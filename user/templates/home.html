@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Dashboard Header Section -->
+    <div class="dashboard-header text-center mb-5">
+        <h1 class="display-4 text-primary">Welcome to BIMS</h1>
+        <p class="lead text-muted">
+            BIMS is designed to record all the transactions and activities involved in a poultry farm. These solutions integrate Flock Performance, Purchases, Sales, Expenses, Feed Formulation, Feed Production, and Accounting.
+        </p>
+        <p class="text-muted">
+            Depending on the Geographical, Climatic Conditions, Age, and Availability of Raw Materials, different Feed Formulae are adapted by the Farmers. A separate module is included in these systems to develop cost-effective formulae.
+        </p>
+    </div>
+
+    <!-- Dashboard Info Section -->
+    <div class="dashboard-info">
+        <h2 class="mb-4">BIMS keeps track of:</h2>
+        <div class="row">
+            <div class="col-md-6">
+                <!-- Card for First Half of List -->
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        Key Areas
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">Hen house production and standards</li>
+                        <li class="list-group-item">Vaccination Schedules</li>
+                        <li class="list-group-item">Cash and Bank Balances</li>
+                        <li class="list-group-item">Creditors and Debtors</li>
+                        <li class="list-group-item">Expenditure Details</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <!-- Card for Second Half of List -->
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        Additional Tracking Areas
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">Employee Details</li>
+                        <li class="list-group-item">Shed Details</li>
+                        <li class="list-group-item">Flock Details</li>
+                        <li class="list-group-item">Daily Flock entry Details</li>
+                        <li class="list-group-item">Mortality Ratio</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <!-- Card for Third Section -->
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        Production and Sales Tracking
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">Production Details</li>
+                        <li class="list-group-item">Feed Production Unit Details</li>
+                        <li class="list-group-item">Purchases and Sales Details</li>
+                        <li class="list-group-item">Medicine and Vaccination Details</li>
+                        <li class="list-group-item">Stock Information</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <!-- Card for Fourth Section -->
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        Financial and Bookkeeping
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">Book Keeping</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
