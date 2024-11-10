@@ -1,5 +1,5 @@
 """
-ASGI config for erp project.
+ASGI config for Hitech_BIMS project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "erp.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Hitech_BIMS.settings")
 
 application = get_asgi_application()
