@@ -1,34 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
-
+{% load static %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hi Tech Farms{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Add Font Awesome for Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link href="https://cdn.datatables.net/2.1.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static "css/style.css" %}">
     <style>
-        /* Make the body cover the full height of the viewport */
-        html, body {
-            height: 100%;
+        .dropdown-submenu {
+            position: relative;
+        }
+        
+        .dropdown-submenu .dropdown-menu {
+            left: 100%;
+            top: 0;
+            margin-top: -1px;
+            display: none; /* Hide the submenu by default */
         }
 
-        /* Ensure the content area grows to fill available space */
-        .content {
-            min-height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Push the footer to the bottom */
-        footer {
-            margin-top: auto;
+        .dropdown-submenu.show .dropdown-menu {
+            display: block; /* Show the submenu when it's toggled */
         }
     </style>
+    
 </head>
-
 <body class="bg-light">
     <div class="content">
         <!-- Navigation Bar -->
@@ -54,10 +52,27 @@
                             <i class="fa-solid fa-warehouse"></i> Inventory
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'hr' %}">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="hrDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fa-solid fa-user"></i> Human Resource
                         </a>
+                        <ul class="dropdown-menu" aria-labelledby="hrDropdown">
+                            <li>
+                                <h6 class="dropdown-header">HR Menu</h6>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-submenu">
+                                <a class="dropdown-item dropdown-toggle" href="#" id="employeeDropdowns" role="button">
+                                    <i class="fas fa-user-cog" style="font-size:17px"></i> Employee Management
+                                </a>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="{% url "create_new_employee" %}"><i class="fas fa-user-alt" style="font-size:17px"></i> Add Employee</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'employee_list' %}"><i class="fas fa-users" style="font-size:17px"></i> Employee List</a></li>
+                                </ul>
+                            </li>
+                            <li><a class="dropdown-item" href="#"><i class="fas fa-user-check" style="font-size:17px"></i> Attendance</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a></li>
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'user_management' %}">
@@ -78,10 +93,8 @@
                         <li><h6 class="dropdown-header">User Menu</h6></li>
                         <li><a class="dropdown-item" href="/user-profile/"><i class="fa-regular fa-address-card fa-fw"></i> View Profile</a></li>
                         <li><hr class="dropdown-divider"></li>
-                      
-                        <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="/update-profile/"><i class="fa-regular fa-pen-to-square fa-fw"></i> Update Profile</a></li>
-                        <li><a class="dropdown-item" href="/change-password/"><i class="fa fa-key" aria-hidden="true"></i></i> Change Password</a></li>
+                        <li><a class="dropdown-item" href="/change-password/"><i class="fa fa-key" aria-hidden="true"></i> Change Password</a></li>
                         <li><a class="dropdown-item" href="/logout/"><i class="fa fa-sign-out" aria-hidden="true"></i> Logout</a></li>
                     </ul>
                 </div>
@@ -89,10 +102,10 @@
         </nav>
 
         <!-- Content Section (Placeholder for child content) -->
-        <div class="container mt-4">
+        <div class="container-cstm">
             {% block content %}
             <!-- Child content will be inserted here -->
-            {% endblock %}
+            {% endblock content %}
         </div>
     </div>
 
@@ -101,15 +114,68 @@
         <p>&copy; 2024 Hi Tech Farms. All rights reserved.</p>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.7.1.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- jQuery (if required) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- DataTables JS (if required) -->
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.js"></script>
-    <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.js"></script>    <script>
-        $(document).ready(function() {
-            $('#example').DataTable();
+    <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.js"></script>
+
+    <!-- Custom JS -->
+    <script src="{% static 'js/custom.js' %}"></script>
+
+    <script>
+        $(document).ready(function () {
+            // Handle submenu toggle for Employee Management
+            $('.dropdown-submenu a').on("click", function (e) {
+                var $subMenu = $(this).next('.dropdown-menu');
+                var text = $(this).text().trim(); // Get the text of the clicked menu item
+                
+                // Check if "Employee Management" was clicked
+                if (text === "Employee Management") {
+                    // Toggle the submenu visibility for Employee Management
+                    $subMenu.toggleClass('show');
+                } else {
+                    // Close all sub-dropdowns when clicking on "Attendance" or "Payroll"
+                    $('.dropdown-submenu .dropdown-menu').removeClass('show');
+                }
+    
+                e.stopPropagation(); // Prevent event bubbling
+                e.preventDefault(); // Prevent default link action
+            });
+    
+            // Handle click on "Attendance" or "Payroll" to hide the sub-dropdown
+            $('.dropdown-menu li a').on("click", function (e) {
+                var text = $(this).text().trim(); // Get the text of the clicked menu item
+    
+                // Close all sub-dropdowns when clicking on "Attendance" or "Payroll"
+                if (text !== "Employee Management") {
+                    $('.dropdown-submenu .dropdown-menu').removeClass('show');
+                }
+    
+                // You can add any specific action here (like navigation or other handling)
+                console.log("Clicked on " + text);
+    
+                e.stopPropagation(); // Prevent event bubbling
+                e.preventDefault(); // Prevent default link action
+            });
+    
+            // Optional: Close all dropdowns when clicking outside
+            $(document).on('click', function (e) {
+                if (!$(e.target).closest('.dropdown').length) {
+                    $('.dropdown-menu').removeClass('show'); // Close all open dropdowns
+                }
+            });
         });
     </script>
-</body>
+    
 
+    {% block js %}{% endblock js %}
+</body>
 </html>
