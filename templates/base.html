@@ -100,6 +100,7 @@
                 </div>
             </div>
         </nav>
+        {% block body %}{% endblock body %}
 
         <!-- Content Section (Placeholder for child content) -->
         <div class="container-cstm">
@@ -132,50 +133,32 @@
 
     <script>
         $(document).ready(function () {
-            // Handle submenu toggle for Employee Management
-            $('.dropdown-submenu a').on("click", function (e) {
+            // Handle submenu toggle for each dropdown independently
+            $('.dropdown-submenu > a').on("click", function (e) {
                 var $subMenu = $(this).next('.dropdown-menu');
-                var text = $(this).text().trim(); // Get the text of the clicked menu item
-                
-                // Check if "Employee Management" was clicked
-                if (text === "Employee Management") {
-                    // Toggle the submenu visibility for Employee Management
-                    $subMenu.toggleClass('show');
-                } else {
-                    // Close all sub-dropdowns when clicking on "Attendance" or "Payroll"
-                    $('.dropdown-submenu .dropdown-menu').removeClass('show');
-                }
-    
-                e.stopPropagation(); // Prevent event bubbling
-                e.preventDefault(); // Prevent default link action
+        
+                // Toggle the clicked submenu
+                $subMenu.toggleClass('show');
+        
+                // Prevent event propagation and default behavior for toggling
+                e.stopPropagation();
+                e.preventDefault();
             });
-    
-            // Handle click on "Attendance" or "Payroll" to hide the sub-dropdown
-            $('.dropdown-menu li a').on("click", function (e) {
-                var text = $(this).text().trim(); // Get the text of the clicked menu item
-    
-                // Close all sub-dropdowns when clicking on "Attendance" or "Payroll"
-                if (text !== "Employee Management") {
-                    $('.dropdown-submenu .dropdown-menu').removeClass('show');
-                }
-    
-                // You can add any specific action here (like navigation or other handling)
-                console.log("Clicked on " + text);
-    
-                e.stopPropagation(); // Prevent event bubbling
-                e.preventDefault(); // Prevent default link action
-            });
-    
-            // Optional: Close all dropdowns when clicking outside
+        
+            // Close submenus when clicking elsewhere
             $(document).on('click', function (e) {
                 if (!$(e.target).closest('.dropdown').length) {
                     $('.dropdown-menu').removeClass('show'); // Close all open dropdowns
                 }
             });
+        
+            // Optional: Close all sibling submenus when opening a new one
+            $('.dropdown-submenu > a').on("click", function () {
+                var $currentMenu = $(this).next('.dropdown-menu');
+                $('.dropdown-submenu .dropdown-menu').not($currentMenu).removeClass('show'); // Close other submenus
+            });
         });
     </script>
-    
-
     {% block js %}{% endblock js %}
 </body>
 </html>

@@ -1,4 +1,5 @@
 """models configuration for HR Management"""
+import random
 import uuid
 from django.db import models
 from django.contrib.auth.models import User
@@ -14,14 +15,10 @@ class Designation(models.Model):
         return self.title
 
 class Employee(models.Model):
-    """Represents an employee with detailed personal and job-related information."""
-    def generate_unique_employee_id():
-        """Generate a unique 5-character employee ID."""
-        return str(uuid.uuid4())[:5]
-    
+    """Represents an employee with detailed personal and job-related information."""    
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
     title = models.CharField(max_length=10, choices=[('Mr.', 'Mr.'), ('Ms.', 'Ms.'), ('Dr.', 'Dr.')], blank=True, null=True)
-    employee_id = models.CharField(max_length=5, unique=True, blank=True, editable=False, default=generate_unique_employee_id)
+    employee_id = models.IntegerField(unique=True, blank=True, editable=False)
     father_name = models.CharField(max_length=100, blank=True, null=True)
     marital_status = models.CharField(max_length=10, choices=[('Married', 'Married'), ('Unmarried', 'Unmarried')], default='Unmarried', null=True, blank=True)
     gender = models.CharField(max_length=10, choices=[('Male', 'Male'), ('Female', 'Female')], default='Male', null=True, blank=True)
@@ -32,6 +29,7 @@ class Employee(models.Model):
     pan_card = models.CharField(max_length=20, blank=True, null=True)
     aadhar_number = models.CharField(max_length=12, blank=True, null=True)
     emergency_contact_1 = models.PositiveBigIntegerField(null=True, blank=True)
+    personal_contact = models.PositiveBigIntegerField(null=True, blank=True)
     emergency_contact_2 = models.PositiveBigIntegerField(null=True, blank=True)
     country = models.CharField(max_length=100, default='India', null=True, blank=True)
     correspondence_address = models.TextField(blank=True, null=True)   
@@ -47,11 +45,26 @@ class Employee(models.Model):
     salary_account = models.CharField(max_length=20, blank=True, null=True)
     loan_account = models.CharField(max_length=20, blank=True, null=True)
     leaves = models.IntegerField(default=0, null=True, blank=True)
+    relieve = models.BooleanField(default=False, null=True, blank=True)
     image = models.ImageField(upload_to='employee_images/', blank=True, null=True)
 
     def __str__(self):
         """Returns a string representation of this object with the given fields"""
         return f"{self.user.get_full_name()} - {self.employee_id}"
+    
+    @staticmethod
+    def generate_unique_employee_id():
+        """Generate a unique 5-digit numeric employee ID."""
+        while True:
+            new_id = random.randint(10000, 99999)
+            if not Employee.objects.filter(employee_id=new_id).exists():
+                return new_id
+
+    def save(self, *args, **kwargs):
+        """Override the save method to assign a unique employee ID if not set."""
+        if not self.employee_id:
+            self.employee_id = self.generate_unique_employee_id()
+        super().save(*args, **kwargs)
     
 
 class Attendance(models.Model):

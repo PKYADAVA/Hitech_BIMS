@@ -6,5 +6,4 @@ db.sqlite3  # Ignore if using SQLite database
 *.log  # Log files
 *.env  # Environment files for sensitive keys
 venv/  # Your virtual environment folder
-/static/
 media/
