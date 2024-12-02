@@ -100,7 +100,7 @@ WSGI_APPLICATION = "Hitech_BIMS.wsgi.application"
 DATABASES = {
     'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
 }
-print(DATABASES, "DATABASES)
+print(DATABASES, "DATABASES")
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
