@@ -1,74 +1,311 @@
-{% extends "base.html" %}
-{% load custom_filters %}
-{% block title %}New Employee{% endblock title %}
-{% block css %}
-<style>
-    .largest-margin {
-        margin: 50px; /* Adjust to desired margin size */
-    }
-    .form-heading {
-        text-align: center;
-    }
-</style>
-{% endblock css %}
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}
+  New Employee
+{% endblock %}
 {% block content %}
-<div class="container mt-5 mb-5">
+  <div class="container mt-5 mb-5 largest-margin">
     <h2 class="mb-4 form-heading">Add New Employee</h2>
-    <form method="POST" enctype="multipart/form-data" action="">
-        {% csrf_token %}
-        
-        <!-- Use the Django form to render fields -->
-        <div class="row mt-4">
-            <div class="form-group col-md-4">
-                <label for="{{ form.user.id_for_label }}">User</label>
-                {{ form.user|add_class:"form-control" }}
-            </div>
-            <div class="form-group col-md-4">
-                <label for="{{ form.title.id_for_label }}">Title</label>
-                {{ form.title|add_class:"form-select" }}
-            </div>
-            <div class="form-group col-md-4">
-                <label for="{{ form.father_name.id_for_label }}">Father Name</label>
-                {{ form.father_name|add_class:"form-control" }}
-            </div>
+    <form method="POST" id="employee-form" enctype="multipart/form-data">
+      {% csrf_token %}
+      
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Basic Information</h5>
         </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="full_name">Full Name</label>
+              <input type="text" class="form-control" id="full_name" placeholder="Enter Full Name" name="full_name" />
+            </div>
+            <div class="col-md-4">
+              <label for="title">Title</label>
+              <select class="form-control" id="title" name="title">
+                <option value="Mr.">Mr.</option>
+                <option value="Ms.">Ms.</option>
+                <option value="Dr.">Dr.</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="father_name">Father Name</label>
+              <input type="text" class="form-control" id="father_name" name="father_name" placeholder="Enter Father Name" />
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <div class="row mt-4">
-            <div class="form-group col-md-4">
-                <label for="{{ form.marital_status.id_for_label }}">Marital Status</label>
-                {{ form.marital_status|add_class:"form-select" }}
-            </div>
-            <div class="form-group col-md-4">
-                <label for="{{ form.gender.id_for_label }}">Gender</label>
-                {{ form.gender|add_class:"form-select" }}
-            </div>
-            <div class="form-group col-md-4">
-                <label for="{{ form.date_of_birth.id_for_label }}">Date of Birth</label>
-                {{ form.date_of_birth|add_class:"form-control" }}
-            </div>
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Personal Details</h5>
         </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="marital_status">Marital Status</label>
+              <select class="form-control" id="marital_status" name="marital_status">
+                <option value="Married">Married</option>
+                <option value="Single">Single</option>
+                <option value="Divorced">Divorced</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="gender">Gender</label>
+              <select class="form-control" id="gender" name="gender">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="date_of_birth">Date of Birth</label>
+              <input type="date" class="form-control" id="date_of_birth" name="date_of_birth" />
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <div class="row mt-4">
-            <div class="form-group col-md-4">
-                <label for="{{ form.designation.id_for_label }}">Designation</label>
-                {{ form.designation|add_class:"form-control" }}
-            </div>
-            <div class="form-group col-md-4">
-                <label for="{{ form.salary.id_for_label }}">Salary</label>
-                {{ form.salary|add_class:"form-control" }}
-            </div>
-            <div class="form-group col-md-4">
-                <label for="{{ form.image.id_for_label }}">Image</label>
-                {{ form.image|add_class:"form-control" }}
-            </div>
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Job Details</h5>
         </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="designation">Designation</label>
+              <select class="form-control" id="designation" name="designation">
+                {% for designation in designation_detail %}
+                  <option value="{{ designation.id }}">{{ designation.title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="salary">Salary</label>
+              <input type="number" class="form-control" id="salary" name="salary" placeholder="Salary" />
+            </div>
+            <div class="col-md-4">
+              <label for="image">Image</label>
+              <input type="file" class="form-control" id="image" name="image" />
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <!-- Submit Button Row -->
-        <div class="row mt-5">
-            <div class="col-md-12 text-center">
-                <button type="submit" class="btn btn-primary">Add Employee</button>
-            </div>
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Additional Information</h5>
         </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="blood_group">Blood Group</label>
+              <input type="text" class="form-control" id="blood_group" name="blood_group" placeholder="Enter Blood Group" />
+            </div>
+            <div class="col-md-4">
+              <label for="qualification">Qualification</label>
+              <input type="text" class="form-control" id="qualification" name="qualification" placeholder="Enter Qualification" />
+            </div>
+            <div class="col-md-4 form-check form-switch">
+              <div>
+                <label class="form-check-label" for="driving_license">Driving License</label>
+              </div>
+              <div class="form-checkbox">
+                <input type="checkbox" class="form-check-input" id="driving_license" name="driving_license" style="height: 30px;width: 60px;" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Identification Details</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="pan_card">Pan Card</label>
+              <input type="text" class="form-control" id="pan_card" name="pan_card" placeholder="Enter Pan Card" />
+            </div>
+            <div class="col-md-4">
+              <label for="aadhar_number">Aadhar Number</label>
+              <input type="number" class="form-control" id="aadhar_number" name="aadhar_number" placeholder="Enter Adhar Card" />
+            </div>
+            <div class="col-md-4">
+              <label for="personal_contact">Personal Contact</label>
+              <input type="number" class="form-control" id="personal_contact" name="personal_contact" placeholder="Enter Personal Contact" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Emergency & Contact Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="emergency_contact">Emergency Contact</label>
+              <input type="number" class="form-control" id="emergency_contact" name="emergency_contact" placeholder="Enter Emergency Contact" />
+            </div>
+            <div class="col-md-4">
+              <label for="country">Country</label>
+              <input type="text" class="form-control" id="country" name="country" placeholder="Enter Country" />
+            </div>
+            <div class="col-md-4">
+              <label for="correspondence_address">Correspondence Address</label>
+              <textarea class="form-control" id="correspondence_address" name="correspondence_address" placeholder="Enter Permanent Address"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Job Specific Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="sector">Sector</label>
+              <input type="text" class="form-control" id="sector" name="sector" placeholder="Enter Sector" />
+            </div>
+            <div class="col-md-4">
+              <label for="group">Group</label>
+              <input type="text" class="form-control" id="group" name="group" placeholder="Enter Group" />
+            </div>
+            <div class="col-md-4">
+              <label for="salary_type">Salary Type</label>
+              <select class="form-control" id="salary_type" name="salary_type">
+                <option value="Monthly">Monthly</option>
+                <option value="Hourly">Hourly</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Salary & Leave Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="advance">Advance Salary</label>
+              <input type="number" class="form-control" id="advance" name="advance" placeholder="Enter Advance salary" />
+            </div>
+            <div class="col-md-4">
+              <label for="bank_name">Bank Name</label>
+              <input type="text" class="form-control" id="bank_name" name="bank_name" placeholder="Enter Bank Name" />
+            </div>
+            <div class="col-md-4">
+              <label for="date_of_joining">Date of Joining</label>
+              <input type="datetime-local" class="form-control" id="date_of_joining" name="date_of_joining" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Salary & Loan Accounts</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="report_to">Report to</label>
+              <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Enter Report to" />
+            </div>
+            <div class="col-md-4">
+              <label for="salary_account">Salary Account</label>
+              <input type="text" class="form-control" id="salary_account" name="salary_account" placeholder="Enter Salary Account" />
+            </div>
+            <div class="col-md-4">
+              <label for="ifsc_code">IFSC Code</label>
+              <input type="text" class="form-control" id="ifsc_code" name="ifsc_code" placeholder="Enter IFSC Code" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Leave Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="leaves">Leaves</label>
+              <input type="number" class="form-control" id="leaves" name="leaves" value="0" />
+            </div>
+            <div class="col-md-4">
+              <label for="branch_name">Branch Name</label>
+              <input type="text" class="form-control" id="branch_name" name="branch_name" placeholder="Enter Branch Name" />
+            </div>
+            <div class="col-md-4">
+              <label for="saving">Savings Amount</label>
+              <input type="number" class="form-control" id="saving" name="saving" value="0" placeholder="Enter Savings Amount" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row mt-5">
+        <div class="col-md-12 text-center">
+          <a href="{% url 'employee_list' %}" class="btn btn-secondary me-2">Back</a>
+          <button type="submit" class="btn btn-primary">Add Employee</button>
+        </div>
+      </div>
+      
     </form>
-</div>
-{% endblock content %}
+  </div>
+{% endblock %}
+{% block js %}
+  <script src="{% static 'js/new-employee.js' %}"></script>
+  <script>
+    {% if error_message %}
+        Toastify({
+            text: "{{ error_message }}",
+            duration: 3000,
+            newWindow: true,
+            gravity: "top",
+            positionLeft: true,
+            backgroundColor: "linear-gradient(to right, #1e81b0, #8e0000)"
+        }).showToast();
+    
+    {% elif success %}
+        Toastify({
+            text: "{{ success }}",
+            duration: 3000,
+            newWindow: true,
+            gravity: "top",
+            positionLeft: true,
+            backgroundColor: "linear-gradient(to right,  #00b09b, #96c93d)"
+        }).showToast();
+    
+    {% else %}
+        {% for message in messages %}
+            {% if message.tags == "error" %}
+                Toastify({
+                    text: "{{ message }}",
+                    duration: 3000,
+                    newWindow: true,
+                    gravity: "top",
+                    positionLeft: true,
+                    backgroundColor: "linear-gradient(to right, #1e81b0, #8e0000)"
+                }).showToast();
+            {% else %}
+                Toastify({
+                    text: "{{ message }}",
+                    duration: 3000,
+                    newWindow: true,
+                    gravity: "top",
+                    positionLeft: true,
+                    backgroundColor: "linear-gradient(to right,  #00b09b, #96c93d)"
+                }).showToast();
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+  </script>
+{% endblock %}
