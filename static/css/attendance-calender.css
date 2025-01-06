@@ -1,0 +1,50 @@
+.calendar {
+    background: white;
+    border-radius: 10px;
+}
+.calendar .header {
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+}
+.calendar .days {
+    padding: 15px;
+}
+.calendar .day {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+.calendar .day:hover {
+    background: #e9ecef;
+}
+.calendar .day.active {
+    background: #0d6efd;
+    color: white;
+}
+.calendar .day.holiday {
+    background: #ffc107;
+    color: white;
+}
+.custom-select {
+    border-radius: 10px;
+    padding: 12px;
+}
+.reason-textarea {
+    border-radius: 10px;
+    resize: none;
+}
+.holiday-badge {
+    font-size: 0.8rem;
+    padding: 5px 10px;
+    border-radius: 15px;
+    background: #ffc107;
+    color: #000;
+    margin: 5px 0;
+    display: inline-block;
+}

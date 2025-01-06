@@ -57,7 +57,7 @@
                   </ul>
                 </li>
                 <li>
-                  <a class="dropdown-item" href="#"><i class="fas fa-user-check" style="font-size:17px"></i> Attendance</a>
+                  <a class="dropdown-item" href="{% url 'employee_attendance' %}"><i class="fas fa-user-check" style="font-size:17px"></i> Attendance</a>
                 </li>
                 <li>
                   <a class="dropdown-item" href="#"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a>
@@ -125,7 +125,7 @@
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.js"></script>
 
     <!-- Custom JS -->
-    <script src="{% static 'js/custom.js' %}"></script>
+    <script src="{% static 'js/hr/custom.js' %}"></script>
 
     <script>
       $(document).ready(function () {
