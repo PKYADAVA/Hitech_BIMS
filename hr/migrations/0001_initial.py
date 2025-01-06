@@ -16,58 +16,233 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Designation',
+            name="Designation",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(blank=True, max_length=100, null=True, unique=True)),
-                ('description', models.TextField(blank=True, null=True)),
-                ('base_salary', models.DecimalField(blank=True, decimal_places=2, max_digits=10, null=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "title",
+                    models.CharField(
+                        blank=True, max_length=100, null=True, unique=True
+                    ),
+                ),
+                ("description", models.TextField(blank=True, null=True)),
+                (
+                    "base_salary",
+                    models.DecimalField(
+                        blank=True, decimal_places=2, max_digits=10, null=True
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Employee',
+            name="Employee",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(blank=True, choices=[('Mr.', 'Mr.'), ('Ms.', 'Ms.'), ('Dr.', 'Dr.')], max_length=10, null=True)),
-                ('employee_id', models.CharField(blank=True, default=hr.models.Employee.generate_unique_employee_id, editable=False, max_length=5, unique=True)),
-                ('father_name', models.CharField(blank=True, max_length=100, null=True)),
-                ('marital_status', models.CharField(blank=True, choices=[('Married', 'Married'), ('Unmarried', 'Unmarried')], default='Unmarried', max_length=10, null=True)),
-                ('gender', models.CharField(blank=True, choices=[('Male', 'Male'), ('Female', 'Female')], default='Male', max_length=10, null=True)),
-                ('date_of_birth', models.DateField(blank=True, null=True)),
-                ('blood_group', models.CharField(blank=True, max_length=5, null=True)),
-                ('driving_license', models.BooleanField(default=False)),
-                ('qualification', models.CharField(blank=True, max_length=100, null=True)),
-                ('pan_card', models.CharField(blank=True, max_length=20, null=True)),
-                ('aadhar_number', models.CharField(blank=True, max_length=12, null=True)),
-                ('emergency_contact_1', models.PositiveBigIntegerField(blank=True, null=True)),
-                ('emergency_contact_2', models.PositiveBigIntegerField(blank=True, null=True)),
-                ('country', models.CharField(blank=True, default='India', max_length=100, null=True)),
-                ('correspondence_address', models.TextField(blank=True, null=True)),
-                ('sector', models.CharField(blank=True, max_length=100, null=True)),
-                ('group', models.CharField(blank=True, max_length=100, null=True)),
-                ('salary', models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True)),
-                ('salary_type', models.CharField(blank=True, choices=[('Monthly', 'Monthly'), ('Hourly', 'Hourly')], default='Monthly', max_length=10, null=True)),
-                ('advance', models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True)),
-                ('savings', models.DecimalField(blank=True, decimal_places=2, default=0.0, max_digits=10, null=True)),
-                ('date_of_joining', models.DateTimeField(blank=True, null=True)),
-                ('report_to', models.CharField(blank=True, max_length=100, null=True)),
-                ('salary_account', models.CharField(blank=True, max_length=20, null=True)),
-                ('loan_account', models.CharField(blank=True, max_length=20, null=True)),
-                ('leaves', models.IntegerField(blank=True, default=0, null=True)),
-                ('image', models.ImageField(blank=True, null=True, upload_to='employee_images/')),
-                ('designation', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='employees', to='hr.designation')),
-                ('user', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "title",
+                    models.CharField(
+                        blank=True,
+                        choices=[("Mr.", "Mr."), ("Ms.", "Ms."), ("Dr.", "Dr.")],
+                        max_length=10,
+                        null=True,
+                    ),
+                ),
+                (
+                    "employee_id",
+                    models.CharField(
+                        blank=True,
+                        default=hr.models.Employee.generate_unique_employee_id,
+                        editable=False,
+                        max_length=5,
+                        unique=True,
+                    ),
+                ),
+                (
+                    "father_name",
+                    models.CharField(blank=True, max_length=100, null=True),
+                ),
+                (
+                    "marital_status",
+                    models.CharField(
+                        blank=True,
+                        choices=[("Married", "Married"), ("Unmarried", "Unmarried")],
+                        default="Unmarried",
+                        max_length=10,
+                        null=True,
+                    ),
+                ),
+                (
+                    "gender",
+                    models.CharField(
+                        blank=True,
+                        choices=[("Male", "Male"), ("Female", "Female")],
+                        default="Male",
+                        max_length=10,
+                        null=True,
+                    ),
+                ),
+                ("date_of_birth", models.DateField(blank=True, null=True)),
+                ("blood_group", models.CharField(blank=True, max_length=5, null=True)),
+                ("driving_license", models.BooleanField(default=False)),
+                (
+                    "qualification",
+                    models.CharField(blank=True, max_length=100, null=True),
+                ),
+                ("pan_card", models.CharField(blank=True, max_length=20, null=True)),
+                (
+                    "aadhar_number",
+                    models.CharField(blank=True, max_length=12, null=True),
+                ),
+                (
+                    "emergency_contact_1",
+                    models.PositiveBigIntegerField(blank=True, null=True),
+                ),
+                (
+                    "emergency_contact_2",
+                    models.PositiveBigIntegerField(blank=True, null=True),
+                ),
+                (
+                    "country",
+                    models.CharField(
+                        blank=True, default="India", max_length=100, null=True
+                    ),
+                ),
+                ("correspondence_address", models.TextField(blank=True, null=True)),
+                ("sector", models.CharField(blank=True, max_length=100, null=True)),
+                ("group", models.CharField(blank=True, max_length=100, null=True)),
+                (
+                    "salary",
+                    models.DecimalField(
+                        blank=True,
+                        decimal_places=2,
+                        default=0.0,
+                        max_digits=10,
+                        null=True,
+                    ),
+                ),
+                (
+                    "salary_type",
+                    models.CharField(
+                        blank=True,
+                        choices=[("Monthly", "Monthly"), ("Hourly", "Hourly")],
+                        default="Monthly",
+                        max_length=10,
+                        null=True,
+                    ),
+                ),
+                (
+                    "advance",
+                    models.DecimalField(
+                        blank=True,
+                        decimal_places=2,
+                        default=0.0,
+                        max_digits=10,
+                        null=True,
+                    ),
+                ),
+                (
+                    "savings",
+                    models.DecimalField(
+                        blank=True,
+                        decimal_places=2,
+                        default=0.0,
+                        max_digits=10,
+                        null=True,
+                    ),
+                ),
+                ("date_of_joining", models.DateTimeField(blank=True, null=True)),
+                ("report_to", models.CharField(blank=True, max_length=100, null=True)),
+                (
+                    "salary_account",
+                    models.CharField(blank=True, max_length=20, null=True),
+                ),
+                (
+                    "loan_account",
+                    models.CharField(blank=True, max_length=20, null=True),
+                ),
+                ("leaves", models.IntegerField(blank=True, default=0, null=True)),
+                (
+                    "image",
+                    models.ImageField(
+                        blank=True, null=True, upload_to="employee_images/"
+                    ),
+                ),
+                (
+                    "designation",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="employees",
+                        to="hr.designation",
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Attendance',
+            name="Attendance",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('date', models.DateField(blank=True, null=True)),
-                ('check_in_time', models.TimeField(blank=True, null=True)),
-                ('check_out_time', models.TimeField(blank=True, null=True)),
-                ('status', models.CharField(blank=True, choices=[('Present', 'Present'), ('Absent', 'Absent'), ('On Leave', 'On Leave')], default='Present', max_length=20, null=True)),
-                ('employee', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='attendance_records', to='hr.employee')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("date", models.DateField(blank=True, null=True)),
+                ("check_in_time", models.TimeField(blank=True, null=True)),
+                ("check_out_time", models.TimeField(blank=True, null=True)),
+                (
+                    "status",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("Present", "Present"),
+                            ("Absent", "Absent"),
+                            ("On Leave", "On Leave"),
+                        ],
+                        default="Present",
+                        max_length=20,
+                        null=True,
+                    ),
+                ),
+                (
+                    "employee",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="attendance_records",
+                        to="hr.employee",
+                    ),
+                ),
             ],
         ),
     ]

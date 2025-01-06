@@ -9,17 +9,19 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
+
 import os
 import dj_database_url
 from pathlib import Path
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Define the path for the log file
-LOG_FILE_PATH = BASE_DIR / 'logs' / 'info.log'
+LOG_FILE_PATH = BASE_DIR / "logs" / "info.log"
 
 # Create logs directory if it doesn't exist
 LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -34,7 +36,7 @@ SECRET_KEY = "django-insecure-#)8h+8a*2s4d!^_q2&ykr2r+opj^^3&*hued7xy1x&!n3a*lzm
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']  # Allows all domains (use with caution in production)
+ALLOWED_HOSTS = ["*"]  # Allows all domains (use with caution in production)
 
 
 # Application definition
@@ -49,7 +51,7 @@ INSTALLED_APPS = [
     "user",
     "broiler",
     "inventory",
-    "hr"
+    "hr",
 ]
 
 MIDDLEWARE = [
@@ -67,7 +69,7 @@ ROOT_URLCONF = "Hitech_BIMS.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        'DIRS': [BASE_DIR / 'templates'],  # Add this line
+        "DIRS": [BASE_DIR / "templates"],  # Add this line
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -87,20 +89,20 @@ WSGI_APPLICATION = "Hitech_BIMS.wsgi.application"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
 # DATABASES = {
-#     'default': {
-#         'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
-#         'NAME': os.getenv('DB_NAME'),
-#         'USER': os.getenv('DB_USER'),
-#         'PASSWORD': os.getenv('DB_PASSWORD'),
-#         'HOST': os.getenv('DB_HOST', 'localhost'),
-#         'PORT': os.getenv('DB_PORT', '5432'),
+#     "default": {
+#         "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+#         "NAME": os.getenv("DB_NAME"),
+#         "USER": os.getenv("DB_USER"),
+#         "PASSWORD": os.getenv("DB_PASSWORD"),
+#         "HOST": os.getenv("DB_HOST", "localhost"),
+#         "PORT": os.getenv("DB_PORT", "5432"),
 #     }
 # }
 
 DATABASES = {
     'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
 }
-print(DATABASES, "DATABASES")
+
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
@@ -140,11 +142,11 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 
 # use smtp forget password send link mail
@@ -162,31 +164,29 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '[%(asctime)s] %(levelname)s %(name)s:%(lineno)d: %(message)s',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[%(asctime)s] %(levelname)s %(name)s:%(lineno)d: %(message)s",
         },
-        'simple': {
-            'format': '%(levelname)s %(message)s'
+        "simple": {"format": "%(levelname)s %(message)s"},
+    },
+    "handlers": {
+        "info_file_handler": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_FILE_PATH,
+            "maxBytes": 1048576,  # 1 MB
+            "backupCount": 10,
+            "formatter": "verbose",
         },
     },
-    'handlers': {
-        'info_file_handler': {
-            'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOG_FILE_PATH,
-            'maxBytes': 1048576,  # 1 MB
-            'backupCount': 10,
-            'formatter': 'verbose'
-        },
-    },
-    'loggers': {
-        '': {
-            'handlers': ['info_file_handler'],
-            'level': 'INFO',
-            'propagate': True,
+    "loggers": {
+        "": {
+            "handlers": ["info_file_handler"],
+            "level": "INFO",
+            "propagate": True,
         },
     },
 }

@@ -1,21 +1,70 @@
-/* Make the body cover the full height of the viewport */
-html, body {
+html,
+body {
     height: 100%;
 }
 
-/* Ensure the content area grows to fill available space */
 .content {
     min-height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-/* Push the footer to the bottom */
 footer {
     margin-top: auto;
 }
+
 .container-cstm {
     width: 96%;
-    /* text-align: center; */
     margin: 37px;
+}
+
+.largest-margin {
+    margin: 50px;
+}
+
+.form-heading {
+    text-align: center;
+}
+
+.largest-margin {
+    margin: 50px;
+}
+
+.form-heading {
+    text-align: center;
+}
+
+.error {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff8f8;
+}
+
+.error-message {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.form-checkbox {
+    margin-left: 85px !important;
+}
+
+input#driving_license {
+    height: 30px;
+    width: 60px;
+}
+
+.dropdown-submenu {
+    position: relative;
+}
+
+.dropdown-submenu .dropdown-menu {
+    left: 100%;
+    top: 0;
+    margin-top: -1px;
+    display: none;
+}
+
+.dropdown-submenu.show .dropdown-menu {
+    display: block;
 }
