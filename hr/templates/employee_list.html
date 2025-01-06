@@ -2,21 +2,6 @@
 {% load static %}
 {% block title %}Employee List{% endblock title %}
 {% block body %}
-<div class="row justify-content-end mt-2 mb-2">
-    <div class="col-md-3">
-        <form method="GET" action="" class="mb-4">
-            <div class="input-group">
-                <input type="text" name="q" class="form-control" placeholder="Search...">
-                <div class="input-group-append">
-                    <div class="input-group-text" style="margin-left: 5px; padding: 0;">
-                        <button type="submit" class="btn btn-primary">Search</button>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
 <div class="modal fade" id="relieveConfirmationModal" tabindex="-1" aria-labelledby="relieveConfirmationLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -54,9 +39,21 @@
 </div>
 
 <div class="addingEmployeeBTN" style="margin:15px;">
-   <a href="{% url "create_new_employee" %}"><button class="btn btn-primary"><i class="fa-solid fa-user-check"></i> Add Employee</button></a>
-</div>
-
+    <a href="{% url "create_new_employee" %}"><button class="btn btn-primary addemployee"><i class="fa-solid fa-user-check"></i> Add Employee</button></a>
+    <div class="row justify-content-end mt-2 mb-2">
+        <div class="col-md-3">
+            <form method="GET" action="" class="mb-4">
+                <div class="input-group">
+                    <input type="text" name="q" class="form-control" placeholder="Search...">
+                    {% comment %} <div class="input-group-append">
+                        <div class="input-group-text" style="margin-left: 5px; padding: 0;">
+                            <button type="submit" class="btn btn-primary">Search</button>
+                        </div>
+                    </div> {% endcomment %}
+                </div>
+            </form>
+        </div>
+    </div>
 <div class="cstm-table" style="margin:17px;">
     <table class="table table-bordered table-striped text-center custom-table">
         <thead class="table-light">
@@ -75,7 +72,7 @@
             </tr>
         </thead>
         <tbody>
-            {% for employee in employee_deatils %}
+            {% for employee in employee_details %}
             <tr>
                 <td><a href="{% url 'edit_employee' employee.id %}">{{ employee.employee_id }}</a></td>
                 <td>{{ employee.full_name }}</td>
@@ -117,40 +114,55 @@
         </tbody>
     </table>
 </div>
-
-
-
-{% if items.has_other_pages %}
-<div class="pagination">
-    <span class="step-links">
-        {% if items.has_previous %}
-        <div class="pagination-item">
-            <a href="?page=1{% if query %}&q={{ query }}{% endif %}">&laquo; First</a>
-        </div>
-        <div class="pagination-item">
-            <a href="?page={{ items.previous_page_number }}{% if query %}&q={{ query }}{% endif %}">Previous</a>
-        </div>
+<nav aria-label="Page navigation example">
+    <ul class="pagination">
+        {% if employee_details.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% if query %}&q={{ query }}{% endif %}" aria-label="First">&laquo; First</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ employee_details.previous_page_number }}{% if query %}&q={{ query }}{% endif %}" aria-label="Previous">Previous</a>
+            </li>
+        {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">&laquo; First</span>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">Previous</span>
+            </li>
         {% endif %}
 
-        <span class="current">
-            Page {{ items.number }} of {{ items.paginator.num_pages }}. Total count: {{ total_count }}
-        </span>
-
-        {% if items.has_next %}
-        <div class="pagination-item">
-            <a href="?page={{ items.next_page_number }}{% if query %}&q={{ query }}{% endif %}">Next</a>
-        </div>
-        <div class="pagination-item">
-            <a href="?page={{ items.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}">Last &raquo;</a>
-        </div>
+        {% for num in employee_details.paginator.page_range %}
+            {% if employee_details.number == num %}
+                <li class="page-item active">
+                    <span class="page-link">{{ num }}</span>
+                </li>
+            {% else %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}">{{ num }}</a>
+                </li>
+            {% endif %}
+        {% endfor %}
+        {% if employee_details.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ employee_details.next_page_number }}{% if query %}&q={{ query }}{% endif %}" aria-label="Next">Next</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ employee_details.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}" aria-label="Last">Last &raquo;</a>
+            </li>
+        {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Next</span>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">Last &raquo;</span>
+            </li>
         {% endif %}
-    </span>
-</div>
-{% endif %}
-
+    </ul>
+</nav>
 {% endblock body %}
 {% block js %}
-<script src="{% static 'js/employee_list.js' %}"></script>
+<script src="{% static 'js/hr/employee_list.js' %}"></script>
 <script>
     $(document).ready(function () {
         $('#myTable').DataTable({

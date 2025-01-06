@@ -10,6 +10,7 @@ from django.utils.dateparse import parse_date
 from django.db import transaction
 from datetime import datetime
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from hr.models import Designation, Employee
@@ -21,9 +22,18 @@ logger = logging.getLogger(__name__)
 @login_required(login_url='login')
 def employee_list(request):
     """Display a list of employees."""
-    employees = Employee.objects.all()
-    return render(request, "employee_list.html", {"employee_deatils": employees})
+    employees = Employee.objects.all().order_by('id') 
 
+    paginator = Paginator(employees, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    total_count = employees.count()
+
+    return render(request, "employee_list.html", {
+        "employee_details": page_obj,
+        "total_count": total_count,
+    })
 @login_required(login_url='login')
 def create_new_employee(request):
     """
@@ -310,3 +320,11 @@ def relieve_employee(request, id):
         return JsonResponse(
             {"success": False, "message": "Invalid request method."}, status=400
         )
+
+def employee_attendance(request):
+    """View function to handle employee attendance."""
+    employee_details = Employee.objects.all().order_by('employee_id')
+    context = {
+        "employee_details": employee_details
+        }
+    return render(request,"employee_attendance.html",context)
