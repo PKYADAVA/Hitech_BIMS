@@ -86,7 +86,6 @@ class Employee(models.Model):
     bank_name = models.CharField(max_length=100, blank=True, null=True)
     ifsc_code = models.CharField(max_length=30, blank=True, null=True)
     branch_name = models.CharField(max_length=50, blank=True, null=True)
-    leaves = models.IntegerField(default=0, null=True, blank=True)
     relieve = models.BooleanField(default=False, null=True, blank=True)
     image = models.ImageField(upload_to="employee_images/", blank=True, null=True)
 

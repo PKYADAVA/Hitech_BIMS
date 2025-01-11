@@ -321,6 +321,7 @@ def relieve_employee(request, id):
             {"success": False, "message": "Invalid request method."}, status=400
         )
     
+@login_required(login_url='login')
 def employee_leave(request):
     """View function to handle employee leave."""
     employee_details = Employee.objects.all().order_by('employee_id')
@@ -329,6 +330,7 @@ def employee_leave(request):
         }
     return render(request,"employee_leave.html",context)
 
+@login_required(login_url='login')
 def employee_attendance(request):
     """View function to handle employee attendance."""
     return render(request,"employee_attendance.html")
