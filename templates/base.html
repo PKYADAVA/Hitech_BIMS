@@ -56,9 +56,23 @@
                     </li>
                   </ul>
                 </li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'employee_attendance' %}"><i class="fas fa-user-check" style="font-size:17px"></i> Attendance</a>
-                </li>
+                <li class="dropdown-submenu dropdown-attendance">
+                  <a class="dropdown-item dropdown-toggle" href="#" id="attendanceDropdown">
+                    <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
+                  </a>
+                  <ul class="dropdown-menu dropdown-attendance-menu">
+                    <li>
+                      <a class="dropdown-item" href="{% url 'employee_leave' %}">
+                        <i class="fas fa-user-alt" style="font-size:17px"></i> Leave
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="{% url 'employee_attendance' %}">
+                        <i class="fas fa-users" style="font-size:17px"></i> Attendance
+                      </a>
+                    </li>
+                  </ul>
+                </li>                               
                 <li>
                   <a class="dropdown-item" href="#"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a>
                 </li>
@@ -125,36 +139,7 @@
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.js"></script>
 
     <!-- Custom JS -->
-    <script src="{% static 'js/hr/custom.js' %}"></script>
-
-    <script>
-      $(document).ready(function () {
-        // Handle submenu toggle for each dropdown independently
-        $('.dropdown-submenu > a').on('click', function (e) {
-          var $subMenu = $(this).next('.dropdown-menu')
-      
-          // Toggle the clicked submenu
-          $subMenu.toggleClass('show')
-      
-          // Prevent event propagation and default behavior for toggling
-          e.stopPropagation()
-          e.preventDefault()
-        })
-      
-        // Close submenus when clicking elsewhere
-        $(document).on('click', function (e) {
-          if (!$(e.target).closest('.dropdown').length) {
-            $('.dropdown-menu').removeClass('show') // Close all open dropdowns
-          }
-        })
-      
-        // Optional: Close all sibling submenus when opening a new one
-        $('.dropdown-submenu > a').on('click', function () {
-          var $currentMenu = $(this).next('.dropdown-menu')
-          $('.dropdown-submenu .dropdown-menu').not($currentMenu).removeClass('show') // Close other submenus
-        })
-      })
-    </script>
+    <script src="{% static 'js/main.js' %}"></script>
     {% block js %}
     {% endblock js %}
   </body>

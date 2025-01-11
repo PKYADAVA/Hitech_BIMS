@@ -187,7 +187,7 @@
 
       <div class="card mb-4">
         <div class="card-header">
-          <h5 class="mb-0">Salary & Leave Information</h5>
+          <h5 class="mb-0">Salary Information</h5>
         </div>
         <div class="card-body">
           <div class="row">
@@ -205,17 +205,11 @@
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Salary & Loan Accounts</h5>
-        </div>
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="report_to">Report to</label>
-              <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Enter Report to" />
+              <label for="branch_name">Branch Name</label>
+              <input type="text" class="form-control" id="branch_name" name="branch_name" placeholder="Enter Branch Name" />
             </div>
             <div class="col-md-4">
               <label for="salary_account">Salary Account</label>
@@ -227,30 +221,20 @@
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Leave Information</h5>
-        </div>
         <div class="card-body">
           <div class="row">
-            <div class="col-md-4">
-              <label for="leaves">Leaves</label>
-              <input type="number" class="form-control" id="leaves" name="leaves" value="0" />
-            </div>
-            <div class="col-md-4">
-              <label for="branch_name">Branch Name</label>
-              <input type="text" class="form-control" id="branch_name" name="branch_name" placeholder="Enter Branch Name" />
-            </div>
             <div class="col-md-4">
               <label for="saving">Savings Amount</label>
               <input type="number" class="form-control" id="saving" name="saving" value="0" placeholder="Enter Savings Amount" />
             </div>
+            <div class="col-md-4">
+              <label for="report_to">Report to</label>
+              <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Enter Report to" />
+            </div>
           </div>
         </div>
       </div>
-
+      </div>
       <div class="row mt-5">
         <div class="col-md-12 text-center">
           <a href="{% url 'employee_list' %}" class="btn btn-secondary me-2">Back</a>
