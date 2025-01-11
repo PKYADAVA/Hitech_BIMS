@@ -51,7 +51,6 @@ class EmployeeAdmin(admin.ModelAdmin):
         "bank_name",
         "ifsc_code",
         "branch_name",
-        "leaves",
         "relieve",
         "image",
     ]
