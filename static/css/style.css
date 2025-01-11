@@ -71,3 +71,17 @@ input#driving_license {
 button.btn.btn-primary.addemployee {
     margin-bottom: -100px;
 }
+/* Default state: Submenu hidden */
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    margin-top: -1px;
+  }
+  
+  /* Show submenu when 'show' class is added */
+  .dropdown-menu.show {
+    display: block;
+  }
+  

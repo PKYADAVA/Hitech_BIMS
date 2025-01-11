@@ -320,11 +320,15 @@ def relieve_employee(request, id):
         return JsonResponse(
             {"success": False, "message": "Invalid request method."}, status=400
         )
-
-def employee_attendance(request):
-    """View function to handle employee attendance."""
+    
+def employee_leave(request):
+    """View function to handle employee leave."""
     employee_details = Employee.objects.all().order_by('employee_id')
     context = {
         "employee_details": employee_details
         }
-    return render(request,"employee_attendance.html",context)
+    return render(request,"employee_leave.html",context)
+
+def employee_attendance(request):
+    """View function to handle employee attendance."""
+    return render(request,"employee_attendance.html")
