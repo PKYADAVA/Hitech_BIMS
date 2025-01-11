@@ -1,7 +1,44 @@
 {% extends 'base.html' %}
 
 {% block content %}
+ <!-- Toggle Navbar -->
+ <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom mb-4">
+    <div class="container-fluid">
+      <button
+        class="navbar-toggler"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#subNavbar"
+        aria-controls="subNavbar"
+        aria-expanded="false"
+        aria-label="Toggle navigation"
+      >
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="subNavbar">
+        <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link" href="{% url 'branch_list' %}">Branch</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#supervisor-section">Supervisor</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#broilerplace-section">Broiler Place</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#broilerfarm-section">Broiler Farm</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#broilerbatch-section">Broiler Batch</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#broilerdisease-section">Broiler Disease</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
 
-Welcome to Broiler page
 
 {% endblock %}
