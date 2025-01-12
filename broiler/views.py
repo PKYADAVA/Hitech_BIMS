@@ -1,8 +1,8 @@
 from django.shortcuts import get_object_or_404, render, redirect
-from django.contrib.auth.models import User
-from django.urls import reverse_lazy
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
 from django.views import View
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.views import View
 from .models import Branch, Supervisor
 import json
@@ -13,11 +13,11 @@ from django.db.models import F
 
 
 
-
+@login_required( )
 def broiler(request):
     return render(request, 'broiler.html')
 
-
+@method_decorator(login_required, name='dispatch')
 class BranchTemplateView(View):
     def get(self, request):
         # List of Indian states and union territories
@@ -37,11 +37,8 @@ class BranchTemplateView(View):
         # Render the branch_template.html file
         return render(request, 'branch.html', context)
 
-from django.http import JsonResponse, Http404
-from django.views import View
-import json
-from .models import Branch
 
+@method_decorator(login_required, name='dispatch')
 class BranchAPI(View):
     def get(self, request, id=None):
         if id:
@@ -86,7 +83,7 @@ class BranchAPI(View):
         branch.delete()
         return JsonResponse({'message': 'Branch deleted'})
 
-
+@method_decorator(login_required, name='dispatch')
 class SupervisorTemplateView(View):
     def get(self, request):
         # List of Indian states and union territories
@@ -96,6 +93,8 @@ class SupervisorTemplateView(View):
         # Render the branch_template.html file
         return render(request, 'supervisor.html', context)
     
+
+@method_decorator(login_required, name='dispatch')    
 class BroilerPlaceTemplateView(View):
     def get(self, request):
         # List of Indian states and union territories
@@ -106,6 +105,7 @@ class BroilerPlaceTemplateView(View):
         return render(request, 'broiler_place.html', context)
 
 
+@method_decorator(login_required, name='dispatch')
 class BroilerFarmTemplateView(View):
     def get(self, request):
         # List of Indian states and union territories
@@ -126,7 +126,7 @@ class BroilerBatchTemplateView(View):
         # Render the branch_template.html file
         return render(request, 'broiler_batch.html', context)
     
-
+@method_decorator(login_required, name='dispatch')
 class BroilerDiseaseTemplateView(View):
     def get(self, request):
         # List of Indian states and union territories
@@ -136,7 +136,7 @@ class BroilerDiseaseTemplateView(View):
         # Render the branch_template.html file
         return render(request, 'broiler_disease.html', context)
 
-
+@method_decorator(login_required, name='dispatch')
 class SupervisorAPI(View):
 
     def get(self, request, id=None):
