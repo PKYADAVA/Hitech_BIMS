@@ -71,7 +71,6 @@ input#driving_license {
 button.btn.btn-primary.addemployee {
     margin-bottom: -100px;
 }
-/* Default state: Submenu hidden */
 .dropdown-menu {
     display: none;
     position: absolute;
@@ -80,8 +79,54 @@ button.btn.btn-primary.addemployee {
     margin-top: -1px;
   }
   
-  /* Show submenu when 'show' class is added */
   .dropdown-menu.show {
     display: block;
   }
-  
+  .me-1 {
+    margin-right: .25rem !important;
+    color: #eded7f;
+}
+
+/* adding calender css */
+.calendar-container {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    max-width: 800px;
+    margin: auto;
+}
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    text-align: center;
+}
+.calendar-grid .day {
+    padding: 10px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.calendar-grid .day:hover {
+    background: #e9ecef;
+}
+.calendar-grid .holiday {
+    background: #d9546c;
+    color: #e9e5e5;
+    cursor: default;
+}
+.calendar-grid .empty {
+    pointer-events: none;
+    background: transparent;
+}
+.holiday-list {
+    margin-top: 20px;
+}
+.holiday-item {
+    margin-bottom: 10px;
+}
+.day.selected {
+    background-color: green !important;
+    color: white !important;
+ }
