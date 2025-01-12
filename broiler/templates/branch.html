@@ -116,7 +116,7 @@
         </div>
     </div>
  
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
  <script>
 
 
@@ -126,26 +126,28 @@
     // Function to load branches
     function loadBranches() {
         $.get("{% url 'branch_list' %}", function (data) {
-            let rows = "";
-            let counter = 1; // Start the counter at 1
-            data.forEach(function (branch) {
-                rows += `
-                <tr>
-                    <td>${counter}</td>
-                    <td>${branch.state}</td>
-                    <td>${branch.branch_name}</td>
-                    <td>
-                        <button class="btn btn-warning btn-sm edit-button" 
-                                data-id="${branch.id}" 
-                                data-state="${branch.state}" 
-                                data-branch-name="${branch.branch_name}">Edit</button>
-                        <button class="btn btn-danger btn-sm delete-button" 
-                                data-id="${branch.id}">Delete</button>
-                    </td>
-                </tr>`;
-                counter++;
-            });
+            const rows = data.map(function (branch, index) {
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${branch.state}</td>
+                        <td>${branch.branch_name}</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm edit-button" 
+                                    data-id="${branch.id}" 
+                                    data-state="${branch.state}" 
+                                    data-branch-name="${branch.branch_name}">Edit</button>
+                            <button class="btn btn-danger btn-sm delete-button" 
+                                    data-id="${branch.id}">Delete</button>
+                        </td>
+                    </tr>`;
+            }).join('');  // Efficiently joining the array to a string
+
+            // Update table body in one go
             $("#branch-table tbody").html(rows);
+
+            // Re-initialize DataTable to apply functionality
+            $('#branch-table').DataTable();
         });
     }
 

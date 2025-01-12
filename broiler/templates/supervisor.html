@@ -115,8 +115,7 @@
             </div>
         </div>
     </div>
- 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
     $(document).ready(function () {
         // Load Supervisor List
@@ -148,6 +147,9 @@
 
                      // Append the rows to the table body (assuming the table has a <tbody> with an id)
                     $("#supervisor-table tbody").html(rows);
+
+                     // Re-initialize DataTable to apply functionality
+                    $('#supervisor-table').DataTable();
                 },
             });
         }
