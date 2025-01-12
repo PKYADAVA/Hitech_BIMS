@@ -72,8 +72,7 @@
                         id="branch-table"
                         >
                         <thead class="table-dark">
-                            <tr>
-                                <th>ID</th>
+                            <tr>                               
                                 <th>State</th>
                                 <th>Branch Name</th>
                                 <th>Actions</th>
@@ -128,8 +127,7 @@
         $.get("{% url 'branch_list' %}", function (data) {
             const rows = data.map(function (branch, index) {
                 return `
-                    <tr>
-                        <td>${index + 1}</td>
+                    <tr>                       
                         <td>${branch.state}</td>
                         <td>${branch.branch_name}</td>
                         <td>
