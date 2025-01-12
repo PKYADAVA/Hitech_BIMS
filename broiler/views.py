@@ -4,11 +4,12 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.http import JsonResponse
 from django.views import View
-from .models import Branch
+from .models import Branch, Supervisor
 import json
 
 
 from broiler.models import Branch
+from django.db.models import F
 
 
 
@@ -84,3 +85,65 @@ class BranchAPI(View):
 
         branch.delete()
         return JsonResponse({'message': 'Branch deleted'})
+
+
+class SupervisorTemplateView(View):
+    def get(self, request):
+        # List of Indian states and union territories
+        
+        # Pass the data as context
+        context = {'branches': list(Branch.objects.values())}
+        # Render the branch_template.html file
+        return render(request, 'supervisor.html', context)
+
+
+class SupervisorAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                supervisor = Supervisor.objects.get(id=id)
+                return JsonResponse({'id': supervisor.id.id, 'supervisor': supervisor.name, 'branch_name': supervisor.branch.branch_name})
+            except Supervisor.DoesNotExist:
+                raise Http404('Supervisor not found')
+        else:
+            supervisors = list(
+                Supervisor.objects.select_related('branch')  # Load related branch data
+                .annotate(branch_name=F('branch__branch_name'))  # Create an alias for branch_name
+                .values('id', 'name', 'branch_name')  # Use the alias for the JSON response
+            )
+            return JsonResponse(supervisors, safe=False)
+
+    def post(self, request):
+
+        try:
+            data = (request.POST)
+            print(data,"data")
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+        branch = Branch.objects.get(branch_name=data['branch'])
+
+        Supervisor.objects.create(name=data['supervisor_name'], branch=branch)
+        return JsonResponse({'message': 'Supervisor created'}, status=201)
+    
+    def put(self, request, id):
+        try:
+            supervisor = Supervisor.objects.get(id=id)
+        except Supervisor.DoesNotExist:
+            raise Http404('Supervisor not found')
+
+        data = json.loads(request.body)
+        supervisor.name = data['name']
+        supervisor.branch.branch_name = data['branch_name']
+        supervisor.save()
+        return JsonResponse({'message': 'Supervisor updated'})
+
+    def delete(self, request, id):
+        try:
+            supervisor = Supervisor.objects.get(id=id)
+        except Supervisor.DoesNotExist:
+            raise Http404('Supervisor not found')
+
+        supervisor.delete()
+        return JsonResponse({'message': 'Supervisor deleted'})
