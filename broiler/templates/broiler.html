@@ -1,7 +1,17 @@
 {% extends 'base.html' %}
 
 {% block content %}
+ <!-- Toggle Navbar -->
+ {% include '_broiler_subnavbar.html' with active_tab='branch' %}
 
-Welcome to Broiler page
-
+ <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Find the active tab and trigger a click event
+      const activeTab = document.querySelector(".nav-link.active");
+      if (activeTab) {
+        activeTab.click();
+      }
+    });
+  </script>
+  
 {% endblock %}
