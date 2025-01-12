@@ -290,9 +290,12 @@
     }
 
     function validateField(field) {
+      console.log(field,"called function");
         const value = $(`#${field}`).val().trim();
+        console.log("value",value);
 
         if ((field === 'personal_contact' || field === 'emergency_contact')) {
+          console.log("vvvvvvvvvvvvvvvvvvvvv")
             if (!value) {
                 addError(field, 'This field is required');
                 return false;
@@ -305,6 +308,7 @@
         }
 
         else if (field === 'aadhar_number') {
+          console.log("nnnnnnnnnnnnnnnn")
             if (!value) {
                 addError(field, 'This field is required');
                 return false;
@@ -316,6 +320,7 @@
             }
         }
         else if (field === 'pan_card') {
+          console.log("ooooooo")
             if (!value) {
                 addError(field, 'This field is required');
                 return false;
@@ -327,6 +332,7 @@
             }
         }  
         else if (field === 'date_of_birth') {
+          console.log("date_of_birth")
             if (!value) {
                 addError(field, 'This field is required');
                 return false;
@@ -339,6 +345,7 @@
             }
         }
         else {
+          console.log("else")
             if (!value) {
                 addError(field, 'This field is required');
                 return false;
@@ -362,6 +369,7 @@
         let isValid = true;
 
         requiredFields.forEach(field => {
+          console.log(field,"field")
             if (!validateField(field)) {
                 console.log("iffffffffffffffff")
                 isValid = false;
