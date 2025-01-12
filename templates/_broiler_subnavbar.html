@@ -1,0 +1,56 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom mb-4">
+    <div class="container-fluid">
+      <button
+        class="navbar-toggler"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#subNavbar"
+        aria-controls="subNavbar"
+        aria-expanded="false"
+        aria-label="Toggle navigation"
+      >
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="subNavbar">
+        <ul class="nav nav-tabs">
+          <li class="nav-item">
+            <a
+              class="nav-link {% if active_tab == 'branch' %}active{% endif %}"
+              href="{% url 'branch_template' %}"
+            >
+              Branch
+            </a>
+          </li>
+          <li class="nav-item">
+            <a
+              class="nav-link {% if active_tab == 'supervisor' %}active{% endif %}"
+              href="{% url 'supervisor_template' %}"
+            >
+              Supervisor
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'broiler_place' %}active{% endif %}" href="#broilerplace-section">
+              Broiler Place
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'broiler_farm' %}active{% endif %}" href="#broilerfarm-section">
+              Broiler Farm
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'broiler_batch' %}active{% endif %}" href="#broilerbatch-section">
+              Broiler Batch
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'broiler_disease' %}active{% endif %}" href="#broilerdisease-section">
+              Broiler Disease
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  
