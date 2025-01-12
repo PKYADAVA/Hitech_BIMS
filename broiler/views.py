@@ -95,6 +95,46 @@ class SupervisorTemplateView(View):
         context = {'branches': list(Branch.objects.values())}
         # Render the branch_template.html file
         return render(request, 'supervisor.html', context)
+    
+class BroilerPlaceTemplateView(View):
+    def get(self, request):
+        # List of Indian states and union territories
+        
+        # Pass the data as context
+        context = {'branches': list(Branch.objects.values())}
+        # Render the branch_template.html file
+        return render(request, 'broiler_place.html', context)
+
+
+class BroilerFarmTemplateView(View):
+    def get(self, request):
+        # List of Indian states and union territories
+        
+        # Pass the data as context
+        context = {'branches': list(Branch.objects.values())}
+        # Render the branch_template.html file
+        return render(request, 'broiler_farm.html', context)
+
+
+
+class BroilerBatchTemplateView(View):
+    def get(self, request):
+        # List of Indian states and union territories
+        
+        # Pass the data as context
+        context = {'branches': list(Branch.objects.values())}
+        # Render the branch_template.html file
+        return render(request, 'broiler_batch.html', context)
+    
+
+class BroilerDiseaseTemplateView(View):
+    def get(self, request):
+        # List of Indian states and union territories
+        
+        # Pass the data as context
+        context = {'branches': list(Branch.objects.values())}
+        # Render the branch_template.html file
+        return render(request, 'broiler_disease.html', context)
 
 
 class SupervisorAPI(View):

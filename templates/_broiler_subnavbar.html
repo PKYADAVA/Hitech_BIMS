@@ -30,22 +30,22 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_place' %}active{% endif %}" href="#broilerplace-section">
+            <a class="nav-link {% if active_tab == 'broiler_place' %}active{% endif %}" href="{% url 'branch_place' %}">
               Broiler Place
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_farm' %}active{% endif %}" href="#broilerfarm-section">
+            <a class="nav-link {% if active_tab == 'broiler_farm' %}active{% endif %}" href="{% url 'branch_farm' %}">
               Broiler Farm
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_batch' %}active{% endif %}" href="#broilerbatch-section">
+            <a class="nav-link {% if active_tab == 'broiler_batch' %}active{% endif %}" href="{% url 'broiler_batch' %}">
               Broiler Batch
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_disease' %}active{% endif %}" href="#broilerdisease-section">
+            <a class="nav-link {% if active_tab == 'broiler_disease' %}active{% endif %}" href="{% url 'broiler_disease' %}">
               Broiler Disease
             </a>
           </li>
