@@ -363,11 +363,13 @@
 
         requiredFields.forEach(field => {
             if (!validateField(field)) {
+                console.log("iffffffffffffffff")
                 isValid = false;
             }
         });
 
         if (!isValid) {
+          console.log("ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss")
             event.preventDefault();
             $('html, body').animate({
                 scrollTop: $('.error:first').offset().top - 100
