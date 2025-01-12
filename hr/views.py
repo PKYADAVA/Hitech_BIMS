@@ -3,6 +3,7 @@
 """
 Defines views for managing employee records
 """
+import json
 import logging
 from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
@@ -13,6 +14,7 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
 from hr.models import Designation, Employee
 from hr.validation import validate_employee_data
 
@@ -324,11 +326,31 @@ def relieve_employee(request, id):
 @login_required(login_url='login')
 def employee_leave(request):
     """View function to handle employee leave."""
-    employee_details = Employee.objects.all().order_by('employee_id')
-    context = {
-        "employee_details": employee_details
-        }
+    try:
+        employee_details = Employee.objects.all().order_by('employee_id')
+        context = {
+            "employee_details": employee_details
+            }
+    except Exception as e:
+        logger.error(f"Error fetching employee details: {e}")
+        messages.error(request, "An error occurred while fetching employee details.")
+        return redirect("employee_list")
     return render(request,"employee_leave.html",context)
+
+@csrf_exempt
+def employee_save_attendance(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        employee_id = data.get("employee_id")
+        seleted_dates = data.get("selected_dates",[])
+        reason = data.get("reason")
+        print("dates",employee_id,seleted_dates,reason)
+
+        if not employee_id or not seleted_dates or not reason:
+            return JsonResponse({"success": False, "message": "All fields are required."}, status=400)
+
+        return JsonResponse({"success": True, "message": "Attendance saved successfully!"})
+    return JsonResponse({"success": False, "message": "Invalid request."}, status=400)
 
 @login_required(login_url='login')
 def employee_attendance(request):

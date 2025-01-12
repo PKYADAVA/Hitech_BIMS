@@ -14,14 +14,4 @@ $(document).ready(function() {
             $('.card.mb-4').addClass('d-none');
         }
     });
-
-    $('#submitButton').click(function(e) {
-        e.preventDefault();
-        
-        var employeeId = $('#employee_details').val();
-        var selectedEmployeeId = $('#selected-employee').val();
-        var date = $('#date').val();
-        var reason = $('#reason').val();
-        
-    });
 });
