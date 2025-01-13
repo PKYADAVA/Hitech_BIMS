@@ -375,6 +375,10 @@ def employee_mark_leave(request):
     return JsonResponse({"success": False, "message": "Invalid request."}, status=400)
 
 @login_required(login_url='login')
+def employee_leave_details(request):
+    return render(request, 'employee_leave_details.html')
+
+@login_required(login_url='login')
 def employee_attendance(request):
     """View function to handle employee attendance."""
     return render(request,"employee_attendance.html")
