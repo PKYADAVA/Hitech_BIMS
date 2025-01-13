@@ -15,7 +15,7 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
-from hr.models import Designation, Employee
+from hr.models import Designation, Employee, EmployeeLeave, EmployeeLeaveSelectedDate
 from hr.validation import validate_employee_data
 
 # Configure logger
@@ -338,18 +338,40 @@ def employee_leave(request):
     return render(request,"employee_leave.html",context)
 
 @csrf_exempt
-def employee_save_attendance(request):
+def employee_mark_leave(request):
     if request.method == "POST":
         data = json.loads(request.body)
         employee_id = data.get("employee_id")
         seleted_dates = data.get("selected_dates",[])
         reason = data.get("reason")
-        print("dates",employee_id,seleted_dates,reason)
+
+        if not isinstance(seleted_dates, list) or not all(isinstance(date, str) for date in seleted_dates):
+            return JsonResponse({"success": False, "message": "Invalid selected dates."}, status=400)
 
         if not employee_id or not seleted_dates or not reason:
             return JsonResponse({"success": False, "message": "All fields are required."}, status=400)
+        
+        try:
+            with transaction.atomic():
+                employee = Employee.objects.filter(id=employee_id).first()
+                if not employee:
+                    return JsonResponse({"success": False, "message": "Employee not found."}, status=404)
 
-        return JsonResponse({"success": True, "message": "Attendance saved successfully!"})
+                employee_leave = EmployeeLeave.objects.create(
+                    employee=employee,
+                    reason=reason
+                )
+                for date in seleted_dates:
+                    EmployeeLeaveSelectedDate.objects.create(
+                        employee_leave=employee_leave,
+                        date=date
+                    )
+        except Exception as e:
+            logger.error(f"Error marking leave for employee {employee_id}: {e}")
+            return JsonResponse({"success": False, "message": "An error occurred while marking leave."}, status=500)
+        
+        return JsonResponse({"success": True, "message": "Leave marked successfully."})
+    
     return JsonResponse({"success": False, "message": "Invalid request."}, status=400)
 
 @login_required(login_url='login')
