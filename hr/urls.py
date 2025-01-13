@@ -13,7 +13,8 @@ from hr.views import (
     relieve_employee,
     employee_attendance,
     employee_leave,
-    employee_mark_leave
+    employee_mark_leave,
+    employee_leave_details
 )
 
 
@@ -26,6 +27,7 @@ urlpatterns = [
     path("employees/leave/", employee_leave, name="employee_leave"),
     path("employees/attendance/", employee_attendance, name="employee_attendance"),
     path("save/employee/leave/",employee_mark_leave, name="employee_mark_leave"),
+    path("employee/leave/details/",employee_leave_details,name="employee_leave_details")
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

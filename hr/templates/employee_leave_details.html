@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% block title %}Employee Leave Details{% endblock title %}
+{% block nav %}
+   {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock nav %}
+{% block css %}
+<style>
+    .dataTables_filter {
+        float: right !important;
+        margin-left: 1rem;
+    }
+    .dataTables_filter input {
+        margin-left: 0.5em;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.375rem 0.75rem;
+    }
+    .dataTables_length {
+        float: right !important;
+    }
+    .card-header-custom {
+        padding: 1rem;
+        background-color: #f8f9fa;
+    }
+    .table-top-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    .table-right-controls {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    /* Style for the entries dropdown */
+    .dataTables_length select {
+        padding: 0.375rem 2.25rem 0.375rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        background-color: #fff;
+    }
+</style>
+{% endblock css %}
+{% block content %}
+<div class="container mt-4">
+    <!-- Header Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2 class="text-primary">Employee Leave Management System</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Leave Management</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Employees</h5>
+                    <h2 class="card-text">150</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Active Leaves</h5>
+                    <h2 class="card-text">12</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Requests</h5>
+                    <h2 class="card-text">8</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Leave Balance</h5>
+                    <h2 class="card-text">245</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leave Applications Table -->
+    <div class="card">
+        <div class="card-header card-header-custom">
+            <div class="table-top-controls">
+                <h5 class="mb-0">Leave Applications</h5>
+                <div class="table-right-controls">
+                    <a href="{% url 'employee_leave' %}">
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newLeaveModal">
+                        <i class="fas fa-plus"></i> New Leave Request
+                    </button>
+                </a>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-controls-wrapper mb-3">
+                <div class="table-right-controls float-end">
+                    <!-- Length and filter will be placed here by DataTables -->
+                </div>
+                <div class="clearfix"></div>
+            </div>
+            <table id="leaveTable" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>Leave Type</th>
+                        <th>From Date</th>
+                        <th>To Date</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>EMP001</td>
+                        <td>John Doe</td>
+                        <td>Annual Leave</td>
+                        <td>2025-01-20</td>
+                        <td>2025-01-25</td>
+                        <td>5</td>
+                        <td><span class="badge bg-warning">Pending</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-primary">View</button>
+                            <button class="btn btn-sm btn-success">Approve</button>
+                            <button class="btn btn-sm btn-danger">Reject</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>EMP002</td>
+                        <td>Jane Smith</td>
+                        <td>Sick Leave</td>
+                        <td>2025-01-15</td>
+                        <td>2025-01-16</td>
+                        <td>2</td>
+                        <td><span class="badge bg-success">Approved</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-primary">View</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+{% block js %}
+<script>
+    $(document).ready(function() {
+        $('#leaveTable').DataTable({
+            responsive: true,
+            order: [[3, 'desc']],
+            dom: '<"table-controls-wrapper"<"table-right-controls"lf>>rtip',
+            language: {
+                search: "",
+                searchPlaceholder: "Search...",
+                lengthMenu: "Show _MENU_ entries"
+            },
+            pageLength: 10,
+            lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]]
+        });
+    });
+</script>
+{% endblock js %}
