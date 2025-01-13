@@ -45,11 +45,6 @@
             <form method="GET" action="" class="mb-4">
                 <div class="input-group">
                     <input type="text" name="q" class="form-control" placeholder="Search...">
-                    {% comment %} <div class="input-group-append">
-                        <div class="input-group-text" style="margin-left: 5px; padding: 0;">
-                            <button type="submit" class="btn btn-primary">Search</button>
-                        </div>
-                    </div> {% endcomment %}
                 </div>
             </form>
         </div>
@@ -63,7 +58,7 @@
                 <th scope="col">Designation</th>
                 <th scope="col">Salary</th>
                 <th scope="col">Salary Type</th>
-                <th scope="col">Advance</th>
+                {% comment %} <th scope="col">Advance</th> {% endcomment %}
                 <th scope="col">Personal Contact</th>
                 <th scope="col">Emergency Contact</th>
                 <th scope="col">Relieve</th>
@@ -79,7 +74,7 @@
                 <td>{{ employee.designation.title}}</td>
                 <td>{{ employee.salary }}</td>
                 <td>{{ employee.salary_type }}</td>
-                <td>{{ employee.advance }}</td>
+                {% comment %} <td>{{ employee.advance }}</td> {% endcomment %}
                 <td>{{ employee.personal_contact }}</td>
                 <td>{{ employee.emergency_contact }}</td>
                 {% if employee.relieve %}

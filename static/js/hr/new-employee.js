@@ -7,7 +7,6 @@ $(document).ready(function () {
         'salary_type', 'date_of_joining', 'salary_account', 'bank_name', 'ifsc_code',
         'branch_name', 'saving'
     ];
-
     function removeError(field) {
         $(`#${field}`)
             .removeClass('error')
