@@ -141,24 +141,28 @@ document.getElementById("calendarGrid").addEventListener("click", async (event) 
    if (event.target.classList.contains("day") && !event.target.classList.contains("empty")) {
       const dayDate = event.target.dataset.date;
 
-      // Fetch holidays for the selected month (important to validate holidays in case of month change)
       const holidays = await fetchHolidays(selectedYear, selectedMonth);
 
-      // Check if the selected date is a Sunday (0 represents Sunday in JavaScript's Date object)
       const selectedDay = new Date(dayDate);
-      if (selectedDay.getDay() === 0) { // 0 represents Sunday
-         alert("Sundays cannot be selected.");
-         return; // Prevent selecting Sundays
+      if (selectedDay.getDay() === 0) { // Check for Sunday
+         $('#confirmationRelieveMessage')
+            .text('Sunday cannot be selected.')
+            .removeClass('text-success')
+            .addClass('text-danger');
+         $('#relieveConfirmationModal').modal('show');
+         return; 
       }
 
-      // Check if the selected date is a holiday
-      if (holidays.some(holiday => holiday.date.iso.startsWith(dayDate))) {
-         alert(`The selected date (${dayDate}) is a holiday and cannot be selected.`);
-         return; // Prevent selecting holidays
+      if (holidays.some(holiday => holiday.date.iso.startsWith(dayDate))) { // Check for holidays
+         $('#confirmationRelieveMessage')
+            .text(`The selected date (${dayDate}) is a holiday and cannot be selected.`)
+            .removeClass('text-success')
+            .addClass('text-danger');
+         $('#relieveConfirmationModal').modal('show');
+         return;
       }
 
-      // Toggle selection for the clicked date
-      if (selectedDates.includes(dayDate)) {
+      if (selectedDates.includes(dayDate)) { // Toggle date selection
          selectedDates = selectedDates.filter((date) => date !== dayDate);
          event.target.classList.remove("selected");
       } else {
@@ -168,15 +172,18 @@ document.getElementById("calendarGrid").addEventListener("click", async (event) 
    }
 });
 
-// Submit form and make AJAX POST request
 document.querySelector("button[type='submit']").addEventListener("click", async (event) => {
-   event.preventDefault(); // Prevent form submission
+   event.preventDefault();
 
    const employeeId = document.getElementById("employee_details").value;
    const absenceReason = document.querySelector("textarea[name='absence_reason']").value;
 
    if (!employeeId || !absenceReason || selectedDates.length === 0) {
-      alert("Please fill in all fields and select at least one date.");
+      $('#confirmationRelieveMessage')
+         .text("Please fill in all fields and select at least one date.")
+         .removeClass('text-success')
+         .addClass('text-danger');
+      $('#relieveConfirmationModal').modal('show');
       return;
    }
 
@@ -187,7 +194,7 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
    };
 
    try {
-      const response = await fetch('/save/employee/attendance/', {
+      const response = await fetch('/save/employee/leave/', {
          method: 'POST',
          headers: {
             'Content-Type': 'application/json',
@@ -196,17 +203,31 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
       });
 
       if (response.ok) {
-         alert("Attendance marked successfully!");
-         // You can reset the form or handle success here
+         $('#confirmationRelieveMessage')
+            .text("Attendance marked successfully!")
+            .removeClass('text-danger')
+            .addClass('text-success');
+         $('#relieveConfirmationModal').modal('show');
+         setTimeout(() => {
+            location.reload();
+         }, 3000);
+         // Optionally reset the form here
       } else {
-         alert("There was an error marking attendance.");
+         $('#confirmationRelieveMessage')
+            .text("There was an error marking attendance. Please try again.")
+            .removeClass('text-success')
+            .addClass('text-danger');
+         $('#relieveConfirmationModal').modal('show');
       }
    } catch (error) {
       console.error("Error making POST request:", error);
-      alert("There was an error. Please try again.");
+      $('#confirmationRelieveMessage')
+         .text("There was an error. Please try again.")
+         .removeClass('text-success')
+         .addClass('text-danger');
+      $('#relieveConfirmationModal').modal('show');
    }
 });
-
 // Initialize
 populateYearSelector();
 renderCalendar();

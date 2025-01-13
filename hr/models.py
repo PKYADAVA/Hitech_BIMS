@@ -107,6 +107,34 @@ class Employee(models.Model):
             self.employee_id = self.generate_unique_employee_id()
         super().save(*args, **kwargs)
 
+class EmployeeLeave(models.Model):
+    """Represent an employee's leave request"""
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="leave_requests",
+        null=True,
+        blank=True
+    )
+    reason = models.CharField(max_length=500, null=True, blank=True)
+
+    def __str__(self):
+        """Returns a string representation of this object with the given fields"""
+        return f"{self.employee.full_name} - {self.reason}"
+    
+class EmployeeLeaveSelectedDate(models.Model):
+    """Represent an employee's leave request that has been deducted"""
+    employee_leave = models.ForeignKey(
+        EmployeeLeave,
+        on_delete=models.CASCADE,
+        related_name="leave_deletions",
+        null=True
+    )
+    date = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        """Returns a string representation of this object with the given fields"""
+        return f"{self.employee_leave.employee.full_name} - {self.date}"
 
 class Attendance(models.Model):
     """Represent an attendance for a given employee"""
