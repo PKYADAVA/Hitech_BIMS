@@ -1,5 +1,11 @@
 {% extends 'base.html' %}
 
+{% block title %}Manage Broiler{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock %}
+
 {% block content %}
  <!-- Toggle Navbar -->
  {% include '_broiler_subnavbar.html' with active_tab='branch' %}
@@ -7,11 +13,11 @@
  <script>
     document.addEventListener("DOMContentLoaded", function () {
       // Find the active tab and trigger a click event
-      const activeTab = document.querySelector(".nav-link.active");
+      const activeTab = document.querySelector(".nav-link.active.activate");
       if (activeTab) {
         activeTab.click();
       }
     });
-  </script>
+  </script> 
   
 {% endblock %}

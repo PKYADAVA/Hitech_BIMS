@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Employee Attendance{% endblock title %}
+{% block nav %}
+   {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock nav %}
 {% block css %}
    <link rel="stylesheet" href="{% static 'css/attendance-calender.css' %}">
 {% endblock css %}

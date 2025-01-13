@@ -2,6 +2,10 @@
 
 {% block title %}Manage Broiler Disease{% endblock %}
 
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
 {% block content %}
 {% include '_broiler_subnavbar.html' with active_tab='broiler_disease' %}
 <div class="container-cstm mt-5">

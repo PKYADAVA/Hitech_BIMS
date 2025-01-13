@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Employee List{% endblock title %}
+{% block nav %}
+    {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock nav %}
+
 {% block body %}
 <div class="modal fade" id="relieveConfirmationModal" tabindex="-1" aria-labelledby="relieveConfirmationLabel" aria-hidden="true">
     <div class="modal-dialog">

@@ -1,5 +1,11 @@
 {% extends 'base.html' %}
 
+{% block title %}Home{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='home' %}
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <!-- Dashboard Header Section -->

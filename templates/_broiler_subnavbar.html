@@ -15,7 +15,7 @@
         <ul class="nav nav-tabs">
           <li class="nav-item">
             <a
-              class="nav-link {% if active_tab == 'branch' %}active{% endif %}"
+              class="nav-link {% if active_tab == 'branch' %}active{% endif %} activate"
               href="{% url 'branch_template' %}"
             >
               Branch
@@ -23,29 +23,29 @@
           </li>
           <li class="nav-item">
             <a
-              class="nav-link {% if active_tab == 'supervisor' %}active{% endif %}"
+              class="nav-link {% if active_tab == 'supervisor' %}active{% endif %} activate"
               href="{% url 'supervisor_template' %}"
             >
               Supervisor
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_place' %}active{% endif %}" href="{% url 'branch_place' %}">
+            <a class="nav-link {% if active_tab == 'broiler_place' %}active{% endif %} activate" href="{% url 'branch_place' %}">
               Broiler Place
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_farm' %}active{% endif %}" href="{% url 'branch_farm' %}">
+            <a class="nav-link {% if active_tab == 'broiler_farm' %}active{% endif %} activate" href="{% url 'branch_farm' %}">
               Broiler Farm
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_batch' %}active{% endif %}" href="{% url 'broiler_batch' %}">
+            <a class="nav-link {% if active_tab == 'broiler_batch' %}active{% endif %} activate" href="{% url 'broiler_batch' %}">
               Broiler Batch
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'broiler_disease' %}active{% endif %}" href="{% url 'broiler_disease' %}">
+            <a class="nav-link {% if active_tab == 'broiler_disease' %}active{% endif %} activate" href="{% url 'broiler_disease' %}">
               Broiler Disease
             </a>
           </li>

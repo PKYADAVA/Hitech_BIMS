@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
 {% load static %}
+
 {% block title %}
   New Employee
+{% endblock %}
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hr' %}
 {% endblock %}
 {% block content %}
   <div class="container mt-5 mb-5 largest-margin">
