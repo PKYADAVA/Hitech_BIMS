@@ -34,7 +34,8 @@ LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
 SECRET_KEY = "django-insecure-#)8h+8a*2s4d!^_q2&ykr2r+opj^^3&*hued7xy1x&!n3a*lzm"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "True") == "True"
+DEVELOPMENT_MODE = os.getenv("DEVELOPMENT", "True") == "True"
 
 ALLOWED_HOSTS = ["*"]  # Allows all domains (use with caution in production)
 
@@ -88,20 +89,24 @@ WSGI_APPLICATION = "Hitech_BIMS.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-# DATABASES = {
-#     "default": {
-#         "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-#         "NAME": os.getenv("DB_NAME"),
-#         "USER": os.getenv("DB_USER"),
-#         "PASSWORD": os.getenv("DB_PASSWORD"),
-#         "HOST": os.getenv("DB_HOST", "localhost"),
-#         "PORT": os.getenv("DB_PORT", "5432"),
-#     }
-# }
+print(DEVELOPMENT_MODE, "DEVELOPMENT_MODE")
+if DEVELOPMENT_MODE:
+    DATABASES = {
+        "default": {
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+        }
+    }
 
-DATABASES = {
-    'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
-}
+else:    
+
+    DATABASES = {
+        'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
+    }
 
 LOGIN_URL = '/login/'
 
