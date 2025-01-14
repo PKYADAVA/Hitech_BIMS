@@ -174,26 +174,9 @@
             });
         });
     
-        // Edit Supervisor
-        {% comment %} $(document).on("click", ".edit-supervisor", function () {
-            var supervisor_id = $(this).data("id");
-            $.ajax({
-                url: "{% url 'supervisor_edit' supervisor_id %}",
-                type: "GET",
-                data: {
-                    supervisor_id: supervisor_id,
-                },
-                success: function (response) {
-                    $("#editSupervisorModal").modal("show");
-                    $("#supervisor-id").val(response.id);
-                    $("#branch").val(response.branch);
-                    $("#supervisor_name").val(response.supervisor_name);
-                },
-            });
-        });// {% endcomment %}
-    
+   
         // Update Supervisor
-        {% comment %} $("#edit-supervisor-form").submit(function (e) {
+        $("#edit-supervisor-form").submit(function (e) {
             e.preventDefault();
             var supervisor_id = $("#supervisor-id").val();
             var branch = $("#branch").val();
