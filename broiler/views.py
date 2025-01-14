@@ -3,13 +3,11 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.http import Http404, JsonResponse
-from django.views import View
-from .models import Branch, BroilerBatch, BroilerFarm, BroilerPlace, Supervisor
+from django.db.models import F
+from django.core.files.storage import default_storage
+from .models import Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerPlace, Supervisor
 import json
 
-
-from broiler.models import Branch
-from django.db.models import F
 
 
 @login_required()
@@ -359,3 +357,75 @@ class BroilerBatchAPI(View):
 
         broiler_batch.delete()
         return JsonResponse({"message": "BroilerBatch deleted"})
+
+
+@method_decorator(login_required, name="dispatch")
+class BroilerDiseaseAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                broiler_disease = BroilerDisease.objects.get(id=id)
+                return JsonResponse(
+                    {
+                        "id": broiler_disease.id,
+                        "disease_code": broiler_disease.disease_code,
+                        "disease_name": broiler_disease.disease_name,
+                        "symptoms": broiler_disease.symptoms,
+                        "diagnosis": broiler_disease.diagnosis,
+                        "image": broiler_disease.image.url if broiler_disease.image else None,
+                    }
+                )
+            except BroilerDisease.DoesNotExist:
+                raise Http404("BroilerDisease not found")
+        else:
+            broiler_diseases = list(
+                BroilerDisease.objects.values(
+                    "id", "disease_code", "disease_name", "symptoms", "diagnosis", "image"
+                )
+            )
+            # Convert image paths to URLs
+            for disease in broiler_diseases:
+                disease["image"] = request.build_absolute_uri(disease["image"]) if disease["image"] else None
+            return JsonResponse(broiler_diseases, safe=False)
+
+    def post(self, request):
+        try:
+            data = request.POST
+            image = request.FILES.get("image")
+        except Exception:
+            return JsonResponse({"error": "Invalid data or image"}, status=400)
+
+        BroilerDisease.objects.create(
+            disease_code=data["disease_code"],
+            disease_name=data["disease_name"],
+            symptoms=data["symptoms"],
+            diagnosis=data["diagnosis"],
+            image=image,
+        )
+        return JsonResponse({"message": "BroilerDisease created"}, status=201)
+
+    def put(self, request, id):
+        try:
+            broiler_disease = BroilerDisease.objects.get(id=id)
+        except BroilerDisease.DoesNotExist:
+            raise Http404("BroilerDisease not found")
+
+        data = json.loads(request.body.decode("utf-8"))
+        broiler_disease.disease_code = data.get("disease_code", broiler_disease.disease_code)
+        broiler_disease.disease_name = data.get("disease_name", broiler_disease.disease_name)
+        broiler_disease.symptoms = data.get("symptoms", broiler_disease.symptoms)
+        broiler_disease.diagnosis = data.get("diagnosis", broiler_disease.diagnosis)
+        broiler_disease.save()
+        return JsonResponse({"message": "BroilerDisease updated"})
+
+    def delete(self, request, id):
+        try:
+            broiler_disease = BroilerDisease.objects.get(id=id)
+        except BroilerDisease.DoesNotExist:
+            raise Http404("BroilerDisease not found")
+
+        if broiler_disease.image:
+            default_storage.delete(broiler_disease.image.path)  # Delete the image file
+        broiler_disease.delete()
+        return JsonResponse({"message": "BroilerDisease deleted"})
