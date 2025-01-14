@@ -182,4 +182,166 @@
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function () {
+    // CSRF token setup for AJAX
+    function getCSRFToken() {
+        return $("input[name=csrfmiddlewaretoken]").val();
+    }
+
+    // Function to load farms data into the table
+    function loadFarms() {
+        $.ajax({
+            url: "/broiler_farm/", // Endpoint for getting the list of farms
+            type: "GET",
+            success: function (data) {
+                console.log(data);
+                const tbody = $("#farm-table tbody");
+                tbody.empty();
+                data.forEach(farm => {
+                    tbody.append(`
+                        <tr>
+                            <td>${farm.branch_name}</td>
+                            <td>${farm.supervisor_name}</td>
+                            <td>${farm.broiler_place_name}</td>
+                            <td>${farm.farm_name}</td>
+                            <td>
+                                <button class="btn btn-warning btn-sm edit-farm" data-id="${farm.id}">Edit</button>
+                                <button class="btn btn-danger btn-sm delete-farm" data-id="${farm.id}">Delete</button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                 // Re-initialize DataTable to apply functionality
+                 $('#farm-table').DataTable();
+            },
+            error: function (xhr) {
+                alert("Error loading farms. Please try again.");
+            }
+        });
+    }
+
+    // Load farms on page load
+    loadFarms();
+
+    // Handle form submission
+    $("#farm-form").submit(function (e) {
+        e.preventDefault();
+        const formData = {
+            branch: $("#branch").val(),
+            supervisor: $("#supervisor").val(),
+            broiler_place: $("#broiler_place").val(),
+            farm_code: $("#farm_code").val(),
+            farm_name: $("#farm_name").val(),
+            mobile_no: $("#mobile_no").val(),
+            block_name: $("#block_name").val(),
+            address: $("#address").val(),
+            farm_latitude: $("#farm_latitude").val(),
+            farm_longitude: $("#farm_longitude").val(),
+            farm_type: $("#farm_type").val(),
+        };
+
+        $.ajax({
+            url: "/broiler_farm_create/",
+            type: "POST",
+            data: formData,
+            headers: {
+                "X-CSRFToken": getCSRFToken()
+            },
+            success: function () {
+                $("#farmFormModal").modal("hide");
+                loadFarms();
+                alert("Farm added successfully!");
+            },
+            error: function (xhr) {
+                alert("Error adding farm. Please check your input.");
+            }
+        });
+    });
+
+    // Handle edit button click
+    $(document).on("click", ".edit-farm", function () {
+        const farmId = $(this).data("id");
+        $.ajax({
+            url: `/broiler_farm/${farmId}/`,
+            type: "GET",
+            success: function (farm) {
+                $("#branch").val(farm.branch);
+                $("#supervisor").val(farm.supervisor);
+                $("#broiler_place").val(farm.place);
+                $("#farm_code").val(farm.farm_code);
+                $("#farm_name").val(farm.farm_name);
+                $("#mobile_no").val(farm.mobile_no);
+                $("#block_name").val(farm.block_name);
+                $("#address").val(farm.address);
+                $("#farm_latitude").val(farm.farm_latitude);
+                $("#farm_longitude").val(farm.farm_longitude);
+                $("#farm_type").val(farm.farm_type);
+                $("#farmFormModal").modal("show");
+
+                // Update form submit behavior
+                $("#farm-form").off("submit").on("submit", function (e) {
+                    e.preventDefault();
+                    const updatedData = {
+                        branch: $("#branch").val(),
+                        supervisor: $("#supervisor").val(),
+                        broiler_place: $("#broiler_place").val(),
+                        farm_code: $("#farm_code").val(),
+                        farm_name: $("#farm_name").val(),
+                        mobile_no: $("#mobile_no").val(),
+                        block_name: $("#block_name").val(),
+                        address: $("#address").val(),
+                        farm_latitude: $("#farm_latitude").val(),
+                        farm_longitude: $("#farm_longitude").val(),
+                        farm_type: $("#farm_type").val(),
+                    };
+
+                    $.ajax({
+                        url: `/broiler_farm/${farmId}/update/`,
+                        type: "PUT",
+                        data: JSON.stringify(updatedData),
+                        contentType: "application/json",
+                        headers: {
+                            "X-CSRFToken": getCSRFToken()
+                        },
+                        success: function () {
+                            $("#farmFormModal").modal("hide");
+                            loadFarms();
+                            alert("Farm updated successfully!");
+                        },
+                        error: function (xhr) {
+                            alert("Error updating farm.");
+                        }
+                    });
+                });
+            },
+            error: function () {
+                alert("Error fetching farm details.");
+            }
+        });
+    });
+
+    // Handle delete button click
+    $(document).on("click", ".delete-farm", function () {
+        const farmId = $(this).data("id");
+        if (confirm("Are you sure you want to delete this farm?")) {
+            $.ajax({
+                url: `/broiler_farm/${farmId}/delete/`,
+                type: "DELETE",
+                headers: {
+                    "X-CSRFToken": getCSRFToken()
+                },
+                success: function () {
+                    loadFarms();
+                    alert("Farm deleted successfully!");
+                },
+                error: function () {
+                    alert("Error deleting farm.");
+                }
+            });
+        }
+    });
+});
+</script>
+
 {% endblock content %}

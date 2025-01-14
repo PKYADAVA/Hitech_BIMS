@@ -429,3 +429,102 @@ class BroilerDiseaseAPI(View):
             default_storage.delete(broiler_disease.image.path)  # Delete the image file
         broiler_disease.delete()
         return JsonResponse({"message": "BroilerDisease deleted"})
+    
+
+@method_decorator(login_required, name="dispatch")
+class BroilerFarmAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                broiler_farm = BroilerFarm.objects.get(id=id)
+                return JsonResponse(
+                    {
+                        "id": broiler_farm.id,
+                        "farm_code": broiler_farm.farm_code,
+                        "farm_name": broiler_farm.farm_name,
+                        "branch_name": broiler_farm.branch.branch_name if broiler_farm.branch else None,
+                        "supervisor_name": broiler_farm.supervisor.name if broiler_farm.supervisor else None,
+                        "broiler_place_name": broiler_farm.broiler_place.name if broiler_farm.broiler_place else None,
+                        "mobile_no": broiler_farm.mobile_no,
+                        "block_name": broiler_farm.block_name,
+                        "address": broiler_farm.address,
+                        "farm_latitude": broiler_farm.farm_latitude,
+                        "farm_longitude": broiler_farm.farm_longitude,
+                        "farm_type": broiler_farm.farm_type,
+                    }
+                )
+            except BroilerFarm.DoesNotExist:
+                raise Http404("BroilerFarm not found")
+        else:
+            broiler_farms = list(
+                BroilerFarm.objects.select_related("branch", "supervisor", "broiler_place").values(
+                    "id", "farm_code", "farm_name", "mobile_no", "block_name",
+                    "address", "farm_latitude", "farm_longitude", "farm_type",
+                    branch_name=F("branch__branch_name"),
+                    supervisor_name=F("supervisor__name"),
+                    broiler_place_name=F("broiler_place__place_name"),
+                )
+            )
+            return JsonResponse(broiler_farms, safe=False)
+
+    def post(self, request):
+        try:
+            data = request.POST
+        except Exception:
+            return JsonResponse({"error": "Invalid data"}, status=400)
+
+        branch = Branch.objects.get(id=data["branch_id"])
+        supervisor = Supervisor.objects.get(id=data["supervisor_id"])
+        broiler_place = BroilerPlace.objects.get(id=data["broiler_place_id"])
+
+        BroilerFarm.objects.create(
+            farm_code=data["farm_code"],
+            farm_name=data["farm_name"],
+            branch=branch,
+            supervisor=supervisor,
+            broiler_place=broiler_place,
+            mobile_no=data["mobile_no"],
+            block_name=data["block_name"],
+            address=data["address"],
+            farm_latitude=data["farm_latitude"],
+            farm_longitude=data["farm_longitude"],
+            farm_type=data["farm_type"],
+        )
+        return JsonResponse({"message": "BroilerFarm created"}, status=201)
+
+    def put(self, request, id):
+        try:
+            broiler_farm = BroilerFarm.objects.get(id=id)
+        except BroilerFarm.DoesNotExist:
+            raise Http404("BroilerFarm not found")
+
+        data = json.loads(request.body.decode("utf-8"))
+
+        broiler_farm.farm_code = data.get("farm_code", broiler_farm.farm_code)
+        broiler_farm.farm_name = data.get("farm_name", broiler_farm.farm_name)
+        broiler_farm.mobile_no = data.get("mobile_no", broiler_farm.mobile_no)
+        broiler_farm.block_name = data.get("block_name", broiler_farm.block_name)
+        broiler_farm.address = data.get("address", broiler_farm.address)
+        broiler_farm.farm_latitude = data.get("farm_latitude", broiler_farm.farm_latitude)
+        broiler_farm.farm_longitude = data.get("farm_longitude", broiler_farm.farm_longitude)
+        broiler_farm.farm_type = data.get("farm_type", broiler_farm.farm_type)
+
+        if "branch_id" in data:
+            broiler_farm.branch = Branch.objects.get(id=data["branch_id"])
+        if "supervisor_id" in data:
+            broiler_farm.supervisor = Supervisor.objects.get(id=data["supervisor_id"])
+        if "broiler_place_id" in data:
+            broiler_farm.broiler_place = BroilerPlace.objects.get(id=data["broiler_place_id"])
+
+        broiler_farm.save()
+        return JsonResponse({"message": "BroilerFarm updated"})
+
+    def delete(self, request, id):
+        try:
+            broiler_farm = BroilerFarm.objects.get(id=id)
+        except BroilerFarm.DoesNotExist:
+            raise Http404("BroilerFarm not found")
+
+        broiler_farm.delete()
+        return JsonResponse({"message": "BroilerFarm deleted"})
