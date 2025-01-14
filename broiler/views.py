@@ -4,7 +4,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.http import Http404, JsonResponse
 from django.views import View
-from .models import Branch, Supervisor
+from .models import Branch, BroilerPlace, Supervisor
 import json
 
 
@@ -100,7 +100,7 @@ class BroilerPlaceTemplateView(View):
         # List of Indian states and union territories
         
         # Pass the data as context
-        context = {'branches': list(Branch.objects.values())}
+        context = {'supervisors': list(Supervisor.objects.values())}
         # Render the branch_template.html file
         return render(request, 'broiler_place.html', context)
 
@@ -126,6 +126,7 @@ class BroilerBatchTemplateView(View):
         # Render the branch_template.html file
         return render(request, 'broiler_batch.html', context)
     
+
 @method_decorator(login_required, name='dispatch')
 class BroilerDiseaseTemplateView(View):
     def get(self, request):
@@ -187,3 +188,55 @@ class SupervisorAPI(View):
 
         supervisor.delete()
         return JsonResponse({'message': 'Supervisor deleted'})
+
+
+@method_decorator(login_required, name='dispatch')
+class BroilerPlaceAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                broiler_place = BroilerPlace.objects.get(id=id)
+                return JsonResponse({'id': broiler_place.id, 'name': broiler_place.place_name, 'supervisor_name': broiler_place.supervisor.name})
+            except BroilerPlace.DoesNotExist:
+                raise Http404('Supervisor not found')
+        else:
+            broiler_places = list(
+                BroilerPlace.objects.select_related('supervisor')  # Load related branch data
+                .annotate(supervisor_name=F('supervisor__name'))  # Create an alias for branch_name
+                .values('id', 'place_name', 'supervisor_name')  # Use the alias for the JSON response
+            )
+            return JsonResponse(broiler_places, safe=False)
+
+    def post(self, request):
+
+        try:
+            data = (request.POST)
+            print(data,"data")
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+        super_obj = Supervisor.objects.get(id=data['supervisor_id'])
+
+        BroilerPlace.objects.create(place_name=data['place_name'], supervisor=super_obj)
+        return JsonResponse({'message': 'BroilerPlace created'}, status=201)
+    
+    def put(self, request, id):
+        try:
+            broiler_place = BroilerPlace.objects.get(id=id)
+        except Supervisor.DoesNotExist:
+            raise Http404('Supervisor not found')
+
+        data = json.loads(request.body)
+        broiler_place.place_name = data['place_name']
+        broiler_place.save()
+        return JsonResponse({'message': 'BroilerPlace updated'})
+
+    def delete(self, request, id):
+        try:
+            broiler_place = BroilerPlace.objects.get(id=id)
+        except BroilerPlace.DoesNotExist:
+            raise Http404('Supervisor not found')
+
+        broiler_place.delete()
+        return JsonResponse({'message': 'BroilerPlace deleted'})
