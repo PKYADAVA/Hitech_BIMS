@@ -176,7 +176,7 @@
     
    
         // Update Supervisor
-        $("#edit-supervisor-form").submit(function (e) {
+        {% comment %} $("#edit-supervisor-form").submit(function (e) {
             e.preventDefault();
             var supervisor_id = $("#supervisor-id").val();
             var branch = $("#branch").val();
@@ -197,7 +197,6 @@
             });
         });
     
-        // Delete Supervisor
         $(document).on("click", ".delete-supervisor", function () {
             var supervisor_id = $(this).data("id");
             $.ajax({
@@ -212,7 +211,7 @@
                 },
             });
     
-        }); 
+        });  {% endcomment %}
     });
 </script>
 {% endblock %}
