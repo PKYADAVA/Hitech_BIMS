@@ -2,7 +2,7 @@
 from django.urls import path
 from . import views
 
-from .views import BranchAPI, BranchTemplateView, BroilerBatchTemplateView, BroilerDiseaseTemplateView, BroilerFarmTemplateView, BroilerPlaceAPI, BroilerPlaceTemplateView, SupervisorAPI, SupervisorTemplateView
+from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseTemplateView, BroilerFarmTemplateView, BroilerPlaceAPI, BroilerPlaceTemplateView, SupervisorAPI, SupervisorTemplateView
 
 urlpatterns = [
     path('broiler/', views.broiler, name='broiler'),  
@@ -23,6 +23,10 @@ urlpatterns = [
     path('branch_place/<int:id>/delete/', BroilerPlaceAPI.as_view(), name='broiler_place_delete'), # For deleting broiler place
     path('branch-farm/', BroilerFarmTemplateView.as_view(), name='branch_farm'),
     path('broiler-disease/', BroilerDiseaseTemplateView.as_view(), name='broiler_disease'),
-    path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch')
+    path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch'),
+    path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
+    path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
+    path('broiler_batch/<int:id>/', BroilerBatchAPI.as_view(), name='broiler_batch_edit'),  # For editing broiler batch
+    path('broiler_batch/<int:id>/delete/', BroilerBatchAPI.as_view(), name='broiler_batch_delete'), # For deleting broiler batch
     
 ]

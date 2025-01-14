@@ -71,7 +71,7 @@
                 <div class="card-body">
                     <table
                         class="table table-striped table-hover table-bordered"
-                        id="batch-table"
+                        id="broiler-batch-table"
                     >
                         <thead class="table-dark">
                             <tr>
@@ -91,4 +91,122 @@
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(function () {
+        // Load Broiler Batch List
+        function loadBatchList() {
+            $.ajax({
+                url: "{% url 'broiler_batch_list' %}",
+                type: "GET",
+                success: function (response) {
+                    let rows = "";
+                    response.forEach(function (item) {
+                        rows += `
+                        <tr>                   
+                            <td>${item.broiler_farm_name}</td>
+                            <td>${item.batch_name}</td>
+                            <td>
+                                <button class="btn btn-warning btn-sm edit-button" 
+                                        data-id="${item.id}" 
+                                        data-broiler-farm="${item.broiler_farm}" 
+                                        data-batch-name="${item.batch_name}">Edit</button>
+                                <button class="btn btn-danger btn-sm delete-button" 
+                                        data-id="${item.id}">Delete</button>
+                            </td>
+                        </tr>`;
+                    });
+
+                    // Append the rows to the table body (assuming the table has a <tbody> with an id)
+                    $("#broiler-batch-table tbody").html(rows);
+
+                    // Re-initialize DataTable to apply functionality
+                    $('#broiler-batch-table').DataTable();
+                },
+            });
+        }
+        loadBatchList();
+
+        // Add Broiler Batch
+        $("#broiler-batch-form").submit(function (e) {
+            e.preventDefault();
+            var broiler_farm = $("#broiler_farm").val();
+            var batch_name = $("#batch_name").val();
+            $.ajax({
+                url: "{% url 'broiler_batch_create' %}",
+                type: "POST",
+                data: {
+                    broiler_farm: broiler_farm,
+                    batch_name: batch_name,
+                    csrfmiddlewaretoken: "{{ csrf_token }}",
+                },
+                success: function () {
+                    loadBatchList();
+                    $("#batchFormModal").modal("hide");
+                    $("#broiler-batch-form").trigger("reset");
+                },
+            });
+        });
+
+        // Edit Broiler Batch
+        $(document).on("click", ".edit-button", function () {
+            var id = $(this).data("id");
+            $.ajax({
+                url: `/broiler_batch/${id}/`,
+                type: "GET",
+                success: function (response) {
+                    $("#editBatchModal").modal("show");
+                    $("#batch-id").val(response.id);
+                    $("#edit_broiler_farm").val(response.broiler_farm);
+                    $("#edit_batch_name").val(response.batch_name);
+                },
+            });
+        });
+
+        // Update Broiler Batch
+        $("#edit-batch-form").submit(function (e) {
+            e.preventDefault();
+            var batch_id = $("#batch-id").val();
+            var broiler_farm = $("#edit_broiler_farm").val();
+            var batch_name = $("#edit_batch_name").val();
+            $.ajax({
+                url: `/broiler_batch/${batch_id}/update/`,
+                type: "POST",
+                data: {
+                    batch_id: batch_id,
+                    broiler_farm: broiler_farm,
+                    batch_name: batch_name,
+                    csrfmiddlewaretoken: "{{ csrf_token }}",
+                },
+                success: function () {
+                    loadBatchList();
+                    $("#editBatchModal").modal("hide");
+                },
+            });
+        });
+
+        // Delete Broiler Batch
+        $(document).on("click", ".delete-button", function () {
+            const id = $(this).data("id");
+            const csrfToken = "{{ csrf_token }}";
+
+            if (confirm("Are you sure you want to delete this batch?")) {
+                const deleteUrl = `/broiler_batch/${id}/delete/`;
+
+                $.ajax({
+                    url: deleteUrl,
+                    method: "DELETE",
+                    headers: { "X-CSRFToken": csrfToken },
+                    success: function () {
+                        loadBatchList();
+                        alert("Batch deleted successfully!");
+                    },
+                    error: function () {
+                        alert("An error occurred while deleting the batch.");
+                    },
+                });
+            }
+        });
+    });
+</script>
+
 {% endblock content %}
