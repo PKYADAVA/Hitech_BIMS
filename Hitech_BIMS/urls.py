@@ -11,4 +11,7 @@ urlpatterns = [
     path("", include("broiler.urls")),
     path("", include("hr.urls")),
     path("", include("inventory.urls")),
+    # path("", include("account.urls")),
+    # path("", include("purchase.urls")),
+    # path("", include("sales.urls"))
 ]
