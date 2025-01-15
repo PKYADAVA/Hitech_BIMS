@@ -1,4 +1,4 @@
-#pylint: disable=no-member
+# pylint: disable=no-member
 # pylint: disable=logging-fstring-interpolation
 """
 Defines views for managing employee records
@@ -14,29 +14,38 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.decorators.csrf import csrf_exempt
-from hr.models import Designation, Employee, EmployeeLeave, EmployeeLeaveSelectedDate
+from hr.models import Designation, Employee, EmployeeLeave
 from hr.validation import validate_employee_data
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
-@login_required(login_url='login')
+
+@login_required(login_url="login")
 def employee_list(request):
     """Display a list of employees."""
-    employees = Employee.objects.all().order_by('id') 
+    employees = Employee.objects.all().order_by("id")
 
     paginator = Paginator(employees, 10)
-    page_number = request.GET.get('page')
+    page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     total_count = employees.count()
 
-    return render(request, "employee_list.html", {
-        "employee_details": page_obj,
-        "total_count": total_count,
-    })
-@login_required(login_url='login')
+    return render(
+        request,
+        "employee_list.html",
+        {
+            "employee_details": page_obj,
+            "total_count": total_count,
+        },
+    )
+
+
+@login_required(login_url="login")
 def create_new_employee(request):
     """
     adding new employees functionality
@@ -161,7 +170,8 @@ def create_new_employee(request):
     context = {"designation_detail": designations_details}
     return render(request, "new_employee.html", context)
 
-@login_required(login_url='login')
+
+@login_required(login_url="login")
 def edit_employee(request, pk):
     """
     View function to handle employee editing.
@@ -256,7 +266,8 @@ def edit_employee(request, pk):
         messages.error(request, "An unexpected error occurred")
         return redirect("employee_list")
 
-@login_required(login_url='login')
+
+@login_required(login_url="login")
 def delete_employee(request, id):
     """Delete an employee."""
     if request.method == "GET":
@@ -287,10 +298,15 @@ def delete_employee(request, id):
             {"success": False, "message": "Invalid request method."}, status=400
         )
 
-@login_required(login_url='login')
-def relieve_employee(request, id):
-    """relieve an employee."""
-    if request.method == "GET":
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class RelieveEmployeeView(View):
+    """Class-based view to relieve an employee."""
+
+    def get(self, request, id):
+        """
+        Handle GET requests to relieve an employee.
+        """
         try:
             employee = get_object_or_404(Employee, id=id)
             if employee.relieve:
@@ -300,7 +316,7 @@ def relieve_employee(request, id):
             employee.relieve = True
             employee.save()
             return JsonResponse(
-                {"success": True, "message": "Employee relieve successfully."}
+                {"success": True, "message": "Employee relieved successfully."}
             )
         except Employee.DoesNotExist:
             logger.error(f"Employee with ID {id} does not exist.")
@@ -309,76 +325,90 @@ def relieve_employee(request, id):
             )
         except Exception as e:
             logger.exception(
-                f"An error occurred while relieve employee with ID {id}: {e}"
+                f"An error occurred while relieving employee with ID {id}: {e}"
             )
             return JsonResponse(
                 {"success": False, "message": "An unexpected error occurred."},
                 status=500,
             )
-    else:
-        logger.warning(
-            f"Invalid request method: {request.method} for relieve employee with ID {id}."
-        )
-        return JsonResponse(
-            {"success": False, "message": "Invalid request method."}, status=400
-        )
-    
-@login_required(login_url='login')
-def employee_leave(request):
-    """View function to handle employee leave."""
-    try:
-        employee_details = Employee.objects.all().order_by('employee_id')
-        context = {
-            "employee_details": employee_details
-            }
-    except Exception as e:
-        logger.error(f"Error fetching employee details: {e}")
-        messages.error(request, "An error occurred while fetching employee details.")
-        return redirect("employee_list")
-    return render(request,"employee_leave.html",context)
 
-@csrf_exempt
-def employee_mark_leave(request):
-    if request.method == "POST":
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
+class EmployeeLeaveRequest(View):
+    """Class-based view to mark leave for an employee."""
+
+    def get(self, request):
+        """
+        Handle GET requests to mark leave for an employee.
+        """
+        try:
+            employee_details = Employee.objects.all().order_by("employee_id")
+            context = {"employee_details": employee_details}
+        except Exception as e:
+            logger.error(f"Error fetching employee details: {e}")
+            return JsonResponse(
+                {"success": False, "message": "Error fetching employee details"},
+                status=500,
+            )
+        return render(request, "employee_leave.html", context)
+
+    def post(self, request):
+        """
+        Handle POST requests to mark leave for an employee.
+        """
         data = json.loads(request.body)
         employee_id = data.get("employee_id")
-        seleted_dates = data.get("selected_dates",[])
+        selected_dates = data.get("selected_dates", [])
         reason = data.get("reason")
 
-        if not isinstance(seleted_dates, list) or not all(isinstance(date, str) for date in seleted_dates):
-            return JsonResponse({"success": False, "message": "Invalid selected dates."}, status=400)
+        if not isinstance(selected_dates, list) or not all(
+            isinstance(date, str) for date in selected_dates
+        ):
+            return JsonResponse(
+                {"success": False, "message": "Invalid selected dates."}, status=400
+            )
 
-        if not employee_id or not seleted_dates or not reason:
-            return JsonResponse({"success": False, "message": "All fields are required."}, status=400)
-        
+        if not employee_id or not selected_dates or not reason:
+            return JsonResponse(
+                {"success": False, "message": "All fields are required."}, status=400
+            )
+
         try:
-            with transaction.atomic():
-                employee = Employee.objects.filter(id=employee_id).first()
-                if not employee:
-                    return JsonResponse({"success": False, "message": "Employee not found."}, status=404)
-
-                employee_leave = EmployeeLeave.objects.create(
-                    employee=employee,
-                    reason=reason
+            employee = Employee.objects.filter(id=employee_id).first()
+            if not employee:
+                return JsonResponse(
+                    {"success": False, "message": "Employee not found."}, status=404
                 )
-                for date in seleted_dates:
-                    EmployeeLeaveSelectedDate.objects.create(
-                        employee_leave=employee_leave,
-                        date=date
-                    )
+
+            for date in selected_dates:
+                EmployeeLeave.objects.create(
+                    employee=employee, reason=reason, date=date
+                )
+
         except Exception as e:
             logger.error(f"Error marking leave for employee {employee_id}: {e}")
-            return JsonResponse({"success": False, "message": "An error occurred while marking leave."}, status=500)
-        
+            return JsonResponse(
+                {"success": False, "message": "An error occurred while marking leave."},
+                status=500,
+            )
+
         return JsonResponse({"success": True, "message": "Leave marked successfully."})
-    
-    return JsonResponse({"success": False, "message": "Invalid request."}, status=400)
 
-@login_required(login_url='login')
-def employee_leave_details(request):
-    return render(request, 'employee_leave_details.html')
 
-@login_required(login_url='login')
-def employee_attendance(request):
-    """View function to handle employee attendance."""
-    return render(request,"employee_attendance.html")
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class EmployeeLeaveDashboard(View):
+    """Class-based view to display employee leave dashboard."""
+
+    def get(self, request):
+        """Handle GET requests to display employee leave dashboard."""
+        return render(request, "employee_leave_details.html")
+
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class EmployeeAttendance(View):
+    """Class-based view to handle employee attendance."""
+
+    def get(self, request):
+        """Handle GET requests to display employee attendance."""
+        return render(request, "employee_attendance.html")

@@ -10,11 +10,12 @@ from hr.views import (
     edit_employee,
     employee_list,
     create_new_employee,
-    relieve_employee,
-    employee_attendance,
-    employee_leave,
-    employee_mark_leave,
-    employee_leave_details
+)
+from hr.views import (
+    RelieveEmployeeView,
+    EmployeeLeaveRequest,
+    EmployeeLeaveDashboard,
+    EmployeeAttendance,
 )
 
 
@@ -23,11 +24,22 @@ urlpatterns = [
     path("new/employees/", create_new_employee, name="create_new_employee"),
     path("employees/<int:pk>/edit/", edit_employee, name="edit_employee"),
     path("employees/<int:id>/delete/", delete_employee, name="delete_employee"),
-    path("employees/<int:id>/relieve/", relieve_employee, name="relieve_employee"),
-    path("employees/leave/", employee_leave, name="employee_leave"),
-    path("employees/attendance/", employee_attendance, name="employee_attendance"),
-    path("save/employee/leave/",employee_mark_leave, name="employee_mark_leave"),
-    path("employee/leave/details/",employee_leave_details,name="employee_leave_details")
+    path(
+        "employees/<int:id>/relieve/",
+        RelieveEmployeeView.as_view(),
+        name="relieve_employee",
+    ),
+    path("employees/leave/", EmployeeLeaveRequest.as_view(), name="leave_employee"),
+    path(
+        "employees/attendance/",
+        EmployeeAttendance.as_view(),
+        name="employee_attendance",
+    ),
+    path(
+        "employee/leave/details/",
+        EmployeeLeaveDashboard.as_view(),
+        name="employee_leave_details",
+    ),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

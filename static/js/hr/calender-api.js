@@ -137,7 +137,6 @@ document.getElementById("yearSelector").addEventListener("change", (event) => {
 
 // Calendar date selection logic
 document.getElementById("calendarGrid").addEventListener("click", async (event) => {
-   console.log("Calendar clicked");
    if (event.target.classList.contains("day") && !event.target.classList.contains("empty")) {
       const dayDate = event.target.dataset.date;
 
@@ -194,10 +193,11 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
    };
 
    try {
-      const response = await fetch('/save/employee/leave/', {
+
+      const response = await fetch('/employees/leave/', {
          method: 'POST',
          headers: {
-            'Content-Type': 'application/json',
+               'Content-Type': 'application/json',
          },
          body: JSON.stringify(formData),
       });
@@ -220,7 +220,6 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
          $('#relieveConfirmationModal').modal('show');
       }
    } catch (error) {
-      console.error("Error making POST request:", error);
       $('#confirmationRelieveMessage')
          .text("There was an error. Please try again.")
          .removeClass('text-success')
