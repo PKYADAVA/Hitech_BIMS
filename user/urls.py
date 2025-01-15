@@ -10,5 +10,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('home/', views.home, name='home'),
     path('forgot-password/', views.forgot_password_view, name='forgot_password'),  
-    path('user_management/', views.user_management, name='user_management')
+    path('user_management/', views.user_management, name='user_management'),
+    path('update_password/', views.update_password, name='update_password'),
+    path('user_profile/', views.user_profile, name='user_profile'),
 ]

@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from .models import UserProfile
 
@@ -62,5 +63,31 @@ def forgot_password_view(request):
     return render(request, "forget_password.html")  
 
 
+@login_required
 def user_management(request):
     return render(request, 'user_management.html')
+
+
+@login_required
+def user_profile(request):
+    return render(request, 'user_profile.html')
+
+@login_required
+def update_password(request):
+    if request.method == "POST":
+        old_password = request.POST.get("old_password")
+        new_password = request.POST.get("new_password")
+        confirm_password = request.POST.get("confirm_password")
+        user = request.user
+        
+        if not user.check_password(old_password):
+            return JsonResponse({"error": "Incorrect password."})
+        
+        if new_password != confirm_password:
+            return JsonResponse({"error": "Passwords do not match."})
+        
+        user.set_password(new_password)
+        user.save()
+        return JsonResponse({"message": "Password updated successfully."})
+    
+    return render(request, 'update_password.html')
