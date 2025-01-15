@@ -147,22 +147,14 @@ class BroilerFarmTemplateView(View):
 
 class BroilerBatchTemplateView(View):
     def get(self, request):
-        # List of Indian states and union territories
-
-        # Pass the data as context
-        context = {"branches": list(Branch.objects.values())}
-        # Render the branch_template.html file
+        context = {"broiler_farms": list(BroilerFarm.objects.values())}
         return render(request, "broiler_batch.html", context)
 
 
 @method_decorator(login_required, name="dispatch")
 class BroilerDiseaseTemplateView(View):
     def get(self, request):
-        # List of Indian states and union territories
-
-        # Pass the data as context
-        context = {"branches": list(Branch.objects.values())}
-        # Render the branch_template.html file
+        context = {"broiler_farms": list(BroilerFarm.objects.values())}
         return render(request, "broiler_disease.html", context)
 
 
@@ -334,7 +326,7 @@ class BroilerBatchAPI(View):
         farm_obj = BroilerFarm.objects.get(id=data["broiler_farm_id"])
 
         BroilerBatch.objects.create(
-            place_name=data["batch_name"], broiler_farm=farm_obj
+            batch_name=data["batch_name"], broiler_farm=farm_obj
         )
         return JsonResponse({"message": "BroilerBatch created"}, status=201)
 
@@ -471,6 +463,7 @@ class BroilerFarmAPI(View):
     def post(self, request):
         try:
             data = request.POST
+            print(data, "data")
         except Exception:
             return JsonResponse({"error": "Invalid data"}, status=400)
 
@@ -528,3 +521,14 @@ class BroilerFarmAPI(View):
 
         broiler_farm.delete()
         return JsonResponse({"message": "BroilerFarm deleted"})
+
+
+def get_supervisors(request):
+    branch_id = request.GET.get('branch_id')
+    supervisors = Supervisor.objects.filter(branch_id=branch_id).values('id', 'name')
+    return JsonResponse({'supervisors': list(supervisors)})
+
+def get_broiler_places(request):
+    supervisor_id = request.GET.get('supervisor_id')
+    broiler_places = BroilerPlace.objects.filter(supervisor_id=supervisor_id).values('id', 'place_name')
+    return JsonResponse({'broiler_places': list(broiler_places)})

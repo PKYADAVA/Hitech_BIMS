@@ -32,7 +32,7 @@
                     </div>
                     <div class="modal-body">
                         <!-- Form Section -->
-                        <form id="batch-form">
+                        <form id="broiler-batch-form">
                             {% csrf_token %}
                             <div class="mb-3">
                                 <label for="broiler_farm" class="form-label">Broiler Farm</label>
@@ -129,13 +129,13 @@
         // Add Broiler Batch
         $("#broiler-batch-form").submit(function (e) {
             e.preventDefault();
-            var broiler_farm = $("#broiler_farm").val();
+            var broiler_farm_id = $("#broiler_farm").val();
             var batch_name = $("#batch_name").val();
             $.ajax({
                 url: "{% url 'broiler_batch_create' %}",
                 type: "POST",
                 data: {
-                    broiler_farm: broiler_farm,
+                    broiler_farm_id: broiler_farm_id,
                     batch_name: batch_name,
                     csrfmiddlewaretoken: "{{ csrf_token }}",
                 },

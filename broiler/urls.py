@@ -24,7 +24,7 @@ urlpatterns = [
     path('branch-farm/', BroilerFarmTemplateView.as_view(), name='branch_farm'),
     path('broiler_farm/', BroilerFarmAPI.as_view(), name='broiler_farm_list'),
     path('broiler_farm/<int:id>/', BroilerFarmAPI.as_view(), name='broiler_farm_detail'),
-    path('create-broiler-farm/', BroilerFarmAPI.as_view(), name='broiler_farm_create'),  # For creating new broiler disease    
+    path('broiler_farm_create/', BroilerFarmAPI.as_view(), name='broiler_farm_create'),  # For creating new broiler disease    
     path('broiler_farm/<int:id>/delete/', BroilerFarmAPI.as_view(), name='broiler_farm_delete'), # For deleting broiler disease
     path('broiler-disease/', BroilerDiseaseTemplateView.as_view(), name='broiler_disease'),
     path('broiler_disease/', BroilerDiseaseAPI.as_view(), name='broiler_disease_list'),
@@ -36,5 +36,7 @@ urlpatterns = [
     path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
     path('broiler_batch/<int:id>/', BroilerBatchAPI.as_view(), name='broiler_batch_edit'),  # For editing broiler batch
     path('broiler_batch/<int:id>/delete/', BroilerBatchAPI.as_view(), name='broiler_batch_delete'), # For deleting broiler batch
+    path('get-supervisors/', views.get_supervisors, name='get_supervisors'),
+    path('get-places/', views.get_broiler_places, name='get_broiler_places'),
     
 ]

@@ -39,28 +39,25 @@
                                 <select id="branch" class="form-control" required>
                                     <option value="" selected disabled>Select a branch</option>
                                     {% for branch in branches %}
-                                    <option value="{{ branch.id }}">{{ branch.name }}</option>
+                                    <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
+                            
                             <div class="mb-3">
                                 <label for="supervisor" class="form-label">Supervisor</label>
                                 <select id="supervisor" class="form-control" required>
                                     <option value="" selected disabled>Select a supervisor</option>
-                                    {% for supervisor in supervisors %}
-                                    <option value="{{ supervisor.id }}">{{ supervisor.name }}</option>
-                                    {% endfor %}
                                 </select>
                             </div>
+                            
                             <div class="mb-3">
                                 <label for="broiler_place" class="form-label">Broiler Place</label>
                                 <select id="broiler_place" class="form-control" required>
                                     <option value="" selected disabled>Select a broiler place</option>
-                                    {% for place in broiler_places %}
-                                    <option value="{{ place.id }}">{{ place.name }}</option>
-                                    {% endfor %}
                                 </select>
                             </div>
+                            
                             <div class="mb-3">
                                 <label for="farm_code" class="form-label">Farm Code</label>
                                 <input
@@ -223,14 +220,53 @@ $(document).ready(function () {
 
     // Load farms on page load
     loadFarms();
+            // On branch selection, fetch supervisors
+            $('#branch').change(function() {
+                const branchId = $(this).val();
+                if (branchId) {
+                    $.ajax({
+                        url: "{% url 'get_supervisors' %}",
+                        data: { branch_id: branchId },
+                        success: function(data) {
+                            const supervisors = data.supervisors;
+                            const supervisorSelect = $('#supervisor');
+                            supervisorSelect.empty();
+                            supervisorSelect.append('<option value="" selected disabled>Select a supervisor</option>');
+                            supervisors.forEach(function(supervisor) {
+                                supervisorSelect.append(`<option value="${supervisor.id}">${supervisor.name}</option>`);
+                            });
+                        }
+                    });
+                }
+            });
+    
+            // On supervisor selection, fetch places
+            $('#supervisor').change(function() {
+                const supervisorId = $(this).val();
+                if (supervisorId) {
+                    $.ajax({
+                        url: "{% url 'get_broiler_places' %}",
+                        data: { supervisor_id: supervisorId },
+                        success: function(data) {
+                            const places = data.broiler_places;
+                            const placeSelect = $('#broiler_place');
+                            placeSelect.empty();
+                            placeSelect.append('<option value="" selected disabled>Select a broiler place</option>');
+                            places.forEach(function(place) {
+                                placeSelect.append(`<option value="${place.id}">${place.place_name}</option>`);
+                            });
+                        }
+                    });
+                }
+            });
 
     // Handle form submission
     $("#farm-form").submit(function (e) {
         e.preventDefault();
         const formData = {
-            branch: $("#branch").val(),
-            supervisor: $("#supervisor").val(),
-            broiler_place: $("#broiler_place").val(),
+            branch_id: $("#branch").val(),
+            supervisor_id: $("#supervisor").val(),
+            broiler_place_id: $("#broiler_place").val(),
             farm_code: $("#farm_code").val(),
             farm_name: $("#farm_name").val(),
             mobile_no: $("#mobile_no").val(),
@@ -250,6 +286,12 @@ $(document).ready(function () {
             },
             success: function () {
                 $("#farmFormModal").modal("hide");
+                 // Reset the form
+                $("#farm-form")[0].reset();
+
+                // Clear dependent dropdowns
+                $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
+                $("#broiler_place").empty().append('<option value="" selected disabled>Select a broiler place</option>');
                 loadFarms();
                 alert("Farm added successfully!");
             },
