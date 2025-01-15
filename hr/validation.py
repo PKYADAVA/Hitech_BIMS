@@ -1,4 +1,6 @@
 """adding validation functionality"""
+
+
 def validate_employee_data(data):
     """
     Validates employee form data before processing.
