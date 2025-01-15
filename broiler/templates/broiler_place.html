@@ -122,12 +122,19 @@
                 url: "{% url 'broiler_place_list' %}",
                 type: "GET",
                 success: function (response) {
+                    const table = $("#broiler-place-table");
+        
+                    // Destroy existing DataTable instance if it exists
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+        
+                    // Populate the table body with the new data
                     let rows = "";
-                    let counter = 1; // Start the counter at 1
+                    let counter = 1;
                     response.forEach(function (item) {
                         rows += `
                         <tr>                   
-                          
                             <td>${item.place_name}</td>
                             <td>${item.supervisor_name}</td>
                             <td>
@@ -140,17 +147,28 @@
                         </tr>`;
                         counter++;
                     });
-    
-                    console.log(rows);
-    
-                     // Append the rows to the table body (assuming the table has a <tbody> with an id)
-                    $("#broiler-place-table tbody").html(rows);
-    
-                     // Re-initialize DataTable to apply functionality
-                    $('#broiler-place-table').DataTable();
+        
+                    table.find("tbody").html(rows);
+        
+                    // Reinitialize the DataTable
+                    table.DataTable({
+                        destroy: true, // Ensure no duplicate initialization
+                        responsive: true, // Make the table responsive
+                        paging: true, // Enable pagination
+                        searching: true, // Enable search functionality
+                        info: true, // Show "Showing X to Y of Z entries"
+                        lengthChange: true, // Allow page size selection
+                        columnDefs: [
+                            { orderable: false, targets: -1 } // Disable sorting for the actions column (last column)
+                        ]
+                    });
                 },
+                error: function (xhr) {
+                    alert("Error loading broiler place list. Please try again.");
+                }
             });
         }
+        
         loadPlaceList();
     
         // Add Supervisor

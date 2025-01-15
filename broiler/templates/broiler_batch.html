@@ -99,6 +99,14 @@
                 url: "{% url 'broiler_batch_list' %}",
                 type: "GET",
                 success: function (response) {
+                    const table = $("#broiler-batch-table");
+        
+                    // Destroy existing DataTable instance if it exists
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+        
+                    // Populate the table body
                     let rows = "";
                     response.forEach(function (item) {
                         rows += `
@@ -115,15 +123,27 @@
                             </td>
                         </tr>`;
                     });
-
-                    // Append the rows to the table body (assuming the table has a <tbody> with an id)
-                    $("#broiler-batch-table tbody").html(rows);
-
-                    // Re-initialize DataTable to apply functionality
-                    $('#broiler-batch-table').DataTable();
+                    table.find("tbody").html(rows);
+        
+                    // Reinitialize the DataTable
+                    table.DataTable({
+                        destroy: true, // Ensure no duplicate initialization
+                        responsive: true, // Make the table responsive
+                        paging: true, // Enable pagination
+                        searching: true, // Enable search functionality
+                        info: true, // Show "Showing X to Y of Z entries"
+                        lengthChange: true, // Allow page size selection
+                        columnDefs: [
+                            { orderable: false, targets: -1 } // Disable sorting for the action column (last column)
+                        ]
+                    });
                 },
+                error: function (xhr) {
+                    alert("Error loading batch list. Please try again.");
+                }
             });
         }
+        
         loadBatchList();
 
         // Add Broiler Batch

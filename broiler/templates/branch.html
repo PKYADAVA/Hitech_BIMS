@@ -129,7 +129,15 @@
     // Function to load branches
     function loadBranches() {
         $.get("{% url 'branch_list' %}", function (data) {
-            const rows = data.map(function (branch, index) {
+            const table = $("#branch-table");
+    
+            // Destroy existing DataTable instance if it exists
+            if ($.fn.DataTable.isDataTable(table)) {
+                table.DataTable().clear().destroy();
+            }
+    
+            // Generate rows from the response data
+            const rows = data.map(function (branch) {
                 return `
                     <tr>                       
                         <td>${branch.state}</td>
@@ -144,14 +152,24 @@
                         </td>
                     </tr>`;
             }).join('');  // Efficiently joining the array to a string
-
+    
             // Update table body in one go
-            $("#branch-table tbody").html(rows);
-
-            // Re-initialize DataTable to apply functionality
-            $('#branch-table').DataTable();
+            table.find("tbody").html(rows);
+    
+            // Reinitialize DataTable to apply functionality
+            table.DataTable({
+                destroy: true, // Ensure no duplicate initialization
+                responsive: true, // Make the table responsive
+                paging: true, // Enable pagination
+                searching: true, // Enable search functionality
+                info: true, // Show "Showing X to Y of Z entries"
+                lengthChange: true, // Allow page size selection
+                columnDefs: [
+                    { orderable: false, targets: -1 } // Disable sorting for the actions column (last column)
+                ]
+            });
         });
-    }
+    }   
 
     loadBranches();
 

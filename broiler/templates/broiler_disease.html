@@ -131,6 +131,14 @@
                 url: "{% url 'broiler_disease_list' %}",
                 type: "GET",
                 success: function (response) {
+                    const table = $("#disease-table");
+        
+                    // Destroy existing DataTable instance if it exists
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+        
+                    // Populate the table body with the new data
                     let rows = "";
                     response.forEach(function (item) {
                         rows += `
@@ -153,15 +161,27 @@
                             </td>
                         </tr>`;
                     });
-
-                    // Append rows to the table body
-                    $("#disease-table tbody").html(rows);
-
-                    // Reinitialize DataTable
-                    $("#disease-table").DataTable();
+                    table.find("tbody").html(rows);
+        
+                    // Reinitialize DataTable with proper options
+                    table.DataTable({
+                        destroy: true, // Ensure no duplicate initialization
+                        responsive: true, // Make the table responsive
+                        paging: true, // Enable pagination
+                        searching: true, // Enable search functionality
+                        info: true, // Show "Showing X to Y of Z entries"
+                        lengthChange: true, // Allow page size selection
+                        columnDefs: [
+                            { orderable: false, targets: -1 } // Disable sorting for the actions column (last column)
+                        ]
+                    });
                 },
+                error: function (xhr) {
+                    alert("Error loading disease list. Please try again.");
+                }
             });
         }
+        
         loadDiseaseList();
 
         // Add New Disease

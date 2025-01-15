@@ -63,7 +63,7 @@
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-header bg-dark text-white">
-                <h5 class="mb-0">Supervisor List</h5>
+                <h5 class="mb-0"> Broiler Supervisor </h5>
             </div>
             <div class="card-body">
                 <table
@@ -122,12 +122,18 @@
                 url: "{% url 'supervisor_list' %}",
                 type: "GET",
                 success: function (response) {
+                    const table = $("#supervisor-table");
+        
+                    // Destroy existing DataTable instance if it exists
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+        
+                    // Populate the table body
                     let rows = "";
-                    let counter = 1; // Start the counter at 1
                     response.forEach(function (item) {
                         rows += `
                         <tr>
-                           
                             <td>${item.branch_name}</td>
                             <td>${item.name}</td>
                             <td>
@@ -138,19 +144,28 @@
                                         data-id="${item.branch_name}">Delete</button>
                             </td>
                         </tr>`;
-                        counter++;
                     });
-    
-                    console.log(rows);
-    
-                     // Append the rows to the table body (assuming the table has a <tbody> with an id)
-                    $("#supervisor-table tbody").html(rows);
-    
-                     // Re-initialize DataTable to apply functionality
-                    $('#supervisor-table').DataTable();
+                    table.find("tbody").html(rows);
+        
+                    // Reinitialize the DataTable
+                    table.DataTable({
+                        destroy: true, // Ensure no duplicate initialization
+                        responsive: true, // Optional: make the table responsive
+                        paging: true, // Enable pagination
+                        searching: true, // Enable search functionality
+                        info: true, // Show "Showing X to Y of Z entries"
+                        lengthChange: true, // Allow the user to change page size
+                        columnDefs: [
+                            { orderable: false, targets: -1 } // Disable ordering on the last column (Actions column)
+                        ]
+                    });
                 },
+                error: function (xhr) {
+                    alert("Error loading supervisors. Please try again.");
+                }
             });
         }
+        
         loadSupervisorList();
     
         // Add Supervisor
