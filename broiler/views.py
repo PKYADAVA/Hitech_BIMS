@@ -206,10 +206,13 @@ class SupervisorAPI(View):
             supervisor = Supervisor.objects.get(id=id)
         except Supervisor.DoesNotExist:
             raise Http404("Supervisor not found")
+        
+      
 
         data = json.loads(request.body)
-        supervisor.name = data["name"]
-        supervisor.branch.branch_name = data["branch_name"]
+        print(data, "data")
+        supervisor.name = data["supervisor_name"]
+        supervisor.branch.branch_name = data["branch"]
         supervisor.save()
         return JsonResponse({"message": "Supervisor updated"})
 
