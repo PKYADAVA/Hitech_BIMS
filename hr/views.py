@@ -12,12 +12,19 @@ from django.db import transaction
 from datetime import datetime
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.http import JsonResponse
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
+from django.db.models import Count
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
-from hr.models import Designation, Employee, EmployeeLeave
+from hr.models import (
+    Attendance,
+    Designation,
+    Employee,
+    EmployeeLeave,
+    LeaveSelectedDate,
+)
 from hr.validation import validate_employee_data
 
 # Configure logger
@@ -375,16 +382,23 @@ class EmployeeLeaveRequest(View):
             )
 
         try:
-            employee = Employee.objects.filter(id=employee_id).first()
-            if not employee:
-                return JsonResponse(
-                    {"success": False, "message": "Employee not found."}, status=404
+            with transaction.atomic():
+                employee = Employee.objects.filter(id=employee_id).first()
+                if not employee:
+                    return JsonResponse(
+                        {"success": False, "message": "Employee not found."}, status=404
+                    )
+
+                leave_request = EmployeeLeave.objects.create(
+                    employee=employee,
+                    reason=reason,
                 )
 
-            for date in selected_dates:
-                EmployeeLeave.objects.create(
-                    employee=employee, reason=reason, date=date
-                )
+                for date in selected_dates:
+                    LeaveSelectedDate.objects.create(
+                        leave_request=leave_request,
+                        date=date,
+                    )
 
         except Exception as e:
             logger.error(f"Error marking leave for employee {employee_id}: {e}")
@@ -397,12 +411,86 @@ class EmployeeLeaveRequest(View):
 
 
 @method_decorator(login_required(login_url="login"), name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
 class EmployeeLeaveDashboard(View):
     """Class-based view to display employee leave dashboard."""
 
     def get(self, request):
         """Handle GET requests to display employee leave dashboard."""
-        return render(request, "employee_leave_details.html")
+        employee_id = request.GET.get(
+            "employee_id"
+        )  # Retrieve employee_id from the payload
+
+        if employee_id:
+            try:
+                # Fetch leave details for the specific employee
+                employee_leave = (
+                    EmployeeLeave.objects.filter(id=employee_id)
+                    .prefetch_related("selected_dates")
+                    .first()
+                )
+
+                if not employee_leave:
+                    return JsonResponse(
+                        {"error": "Employee leave not found."}, status=404
+                    )
+
+                selected_dates = list(
+                    employee_leave.selected_dates.values_list("date", flat=True)
+                )
+                return JsonResponse({"selected_dates": selected_dates}, status=200)
+            except Exception as e:
+                logger.exception(f"Error fetching employee leave details: {e}")
+                return JsonResponse(
+                    {"error": "An error occurred while fetching leave details."},
+                    status=500,
+                )
+
+        # If no employee_id is provided, return the full dashboard context
+        employee_leave_details = (
+            EmployeeLeave.objects.annotate(total_days=Count("selected_dates"))
+            .filter(employee__isnull=False)
+            .prefetch_related("selected_dates")
+        )
+        total_pending_leaves = EmployeeLeave.objects.filter(status="Pending").count()
+        total_approved_leaves = EmployeeLeave.objects.filter(status="Approved").count()
+        total_employees = Employee.objects.count()
+
+        context = {
+            "leave_details": employee_leave_details,
+            "total_pending_leaves": total_pending_leaves,
+            "total_approved_leaves": total_approved_leaves,
+            "total_employees": total_employees,
+        }
+        return render(request, "employee_leave_details.html", context)
+
+    def post(self, request):
+        """Handle POST requests to update leave status."""
+        leave_id = request.POST.get("leave_id")
+        new_status = request.POST.get("status")
+
+        if not leave_id or not new_status:
+            logger.error("Invalid data: leave_id or new_status missing.")
+            return JsonResponse({"error": "Invalid data provided."}, status=400)
+
+        if new_status not in ["Pending", "Approved", "Rejected"]:
+            logger.warning(f"Invalid status value: {new_status}")
+            return JsonResponse({"error": "Invalid status provided."}, status=400)
+
+        try:
+            leave = get_object_or_404(EmployeeLeave, id=leave_id)
+            leave.status = new_status
+            leave.save()
+
+            return JsonResponse({"success": "Leave status updated successfully."})
+        except EmployeeLeave.DoesNotExist:
+            logger.error(f"Leave with ID {leave_id} not found.")
+            return JsonResponse({"error": "Leave not found."}, status=404)
+        except Exception as e:
+            logger.exception(f"Error updating leave status. Leave ID: {leave_id} {e}")
+            return JsonResponse(
+                {"error": "An error occurred while updating leave status."}, status=500
+            )
 
 
 @method_decorator(login_required(login_url="login"), name="dispatch")
@@ -410,5 +498,100 @@ class EmployeeAttendance(View):
     """Class-based view to handle employee attendance."""
 
     def get(self, request):
-        """Handle GET requests to display employee attendance."""
-        return render(request, "employee_attendance.html")
+        """Handle GET requests to display employee attendance or get specific attendance."""
+        attendance_id = request.GET.get("id")
+
+        if attendance_id:
+            try:
+                attendance = get_object_or_404(Attendance, id=attendance_id)
+                return JsonResponse(
+                    {
+                        "id": attendance.id,
+                        "employee_id": attendance.employee.id,
+                        "date": attendance.date.strftime("%Y-%m-%d"),
+                        "check_in_time": (
+                            attendance.check_in_time.strftime("%H:%M")
+                            if attendance.check_in_time
+                            else ""
+                        ),
+                        "check_out_time": (
+                            attendance.check_out_time.strftime("%H:%M")
+                            if attendance.check_out_time
+                            else ""
+                        ),
+                        "status": attendance.status,
+                        # 'remarks': attendance.remarks or ''
+                    }
+                )
+            except Exception as e:
+                logger.error("Error while checking out time for %s: %s" % (e))
+                return HttpResponseBadRequest(str(e))
+
+        context = {
+            "employees": Employee.objects.filter(relieve=False).order_by("full_name"),
+            "attendances": Attendance.objects.select_related("employee").order_by(
+                "-date", "-check_in_time"
+            ),
+        }
+        return render(request, "employee_attendance.html", context)
+
+    def post(self, request):
+        """Handle POST requests to create a new attendance record."""
+        try:
+            data = json.loads(request.body)
+            employee = get_object_or_404(Employee, id=data.get("employee_id"))
+            attendance = Attendance.objects.create(
+                employee=employee,
+                date=data.get("date"),
+                check_in_time=data.get("check_in_time"),
+                check_out_time=data.get("check_out_time"),
+                status=data.get("status", "Present"),
+            )
+            return JsonResponse(
+                {
+                    "message": "Attendance record created successfully",
+                    "id": attendance.id,
+                },
+                status=201,
+            )
+        except Exception as e:
+            logger.error("Error creating attendance record: %s", e)
+            return JsonResponse(
+                {"error": "Failed to create attendance record"},
+                status=400,
+            )
+
+    def put(self, request):
+        """Handle PUT requests to update an existing attendance record."""
+        try:
+            data = json.loads(request.body)
+            attendance = get_object_or_404(Attendance, id=data.get("id"))
+            attendance.date = data.get("date", attendance.date)
+            attendance.check_in_time = data.get(
+                "check_in_time", attendance.check_in_time
+            )
+            attendance.check_out_time = data.get(
+                "check_out_time", attendance.check_out_time
+            )
+            attendance.status = data.get("status", attendance.status)
+            attendance.save()
+            return JsonResponse({"message": "Attendance record updated successfully"})
+        except Exception as e:
+            logger.error("Error updating attendance record for event %s", (e))
+            return JsonResponse(
+                {"error": "Failed to update attendance record"},
+                status=400,
+            )
+
+    def delete(self, request):
+        """Handle DELETE requests to delete an attendance record."""
+        try:
+            attendance = get_object_or_404(Attendance, id=request.GET.get("id"))
+            attendance.delete()
+            return JsonResponse({"message": "Attendance record deleted successfully"})
+        except Exception as e:
+            logger.error("Error deleting attendance record for event %s", (e))
+            return JsonResponse(
+                {"error": "Failed to delete attendance record"},
+                status=400,
+            )

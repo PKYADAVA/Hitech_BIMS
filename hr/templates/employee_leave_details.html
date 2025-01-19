@@ -1,56 +1,102 @@
-{% extends 'base.html' %}
-{% block title %}Employee Leave Details{% endblock title %}
-{% block nav %}
-   {% include 'main_top_navbar.html' with active_tab='hr' %}
-{% endblock nav %}
+{% extends 'base.html' %} 
+{% load static %} 
+{% block title %} Employee Leave Details {% endblock %} 
+{% block nav %} 
+{% include 'main_top_navbar.html' with active_tab='hr' %} 
+{% endblock %} 
 {% block css %}
 <style>
     .dataTables_filter {
-        float: right !important;
-        margin-left: 1rem;
+      float: right !important;
+      margin-left: 1rem;
     }
     .dataTables_filter input {
-        margin-left: 0.5em;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        padding: 0.375rem 0.75rem;
+      margin-left: 0.5em;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 0.375rem 0.75rem;
     }
     .dataTables_length {
-        float: right !important;
+      float: right !important;
     }
     .card-header-custom {
-        padding: 1rem;
-        background-color: #f8f9fa;
+      padding: 1rem;
+      background-color: #f8f9fa;
     }
     .table-top-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
     }
     .table-right-controls {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
     }
     /* Style for the entries dropdown */
     .dataTables_length select {
-        padding: 0.375rem 2.25rem 0.375rem 0.75rem;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        background-color: #fff;
+      padding: 0.375rem 2.25rem 0.375rem 0.75rem;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      background-color: #fff;
+    }
+    #leaveTable th,
+    #leaveTable td {
+      text-align: center;
+      vertical-align: middle;
     }
 </style>
-{% endblock css %}
+{% endblock %} 
 {% block content %}
 <div class="container mt-4">
+    <!-- Approve Confirmation Modal -->
+    <div class="modal fade" id="leaveApproveConfirmationModal" tabindex="-1" aria-labelledby="approveConfirmationLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="approveConfirmationLabel">Confirm Leave Approval</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmationApproveMessage">Are you sure you want to approve this leave?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmLeaveApprove">Approve</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Confirmation Modal -->
+    <div class="modal fade" id="leaveRejectConfirmationModal" tabindex="-1" aria-labelledby="rejectConfirmationLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="rejectConfirmationLabel">Confirm Leave Rejection</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmationRejectMessage">Are you sure you want to reject this leave?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmLeaveReject">Reject</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Header Section -->
     <div class="row mb-4">
         <div class="col">
             <h2 class="text-primary">Employee Leave Management System</h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{% url 'home' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item">
+                        <a href="{% url 'home' %}">Dashboard</a>
+                    </li>
                     <li class="breadcrumb-item active" aria-current="page">Leave Management</li>
                 </ol>
             </nav>
@@ -63,31 +109,23 @@
             <div class="card bg-primary text-white">
                 <div class="card-body">
                     <h5 class="card-title">Total Employees</h5>
-                    <h2 class="card-text">150</h2>
+                    <h2 class="card-text">{{ total_employees }}</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card bg-success text-white">
                 <div class="card-body">
-                    <h5 class="card-title">Active Leaves</h5>
-                    <h2 class="card-text">12</h2>
+                    <h5 class="card-title">Approved Leaves</h5>
+                    <h2 class="card-text">{{ total_approved_leaves }}</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card bg-warning text-white">
                 <div class="card-body">
-                    <h5 class="card-title">Pending Requests</h5>
-                    <h2 class="card-text">8</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <h5 class="card-title">Leave Balance</h5>
-                    <h2 class="card-text">245</h2>
+                    <h5 class="card-title">Pending Leave</h5>
+                    <h2 class="card-text">{{ total_pending_leaves }}</h2>
                 </div>
             </div>
         </div>
@@ -98,13 +136,6 @@
         <div class="card-header card-header-custom">
             <div class="table-top-controls">
                 <h5 class="mb-0">Leave Applications</h5>
-                <div class="table-right-controls">
-                    <a href="{% url 'leave_employee' %}">
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newLeaveModal">
-                        <i class="fas fa-plus"></i> New Leave Request
-                    </button>
-                </a>
-                </div>
             </div>
         </div>
         <div class="card-body">
@@ -119,62 +150,77 @@
                     <tr>
                         <th>Employee ID</th>
                         <th>Name</th>
+                        <th>Reason</th>
                         <th>Leave Type</th>
-                        <th>From Date</th>
-                        <th>To Date</th>
-                        <th>Days</th>
+                        <th>Total Days</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
+                    {% for employee in leave_details %}
                     <tr>
-                        <td>EMP001</td>
-                        <td>John Doe</td>
+                        <td>{{ employee.employee.employee_id }}</td>
+                        <td>{{ employee.employee.full_name }}</td>
+                        <td>{{ employee.reason }}</td>
                         <td>Annual Leave</td>
-                        <td>2025-01-20</td>
-                        <td>2025-01-25</td>
-                        <td>5</td>
-                        <td><span class="badge bg-warning">Pending</span></td>
+                        <td>{{ employee.total_days }}</a>
+                        </td>
                         <td>
-                            <button class="btn btn-sm btn-primary">View</button>
-                            <button class="btn btn-sm btn-success">Approve</button>
-                            <button class="btn btn-sm btn-danger">Reject</button>
+                            {% if employee.status == 'Pending' %}
+                            <span class="badge bg-warning">{{ employee.status }}</span> {% elif employee.status == 'Approved' %}
+                            <span class="badge bg-success">{{ employee.status }}</span> {% else %}
+                            <span class="badge bg-danger">{{ employee.status }}</span> {% endif %}
+                        </td>
+                        <td>
+                            <button id="employeeViewLeave-{{ employee.id }}" type="button" class="btn btn-sm btn-primary view-leave-dates" data-bs-toggle="modal" data-id="{{ employee.id }}">
+                                View
+                            </button>
+                            <button id="employeeLeaveApprove-{{ employee.id }}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="{{ employee.id }}">Approve</button>
+                            <button id="employeeLeaveReject-{{ employee.id }}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="{{ employee.id }}">Reject</button>
                         </td>
                     </tr>
-                    <tr>
-                        <td>EMP002</td>
-                        <td>Jane Smith</td>
-                        <td>Sick Leave</td>
-                        <td>2025-01-15</td>
-                        <td>2025-01-16</td>
-                        <td>2</td>
-                        <td><span class="badge bg-success">Approved</span></td>
-                        <td>
-                            <button class="btn btn-sm btn-primary">View</button>
-                        </td>
-                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
+    <!-- Modal -->
+    <div class="modal fade" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="staticBackdropLabel">Employee Leave Date</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">...</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-{% endblock content %}
+{% endblock %} 
 {% block js %}
+<script src="{% static 'js/hr/employee_leave_details.js' %}"></script>
 <script>
-    $(document).ready(function() {
-        $('#leaveTable').DataTable({
-            responsive: true,
-            order: [[3, 'desc']],
-            dom: '<"table-controls-wrapper"<"table-right-controls"lf>>rtip',
-            language: {
-                search: "",
-                searchPlaceholder: "Search...",
-                lengthMenu: "Show _MENU_ entries"
-            },
-            pageLength: 10,
-            lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]]
-        });
-    });
+    $(document).ready(function () {
+      $('#leaveTable').DataTable({
+        responsive: true,
+        order: [[3, 'desc']],
+        dom: '<"table-controls-wrapper"<"table-right-controls"lf>>rtip',
+        language: {
+          search: '',
+          searchPlaceholder: 'Search...',
+          lengthMenu: 'Show _MENU_ entries'
+        },
+        pageLength: 10,
+        lengthMenu: [
+          [5, 10, 25, 50, -1],
+          [5, 10, 25, 50, 'All']
+        ]
+      })
+    })
 </script>
-{% endblock js %}
+{% endblock %}
