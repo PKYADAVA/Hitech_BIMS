@@ -4,6 +4,8 @@
 
 import random
 from django.db import models
+from django.forms import ValidationError
+from django.utils import timezone
 
 
 class Designation(models.Model):
@@ -112,6 +114,11 @@ class Employee(models.Model):
 class EmployeeLeave(models.Model):
     """Represent an employee's leave request"""
 
+    STATUS_CHOICES = [
+        ("Pending", "Pending"),
+        ("Approved", "Approved"),
+        ("Rejected", "Rejected"),
+    ]
     employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
@@ -120,12 +127,28 @@ class EmployeeLeave(models.Model):
         blank=True,
     )
     reason = models.CharField(max_length=500, null=True, blank=True)
-    date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="Pending",
+    )
     created_date = models.DateTimeField(auto_now_add=True, blank=True, null=True)
 
     def __str__(self):
         """Returns a string representation of this object with the given fields"""
         return f"{self.employee.full_name} - {self.reason}"
+
+
+class LeaveSelectedDate(models.Model):
+    """Represent the selected dates for a specific leave request"""
+
+    leave_request = models.ForeignKey(
+        EmployeeLeave, on_delete=models.CASCADE, related_name="selected_dates"
+    )
+    date = models.DateField()
+
+    def __str__(self):
+        return f"Date: {self.date} for Leave Request ID: {self.leave_request.id}"
 
 
 class Attendance(models.Model):
@@ -147,6 +170,8 @@ class Attendance(models.Model):
             ("Present", "Present"),
             ("Absent", "Absent"),
             ("On Leave", "On Leave"),
+            ("First Half", "First Half"),
+            ("Second Half", "Second Half"),
         ],
         default="Present",
         null=True,

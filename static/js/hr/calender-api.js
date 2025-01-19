@@ -175,9 +175,10 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
    event.preventDefault();
 
    const employeeId = document.getElementById("employee_details").value;
+   const leaveType = document.getElementById("leave_type").value;
    const absenceReason = document.querySelector("textarea[name='absence_reason']").value;
 
-   if (!employeeId || !absenceReason || selectedDates.length === 0) {
+   if (!employeeId || !leaveType || !absenceReason || selectedDates.length === 0) {
       $('#confirmationRelieveMessage')
          .text("Please fill in all fields and select at least one date.")
          .removeClass('text-success')
@@ -188,6 +189,7 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
 
    const formData = {
       employee_id: employeeId,
+      leave_type: leaveType,
       reason: absenceReason,
       selected_dates: selectedDates,
    };

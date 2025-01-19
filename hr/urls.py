@@ -31,15 +31,11 @@ urlpatterns = [
     ),
     path("employees/leave/", EmployeeLeaveRequest.as_view(), name="leave_employee"),
     path(
-        "employees/attendance/",
-        EmployeeAttendance.as_view(),
-        name="employee_attendance",
-    ),
-    path(
         "employee/leave/details/",
         EmployeeLeaveDashboard.as_view(),
         name="employee_leave_details",
     ),
+    path("attendance/", EmployeeAttendance.as_view(), name="employee_attendance"),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
