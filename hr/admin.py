@@ -4,10 +4,12 @@ configration admin.py in hr modules
 
 from django.contrib import admin
 from hr.models import (
+    Attendance,
     Employee,
     Designation,
-    Attendance,
+    # Attendance,
     EmployeeLeave,
+    LeaveSelectedDate,
 )
 
 
@@ -67,7 +69,12 @@ class EmployeeLeaveAdmin(admin.ModelAdmin):
     register employee leave
     """
 
-    list_display = ("employee", "reason", "date", "created_date")
+    list_display = ("employee", "reason", "status", "created_date")
+
+
+@admin.register(LeaveSelectedDate)
+class LeaveSelectedDateAdmin(admin.ModelAdmin):
+    list_display = ("leave_request", "date")
 
 
 @admin.register(Attendance)
