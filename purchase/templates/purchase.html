@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Purchase{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='purchase' %}
+{% endblock %}
+
+{% block content %}
+ <!-- Toggle Navbar -->
+ {% include '_purchase_subnavbar.html' with active_tab='supplier' %}
+
+ <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Find the active tab and trigger a click event
+      const activeTab = document.querySelector(".nav-link.active.activate");
+      if (activeTab) {
+        activeTab.click();
+      }
+    });
+  </script> 
+  
+{% endblock %}

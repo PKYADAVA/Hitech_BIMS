@@ -9,10 +9,10 @@
           <a class="nav-link {% if active_tab == 'broiler' %}active{% endif %}" href="{% url 'broiler' %}"><i class="fa-solid fa-egg"></i> Broiler</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'purchase' %}active{% endif %}" href="#"><i class="fa fa-shopping-cart" aria-hidden="true"></i>Purchase</a>
+          <a class="nav-link {% if active_tab == 'purchase' %}active{% endif %}" href="{% url 'purchase' %}"><i class="fa fa-shopping-cart" aria-hidden="true"></i>Purchase</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'sales' %}active{% endif %}" href="#"><i class="fa-solid fa-indian-rupee-sign"></i></i> Sales</a>
+          <a class="nav-link {% if active_tab == 'sales' %}active{% endif %}" href="{% url 'sales' %}"><i class="fa-solid fa-indian-rupee-sign"></i></i> Sales</a>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if active_tab == 'account' %}active{% endif %}" href="#"><i class="fa-solid fa-file-invoice"></i></i> Account</a>
