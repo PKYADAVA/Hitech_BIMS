@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Supplier, TaxMaster, VendorGroup, TermsConditions
+from .models import Supplier, TaxMaster, VendorGroup, TermsConditions, CreditTerm, PurchaseOrder,PurchaseOrderLineItem
+
 
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
@@ -23,3 +24,26 @@ class VendorGroupAdmin(admin.ModelAdmin):
 class TermsConditionsAdmin(admin.ModelAdmin):
     list_display = ('type', 'condition')
     search_fields = ('type',)
+
+# Register the CreditTerm model
+@admin.register(CreditTerm)
+class CreditTermAdmin(admin.ModelAdmin):
+    list_display = [field.name for field in CreditTerm._meta.fields]  # Display all fields
+    search_fields = ('term',)  # Add search field for credit term
+
+
+# Register the PurchaseOrder model
+@admin.register(PurchaseOrder)
+class PurchaseOrderAdmin(admin.ModelAdmin):
+    list_display = [field.name for field in PurchaseOrder._meta.fields]
+    list_filter = ('date', 'vendor', 'credit_term')
+    search_fields = ('invoice', 'vendor__code')
+    date_hierarchy = 'date'
+    autocomplete_fields = ['vendor', 'credit_term']
+
+@admin.register(PurchaseOrderLineItem)
+class PurchaseOrderLineItemAdmin(admin.ModelAdmin):
+    list_display = ['id', 'purchase_order', 'category', 'code', 'qty_sent', 'qty_received', 'price_per_unit']
+    list_filter = ('purchase_order', 'category', 'warehouse')
+    search_fields = ('code', 'purchase_order__invoice', 'category')
+    autocomplete_fields = ['purchase_order']
