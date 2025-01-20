@@ -275,14 +275,15 @@
             $.ajax({
                 url: "{% url 'vendor_group_create' %}",
                 type: "POST",
-                data: {
+                headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                data: JSON.stringify({  // Serialize the data as a JSON string
                     code: code,
                     description: description,
                     currency: currency,
                     control_account: controlAccount,
-                    prepayment_account: prepaymentAccount,
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                },
+                    prepayment_account: prepaymentAccount
+                }),
+                contentType: "application/json",  // Specify content type as JSON
                 success: function () {
                     $("#vendorGroupFormModal").modal("hide");
                     alert("Vendor Group created successfully.");

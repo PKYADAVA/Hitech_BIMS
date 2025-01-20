@@ -224,11 +224,12 @@
             $.ajax({
                 url: "{% url 'terms_conditions_create' %}",
                 type: "POST",
-                data: {
+                headers: {
+                    "X-CSRFToken": "{{ csrf_token }}"},
+                data: JSON.stringify({
                     type: type,
                     condition: condition,
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                },
+                }),
                 success: function () {
                     $("#termsConditionsFormModal").modal("hide");
                     alert("Term or Condition created successfully.");

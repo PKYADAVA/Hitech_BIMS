@@ -72,8 +72,10 @@ class VendorGroupAPI(View):
 
     def post(self, request):
         try:
+            print(request.body)
             data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         VendorGroup.objects.create(
@@ -118,6 +120,7 @@ class VendorGroupAPI(View):
 class SupplierAPI(View):
 
     def get(self, request, id=None):
+        print("called")
         if id:
             try:
                 supplier = Supplier.objects.get(id=id)
@@ -147,12 +150,16 @@ class SupplierAPI(View):
                     "gstin", "state", "credit_term", "note"
                 )
             )
+            print(suppliers, "suppliers")
             return JsonResponse(suppliers, safe=False)
 
     def post(self, request):
+        print("called")
         try:
+            print(request.body)
             data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         Supplier.objects.create(

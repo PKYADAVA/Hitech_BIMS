@@ -275,14 +275,14 @@
             $.ajax({
                 url: "{% url 'tax_master_create' %}",
                 type: "POST",
-                data: {
+                headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                data: JSON.stringify({
                     tax_code: taxCode,
                     description: description,
                     tax_percentage: taxPercentage,
                     rule: rule,
                     coa: coa,
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                },
+                }),
                 success: function () {
                     $("#taxMasterFormModal").modal("hide");
                     alert("Tax created successfully.");

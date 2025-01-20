@@ -377,11 +377,28 @@ $(document).ready(function () {
     $("#supplier-form").submit(function (e) {
         e.preventDefault();
 
-        const formData = $(this).serialize();
+        const supplierData = {
+            name: $("#name").val(),
+            address: $("#address").val(),
+            place: $("#place").val(),
+            mobile: $("#mobile").val(),
+            contact_type: $("#contact_type").val(),
+            pan: $("#pan").val(),
+            supplier_group: $("#supplier_group").val(),
+            gstin: $("#gstin").val(),
+            state: $("#state").val(),
+            credit_term: $("#credit_term").val(),
+            note: $("#note").val(),
+        };
+    
         $.ajax({
             url: "{% url 'supplier_create' %}",
             type: "POST",
-            data: formData,
+            headers: {
+                "X-CSRFToken": "{{ csrf_token }}",
+            },
+            data: JSON.stringify(supplierData),  // Send the data as JSON
+            contentType: "application/json",  // Specify content type as JSON
             success: function () {
                 $("#supplierFormModal").modal("hide");
                 alert("Supplier created successfully.");
