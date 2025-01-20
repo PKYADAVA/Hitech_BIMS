@@ -1,0 +1,56 @@
+<style>
+
+.sidebar {
+    position: fixed;
+    top: 55px; /* Sidebar starts just below the navbar */
+    left: 0;
+    width: 250px; /* Sidebar width */
+    background-color: #343a40;
+    padding-top: 20px;
+    bottom: 10; /* Keep sidebar stretched to bottom */
+    height: calc(100vh - 70px); /* Ensure sidebar adjusts to the full height minus the navbar */
+    overflow-y: auto; /* Allow scrolling if sidebar content exceeds the viewport */
+    z-index: 1; /* Ensure sidebar stays beneath the navbar */
+}
+
+.sidebar .nav-item {
+    margin: 10px 0;
+}
+
+.sidebar .nav-link {
+    color: white;
+    padding: 10px;
+    text-decoration: none;
+}
+
+.sidebar .nav-link.active {
+    background-color: #007bff;
+    border-radius: 5px;
+}
+</style>
+
+
+<div class="sidebar">
+    <ul class="nav flex-column">
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'master' %}active{% endif %}" href="{% url 'branch_template' %}">
+                Master
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'processing' %}active{% endif %}" href="#">
+                Processing
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'reports' %}active{% endif %}" href="#">
+                Reports
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'graphs' %}active{% endif %}" href="#">
+                Graphs
+            </a>
+        </li>
+    </ul>
+</div>

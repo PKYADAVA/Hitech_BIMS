@@ -4,8 +4,9 @@
 {% include 'main_top_navbar.html' with active_tab='broiler' %}
 {% endblock nav %}
 {% block content %}
+{% include "_broiler_sidebar.html"  with active_tab='master' %}
 {% include '_broiler_subnavbar.html' with active_tab='broiler_farm' %}
-<div class="container-cstm mt-5">
+<div class="container mt-5">
     <h2 class="text-center mb-4">Manage Broiler Farm</h2>
     <div class="row g-5">
         <!-- Button to Open the Modal -->
