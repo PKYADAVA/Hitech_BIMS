@@ -10,14 +10,119 @@
  <!-- Toggle Navbar -->
  {% include '_purchase_subnavbar.html' with active_tab='tax_master' %}
 
- {% comment %} <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      // Find the active tab and trigger a click event
-      const activeTab = document.querySelector(".nav-link.active.activate");
-      if (activeTab) {
-        activeTab.click();
-      }
-    });
-  </script>  {% endcomment %}
+ <div class="container-cstm mt-5">
+    <h2 class="text-center mb-4">Manage Tax Master</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#taxMasterFormModal"
+            >
+                Add New Tax
+            </button>
+        </div>
+        <!-- Modal Structure -->
+        <div class="modal fade" id="taxMasterFormModal" tabindex="-1" aria-labelledby="taxMasterFormModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="taxMasterFormModalLabel">Add New Tax</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="tax-master-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="tax-master-id" />
+                            <div class="mb-3">
+                                <label for="tax_code" class="form-label">Tax Code</label>
+                                <input
+                                    type="text"
+                                    id="tax_code"
+                                    class="form-control"
+                                    placeholder="Enter tax code"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea
+                                    id="description"
+                                    class="form-control"
+                                    placeholder="Enter description"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="tax_percentage" class="form-label">Tax Percentage</label>
+                                <input
+                                    type="number"
+                                    id="tax_percentage"
+                                    class="form-control"
+                                    placeholder="Enter tax percentage"
+                                    step="0.01"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="rule" class="form-label">Rule</label>
+                                <input
+                                    type="text"
+                                    id="rule"
+                                    class="form-control"
+                                    placeholder="Enter rule"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="coa" class="form-label">Chart of Accounts (COA)</label>
+                                <input
+                                    type="text"
+                                    id="coa"
+                                    class="form-control"
+                                    placeholder="Enter COA"
+                                />
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Tax Master List</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="tax-master-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Tax Code</th>
+                                <th>Description</th>
+                                <th>Tax Percentage</th>
+                                <th>Rule</th>
+                                <th>COA</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tax-master-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
   
 {% endblock %}

@@ -9,15 +9,88 @@
 {% block content %}
  <!-- Toggle Navbar -->
  {% include '_purchase_subnavbar.html' with active_tab='terms' %}
+ <div class="container-cstm mt-5">
+    <h2 class="text-center mb-4">Manage Terms and Conditions</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#termsConditionsFormModal"
+            >
+                Add New Term or Condition
+            </button>
+        </div>
+        <!-- Modal Structure -->
+        <div class="modal fade" id="termsConditionsFormModal" tabindex="-1" aria-labelledby="termsConditionsFormModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="termsConditionsFormModalLabel">Add New Term or Condition</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="terms-conditions-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="terms-conditions-id" />
+                            <div class="mb-3">
+                                <label for="type" class="form-label">Type</label>
+                                <input
+                                    type="text"
+                                    id="type"
+                                    class="form-control"
+                                    placeholder="Enter type"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="condition" class="form-label">Condition</label>
+                                <textarea
+                                    id="condition"
+                                    class="form-control"
+                                    placeholder="Enter condition"
+                                    rows="3"
+                                    required
+                                ></textarea>
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Terms and Conditions List</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="terms-conditions-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Type</th>
+                                <th>Condition</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="terms-conditions-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
- {% comment %} <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      // Find the active tab and trigger a click event
-      const activeTab = document.querySelector(".nav-link.active.activate");
-      if (activeTab) {
-        activeTab.click();
-      }
-    });
-  </script>  {% endcomment %}
   
 {% endblock %}
