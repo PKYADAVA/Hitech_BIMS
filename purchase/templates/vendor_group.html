@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Purchase{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='purchase' %}
+{% endblock %}
+
+{% block content %}
+ <!-- Toggle Navbar -->
+ {% include '_purchase_subnavbar.html' with active_tab='vendor_groups' %}
+
+ <div class="container-cstm mt-5">
+    <h2 class="text-center mb-4">Manage Vendor Groups</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#vendorGroupFormModal"
+            >
+                Add New Vendor Group
+            </button>
+        </div>
+        <!-- Modal Structure -->
+        <div class="modal fade" id="vendorGroupFormModal" tabindex="-1" aria-labelledby="vendorGroupFormModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="vendorGroupFormModalLabel">Add New Vendor Group</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="vendor-group-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="vendor-group-id" />
+                            <div class="mb-3">
+                                <label for="code" class="form-label">Code</label>
+                                <input
+                                    type="text"
+                                    id="code"
+                                    class="form-control"
+                                    placeholder="Enter group code"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea
+                                    id="description"
+                                    class="form-control"
+                                    placeholder="Enter description"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="currency" class="form-label">Currency</label>
+                                <input
+                                    type="text"
+                                    id="currency"
+                                    class="form-control"
+                                    placeholder="Enter currency"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="control_account" class="form-label">Control Account</label>
+                                <input
+                                    type="text"
+                                    id="control_account"
+                                    class="form-control"
+                                    placeholder="Enter control account"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="prepayment_account" class="form-label">Prepayment Account</label>
+                                <input
+                                    type="text"
+                                    id="prepayment_account"
+                                    class="form-control"
+                                    placeholder="Enter prepayment account"
+                                />
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Vendor Group List</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="vendor-group-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Code</th>
+                                <th>Description</th>
+                                <th>Currency</th>
+                                <th>Control Account</th>
+                                <th>Prepayment Account</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vendor-group-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+  
+{% endblock %}
