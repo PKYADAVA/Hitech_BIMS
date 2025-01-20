@@ -161,21 +161,25 @@ class SupplierAPI(View):
         except json.JSONDecodeError as e:
             print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        Supplier.objects.create(
-            name=data.get("name"),
-            address=data.get("address"),
-            place=data.get("place"),
-            mobile=data.get("mobile"),
-            contact_type=data.get("contact_type"),
-            pan=data.get("pan"),
-            supplier_group=data.get("supplier_group"),
-            gstin=data.get("gstin"),
-            state=data.get("state"),
-            credit_term=data.get("credit_term"),
-            note=data.get("note"),
-        )
-        return JsonResponse({"message": "Supplier created"}, status=201)
+        
+        try:
+            Supplier.objects.create(
+                name=data.get("name"),
+                address=data.get("address"),
+                place=data.get("place"),
+                mobile=data.get("mobile"),
+                contact_type=data.get("contact_type"),
+                pan=data.get("pan"),
+                supplier_group=data.get("supplier_group"),
+                gstin=data.get("gstin"),
+                state=data.get("state"),
+                credit_term=data.get("credit_term"),
+                note=data.get("note"),
+            )
+            return JsonResponse({"message": "Supplier created"}, status=201)
+        except Exception as e:
+            print("error", e)
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     def put(self, request, id):
         try:
