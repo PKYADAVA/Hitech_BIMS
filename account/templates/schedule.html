@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Broiler{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+ <!-- Toggle Navbar -->
+ {% include '_account_subnavbar.html' with active_tab='schedule' %}
+
+
+{% endblock %}
