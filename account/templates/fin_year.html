@@ -10,6 +10,96 @@
  <!-- Toggle Navbar -->
  {% include '_account_subnavbar.html' with active_tab='fin_year' %}
 
+ <div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Financial Years</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#financialYearFormModal"
+            >
+                Add New Financial Year
+            </button>
+        </div>
+
+        <!-- Modal Structure -->
+        <div class="modal fade" id="financialYearFormModal" tabindex="-1" aria-labelledby="financialYearFormModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="financialYearFormModalLabel">Add New Financial Year</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="financial-year-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="financial-year-id" />
+                            <div class="mb-3">
+                                <label for="start_date" class="form-label">Start Date</label>
+                                <input
+                                    type="date"
+                                    id="start_date"
+                                    class="form-control"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="end_date" class="form-label">End Date</label>
+                                <input
+                                    type="date"
+                                    id="end_date"
+                                    class="form-control"
+                                    required
+                                />
+                            </div>
+                            <div class="form-check mb-3">
+                                <input
+                                    type="checkbox"
+                                    id="is_active"
+                                    class="form-check-input"
+                                />
+                                <label class="form-check-label" for="is_active">Active Financial Year</label>
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Financial Years</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="financial-year-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Start Date</th>
+                                <th>End Date</th>
+                                <th>Active Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="financial-year-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
   
 {% endblock %}

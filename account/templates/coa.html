@@ -9,7 +9,127 @@
 {% block content %}
  <!-- Toggle Navbar -->
  {% include '_account_subnavbar.html' with active_tab='coa' %}
+ <div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Chart of Accounts</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#chartOfAccountFormModal"
+            >
+                Add New Account
+            </button>
+        </div>
 
+        <!-- Modal Structure -->
+        <div class="modal fade" id="chartOfAccountFormModal" tabindex="-1" aria-labelledby="chartOfAccountFormModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="chartOfAccountFormModalLabel">Add New Account</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="chart-of-account-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="account-id" />
+                            <div class="mb-3">
+                                <label for="code" class="form-label">Code</label>
+                                <input
+                                    type="text"
+                                    id="code"
+                                    class="form-control"
+                                    placeholder="Enter account code"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <input
+                                    type="text"
+                                    id="description"
+                                    class="form-control"
+                                    placeholder="Enter account description"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="type" class="form-label">Type</label>
+                                <select id="type" class="form-control" required>
+                                    <option value="" selected disabled>Select account type</option>
+                                    {% for type, type_name in ChartOfAccount.TYPE_CHOICES %}
+                                    <option value="{{ type }}">{{ type_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="control_type" class="form-label">Control Type</label>
+                                <input
+                                    type="text"
+                                    id="control_type"
+                                    class="form-control"
+                                    placeholder="Enter control type"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="schedule" class="form-label">Schedule</label>
+                                <select id="schedule" class="form-control">
+                                    <option value="" selected disabled>Select schedule</option>
+                                    {% for schedule in schedules %}
+                                    <option value="{{ schedule.id }}">{{ schedule.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="status" class="form-label">Status</label>
+                                <select id="status" class="form-control" required>
+                                    <option value="Active" selected>Active</option>
+                                    <option value="Inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Chart of Accounts</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="chart-of-accounts-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Code</th>
+                                <th>Description</th>
+                                <th>Type</th>
+                                <th>Control Type</th>
+                                <th>Schedule</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chart-of-accounts-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
   
 {% endblock %}

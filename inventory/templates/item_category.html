@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventory{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_subnavbar.html' with active_tab='item_category' %}
+
+<div class="container-cstm mt-5">
+    <h2 class="text-center mb-4">Manage Categories</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-info"
+                data-bs-toggle="modal"
+                data-bs-target="#categoryFormModal"
+            >
+                Add New Category
+            </button>
+        </div>
+        <!-- Modal Structure -->
+        <div
+            class="modal fade"
+            id="categoryFormModal"
+            tabindex="-1"
+            aria-labelledby="categoryFormModalLabel"
+            aria-hidden="true"
+        >
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white">
+                        <h5 class="modal-title" id="categoryFormModalLabel">
+                            Add New Category
+                        </h5>
+                        <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                        ></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="category-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="category-id" />
+                            <div class="mb-3">
+                                <label for="category-name" class="form-label">Name</label>
+                                <input
+                                    type="text"
+                                    id="category-name"
+                                    class="form-control"
+                                    placeholder="Enter category name"
+                                    required
+                                />
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-info">Save</button>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary"
+                                    data-bs-dismiss="modal"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Category List</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="category-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="category-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}

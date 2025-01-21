@@ -9,6 +9,99 @@
 {% block content %}
  <!-- Toggle Navbar -->
  {% include '_account_subnavbar.html' with active_tab='schedule' %}
+ <div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Schedules</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#scheduleFormModal"
+            >
+                Add New Schedule
+            </button>
+        </div>
 
+        <!-- Modal Structure -->
+        <div class="modal fade" id="scheduleFormModal" tabindex="-1" aria-labelledby="scheduleFormModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="scheduleFormModalLabel">Add New Schedule</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="schedule-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="schedule-id" />
+                            <div class="mb-3">
+                                <label for="code" class="form-label">Code</label>
+                                <input
+                                    type="text"
+                                    id="code"
+                                    class="form-control"
+                                    placeholder="Enter unique code"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Name</label>
+                                <input
+                                    type="text"
+                                    id="name"
+                                    class="form-control"
+                                    placeholder="Enter schedule name"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea
+                                    id="description"
+                                    class="form-control"
+                                    rows="3"
+                                    placeholder="Enter schedule description (optional)"
+                                ></textarea>
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Schedule List</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="schedule-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th>Description</th>
+                                <th>Created At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
 {% endblock %}

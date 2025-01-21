@@ -10,6 +10,165 @@
  <!-- Toggle Navbar -->
  {% include '_account_subnavbar.html' with active_tab='bank_cash' %}
 
+ <div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Bank Codes</h2>
+    <div class="row g-5">
+        <!-- Add New Bank Button -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#bankCodeFormModal"
+            >
+                Add New Bank
+            </button>
+        </div>
 
+        <!-- Modal for Add/Edit Bank -->
+        <div
+            class="modal fade"
+            id="bankCodeFormModal"
+            tabindex="-1"
+            aria-labelledby="bankCodeFormModalLabel"
+            aria-hidden="true"
+        >
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="bankCodeFormModalLabel">Add Bank Details</h5>
+                        <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                        ></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="bank-code-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="bank-id" />
+                            <div class="mb-3">
+                                <label for="bank-code" class="form-label">Bank Code</label>
+                                <input
+                                    type="text"
+                                    id="bank-code"
+                                    class="form-control"
+                                    placeholder="Enter unique bank code"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="bank-name" class="form-label">Bank Name</label>
+                                <input
+                                    type="text"
+                                    id="bank-name"
+                                    class="form-control"
+                                    placeholder="Enter bank name"
+                                    required
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="sector" class="form-label">Sector</label>
+                                <select id="sector" class="form-select">
+                                    <option value="">Select a sector</option>
+                                    {% for sector in sectors %}
+                                    <option value="{{ sector.id }}">{{ sector.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="micr" class="form-label">MICR Code</label>
+                                <input
+                                    type="text"
+                                    id="micr"
+                                    class="form-control"
+                                    placeholder="Enter MICR code"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="address" class="form-label">Address</label>
+                                <textarea
+                                    id="address"
+                                    class="form-control"
+                                    rows="3"
+                                    placeholder="Enter bank address"
+                                    required
+                                ></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <input
+                                    type="email"
+                                    id="email"
+                                    class="form-control"
+                                    placeholder="Enter bank email"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">Phone</label>
+                                <input
+                                    type="text"
+                                    id="phone"
+                                    class="form-control"
+                                    placeholder="Enter phone number"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="fax" class="form-label">Fax</label>
+                                <input
+                                    type="text"
+                                    id="fax"
+                                    class="form-control"
+                                    placeholder="Enter fax number"
+                                />
+                            </div>
+                            <div class="mb-3">
+                                <label for="contact-person" class="form-label">Contact Person</label>
+                                <input
+                                    type="text"
+                                    id="contact-person"
+                                    class="form-control"
+                                    placeholder="Enter contact person name"
+                                />
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-success">Save</button>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Bank Code List</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-striped table-hover table-bordered" id="bank-code-table">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Bank Code</th>
+                                <th>Bank Name</th>
+                                <th>Sector</th>
+                                <th>Address</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Contact Person</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bank-code-table-body">
+                            <!-- Dynamic content will be added via AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+           
   
 {% endblock %}

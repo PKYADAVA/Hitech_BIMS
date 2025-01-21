@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventory{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_subnavbar.html' with active_tab='warehouse' %}
+<div class="container-cstm mt-5">
+    <h2 class="text-center mb-4">Manage Warehouses</h2>
+    <div class="row g-5">
+        <!-- Button to Open the Modal -->
+        <div class="text-end mb-3">
+            <button
+                class="btn btn-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#warehouseFormModal"
+            >
+                Add New Warehouse
+            </button>
+        </div>
+        <!-- Modal Structure -->
+        <div
+            class="modal fade"
+            id="warehouseFormModal"
+            tabindex="-1"
+            aria-labelledby="warehouseFormModalLabel"
+            aria-hidden="true"
+        >
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="warehouseFormModalLabel">
+                            Add New Warehouse
+                        </h5>
+                        <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close"
+                        ></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Form Section -->
+                        <form id="warehouse-form">
+                            {% csrf_token %}
+                            <input type="hidden" id="warehouse-id" />
+                            <div class="mb-3">
+                                <label for="warehouse-name" class="form-label">Name</label>
+                                <input
+                                    type="text"
+                                    id="warehouse-name"
+                                    class="form-control"
+                                    placeholder="Enter warehouse name"
+                                    required
+                                />
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-primary">Save</button>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary"
+                                    data-bs-dismiss="modal"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- List Section -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Warehouse List</h5>
+                </div>
+                <div class="card-body">
+                    <table
+                        class="table table-striped table-hover table-bordered"
+                        id="warehouse-table"
+                    >
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="warehouse-table-body">
+                            <!-- AJAX content will load here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

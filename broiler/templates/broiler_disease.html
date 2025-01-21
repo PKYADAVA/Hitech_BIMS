@@ -1,15 +1,11 @@
 {% extends "base.html" %}
-
 {% block title %}Manage Broiler Disease{% endblock %}
-
 {% block nav %}
 {% include 'main_top_navbar.html' with active_tab='broiler' %}
 {% endblock nav %}
-
 {% block content %}
 {% include "_broiler_sidebar.html"  with active_tab='master' %}
 {% include '_broiler_subnavbar.html' with active_tab='broiler_disease' %}
-
 <div class="container mt-5">
     <h2 class="text-center mb-4">Manage Broiler Disease</h2>
     <div class="row g-5">
