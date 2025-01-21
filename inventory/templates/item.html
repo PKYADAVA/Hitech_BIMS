@@ -154,4 +154,179 @@
         </div>
     </div>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script>
+    $(document).ready(function () {
+        // Function to Load Item List
+        function loadItemList() {
+            $.ajax({
+                url: "{% url 'item_list' %}", // Replace with your actual endpoint
+                type: "GET",
+                success: function (response) {
+                    console.log(response, "response");
+                    const table = $("#item-table");
+                    const tableBody = $("#item-table-body");
+    
+                    // Clear the current table body and destroy the DataTable if initialized
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+                    tableBody.empty();
+    
+                    // Populate the table dynamically
+                    response.forEach((item) => {
+                        const tableRow = `
+                            <tr>
+                                <td>${item.item_code}</td>
+                                <td>${item.description}</td>
+                                <td>${item.category}</td>
+                                <td>${item.warehouse}</td>
+                                <td>${item.valuation_method}</td>
+                                <td>${item.standard_cost_per_unit}</td>
+                                <td>${item.usage}</td>
+                                <td>
+                                    <button class="btn btn-primary edit-item" 
+                                        data-id="${item.id}" 
+                                        data-item_code="${item.item_code}" 
+                                        data-description="${item.description}" 
+                                        data-category="${item.category}" 
+                                        data-warehouse="${item.warehouse}" 
+                                        data-valuation_method="${item.valuation_method}" 
+                                        data-standard_cost_per_unit="${item.standard_cost_per_unit}" 
+                                        data-usage="${item.usage}">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-danger delete-item" 
+                                        data-id="${item.id}">
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.append(tableRow);
+                    });
+    
+                    // Reinitialize DataTable
+                    table.DataTable();
+                },
+                error: function (xhr, status, error) {
+                    console.error(`Failed to load items: ${error}`);
+                },
+            });
+        }
+    
+        // Load item list on page load
+        loadItemList();
+    
+        // Handle edit button click and create modal dynamically
+        $(document).on("click", ".edit-item", function () {
+            const itemData = $(this).data();
+    
+            // Dynamically create the modal content
+            const modalContent = `
+                <div class="modal fade" id="dynamicItemEditModal" tabindex="-1" aria-labelledby="dynamicItemEditModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title" id="dynamicItemEditModalLabel">Edit Item</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="dynamic-item-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="item-id" value="${itemData.id}" />
+                                    <div class="mb-3">
+                                        <label for="dynamic-item_code" class="form-label">Item Code</label>
+                                        <input type="text" id="dynamic-item_code" class="form-control" value="${itemData.item_code}" required />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-description" class="form-label">Description</label>
+                                        <textarea id="dynamic-description" class="form-control" rows="3" required>${itemData.description}</textarea>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-category" class="form-label">Category</label>
+                                        <input type="text" id="dynamic-category" class="form-control" value="${itemData.category}" required />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-warehouse" class="form-label">Warehouse</label>
+                                        <input type="text" id="dynamic-warehouse" class="form-control" value="${itemData.warehouse}" required />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-valuation_method" class="form-label">Valuation Method</label>
+                                        <select id="dynamic-valuation_method" class="form-select" required>
+                                            <option value="Weighted Average" ${itemData.valuation_method === "Weighted Average" ? "selected" : ""}>Weighted Average</option>
+                                            <option value="Standard Costing" ${itemData.valuation_method === "Standard Costing" ? "selected" : ""}>Standard Costing</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-standard_cost_per_unit" class="form-label">Standard Cost/Unit</label>
+                                        <input type="number" id="dynamic-standard_cost_per_unit" class="form-control" value="${itemData.standard_cost_per_unit}" step="0.01" required />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-usage" class="form-label">Usage</label>
+                                        <select id="dynamic-usage" class="form-select" required>
+                                            <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
+                                            <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
+                                        </select>
+                                    </div>
+                                    <div class="text-end">
+                                        <button type="submit" class="btn btn-primary">Save</button>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+    
+            // Append the modal to the body
+            $("body").append(modalContent);
+    
+            // Show the modal
+            $("#dynamicItemEditModal").modal("show");
+    
+            // Handle form submission
+            $("#dynamic-item-form").on("submit", function (event) {
+                event.preventDefault();
+    
+                const updatedItemData = {
+                    id: $("#item-id").val(),
+                    item_code: $("#dynamic-item_code").val(),
+                    description: $("#dynamic-description").val(),
+                    category: $("#dynamic-category").val(),
+                    warehouse: $("#dynamic-warehouse").val(),
+                    valuation_method: $("#dynamic-valuation_method").val(),
+                    standard_cost_per_unit: $("#dynamic-standard_cost_per_unit").val(),
+                    usage: $("#dynamic-usage").val(),
+                };
+    
+                const csrfToken = "{{ csrf_token }}";
+    
+                $.ajax({
+                    url: `/item/${updatedItemData.id}/update/`,
+                    method: "PUT",
+                    headers: { "X-CSRFToken": csrfToken },
+                    data: updatedItemData,
+                    success: function () {
+                        $("#dynamicItemEditModal").modal("hide").remove();
+                        loadItemList();
+                        alert("Item updated successfully!");
+                    },
+                    error: function () {
+                        alert("An error occurred while updating the item.");
+                    },
+                });
+            });
+    
+            // Clean up modal on close
+            $("#dynamicItemEditModal").on("hidden.bs.modal", function () {
+                $(this).remove();
+            });
+        });
+    });
+    
+</script>
+ 
 {% endblock %}

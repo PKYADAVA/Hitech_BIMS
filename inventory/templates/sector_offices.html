@@ -98,4 +98,124 @@
         </div>
     </div>
 </div>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script>
+    $(document).ready(function () {
+        // Function to Load Warehouse List
+        function loadWarehouseList() {
+            $.ajax({
+                url: "{% url 'warehouse_list' %}", // Replace with your actual endpoint
+                type: "GET",
+                success: function (response) {
+                    console.log(response, "response");
+                    const table = $("#warehouse-table");
+                    const tableBody = $("#warehouse-table-body");
+    
+                    // Clear the current table body and destroy the DataTable if initialized
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+                    tableBody.empty();
+    
+                    // Populate the table dynamically
+                    response.forEach((warehouse) => {
+                        const tableRow = `
+                            <tr>
+                                <td>${warehouse.name}</td>
+                                <td>
+                                    <button class="btn btn-primary edit-warehouse" 
+                                        data-id="${warehouse.id}" 
+                                        data-name="${warehouse.name}">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-danger delete-warehouse" 
+                                        data-id="${warehouse.id}">
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.append(tableRow);
+                    });
+    
+                    // Reinitialize DataTable
+                    table.DataTable();
+                },
+                error: function (xhr, status, error) {
+                    console.error(`Failed to load warehouses: ${error}`);
+                },
+            });
+        }
+    
+        // Load warehouse list on page load
+        loadWarehouseList();
+    
+        // Add new warehouse
+        $("#warehouse-form").on("submit", function (event) {
+            event.preventDefault();
+    
+            const warehouseId = $("#warehouse-id").val();
+            const warehouseName = $("#warehouse-name").val();
+            csrfToken = "{{ csrf_token }}";
+            const method = warehouseId ? "PUT" : "POST";
+            const url = warehouseId 
+                ? `/warehouse/${warehouseId}/` 
+                : "/create-warehouse/";
+    
+            $.ajax({
+                url: url, // Endpoint for adding or updating warehouse
+                method: method,
+                headers: {
+                    "X-CSRFToken": csrfToken,
+                },
+                data: {
+                    name: warehouseName,
+                },
+                success: function () {
+                    $("#warehouseFormModal").modal("hide");
+                    $("#warehouse-form")[0].reset();
+                    loadWarehouseList();
+                    alert("Warehouse saved successfully!");
+                },
+                error: function (xhr, status, error) {
+                    console.error(`Failed to save warehouse: ${error}`);
+                    alert("An error occurred while saving the warehouse.");
+                },
+            });
+        });
+    
+        // Handle delete button click
+        $(document).on("click", ".delete-warehouse", function () {
+            const id = $(this).data("id");
+            csrfToken = "{{ csrf_token }}";
+    
+            if (confirm("Are you sure you want to delete this warehouse?")) {
+                $.ajax({
+                    url: `/warehouse/${id}/delete/`, // Construct delete URL
+                    method: "DELETE",
+                    headers: { "X-CSRFToken": csrfToken },
+                    success: function () {
+                        loadWarehouseList();
+                        alert("Warehouse deleted successfully!");
+                    },
+                    error: function () {
+                        alert("An error occurred while deleting the warehouse.");
+                    },
+                });
+            }
+        });
+    
+        // Handle edit button click
+        $(document).on("click", ".edit-warehouse", function () {
+            const id = $(this).data("id");
+            const name = $(this).data("name");
+    
+            $("#warehouse-id").val(id);
+            $("#warehouse-name").val(name);
+            $("#warehouseFormModal").modal("show");
+        });
+    });
+    
+
+</script>    
 {% endblock %}
