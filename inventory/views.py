@@ -3,7 +3,7 @@ from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.auth.decorators import login_required
-from .models import Category, Item, Warehouse
+from .models import ItemCategory, Item, Warehouse
 import json
 
 # Create your views here.
@@ -30,12 +30,12 @@ class CategoryAPI(View):
     def get(self, request, id=None):
         if id:
             try:
-                category = Category.objects.get(id=id)
+                category = ItemCategory.objects.get(id=id)
                 return JsonResponse({"id": category.id, "name": category.name})
-            except Category.DoesNotExist:
+            except ItemCategory.DoesNotExist:
                 raise Http404("Category not found")
         else:
-            categories = list(Category.objects.values("id", "name"))
+            categories = list(ItemCategory.objects.values("id", "name"))
             return JsonResponse(categories, safe=False)
 
     def post(self, request):
@@ -47,13 +47,13 @@ class CategoryAPI(View):
         if not data.get("name"):
             return JsonResponse({"error": "Name is required"}, status=400)
 
-        Category.objects.create(name=data["name"])
+        ItemCategory.objects.create(name=data["name"])
         return JsonResponse({"message": "Category created"}, status=201)
 
     def put(self, request, id):
         try:
-            category = Category.objects.get(id=id)
-        except Category.DoesNotExist:
+            category = ItemCategory.objects.get(id=id)
+        except ItemCategory.DoesNotExist:
             raise Http404("Category not found")
 
         try:
@@ -70,8 +70,8 @@ class CategoryAPI(View):
 
     def delete(self, request, id):
         try:
-            category = Category.objects.get(id=id)
-        except Category.DoesNotExist:
+            category = ItemCategory.objects.get(id=id)
+        except ItemCategory.DoesNotExist:
             raise Http404("Category not found")
 
         category.delete()
@@ -84,12 +84,12 @@ class CategoryAPI(View):
     def get(self, request, id=None):
         if id:
             try:
-                category = Category.objects.get(id=id)
+                category = ItemCategory.objects.get(id=id)
                 return JsonResponse({"id": category.id, "name": category.name})
-            except Category.DoesNotExist:
+            except ItemCategory.DoesNotExist:
                 raise Http404("Category not found")
         else:
-            categories = list(Category.objects.values("id", "name"))
+            categories = list(ItemCategory.objects.values("id", "name"))
             return JsonResponse(categories, safe=False)
 
     def post(self, request):
@@ -101,13 +101,13 @@ class CategoryAPI(View):
         if not data.get("name"):
             return JsonResponse({"error": "Name is required"}, status=400)
 
-        Category.objects.create(name=data["name"])
+        ItemCategory.objects.create(name=data["name"])
         return JsonResponse({"message": "Category created"}, status=201)
 
     def put(self, request, id):
         try:
-            category = Category.objects.get(id=id)
-        except Category.DoesNotExist:
+            category = ItemCategory.objects.get(id=id)
+        except ItemCategory.DoesNotExist:
             raise Http404("Category not found")
 
         try:
@@ -124,8 +124,8 @@ class CategoryAPI(View):
 
     def delete(self, request, id):
         try:
-            category = Category.objects.get(id=id)
-        except Category.DoesNotExist:
+            category = ItemCategory.objects.get(id=id)
+        except ItemCategory.DoesNotExist:
             raise Http404("Category not found")
 
         category.delete()
@@ -185,8 +185,8 @@ class ItemAPI(View):
             return JsonResponse({"error": "Missing required fields"}, status=400)
 
         try:
-            category = Category.objects.get(id=data["category"])
-        except Category.DoesNotExist:
+            category = ItemCategory.objects.get(id=data["category"])
+        except ItemCategory.DoesNotExist:
             return JsonResponse({"error": "Invalid category ID"}, status=400)
 
         try:
@@ -234,8 +234,8 @@ class ItemAPI(View):
 
         if "category" in data:
             try:
-                item.category = Category.objects.get(id=data["category"])
-            except Category.DoesNotExist:
+                item.category = ItemCategory.objects.get(id=data["category"])
+            except ItemCategory.DoesNotExist:
                 return JsonResponse({"error": "Invalid category ID"}, status=400)
 
         if "warehouse" in data:

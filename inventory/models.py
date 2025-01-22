@@ -1,7 +1,7 @@
 from django.db import models
 
 
-class Category(models.Model):
+class ItemCategory(models.Model):
     name = models.CharField(max_length=255, unique=True)
 
     def __str__(self):
@@ -50,7 +50,7 @@ class Item(models.Model):
 
     item_code = models.CharField(max_length=100, unique=True)
     description = models.TextField()
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='items')
+    category = models.ForeignKey(ItemCategory, on_delete=models.CASCADE, related_name='items')
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='items')
     valuation_method = models.CharField(max_length=50, choices=VALUATION_METHODS)
     standard_cost_per_unit = models.DecimalField(max_digits=10, decimal_places=2)

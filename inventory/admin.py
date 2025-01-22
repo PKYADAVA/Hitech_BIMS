@@ -1,8 +1,8 @@
 from django.contrib import admin
-from .models import Category, Warehouse, Item
+from .models import ItemCategory, Warehouse, Item
 
 
-@admin.register(Category)
+@admin.register(ItemCategory)
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ('id', 'name')
     search_fields = ('name',)
