@@ -43,7 +43,7 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
 
 @admin.register(PurchaseOrderLineItem)
 class PurchaseOrderLineItemAdmin(admin.ModelAdmin):
-    list_display = ['id', 'purchase_order', 'category', 'code', 'qty_sent', 'qty_received', 'price_per_unit']
-    list_filter = ('purchase_order', 'category', 'warehouse')
+    list_display = ['id', 'purchase_order', 'qty_sent', 'qty_received', 'price_per_unit']
+    list_filter = ('purchase_order', 'warehouse')
     search_fields = ('code', 'purchase_order__invoice', 'category')
     autocomplete_fields = ['purchase_order']
