@@ -1,0 +1,101 @@
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='sales' %}
+{% endblock %}
+
+{% block content %}
+ <!-- Toggle Navbar -->
+ {% include '_sales_subnavbar.html' with active_tab='price_master' %}
+
+
+<div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Sales Prices</h2>
+    <div class="row g-5">
+      <!-- Button to Open the Modal -->
+      <div class="text-end mb-3">
+        <button
+          class="btn btn-success"
+          data-bs-toggle="modal"
+          data-bs-target="#salesPriceFormModal"
+        >
+          Add New Sales Price
+        </button>
+      </div>
+      <!-- Modal Structure -->
+      <div class="modal fade" id="salesPriceFormModal" tabindex="-1" aria-labelledby="salesPriceFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+              <h5 class="modal-title" id="salesPriceFormModalLabel">Add New Sales Price</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <!-- Form Section -->
+              <form id="sales-price-form">
+                {% csrf_token %}
+                <input type="hidden" id="price-id" />
+                <div class="mb-3">
+                  <label for="item_category" class="form-label">Item Category</label>
+                  <select id="item_category" class="form-control" required>
+                    <option value="" selected disabled>Select a category</option>
+                    {% for category in item_categories %}
+                    <option value="{{ category.id }}">{{ category.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="item" class="form-label">Item</label>
+                  <select id="item" class="form-control" required>
+                    <option value="" selected disabled>Select an item</option>
+                    {% for item in items %}
+                    <option value="{{ item.id }}">{{ item.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="price" class="form-label">Price</label>
+                  <input
+                    type="number"
+                    id="price"
+                    class="form-control"
+                    placeholder="Enter sales price"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div class="text-end">
+                  <button type="submit" class="btn btn-success">Save</button>
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- List Section -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Sales Price List</h5>
+          </div>
+          <div class="card-body">
+            <table class="table table-striped table-hover table-bordered" id="sales-price-table">
+              <thead class="table-dark">
+                <tr>
+                  <th>Item Category</th>
+                  <th>Item</th>
+                  <th>Price</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="sales-price-table-body">
+                <!-- AJAX content will load here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endblock %}

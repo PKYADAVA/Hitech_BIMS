@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ContactType, CustomerGroup, SalesPriceMaster, Contact
+from .models import ContactType, CustomerGroup, SalesPriceMaster, Customer
 
 
 @admin.register(CustomerGroup)
@@ -17,8 +17,8 @@ class SalesPriceMasterAdmin(admin.ModelAdmin):
     date_hierarchy = 'date'
 
 
-@admin.register(Contact)
-class ContactAdmin(admin.ModelAdmin):
+@admin.register(Customer)
+class CustomerAdmin(admin.ModelAdmin):
     list_display = ('name', 'phone', 'mobile', 'contact_type', 'customer_group', 'supplier_group', 'credit_limit', 'state')
     search_fields = ('name', 'phone', 'mobile', 'gstin', 'state')
     list_filter = ('contact_type', 'state', 'customer_group', 'supplier_group')
