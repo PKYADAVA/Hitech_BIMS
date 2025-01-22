@@ -26,14 +26,14 @@
                             <th>Designation</th>
                             <th>Date</th>
                             <th>Status</th>
-                            <th>Check In</th>
-                            <th>Check Out</th>
+                            {% comment %} <th>Check In</th>
+                            <th>Check Out</th> {% endcomment %}
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for attendance in attendances %}
-                        <tr>
+                        <tr data-id="{{ attendance.id }}">
                             <td>{{ attendance.employee.employee_id }}</td>
                             <td>{{ attendance.employee.full_name }}</td>
                             <td>{{ attendance.employee.designation.title|default:"-" }}</td>
@@ -48,9 +48,6 @@
                                     {{ attendance.status }}
                                 </span>
                             </td>
-                            <td>{{ attendance.check_in_time|time:"H:i"|default:"-" }}</td>
-                            <td>{{ attendance.check_out_time|time:"H:i"|default:"-" }}</td>
-                            {% comment %} <td>{{ attendance.duration|default:"-" }}</td> {% endcomment %}
                             <td>
                                 <button class="btn btn-sm btn-primary edit-attendance" data-id="{{ attendance.id }}" title="Edit Attendance">
                                     <i class="fas fa-edit"></i>
@@ -61,7 +58,7 @@
                             </td>
                         </tr>
                         {% endfor %}
-                    </tbody>
+                    </tbody>                                      
                 </table>
             </div>
         </div>
@@ -214,12 +211,6 @@
                                 </select>
                             </div>
                         </div>
-                        {% comment %} <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="remarks" class="form-label">Remarks</label>
-                                <textarea class="form-control" id="editremarks" name="remarks" rows="1"></textarea>
-                            </div>
-                        </div> {% endcomment %}
                     </div>
                 </form>
             </div>

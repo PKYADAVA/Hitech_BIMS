@@ -1,103 +1,126 @@
 $(document).ready(function () {
     let selectedEmployeeId = null;
-    
-    // handle display leave dates
+
+    // Utility function for handling AJAX requests
+    function handleAjaxRequest(url, method, data, onSuccess, onError, beforeSendMessage = "Loading...") {
+        $.ajax({
+            url: url,
+            method: method,
+            data: data,
+            beforeSend: function () {
+                $("#staticBackdrop .modal-body").html(`<p>${beforeSendMessage}</p>`);
+            },
+            success: onSuccess,
+            error: onError,
+        });
+    }
+
+    // Handle display leave dates
     $(".view-leave-dates").on("click", function () {
-        const employeeId = $(this).data("id"); // Get the employee ID from the button
+        const employeeId = $(this).data("id");
+        if (!employeeId) return;
 
-        if (employeeId) {
-            $.ajax({
-                url: `/employee/leave/details/`, // API endpoint
-                method: "GET",
-                data: { employee_id: employeeId }, // Pass employee ID
-                beforeSend: function () {
-                    // Show a loader or clear the modal content before the request
-                    $("#staticBackdrop .modal-body").html("<p>Loading...</p>");
-                },
-                success: function (response) {
-                    const selectedDates = response.selected_dates || [];
-                    const modalBody = $("#staticBackdrop .modal-body");
+        handleAjaxRequest(
+            `/employee/leave/details/`,
+            "GET",
+            { employee_id: employeeId },
+            function (response) {
+                const selectedDates = response.selected_dates || [];
+                const modalBody = $("#staticBackdrop .modal-body");
 
-                    if (selectedDates.length > 0) {
-                        // Create a list of leave dates
-                        const datesList = selectedDates
-                            .map(date => `<li>${date}</li>`)
-                            .join("");
-                        modalBody.html(`<ul>${datesList}</ul>`);
-                    } else {
-                        modalBody.html("<p>No leave dates found for this employee.</p>");
-                    }
+                if (selectedDates.length > 0) {
+                    const datesList = selectedDates.map(date => `<li>${date}</li>`).join("");
+                    modalBody.html(`<ul>${datesList}</ul>`);
+                } else {
+                    modalBody.html("<p>No leave dates found for this employee.</p>");
+                }
 
-                    // Open the modal after successfully fetching data
-                    const modalElement = new bootstrap.Modal(document.getElementById("staticBackdrop"));
-                    modalElement.show();
-                },
-                error: function () {
-                    $("#staticBackdrop .modal-body").html("<p>An error occurred while fetching the leave dates.</p>");
-                },
-            });
-        }
+                const modalElement = new bootstrap.Modal(document.getElementById("staticBackdrop"));
+                modalElement.show();
+            },
+            function () {
+                $("#staticBackdrop .modal-body").html("<p>An error occurred while fetching the leave dates.</p>");
+            }
+        );
     });
+
+    // Common handler for showing approval/rejection confirmation modals
+    function showConfirmationModal(employeeId, message, modalId) {
+        selectedEmployeeId = employeeId;
+        $(`#${modalId}Message`).text(message);
+        $(`#${modalId}`).modal("show");
+    }
 
     // Handle Approve Button Click
     $(".employeeLeaveApprove").on("click", function () {
-        selectedEmployeeId = $(this).data("id");
-        $("#confirmationApproveMessage").text("Are you sure you want to approve this leave?");
-        $("#leaveApproveConfirmationModal").modal("show");
+        showConfirmationModal($(this).data("id"), "Are you sure you want to approve this leave?", "leaveApproveConfirmationModal");
     });
 
     // Handle Reject Button Click
     $(".employeeLeaveReject").on("click", function () {
-        selectedEmployeeId = $(this).data("id");
-        $("#confirmationRejectMessage").text("Are you sure you want to reject this leave?");
-        $("#leaveRejectConfirmationModal").modal("show");
+        showConfirmationModal($(this).data("id"), "Are you sure you want to reject this leave?", "leaveRejectConfirmationModal");
     });
+
+    // Confirm Action (Approve/Reject)
+    function confirmLeaveAction(status, modalId, badgeClass) {
+        if (!selectedEmployeeId) return;
+    
+        $.ajax({
+            url: "/employee/leave/details/",
+            method: "POST",
+            data: {
+                leave_id: selectedEmployeeId,
+                status: status,
+                csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(),
+            },
+            success: function (response) {
+    
+                if (response.new_status && response.leave_id) {
+                    // Disable the buttons
+                    $(`#employeeLeaveApprove-${response.leave_id}`).prop("disabled", true);
+                    $(`#employeeLeaveReject-${response.leave_id}`).prop("disabled", true);
+    
+                    // Update the status badge in the table
+                    const newStatusBadge = getBadgeHtml(response.new_status);
+                    $(`#statusBadge-${response.leave_id}`).html(newStatusBadge);
+
+                    $("#total-employees-count").text(response.total_employees);
+                    $("#total-approved-leaves-count").text(response.total_approved_leaves);
+                    $("#total-pending-leaves-count").text(response.total_pending_leaves);
+
+                    // Hide the modal
+                    $(`#${modalId}`).modal("hide");
+                } else {
+                    console.error("Invalid response format from server:", response);
+                    alert("Unexpected response format. Please contact support.");
+                }
+            },
+            error: function (xhr) {
+                const errorMessage =
+                    xhr.responseJSON?.error || `An error occurred while updating the leave status. Please try again.`;
+                console.error("AJAX Error:", xhr);
+                alert(errorMessage);
+            }
+        });
+    }
+    
+    // Helper function to determine badge HTML
+    function getBadgeHtml(status) {
+        let badgeClass = "";
+        if (status === "Pending") badgeClass = "bg-warning";
+        else if (status === "Approved") badgeClass = "bg-success";
+        else badgeClass = "bg-danger";
+    
+        return `<span class="badge ${badgeClass}">${status}</span>`;
+    }
 
     // Confirm Approve Action
     $("#confirmLeaveApprove").on("click", function () {
-        if (selectedEmployeeId) {
-            $.ajax({
-                url: "/employee/leave/details/",
-                method: "POST",
-                data: {
-                    leave_id: selectedEmployeeId,
-                    status: "Approved",
-                    csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(), // CSRF token
-                },
-                success: function (response) {
-                    $("#confirmationApproveMessage").text("Leave approved successfully!");
-                    setTimeout(() => location.reload(), 3000); // Reload after 3 seconds
-                },
-                error: function (xhr) {
-                    const errorMessage = xhr.responseJSON?.error || "An error occurred while approving the leave. Please try again.";
-                    $("#confirmationApproveMessage").text(errorMessage);
-                    setTimeout(() => location.reload(), 3000); // Reload after 3 seconds
-                },
-            });
-        }
+        confirmLeaveAction("Approved", "leaveApproveConfirmationModal", "bg-success");
     });
 
     // Confirm Reject Action
     $("#confirmLeaveReject").on("click", function () {
-        if (selectedEmployeeId) {
-            $.ajax({
-                url: "/employee/leave/details/",
-                method: "POST",
-                data: {
-                    leave_id: selectedEmployeeId,
-                    status: "Rejected",
-                    csrfmiddlewaretoken: $("input[name='csrfmiddlewaretoken']").val(), // CSRF token
-                },
-                success: function (response) {
-                    $("#confirmationRejectMessage").text("Leave rejected successfully!");
-                    setTimeout(() => location.reload(), 3000); // Reload after 3 seconds
-                },
-                error: function (xhr) {
-                    const errorMessage = xhr.responseJSON?.error || "An error occurred while rejecting the leave. Please try again.";
-                    $("#confirmationRejectMessage").text(errorMessage);
-                    setTimeout(() => location.reload(), 3000); // Reload after 3 seconds
-                },
-            });
-        }
+        confirmLeaveAction("Rejected", "leaveRejectConfirmationModal", "bg-danger");
     });
 });

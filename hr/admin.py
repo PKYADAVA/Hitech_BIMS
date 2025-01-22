@@ -7,11 +7,20 @@ from hr.models import (
     Attendance,
     Employee,
     Designation,
-    # Attendance,
     EmployeeLeave,
+    Group,
     LeaveSelectedDate,
+    Sector,
 )
 
+@admin.register(Sector)
+class SectorAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+
+
+@admin.register(Group)
+class GroupAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
 
 @admin.register(Designation)
 class DesignationAdmin(admin.ModelAdmin):
@@ -69,7 +78,7 @@ class EmployeeLeaveAdmin(admin.ModelAdmin):
     register employee leave
     """
 
-    list_display = ("employee", "reason", "status", "created_date")
+    list_display = ("employee", "reason", "leave_type", "status", "created_date")
 
 
 @admin.register(LeaveSelectedDate)

@@ -4,9 +4,21 @@
 
 import random
 from django.db import models
-from django.forms import ValidationError
-from django.utils import timezone
 
+class Sector(models.Model):
+    """Represents a sector an employee belongs to."""
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Group(models.Model):
+    """Represents a group an employee belongs to."""
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
 
 class Designation(models.Model):
     """repersently designates an organization"""
@@ -65,8 +77,20 @@ class Employee(models.Model):
         blank=True,
         related_name="employees",
     )
-    sector = models.CharField(max_length=100, blank=True, null=True)
-    group = models.CharField(max_length=100, blank=True, null=True)
+    sector = models.ForeignKey(
+        Sector,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="employees",
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="employees",
+    )
     salary = models.DecimalField(
         max_digits=10, decimal_places=2, default=0.00, null=True, blank=True
     )
@@ -100,7 +124,7 @@ class Employee(models.Model):
     def generate_unique_employee_id():
         """Generate a unique 5-digit numeric employee ID."""
         while True:
-            new_id = random.randint(10000, 99999)
+            new_id = f"{random.randint(1, 99999):05}"
             if not Employee.objects.filter(employee_id=new_id).exists():
                 return new_id
 
@@ -119,6 +143,11 @@ class EmployeeLeave(models.Model):
         ("Approved", "Approved"),
         ("Rejected", "Rejected"),
     ]
+    LEAVE_TYPE_CHOICES = [
+        ("Full Day", "Full Day"),
+        ("First Half", "First Half"),
+        ("Second Half", "Second Half"),
+    ]
     employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
@@ -127,6 +156,9 @@ class EmployeeLeave(models.Model):
         blank=True,
     )
     reason = models.CharField(max_length=500, null=True, blank=True)
+    leave_type = models.CharField(
+        max_length=15, choices=LEAVE_TYPE_CHOICES, default="Full Day"
+    )
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
