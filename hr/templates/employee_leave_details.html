@@ -109,7 +109,7 @@
             <div class="card bg-primary text-white">
                 <div class="card-body">
                     <h5 class="card-title">Total Employees</h5>
-                    <h2 class="card-text">{{ total_employees }}</h2>
+                    <h2 class="card-text total-employees-count" id="total-employees-count">{{ total_employees }}</h2>
                 </div>
             </div>
         </div>
@@ -117,7 +117,7 @@
             <div class="card bg-success text-white">
                 <div class="card-body">
                     <h5 class="card-title">Approved Leaves</h5>
-                    <h2 class="card-text">{{ total_approved_leaves }}</h2>
+                    <h2 class="card-text total-approved-leaves-count" id="total-approved-leaves-count">{{ total_approved_leaves }}</h2>
                 </div>
             </div>
         </div>
@@ -125,12 +125,12 @@
             <div class="card bg-warning text-white">
                 <div class="card-body">
                     <h5 class="card-title">Pending Leave</h5>
-                    <h2 class="card-text">{{ total_pending_leaves }}</h2>
+                    <h2 class="card-text total-pending-leaves-count" id="total-pending-leaves-count">{{ total_pending_leaves }}</h2>
                 </div>
             </div>
         </div>
     </div>
-
+    
     <!-- Leave Applications Table -->
     <div class="card">
         <div class="card-header card-header-custom">
@@ -163,22 +163,31 @@
                         <td>{{ employee.employee.employee_id }}</td>
                         <td>{{ employee.employee.full_name }}</td>
                         <td>{{ employee.reason }}</td>
-                        <td>Annual Leave</td>
+                        <td>{{ employee.leave_type }}</td>
                         <td>{{ employee.total_days }}</a>
                         </td>
-                        <td>
+                        <td id="statusBadge-{{ employee.id }}">
                             {% if employee.status == 'Pending' %}
-                            <span class="badge bg-warning">{{ employee.status }}</span> {% elif employee.status == 'Approved' %}
-                            <span class="badge bg-success">{{ employee.status }}</span> {% else %}
-                            <span class="badge bg-danger">{{ employee.status }}</span> {% endif %}
+                            <span class="badge bg-warning">{{ employee.status }}</span>
+                            {% elif employee.status == 'Approved' %}
+                            <span class="badge bg-success">{{ employee.status }}</span>
+                            {% else %}
+                            <span class="badge bg-danger">{{ employee.status }}</span>
+                            {% endif %}
                         </td>
                         <td>
                             <button id="employeeViewLeave-{{ employee.id }}" type="button" class="btn btn-sm btn-primary view-leave-dates" data-bs-toggle="modal" data-id="{{ employee.id }}">
                                 View
                             </button>
-                            <button id="employeeLeaveApprove-{{ employee.id }}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="{{ employee.id }}">Approve</button>
-                            <button id="employeeLeaveReject-{{ employee.id }}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="{{ employee.id }}">Reject</button>
-                        </td>
+                        
+                            {% if employee.status == 'Approved' or employee.status == 'Rejected' %}
+                                <button id="employeeLeaveApprove-{{ employee.id }}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="{{ employee.id }}" disabled>Approve</button>
+                                <button id="employeeLeaveReject-{{ employee.id }}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="{{ employee.id }}" disabled>Reject</button>
+                            {% else %}
+                                <button id="employeeLeaveApprove-{{ employee.id }}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="{{ employee.id }}">Approve</button>
+                                <button id="employeeLeaveReject-{{ employee.id }}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="{{ employee.id }}">Reject</button>
+                            {% endif %}
+                        </td>                        
                     </tr>
                     {% endfor %}
                 </tbody>

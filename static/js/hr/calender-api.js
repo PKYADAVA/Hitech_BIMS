@@ -193,6 +193,10 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
       reason: absenceReason,
       selected_dates: selectedDates,
    };
+   function clearSelectedDates() {
+      selectedDates = []; // Clear the selected dates array
+      renderCalendar(); // Re-render the calendar
+   }
 
    try {
 
@@ -211,9 +215,20 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
             .addClass('text-success');
          $('#relieveConfirmationModal').modal('show');
          setTimeout(() => {
-            location.reload();
-         }, 3000);
-         // Optionally reset the form here
+            $('#employee_details').val('');
+            $('#leave_type').val('First Half');
+            $('.reason-textarea').val('');
+            $(".selected-employee").addClass("d-none");
+
+            // Clear the dropdown
+            $("#selected-employee").val(""); // Reset selected value
+            $("#selected-employee").html('<option selected disabled>Choose employee...</option>'); // Reset options
+   
+            clearSelectedDates();
+            // Optionally hide the modal
+            $('#relieveConfirmationModal').modal('hide');
+               }, 3000);
+               // Optionally reset the form here
       } else {
          $('#confirmationRelieveMessage')
             .text("There was an error marking attendance. Please try again.")

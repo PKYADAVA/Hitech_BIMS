@@ -36,7 +36,7 @@ $(document).ready(function() {
             timeInputs.prop('disabled', false);
         }
     });
-
+    
     // Save attendance
     $('#saveAttendance').click(function() {
         const formData = new FormData($('#attendanceForm')[0]);
@@ -49,7 +49,6 @@ $(document).ready(function() {
             check_in_time: formData.get('check_in'),
             check_out_time: formData.get('check_out'),
             status: formData.get('status'),
-            remarks: formData.get('remarks')
         };
 
         if (attendanceId) {
@@ -75,13 +74,9 @@ $(document).ready(function() {
                 'X-CSRFToken': formData.get('csrfmiddlewaretoken')
             },
             success: function(response) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Success',
-                    text: response.message,
-                    showConfirmButton: false,
-                    timer: 1500
-                }).then(() => location.reload());
+                console.log("Response received:", response);
+                //addOrUpdateAttendanceRow(response);
+                $('#attendanceModal').hide();
             },
             error: function(xhr) {
                 Swal.fire({
@@ -118,7 +113,53 @@ $(document).ready(function() {
         $('#editattendance_id').val('');
         $('#EditmodalTitle').text('Mark Attendance');
     });
+
+    function addOrUpdateAttendanceRow(response) {
+        const table = $('#attendanceTable').DataTable();
+        const rowId = response.id; // Unique identifier for the row
     
+        // Prepare the row data (as an array, not as HTML string)
+        const rowData = [
+            response.employee_id,
+            response.employee_name,
+            response.designation || "-",
+            response.date,
+            `<span class="badge ${
+                response.status === "Present"
+                    ? "bg-success"
+                    : response.status === "Absent"
+                    ? "bg-danger"
+                    : response.status === "On Leave"
+                    ? "bg-warning text-dark"
+                    : response.status === "First Half"
+                    ? "bg-info"
+                    : response.status === "Second Half"
+                    ? "bg-secondary"
+                    : ""
+            }">${response.status}</span>`,
+            `
+            <button class="btn btn-sm btn-primary edit-attendance" data-id="${rowId}" title="Edit Attendance">
+                <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-danger delete-attendance" data-id="${rowId}" title="Delete Attendance">
+                <i class="fas fa-trash"></i>
+            </button>
+            `
+        ];
+    
+        // Check if the row with the given ID exists
+        const existingRow = table.row(`tr[data-id="${rowId}"]`).node();
+    
+        if (existingRow) {
+            // If row exists, update it
+            table.row(existingRow).data(rowData).draw();
+        } else {
+            // If row doesn't exist, add a new one
+            const newRow = table.row.add(rowData).draw().node();
+            $(newRow).attr('data-id', rowId); // Set the data-id for the new row
+        }
+    }  
+       
     // Save attendance (PUT request)
     $('#EditAttendance').on('click', function () {
         const formData = new FormData($('#EditattendanceForm')[0]);
@@ -140,13 +181,9 @@ $(document).ready(function() {
             },
             data: JSON.stringify(attendanceData),
             success: function (response) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Success',
-                    text: response.message,
-                    showConfirmButton: false,
-                    timer: 1500
-                }).then(() => location.reload());
+                console.log("Response received:", response);
+                addOrUpdateAttendanceRow(response);
+                $('#attendanceEditModal').hide();
             },
             error: function (xhr) {
                 Swal.fire({
@@ -186,14 +223,12 @@ $(document).ready(function() {
                     'X-CSRFToken': getCookie('csrftoken'),  // Ensure CSRF token is included
                 },
                 success: function (response) {
-                    $(`#attendance-row-${attendanceId}`).remove();
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Success',
-                        text: response.message,
-                        showConfirmButton: false,
-                        timer: 1500
-                    }).then(() => location.reload());
+                    const table = $('#attendanceTable').DataTable();
+
+                    // Find the row and remove it from the DataTable
+                    const row = $(`tr[data-id="${attendanceId}"]`);
+                    table.row(row).remove().draw();
+                    
                 },
                 error: function (xhr) {
                     Swal.fire({
@@ -205,6 +240,21 @@ $(document).ready(function() {
             });
         }
     });
+    function updatePagination() {
+        const rows = $('#attendanceTable tbody tr').length; // Total visible rows
+        const entriesInfo = $('#paginationInfo'); // Replace with your actual pagination info ID
+    
+        // Update the pagination text dynamically
+        if (rows === 0) {
+            entriesInfo.text('Showing 0 to 0 of 0 entries');
+        } else {
+            const perPage = 25; // Define the number of rows per page
+            const currentStart = 1; // Adjust based on the current page
+            const currentEnd = Math.min(perPage, rows);
+            entriesInfo.text(`Showing ${currentStart} to ${currentEnd} of ${rows} entries`);
+        }
+    }
+    
     // Function to get CSRF token
     function getCookie(name) {
         let cookieValue = null;
