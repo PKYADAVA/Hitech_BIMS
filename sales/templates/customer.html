@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}
+Manage Customers
+  {% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='sales' %}
+{% endblock %}
+
+{% block content %}
+ <!-- Toggle Navbar -->
+{% include '_sales_subnavbar.html' with active_tab='customer' %}
+<div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Customers</h2>
+    <div class="row g-5">
+      <!-- Button to Open the Modal -->
+      <div class="text-end mb-3">
+        <button
+          class="btn btn-success"
+          data-bs-toggle="modal"
+          data-bs-target="#customerFormModal"
+        >
+          Add New Customer
+        </button>
+      </div>
+      <!-- Modal Structure -->
+      <div class="modal fade" id="customerFormModal" tabindex="-1" aria-labelledby="customerFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+              <h5 class="modal-title" id="customerFormModalLabel">Add New Customer</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <!-- Form Section -->
+              <form id="customer-form">
+                {% csrf_token %}
+                <input type="hidden" id="customer-id" />
+                <div class="mb-3">
+                  <label for="name" class="form-label">Full Name</label>
+                  <input
+                    type="text"
+                    id="name"
+                    class="form-control"
+                    placeholder="Enter full name"
+                    maxlength="255"
+                    required
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="address" class="form-label">Address</label>
+                  <textarea
+                    id="address"
+                    class="form-control"
+                    placeholder="Enter address"
+                    rows="3"
+                    required
+                  ></textarea>
+                </div>
+                <div class="mb-3">
+                  <label for="place" class="form-label">Place</label>
+                  <input
+                    type="text"
+                    id="place"
+                    class="form-control"
+                    placeholder="Enter place"
+                    maxlength="255"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="phone" class="form-label">Phone</label>
+                  <input
+                    type="text"
+                    id="phone"
+                    class="form-control"
+                    placeholder="Enter phone number"
+                    maxlength="15"
+                    required
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="mobile" class="form-label">Mobile</label>
+                  <input
+                    type="text"
+                    id="mobile"
+                    class="form-control"
+                    placeholder="Enter mobile number"
+                    maxlength="15"
+                    required
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="contact_type" class="form-label">Contact Type</label>
+                  <select id="contact_type" class="form-control" required>
+                    <option value="" selected disabled>Select contact type</option>
+                    {% for value, label in ContactType.choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="pan_tin" class="form-label">PAN/TIN</label>
+                  <input
+                    type="text"
+                    id="pan_tin"
+                    class="form-control"
+                    placeholder="Enter PAN/TIN"
+                    maxlength="50"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="customer_group" class="form-label">Customer Group</label>
+                  <select id="customer_group" class="form-control">
+                    <option value="" selected disabled>Select a customer group</option>
+                    {% for group in customer_groups %}
+                    <option value="{{ group.id }}">{{ group.code }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="supplier_group" class="form-label">Supplier Group</label>
+                  <select id="supplier_group" class="form-control">
+                    <option value="" selected disabled>Select a supplier group</option>
+                    {% for group in supplier_groups %}
+                    <option value="{{ group.id }}">{{ group.code }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="credit_limit" class="form-label">Credit Limit</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    id="credit_limit"
+                    class="form-control"
+                    placeholder="Enter credit limit"
+                    required
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="credit_term" class="form-label">Credit Term</label>
+                  <select id="credit_term" class="form-control">
+                    <option value="" selected disabled>Select credit term</option>
+                    {% for term in credit_terms %}
+                    <option value="{{ term.id }}">{{ term.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="gstin" class="form-label">GSTIN</label>
+                  <input
+                    type="text"
+                    id="gstin"
+                    class="form-control"
+                    placeholder="Enter GSTIN"
+                    maxlength="15"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="state" class="form-label">State</label>
+                  <input
+                    type="text"
+                    id="state"
+                    class="form-control"
+                    placeholder="Enter state"
+                    maxlength="50"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="note" class="form-label">Note</label>
+                  <textarea
+                    id="note"
+                    class="form-control"
+                    placeholder="Enter additional notes"
+                    rows="3"
+                  ></textarea>
+                </div>
+                <div class="mb-3">
+                  <label for="supplier_address" class="form-label">Supplier Address</label>
+                  <textarea
+                    id="supplier_address"
+                    class="form-control"
+                    placeholder="Enter supplier address"
+                    rows="3"
+                  ></textarea>
+                </div>
+                <div class="text-end">
+                  <button type="submit" class="btn btn-success">Save</button>
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- List Section -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Customer List</h5>
+          </div>
+          <div class="card-body">
+            <table
+              class="table table-striped table-hover table-bordered"
+              id="customer-table"
+            >
+              <thead class="table-dark">
+                <tr>
+                  <th>Full Name</th>
+                  <th>Phone</th>
+                  <th>Mobile</th>
+                  <th>Contact Type</th>
+                  <th>Credit Limit</th>
+                  <th>State</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="customer-table-body">
+                <!-- AJAX content will load here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+
+
+ {% endblock %}

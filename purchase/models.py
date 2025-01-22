@@ -1,6 +1,7 @@
 from django.db import models
 from django.db import models
 from django.utils.timezone import now
+from inventory.models import ItemCategory, Item
 
 
 class Supplier(models.Model):
@@ -53,63 +54,66 @@ class CreditTerm(models.Model):
         return self.term
 
 class PurchaseOrder(models.Model):
-        date = models.DateField(verbose_name="Date", default=now)
-        vendor = models.ForeignKey(
-            VendorGroup,
-            verbose_name="Vendor Name",
-            on_delete=models.CASCADE,
-            related_name="purchase_orders"
-        )
-        invoice = models.CharField(verbose_name="Invoice", max_length=100)
-        book_invoice = models.CharField(verbose_name="Book Invoice", max_length=255, blank=True, null=True)
-        dc_no = models.CharField(verbose_name="Dc No", max_length=100, blank=True, null=True)
-        credit_term = models.ForeignKey(
-            CreditTerm,
-            verbose_name="Credit Term",
-            on_delete=models.SET_NULL,
-            null=True,
-            blank=True,
-            related_name="purchase_orders"
-        )
-        item_tax = models.DecimalField(verbose_name="Item Tax", max_digits=10, decimal_places=2, default=0)
+    date = models.DateField(verbose_name="Date", default=now)
+    vendor = models.ForeignKey(
+        VendorGroup,
+        verbose_name="Vendor Name",
+        on_delete=models.CASCADE,
+        related_name="purchase_orders"
+    )
+    invoice = models.CharField(verbose_name="Invoice", max_length=100)
+    book_invoice = models.CharField(verbose_name="Book Invoice", max_length=255, blank=True, null=True)
+    dc_no = models.CharField(verbose_name="Dc No", max_length=100, blank=True, null=True)
+    credit_term = models.ForeignKey(
+        CreditTerm,
+        verbose_name="Credit Term",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="purchase_orders"
+    )
+    item_tax = models.DecimalField(verbose_name="Item Tax", max_digits=10, decimal_places=2, default=0)
 
-        calculation_based_on = models.CharField(
-            verbose_name="Calculation Based On",
-            max_length=255,
-            choices=[("Sent Quantity", "Sent Quantity"), ("Received Quantity", "Received Quantity")],
-            default="Sent Quantity"
-        )
-        basic_amount = models.DecimalField(verbose_name="Basic Amount", max_digits=10, decimal_places=2, default=0)
-        broker_name = models.CharField(verbose_name="Broker Name", max_length=255, blank=True,
-                                       null=True)
-        vehicle_no = models.CharField(verbose_name="Vehicle No.", max_length=50, blank=True, null=True)
-        total_amount = models.DecimalField(verbose_name="Total Amount", max_digits=10, decimal_places=2, default=0)
-        driver_name = models.CharField(verbose_name="Driver Name", max_length=255, blank=True, null=True)
-        freight = models.BooleanField(verbose_name="Freight Include", default=False)
-        freight_amount = models.DecimalField(verbose_name="Freight Amount", max_digits=10, decimal_places=2, default=0)
-        pay_later_via = models.CharField(verbose_name="Pay Later Via", max_length=255)  # Dropdown list
-        tcs = models.CharField(verbose_name="TCS", max_length=255)
-        tcs_percent = models.DecimalField(verbose_name="TCS %", max_digits=5, decimal_places=2, default=0)
-        tcs_amount = models.DecimalField(verbose_name="TCS Amount", max_digits=10, decimal_places=2, default=0)
-        grand_total = models.DecimalField(verbose_name="Grand Total", max_digits=10, decimal_places=2, default=0)
-        round_off = models.DecimalField(verbose_name="Round Off", max_digits=10, decimal_places=2, default=0)
-        round_off_type = models.CharField(
-            verbose_name="Round Off Type",
-            max_length=10,
-            choices=[("Add", "Add"), ("Deduct", "Deduct")],
-            default="Add"
-        )
-        net_total = models.DecimalField(verbose_name="Net Total", max_digits=10, decimal_places=2, default=0)
-        narration = models.TextField(verbose_name="Narration", max_length=225, blank=True, null=True)
+    calculation_based_on = models.CharField(
+        verbose_name="Calculation Based On",
+        max_length=255,
+        choices=[("Sent Quantity", "Sent Quantity"), ("Received Quantity", "Received Quantity")],
+        default="Sent Quantity"
+    )
+    basic_amount = models.DecimalField(verbose_name="Basic Amount", max_digits=10, decimal_places=2, default=0)
+    broker_name = models.CharField(verbose_name="Broker Name", max_length=255, blank=True,
+                                    null=True)
+    vehicle_no = models.CharField(verbose_name="Vehicle No.", max_length=50, blank=True, null=True)
+    total_amount = models.DecimalField(verbose_name="Total Amount", max_digits=10, decimal_places=2, default=0)
+    driver_name = models.CharField(verbose_name="Driver Name", max_length=255, blank=True, null=True)
+    freight = models.BooleanField(verbose_name="Freight Include", default=False)
+    freight_amount = models.DecimalField(verbose_name="Freight Amount", max_digits=10, decimal_places=2, default=0)
+    pay_later_via = models.CharField(verbose_name="Pay Later Via", max_length=255)  # Dropdown list
+    tcs = models.CharField(verbose_name="TCS", max_length=255)
+    tcs_percent = models.DecimalField(verbose_name="TCS %", max_digits=5, decimal_places=2, default=0)
+    tcs_amount = models.DecimalField(verbose_name="TCS Amount", max_digits=10, decimal_places=2, default=0)
+    grand_total = models.DecimalField(verbose_name="Grand Total", max_digits=10, decimal_places=2, default=0)
+    round_off = models.DecimalField(verbose_name="Round Off", max_digits=10, decimal_places=2, default=0)
+    round_off_type = models.CharField(
+        verbose_name="Round Off Type",
+        max_length=10,
+        choices=[("Add", "Add"), ("Deduct", "Deduct")],
+        default="Add"
+    )
+    net_total = models.DecimalField(verbose_name="Net Total", max_digits=10, decimal_places=2, default=0)
+    narration = models.TextField(verbose_name="Narration", max_length=225, blank=True, null=True)
 
-        def __str__(self):
-            return f"Purchase Order - {self.invoice}"
+    def __str__(self):
+        return f"Purchase Order - {self.invoice}"
 
 class PurchaseOrderLineItem(models.Model):
     purchase_order = models.ForeignKey(PurchaseOrder, verbose_name="Purchase Order", on_delete=models.CASCADE, related_name="line_items")
-    category = models.CharField(verbose_name=" Item Category", max_length=100)
-    code = models.CharField(verbose_name="Item Code", max_length=100)
-    description = models.TextField(verbose_name="Item Description")
+    item_category = models.ForeignKey(
+    'inventory.ItemCategory', on_delete=models.SET_NULL, blank=True, null=True, help_text="Item category"
+    )
+    item = models.ForeignKey(
+        'inventory.Item', on_delete=models.SET_NULL, blank=True, null=True, help_text="Item"
+    )
     units = models.CharField(verbose_name="Units", max_length=100, blank=True, null=True)
     price_per_unit = models.DecimalField(verbose_name="Price / Unit", max_digits=10, decimal_places=2, default=0)
     qty_sent = models.DecimalField(verbose_name="Qty Sent", max_digits=10, decimal_places=2, default=0)

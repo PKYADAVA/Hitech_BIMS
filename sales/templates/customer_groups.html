@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}
+  Manage Customer Groups
+  {% endblock %}
+  
+
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='sales' %}
+{% endblock %}
+
+{% block content %}
+ <!-- Toggle Navbar -->
+ {% include '_sales_subnavbar.html' with active_tab='customer_groups' %}
+
+
+<div class="container mt-5">
+    <h2 class="text-center mb-4">Manage Customer Groups</h2>
+    <div class="row g-5">
+      <!-- Button to Open the Modal -->
+      <div class="text-end mb-3">
+        <button
+          class="btn btn-success"
+          data-bs-toggle="modal"
+          data-bs-target="#customerGroupFormModal"
+        >
+          Add New Customer Group
+        </button>
+      </div>
+      <!-- Modal Structure -->
+      <div class="modal fade" id="customerGroupFormModal" tabindex="-1" aria-labelledby="customerGroupFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+              <h5 class="modal-title" id="customerGroupFormModalLabel">Add New Customer Group</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <!-- Form Section -->
+              <form id="customer-group-form">
+                {% csrf_token %}
+                <input type="hidden" id="customer-group-id" />
+                <div class="mb-3">
+                  <label for="code" class="form-label">Code</label>
+                  <input
+                    type="text"
+                    id="code"
+                    class="form-control"
+                    placeholder="Enter group code"
+                    maxlength="50"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="description" class="form-label">Description</label>
+                  <textarea
+                    id="description"
+                    class="form-control"
+                    placeholder="Enter group description"
+                    rows="3"
+                  ></textarea>
+                </div>
+                <div class="mb-3">
+                  <label for="currency" class="form-label">Currency</label>
+                  <input
+                    type="text"
+                    id="currency"
+                    class="form-control"
+                    placeholder="Enter currency"
+                    maxlength="50"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="control_account" class="form-label">Control Account</label>
+                  <input
+                    type="text"
+                    id="control_account"
+                    class="form-control"
+                    placeholder="Enter control account"
+                    maxlength="100"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label for="advance_account" class="form-label">Advance Account</label>
+                  <input
+                    type="text"
+                    id="advance_account"
+                    class="form-control"
+                    placeholder="Enter advance account"
+                    maxlength="100"
+                  />
+                </div>
+                <div class="text-end">
+                  <button type="submit" class="btn btn-success">Save</button>
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- List Section -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Customer Group List</h5>
+          </div>
+          <div class="card-body">
+            <table
+              class="table table-striped table-hover table-bordered"
+              id="customer-group-table"
+            >
+              <thead class="table-dark">
+                <tr>
+                  <th>Code</th>
+                  <th>Description</th>
+                  <th>Currency</th>
+                  <th>Control Account</th>
+                  <th>Advance Account</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="customer-group-table-body">
+                <!-- AJAX content will load here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endblock %}

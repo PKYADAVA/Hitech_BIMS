@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path("purchase/", views.purchase, name="purchase"),
+    path("purchase_order/", views.purchase_order, name="purchase_order"),
     path("supplier/", views.supplier, name="supplier"),
     path('suppliers/', views.SupplierAPI.as_view(), name='supplier_list'),
     path('supplier/create/', views.SupplierAPI.as_view(), name='supplier_create'),

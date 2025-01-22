@@ -10,7 +10,9 @@ from django.core.files.storage import default_storage
 from .models import Supplier, TaxMaster, TermsConditions
 import json
 
-
+@login_required()
+def purchase_order(request):
+    return render(request, "purchase_order.html")
 
 @login_required()
 def purchase(request):
