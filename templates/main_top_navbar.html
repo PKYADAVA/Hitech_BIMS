@@ -1,99 +1,157 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav">
-        <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'home' %}active{% endif %}" href="{% url 'home' %}"><i class="fas fa-home"></i> Home</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'broiler' %}active{% endif %}" href="{% url 'broiler' %}"><i class="fa-solid fa-egg"></i> Broiler</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'purchase' %}active{% endif %}" href="{% url 'purchase' %}"><i class="fa fa-shopping-cart" aria-hidden="true"></i>Purchase</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'sales' %}active{% endif %}" href="{% url 'sales' %}"><i class="fa-solid fa-indian-rupee-sign"></i></i> Sales</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'account' %}active{% endif %}" href="{% url 'account' %}"><i class="fa-solid fa-file-invoice"></i></i> Account</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if active_tab == 'inventory' %}active{% endif %}" href="{% url 'inventory' %}"><i class="fa-solid fa-warehouse"></i> Inventory</a>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link {% if active_tab == 'hr' %}active{% endif %} dropdown-toggle" href="#" id="hrDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-user"></i> Human Resource</a>
-          <ul class="dropdown-menu" aria-labelledby="hrDropdown">
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarNav">
+    <ul class="navbar-nav">
+      <!-- Home -->
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'home' %}active{% endif %}" href="{% url 'home' %}">
+          <i class="fas fa-home"></i> Home
+        </a>
+      </li>
+
+      <!-- Broiler Dropdown -->
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'broiler' %}active{% endif %}" href="#" id="broilerDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa-solid fa-egg"></i> Broiler
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="broilerDropdown">
+          <li><h6 class="dropdown-header">Broiler Menu</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url "broiler" %}"><i class="fas fa-user-cog"></i> Master</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fas fa-user-check"></i> Transactions</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet"></i> Reports</a></li>
+        </ul>
+      </li>
+
+      <!-- Purchase Dropdown -->
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'purchase' %}active{% endif %}" href="#" id="purchaseDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa fa-shopping-cart"></i> Purchase
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="purchaseDropdown">
+          <li><h6 class="dropdown-header">Purchase Menu</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url "purchase" %}"><i class="fas fa-user-cog"></i> Master</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fas fa-user-check"></i> Transactions</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet"></i> Reports</a></li>
+        </ul>
+      </li>
+
+      <!-- Sales Dropdown -->
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'sales' %}active{% endif %}" href="#" id="salesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa-solid fa-indian-rupee-sign"></i> Sales
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="salesDropdown">
+          <li><h6 class="dropdown-header">Sales Menu</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url "sales" %}"><i class="fas fa-user-cog"></i> Master</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fas fa-user-check"></i> Transactions</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet"></i> Reports</a></li>
+        </ul>
+      </li>
+
+      <!-- Account Dropdown -->
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'account' %}active{% endif %}" href="#" id="accountDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa-solid fa-file-invoice"></i> Account
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="accountDropdown">
+          <li><h6 class="dropdown-header">Accounts Menu</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url "account" %}"><i class="fas fa-user-cog"></i> Master</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fas fa-user-check"></i> Transactions</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet"></i> Reports</a></li>
+        </ul>
+      </li>
+
+      <!-- Inventory Dropdown -->
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'inventory' %}active{% endif %}" href="#" id="inventoryDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa-solid fa-warehouse"></i> Inventory
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="inventoryDropdown">
+          <li><h6 class="dropdown-header">Inventory Menu</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url "inventory" %}"><i class="fas fa-user-cog"></i> Master</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fas fa-user-check"></i> Transactions</a></li>
+          <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet"></i> Reports</a></li>
+        </ul>
+      </li>
+
+      <!-- Human Resource Dropdown -->
+      <li class="nav-item dropdown">
+        <a class="nav-link {% if active_tab == 'hr' %}active{% endif %} dropdown-toggle" href="#" id="hrDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-user"></i> Human Resource</a>
+        <ul class="dropdown-menu" aria-labelledby="hrDropdown">
             <li>
-              <h6 class="dropdown-header">HR Menu</h6>
+                <h6 class="dropdown-header">HR Menu</h6>
             </li>
             <li>
-              <hr class="dropdown-divider" />
+                <hr class="dropdown-divider" />
             </li>
             <li class="dropdown-submenu">
-              <a class="dropdown-item dropdown-toggle" href="#" id="employeeDropdowns" role="button"><i class="fas fa-user-cog" style="font-size:17px"></i> Employee Management</a>
-              <ul class="dropdown-menu">
-                <li>
-                  <a class="dropdown-item" href="{% url 'create_new_employee' %}"><i class="fas fa-user-alt" style="font-size:17px"></i> Add Employee</a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'employee_list' %}"><i class="fas fa-users" style="font-size:17px"></i> Employee List</a>
-                </li>
-              </ul>
+                <a class="dropdown-item dropdown-toggle" href="#" id="employeeDropdowns" role="button"><i class="fas fa-user-cog" style="font-size:17px"></i> Employee Management</a>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="{% url 'create_new_employee' %}"><i class="fas fa-user-alt" style="font-size:17px"></i> Add Employee</a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'employee_list' %}"><i class="fas fa-users" style="font-size:17px"></i> Employee List</a>
+                    </li>
+                </ul>
             </li>
             <li class="dropdown-submenu dropdown-attendance">
-              <a class="dropdown-item dropdown-toggle" href="#" id="attendanceDropdown">
+                <a class="dropdown-item dropdown-toggle" href="#" id="attendanceDropdown">
                 <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
-              </a>
-              <ul class="dropdown-menu dropdown-attendance-menu">
-                <li>
-                  <a class="dropdown-item" href="{% url 'leave_employee' %}">
-                    <i class="fas fa-user-times" style="font-size:17px"></i> Leave Placed
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'employee_leave_details' %}">
-                    <i class="fas fa-users" style="font-size:17px"></i> Leave Details
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'employee_attendance' %}">
-                    <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
-                  </a>
-                </li>
-              </ul>
-            </li>                               
-            <li>
-              <a class="dropdown-item" href="#"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a>
+                </a>
+                <ul class="dropdown-menu dropdown-attendance-menu">
+                    <li>
+                        <a class="dropdown-item" href="{% url 'leave_employee' %}">
+                        <i class="fas fa-user-times" style="font-size:17px"></i> Leave Placed
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'employee_leave_details' %}">
+                        <i class="fas fa-users" style="font-size:17px"></i> Leave Details
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'employee_attendance' %}">
+                        <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
+                        </a>
+                    </li>
+                </ul>
             </li>
-          </ul>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{% url 'user_management' %}"><i class="fa-solid fa-users-gear"></i> User Management</a>
-        </li>
+            <li>
+                <a class="dropdown-item" href="#"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a>
+            </li>
+        </ul>
+    </li>
+
+      <!-- User Management -->
+      <li class="nav-item">
+        <a class="nav-link" href="{% url 'user_management' %}">
+          <i class="fa-solid fa-users-gear"></i> User Management
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <!-- User Profile and Logout -->
+  <div class="ms-auto">
+    <div class="dropdown">
+      <button class="btn btn-outline-light dropdown-toggle" type="button" id="userMenu" data-bs-toggle="dropdown" aria-expanded="false">
+        <span>Admin</span>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
+        <li><h6 class="dropdown-header">User Menu</h6></li>
+        <li><a class="dropdown-item" href="{% url 'user_profile' %}"><i class="fa-regular fa-address-card"></i> View Profile</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{% url 'update_password' %}"><i class="fa fa-key"></i> Change Password</a></li>
+        <li><a class="dropdown-item" href="/logout/"><i class="fa fa-sign-out"></i> Logout</a></li>
       </ul>
     </div>
-
-    <!-- User Profile and Logout Dropdown -->
-    <div class="ms-auto">
-      <div class="dropdown">
-        <button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><span>Admin</span></button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li>
-            <h6 class="dropdown-header">User Menu</h6>
-          </li>
-          <li>
-            <a class="dropdown-item" href="{% url 'user_profile' %}"><i class="fa-regular fa-address-card fa-fw"></i> View Profile</a>
-          </li>
-          <li>
-            <hr class="dropdown-divider" />
-          </li>
-          <li>
-            <a class="dropdown-item" href="{% url 'update_password' %}"><i class="fa fa-key" aria-hidden="true"></i> Change Password</a>
-          </li>
-          <li>
-            <a class="dropdown-item" href="/logout/"><i class="fa fa-sign-out" aria-hidden="true"></i> Logout</a>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  </div>
+</nav>
