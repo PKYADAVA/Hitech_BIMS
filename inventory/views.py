@@ -273,8 +273,11 @@ class WarehouseAPI(View):
 
     def post(self, request):
         try:
+            print(request.body,"request.body")
             data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
+            print(data,"data")
+        except json.JSONDecodeError as e:
+            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not data.get("name"):

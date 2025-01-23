@@ -232,7 +232,7 @@
     const form = $('#orderLineItemForm');
     console.log('Form:', form);
     if (form) {
-        form.reset(); // Reset all form fields
+        form.trigger("reset"); // Reset all form fields
     } else {
         console.error('Form not found: #orderLineItemForm');
     }
@@ -287,6 +287,7 @@
 
     // Close the modal
     $('#addOrderLineItemModal').modal('hide');
+    $("#orderLineItemForm").trigger("reset");
   });
 });
 

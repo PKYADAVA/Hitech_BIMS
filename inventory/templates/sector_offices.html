@@ -100,121 +100,170 @@
 </div>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script>
-    $(document).ready(function () {
-        // Function to Load Warehouse List
-        function loadWarehouseList() {
-            $.ajax({
-                url: "{% url 'warehouse_list' %}", // Replace with your actual endpoint
-                type: "GET",
-                success: function (response) {
-                    console.log(response, "response");
-                    const table = $("#warehouse-table");
-                    const tableBody = $("#warehouse-table-body");
-    
-                    // Clear the current table body and destroy the DataTable if initialized
-                    if ($.fn.DataTable.isDataTable(table)) {
-                        table.DataTable().clear().destroy();
-                    }
-                    tableBody.empty();
-    
-                    // Populate the table dynamically
-                    response.forEach((warehouse) => {
-                        const tableRow = `
-                            <tr>
-                                <td>${warehouse.name}</td>
-                                <td>
-                                    <button class="btn btn-primary edit-warehouse" 
-                                        data-id="${warehouse.id}" 
-                                        data-name="${warehouse.name}">
-                                        Edit
-                                    </button>
-                                    <button class="btn btn-danger delete-warehouse" 
-                                        data-id="${warehouse.id}">
-                                        Delete
-                                    </button>
-                                </td>
-                            </tr>
-                        `;
-                        tableBody.append(tableRow);
+$(document).ready(function () {
+    // Function to Load Warehouse List
+    function loadWarehouseList() {
+        $.ajax({
+            url: "{% url 'warehouse_list' %}", // Replace with your actual endpoint
+            type: "GET",
+            success: function (response) {
+                console.log(response, "response");
+                const table = $("#warehouse-table");
+                const tableBody = $("#warehouse-table-body");
+
+                // Clear the current table body and destroy the DataTable if initialized
+                if ($.fn.DataTable.isDataTable(table)) {
+                    table.DataTable().clear().destroy();
+                }
+                tableBody.empty();
+
+                // Populate the table dynamically
+                response.forEach((warehouse) => {
+                    const modalId = `editwarehouseModal-${warehouse.id}`;
+                    const formId = `edit-warehouse-form-${warehouse.id}`;
+                    const tableRow = `
+                        <tr>
+                            <td>${warehouse.name}</td>
+                            <td>
+                                <button class="btn btn-primary edit-warehouse" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#${modalId}" 
+                                    data-id="${warehouse.id}" 
+                                    data-name="${warehouse.name}">
+                                    Edit
+                                </button>
+                                <button class="btn btn-danger delete-warehouse" 
+                                    data-id="${warehouse.id}">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    console.log(tableRow);
+
+                    const modal = `
+                        <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Edit Warehouse</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <form id="${formId}">
+                                        <div class="modal-body">
+                                            <input type="hidden" name="warehouse-id" value="${warehouse.id}">
+                                            <div class="mb-3">
+                                                <label class="form-label">Warehouse</label>
+                                                <input type="text" class="form-control" name="warehouse-name" value="${warehouse.name}" required>
+                                            </div>                                               
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    console.log(modal);
+                tableBody.append(tableRow);    
+                
+
+                // Add event listener for the form inside modal
+                $(`#${formId}`).off("submit").on("submit", function (e) {   
+                    e.preventDefault();
+
+                    const jsonData = {
+                        name: $(`#${formId} [name="warehouse-name"]`).val(),
+                    };
+
+                    $.ajax({
+                        url: `/warehouse/${warehouse.id}/`, // Endpoint for updating branch details
+                        type: "PUT",
+                        headers: {
+                            "X-CSRFToken": "{{ csrf_token }}",
+                            "Content-Type": "application/json",
+                        },
+                        data: JSON.stringify(jsonData),
+                        success: function () {
+                            loadWarehouseList(); // Reload table after update
+                            $(`#${modalId}`).modal("hide"); // Hide modal after submission
+                        },
+                        error: function (xhr, status, error) {
+                            console.error(`Update error: ${error}`);
+                        },
                     });
-    
-                    // Reinitialize DataTable
-                    table.DataTable();
+                });
+            });
+
+                // Reinitialize DataTable
+                table.DataTable();
+            },
+            error: function (xhr, status, error) {
+                console.error(`Failed to load warehouses: ${error}`);
+            },
+        });
+    }
+
+    // Load warehouse list on page load
+    loadWarehouseList();
+
+    // Add new branch
+    $("#warehouse-form").on("submit", function (event) {
+        event.preventDefault();
+        const warehouse_name = $("#warehouse-name").val();
+        csrfToken = "{{ csrf_token }}";
+
+        $.ajax({
+            url: "/create-warehouse/", // Replace with your backend endpoint for adding branches
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrfToken,
+            },
+            data: JSON.stringify({
+                name: warehouse_name,
+            }),
+            success: function () {
+                $("#warehouseFormModal").modal("hide");
+                $("#warehouse-form")[0].reset();
+                loadWarehouseList();
+                alert("Warehouse added successfully!");
+            },
+            error: function (xhr, status, error) {
+                console.error("Failed to add branch:", error);
+                alert("An error occurred while adding the branch.");
+            },
+        });
+    });
+
+
+    // Handle delete button click
+    $(document).on("click", ".delete-warehouse", function () {
+        const id = $(this).data("id");
+        const csrfToken = "{{ csrf_token }}";
+
+        if (confirm("Are you sure you want to delete this warehouse?")) {
+            $.ajax({
+                url: `/warehouse/${id}/delete/`, // Construct delete URL
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrfToken },
+                success: function () {
+                    loadWarehouseList();
+                    alert("Warehouse deleted successfully!");
                 },
-                error: function (xhr, status, error) {
-                    console.error(`Failed to load warehouses: ${error}`);
+                error: function () {
+                    alert("An error occurred while deleting the warehouse.");
                 },
             });
         }
-    
-        // Load warehouse list on page load
-        loadWarehouseList();
-    
-        // Add new warehouse
-        $("#warehouse-form").on("submit", function (event) {
-            event.preventDefault();
-    
-            const warehouseId = $("#warehouse-id").val();
-            const warehouseName = $("#warehouse-name").val();
-            csrfToken = "{{ csrf_token }}";
-            const method = warehouseId ? "PUT" : "POST";
-            const url = warehouseId 
-                ? `/warehouse/${warehouseId}/` 
-                : "/create-warehouse/";
-    
-            $.ajax({
-                url: url, // Endpoint for adding or updating warehouse
-                method: method,
-                headers: {
-                    "X-CSRFToken": csrfToken,
-                },
-                data: {
-                    name: warehouseName,
-                },
-                success: function () {
-                    $("#warehouseFormModal").modal("hide");
-                    $("#warehouse-form")[0].reset();
-                    loadWarehouseList();
-                    alert("Warehouse saved successfully!");
-                },
-                error: function (xhr, status, error) {
-                    console.error(`Failed to save warehouse: ${error}`);
-                    alert("An error occurred while saving the warehouse.");
-                },
-            });
-        });
-    
-        // Handle delete button click
-        $(document).on("click", ".delete-warehouse", function () {
-            const id = $(this).data("id");
-            csrfToken = "{{ csrf_token }}";
-    
-            if (confirm("Are you sure you want to delete this warehouse?")) {
-                $.ajax({
-                    url: `/warehouse/${id}/delete/`, // Construct delete URL
-                    method: "DELETE",
-                    headers: { "X-CSRFToken": csrfToken },
-                    success: function () {
-                        loadWarehouseList();
-                        alert("Warehouse deleted successfully!");
-                    },
-                    error: function () {
-                        alert("An error occurred while deleting the warehouse.");
-                    },
-                });
-            }
-        });
-    
-        // Handle edit button click
-        $(document).on("click", ".edit-warehouse", function () {
-            const id = $(this).data("id");
-            const name = $(this).data("name");
-    
-            $("#warehouse-id").val(id);
-            $("#warehouse-name").val(name);
-            $("#warehouseFormModal").modal("show");
-        });
     });
+
+    // Handle edit button click
+    $(document).on("click", ".edit-warehouse", function () {
+        const id = $(this).data("id");
+        const name = $(this).data("name");
+
+        $("#warehouse-id").val(id);
+        $("#warehouse-name").val(name);
+        $("#warehouseFormModal").modal("show");
+    });
+});
     
 
 </script>    
