@@ -11,210 +11,199 @@
 {% include '_purchase_transaction_subnavbar.html' with active_tab='purchase_order' %}
 
 <div class="container mt-4">
-  <form method="POST" action="">
-    {% csrf_token %}
-    <div class="row">
-      <!-- First Column -->
-      <div class="col-md-4">
-        <div class="form-group">
-          <label for="date">Date</label>
-          <input type="date" class="form-control" id="date" name="date" required>
-        </div>
-        <div class="form-group">
-          <label for="vendor">Vendor Name</label>
-          <select class="form-control" id="vendor" name="vendor" required>
-            <!-- Populate vendor options dynamically -->
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="invoice">Invoice</label>
-          <input type="text" class="form-control" id="invoice" name="invoice" required>
-        </div>
-        <div class="form-group">
-          <label for="book_invoice">Book Invoice</label>
-          <input type="text" class="form-control" id="book_invoice" name="book_invoice">
-        </div>
-        <div class="form-group">
-          <label for="dc_no">Dc No</label>
-          <input type="text" class="form-control" id="dc_no" name="dc_no">
-        </div>
-      </div>
-
-      <!-- Second Column -->
-      <div class="col-md-4">
-        <div class="form-group">
-          <label for="credit_term">Credit Term</label>
-          <select class="form-control" id="credit_term" name="credit_term">
-            <!-- Populate credit term options dynamically -->
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="item_tax">Item Tax</label>
-          <input type="number" class="form-control" id="item_tax" name="item_tax" step="0.01" required>
-        </div>
-        <div class="form-group">
-          <label for="basic_amount">Basic Amount</label>
-          <input type="number" class="form-control" id="basic_amount" name="basic_amount" step="0.01" required>
-        </div>
-        <div class="form-group" >
-          <label for="broker_name">Broker Name</label>
-          <input type="text" class="form-control" id="broker_name" name="broker_name">
-        </div>
-        <div class="form-group" style="margin-top: 25px;">
-          <label for="freight">Freight Include</label>
-          <input type="checkbox" id="freight" name="freight">
-        </div>
-      </div>
-
-      <!-- Third Column -->
-      <div class="col-md-4">
-        <div class="form-group">
-          <label for="vehicle_no">Vehicle No.</label>
-          <input type="text" class="form-control" id="vehicle_no" name="vehicle_no">
-        </div>
-        <div class="form-group">
-          <label for="total_amount">Total Amount</label>
-          <input type="number" class="form-control" id="total_amount" name="total_amount" step="0.01" required>
-        </div>
-        <div class="form-group">
-          <label for="freight_amount">Freight Amount</label>
-          <input type="number" class="form-control" id="freight_amount" name="freight_amount" step="0.01">
-        </div>
-        <div class="form-group">
-          <label for="pay_later_via">Pay Later Via</label>
-          <input type="text" class="form-control" id="pay_later_via" name="pay_later_via">
-        </div>
-        <div class="form-group">
-          <label for="calculation_based_on">Calculation Based On</label>
-          <select class="form-control" id="calculation_based_on" name="calculation_based_on" required>
-            <option value="Sent Quantity">Sent Quantity</option>
-            <option value="Received Quantity">Received Quantity</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-
-   <div class="container mt-4">
-  <h4 class="mb-3">Purchase Order Items</h4>
-  <div class="table-responsive">
-    <table class="table table-bordered table-striped">
-      <thead class="thead-dark">
-        <tr>
-          <th>Category</th>
-          <th>Code</th>
-          <th>Description</th>
-          <th>Units</th>
-          <th>Qty Sent</th>
-          <th>Qty Received</th>
-          <th>Qty Free</th>
-          <th>Type</th>
-          <th>Bags / Boxes</th>
-          <th>Weight</th>
-          <th>Price/Unit</th>
-          <th>Discount</th>
-        </tr>
-      </thead>
-      <tbody id="order-line-items">
-        <!-- Dynamically added rows will appear here -->
-      </tbody>
-    </table>
-  </div>
-
-  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addOrderLineItemModal">
-    Add Order Line Item
-  </button>
-</div>
-
-<!-- Modal for Adding Order Line Item -->
-<div class="modal fade" id="addOrderLineItemModal" tabindex="-1" aria-labelledby="addOrderLineItemModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg"> <!-- 80% width modal -->
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="addOrderLineItemModalLabel">Add Order Line Item</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form id="orderLineItemForm">
-          <div class="row">
-            <!-- First Column -->
-            <div class="col-md-4">
-              <div class="mb-3">
-                <label for="category" class="form-label">Category</label>
-                <input type="text" class="form-control" id="category" name="category">
+	<form method="POST" action="">
+		{% csrf_token %}
+		<div class="row">
+			<!-- First Column -->
+			<div class="col-md-4">
+				<div class="form-group">
+					<label for="date">Date</label>
+					<input type="date" class="form-control" id="date" name="date" required>
+				</div>
+				<div class="form-group">
+					<label for="vendor">Vendor Name</label>
+					<select class="form-control" id="vendor" name="vendor" required>
+						<!-- Populate vendor options dynamically -->
+					</select>
+				</div>
+				<div class="form-group">
+					<label for="invoice">Invoice</label>
+					<input type="text" class="form-control" id="invoice" name="invoice" required>
+				</div>
+				<div class="form-group">
+					<label for="book_invoice">Book Invoice</label>
+					<input type="text" class="form-control" id="book_invoice" name="book_invoice">
+				</div>
+				<div class="form-group">
+					<label for="dc_no">Dc No</label>
+					<input type="text" class="form-control" id="dc_no" name="dc_no">
+				</div>
+			</div>
+			<!-- Second Column -->
+			<div class="col-md-4">
+				<div class="form-group">
+					<label for="credit_term">Credit Term</label>
+					<select class="form-control" id="credit_term" name="credit_term">
+						<!-- Populate credit term options dynamically -->
+					</select>
+				</div>
+				<div class="form-group">
+					<label for="item_tax">Item Tax</label>
+					<input type="number" class="form-control" id="item_tax" name="item_tax" step="0.01" required>
+				</div>
+				<div class="form-group">
+					<label for="basic_amount">Basic Amount</label>
+					<input type="number" class="form-control" id="basic_amount" name="basic_amount" step="0.01" required>
+				</div>
+				<div class="form-group" >
+					<label for="broker_name">Broker Name</label>
+					<input type="text" class="form-control" id="broker_name" name="broker_name">
+				</div>
+				<div class="form-group" style="margin-top: 25px;">
+					<label for="freight">Freight Include</label>
+					<input type="checkbox" id="freight" name="freight">
+				</div>
+			</div>
+			<!-- Third Column -->
+			<div class="col-md-4">
+				<div class="form-group">
+					<label for="vehicle_no">Vehicle No.</label>
+					<input type="text" class="form-control" id="vehicle_no" name="vehicle_no">
+				</div>
+				<div class="form-group">
+					<label for="total_amount">Total Amount</label>
+					<input type="number" class="form-control" id="total_amount" name="total_amount" step="0.01" required>
+				</div>
+				<div class="form-group">
+					<label for="freight_amount">Freight Amount</label>
+					<input type="number" class="form-control" id="freight_amount" name="freight_amount" step="0.01">
+				</div>
+				<div class="form-group">
+					<label for="pay_later_via">Pay Later Via</label>
+					<input type="text" class="form-control" id="pay_later_via" name="pay_later_via">
+				</div>
+				<div class="form-group">
+					<label for="calculation_based_on">Calculation Based On</label>
+					<select class="form-control" id="calculation_based_on" name="calculation_based_on" required>
+						<option value="Sent Quantity">Sent Quantity</option>
+						<option value="Received Quantity">Received Quantity</option>
+					</select>
+				</div>
+			</div>
+		</div>
+		<div class="container mt-4">
+			<h4 class="mb-3">Purchase Order Items</h4>
+			<div class="table-responsive">
+				<table class="table table-bordered table-striped" id="orderLineItemsTable">
+					<thead class="thead-dark">
+						<tr>
+							<th>Category</th>
+							<th>Code</th>
+							<th>Description</th>
+							<th>Units</th>
+							<th>Qty Sent</th>
+							<th>Qty Received</th>
+							<th>Qty Free</th>
+							<th>Type</th>
+							<th>Bags / Boxes</th>
+							<th>Weight</th>
+							<th>Price/Unit</th>
+							<th>Discount</th>
+						</tr>
+					</thead>
+					<tbody id="order-line-items">
+						<!-- Dynamically added rows will appear here -->
+					</tbody>
+				</table>
+			</div>
+			<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addOrderLineItemModal">
+			Add Order Line Item
+			</button>
+		</div>
+		<!-- Modal for Adding Order Line Item -->
+		<div class="modal fade" id="addOrderLineItemModal" tabindex="-1" aria-labelledby="addOrderLineItemModalLabel" aria-hidden="true">
+			<div class="modal-dialog modal-lg">
+				<!-- 80% width modal -->
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title" id="addOrderLineItemModalLabel">Add Order Line Item</h5>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+					</div>
+					<div class="modal-body">
+            <form id="orderLineItemForm">
+              <div class="row">
+                <!-- First Column -->
+                <div class="col-md-4">
+                  <div class="mb-3">
+                    <label for="category" class="form-label">Category</label>
+                    <input type="text" class="form-control" id="category" name="category">
+                  </div>
+                  <div class="mb-3">
+                    <label for="code" class="form-label">Code</label>
+                    <input type="text" class="form-control" id="code" name="code">
+                  </div>
+                  <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                  </div>
+                </div>
+                <!-- Second Column -->
+                <div class="col-md-4">
+                  <div class="mb-3">
+                    <label for="units" class="form-label">Units</label>
+                    <input type="text" class="form-control" id="units" name="units">
+                  </div>
+                  <div class="mb-3">
+                    <label for="qty_sent" class="form-label">Qty Sent</label>
+                    <input type="number" class="form-control" id="qty_sent" name="qty_sent" step="0.01">
+                  </div>
+                  <div class="mb-3">
+                    <label for="qty_received" class="form-label">Qty Received</label>
+                    <input type="number" class="form-control" id="qty_received" name="qty_received" step="0.01">
+                  </div>
+                </div>
+                <!-- Third Column -->
+                <div class="col-md-4">
+                  <div class="mb-3">
+                    <label for="qty_free" class="form-label">Qty Free</label>
+                    <input type="number" class="form-control" id="qty_free" name="qty_free" step="0.01">
+                  </div>
+                  <div class="mb-3">
+                    <label for="bags_or_boxes" class="form-label">Bags / Boxes</label>
+                    <input type="text" class="form-control" id="bags_or_boxes" name="bags_or_boxes">
+                  </div>
+                  <div class="mb-3">
+                    <label for="price_per_unit" class="form-label">Price / Unit</label>
+                    <input type="number" class="form-control" id="price_per_unit" name="price_per_unit" step="0.01">
+                  </div>
+                </div>
               </div>
-              <div class="mb-3">
-                <label for="code" class="form-label">Code</label>
-                <input type="text" class="form-control" id="code" name="code">
+              <div class="row">
+                <div class="col-md-12 text-end">
+                  <button id="line-item-submit" type="submit" class="btn btn-primary">Add Line Item</button>
+                </div>
               </div>
-              <div class="mb-3">
-                <label for="description" class="form-label">Description</label>
-                <textarea class="form-control" id="description" name="description" rows="3"></textarea>
-              </div>
-            </div>
-
-            <!-- Second Column -->
-            <div class="col-md-4">
-              <div class="mb-3">
-                <label for="units" class="form-label">Units</label>
-                <input type="text" class="form-control" id="units" name="units">
-              </div>
-              <div class="mb-3">
-                <label for="qty_sent" class="form-label">Qty Sent</label>
-                <input type="number" class="form-control" id="qty_sent" name="qty_sent" step="0.01">
-              </div>
-              <div class="mb-3">
-                <label for="qty_received" class="form-label">Qty Received</label>
-                <input type="number" class="form-control" id="qty_received" name="qty_received" step="0.01">
-              </div>
-            </div>
-
-            <!-- Third Column -->
-            <div class="col-md-4">
-              <div class="mb-3">
-                <label for="qty_free" class="form-label">Qty Free</label>
-                <input type="number" class="form-control" id="qty_free" name="qty_free" step="0.01">
-              </div>
-              <div class="mb-3">
-                <label for="bags_or_boxes" class="form-label">Bags / Boxes</label>
-                <input type="text" class="form-control" id="bags_or_boxes" name="bags_or_boxes">
-              </div>
-              <div class="mb-3">
-                <label for="price_per_unit" class="form-label">Price / Unit</label>
-                <input type="number" class="form-control" id="price_per_unit" name="price_per_unit" step="0.01">
+            </form>
+          </div>
+          </div>
+          </div>
+          </div>
+          <div class="row mt-3">
+            <div class="col-md-12">
+              <div class="form-group">
+                <label for="narration">Narration</label>
+                <textarea class="form-control" id="narration" name="narration" rows="3"></textarea>
               </div>
             </div>
           </div>
-          <div class="row">
-            <div class="col-md-12 text-end">
-              <button type="submit" class="btn btn-primary">Add Line Item</button>
+          <div class="row mt-3">
+            <div class="col-md-12 text-right">
+              <button type="submit" class="btn btn-primary">Submit</button>
             </div>
           </div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-
-
-    <div class="row mt-3">
-      <div class="col-md-12">
-        <div class="form-group">
-          <label for="narration">Narration</label>
-          <textarea class="form-control" id="narration" name="narration" rows="3"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="row mt-3">
-      <div class="col-md-12 text-right">
-        <button type="submit" class="btn btn-primary">Submit</button>
-      </div>
-    </div>
-  </form>
-</div>
+          </form>
+          </div>
+          <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>         
 <script>
  $(document).ready(function () {
   const tableBody = $('#orderLineItemsTable tbody'); // Target the table body
@@ -226,7 +215,8 @@
   });
 
   // Handle form submission
-  $('#orderLineItemForm').on('submit', function (e) {
+  $('#line-item-submit').on('click', function (e) {
+    console.log('Form submitted');
     e.preventDefault(); // Prevent the default form submission behavior
 
     // Get form data
@@ -262,6 +252,9 @@
         <td>${formData.discount}</td>
       </tr>
     `;
+
+    console.log('New row:', newRow);
+    console.log('Table body:', tableBody);
 
     tableBody.append(newRow); // Add the new row to the table
 
