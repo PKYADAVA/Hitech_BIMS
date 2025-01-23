@@ -2,7 +2,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("purchase/", views.purchase, name="purchase"),
+    path("purchase_master/", views.purchase_master, name="purchase_master"),
+    path("purchase_transaction/", views.purchase_transaction, name="purchase_transaction"),
     path("purchase_order/", views.purchase_order, name="purchase_order"),
     path("supplier/", views.supplier, name="supplier"),
     path('suppliers/', views.SupplierAPI.as_view(), name='supplier_list'),

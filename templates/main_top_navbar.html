@@ -1,3 +1,18 @@
+<style>
+  /* Ensure dropdowns appear directly below the navbar */
+  .navbar-nav .nav-item.dropdown .dropdown-menu {
+    margin-top: 0; /* Ensure alignment below the navbar */
+    position: absolute; /* Detach from inline flow */
+    left: 0;
+    right: auto; /* Align left for all dropdowns */
+    top: 100%; /* Position it exactly below */
+    z-index: 1050; /* Ensure it is above other elements */
+  }
+
+  .dropdown-menu .dropdown-item:hover {
+    background-color: #e8e8e8; /* Optional: Highlight item on hover */
+  }
+</style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
   <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
     <span class="navbar-toggler-icon"></span>
@@ -33,8 +48,8 @@
         <ul class="dropdown-menu" aria-labelledby="purchaseDropdown">
           <li><h6 class="dropdown-header">Purchase Menu</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url "purchase" %}"><i class="fas fa-user-cog"></i> Master</a></li>
-          <li><a class="dropdown-item" href="#"><i class="fas fa-user-check"></i> Transactions</a></li>
+          <li><a class="dropdown-item" href="{% url "purchase_master" %}"><i class="fas fa-user-cog"></i> Master</a></li>
+          <li><a class="dropdown-item" href="{% url "purchase_transaction" %}"><i class="fas fa-user-check"></i> Transactions</a></li>
           <li><a class="dropdown-item" href="#"><i class="fa fa-google-wallet"></i> Reports</a></li>
         </ul>
       </li>
@@ -155,3 +170,25 @@
     </div>
   </div>
 </nav>
+<script>
+  // Enable hover functionality for dropdown menus
+  document.addEventListener("DOMContentLoaded", function () {
+    const dropdowns = document.querySelectorAll(".nav-item.dropdown");
+
+    dropdowns.forEach((dropdown) => {
+      dropdown.addEventListener("mouseover", function () {
+        const dropdownMenu = this.querySelector(".dropdown-menu");
+        if (dropdownMenu) {
+          dropdownMenu.classList.add("show");
+        }
+      });
+
+      dropdown.addEventListener("mouseout", function () {
+        const dropdownMenu = this.querySelector(".dropdown-menu");
+        if (dropdownMenu) {
+          dropdownMenu.classList.remove("show");
+        }
+      });
+    });
+  });
+</script>

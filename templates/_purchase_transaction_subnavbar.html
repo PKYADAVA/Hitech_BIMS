@@ -1,0 +1,25 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom mb-4">
+    <div class="container-fluid">
+        <button
+            class="navbar-toggler"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#subNavbar"
+            aria-controls="subNavbar"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+            >
+        <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="subNavbar">
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <a class="nav-link {% if active_tab == 'purchase_order' %}active{% endif %} activate" href="{% url 'purchase_order' %}">
+                    Create Purchase Order
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+  
