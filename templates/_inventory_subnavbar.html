@@ -14,18 +14,18 @@
       <div class="collapse navbar-collapse" id="subNavbar">
         <ul class="nav nav-tabs">
           <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'item_category' %}active{% endif %} activate" href="{% url 'item_category' %}">
+              Item Category
+            </a>
+          </li>
+          <li class="nav-item">
             <a
               class="nav-link {% if active_tab == 'items' %}active{% endif %} activate"
               href="{% url 'items' %}"
             >
               Items
             </a>
-          </li>          
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'item_category' %}active{% endif %} activate" href="{% url 'item_category' %}">
-              Item Category
-            </a>
-          </li>
+          </li>             
           <li class="nav-item">
             <a class="nav-link {% if active_tab == 'warehouse' %}active{% endif %} activate" href="{% url 'warehouse' %}">
               Warehouse
