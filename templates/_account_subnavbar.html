@@ -14,6 +14,16 @@
       <div class="collapse navbar-collapse" id="subNavbar">
         <ul class="nav nav-tabs">
           <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}">
+              Financial Year
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'schedule' %}active{% endif %} activate" href="{% url 'schedule' %}">
+              Schedule
+            </a>
+          </li> 
+          <li class="nav-item">
             <a
               class="nav-link {% if active_tab == 'coa' %}active{% endif %} activate"
               href="{% url 'coa' %}"
@@ -28,17 +38,7 @@
             >
               Bank/Cash Masters
             </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}">
-              Financial Year
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'schedule' %}active{% endif %} activate" href="{% url 'schedule' %}">
-              Schedule
-            </a>
-          </li>          
+          </li>         
         </ul>
       </div>
     </div>
