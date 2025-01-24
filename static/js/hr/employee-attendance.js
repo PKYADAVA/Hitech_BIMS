@@ -1,274 +1,277 @@
-$(document).ready(function() {
-    // Initialize DataTable
-    const table = $('#attendanceTable').DataTable({
+$(document).ready(function(){
+    $('#attendanceTable').DataTable({
         responsive: true,
-        order: [[3, 'desc'], [5, 'desc']],
-        pageLength: 25,
-        dom: '<"d-flex justify-content-between align-items-center mb-3"Bf>rtip',
-        buttons: [
-            {
-                extend: 'excel',
-                text: '<i class="fas fa-file-excel me-2"></i>Export Excel',
-                className: 'btn btn-success',
-                exportOptions: {
-                    columns: [0, 1, 2, 3, 4, 5, 6, 7]
+        order: [[3, 'desc']],
+        dom: 'Blfrtip',
+        buttons: ['csv', 'excel', 'pdf', 'print']
+    });
+
+    $('#leaveTable').DataTable({
+        responsive: true,
+        order: [[3, 'desc']],
+        dom: 'Blfrtip',
+        buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+    });
+
+    // Add employee modal
+    $('#addEmployeeModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget);
+        var modal = $(this);
+        modal.find('#addEmployeeForm').trigger('reset');
+    });
+
+    function getBadgeClass(status) {
+        switch(status) {
+            case 'Present': return 'bg-success';
+            case 'Absent': return 'bg-danger';
+            case 'On Leave': return 'bg-warning text-dark';
+            case 'First Half': return 'bg-info';
+            case 'Second Half': return 'bg-secondary';
+            default: return '';
+        }
+    }
+
+    // Edit employee modal
+    function onloademplyeelist(){
+        $.ajax({
+            url: '/attendance/',
+            type: 'GET',
+            success: function(response){
+                // Get the table body where rows will be added
+                    let tableBody = $('#attendance-table-body');
+                    
+                    // Clear the current table content (if needed)
+                    tableBody.empty();
+                    
+                    // Loop through each attendance item in the response
+                    response.attendances.forEach(function(attendance) {
+                        let row = `<tr data-id="${attendance.id}">
+                                        <td>${attendance.employee__employee_id}</td>
+                                        <td>${attendance.employee__full_name}</td>
+                                        <td>${attendance.employee__designation__title || '-'}</td>
+                                        <td>${new Date(attendance.date).toLocaleDateString("en-GB")}</td>
+                                        <td>
+                                            <span class="badge ${getBadgeClass(attendance.status)}">
+                                                ${attendance.status}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary edit-attendance" data-id="${attendance.id}" title="Edit Attendance">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-attendance" data-id="${attendance.id}" title="Delete Attendance">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>`;
+                        tableBody.append(row);
+                    });
                 },
-                filename: () => `Attendance_Report_${new Date().toISOString().split('T')[0]}`
+            error: function(error){
+                console.error(error);
             }
-        ],
-        language: {
-            search: "",
-            searchPlaceholder: "Search records..."
-        }
-    });
+        });
+    }
 
-    // Set default date to today
-    $('#date').val(new Date().toISOString().split('T')[0]);
+    $(document).on('click', '.edit-attendance', function() {
 
-    // Handle status change
-    $('#status').change(function() {
-        const status = $(this).val();
-        const timeInputs = $('#check_in, #check_out');
-        
-        if (status === 'Absent' || status === 'On Leave') {
-            timeInputs.val('').prop('disabled', true);
-        } else {
-            timeInputs.prop('disabled', false);
-        }
-    });
-    
-    // Save attendance
-    $('#saveAttendance').click(function() {
-        const formData = new FormData($('#attendanceForm')[0]);
-        const attendanceId = $('#attendance_id').val();
-        
-        // Create data object
-        const data = {
-            employee_id: formData.get('employee'),
-            date: formData.get('date'),
-            check_in_time: formData.get('check_in'),
-            check_out_time: formData.get('check_out'),
-            status: formData.get('status'),
-        };
+        var attendanceId = $(this).data('id');
 
-        if (attendanceId) {
-            data.id = attendanceId;
-        }
-
-        // Validate required fields
-        if (!data.employee_id || !data.date || !data.status) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Validation Error',
-                text: 'Please fill in all required fields.'
-            });
-            return;
-        }
-
+        // Make an AJAX GET request to fetch the attendance details using the attendance ID
         $.ajax({
-            url: `/attendance/`,
-            type: attendanceId ? 'PUT':'POST',
-            data: JSON.stringify(data),
-            contentType: 'application/json',
-            headers: {
-                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
-            },
+            url: `/attendance/${attendanceId}/`,
+            type: 'GET',
             success: function(response) {
-                console.log("Response received:", response);
-                //addOrUpdateAttendanceRow(response);
-                $('#attendanceModal').hide();
-            },
-            error: function(xhr) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: xhr.responseText || 'Failed to save attendance. Please try again.'
-                });
+                $('#attendanceEditModal').remove();
+            
+                // Check if response.employees is defined and is an array
+                const employees = Array.isArray(response.employees) ? response.employees : [];
+            
+                const modalHTML = `
+                <div class="modal fade" id="attendanceEditModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title">
+                                    <i class="fas fa-user-clock me-2"></i>
+                                    <span id="EditmodalTitle">Edit Attendance</span>
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="EditattendanceForm">
+                                    <input type="hidden" id="editattendance_id" name="attendance_id" value="${response.id}">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="employee" class="form-label required">Employee</label>
+                                                <select class="form-select" id="editemployee" name="employee" required>
+                                                    <option value="">Select Employee</option>
+                                                    <option value="${response.employee_id}" selected>
+                                                        ${response.employee_id} - ${response.employee_name}
+                                                    </option>
+                                                </select>
+
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="date" class="form-label required">Date</label>
+                                                <input type="date" class="form-control" id="editdate" name="date" 
+                                                    value="${new Date(response.date).toISOString().split('T')[0]}" required>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="check_in" class="form-label">Check In Time</label>
+                                                <input type="time" class="form-control" id="editcheck_in" name="check_in" 
+                                                    value="${response.check_in_time || ''}">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="check_out" class="form-label">Check Out Time</label>
+                                                <input type="time" class="form-control" id="editcheck_out" name="check_out" 
+                                                    value="${response.check_out_time || ''}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="status" class="form-label required">Status</label>
+                                                <select class="form-select" id="editstatus" name="status" required>
+                                                    <option value="Present" ${response.status === 'Present' ? 'selected' : ''}>Present</option>
+                                                    <option value="Absent" ${response.status === 'Absent' ? 'selected' : ''}>Absent</option>
+                                                    <option value="On Leave" ${response.status === 'On Leave' ? 'selected' : ''}>On Leave</option>
+                                                    <option value="First Half" ${response.status === 'First Half' ? 'selected' : ''}>First Half</option>
+                                                    <option value="Second Half" ${response.status === 'Second Half' ? 'selected' : ''}>Second Half</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <i class="fas fa-times me-2"></i>Cancel
+                                </button>
+                                <button type="button" class="btn btn-primary" id="EditAttendance">
+                                    <i class="fas fa-save me-2"></i>Update
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            
+                $('body').append(modalHTML);
+            
+                $('#editattendance_id').val(response.id);
+                $('#editemployee').val(response.employee_id);
+                $('#editdate').val(new Date(response.date).toISOString().split('T')[0]);
+                $('#editcheck_in').val(response.check_in_time || '');
+                $('#editcheck_out').val(response.check_out_time || '');
+                $('#editstatus').val(response.status);
+            
+                $('#attendanceEditModal').modal('show');
+            },               
+            error: function(error) {
+                console.error(error);
             }
         });
     });
 
-    // Edit attendance
-    $(document).on('click', '.edit-attendance', function () {
-        const attendanceId = $(this).data('id');
+    
+    $(document).on('click', '#EditAttendance', function() {
         
-        // Fetch attendance details
-        $.get(`/attendance/?id=${attendanceId}`, function (data) {
-            $('#editattendance_id').val(data.id);
-            $('#editemployee').val(data.employee_id);
-            $('#editdate').val(data.date);
-            $('#editcheck_in').val(data.check_in_time);
-            $('#editcheck_out').val(data.check_out_time);
-            $('#editstatus').val(data.status).trigger('change');
-            //$('#editremarks').val(data.remarks);
-            
-            $('#EditmodalTitle').text('Edit Attendance');
-            $('#attendanceEditModal').modal('show');
-        });
-    });
-    
-    // Reset modal on close
-    $('#attendanceEditModal').on('hidden.bs.modal', function () {
-        $('#EditattendanceForm')[0].reset();
-        $('#editattendance_id').val('');
-        $('#EditmodalTitle').text('Mark Attendance');
-    });
-
-    function addOrUpdateAttendanceRow(response) {
-        const table = $('#attendanceTable').DataTable();
-        const rowId = response.id; // Unique identifier for the row
-    
-        // Prepare the row data (as an array, not as HTML string)
-        const rowData = [
-            response.employee_id,
-            response.employee_name,
-            response.designation || "-",
-            response.date,
-            `<span class="badge ${
-                response.status === "Present"
-                    ? "bg-success"
-                    : response.status === "Absent"
-                    ? "bg-danger"
-                    : response.status === "On Leave"
-                    ? "bg-warning text-dark"
-                    : response.status === "First Half"
-                    ? "bg-info"
-                    : response.status === "Second Half"
-                    ? "bg-secondary"
-                    : ""
-            }">${response.status}</span>`,
-            `
-            <button class="btn btn-sm btn-primary edit-attendance" data-id="${rowId}" title="Edit Attendance">
-                <i class="fas fa-edit"></i>
-            </button>
-            <button class="btn btn-sm btn-danger delete-attendance" data-id="${rowId}" title="Delete Attendance">
-                <i class="fas fa-trash"></i>
-            </button>
-            `
-        ];
-    
-        // Check if the row with the given ID exists
-        const existingRow = table.row(`tr[data-id="${rowId}"]`).node();
-    
-        if (existingRow) {
-            // If row exists, update it
-            table.row(existingRow).data(rowData).draw();
-        } else {
-            // If row doesn't exist, add a new one
-            const newRow = table.row.add(rowData).draw().node();
-            $(newRow).attr('data-id', rowId); // Set the data-id for the new row
-        }
-    }  
-       
-    // Save attendance (PUT request)
-    $('#EditAttendance').on('click', function () {
-        const formData = new FormData($('#EditattendanceForm')[0]);
-        const attendanceData = {
-            id: $('#editattendance_id').val(),
-            date: $('#editdate').val(),
-            check_in_time: $('#editcheck_in').val(),
-            check_out_time: $('#editcheck_out').val(),
-            status: $('#editstatus').val(),
-            remarks: $('#editremarks').val(),
+        var attendanceId = $('#editattendance_id').val();
+        var employeeId = $('#editemployee').val();
+        var date = $('#editdate').val();
+        var checkIn = $('#editcheck_in').val();
+        var checkOut = $('#editcheck_out').val();
+        var status = $('#editstatus').val();
+        
+        var data = {
+            attendance_id: attendanceId,
+            employee_id: employeeId,
+            date: date,
+            check_in_time: checkIn,
+            check_out_time: checkOut,
+            status: status
         };
-    
+        
         $.ajax({
-            url: `/attendance/`,
+            url: `/attendance/${attendanceId}/`,
             type: 'PUT',
             contentType: 'application/json',
-            headers: {
-                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            data: JSON.stringify(data),
+            success: function(response) {
+                onloademplyeelist();
+                $('#attendanceEditModal').modal('hide');
+            
             },
-            data: JSON.stringify(attendanceData),
-            success: function (response) {
-                console.log("Response received:", response);
-                addOrUpdateAttendanceRow(response);
-                $('#attendanceEditModal').hide();
-            },
-            error: function (xhr) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: xhr.responseText || 'Failed to update attendance. Please try again.'
-                });
+            error: function(error) {
+                console.error('Error updating attendance:', error);
             }
         });
     });
     
-    // Reset form on modal close
-    $('#attendanceModal').on('hidden.bs.modal', function() {
-        $('#attendanceForm')[0].reset();
-        $('#attendance_id').val('');
-        $('#modalTitle').text('Mark Attendance');
-        $('#status').trigger('change');
-        $('#date').val(new Date().toISOString().split('T')[0]);
-    });
-
-    // Form validation before submit
-    $('#attendanceForm').on('submit', function(e) {
-        e.preventDefault();
-        $('#saveAttendance').click();
-    });
-
-    // Delete attendance
-    $(document).on('click', '.delete-attendance', function () {
-        const attendanceId = $(this).data('id');
-        console.log(attendanceId)
+    $(document).on('click', '.delete-attendance', function() {
+        
+        var attendanceId = $(this).data('id');
+        
         if (confirm('Are you sure you want to delete this attendance record?')) {
-            
+          
             $.ajax({
-                url: `/attendance/?id=${attendanceId}`,  // Adjust the URL as per your Django endpoint
+                url: `/attendance/${attendanceId}/`,
                 type: 'DELETE',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken'),  // Ensure CSRF token is included
+                success: function(response) {
+                    $(`#attendance-${attendanceId}`).remove();
+                    onloademplyeelist();
                 },
-                success: function (response) {
-                    const table = $('#attendanceTable').DataTable();
-
-                    // Find the row and remove it from the DataTable
-                    const row = $(`tr[data-id="${attendanceId}"]`);
-                    table.row(row).remove().draw();
-                    
-                },
-                error: function (xhr) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: xhr.responseText || 'Failed to delete attendance. Please try again.'
-                    });
+                error: function(error) {
+                    console.error('Error deleting attendance:', error);
+                    alert('Failed to delete attendance.');
                 }
             });
         }
     });
-    function updatePagination() {
-        const rows = $('#attendanceTable tbody tr').length; // Total visible rows
-        const entriesInfo = $('#paginationInfo'); // Replace with your actual pagination info ID
+
+    $(document).on('click', '#saveAttendance', function() {
+        // Gather form data
+        var attendanceId = $('#attendance_id').val();
+        var employeeId = $('#employee').val();
+        var date = $('#date').val();
+        var checkIn = $('#check_in').val();
+        var checkOut = $('#check_out').val();
+        var status = $('#status').val();
     
-        // Update the pagination text dynamically
-        if (rows === 0) {
-            entriesInfo.text('Showing 0 to 0 of 0 entries');
-        } else {
-            const perPage = 25; // Define the number of rows per page
-            const currentStart = 1; // Adjust based on the current page
-            const currentEnd = Math.min(perPage, rows);
-            entriesInfo.text(`Showing ${currentStart} to ${currentEnd} of ${rows} entries`);
-        }
-    }
+        var data = {
+            attendance_id: attendanceId,
+            employee_id: employeeId,
+            date: date,
+            check_in_time: checkIn,
+            check_out_time: checkOut,
+            status: status
+        };
     
-    // Function to get CSRF token
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                // Does this cookie string begin with the name we want?
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
+        // Make the POST request to save attendance
+        $.ajax({
+            url: '/attendance/',
+            type: 'POST',
+            data: JSON.stringify(data),
+            success: function(response) {
+                onloademplyeelist();
+                $('#attendanceModal').modal('hide');
+            },
+            error: function(error) {
+                console.error('Error saving attendance:', error);
+                alert('Failed to save attendance.');
             }
-        }
-        return cookieValue;
-    }
+        });
+    });
+    
+    onloademplyeelist();
 });
