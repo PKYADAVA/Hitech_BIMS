@@ -7,18 +7,22 @@ from .models import ItemCategory, Item, Warehouse
 import json
 
 # Create your views here.
-
+@login_required
 def inventory(request):
     return render(request, 'inventory.html')
 
+@login_required
 def items(request):
-    return render(request, 'item.html')
+    categories  = ItemCategory.objects.all()
+    warehouses = Warehouse.objects.all()
+    return render(request, 'item.html', {'categories': categories, 'warehouses': warehouses})
 
 
+@login_required
 def item_category(request):
     return render(request, 'item_category.html')
 
-
+@login_required
 def warehouse(request):
     return render(request, 'sector_offices.html')
 
@@ -109,7 +113,7 @@ class ItemAPI(View):
         else:
             items = list(
                 Item.objects.values(
-                    "id", "item_code", "description", "category", "warehouse", "valuation_method",
+                    "id", "item_code", "description", "category__name", "warehouse__name", "valuation_method",
                     "standard_cost_per_unit", "storage_uom", "consumption_uom", "usage", "source",
                     "type", "item_account", "lot_serial_control", "kg_per_bag", "hsn_code"
                 )
@@ -123,14 +127,7 @@ class ItemAPI(View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-        required_fields = [
-            "item_code", "description", "category", "warehouse", "valuation_method",
-            "standard_cost_per_unit", "storage_uom", "consumption_uom", "usage", "source", "type", "item_account"
-        ]
-
-        if not all(field in data for field in required_fields):
-            return JsonResponse({"error": "Missing required fields"}, status=400)
-
+        
         try:
             category = ItemCategory.objects.get(id=data["category"])
         except ItemCategory.DoesNotExist:
@@ -140,6 +137,8 @@ class ItemAPI(View):
             warehouse = Warehouse.objects.get(id=data["warehouse"])
         except Warehouse.DoesNotExist:
             return JsonResponse({"error": "Invalid warehouse ID"}, status=400)
+        
+        print(data, "data")
 
         Item.objects.create(
             item_code=data["item_code"],
@@ -147,16 +146,8 @@ class ItemAPI(View):
             category=category,
             warehouse=warehouse,
             valuation_method=data["valuation_method"],
-            standard_cost_per_unit=data["standard_cost_per_unit"],
-            storage_uom=data["storage_uom"],
-            consumption_uom=data["consumption_uom"],
-            usage=data["usage"],
-            source=data["source"],
-            type=data["type"],
-            item_account=data["item_account"],
-            lot_serial_control=data.get("lot_serial_control", "None"),
-            kg_per_bag=data.get("kg_per_bag"),
-            hsn_code=data.get("hsn_code"),
+            standard_cost_per_unit=data["standard_cost_per_unit"],            
+            usage=data["usage"]
         )
         return JsonResponse({"message": "Item created"}, status=201)
 
