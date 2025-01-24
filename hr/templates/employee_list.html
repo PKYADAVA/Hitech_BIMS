@@ -41,20 +41,8 @@
         </div>
     </div>
 </div>
-
-<div class="addingEmployeeBTN" style="margin:15px;">
-    <a href="{% url "create_new_employee" %}"><button class="btn btn-primary addemployee"><i class="fa-solid fa-user-check"></i> Add Employee</button></a>
-    <div class="row justify-content-end mt-2 mb-2">
-        <div class="col-md-3">
-            <form method="GET" action="" class="mb-4">
-                <div class="input-group">
-                    <input type="text" name="q" class="form-control" placeholder="Search...">
-                </div>
-            </form>
-        </div>
-    </div>
 <div class="cstm-table" style="margin:17px;">
-    <table class="table table-bordered table-striped text-center custom-table">
+    <table id="employeeTable" class="table table-bordered table-striped text-center custom-table">
         <thead class="table-light">
             <tr>
                 <th scope="col">Emp ID</th>
@@ -81,14 +69,13 @@
                 {% comment %} <td>{{ employee.advance }}</td> {% endcomment %}
                 <td>{{ employee.personal_contact }}</td>
                 <td>{{ employee.emergency_contact }}</td>
-                {% if employee.relieve %}
-                <td style="background-color:#874848;color:#fff;">
+                <td id="statusCell-{{ employee.id }}" style="background-color: {% if employee.relieve %}#874848{% else %}#609160{% endif %}; color: #fff;">
+                    {% if employee.relieve %}
                     Yes
-                </td>
-                {% else %}
-                <td style="background-color:#609160;color:#fff;">
+                    {% else %}
                     No
-                {% endif %}</td>
+                    {% endif %}
+                </td>
                 <td>{% if employee.image %}
                     <img src="{{ employee.image.url }}" alt="Employee Image" style="height: 50px;width:80px;">
                   {% else %}
@@ -104,61 +91,18 @@
                         <i class="fa-regular fa-trash"></i> Delete
                     </button>
                 
-                    <button class="btn btn-outline-success btn-sm relieveEmployee" id="relieveEmployee-{{employee.id}}" title="Relieve">
-                        <i class="fa-solid fa-user-check"></i> Relieve
-                    </button>
+                    {% if not employee.relieve %}
+                    <button id="relieveEmployee-{{ employee.id }}" class="btn btn-outline-success btn-sm relieveEmployee"><i class="fa-solid fa-user-check"></i> Relieve</button>
+                    {% else %}
+                    <button class="btn btn-outline-secondary btn-sm" disabled><i class="fa-solid fa-user-check"></i> Relieved</button>
+                    {% endif %}
                 </td>              
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
-<nav aria-label="Page navigation example">
-    <ul class="pagination">
-        {% if employee_details.has_previous %}
-            <li class="page-item">
-                <a class="page-link" href="?page=1{% if query %}&q={{ query }}{% endif %}" aria-label="First">&laquo; First</a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="?page={{ employee_details.previous_page_number }}{% if query %}&q={{ query }}{% endif %}" aria-label="Previous">Previous</a>
-            </li>
-        {% else %}
-            <li class="page-item disabled">
-                <span class="page-link">&laquo; First</span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">Previous</span>
-            </li>
-        {% endif %}
 
-        {% for num in employee_details.paginator.page_range %}
-            {% if employee_details.number == num %}
-                <li class="page-item active">
-                    <span class="page-link">{{ num }}</span>
-                </li>
-            {% else %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}">{{ num }}</a>
-                </li>
-            {% endif %}
-        {% endfor %}
-        {% if employee_details.has_next %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ employee_details.next_page_number }}{% if query %}&q={{ query }}{% endif %}" aria-label="Next">Next</a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="?page={{ employee_details.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}" aria-label="Last">Last &raquo;</a>
-            </li>
-        {% else %}
-            <li class="page-item disabled">
-                <span class="page-link">Next</span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">Last &raquo;</span>
-            </li>
-        {% endif %}
-    </ul>
-</nav>
 {% endblock body %}
 {% block js %}
 <script src="{% static 'js/hr/employee_list.js' %}"></script>

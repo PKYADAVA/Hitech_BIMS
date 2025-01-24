@@ -1,11 +1,10 @@
 $(document).ready(function () {
     const requiredFields = [
         'full_name', 'father_name',
-        'date_of_birth', 'designation', 'salary', 'blood_group',
-        'qualification', 'pan_card', 'aadhar_number', 'emergency_contact', 'personal_contact',
-        'country', 'correspondence_address', 'sector', 'group',
-        'salary_type', 'date_of_joining', 'salary_account', 'bank_name', 'ifsc_code',
-        'branch_name', 'saving'
+        'date_of_birth', 'designation', 'salary',
+        'qualification','personal_contact',
+        'country', 'sector', 'group',
+        'salary_type', 'date_of_joining', 
     ];
     function removeError(field) {
         $(`#${field}`)

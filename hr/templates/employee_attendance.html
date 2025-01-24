@@ -1,11 +1,10 @@
 {% extends 'base.html' %} 
 {% load static %} 
 {% block title %}Employee Attendance{% endblock title %} 
-{% block nav %} 
-{% include 'main_top_navbar.html' with active_tab='hr' %} 
+{% block nav %} {% include 'main_top_navbar.html' with active_tab='hr' %} 
 {% endblock nav %} 
 {% block css %}
-<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet"> 
 {% endblock css %} 
 {% block content %}
 <div class="container-fluid py-4">
@@ -26,39 +25,15 @@
                             <th>Designation</th>
                             <th>Date</th>
                             <th>Status</th>
-                            {% comment %} <th>Check In</th>
+                            {% comment %}
+                            <th>Check In</th>
                             <th>Check Out</th> {% endcomment %}
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for attendance in attendances %}
-                        <tr data-id="{{ attendance.id }}">
-                            <td>{{ attendance.employee.employee_id }}</td>
-                            <td>{{ attendance.employee.full_name }}</td>
-                            <td>{{ attendance.employee.designation.title|default:"-" }}</td>
-                            <td>{{ attendance.date|date:"d-m-Y" }}</td>
-                            <td>
-                                <span class="badge {% if attendance.status == 'Present' %}bg-success
-                                                 {% elif attendance.status == 'Absent' %}bg-danger
-                                                 {% elif attendance.status == 'On Leave' %}bg-warning text-dark
-                                                 {% elif attendance.status == 'First Half' %}bg-info
-                                                 {% elif attendance.status == 'Second Half' %}bg-secondary
-                                                 {% endif %}">
-                                    {{ attendance.status }}
-                                </span>
-                            </td>
-                            <td>
-                                <button class="btn btn-sm btn-primary edit-attendance" data-id="{{ attendance.id }}" title="Edit Attendance">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger delete-attendance" data-id="{{ attendance.id }}" title="Delete Attendance">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>                                      
+                    <tbody id="attendance-table-body">
+                        <!-- AJAX content will load here -->
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -128,12 +103,6 @@
                                 </select>
                             </div>
                         </div>
-                        {% comment %} <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="remarks" class="form-label">Remarks</label>
-                                <textarea class="form-control" id="remarks" name="remarks" rows="1"></textarea>
-                            </div>
-                        </div> {% endcomment %}
                     </div>
                 </form>
             </div>
@@ -148,84 +117,6 @@
         </div>
     </div>
 </div>
-
-<div class="modal fade" id="attendanceEditModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-user-clock me-2"></i>
-                    <span id="EditmodalTitle">Mark Attendance</span>
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="EditattendanceForm">
-                    {% csrf_token %}
-                    <input type="hidden" id="editattendance_id" name="attendance_id">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="employee" class="form-label required">Employee</label>
-                                <select class="form-select" id="editemployee" name="employee" value={{employees.status}} required>
-                                    <option value="">Select Employee</option>
-                                    {% for employee in employees %}
-                                    <option value="{{ employee.id }}">
-                                        {{ employee.employee_id }} - {{ employee.full_name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="date" class="form-label required">Date</label>
-                                <input type="date" class="form-control" id="editdate" name="date" required>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="check_in" class="form-label">Check In Time</label>
-                                <input type="time" class="form-control" id="editcheck_in" name="check_in">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="check_out" class="form-label">Check Out Time</label>
-                                <input type="time" class="form-control" id="editcheck_out" name="check_out">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="status" class="form-label required">Status</label>
-                                <select class="form-select" id="editstatus" name="status" required>
-                                    <option value="Present">Present</option>
-                                    <option value="Absent">Absent</option>
-                                    <option value="On Leave">On Leave</option>
-                                    <option value="First Half">First Half</option>
-                                    <option value="Second Half">Second Half</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-2"></i>Cancel
-                </button>
-                <button type="button" class="btn btn-primary" id="EditAttendance">
-                    <i class="fas fa-save me-2"></i>Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
 {% endblock %} 
 {% block js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
