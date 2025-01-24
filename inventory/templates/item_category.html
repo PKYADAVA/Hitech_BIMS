@@ -108,7 +108,7 @@
                 url: "{% url 'category_list' %}", // Replace with your actual endpoint
                 type: "GET",
                 success: function (response) {
-                    console.log(response, "response");                    
+                    console.log(response, "response");
                     const table = $("#category-table");
                     const tableBody = $("#category-table-body");
     
@@ -120,6 +120,8 @@
     
                     // Populate the table dynamically
                     response.forEach((category) => {
+                        const modalId = `editModal-${category.id}`;
+                        const formId = `editForm-${category.id}`;
                         const tableRow = `
                             <tr>
                                 <td>${category.name}</td>
@@ -136,8 +138,59 @@
                                 </td>
                             </tr>
                         `;
-    
+                        const modal = `
+                            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Edit Category</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <form id="${formId}">
+                                            <div class="modal-body">
+                                                <input type="hidden" name="category-id" value="${category.id}">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Category Name</label>
+                                                    <input type="text" class="form-control" name="category-name" value="${category.name}" required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                <button type="submit" class="btn btn-primary">Save changes</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
                         tableBody.append(tableRow);
+                        $("body").append(modal);
+    
+                        // Add event listener for the form inside modal
+                        $(`#${formId}`).off("submit").on("submit", function (e) {
+                            e.preventDefault();
+    
+                            const jsonData = {
+                                name: $(`#${formId} [name="category-name"]`).val(),
+                            };
+    
+                            $.ajax({
+                                url: `/category/${category.id}/`, // Endpoint for updating category details
+                                type: "PUT",
+                                headers: {
+                                    "X-CSRFToken": "{{ csrf_token }}",
+                                    "Content-Type": "application/json",
+                                },
+                                data: JSON.stringify(jsonData),
+                                success: function () {
+                                    loadCategoryList(); // Reload table after update
+                                    $(`#${modalId}`).modal("hide"); // Hide modal after submission
+                                },
+                                error: function (xhr, status, error) {
+                                    console.error(`Update error: ${error}`);
+                                },
+                            });
+                        });
                     });
     
                     // Reinitialize DataTable
@@ -155,33 +208,26 @@
         // Add new category
         $("#category-form").on("submit", function (event) {
             event.preventDefault();
-    
-            const categoryId = $("#category-id").val();
             const categoryName = $("#category-name").val();
-            csrfToken = "{{ csrf_token }}";
-            const method = categoryId ? "PUT" : "POST";
-            const url = categoryId 
-                ? `/category/${categoryId}/` 
-                : "/create-category/";
+            const csrfToken = "{{ csrf_token }}";
     
             $.ajax({
-                url: url, // Endpoint for adding or updating category
-                method: method,
+                url: "/create-category/", // Replace with your backend endpoint for adding categories
+                method: "POST",
                 headers: {
                     "X-CSRFToken": csrfToken,
+                    "Content-Type": "application/json",
                 },
-                data: {
-                    name: categoryName,
-                },
+                data: JSON.stringify({ name: categoryName }),
                 success: function () {
                     $("#categoryFormModal").modal("hide");
                     $("#category-form")[0].reset();
                     loadCategoryList();
-                    alert("Category saved successfully!");
+                    alert("Category added successfully!");
                 },
                 error: function (xhr, status, error) {
-                    console.error(`Failed to save category: ${error}`);
-                    alert("An error occurred while saving the category.");
+                    console.error("Failed to add category:", error);
+                    alert("An error occurred while adding the category.");
                 },
             });
         });
@@ -189,7 +235,7 @@
         // Handle delete button click
         $(document).on("click", ".delete-category", function () {
             const id = $(this).data("id");
-            csrfToken = "{{ csrf_token }}";
+            const csrfToken = "{{ csrf_token }}";
     
             if (confirm("Are you sure you want to delete this category?")) {
                 $.ajax({
@@ -210,13 +256,10 @@
         // Handle edit button click
         $(document).on("click", ".edit-category", function () {
             const id = $(this).data("id");
-            const name = $(this).data("name");
-    
-            $("#category-id").val(id);
-            $("#category-name").val(name);
-            $("#categoryFormModal").modal("show");
+            $(`#editModal-${id}`).modal("show");
         });
     });
+    
     
 </script>    
 {% endblock %}

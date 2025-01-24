@@ -41,61 +41,8 @@ class CategoryAPI(View):
     def post(self, request):
         try:
             data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        if not data.get("name"):
-            return JsonResponse({"error": "Name is required"}, status=400)
-
-        ItemCategory.objects.create(name=data["name"])
-        return JsonResponse({"message": "Category created"}, status=201)
-
-    def put(self, request, id):
-        try:
-            category = ItemCategory.objects.get(id=id)
-        except ItemCategory.DoesNotExist:
-            raise Http404("Category not found")
-
-        try:
-            data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        if "name" in data:
-            category.name = data["name"]
-            category.save()
-            return JsonResponse({"message": "Category updated"})
-
-        return JsonResponse({"error": "No updates provided"}, status=400)
-
-    def delete(self, request, id):
-        try:
-            category = ItemCategory.objects.get(id=id)
-        except ItemCategory.DoesNotExist:
-            raise Http404("Category not found")
-
-        category.delete()
-        return JsonResponse({"message": "Category deleted"})
-
-
-@method_decorator(login_required, name="dispatch")
-class CategoryAPI(View):
-
-    def get(self, request, id=None):
-        if id:
-            try:
-                category = ItemCategory.objects.get(id=id)
-                return JsonResponse({"id": category.id, "name": category.name})
-            except ItemCategory.DoesNotExist:
-                raise Http404("Category not found")
-        else:
-            categories = list(ItemCategory.objects.values("id", "name"))
-            return JsonResponse(categories, safe=False)
-
-    def post(self, request):
-        try:
-            data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not data.get("name"):
@@ -273,8 +220,11 @@ class WarehouseAPI(View):
 
     def post(self, request):
         try:
+            print(request.body,"request.body")
             data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
+            print(data,"data")
+        except json.JSONDecodeError as e:
+            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not data.get("name"):
