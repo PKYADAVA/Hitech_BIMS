@@ -5,6 +5,7 @@ Defines views for managing employee records
 """
 import json
 import logging
+from decimal import Decimal
 from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.dateparse import parse_date
@@ -23,7 +24,9 @@ from hr.models import (
     Designation,
     Employee,
     EmployeeLeave,
+    Group,
     LeaveSelectedDate,
+    Sector,
 )
 from hr.validation import validate_employee_data
 
@@ -77,8 +80,8 @@ def create_new_employee(request):
             emergency_contact = request.POST.get("emergency_contact")
             country = request.POST.get("country")
             correspondence_address = request.POST.get("correspondence_address")
-            sector = request.POST.get("sector")
-            group = request.POST.get("group")
+            sector_id = request.POST.get("sector")
+            group_id = request.POST.get("group")
             salary_type = request.POST.get("salary_type")
             advance = request.POST.get("advance")
             bank_name = request.POST.get("bank_name")
@@ -86,9 +89,9 @@ def create_new_employee(request):
             report_to = request.POST.get("report_to")
             salary_account = request.POST.get("salary_account")
             ifsc_code = request.POST.get("ifsc_code")
-            leaves = request.POST.get("leaves")
             branch_name = request.POST.get("branch_name")
             saving = request.POST.get("saving")
+            image = request.FILES["image"]
 
             error_message = None
 
@@ -100,14 +103,7 @@ def create_new_employee(request):
                 error_message = "Salary is required."
             if not designation_id:
                 error_message = "Designation is required."
-            if not personal_contact or not personal_contact.isdigit():
-                error_message = (
-                    "Emergency Contact 1 is required and should contain only numbers."
-                )
-            if not emergency_contact or not emergency_contact.isdigit():
-                error_message = (
-                    "Emergency Contact is required and should contain only numbers."
-                )
+            
             if not salary.isdigit():
                 error_message = "Salary must be a valid number."
 
@@ -130,7 +126,9 @@ def create_new_employee(request):
                 return render(
                     request, "new_employee.html", {"error_message": error_message}
                 )
-
+            sector = Sector.objects.filter(id=sector_id).first()
+            group = Group.objects.filter(id=group_id).first()
+            
             employee = Employee(
                 full_name=full_name,
                 title=title,
@@ -151,16 +149,16 @@ def create_new_employee(request):
                 group=group,
                 salary=int(salary),
                 salary_type=salary_type,
-                advance=advance,
-                savings=saving,
+                advance=int(advance),
+                savings=int(saving),
                 date_of_joining=date_of_joining,
                 report_to=report_to,
                 salary_account=salary_account,
                 ifsc_code=ifsc_code,
-                leaves=leaves,
                 branch_name=branch_name,
                 designation=designation,
                 bank_name=bank_name,
+                image=image,
             )
             employee.save()
 
@@ -174,7 +172,11 @@ def create_new_employee(request):
                 "new_employee.html",
                 {"error_message": "An error occurred while creating the employee."},
             )
-    context = {"designation_detail": designations_details}
+    context = {
+        "designation_detail": designations_details,
+        "group_detail": Group.objects.all(),
+        "sector_detail": Sector.objects.all(),
+        }
     return render(request, "new_employee.html", context)
 
 
@@ -209,8 +211,8 @@ def edit_employee(request, pk):
                         employee.designation = get_object_or_404(
                             Designation, id=designation_id
                         )
-                    employee.sector = request.POST.get("sector")
-                    employee.group = request.POST.get("group")
+                    employee.sector = Sector.objects.filter(id=request.POST.get("sector")).first()
+                    employee.group = Group.objects.filter(id=request.POST.get("group")).first()
 
                     if request.POST.get("salary"):
                         employee.salary = float(request.POST.get("salary"))
@@ -262,6 +264,8 @@ def edit_employee(request, pk):
         context = {
             "employee": employee,
             "designation_detail": Designation.objects.all(),
+            "group_detail": Group.objects.all(),
+            "sector_detail": Sector.objects.all(),
         }
 
         return render(request, "edit_employee.html", context)
@@ -280,27 +284,26 @@ def delete_employee(request, id):
     if request.method == "GET":
         try:
             employee = get_object_or_404(Employee, id=id)
+            employee_id = employee.id
             employee.delete()
+            # Return response with employee ID
             return JsonResponse(
-                {"success": True, "message": "Employee deleted successfully."}
+                {
+                    "success": True,
+                    "message": "Employee deleted successfully.",
+                    "employee_id": employee_id,
+                }
             )
         except Employee.DoesNotExist:
-            logger.error(f"Employee with ID {id} does not exist.")
             return JsonResponse(
                 {"success": False, "message": "Employee not found."}, status=404
             )
         except Exception as e:
-            logger.exception(
-                f"An error occurred while deleting employee with ID {id}: {e}"
-            )
             return JsonResponse(
-                {"success": False, "message": "An unexpected error occurred."},
+                {"success": False, "message": f"An unexpected error occurred: {e}"},
                 status=500,
             )
     else:
-        logger.warning(
-            f"Invalid request method: {request.method} for deleting employee with ID {id}."
-        )
         return JsonResponse(
             {"success": False, "message": "Invalid request method."}, status=400
         )
@@ -322,23 +325,24 @@ class RelieveEmployeeView(View):
                 )
             employee.relieve = True
             employee.save()
+            # Return response with updated data
             return JsonResponse(
-                {"success": True, "message": "Employee relieved successfully."}
+                {
+                    "success": True,
+                    "message": "Employee relieved successfully.",
+                    "employee_id": employee.id,
+                    "relieve_status": employee.relieve,
+                }
             )
         except Employee.DoesNotExist:
-            logger.error(f"Employee with ID {id} does not exist.")
             return JsonResponse(
                 {"success": False, "message": "Employee not found."}, status=404
             )
         except Exception as e:
-            logger.exception(
-                f"An error occurred while relieving employee with ID {id}: {e}"
-            )
             return JsonResponse(
-                {"success": False, "message": "An unexpected error occurred."},
+                {"success": False, "message": f"An unexpected error occurred: {e}"},
                 status=500,
             )
-
 
 @method_decorator(login_required(login_url="login"), name="dispatch")
 @method_decorator(csrf_exempt, name="dispatch")
@@ -477,20 +481,34 @@ class EmployeeLeaveDashboard(View):
                 status=500
             )
 
+class EmployeeAttendanceListAPIView(View):
+    """Class-based view to handle employee attendance using API."""
+    def get(self, request):
+        """Handle GET requests to fetch all employee attendance records."""
+        try:
+            context = {
+                "employees": Employee.objects.filter(relieve=False).order_by("full_name"),
+                "attendances": Attendance.objects.select_related("employee").order_by("-date", "-check_in_time"),
+            }
+            return render(request, "employee_attendance.html", context)
+        except Exception as e:
+            logger.error("Error fetching attendance records: %s", e)
+            return JsonResponse({"error": str(e)}, status=500)
+
 @method_decorator(login_required(login_url="login"), name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
 class EmployeeAttendance(View):
     """Class-based view to handle employee attendance."""
 
-    def get(self, request):
+    def get(self, request, id=None):
         """Handle GET requests to display employee attendance or get specific attendance."""
-        attendance_id = request.GET.get("id")
 
-        if attendance_id:
+        if id:
             try:
-                attendance = get_object_or_404(Attendance, id=attendance_id)
+                attendance = get_object_or_404(Attendance, id=id)
                 return JsonResponse({
                     "id": attendance.id,
-                    "employee_id": attendance.employee.id,
+                    "employee_id": attendance.employee.employee_id,
                     "employee_name": attendance.employee.full_name,
                     "designation": attendance.employee.designation.title if attendance.employee.designation else None,
                     "date": attendance.date.strftime("%Y-%m-%d"),
@@ -501,12 +519,20 @@ class EmployeeAttendance(View):
             except Exception as e:
                 logger.error("Error fetching attendance record: %s", e)
                 return JsonResponse({"error": str(e)}, status=400)
+            
+        else:
 
-        context = {
-            "employees": Employee.objects.filter(relieve=False).order_by("full_name"),
-            "attendances": Attendance.objects.select_related("employee").order_by("-date", "-check_in_time")
-        }
-        return render(request, "employee_attendance.html", context)
+            employees = Employee.objects.filter(relieve=False).order_by("full_name")
+            attendances = Attendance.objects.select_related("employee").order_by("-date", "-check_in_time")
+            
+            data = {
+                "attendances": list(
+                    attendances.values(
+                        "id", "employee__employee_id", "employee__designation__title", "employee__full_name", "date", "check_in_time", "check_out_time", "status"
+                    )
+                ),
+            }
+            return JsonResponse(data)
 
     def post(self, request):
         """Handle POST requests to create a new attendance record."""
@@ -536,41 +562,51 @@ class EmployeeAttendance(View):
             logger.error("Error creating attendance record: %s", e)
             return JsonResponse({"error": str(e)}, status=400)
 
-    def put(self, request):
-        """Handle PUT requests to update an existing attendance record."""
+    def put(self, request, id=None):
         try:
-            data = json.loads(request.body)
-            attendance = get_object_or_404(Attendance, id=data.get("id"))
-            
-            # Update attendance record
-            attendance.date = data.get("date", attendance.date)
-            attendance.check_in_time = data.get("check_in_time") or None
-            attendance.check_out_time = data.get("check_out_time") or None
-            attendance.status = data.get("status", attendance.status)
-            attendance.save()
-            
-            return JsonResponse({
-                "message": "Attendance record updated successfully",
-                "id": attendance.id,
-                "employee_id": attendance.employee.employee_id,
-                "employee_name": attendance.employee.full_name,
-                "designation": attendance.employee.designation.title if attendance.employee.designation else None,
-                "date": attendance.date,
-                "status": attendance.status,
-            })
+            # Check if the request method is PUT and the body contains form-encoded data
+            if request.method == 'PUT':
+                # If data is sent as URL-encoded form data, access it with request.POST
+                data = json.loads(request.body)
+                
+                # If no ID is passed in the URL, try to get it from the request body
+                attendance_id = id or data.get("attendance_id")  # use "attendance_id" here
+                attendance = get_object_or_404(Attendance, id=attendance_id)
+                
+                # Update attendance record with the provided data
+                attendance.date = data.get("date", attendance.date)
+                attendance.check_in_time = data.get("check_in_time") or None
+                attendance.check_out_time = data.get("check_out_time") or None
+                attendance.status = data.get("status", attendance.status)
+                attendance.save()
+
+                return JsonResponse({
+                    "message": "Attendance record updated successfully",
+                    "attendance": {
+                    "attendance_id": attendance.id,
+                    "employee_id": attendance.employee.employee_id,
+                    "date": attendance.date,
+                    "check_in_time": attendance.check_in_time,
+                    "check_out_time": attendance.check_out_time,
+                    "status": attendance.status,
+                }
+                })
+            else:
+                return JsonResponse({"error": "Invalid request method"}, status=405)
+        
         except Exception as e:
             logger.error("Error updating attendance record: %s", e)
             return JsonResponse({"error": str(e)}, status=400)
-
-    def delete(self, request):
+    def delete(self, request,id=None):
         """Handle DELETE requests to delete an attendance record."""
         try:
-            attendance = get_object_or_404(Attendance, id=request.GET.get("id"))
+            attendance = get_object_or_404(Attendance, id=id)
             attendance.delete()
             return JsonResponse({
+                "success": True,
                 "message": "Attendance record deleted successfully",
-                "id": request.GET.get("id")
-            })
+                "id":id,
+            },status=200)
         except Exception as e:
             logger.error("Error deleting attendance record: %s", e)
             return JsonResponse({"error": str(e)}, status=400)
