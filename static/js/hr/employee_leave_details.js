@@ -25,6 +25,7 @@ $(document).ready(function () {
             "GET",
             { employee_id: employeeId },
             function (response) {
+                console.log(response)
                 const selectedDates = response.selected_dates || [];
                 const modalBody = $("#staticBackdrop .modal-body");
 

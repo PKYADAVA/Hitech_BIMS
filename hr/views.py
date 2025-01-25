@@ -5,6 +5,8 @@ Defines views for managing employee records
 """
 import json
 import logging
+from django.db.models.functions import TruncMonth
+from django.utils.timezone import now
 from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.dateparse import parse_date
@@ -422,23 +424,87 @@ class EmployeeLeaveDashboard(View):
 
     def get(self, request):
         """Handle GET requests to display employee leave dashboard."""
-        # If no employee_id is provided, return the full dashboard context
-        employee_leave_details = (
-            EmployeeLeave.objects.annotate(total_days=Count("selected_dates"))
-            .filter(employee__isnull=False)
-            .prefetch_related("selected_dates")
-        )
-        total_pending_leaves = EmployeeLeave.objects.filter(status="Pending").count()
-        total_approved_leaves = EmployeeLeave.objects.filter(status="Approved").count()
-        total_employees = Employee.objects.count()
+        current_date = now()
 
-        context = {
-            "leave_details": employee_leave_details,
-            "total_pending_leaves": total_pending_leaves,
-            "total_approved_leaves": total_approved_leaves,
-            "total_employees": total_employees,
-        }
-        return render(request, "employee_leave_details.html", context)
+        from_date = request.GET.get('from_date')
+        to_date = request.GET.get('to_date')
+
+        if from_date and to_date:
+            try:
+                from_date = datetime.strptime(from_date, '%Y-%m-%d')
+                to_date = datetime.strptime(to_date, '%Y-%m-%d')
+
+                employee_leave_details = (
+                    EmployeeLeave.objects.filter(
+                        employee__isnull=False,
+                        created_date__range=[from_date, to_date]
+                    )
+                    .prefetch_related("selected_dates")
+                )
+
+            except ValueError:
+                return JsonResponse({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=400)
+            
+            total_pending_leaves = (
+            EmployeeLeave.objects.filter(
+                status="Pending",
+                created_date__range=[from_date, to_date] if from_date and to_date else [current_date.replace(day=1), current_date.replace(day=28)]
+            ).count()
+            )
+
+            total_approved_leaves = (
+                EmployeeLeave.objects.filter(
+                    status="Approved",
+                    created_date__range=[from_date, to_date] if from_date and to_date else [current_date.replace(day=1), current_date.replace(day=28)]
+                ).count()
+            )
+
+            total_employees = Employee.objects.count()
+            context = {
+                "leave_details": list(employee_leave_details.values()),  # Convert QuerySet to list for easy rendering
+                "total_pending_leaves": total_pending_leaves,
+                "total_approved_leaves": total_approved_leaves,
+                "total_employees": total_employees,
+            }
+
+            return JsonResponse(context)
+
+        else:
+            employee_leave_details = (
+                EmployeeLeave.objects.filter(
+                    employee__isnull=False, 
+                    created_date__year=current_date.year,  # Filter by current year
+                    created_date__month=current_date.month  # Filter by current month
+                )
+                .prefetch_related("selected_dates")
+            )
+
+            # Count total pending and approved leaves in the current month
+            total_pending_leaves = (
+                EmployeeLeave.objects.filter(
+                    status="Pending", 
+                    created_date__year=current_date.year,
+                    created_date__month=current_date.month
+                ).count()
+            )
+
+            total_approved_leaves = (
+                EmployeeLeave.objects.filter(
+                    status="Approved", 
+                    created_date__year=current_date.year,
+                    created_date__month=current_date.month
+                ).count()
+            )
+
+            # Count total employees
+            total_employees = Employee.objects.count()
+            context = {
+                "leave_details": employee_leave_details,
+                "total_pending_leaves": total_pending_leaves,
+                "total_approved_leaves": total_approved_leaves,
+                "total_employees": total_employees,
+            }
+            return render(request, "employee_leave_details.html", context)
 
     def post(self, request):
         """Handle POST requests to update leave status."""

@@ -264,6 +264,37 @@ $(document).ready(function(){
             }
         });
     });
+    $("#fromDate, #toDate").change(function() {
+        console.log("called")
+        // Get the selected 'from' and 'to' dates
+        const fromDate = $("#fromDate").val();
+        const toDate = $("#toDate").val();
+
+        // Check if both dates are selected
+        if (fromDate && toDate) {
+            // Create the payload with the selected dates
+            const payload = {
+                from_date: fromDate,
+                to_date: toDate
+            };
+
+            $.ajax({
+                url: "/employee/leave/details/",
+                method: "GET",
+                data: payload,
+                success: function(response) {
+                    console.log("Data received:", response.leave_details);
+                    onloademplyeelist(response.leave_details);
+                    // Do something with the response, e.g., display data
+                },
+                error: function(xhr, status, error) {
+                    console.log("Error:", error);
+                }
+            });
+        } else {
+            console.log("Please select both dates.");
+        }
+    });
     
     onloademplyeelist();
 });

@@ -167,8 +167,9 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="employee-table-body">
                     {% for employee in leave_details %}
+                    {{ employee.date}}
                     <tr>
                         <td>{{ employee.employee.employee_id }}</td>
                         <td>{{ employee.employee.full_name }}</td>
