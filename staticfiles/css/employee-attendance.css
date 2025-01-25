@@ -56,3 +56,61 @@
     height: 32px;
     padding: 0;
 }
+.header {
+    background-color: #f8f9fa;
+    padding: 20px 0;
+    margin-bottom: 30px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.attendance-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+}
+
+.table-header {
+    padding: 20px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.table-top-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.search-container {
+    min-width: 250px;
+}
+
+.dt-buttons {
+    margin-bottom: 15px;
+}
+
+.dt-button {
+    background-color: #198754 !important;
+    border-color: #198754 !important;
+    color: white !important;
+}
+
+.dt-button:hover {
+    background-color: #157347 !important;
+    border-color: #157347 !important;
+}
+
+.badge {
+    font-size: 0.85em;
+    padding: 0.5em 0.75em;
+}
+
+.btn-info {
+    color: white;
+}
+
+.required:after {
+    content: " *";
+    color: red;
+}

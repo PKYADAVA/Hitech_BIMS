@@ -87,9 +87,9 @@
                             <i class="fa-regular fa-pen-to-square"></i> Edit
                         </button>
                     </a>
-                    <button class="btn btn-outline-danger btn-sm delete-btn" title="Delete" id="deleteEmployee-{{employee.id}}">
+                    {% comment %} <button class="btn btn-outline-danger btn-sm delete-btn" title="Delete" id="deleteEmployee-{{employee.id}}">
                         <i class="fa-regular fa-trash"></i> Delete
-                    </button>
+                    </button> {% endcomment %}
                 
                     {% if not employee.relieve %}
                     <button id="relieveEmployee-{{ employee.id }}" class="btn btn-outline-success btn-sm relieveEmployee"><i class="fa-solid fa-user-check"></i> Relieve</button>

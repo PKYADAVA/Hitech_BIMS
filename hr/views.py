@@ -521,10 +521,7 @@ class EmployeeAttendance(View):
                 return JsonResponse({"error": str(e)}, status=400)
             
         else:
-
-            employees = Employee.objects.filter(relieve=False).order_by("full_name")
             attendances = Attendance.objects.select_related("employee").order_by("-date", "-check_in_time")
-            
             data = {
                 "attendances": list(
                     attendances.values(
