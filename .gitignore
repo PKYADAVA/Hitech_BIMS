@@ -9,3 +9,8 @@ venv/  # Your virtual environment folder
 media/
 logs/
 .env
+*.DS_Store
+.DS_Store
+
+
+
