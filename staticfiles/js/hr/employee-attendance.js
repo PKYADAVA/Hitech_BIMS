@@ -1,17 +1,15 @@
 $(document).ready(function(){
-    $('#attendanceTable').DataTable({
-        responsive: true,
-        order: [[3, 'desc']],
-        dom: 'Blfrtip',
-        buttons: ['csv', 'excel', 'pdf', 'print']
-    });
-
-    $('#leaveTable').DataTable({
-        responsive: true,
-        order: [[3, 'desc']],
-        dom: 'Blfrtip',
-        buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
-    });
+    // Initialize DataTable for attendance and leave tables
+    function initializeDataTable(tableId) {
+        if (!$.fn.DataTable.isDataTable(tableId)) {
+            $(tableId).DataTable({
+                responsive: true,
+                order: [[3, 'desc']],
+                dom: 'Blfrtip',
+                buttons: ['csv', 'excel', 'pdf', 'print']
+            });
+        }
+    }
 
     // Add employee modal
     $('#addEmployeeModal').on('show.bs.modal', function (event) {
@@ -32,41 +30,45 @@ $(document).ready(function(){
     }
 
     // Edit employee modal
-    function onloademplyeelist(){
+    function onloademplyeelist() {
         $.ajax({
             url: '/attendance/',
             type: 'GET',
             success: function(response){
                 // Get the table body where rows will be added
-                    let tableBody = $('#attendance-table-body');
-                    
-                    // Clear the current table content (if needed)
-                    tableBody.empty();
-                    
-                    // Loop through each attendance item in the response
-                    response.attendances.forEach(function(attendance) {
-                        let row = `<tr data-id="${attendance.id}">
-                                        <td>${attendance.employee__employee_id}</td>
-                                        <td>${attendance.employee__full_name}</td>
-                                        <td>${attendance.employee__designation__title || '-'}</td>
-                                        <td>${new Date(attendance.date).toLocaleDateString("en-GB")}</td>
-                                        <td>
-                                            <span class="badge ${getBadgeClass(attendance.status)}">
-                                                ${attendance.status}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-primary edit-attendance" data-id="${attendance.id}" title="Edit Attendance">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-danger delete-attendance" data-id="${attendance.id}" title="Delete Attendance">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </td>
-                                    </tr>`;
-                        tableBody.append(row);
-                    });
-                },
+                let tableBody = $('#attendance-table-body');
+                let dataTable = $('#attendanceTable').DataTable();
+
+                // Clear current table content
+                tableBody.empty();
+                
+                // Loop through each attendance item in the response
+                response.attendances.forEach(function(attendance) {
+                    let row = `<tr data-id="${attendance.id}">
+                                <td>${attendance.employee__employee_id}</td>
+                                <td>${attendance.employee__full_name}</td>
+                                <td>${attendance.employee__designation__title || '-'}</td>
+                                <td>${new Date(attendance.date).toLocaleDateString("en-GB")}</td>
+                                <td>
+                                    <span class="badge ${getBadgeClass(attendance.status)}">
+                                        ${attendance.status}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary edit-attendance" data-id="${attendance.id}" title="Edit Attendance">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-attendance" data-id="${attendance.id}" title="Delete Attendance">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>`;
+                    tableBody.append(row);
+                });
+                
+                // Redraw the table without reinitializing it
+                dataTable.clear().rows.add($(tableBody).find('tr')).draw();
+            },
             error: function(error){
                 console.error(error);
             }
@@ -74,7 +76,6 @@ $(document).ready(function(){
     }
 
     $(document).on('click', '.edit-attendance', function() {
-
         var attendanceId = $(this).data('id');
 
         // Make an AJAX GET request to fetch the attendance details using the attendance ID
@@ -83,10 +84,7 @@ $(document).ready(function(){
             type: 'GET',
             success: function(response) {
                 $('#attendanceEditModal').remove();
-            
-                // Check if response.employees is defined and is an array
-                const employees = Array.isArray(response.employees) ? response.employees : [];
-            
+                
                 const modalHTML = `
                 <div class="modal fade" id="attendanceEditModal" tabindex="-1">
                     <div class="modal-dialog modal-lg">
@@ -111,7 +109,6 @@ $(document).ready(function(){
                                                         ${response.employee_id} - ${response.employee_name}
                                                     </option>
                                                 </select>
-
                                             </div>
                                         </div>
                                         <div class="col-md-6">
@@ -183,9 +180,7 @@ $(document).ready(function(){
         });
     });
 
-    
     $(document).on('click', '#EditAttendance', function() {
-        
         var attendanceId = $('#editattendance_id').val();
         var employeeId = $('#editemployee').val();
         var date = $('#editdate').val();
@@ -219,17 +214,14 @@ $(document).ready(function(){
     });
     
     $(document).on('click', '.delete-attendance', function() {
-        
         var attendanceId = $(this).data('id');
         
         if (confirm('Are you sure you want to delete this attendance record?')) {
-          
             $.ajax({
                 url: `/attendance/${attendanceId}/`,
                 type: 'DELETE',
                 success: function(response) {
-                    $(`#attendance-${attendanceId}`).remove();
-                    onloademplyeelist();
+                    onloademplyeelist();  // Refresh the table without reinitializing
                 },
                 error: function(error) {
                     console.error('Error deleting attendance:', error);

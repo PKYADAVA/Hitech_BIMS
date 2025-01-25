@@ -5,7 +5,6 @@ Defines views for managing employee records
 """
 import json
 import logging
-from decimal import Decimal
 from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.dateparse import parse_date
@@ -13,7 +12,7 @@ from django.db import transaction
 from datetime import datetime
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.db.models import Count

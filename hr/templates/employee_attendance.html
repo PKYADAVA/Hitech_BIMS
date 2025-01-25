@@ -5,9 +5,25 @@
 {% endblock nav %} 
 {% block css %}
 <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet"> 
+<style>
+    .mt-2 {
+        margin-top: .5rem !important;
+        margin: 10px;
+    }
+</style>
 {% endblock css %} 
 {% block content %}
 <div class="container-fluid py-4">
+    <div class="d-flex mt-2">
+        <div class="me-3">
+            <label for="fromDate" class="form-label">From Date</label>
+            <input type="date" id="fromDate" class="form-control">
+        </div>
+        <div>
+            <label for="toDate" class="form-label">To Date</label>
+            <input type="date" id="toDate" class="form-control">
+        </div>
+    </div>
     <div class="card">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Employee Attendance Management</h5>
