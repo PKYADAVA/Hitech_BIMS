@@ -1,6 +1,6 @@
 $(document).ready(function () {
     const requiredFields = [
-        'full_name', 'father_name',
+        'full_name', 'father_name',,'image','report_to',
         'date_of_birth', 'designation', 'salary',
         'qualification','personal_contact',
         'country', 'sector', 'group',
