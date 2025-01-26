@@ -1,0 +1,41 @@
+.payroll-container {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 20px;
+}
+.input-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.input-grid select, .input-grid input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.employee-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.employee-table th, .employee-table td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+}
+.employee-table th {
+    background-color: #f2f2f2;
+}
+.action-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.action-btn:hover {
+    background-color: #45a049;
+}
