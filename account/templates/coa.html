@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Manage Broiler{% endblock %}
+{% block title %}Manage Chart Of Accounts{% endblock %}
 
 {% block nav %}
  {% include 'main_top_navbar.html' with active_tab='account' %}
@@ -60,7 +60,7 @@
                                 <label for="type" class="form-label">Type</label>
                                 <select id="type" class="form-control" required>
                                     <option value="" selected disabled>Select account type</option>
-                                    {% for type, type_name in ChartOfAccount.TYPE_CHOICES %}
+                                    {% for type, type_name in  account_types %}
                                     <option value="{{ type }}">{{ type_name }}</option>
                                     {% endfor %}
                                 </select>
@@ -130,6 +130,179 @@
             </div>
         </div>
     </div>
-
-  
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+    $(document).ready(function () {
+        // Function to load chart of accounts
+        function loadChartOfAccounts() {
+            $.ajax({
+                url: "{% url 'chart_of_accounts_list' %}", // Replace with the actual endpoint
+                type: "GET",
+                success: function (response) {
+                    const table = $("#chart-of-accounts-table");
+                    const tableBody = $("#chart-of-accounts-table-body");
+    
+                    // Clear the current table body and destroy the DataTable if initialized
+                    if ($.fn.DataTable.isDataTable(table)) {
+                        table.DataTable().clear().destroy();
+                    }
+                    tableBody.empty();
+    
+                    // Populate the table dynamically
+                    response.forEach((account) => {
+                        const tableRow = `
+                            <tr>
+                                <td>${account.code}</td>
+                                <td>${account.description}</td>
+                                <td>${account.type}</td>
+                                <td>${account.control_type || "N/A"}</td>
+                                <td>${account.schedule__name || "N/A"}</td>
+                                <td>${account.status}</td>
+                                <td>
+                                    <button 
+                                        class="btn btn-primary edit-button" 
+                                        data-id="${account.id}"
+                                        data-code="${account.code}"
+                                        data-description="${account.description}"
+                                        data-type="${account.type}"
+                                        data-control-type="${account.control_type}"
+                                        data-schedule="${account.schedule}"
+                                        data-status="${account.status}"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button 
+                                        class="btn btn-danger delete-button" 
+                                        data-id="${account.id}"
+                                    >
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.append(tableRow);
+                    });
+    
+                    // Reinitialize DataTable
+                    table.DataTable();
+                },
+                error: function (xhr, status, error) {
+                    console.error(`Failed to load accounts: ${error}`);
+                },
+            });
+        }
+    
+        // Load chart of accounts on page load
+        loadChartOfAccounts();
+    
+        // Handle form submission to add a new account (POST)
+        $("#chart-of-account-form").on("submit", function (event) {
+            event.preventDefault();
+    
+            const data = {
+                code: $("#code").val(),
+                description: $("#description").val(),
+                type: $("#type").val(),
+                control_type: $("#control_type").val(),
+                schedule: $("#schedule").val(),
+                status: $("#status").val(),
+            };
+    
+            $.ajax({
+                url: "/chart-of-accounts/create/", // Replace with the actual POST endpoint
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Content-Type": "application/json",
+                },
+                data: JSON.stringify(data),
+                success: function () {
+                    $("#chartOfAccountFormModal").modal("hide");
+                    $("#chart-of-account-form")[0].reset();
+                    loadChartOfAccounts();
+                    alert("Account added successfully!");
+                },
+                error: function (xhr, status, error) {
+                    console.error(`Failed to add account: ${error}`);
+                    alert("An error occurred while adding the account.");
+                },
+            });
+        });
+    
+        // Handle form submission to update an existing account (PUT)
+        function updateAccount(id) {
+            const data = {
+                code: $("#code").val(),
+                description: $("#description").val(),
+                type: $("#type").val(),
+                control_type: $("#control_type").val(),
+                schedule: $("#schedule").val(),
+                status: $("#status").val(),
+            };
+    
+            $.ajax({
+                url: `/chart-of-accounts/${id}/`, 
+                method: "PUT",
+                headers: {
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Content-Type": "application/json",
+                },
+                data: JSON.stringify(data),
+                success: function () {
+                    $("#chartOfAccountFormModal").modal("hide");
+                    $("#chart-of-account-form")[0].reset();
+                    loadChartOfAccounts();
+                    alert("Account updated successfully!");
+                },
+                error: function (xhr, status, error) {
+                    console.error(`Failed to update account: ${error}`);
+                    alert("An error occurred while updating the account.");
+                },
+            });
+        }
+    
+        // Edit button click handler
+        $(document).on("click", ".edit-button", function () {
+            const id = $(this).data("id");
+    
+            // Populate the form fields with the data attributes from the button
+            $("#account-id").val(id);
+            $("#code").val($(this).data("code"));
+            $("#description").val($(this).data("description"));
+            $("#type").val($(this).data("type"));
+            $("#control_type").val($(this).data("control-type"));
+            $("#schedule").val($(this).data("schedule"));
+            $("#status").val($(this).data("status"));
+    
+            // Open the modal for editing
+            $("#chartOfAccountFormModal").modal("show");
+    
+            // Submit form with PUT method
+            $("#chart-of-account-form").off("submit").on("submit", function (event) {
+                event.preventDefault();
+                updateAccount(id);
+            });
+        });
+    
+        // Delete button click handler
+        $(document).on("click", ".delete-button", function () {
+            const id = $(this).data("id");
+    
+            if (confirm("Are you sure you want to delete this account?")) {
+                $.ajax({
+                    url: `/chart-of-accounts/${id}/delete/`,
+                    method: "DELETE",
+                    headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                    success: function () {
+                        loadChartOfAccounts();
+                        alert("Account deleted successfully!");
+                    },
+                    error: function () {
+                        alert("An error occurred while deleting the account.");
+                    },
+                });
+            }
+        });
+    });
+    </script>
 {% endblock %}
