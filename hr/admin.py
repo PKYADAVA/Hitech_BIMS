@@ -92,4 +92,4 @@ class AttendanceAdmin(admin.ModelAdmin):
     register attendance models
     """
 
-    list_display = ("employee", "date", "check_in_time", "check_out_time", "status")
+    list_display = ("employee", "date", "check_in_time", "check_out_time", "status","created_date")
