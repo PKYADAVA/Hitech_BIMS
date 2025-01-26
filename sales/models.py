@@ -4,10 +4,6 @@ from inventory.models import Item, ItemCategory
 
 
 
-class ContactType(models.TextChoices):
-    SUPPLIER = "Supplier", "Supplier"
-    CUSTOMER = "Customer", "Customer"
-    BOTH = "Supplier & Customer", "Supplier & Customer"
 
 
 class CustomerGroup(models.Model):
@@ -39,6 +35,12 @@ class SalesPriceMaster(models.Model):
 
 # Create your models here.
 class Customer(models.Model):
+
+    class ContactType(models.TextChoices):
+        SUPPLIER = "Supplier", "Supplier"
+        CUSTOMER = "Customer", "Customer"
+        BOTH = "Supplier & Customer", "Supplier & Customer"
+        
     name = models.CharField(max_length=255, help_text="Full name of the contact")
     address = models.TextField(help_text="Address of the contact")
     place = models.CharField(max_length=255, blank=True, null=True, help_text="Place information")

@@ -12,6 +12,40 @@
   .dropdown-menu .dropdown-item:hover {
     background-color: #e8e8e8; /* Optional: Highlight item on hover */
   }
+  /* Ensures that the submenu appears to the right */
+  .dropdown-submenu {
+    position: relative;
+  }
+
+  .dropdown-attendance-menu{
+    margin-left: 100px;
+  }
+
+  .dropdown-employee-menu{
+    margin-left: 100px;
+  }
+
+.dropdown-submenu:hover > .dropdown-menu {
+  display: block;
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-top: -1px; /* Adjust based on the alignment you want */
+}
+
+/* Hide the submenu by default */
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 100%; /* Shift the menu to the right of the parent */
+}
+
+/* Optional: Additional styling for better layout */
+.dropdown-submenu > .dropdown-menu {
+  min-width: 160px;
+}
+
 </style>
 <nav class="navbar navbar-expand-lg navbar-dark bg-success">
   <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -98,52 +132,52 @@
 
       <!-- Human Resource Dropdown -->
       <li class="nav-item dropdown">
-        <a class="nav-link {% if active_tab == 'hr' %}active{% endif %} dropdown-toggle" href="#" id="hrDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-user"></i> Human Resource</a>
+        <a class="nav-link {% if active_tab == 'hr' %}active{% endif %} dropdown-toggle" href="#" id="hrDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="fa-solid fa-user"></i> Human Resource
+        </a>
         <ul class="dropdown-menu" aria-labelledby="hrDropdown">
-            <li>
-                <h6 class="dropdown-header">HR Menu</h6>
-            </li>
-            <li>
-                <hr class="dropdown-divider" />
-            </li>
-            <li class="dropdown-submenu">
-                <a class="dropdown-item dropdown-toggle" href="#" id="employeeDropdowns" role="button"><i class="fas fa-user-cog" style="font-size:17px"></i> Employee Management</a>
-                <ul class="dropdown-menu">
-                    <li>
-                        <a class="dropdown-item" href="{% url 'create_new_employee' %}"><i class="fas fa-user-alt" style="font-size:17px"></i> Add Employee</a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'employee_list' %}"><i class="fas fa-users" style="font-size:17px"></i> Employee List</a>
-                    </li>
-                </ul>
-            </li>
-            <li class="dropdown-submenu dropdown-attendance">
-                <a class="dropdown-item dropdown-toggle" href="#" id="attendanceDropdown">
+          <li>
+            <h6 class="dropdown-header">HR Menu</h6>
+          </li>
+          <li><hr class="dropdown-divider" /></li>
+          
+          <!-- Employee Management Dropdown -->
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="employeeDropdowns" role="button">
+              <i class="fas fa-user-cog" style="font-size:17px"></i> Employee Management
+            </a>
+            <ul class="dropdown-menu dropdown-employee-menu">
+              <li><a class="dropdown-item" href="{% url 'create_new_employee' %}">
+                <i class="fas fa-user-alt" style="font-size:17px"></i> Add Employee
+              </a></li>
+              <li><a class="dropdown-item" href="{% url 'employee_list' %}">
+                <i class="fas fa-users" style="font-size:17px"></i> Employee List
+              </a></li>
+            </ul>
+          </li>
+
+          <!-- Attendance Dropdown (Submenu to the right) -->
+          <li class="dropdown-submenu dropdown-attendance">
+            <a class="dropdown-item dropdown-toggle" href="#" id="attendanceDropdown">
+              <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
+            </a>
+            <ul class="dropdown-menu dropdown-attendance-menu">
+              <li><a class="dropdown-item" href="{% url 'leave_employee' %}">
+                <i class="fas fa-user-times" style="font-size:17px"></i> Leave Placed
+              </a></li>
+              <li><a class="dropdown-item" href="{% url 'employee_leave_details' %}">
+                <i class="fas fa-users" style="font-size:17px"></i> Leave Details
+              </a></li>
+              <li><a class="dropdown-item" href="{% url 'employee_attendance' %}">
                 <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
-                </a>
-                <ul class="dropdown-menu dropdown-attendance-menu">
-                    <li>
-                        <a class="dropdown-item" href="{% url 'leave_employee' %}">
-                        <i class="fas fa-user-times" style="font-size:17px"></i> Leave Placed
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'employee_leave_details' %}">
-                        <i class="fas fa-users" style="font-size:17px"></i> Leave Details
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'employee_attendance' %}">
-                        <i class="fas fa-user-check" style="font-size:17px"></i> Attendance
-                        </a>
-                    </li>
-                </ul>
-            </li>
-            <li>
-                <a class="dropdown-item" href="{% url 'payroll' %}"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a>
-            </li>
+              </a></li>
+            </ul>
+          </li>
+          
+          <!-- Payroll -->
+          <li><a class="dropdown-item" href="{% url 'payroll' %}"><i class="fa fa-google-wallet" style="font-size:17px"></i> Payroll</a></li>
         </ul>
-    </li>
+      </li>
 
       <!-- User Management -->
       <li class="nav-item">

@@ -15,20 +15,20 @@
             <ul class="nav nav-tabs">
                 <li class="nav-item">
                     <a
-                        class="nav-link {% if active_tab == 'customer' %}active{% endif %} activate"
-                        href="{% url 'customer' %}"
-                        >
-                    Customer
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a
                         class="nav-link {% if active_tab == 'customer_groups' %}active{% endif %} activate"
                         href="{% url 'customer_groups' %}"
                         >
                     Customer groups
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a
+                        class="nav-link {% if active_tab == 'customer' %}active{% endif %} activate"
+                        href="{% url 'customer' %}"
+                        >
+                    Customer
+                    </a>
+                </li>               
                 <li class="nav-item">
                     <a
                         class="nav-link {% if active_tab == 'sales_price_master' %}active{% endif %} activate"
