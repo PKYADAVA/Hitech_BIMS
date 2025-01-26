@@ -5,33 +5,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>
-      {% block title %}
-        Hi Tech Farms
-      {% endblock %}
+      {% block title %} Hi Tech Farms {% endblock %}
     </title>
-    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.11.2/toastify.min.css">
+    
+    <!-- External CSS Libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.11.2/toastify.min.css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" />
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" />
+    
+    <!-- Custom Stylesheets -->
     <link rel="stylesheet" href="{% static 'css/style.css' %}" />
-    <style>
-      
-    </style>
-    {% block css %}
-    {% endblock %}
+    <link href="{% static 'css/bootstrap/bootstrap.min.css' %}" rel="stylesheet" />
+    
+    <!-- Block for additional custom CSS -->
+    {% block css %}{% endblock %}
   </head>
+
   <body class="bg-light">
+    <!-- Main Content Wrapper -->
     <div class="content">
-      <!-- Navigation Bar -->  
-      {% block nav %}
-      {% endblock nav %}
-      {% block body %}
-      {% endblock body %}
+      <!-- Navigation Bar -->
+      {% block nav %}{% endblock %}
+      
+      <!-- Body Content -->
       <div class="container-cstm">
-        {% block content %}
-        {% endblock content %}
+        {% block body %}{% endblock %}
+        {% block content %}{% endblock %}
       </div>
     </div>
 
@@ -39,29 +40,24 @@
     <footer class="bg-dark text-light text-center py-3">
       <p>&copy; 2024 Hi Tech Farms. All rights reserved.</p>
     </footer>
+
+    <!-- External JS Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.11.2/toastify.min.js"></script>
-
-    <!-- Bootstrap CSS -->
-    <link href="{% static 'css/bootstrap/bootstrap.min.css' %}" rel="stylesheet" />
-
-    <!-- jQuery (if required) -->
-    <script src="{% static 'js/jquery-3.7.1.min.js' %}"></script>
-
-    <!-- Bootstrap JS -->
-    <script src="{% static 'js/bootstrap/bootstrap.bundle.min.js' %}"></script>
-
-    <!-- DataTables JS (if required) -->
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
-
-
+    
+    <!-- jQuery and Bootstrap JS -->
+    <script src="{% static 'js/jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'js/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    
     <!-- Custom JS -->
     <script src="{% static 'js/main.js' %}"></script>
-    {% block js %}
-    {% endblock js %}
+    
+    <!-- Block for additional custom JS -->
+    {% block js %}{% endblock %}
   </body>
 </html>
