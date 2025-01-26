@@ -13,6 +13,8 @@ from django.utils.dateparse import parse_date
 from django.db import transaction
 from datetime import datetime
 from django.contrib import messages
+from django.utils import timezone
+from django.db.models import Q
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -421,91 +423,121 @@ class EmployeeLeaveRequest(View):
 @method_decorator(csrf_exempt, name="dispatch")
 class EmployeeLeaveDashboard(View):
     """Class-based view to display employee leave dashboard."""
-
     def get(self, request):
         """Handle GET requests to display employee leave dashboard."""
-        current_date = now()
+        current_date = datetime.now()  # Get the current date
 
-        from_date = request.GET.get('from_date')
-        to_date = request.GET.get('to_date')
+        employee_id = request.GET.get("employee_id")  # Retrieve employee_id from the payload
+        to_date = request.GET.get("to_date")
+        from_date = request.GET.get("from_date")
 
-        if from_date and to_date:
+        if employee_id:
             try:
-                from_date = datetime.strptime(from_date, '%Y-%m-%d')
-                to_date = datetime.strptime(to_date, '%Y-%m-%d')
-
-                employee_leave_details = (
-                    EmployeeLeave.objects.filter(
-                        employee__isnull=False,
-                        created_date__range=[from_date, to_date]
-                    )
+                # Fetch leave details for the specific employee
+                employee_leave = (
+                    EmployeeLeave.objects.filter(id=employee_id)
                     .prefetch_related("selected_dates")
+                    .first()
                 )
 
-            except ValueError:
-                return JsonResponse({"error": "Invalid date format. Please use YYYY-MM-DD."}, status=400)
-            
-            total_pending_leaves = (
-            EmployeeLeave.objects.filter(
-                status="Pending",
-                created_date__range=[from_date, to_date] if from_date and to_date else [current_date.replace(day=1), current_date.replace(day=28)]
-            ).count()
-            )
+                if not employee_leave:
+                    return JsonResponse({"error": "Employee leave not found."}, status=404)
 
-            total_approved_leaves = (
-                EmployeeLeave.objects.filter(
-                    status="Approved",
-                    created_date__range=[from_date, to_date] if from_date and to_date else [current_date.replace(day=1), current_date.replace(day=28)]
+                selected_dates = list(
+                    employee_leave.selected_dates.values_list("date", flat=True)
+                )
+                return JsonResponse({"selected_dates": selected_dates}, status=200)
+            except Exception as e:
+                logger.exception(f"Error fetching employee leave details: {e}")
+                return JsonResponse(
+                    {"error": "An error occurred while fetching leave details."},
+                    status=500,
+                )
+        
+        elif to_date and from_date:
+            try:
+                # Convert 'to_date' and 'from_date' to datetime objects
+                to_date = datetime.strptime(to_date, "%Y-%m-%d")
+                from_date = datetime.strptime(from_date, "%Y-%m-%d")
+
+                # Fetch leave details within the date range
+                employee_leave_details = list(
+                    EmployeeLeave.objects.annotate(total_days=Count("selected_dates"))
+                    .filter(
+                        employee__isnull=False,
+                        created_date__date__gte=from_date,
+                        created_date__date__lte=to_date,
+                    )
+                    .values(
+                        "id",
+                        "employee__employee_id",  # Assuming employee has an 'employee_id' field
+                        "employee__full_name",  # Assuming employee has a 'full_name' field
+                        "leave_type",
+                        "reason",
+                        "status",
+                        "total_days",
+                    )
+                )
+
+                # Count total pending and approved leaves within the date range
+                total_pending_leaves = EmployeeLeave.objects.filter(
+                    status="Pending",
+                    created_date__date__gte=from_date,
+                    created_date__date__lte=to_date,
                 ).count()
-            )
 
-            total_employees = Employee.objects.count()
-            context = {
-                "leave_details": list(employee_leave_details.values()),  # Convert QuerySet to list for easy rendering
-                "total_pending_leaves": total_pending_leaves,
-                "total_approved_leaves": total_approved_leaves,
-                "total_employees": total_employees,
-            }
+                total_approved_leaves = EmployeeLeave.objects.filter(
+                    status="Approved",
+                    created_date__date__gte=from_date,
+                    created_date__date__lte=to_date,
+                ).count()
 
-            return JsonResponse(context)
+                response_data = {
+                    "leave_details": employee_leave_details,
+                    "total_pending_leaves": total_pending_leaves,
+                    "total_approved_leaves": total_approved_leaves,
+                    "total_employees": Employee.objects.count(),
+                }
+
+                return JsonResponse(response_data, status=200)
+
+            except ValueError:
+                return JsonResponse({"error": "Invalid date format."}, status=400)
 
         else:
+            # Default behavior if no employee_id or date range is provided
             employee_leave_details = (
-                EmployeeLeave.objects.filter(
-                    employee__isnull=False, 
-                    created_date__year=current_date.year,  # Filter by current year
-                    created_date__month=current_date.month  # Filter by current month
+                EmployeeLeave.objects.annotate(total_days=Count("selected_dates"))
+                .filter(
+                    employee__isnull=False,
+                    created_date__year=current_date.year,  # Current year
+                    created_date__month=current_date.month,  # Current month
                 )
                 .prefetch_related("selected_dates")
             )
 
-            # Count total pending and approved leaves in the current month
-            total_pending_leaves = (
-                EmployeeLeave.objects.filter(
-                    status="Pending", 
-                    created_date__year=current_date.year,
-                    created_date__month=current_date.month
-                ).count()
-            )
+            # Count total pending and approved leaves for the current month
+            total_pending_leaves = EmployeeLeave.objects.filter(
+                status="Pending",
+                created_date__year=current_date.year,
+                created_date__month=current_date.month,
+            ).count()
 
-            total_approved_leaves = (
-                EmployeeLeave.objects.filter(
-                    status="Approved", 
-                    created_date__year=current_date.year,
-                    created_date__month=current_date.month
-                ).count()
-            )
+            total_approved_leaves = EmployeeLeave.objects.filter(
+                status="Approved",
+                created_date__year=current_date.year,
+                created_date__month=current_date.month,
+            ).count()
 
-            # Count total employees
-            total_employees = Employee.objects.count()
             context = {
                 "leave_details": employee_leave_details,
                 "total_pending_leaves": total_pending_leaves,
                 "total_approved_leaves": total_approved_leaves,
-                "total_employees": total_employees,
+                "total_employees": Employee.objects.count(),
             }
-            return render(request, "employee_leave_details.html", context)
 
+            return render(request, "employee_leave_details.html", context)
+ 
     def post(self, request):
         """Handle POST requests to update leave status."""
         leave_id = request.POST.get("leave_id")
@@ -567,7 +599,9 @@ class EmployeeAttendance(View):
 
     def get(self, request, id=None):
         """Handle GET requests to display employee attendance or get specific attendance."""
-
+        current_date = timezone.now()
+        to_date = request.GET.get('to_date')
+        from_date = request.GET.get('from_date')
         if id:
             try:
                 attendance = get_object_or_404(Attendance, id=id)
@@ -585,8 +619,35 @@ class EmployeeAttendance(View):
                 logger.error("Error fetching attendance record: %s", e)
                 return JsonResponse({"error": str(e)}, status=400)
             
+        elif to_date and from_date:
+            try:
+                # Parse the from_date and to_date strings to datetime objects
+                from_date = datetime.strptime(from_date, "%Y-%m-%d").date()
+                to_date = datetime.strptime(to_date, "%Y-%m-%d").date()
+
+                # Filter records between from_date and to_date
+                attendances = Attendance.objects.filter(
+                    Q(created_date__gte=from_date) & Q(created_date__lte=to_date)
+                ).select_related("employee").order_by("-created_date", "-check_in_time")
+
+                data = {
+                    "attendances": list(
+                        attendances.values(
+                            "id", "employee__employee_id", "employee__designation__title", "employee__full_name", "date", "check_in_time", "check_out_time", "status"
+                        )
+                    ),
+                }
+                return JsonResponse(data)
+
+            except ValueError as e:
+                logger.error("Invalid date format: %s", e)
+                return JsonResponse({"error": "Invalid date format. Use YYYY-MM-DD."}, status=400)
+
         else:
-            attendances = Attendance.objects.select_related("employee").order_by("-date", "-check_in_time")
+            attendances = Attendance.objects.filter(
+            Q(created_date__year=current_date.year) & Q(created_date__month=current_date.month)
+            ).select_related("employee").order_by("-created_date", "-check_in_time")
+            
             data = {
                 "attendances": list(
                     attendances.values(

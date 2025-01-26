@@ -209,6 +209,7 @@ class Attendance(models.Model):
         null=True,
         blank=True,
     )
+    created_date = models.DateTimeField(auto_now_add=True, blank=True, null=True)
 
     def __str__(self):
         """Returns a string representation of this object with the given options as a string."""

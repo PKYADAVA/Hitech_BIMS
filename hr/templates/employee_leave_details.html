@@ -46,6 +46,15 @@
       text-align: center;
       vertical-align: middle;
     }
+    .selectedButton {
+        display: flex; /* This makes the content inside the <td> align horizontally */
+        gap: 4px; /* Adds space between buttons */
+        justify-content: start; /* Aligns the buttons to the left */
+    }
+    
+    .selectedButton button {
+        margin: 0; /* Removes any default margins around the buttons */
+    }
 </style>
 {% endblock %} 
 {% block content %}

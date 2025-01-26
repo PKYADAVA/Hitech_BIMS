@@ -279,13 +279,44 @@ $(document).ready(function(){
             };
 
             $.ajax({
-                url: "/employee/leave/details/",
+                url: "/attendance/",
                 method: "GET",
                 data: payload,
                 success: function(response) {
-                    console.log("Data received:", response.leave_details);
-                    onloademplyeelist(response.leave_details);
-                    // Do something with the response, e.g., display data
+                    console.log("Data received:", response);
+                    // Get the table body where rows will be added
+                    let tableBody = $('#attendance-table-body');
+                    let dataTable = $('#attendanceTable').DataTable();
+
+                    // Clear current table content
+                    tableBody.empty();
+                    
+                    // Loop through each attendance item in the response
+                    response.attendances.forEach(function(attendance) {
+                        let row = `<tr data-id="${attendance.id}">
+                                    <td>${attendance.employee__employee_id}</td>
+                                    <td>${attendance.employee__full_name}</td>
+                                    <td>${attendance.employee__designation__title || '-'}</td>
+                                    <td>${new Date(attendance.date).toLocaleDateString("en-GB")}</td>
+                                    <td>
+                                        <span class="badge ${getBadgeClass(attendance.status)}">
+                                            ${attendance.status}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary edit-attendance" data-id="${attendance.id}" title="Edit Attendance">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-attendance" data-id="${attendance.id}" title="Delete Attendance">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>`;
+                        tableBody.append(row);
+                    });
+                
+                    // Redraw the table without reinitializing it
+                    dataTable.clear().rows.add($(tableBody).find('tr')).draw();
                 },
                 error: function(xhr, status, error) {
                     console.log("Error:", error);
