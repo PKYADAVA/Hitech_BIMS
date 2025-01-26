@@ -10,6 +10,7 @@ from hr.models import (
     EmployeeLeave,
     Group,
     LeaveSelectedDate,
+    Payroll,
     Sector,
 )
 
@@ -93,3 +94,10 @@ class AttendanceAdmin(admin.ModelAdmin):
     """
 
     list_display = ("employee", "date", "check_in_time", "check_out_time", "status","created_date")
+
+@admin.register(Payroll)
+class PayrollAdmin(admin.ModelAdmin):
+    """
+    register payroll models
+    """
+    list_display = ("employee", "month", "year","gross_salary","deductions","net_salary","total_working_days","payable_salary", "created_date")

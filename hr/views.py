@@ -5,8 +5,8 @@ Defines views for managing employee records
 """
 import json
 import logging
-from django.db.models.functions import TruncMonth
-from django.utils.timezone import now
+from calendar import monthrange
+from datetime import date, timedelta
 from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.dateparse import parse_date
@@ -22,6 +22,7 @@ from django.utils.decorators import method_decorator
 from django.db.models import Count
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from calendar import monthrange
 from hr.models import (
     Attendance,
     Designation,
@@ -29,6 +30,7 @@ from hr.models import (
     EmployeeLeave,
     Group,
     LeaveSelectedDate,
+    Payroll,
     Sector,
 )
 from hr.validation import validate_employee_data
@@ -502,6 +504,7 @@ class EmployeeLeaveDashboard(View):
                 return JsonResponse(response_data, status=200)
 
             except ValueError:
+                logger.error("Invalid date format.")
                 return JsonResponse({"error": "Invalid date format."}, status=400)
 
         else:
@@ -733,3 +736,78 @@ class EmployeeAttendance(View):
         except Exception as e:
             logger.error("Error deleting attendance record: %s", e)
             return JsonResponse({"error": str(e)}, status=400)
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
+class EmployeePayrollDashboardView(View):
+    """Class-based view to handle employee payroll dashboard."""
+
+    def get(self, request):
+        """Render the payroll dashboard page."""
+        employees = Employee.objects.all()
+        return render(request, "employee_payroll.html", {'employee_detail': employees})
+
+    def post(self, request):
+        """Handle POST request to calculate monthly salary."""
+        employee_id = request.POST.get('employee_id')
+        year = int(request.POST.get('year'))
+        month = int(request.POST.get('month'))
+
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            payroll = self.generate_payroll(employee, year, month)
+            
+            return JsonResponse({
+                "success": True,
+                "employee": employee.full_name,
+                "month": month,
+                "year": year,
+                "total_working_days": payroll.total_working_days,
+                "payable_salary": payroll.payable_salary,
+                "gross_salary":payroll.gross_salary
+            }, status=200)
+
+        except Employee.DoesNotExist:
+            logger.error("Employee with ID %s not found.", employee_id)
+            return JsonResponse({"success": False, "message": "Employee not found"}, status=404)
+        except Exception as e:
+            logger.error("Error calculating payroll: %s", e)
+            return JsonResponse({"success": False, "message": "An error occurred"}, status=500)
+
+    def generate_payroll(self, employee, year, month):
+        """
+        Generate payroll for an employee based on working days.
+        """
+        # Calculate total days in the month
+        _, total_days = monthrange(year, month)
+        start_date = date(year, month, 1)
+        end_date = date(year, month, total_days)
+
+        # Calculate total working days
+        working_days = 0
+        for day in range(total_days):
+            current_date = start_date + timedelta(days=day)
+
+            # Skip weekends and holidays
+            if current_date.weekday() >= 5 or current_date:  # There seems to be a redundant condition `or current_date`
+                continue
+
+            # Count attendance for the employee
+            if employee.attendance_records.filter(date=current_date).exists():
+                working_days += 1
+
+        # Calculate payable salary
+        payable_salary = working_days * employee.daily_wage
+
+        # Save payroll record
+        payroll, created = Payroll.objects.update_or_create(
+            employee=employee,
+            month=month,  # Pass the month as an integer (1-12)
+            year=year,  # Pass the year as an integer
+            defaults={
+                "gross_salary": employee.salary,
+                "deductions": employee.advance,  # Example, adjust as needed
+                "net_salary": payable_salary,  # Assuming payable salary is the net salary
+            }
+        )
+        return payroll

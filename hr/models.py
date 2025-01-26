@@ -3,6 +3,8 @@
 """models configuration for HR Management"""
 
 import random
+from calendar import monthrange
+from datetime import date
 from django.db import models
 
 class Sector(models.Model):
@@ -134,6 +136,17 @@ class Employee(models.Model):
             self.employee_id = self.generate_unique_employee_id()
         super().save(*args, **kwargs)
 
+    @property
+    def daily_wage(self):
+        """Calculate daily wage based on salary type."""
+        if self.salary_type == "Monthly" and self.salary:
+            # Assuming 30 working days in a month
+            return self.salary / 30
+        elif self.salary_type == "Hourly" and self.salary:
+            # Assuming 8 hours per day
+            return self.salary / 240  # (8 hours/day * 30 days)
+        return 0.00
+
 
 class EmployeeLeave(models.Model):
     """Represent an employee's leave request"""
@@ -214,3 +227,46 @@ class Attendance(models.Model):
     def __str__(self):
         """Returns a string representation of this object with the given options as a string."""
         return f"{self.employee.full_name} - {self.date} ({self.status})"
+    
+class Payroll(models.Model):
+    """Represent a payroll for a given employee"""
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="payrolls")
+    month = models.IntegerField()
+    year = models.IntegerField()
+    gross_salary = models.DecimalField(max_digits=10, decimal_places=2)
+    deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    net_salary = models.DecimalField(max_digits=10, decimal_places=2)
+    total_working_days = models.IntegerField()
+    payable_salary = models.DecimalField(max_digits=10, decimal_places=2)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Returns a string representation of this object with the given fields."""
+        return f"{self.employee.full_name} - {self.month}/{self.year}"
+    
+    def calculate_total_working_days(self):
+        """Calculate total working days for the payroll month."""
+        # Get the number of days in the specified month
+        days_in_month = monthrange(self.year, self.month)[1]
+        start_date = date(self.year, self.month, 1)
+        end_date = date(self.year, self.month, days_in_month)
+
+        # Fetch attendance and leave records for the employee
+        attendance_records = Attendance.objects.filter(
+            employee=self.employee, date__range=(start_date, end_date)
+        )
+        leave_records = LeaveSelectedDate.objects.filter(
+            leave_request__employee=self.employee, date__range=(start_date, end_date)
+        )
+
+        # Count present days, half days, and leave days
+        present_days = attendance_records.filter(status="Present").count()
+        first_half_days = attendance_records.filter(status="First Half").count() * 0.5
+        second_half_days = attendance_records.filter(status="Second Half").count() * 0.5
+        leave_days = leave_records.count()
+
+        # Calculate total working days
+        total_working_days = present_days + first_half_days + second_half_days + leave_days
+        return total_working_days
+
+

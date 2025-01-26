@@ -7,6 +7,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from hr.views import (
     EmployeeAttendanceListAPIView,
+    EmployeePayrollDashboardView,
     delete_employee,
     edit_employee,
     employee_list,
@@ -39,6 +40,7 @@ urlpatterns = [
     path("employee/attendance/list/", EmployeeAttendanceListAPIView.as_view(), name="employee_attendance"),
     path("attendance/", EmployeeAttendance.as_view(), name="attendance"),  # for single employee attendance
     path("attendance/<int:id>/",EmployeeAttendance.as_view(), name="attendance"),
+    path("payroll/", EmployeePayrollDashboardView.as_view(), name="payroll"),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

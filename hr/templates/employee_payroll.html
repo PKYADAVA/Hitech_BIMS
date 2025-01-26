@@ -1,0 +1,51 @@
+{% extends 'base.html' %} 
+{% load static %} 
+{% block title %}Emplyee Payroll{% endblock title %} 
+{% block nav %} 
+{% include 'main_top_navbar.html' with active_tab='hr' %} 
+{% endblock nav %} 
+{% block css %}
+<link rel="stylesheet" href="{% static 'css/payroll.css' %}"> 
+{% endblock css %} 
+{% block content %}
+<div class="payroll-container">
+    <h1>Employee Payroll Management</h1>
+
+    <div class="input-grid">
+        <select id="employeeSelect">
+            <option value="">Select Employee</option>
+            {% for employee in employee_detail %}
+            <option value="{{ employee.id }}">{{ employee.full_name }}-{{employee.employee_id}}</option>
+            {% endfor %}
+        </select>
+
+        <select id="yearSelect">
+
+        </select>
+
+        <select id="monthSelect">
+
+        </select>
+        <button class="action-btn" onclick="processPayroll()">Process Payroll</button>
+    </div>
+
+    <table class="employee-table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Year</th>
+                <th>Month</th>
+                <th>Total Days Worked</th>
+                <th>Payable Salary</th>
+                <th>Gross Pay</th>
+            </tr>
+        </thead>
+        <tbody id="payrollResults">
+            <!-- Payroll results will be dynamically populated here -->
+        </tbody>
+    </table>
+</div>
+{% endblock content %} 
+{% block js %}
+<script src="{% static 'js/hr/payroll.js' %}"></script>
+{% endblock js %}
