@@ -19,9 +19,9 @@ urlpatterns = [
     path('customer_group/<int:id>/', views.CustomerGroupAPI.as_view(), name='customer_group_update'),
     path('customer_group/<int:id>/delete/', views.CustomerGroupAPI.as_view(), name='customer_group_delete'),
     path('sales_price/', views.sales_price, name='sales_price_master'),
-    # path('sales_price_master/', views.SalesPriceMasterAPI.as_view(), name='sales_price_list'),
-    # path('sales_price_master/create/', views.SalesPriceMasterAPI.as_view(), name='sales_price_create'),
-    # path('sales_price_master/<int:id>/', views.SalesPriceMasterAPI.as_view(), name='sales_price_update'),
-    # path('sales_price_master/<int:id>/delete/', views.SalesPriceMasterAPI.as_view(), name='sales_price_delete'),
+    path('sales_price_master/', views.SalesPriceMasterAPI.as_view(), name='sales_price_list'),
+    path('sales_price_master/create/', views.SalesPriceMasterAPI.as_view(), name='sales_price_create'),
+    path('sales_price_master/<int:id>/', views.SalesPriceMasterAPI.as_view(), name='sales_price_update'),
+    path('sales_price_master/<int:id>/delete/', views.SalesPriceMasterAPI.as_view(), name='sales_price_delete'),
 
 ]
