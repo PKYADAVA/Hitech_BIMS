@@ -126,7 +126,7 @@ def create_user(request):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     
-    context = { "employess": Employee.objects.all() ,
+    context = { "employees": Employee.objects.all() ,
                "groups": Group.objects.all()
               }
     
