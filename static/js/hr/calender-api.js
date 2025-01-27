@@ -227,6 +227,7 @@ document.querySelector("button[type='submit']").addEventListener("click", async 
             clearSelectedDates();
             // Optionally hide the modal
             $('#relieveConfirmationModal').modal('hide');
+               location.href = '/employee/leave/details/'
                }, 3000);
                // Optionally reset the form here
       } else {
