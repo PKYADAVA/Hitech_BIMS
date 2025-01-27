@@ -25,7 +25,7 @@
                             <select name="employee" id="employee" class="form-select" required>
                                 <option value="">Select Employee</option>
                                 {% for employee in employees %}
-                                <option value="{{ employee.id }}">{{ employee.first_name }} {{ employee.last_name }}</option>
+                                <option value="{{ employee.id }}">{{ employee.fullname }}</option>
                                 {% endfor %}
                             </select>
                         </div>
