@@ -74,7 +74,7 @@
 
             // Send AJAX request
             $.ajax({
-                url: '{% url "create_user_endpoint" %}', // Replace with your Django view URL
+                url: '{% url "create_user" %}', // Replace with your Django view URL
                 method: 'POST',
                 data: formData,
                 success: function (response) {
