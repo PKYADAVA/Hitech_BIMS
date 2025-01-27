@@ -13,4 +13,8 @@ urlpatterns = [
     path('user_management/', views.user_management, name='user_management'),
     path('update_password/', views.update_password, name='update_password'),
     path('user_profile/', views.user_profile, name='user_profile'),
+    path('create_user_temp/', views.create_user, name='create_user'),
+    path('assign_permission_temp/', views.assign_permission, name='user_permissions'),
+    path('manage_groups/', views.manage_groups, name='user_groups'),
+
 ]
