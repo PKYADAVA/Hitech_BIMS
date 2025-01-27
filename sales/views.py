@@ -10,8 +10,9 @@ from django.core.files.storage import default_storage
 
 import json
 
+from inventory.models import Item, ItemCategory
 from purchase.models import CreditTerm, Supplier, VendorGroup
-from sales.models import Customer, CustomerGroup
+from sales.models import Customer, CustomerGroup, SalesPriceMaster
 
 states_and_union_territories = [
             "Andhra Pradesh",
@@ -266,3 +267,72 @@ class CustomerGroupAPI(View):
 
         customer_group.delete()
         return JsonResponse({"message": "Customer group deleted successfully"}, status=204)
+    
+
+@method_decorator(login_required, name="dispatch")
+class SalesPriceMasterAPI(View):
+    def get(self, request, id=None):
+        if id:
+            try:
+                sales_price = SalesPriceMaster.objects.get(id=id)
+                sales_price_data = {
+                    "id": sales_price.id,
+                    "item_category": sales_price.item_category.id,
+                    "item": sales_price.item.id,
+                    "price": sales_price.price,
+                    "date": sales_price.date,
+                }
+                return JsonResponse(sales_price_data)
+            except SalesPriceMaster.DoesNotExist:
+                raise Http404("Sales price not found")
+        else:
+            sales_prices = list(SalesPriceMaster.objects.values(
+                "id", "item_category", "item", "price", "date"
+            ))
+            return JsonResponse(sales_prices, safe=False)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        try:
+            item_category = ItemCategory.objects.filter(id=data["item_category"]).first()
+            item = Item.objects.filter(id=data["item"]).first()
+
+            sales_price = SalesPriceMaster.objects.create(
+                item_category=item_category,
+                item=item,
+                price=data["price"],
+                date=data["date"],
+            )
+
+            return JsonResponse({"message": "Sales price created", "id": sales_price.id}, status=201)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    def put(self, request, id):
+        try:
+            sales_price = SalesPriceMaster.objects.get(id=id)
+        except SalesPriceMaster.DoesNotExist:
+            return JsonResponse({"error": "Sales price not found"}, status=404)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        sales_price.price = data.get("price", sales_price.price)
+        sales_price.save()
+        return JsonResponse({"message": "Sales price updated"})
+
+    def delete(self, request, id):
+        try:
+            sales_price = SalesPriceMaster.objects.get(id=id)
+        except SalesPriceMaster.DoesNotExist:
+            return JsonResponse({"error": "Sales price not found"}, status=404)
+
+        sales_price.delete()
+        return JsonResponse({"message": "Sales price deleted"}, status=204)    

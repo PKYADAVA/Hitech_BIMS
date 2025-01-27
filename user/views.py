@@ -5,6 +5,9 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.contrib.auth.models import Group, Permission
+
+from hr.models import Employee
 from .models import UserProfile
 
 def register(request):
@@ -91,3 +94,59 @@ def update_password(request):
         return JsonResponse({"message": "Password updated successfully."})
     
     return render(request, 'update_password.html')
+
+
+@login_required
+def create_user(request):
+    if request.method == 'POST':
+        employee_id = request.POST.get('employee')
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        confirm_password = request.POST.get('confirm_password')
+        group_id = request.POST.get('group')
+        is_superuser = request.POST.get('is_superuser', 'off') == 'on'
+
+        if password != confirm_password:
+            return JsonResponse({'error': 'Passwords do not match'}, status=400)
+
+        # Save the user logic (example)
+        try:
+            user = User.objects.create_user(
+                username=username,
+                password=password,
+                is_superuser=is_superuser,
+            )
+            user.groups.add(group_id)
+            user.save()
+            emp_obj = Employee.objects.get(id=employee_id)
+            emp_obj.user = user
+            emp_obj.save()
+
+            return JsonResponse({'message': 'User created successfully'}, status=200)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    context = { "employees": Employee.objects.all() ,
+               "groups": Group.objects.all()
+              }
+    
+    return render(request, 'create_user.html', context)
+
+
+@login_required
+def assign_permission(request):
+    if request.method == "POST":
+        # Extract form data and assign permissions to a user
+        return JsonResponse({"message": "Permissions assigned successfully."})
+    
+    context = {
+        "users": User.objects.all(),
+        "groups": Group.objects.all()
+    }
+    
+    return render(request, 'assign_permission.html', context)
+
+
+@login_required
+def manage_groups(request):
+    return render(request, 'manage_groups.html')
