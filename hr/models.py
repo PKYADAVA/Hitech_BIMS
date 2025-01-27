@@ -6,6 +6,7 @@ import random
 from calendar import monthrange
 from datetime import date
 from django.db import models
+from django.contrib.auth.models import User
 
 class Sector(models.Model):
     """Represents a sector an employee belongs to."""
@@ -39,6 +40,9 @@ class Designation(models.Model):
 class Employee(models.Model):
     """Represents an employee with detailed personal and job-related information."""
 
+    user = models.OneToOneField(
+       User, on_delete=models.SET_NULL, related_name="employee", null=True
+    )
     full_name = models.CharField(max_length=100, blank=True, null=True)
     title = models.CharField(
         max_length=10,
