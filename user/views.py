@@ -139,7 +139,12 @@ def assign_permission(request):
         # Extract form data and assign permissions to a user
         return JsonResponse({"message": "Permissions assigned successfully."})
     
-    return render(request, 'assign_permission.html')
+    context = {
+        "users": User.objects.all(),
+        "groups": Group.objects.all()
+    }
+    
+    return render(request, 'assign_permission.html', context)
 
 
 @login_required
