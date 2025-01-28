@@ -8,8 +8,7 @@
 
 {% block content %}
 
-{% include '_user_management_subnavbar.html' with active_tab='user_permissions' %}
-
+{% include '_user_management_subnavbar.html' with active_tab='assign_groups' %}
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-md-6">
@@ -29,20 +28,94 @@
                                 {% endfor %}
                             </select>
                         </div>
+
                         <div class="mb-3">
-                            <label for="groups" class="form-label">Groups</label>
-                            <select name="groups" id="groups" class="form-select" required multiple>
+                            <label class="form-label">Groups</label>
+                            <div id="groups" class="form-check">
                                 {% for group in groups %}
-                                <option value="{{ group.id }}">{{ group.name }}</option>
+                                <div class="form-check">
+                                    <input type="checkbox" name="groups[]" value="{{ group.id }}" id="group_{{ group.id }}" class="form-check-input">
+                                    <label class="form-check-label" for="group_{{ group.id }}">
+                                        {{ group.name }}
+                                    </label>
+                                </div>
                                 {% endfor %}
-                            </select>
+                            </div>
                         </div>
+
                         <div class="d-grid">
                             <button type="submit" class="btn btn-primary">Assign Groups</button>
                         </div>
                     </form>
+                    <!-- Status message will be displayed here -->
+                    <div id="statusMessage" class="mt-3"></div>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+<!-- Include Bootstrap and jQuery for AJAX and styling -->
+<script >
+    $(document).ready(function () {
+        // Fetch assigned groups when the user is selected
+        $('#user').change(function () {
+            const userId = $(this).val();
+            if (userId) {
+                // Fetch already assigned groups via AJAX
+                $.ajax({
+                    type: "GET",
+                    url: "{% url 'get_assigned_groups' %}",  // Your URL for fetching the assigned groups
+                    data: { 'user_id': userId },
+                    success: function (response) {
+                        // Uncheck all checkboxes first
+                        $("input[name='groups[]']").prop('checked', false);
+
+                        // Check the assigned groups
+                        response.groups.forEach(function (groupId) {
+                            $("input[name='groups[]'][value='" + groupId + "']").prop('checked', true);
+                        });
+                    },
+                    error: function () {
+                        alert("An error occurred while fetching assigned groups.");
+                    }
+                });
+            }
+        });
+
+        $('#groupForm').submit(function (e) {
+            e.preventDefault();
+
+            const userId = $('#user').val();
+            const groupIds = $("input[name='groups[]']:checked").map(function () {
+                return $(this).val();
+            }).get();
+
+            if (!userId || groupIds.length === 0) {
+                alert("Please select a user and at least one group.");
+                return;
+            }
+
+            // Perform AJAX request to assign the groups
+            $.ajax({
+                type: "POST",
+                url: "{% url 'assign_groups' %}",  // Your URL for assigning the groups
+                data: {
+                    'user': userId,
+                    'groups[]': groupIds,  // Send the selected group IDs
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function (response) {
+                    alert(response.message);
+                    $('#groupForm')[0].reset();  // This will reset all form fields, including checkboxes
+                    $('#user').val('');
+                },
+                error: function () {
+                    alert("An error occurred while assigning the groups. Please try again.");
+                }
+            });
+        });
+    });
+</script>
+
 {% endblock %}

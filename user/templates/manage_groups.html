@@ -9,29 +9,133 @@
 {% block content %}
 
 {% include '_user_management_subnavbar.html' with active_tab='user_groups' %}
-
 <div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-md-6">
+        <div class="col-md-8">
             <div class="card shadow-lg">
                 <div class="card-header bg-primary text-white text-center">
-                    <h4>Manage User Groups</h4>
+                    <h4 class="mb-0">Manage User Groups</h4>
                 </div>
                 <div class="card-body">
-                    <form id="groupForm">
+                    <form id="groupForm" method="post">
                         {% csrf_token %}
-                        <div class="mb-3">
-                            <label for="name" class="form-label">Name</label>
-                            <input type="text" name="name" id="name" class="form-control" required>
-                        </div>
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary">Create Group</button>
+                        
+                        <!-- Group Name Field -->
+                        <div class="mb-4">
+                            <label for="name" class="form-label fw-bold">Group Name</label>
+                            <input type="text" 
+                                   name="name" 
+                                   id="name" 
+                                   class="form-control form-control-lg" 
+                                   placeholder="Enter group name" 
+                                   required>
                         </div>
                         
+                        <!-- Accordion for Permissions Grouped by App (Two per row) -->
+                        <div class="accordion" id="permissionsAccordion">
+                            <div class="row">
+                                {% for app, permissions in grouped_permissions.items %}
+                                    <div class="col-md-6">
+                                        <div class="accordion-item">
+                                            <h2 class="accordion-header" id="heading-{{ app }}">
+                                                <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" 
+                                                        type="button" 
+                                                        data-bs-toggle="collapse" 
+                                                        data-bs-target="#collapse-{{ app }}" 
+                                                        aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" 
+                                                        aria-controls="collapse-{{ app }}">
+                                                    {{ app|capfirst }} Module Permissions
+                                                </button>
+                                            </h2>
+                                            <div id="collapse-{{ app }}" 
+                                                 class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" 
+                                                 aria-labelledby="heading-{{ app }}" 
+                                                 data-bs-parent="#permissionsAccordion">
+                                                <div class="accordion-body" style="max-height: 300px; overflow-y: auto;">
+                                                
+                                                    <!-- Select All Checkbox for this app -->
+                                                    <div class="form-check mb-3">
+                                                        <input type="checkbox" class="form-check-input select-all" id="select_all_{{ app }}">
+                                                        <label class="form-check-label" for="select_all_{{ app }}">
+                                                            Select All
+                                                        </label>
+                                                    </div>
+
+                                                    {% for permission in permissions %}
+                                                    <div class="form-check">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            class="form-check-input perm-checkbox" 
+                                                            id="perm_{{ permission.id }}" 
+                                                            name="permissions" 
+                                                            value="{{ permission.id }}">
+                                                        <label for="perm_{{ permission.id }}" class="form-check-label">
+                                                            {{ permission.name }}
+                                                        </label>
+                                                    </div>
+                                                    {% endfor %}
+                                                    
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-plus-circle me-2"></i>Create Group
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
     </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script>
+   
+        $(document).ready(function () {
+            // Event handler for each "Select All" checkbox
+            $(".select-all").on("change", function () {
+                // Get the related app's checkbox group ID
+                var appId = $(this).attr('id').split('_')[2]; 
+                var isChecked = $(this).prop('checked');
+                $("#collapse-" + appId + " .perm-checkbox").prop('checked', isChecked);
+            });
+    
+            $("#groupForm").on("submit", function (e) {
+                e.preventDefault(); 
 
+                const groupName = $("#name").val();
+                const selectedPermissions = $("input[name='permissions']:checked")
+                    .map(function () {
+                        return $(this).val();
+                    })
+                    .get();
+    
+                // Send AJAX request
+                $.ajax({
+                    url: "{% url 'user_groups' %}",
+                    method: "POST",
+                    data: {
+                        csrfmiddlewaretoken: "{{ csrf_token }}",  // Include CSRF token
+                        name: groupName,
+                        permissions: selectedPermissions,
+                    },
+                    success: function (response) {
+                        alert("Group created/updated successfully!");
+                        $("#groupForm")[0].reset();  // Reset the form after success
+                    },
+                    error: function (xhr, status, error) {
+                        alert("An error occurred: " + xhr.responseText || "Please try again.");
+                    }
+                });
+            });
+        });
+    </script>
+    
 {% endblock %}
