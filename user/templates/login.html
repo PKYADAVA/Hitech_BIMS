@@ -15,40 +15,44 @@
 
         .container {
             display: flex;
+            justify-content: center;
+            align-items: center;
             height: 100vh;
-            flex-wrap: wrap;
+            margin: 0;
         }
 
         .left-section {
-            width: 60%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden; /* To avoid overflowing on small screens */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
         }
 
         .left-section img {
-            width: 100%; /* Ensures the image takes up the full width of its container */
+            width: 100%;
             height: 100%;
-           
+            object-fit: cover; /* Ensures the image covers the whole area */
         }
 
         .right-section {
-            width: 40%;
-            background: linear-gradient(to right, #6f42c1, #007bff); /* Beautiful gradient background */
             display: flex;
-            justify-content: center;
+            justify-content: flex-end;
             align-items: center;
-            padding: 20px; /* Padding for better layout in smaller screens */
+            padding: 20px;
+            z-index: 1;
+            position: relative;
+            width: 100%;
         }
 
         .card {
             border-radius: 15px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 50%;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 100%;
             max-width: 400px;
             padding: 40px;
-            background-color: white; /* Makes sure the card background is white */
+            background-color: rgba(255, 255, 255, 0.7); /* White with transparency */
         }
 
         .card-title {
@@ -91,31 +95,20 @@
 
         /* Make the layout responsive */
         @media (max-width: 767px) {
-            .left-section {
-                width: 100%; /* Full width on smaller screens */
-                height: 50%;
-            }
-
-            .right-section {
-                width: 100%; /* Full width on smaller screens */
-                height: 50%;
-                padding: 10px;
-            }
-
             .card {
-                width: 100%; /* Ensures the card takes full width in smaller screens */
+                width: 100%;
                 padding: 20px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid d-flex">
+    <div class="container">
         <!-- Left Section for Poultry Image -->
         <div class="left-section">
             <img src="{% static 'images/istockphoto-888136924-2048x2048.jpg' %}" alt="Poultry Image">
         </div>
-        
+
         <!-- Right Section for Login Form -->
         <div class="right-section">
             <div class="card">
@@ -143,11 +136,5 @@
             </div>
         </div>
     </div>
-
-    <!-- jQuery (if required) -->
-    <script src="{% static 'js/jquery-3.7.1.min.js' %}"></script>
-    
-    <!-- Bootstrap JS -->
-    <script src="{% static 'js/bootstrap/bootstrap.bundle.min.js' %}"></script>
 </body>
 </html>
