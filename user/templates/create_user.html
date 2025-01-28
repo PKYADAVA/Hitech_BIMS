@@ -9,7 +9,6 @@
 {% block content %}
 
 {% include '_user_management_subnavbar.html' with active_tab='create_user' %}
-
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-md-6">
@@ -18,7 +17,7 @@
                     <h4>Create User</h4>
                 </div>
                 <div class="card-body">
-                    <form id="userForm">
+                    <form id="userForm" method="POST" action="{% url 'create_user' %}">
                         {% csrf_token %}
                         <div class="mb-3">
                             <label for="employee" class="form-label">Employee</label>
@@ -63,6 +62,7 @@
         </div>
     </div>
 </div>
+
 
 <script>
     $(document).ready(function () {

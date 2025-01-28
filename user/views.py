@@ -105,9 +105,14 @@ def create_user(request):
         confirm_password = request.POST.get('confirm_password')
         group_id = request.POST.get('group')
         is_superuser = request.POST.get('is_superuser', 'off') == 'on'
+        print(request.POST)
 
         if password != confirm_password:
             return JsonResponse({'error': 'Passwords do not match'}, status=400)
+        
+        context = { "employees": Employee.objects.all() ,
+               "groups": Group.objects.all()
+              }
 
         # Save the user logic (example)
         try:
@@ -122,13 +127,11 @@ def create_user(request):
             emp_obj.user = user
             emp_obj.save()
 
-            return JsonResponse({'message': 'User created successfully'}, status=200)
+            return render(request, 'create_user.html', context)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
     
-    context = { "employees": Employee.objects.all() ,
-               "groups": Group.objects.all()
-              }
+   
     
     return render(request, 'create_user.html', context)
 
