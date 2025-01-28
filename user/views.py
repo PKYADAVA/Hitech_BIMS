@@ -1,4 +1,5 @@
 # user/views.py
+from collections import defaultdict
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
@@ -150,6 +151,29 @@ def assign_permission(request):
     return render(request, 'assign_permission.html', context)
 
 
-@login_required
 def manage_groups(request):
-    return render(request, 'manage_groups.html')
+    if request.method == 'POST':
+        group_name = request.POST.get('name')
+        permissions = request.POST.getlist('permissions[]')
+        print(permissions)
+
+        if group_name:
+            group, created = Group.objects.get_or_create(name=group_name)
+            group.permissions.clear()
+            group.permissions.set(permissions)
+            return JsonResponse({"message": f"Group '{group_name}' {'created' if created else 'updated'} successfully!"})
+        return JsonResponse({"error": "Group name is required."}, status=400)
+        
+    # Group permissions by their app label, excluding system apps
+    excluded_apps = ['admin', 'auth', 'contenttypes', 'sessions']
+    permissions = Permission.objects.select_related('content_type').all()
+    grouped_permissions = defaultdict(list)
+
+    for perm in permissions:
+        app_label = perm.content_type.app_label
+        if app_label not in excluded_apps:  # Exclude system apps
+            grouped_permissions[app_label].append(perm)
+
+    return render(request, 'manage_groups.html', {
+        'grouped_permissions': dict(grouped_permissions)  # Convert defaultdict to a regular dict
+    })
