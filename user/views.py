@@ -144,10 +144,15 @@ def create_user(request):
 
 
 @login_required
-def assign_permission(request):
+def assign_groups(request):
     if request.method == "POST":
-        # Extract form data and assign permissions to a user
-        return JsonResponse({"message": "Permissions assigned successfully."})
+        user_id = request.POST.get("user")
+        groups = request.POST.getlist("groups[]")
+
+        user = User.objects.get(id=user_id)
+        user.groups.clear()
+        user.groups.set(groups)
+        return JsonResponse({"message": "Groups assigned successfully."})
 
     context = {"users": User.objects.all(), "groups": Group.objects.all()}
 
@@ -190,3 +195,19 @@ def manage_groups(request):
             )  # Convert defaultdict to a regular dict
         },
     )
+
+
+@login_required
+def get_assigned_groups(request):
+    if request.method == "GET":
+        user_id = request.GET.get("user_id")
+
+        try:
+            # Get the user and the groups assigned to this user
+            user = User.objects.get(id=user_id)
+            assigned_groups = user.groups.values_list('id', flat=True)  # Get IDs of assigned groups
+
+            return JsonResponse({"groups": list(assigned_groups)})
+
+        except User.DoesNotExist:
+            return JsonResponse({"message": "User not found."}, status=400)
