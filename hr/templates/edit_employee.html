@@ -12,7 +12,7 @@
     <h2 class="mb-4 form-heading">Update Employee</h2>
     <form method="POST" id="employee-form" enctype="multipart/form-data">
       {% csrf_token %}
-      
+      <span class="text-danger">*</span>    
       <div class="card mb-4">
         <div class="card-header">
           <h5 class="mb-0">Basic Information</h5>
@@ -79,40 +79,21 @@
               <input type="number" class="form-control" id="salary" value="{{ employee.salary|default:0 }}" name="salary" placeholder="Salary" />
             </div>
             <div class="col-md-4">
-              <label for="image">Image <span class="text-danger">*</span></label>
-              <input type="file" class="form-control" id="image" name="image" />
-              {% if employee.image %}
-                <small class="text-muted">Current: {{ employee.image.name }}</small>
-              {% endif %}
+              <label for="qualification">Qualification <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" value="{{ employee.qualification|default:'' }}" id="qualification" name="qualification" placeholder="Enter Qualification" />
             </div>
           </div>
         </div>
         <div class="card-body">
           <div class="row">
-            <div class="col-md-4">
-              <label for="qualification">Qualification <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" value="{{ employee.qualification|default:'' }}" id="qualification" name="qualification" placeholder="Enter Qualification" />
-            </div> 
             <div class="col-md-4">
               <label for="country">Country <span class="text-danger">*</span></label>
               <input type="text" class="form-control" value="{{ employee.country|default:'India' }}" id="country" name="country" placeholder="Enter Country" />
             </div> 
             <div class="col-md-4">
-              <label for="report_to">Report to <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" value="{{ employee.report_to|default:'' }}" id="report_to" name="report_to" placeholder="Enter Report to" />
-            </div>          
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
               <label for="personal_contact">Personal Contact <span class="text-danger">*</span></label>
               <input type="number" class="form-control" value="{{ employee.personal_contact|default:'' }}" id="personal_contact" name="personal_contact" placeholder="Enter Personal Contact" />
-            </div>
-            <div class="col-md-4">
-              <label for="date_of_joining">Date of Joining <span class="text-danger">*</span></label>
-              <input type="datetime-local" class="form-control" value="{{ employee.date_of_joining|date:'Y-m-d\TH:i'|default:'' }}" id="date_of_joining" name="date_of_joining" />
-            </div>
+            </div>         
           </div>
         </div>
       </div>
@@ -124,12 +105,12 @@
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="sector">Sector <span class="text-danger">*</span></label>
-              <select class="form-control" id="sector" name="sector" required>
-                <option value="" disabled>Select Sector</option>
-                {% for sector in sector_detail %}
-                  <option value="{{ sector.id }}" {% if employee.sector.id == sector.id %}selected{% endif %}>
-                    {{ sector.name }}
+              <label for="warehouse">Warehouse <span class="text-danger">*</span></label>
+              <select class="form-control" id="warehouse" name="warehouse" required>
+                <option value="" disabled>Select Warehouse</option>
+                {% for warehouse in warehouse_detail %}
+                  <option value="{{ warehouse.id }}" {% if employee.warehouse.id == warehouse.id %}selected{% endif %}>
+                    {{ warehouse.name }}
                   </option>
                 {% endfor %}
               </select>
@@ -197,6 +178,25 @@
               <div class="form-checkbox">
                 <input type="checkbox" class="form-check-input" id="driving_license" name="driving_license" {% if employee.driving_license %}checked{% endif %} style="height: 30px;width: 60px;" />
               </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="report_to">Report to </label>
+              <input type="text" class="form-control" value="{{ employee.report_to|default:'' }}" id="report_to" name="report_to" placeholder="Enter Report to" />
+            </div> 
+            <div class="col-md-4">
+              <label for="date_of_joining">Date of Joining </label>
+              <input type="date" class="form-control" value="{{ employee.date_of_joining|date:'Y-m-d'|default:'' }}" id="date_of_joining" name="date_of_joining" />
+            </div>
+            <div class="col-md-4">
+              <label for="image">Image</label>
+              <input type="file" class="form-control" id="image" name="image" />
+              {% if employee.image %}
+                <small class="text-muted">Current: {{ employee.image.name }}</small>
+              {% endif %}
             </div>
           </div>
         </div>

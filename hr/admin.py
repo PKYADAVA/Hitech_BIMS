@@ -11,17 +11,13 @@ from hr.models import (
     Group,
     LeaveSelectedDate,
     Payroll,
-    Sector,
 )
-
-@admin.register(Sector)
-class SectorAdmin(admin.ModelAdmin):
-    list_display = ("id", "name")
 
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
     list_display = ("id", "name")
+
 
 @admin.register(Designation)
 class DesignationAdmin(admin.ModelAdmin):
@@ -56,7 +52,7 @@ class EmployeeAdmin(admin.ModelAdmin):
         "country",
         "correspondence_address",
         "designation",
-        "sector",
+        "warehouse",
         "group",
         "salary",
         "salary_type",
@@ -93,11 +89,30 @@ class AttendanceAdmin(admin.ModelAdmin):
     register attendance models
     """
 
-    list_display = ("employee", "date", "check_in_time", "check_out_time", "status","created_date")
+    list_display = (
+        "employee",
+        "date",
+        "check_in_time",
+        "check_out_time",
+        "status",
+        "created_date",
+    )
+
 
 @admin.register(Payroll)
 class PayrollAdmin(admin.ModelAdmin):
     """
     register payroll models
     """
-    list_display = ("employee", "month", "year","gross_salary","deductions","net_salary","total_working_days","payable_salary", "created_date")
+
+    list_display = (
+        "employee",
+        "month",
+        "year",
+        "gross_salary",
+        "deductions",
+        "net_salary",
+        "total_working_days",
+        "payable_salary",
+        "created_date",
+    )

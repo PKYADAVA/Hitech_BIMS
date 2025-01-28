@@ -1,10 +1,10 @@
 $(document).ready(function () {
     const requiredFields = [
-        'full_name', 'father_name',,'image','report_to',
+        'full_name', 'father_name',
         'date_of_birth', 'designation', 'salary',
         'qualification','personal_contact',
-        'country', 'sector', 'group',
-        'salary_type', 'date_of_joining', 
+        'country', 'warehouse', 'group',
+        'salary_type', 
     ];
     function removeError(field) {
         $(`#${field}`)

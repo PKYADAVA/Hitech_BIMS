@@ -69,11 +69,12 @@
                 {% comment %} <td>{{ employee.advance }}</td> {% endcomment %}
                 <td>{{ employee.personal_contact }}</td>
                 <td>{{ employee.emergency_contact }}</td>
-                <td id="statusCell-{{ employee.id }}" style="background-color: {% if employee.relieve %}#874848{% else %}#609160{% endif %}; color: #fff;">
+
+                <td id="statusCell-{{ employee.id }}">
                     {% if employee.relieve %}
-                    Yes
+                    <span class="badge bg-danger">Yes</span>
                     {% else %}
-                    No
+                    <span class="badge bg-success">No</span>
                     {% endif %}
                 </td>
                 <td>{% if employee.image %}

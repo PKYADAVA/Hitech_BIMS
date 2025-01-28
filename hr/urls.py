@@ -37,9 +37,15 @@ urlpatterns = [
         EmployeeLeaveDashboard.as_view(),
         name="employee_leave_details",
     ),
-    path("employee/attendance/list/", EmployeeAttendanceListAPIView.as_view(), name="employee_attendance"),
-    path("attendance/", EmployeeAttendance.as_view(), name="attendance"),  # for single employee attendance
-    path("attendance/<int:id>/",EmployeeAttendance.as_view(), name="attendance"),
+    path(
+        "employee/attendance/list/",
+        EmployeeAttendanceListAPIView.as_view(),
+        name="employee_attendance",
+    ),
+    path(
+        "attendance/", EmployeeAttendance.as_view(), name="attendance"
+    ),  # for single employee attendance
+    path("attendance/<int:id>/", EmployeeAttendance.as_view(), name="attendance"),
     path("payroll/", EmployeePayrollDashboardView.as_view(), name="payroll"),
 ]
 if settings.DEBUG:  # Only serve media files in development
