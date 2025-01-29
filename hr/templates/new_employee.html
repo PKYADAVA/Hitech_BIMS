@@ -77,37 +77,21 @@
               <input type="number" class="form-control" id="salary" name="salary" placeholder="Salary" />
             </div>
             <div class="col-md-4">
-              <label for="image">Image <span class="text-danger">*</span></label>
-              <input type="file" class="form-control" id="image" name="image" />
-            </div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
               <label for="qualification">Qualification <span class="text-danger">*</span></label>
               <input type="text" class="form-control" id="qualification" name="qualification" placeholder="Enter Qualification" />
             </div> 
-            <div class="col-md-4">
-              <label for="country">Country <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="country" name="country" placeholder="Enter Country" />
-            </div> 
-            <div class="col-md-4">
-              <label for="report_to">Report to <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Enter Report to" />
-            </div>          
           </div>
         </div>
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="personal_contact">Personal Contact</label>
-              <input type="number" class="form-control" id="personal_contact" name="personal_contact" placeholder="Enter Personal Contact" />
+              <label for="country">Country <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="country" name="country" placeholder="Enter Country" />
             </div>
             <div class="col-md-4">
-              <label for="date_of_joining">Date of Joining</label>
-              <input type="datetime-local" class="form-control" id="date_of_joining" name="date_of_joining" />
-            </div>
+              <label for="personal_contact">Personal Contact <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="personal_contact" name="personal_contact" placeholder="Enter Personal Contact" />
+            </div>         
           </div>
         </div>
       </div>
@@ -119,11 +103,11 @@
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="sector">Sector <span class="text-danger">*</span></label>
-              <select class="form-control" id="sector" name="sector" required>
-                <option value="" disabled selected>Select Sector</option>
-                {% for sector in sector_detail %}
-                  <option value="{{ sector.id }}">{{ sector.name }}</option>
+              <label for="warehouse">Warehouse <span class="text-danger">*</span></label>
+              <select class="form-control" id="warehouse" name="warehouse" required>
+                <option value="" disabled selected>Select Warehouse</option>
+                {% for warehouse in warehouse_detail %}
+                  <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -190,6 +174,21 @@
             </div>
           </div>
         </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <label for="report_to">Report to </label>
+              <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Enter Report to" />
+            </div> 
+            <div class="col-md-4">
+              <label for="date_of_joining">Date of Joining</label>
+              <input type="date" class="form-control" id="date_of_joining" name="date_of_joining" />
+            </div>
+            <div class="col-md-4">
+              <label for="image">Image </label>
+              <input type="file" class="form-control" id="image" name="image" />
+            </div>
+          </div>
       </div>
 
       <div class="card mb-4">

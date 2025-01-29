@@ -7,21 +7,16 @@ from calendar import monthrange
 from datetime import date
 from django.db import models
 from django.contrib.auth.models import User
-
-class Sector(models.Model):
-    """Represents a sector an employee belongs to."""
-    name = models.CharField(max_length=100, unique=True)
-
-    def __str__(self):
-        return self.name
-
+from inventory.models import Warehouse
 
 class Group(models.Model):
     """Represents a group an employee belongs to."""
+
     name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.name
+
 
 class Designation(models.Model):
     """repersently designates an organization"""
@@ -41,7 +36,7 @@ class Employee(models.Model):
     """Represents an employee with detailed personal and job-related information."""
 
     user = models.OneToOneField(
-       User, on_delete=models.SET_NULL, related_name="employee", null=True
+        User, on_delete=models.SET_NULL, related_name="employee", null=True
     )
     full_name = models.CharField(max_length=100, blank=True, null=True)
     title = models.CharField(
@@ -83,8 +78,8 @@ class Employee(models.Model):
         blank=True,
         related_name="employees",
     )
-    sector = models.ForeignKey(
-        Sector,
+    warehouse = models.ForeignKey(
+        Warehouse,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -113,7 +108,7 @@ class Employee(models.Model):
     savings = models.DecimalField(
         max_digits=10, decimal_places=2, default=0.00, null=True, blank=True
     )
-    date_of_joining = models.DateTimeField(null=True, blank=True)
+    date_of_joining = models.DateField(null=True, blank=True)
     report_to = models.CharField(max_length=100, blank=True, null=True)
     salary_account = models.CharField(max_length=20, blank=True, null=True)
     bank_name = models.CharField(max_length=100, blank=True, null=True)
@@ -231,10 +226,14 @@ class Attendance(models.Model):
     def __str__(self):
         """Returns a string representation of this object with the given options as a string."""
         return f"{self.employee.full_name} - {self.date} ({self.status})"
-    
+
+
 class Payroll(models.Model):
     """Represent a payroll for a given employee"""
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="payrolls")
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="payrolls"
+    )
     month = models.IntegerField()
     year = models.IntegerField()
     gross_salary = models.DecimalField(max_digits=10, decimal_places=2)
@@ -247,7 +246,7 @@ class Payroll(models.Model):
     def __str__(self):
         """Returns a string representation of this object with the given fields."""
         return f"{self.employee.full_name} - {self.month}/{self.year}"
-    
+
     def calculate_total_working_days(self):
         """Calculate total working days for the payroll month."""
         # Get the number of days in the specified month
@@ -270,7 +269,7 @@ class Payroll(models.Model):
         leave_days = leave_records.count()
 
         # Calculate total working days
-        total_working_days = present_days + first_half_days + second_half_days + leave_days
+        total_working_days = (
+            present_days + first_half_days + second_half_days + leave_days
+        )
         return total_working_days
-
-
