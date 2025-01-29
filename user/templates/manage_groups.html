@@ -9,93 +9,150 @@
 {% block content %}
 
 {% include '_user_management_subnavbar.html' with active_tab='user_groups' %}
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow-lg">
-                <div class="card-header bg-primary text-white text-center">
-                    <h4 class="mb-0">Manage User Groups</h4>
-                </div>
-                <div class="card-body">
-                    <form id="groupForm" method="post">
-                        {% csrf_token %}
-                        
-                        <!-- Group Name Field -->
-                        <div class="mb-4">
-                            <label for="name" class="form-label fw-bold">Group Name</label>
-                            <input type="text" 
-                                   name="name" 
-                                   id="name" 
-                                   class="form-control form-control-lg" 
-                                   placeholder="Enter group name" 
-                                   required>
-                        </div>
-                        
-                        <!-- Accordion for Permissions Grouped by App (Two per row) -->
-                        <div class="accordion" id="permissionsAccordion">
-                            <div class="row">
-                                {% for app, permissions in grouped_permissions.items %}
-                                    <div class="col-md-6">
-                                        <div class="accordion-item">
-                                            <h2 class="accordion-header" id="heading-{{ app }}">
-                                                <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" 
-                                                        type="button" 
-                                                        data-bs-toggle="collapse" 
-                                                        data-bs-target="#collapse-{{ app }}" 
-                                                        aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" 
-                                                        aria-controls="collapse-{{ app }}">
-                                                    {{ app|capfirst }} Module Permissions
-                                                </button>
-                                            </h2>
-                                            <div id="collapse-{{ app }}" 
-                                                 class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" 
-                                                 aria-labelledby="heading-{{ app }}" 
-                                                 data-bs-parent="#permissionsAccordion">
-                                                <div class="accordion-body" style="max-height: 300px; overflow-y: auto;">
-                                                
-                                                    <!-- Select All Checkbox for this app -->
-                                                    <div class="form-check mb-3">
-                                                        <input type="checkbox" class="form-check-input select-all" id="select_all_{{ app }}">
-                                                        <label class="form-check-label" for="select_all_{{ app }}">
-                                                            Select All
-                                                        </label>
-                                                    </div>
 
-                                                    {% for permission in permissions %}
-                                                    <div class="form-check">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            class="form-check-input perm-checkbox" 
-                                                            id="perm_{{ permission.id }}" 
-                                                            name="permissions" 
-                                                            value="{{ permission.id }}">
-                                                        <label for="perm_{{ permission.id }}" class="form-check-label">
-                                                            {{ permission.name }}
-                                                        </label>
-                                                    </div>
-                                                    {% endfor %}
-                                                    
+
+<!-- Button to Open the Modal -->
+<div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+        <i class="bi bi-plus-circle me-1"></i> Create New Group
+    </button>
+</div>
+
+<!-- Create Group Modal -->
+<div class="modal fade" id="createGroupModal" tabindex="-1" aria-labelledby="createGroupModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="createGroupModalLabel">Create New Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="groupForm" method="post">
+                    {% csrf_token %}
+                    
+                    <!-- Group Name Field -->
+                    <div class="mb-4">
+                        <label for="name" class="form-label fw-bold">Group Name</label>
+                        <input type="text" 
+                               name="name" 
+                               id="name" 
+                               class="form-control form-control-lg" 
+                               placeholder="Enter group name" 
+                               required>
+                    </div>
+                    
+                    <!-- Accordion for Permissions -->
+                    <div class="accordion" id="permissionsAccordion">
+                        <div class="row">
+                            {% for app, permissions in grouped_permissions.items %}
+                                <div class="col-md-6">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="heading-{{ app }}">
+                                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#collapse-{{ app }}" 
+                                                    aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" 
+                                                    aria-controls="collapse-{{ app }}">
+                                                {{ app|capfirst }} Module Permissions
+                                            </button>
+                                        </h2>
+                                        <div id="collapse-{{ app }}" 
+                                             class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" 
+                                             aria-labelledby="heading-{{ app }}" 
+                                             data-bs-parent="#permissionsAccordion">
+                                            <div class="accordion-body" style="max-height: 300px; overflow-y: auto;">
+                                            
+                                                <!-- Select All Checkbox for this app -->
+                                                <div class="form-check mb-3">
+                                                    <input type="checkbox" class="form-check-input select-all" id="select_all_{{ app }}">
+                                                    <label class="form-check-label" for="select_all_{{ app }}">
+                                                        Select All
+                                                    </label>
                                                 </div>
+
+                                                {% for permission in permissions %}
+                                                <div class="form-check">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        class="form-check-input perm-checkbox" 
+                                                        id="perm_{{ permission.id }}" 
+                                                        name="permissions" 
+                                                        value="{{ permission.id }}">
+                                                    <label for="perm_{{ permission.id }}" class="form-check-label">
+                                                        {{ permission.name }}
+                                                    </label>
+                                                </div>
+                                                {% endfor %}
+                                                
                                             </div>
                                         </div>
                                     </div>
-                                {% endfor %}
-                            </div>
+                                </div>
+                            {% endfor %}
                         </div>
+                    </div>
 
-                        <!-- Submit Button -->
-                        <div class="d-grid mt-4">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="bi bi-plus-circle me-2"></i>Create Group
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                    <!-- Submit Button -->
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-check-circle me-2"></i> Save Group
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 </div>
-<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+<!-- Existing Groups Table -->
+<div class="mt-5">
+    <h4 class="text-center mb-3">Existing User Groups</h4>
+    
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+            <thead class="table-primary text-center">
+                <tr>
+                    <th style="width: 30%;">Group Name</th>
+                    <th style="width: 60%;">Permissions</th>
+                    <th style="width: 10%;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in groups_with_permissions %}
+                <tr>
+                    <td class="fw-bold text-center align-middle">{{ group.name }}</td>
+                    <td>
+                        <div style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+                            <ul class="list-unstyled mb-0">
+                                {% for permission in group.permissions %}
+                                    <li>• {{ permission.name }}</li>
+                                {% empty %}
+                                    <li class="text-muted">No permissions assigned</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </td>
+                    <td class="text-center align-middle">
+                        {% comment %} <button class="btn btn-sm btn-warning edit-group" data-group="{{ group.name }}" data-group-id="{{ group.id }}">
+                            <i class="bi bi-pencil-square"></i> Edit
+                        </button> {% endcomment %}
+                        <button class="btn btn-sm btn-danger delete-group" data-group="{{ group.name }}" data-group-id="{{ group.id }}">
+                            <i class="bi bi-trash"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="text-center text-muted">No groups available.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
 <script>
    
         $(document).ready(function () {
@@ -132,6 +189,34 @@
                     },
                     error: function (xhr, status, error) {
                         alert("An error occurred: " + xhr.responseText || "Please try again.");
+                    }
+                });
+            });
+            $(".delete-group").on("click", function () {
+                let groupId = $(this).data("group-id");  // Get group ID
+                let row = $(this).closest("tr");  // Select row to remove after deletion
+                console.log(groupId);
+                
+                // Show Confirmation Dialog
+                if (!confirm("Are you sure you want to delete this group?")) {
+                    return;
+                }
+        
+                $.ajax({
+                    url: "{% url 'delete_group' %}",  // Django URL (configure in urls.py)
+                    type: "POST",
+                    data: {
+                        group_id: groupId,
+                        csrfmiddlewaretoken: "{{ csrf_token }}"  // Pass CSRF token for security
+                    },
+                    success: function (response) {
+                        alert(response.message);  // Show success message
+                        row.fadeOut(500, function () { 
+                            $(this).remove();  // Remove row from table
+                        });
+                    },
+                    error: function (xhr) {
+                        alert("Error deleting group: " + xhr.responseJSON.error);
                     }
                 });
             });

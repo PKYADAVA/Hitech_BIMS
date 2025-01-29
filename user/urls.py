@@ -16,6 +16,7 @@ urlpatterns = [
     path('create_user_temp/', views.create_user, name='create_user'),
     path('assign_permission_temp/', views.assign_groups, name='assign_groups'),
     path('manage_groups/', views.manage_groups, name='user_groups'),
+    path('delete_group/', views.delete_group, name='delete_group'),
     path('get-assigned-groups/', views.get_assigned_groups, name='get_assigned_groups'),
 
 ]

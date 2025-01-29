@@ -159,6 +159,7 @@ def assign_groups(request):
     return render(request, "assign_permission.html", context)
 
 
+@login_required
 def manage_groups(request):
     if request.method == "POST":
         group_name = request.POST.get("name")
@@ -176,7 +177,7 @@ def manage_groups(request):
             )
         return JsonResponse({"error": "Group name is required."}, status=400)
 
-    # Group permissions by their app label, excluding system apps
+    # Exclude system apps
     excluded_apps = ["admin", "auth", "contenttypes", "sessions"]
     permissions = Permission.objects.select_related("content_type").all()
     grouped_permissions = defaultdict(list)
@@ -186,16 +187,25 @@ def manage_groups(request):
         if app_label not in excluded_apps:  # Exclude system apps
             grouped_permissions[app_label].append(perm)
 
+    # Fetch all groups and their assigned permissions
+    groups_with_permissions = []
+    groups = Group.objects.prefetch_related("permissions").all()
+
+    for group in groups:
+        groups_with_permissions.append({
+            "name": group.name,
+            "id": group.id,
+            "permissions": list(group.permissions.values("id", "name"))
+        })
+
     return render(
         request,
         "manage_groups.html",
         {
-            "grouped_permissions": dict(
-                grouped_permissions
-            )  # Convert defaultdict to a regular dict
+            "grouped_permissions": dict(grouped_permissions),
+            "groups_with_permissions": groups_with_permissions  # Pass groups and permissions to the template
         },
     )
-
 
 @login_required
 def get_assigned_groups(request):
@@ -211,3 +221,17 @@ def get_assigned_groups(request):
 
         except User.DoesNotExist:
             return JsonResponse({"message": "User not found."}, status=400)
+        
+
+@login_required
+def delete_group(request):
+    if request.method == "POST":
+        group_id = request.POST.get("group_id")
+
+        try:
+            group = Group.objects.get(id=group_id)
+            group.delete()
+            return JsonResponse({"message": "Group deleted successfully."})
+
+        except Group.DoesNotExist:
+            return JsonResponse({"error": "Group not found."}, status=400)
