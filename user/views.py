@@ -7,6 +7,7 @@ from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import Group, Permission
+from django.shortcuts import get_object_or_404
 
 from hr.models import Employee
 from .models import UserProfile
@@ -146,14 +147,17 @@ def create_user(request):
 @login_required
 def assign_groups(request):
     if request.method == "POST":
-        user_id = request.POST.get("user")
-        groups = request.POST.getlist("groups[]")
+        user = get_object_or_404(User, id=request.POST.get('user'))
+        selected_groups = request.POST.getlist('groups[]')
 
-        user = User.objects.get(id=user_id)
         user.groups.clear()
-        user.groups.set(groups)
-        return JsonResponse({"message": "Groups assigned successfully."})
+        for group_id in selected_groups:
+            user.groups.add(Group.objects.get(id=group_id))
 
+        return JsonResponse({
+            'message': 'Groups updated successfully.',
+            'updated_groups_html': "".join(f"<span class='badge bg-info'>{g.name}</span> " for g in user.groups.all())
+        })
     context = {"users": User.objects.all(), "groups": Group.objects.all()}
 
     return render(request, "assign_permission.html", context)
@@ -209,18 +213,15 @@ def manage_groups(request):
 
 @login_required
 def get_assigned_groups(request):
-    if request.method == "GET":
-        user_id = request.GET.get("user_id")
+    user_id = request.GET.get('user_id')
+    user = get_object_or_404(User, id=user_id)
+    assigned_groups = list(user.groups.values_list('id', flat=True))
+    all_groups = list(Group.objects.values('id', 'name'))
 
-        try:
-            # Get the user and the groups assigned to this user
-            user = User.objects.get(id=user_id)
-            assigned_groups = user.groups.values_list('id', flat=True)  # Get IDs of assigned groups
-
-            return JsonResponse({"groups": list(assigned_groups)})
-
-        except User.DoesNotExist:
-            return JsonResponse({"message": "User not found."}, status=400)
+    return JsonResponse({
+        'groups': assigned_groups,
+        'all_groups': all_groups
+    })
         
 
 @login_required
