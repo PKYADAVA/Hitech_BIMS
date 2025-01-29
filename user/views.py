@@ -156,7 +156,7 @@ def assign_groups(request):
 
         return JsonResponse({
             'message': 'Groups updated successfully.',
-            'updated_groups_html': "".join(f"<span class='badge bg-info'>{g.name}</span> " for g in user.groups.all())
+            'updated_groups_html': "".join(f"<span class='badge bg-info text-dark px-2 py-1'>{g.name}</span> " for g in user.groups.all())
         })
     context = {"users": User.objects.all(), "groups": Group.objects.all()}
 
