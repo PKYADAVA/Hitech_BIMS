@@ -114,7 +114,11 @@ def update_password(request):
 
 @login_required
 def create_user(request):
-    context = {"users": User.objects.all(), "employees": Employee.objects.all(), "groups": Group.objects.all()}
+    context = {
+        "users": User.objects.all(),
+        "employees": Employee.objects.filter(user__isnull=False).all(),
+        "groups": Group.objects.all(),
+    }
 
     if request.method == "POST":
         employee_id = request.POST.get("employee")
@@ -151,17 +155,22 @@ def create_user(request):
 @login_required
 def assign_groups(request):
     if request.method == "POST":
-        user = get_object_or_404(User, id=request.POST.get('user'))
-        selected_groups = request.POST.getlist('groups[]')
+        user = get_object_or_404(User, id=request.POST.get("user"))
+        selected_groups = request.POST.getlist("groups[]")
 
         user.groups.clear()
         for group_id in selected_groups:
             user.groups.add(Group.objects.get(id=group_id))
 
-        return JsonResponse({
-            'message': 'Groups updated successfully.',
-            'updated_groups_html': "".join(f"<span class='badge bg-info text-dark px-2 py-1'>{g.name}</span> " for g in user.groups.all())
-        })
+        return JsonResponse(
+            {
+                "message": "Groups updated successfully.",
+                "updated_groups_html": "".join(
+                    f"<span class='badge bg-info text-dark px-2 py-1'>{g.name}</span> "
+                    for g in user.groups.all()
+                ),
+            }
+        )
     context = {"users": User.objects.all(), "groups": Group.objects.all()}
 
     return render(request, "assign_permission.html", context)
@@ -200,33 +209,33 @@ def manage_groups(request):
     groups = Group.objects.prefetch_related("permissions").all()
 
     for group in groups:
-        groups_with_permissions.append({
-            "name": group.name,
-            "id": group.id,
-            "permissions": list(group.permissions.values("id", "name"))
-        })
+        groups_with_permissions.append(
+            {
+                "name": group.name,
+                "id": group.id,
+                "permissions": list(group.permissions.values("id", "name")),
+            }
+        )
 
     return render(
         request,
         "manage_groups.html",
         {
             "grouped_permissions": dict(grouped_permissions),
-            "groups_with_permissions": groups_with_permissions  # Pass groups and permissions to the template
+            "groups_with_permissions": groups_with_permissions,  # Pass groups and permissions to the template
         },
     )
 
+
 @login_required
 def get_assigned_groups(request):
-    user_id = request.GET.get('user_id')
+    user_id = request.GET.get("user_id")
     user = get_object_or_404(User, id=user_id)
-    assigned_groups = list(user.groups.values_list('id', flat=True))
-    all_groups = list(Group.objects.values('id', 'name'))
+    assigned_groups = list(user.groups.values_list("id", flat=True))
+    all_groups = list(Group.objects.values("id", "name"))
 
-    return JsonResponse({
-        'groups': assigned_groups,
-        'all_groups': all_groups
-    })
-        
+    return JsonResponse({"groups": assigned_groups, "all_groups": all_groups})
+
 
 @login_required
 def delete_group(request):
@@ -240,15 +249,15 @@ def delete_group(request):
 
         except Group.DoesNotExist:
             return JsonResponse({"error": "Group not found."}, status=400)
-        
+
 
 @login_required
 def user_analytics(request):
-    return render(request, "user_analytics.html")       
+    return render(request, "user_analytics.html")
 
 
 def user_analytics_data(request):
-    """ Return analytics data as JSON for jQuery AJAX """
+    """Return analytics data as JSON for jQuery AJAX"""
 
     # User Registrations Per Day (Last 30 Days)
     today = localtime().date()
@@ -256,49 +265,61 @@ def user_analytics_data(request):
 
     registrations = (
         User.objects.filter(date_joined__date__gte=past_30_days)
-        .extra(select={'day': "date(date_joined)"})
-        .values('day')
-        .annotate(count=Count('id'))
-        .order_by('day')
+        .extra(select={"day": "date(date_joined)"})
+        .values("day")
+        .annotate(count=Count("id"))
+        .order_by("day")
     )
 
-    registration_dates = [r['day'].strftime("%Y-%m-%d") for r in registrations]
-    registration_counts = [r['count'] for r in registrations]
+    registration_dates = [r["day"].strftime("%Y-%m-%d") for r in registrations]
+    registration_counts = [r["count"] for r in registrations]
 
     # User Role Distribution
     roles = {
-        "Regular Users": User.objects.filter(is_staff=False, is_superuser=False).count(),
+        "Regular Users": User.objects.filter(
+            is_staff=False, is_superuser=False
+        ).count(),
         "Staff Users": User.objects.filter(is_staff=True, is_superuser=False).count(),
-        "Super Admins": User.objects.filter(is_superuser=True).count()
+        "Super Admins": User.objects.filter(is_superuser=True).count(),
     }
 
     role_labels = list(roles.keys())
     role_counts = list(roles.values())
 
     # Users Per Group
-    groups = Group.objects.annotate(user_count=Count('user'))
+    groups = Group.objects.annotate(user_count=Count("user"))
     group_labels = [g.name for g in groups]
     group_counts = [g.user_count for g in groups]
 
     # Last Login Data
-    users = User.objects.all().values("id", "username", "email", "last_login", "is_active")
+    users = User.objects.all().values(
+        "id", "username", "email", "last_login", "is_active"
+    )
     user_data = []
     for user in users:
-        last_login = localtime(user['last_login']).strftime("%Y-%m-%d %H:%M:%S") if user['last_login'] else "Never"
-        user_data.append({
-            "id": user['id'],
-            "username": user['username'],
-            "email": user['email'],
-            "last_login": last_login,
-            "status": "Active" if user['is_active'] else "Inactive"
-        })
+        last_login = (
+            localtime(user["last_login"]).strftime("%Y-%m-%d %H:%M:%S")
+            if user["last_login"]
+            else "Never"
+        )
+        user_data.append(
+            {
+                "id": user["id"],
+                "username": user["username"],
+                "email": user["email"],
+                "last_login": last_login,
+                "status": "Active" if user["is_active"] else "Inactive",
+            }
+        )
 
-    return JsonResponse({
-        'registration_dates': registration_dates,
-        'registration_counts': registration_counts,
-        'role_labels': role_labels,
-        'role_counts': role_counts,
-        'group_labels': group_labels,
-        'group_counts': group_counts,
-        'users': user_data
-    })
+    return JsonResponse(
+        {
+            "registration_dates": registration_dates,
+            "registration_counts": registration_counts,
+            "role_labels": role_labels,
+            "role_counts": role_counts,
+            "group_labels": group_labels,
+            "group_counts": group_counts,
+            "users": user_data,
+        }
+    )
