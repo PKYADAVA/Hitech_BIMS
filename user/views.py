@@ -110,7 +110,7 @@ def update_password(request):
 
 @login_required
 def create_user(request):
-    context = {"employees": Employee.objects.all(), "groups": Group.objects.all()}
+    context = {"users": User.objects.all(), "employees": Employee.objects.all(), "groups": Group.objects.all()}
 
     if request.method == "POST":
         employee_id = request.POST.get("employee")
