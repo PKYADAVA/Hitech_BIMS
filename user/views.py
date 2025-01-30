@@ -236,3 +236,8 @@ def delete_group(request):
 
         except Group.DoesNotExist:
             return JsonResponse({"error": "Group not found."}, status=400)
+        
+
+@login_required
+def user_analytics(request):
+    return render(request, "user_analytics.html")        

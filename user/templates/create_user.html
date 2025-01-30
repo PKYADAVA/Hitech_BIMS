@@ -34,7 +34,13 @@
                     <td>{{ employee.full_name }}</td>
                     <td>{{ employee.designation }}</td>
                     <td>{{ employee.user.username }}</td>
-                    <td>{{ employee.user.groups }}</td>
+                    <td>
+                        {% for group in employee.user.groups.all %}
+                            <span class="badge bg-info text-dark">{{ group.name }}</span>
+                        {% empty %}
+                            <span class="text-muted">No Group</span>
+                        {% endfor %}
+                    </td>
                     <td>
                         <span class="badge {% if employee.user.is_superuser %} bg-success {% else %} bg-danger {% endif %}">
                             {{ employee.user.is_superuser|yesno:"Yes,No" }}

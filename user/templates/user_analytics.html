@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block content %}
+
+{% include '_user_management_subnavbar.html' with active_tab='user_analytics' %}
+
+
+{% endblock %}
