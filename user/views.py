@@ -1,8 +1,12 @@
 # user/views.py
 from collections import defaultdict
+from datetime import datetime
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.db.models import Count
 from django.contrib.auth.models import User
+from django.utils.timezone import localtime
+import datetime
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -240,4 +244,61 @@ def delete_group(request):
 
 @login_required
 def user_analytics(request):
-    return render(request, "user_analytics.html")        
+    return render(request, "user_analytics.html")       
+
+
+def user_analytics_data(request):
+    """ Return analytics data as JSON for jQuery AJAX """
+
+    # User Registrations Per Day (Last 30 Days)
+    today = localtime().date()
+    past_30_days = today - datetime.timedelta(days=30)
+
+    registrations = (
+        User.objects.filter(date_joined__date__gte=past_30_days)
+        .extra(select={'day': "date(date_joined)"})
+        .values('day')
+        .annotate(count=Count('id'))
+        .order_by('day')
+    )
+
+    registration_dates = [r['day'].strftime("%Y-%m-%d") for r in registrations]
+    registration_counts = [r['count'] for r in registrations]
+
+    # User Role Distribution
+    roles = {
+        "Regular Users": User.objects.filter(is_staff=False, is_superuser=False).count(),
+        "Staff Users": User.objects.filter(is_staff=True, is_superuser=False).count(),
+        "Super Admins": User.objects.filter(is_superuser=True).count()
+    }
+
+    role_labels = list(roles.keys())
+    role_counts = list(roles.values())
+
+    # Users Per Group
+    groups = Group.objects.annotate(user_count=Count('user'))
+    group_labels = [g.name for g in groups]
+    group_counts = [g.user_count for g in groups]
+
+    # Last Login Data
+    users = User.objects.all().values("id", "username", "email", "last_login", "is_active")
+    user_data = []
+    for user in users:
+        last_login = localtime(user['last_login']).strftime("%Y-%m-%d %H:%M:%S") if user['last_login'] else "Never"
+        user_data.append({
+            "id": user['id'],
+            "username": user['username'],
+            "email": user['email'],
+            "last_login": last_login,
+            "status": "Active" if user['is_active'] else "Inactive"
+        })
+
+    return JsonResponse({
+        'registration_dates': registration_dates,
+        'registration_counts': registration_counts,
+        'role_labels': role_labels,
+        'role_counts': role_counts,
+        'group_labels': group_labels,
+        'group_counts': group_counts,
+        'users': user_data
+    })
