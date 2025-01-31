@@ -43,6 +43,7 @@ ALLOWED_HOSTS = ["*"]  # Allows all domains (use with caution in production)
 # Application definition
 
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",

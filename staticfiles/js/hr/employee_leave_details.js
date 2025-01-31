@@ -1,16 +1,29 @@
 $(document).ready(function () {
     let selectedEmployeeId = null;
+    let employeeTable = null; // Define the table instance outside
 
-    // Define the table instance outside
-    let employeeTable = $('#leaveTable').DataTable({
-        paging: true,
-        searching: true,
-        ordering: true,
-        info: true,
-        lengthChange: false, 
-    });
-
-   
+    function initializeDataTable() {
+        if ($.fn.DataTable.isDataTable('#leaveTable')) {
+            $('#leaveTable').DataTable().clear().destroy(); // Properly clear and destroy
+            $('#leaveTable tbody').empty(); // Clear existing table rows
+        }
+    
+        employeeTable = $('#leaveTable').DataTable({
+            paging: true,
+            searching: true,
+            ordering: true,
+            info: true,
+            lengthChange: true,
+            pageLength: 10,
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+            language: {
+                emptyTable: "No leave records found",
+                zeroRecords: "No matching records found"
+            }
+        });
+    
+        return employeeTable;
+    }
 
     // Utility function for handling AJAX requests
     function handleAjaxRequest(url, method, data, onSuccess, onError, beforeSendMessage = "Loading...") {
@@ -164,53 +177,45 @@ $(document).ready(function () {
         }
     });
 
+    // Load datatable function
     function loaddatatable(employeeDetails) {
-        // Destroy the DataTable instance before reinitializing
         if ($.fn.DataTable.isDataTable('#leaveTable')) {
-            employeeTable.clear().destroy();
+            $('#leaveTable').DataTable().clear().destroy();
         }
-
-        // Reinitialize DataTable after clearing it
-        employeeTable = $('#leaveTable').DataTable({
-            paging: true,
-            searching: true,
-            ordering: true,
-            info: true,
-            lengthChange: false, 
-        });
-
-        const tbody = document.getElementById('employee-table-body');
-        
-        // Clear the existing rows before adding new ones
-        tbody.innerHTML = '';
+    
+        const tbody = $('#leaveTable tbody');
+        tbody.empty();
     
         employeeDetails.forEach(employee => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${employee.employee__employee_id}</td>
-                <td>${employee.employee__full_name}</td>
-                <td>${employee.reason}</td>
-                <td>${employee.leave_type}</td>
-                <td>${employee.total_days}</td>
-                <td id="statusBadge-${employee.id}">
-                    <span class="badge ${employee.status === 'Pending' ? 'bg-warning' : (employee.status === 'Approved' ? 'bg-success' : 'bg-danger')}">
-                        ${employee.status}
-                    </span>
-                </td>
-                <td class="selectedButton">
-                    <button id="employeeViewLeave-${employee.id}" type="button" class="btn btn-sm btn-primary view-leave-dates" data-bs-toggle="modal" data-id="${employee.id}">
-                        View
-                    </button>
-                    ${employee.status === 'Approved' || employee.status === 'Rejected' ?
-                        `<button id="employeeLeaveApprove-${employee.id}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="${employee.id}" disabled>Approve</button>
-                        <button id="employeeLeaveReject-${employee.id}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="${employee.id}" disabled>Reject</button>` :
-                        `<button id="employeeLeaveApprove-${employee.id}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="${employee.id}">Approve</button>
-                        <button id="employeeLeaveReject-${employee.id}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="${employee.id}">Reject</button>`
-                    }
-                </td>
+            const row = `
+                <tr>
+                    <td>${employee.employee__employee_id}</td>
+                    <td>${employee.employee__full_name}</td>
+                    <td>${employee.reason}</td>
+                    <td>${employee.leave_type}</td>
+                    <td>${employee.total_days}</td>
+                    <td id="statusBadge-${employee.id}">
+                        <span class="badge ${employee.status === 'Pending' ? 'bg-warning' : (employee.status === 'Approved' ? 'bg-success' : 'bg-danger')}">
+                            ${employee.status}
+                        </span>
+                    </td>
+                    <td class="selectedButton">
+                        <button id="employeeViewLeave-${employee.id}" type="button" class="btn btn-sm btn-primary view-leave-dates" data-bs-toggle="modal" data-id="${employee.id}">
+                            View
+                        </button>
+                        ${employee.status === 'Approved' || employee.status === 'Rejected' ?
+                            `<button id="employeeLeaveApprove-${employee.id}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="${employee.id}" disabled>Approve</button>
+                            <button id="employeeLeaveReject-${employee.id}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="${employee.id}" disabled>Reject</button>` :
+                            `<button id="employeeLeaveApprove-${employee.id}" class="btn btn-sm btn-success employeeLeaveApprove" data-id="${employee.id}">Approve</button>
+                            <button id="employeeLeaveReject-${employee.id}" class="btn btn-sm btn-danger employeeLeaveReject" data-id="${employee.id}">Reject</button>`
+                        }
+                    </td>
+                </tr>
             `;
-            tbody.appendChild(row);
-            employeeTable.row.add($(row)).draw();
+            tbody.append(row);
         });
+    
+        employeeTable = initializeDataTable(); // Re-initialize DataTable
     }
+    
 });
