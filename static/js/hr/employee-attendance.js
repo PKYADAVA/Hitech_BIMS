@@ -1,16 +1,4 @@
 $(document).ready(function(){
-    // Initialize DataTable for attendance and leave tables
-    function initializeDataTable(tableId) {
-        if (!$.fn.DataTable.isDataTable(tableId)) {
-            $(tableId).DataTable({
-                responsive: true,
-                order: [[3, 'desc']],
-                dom: 'Blfrtip',
-                buttons: ['csv', 'excel', 'pdf', 'print']
-            });
-        }
-    }
-
     // Add employee modal
     $('#addEmployeeModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);

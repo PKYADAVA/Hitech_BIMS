@@ -23,8 +23,8 @@ $(document).ready(function() {
                 dynamicloadtable(response);
             },
             error: function(xhr, status, error) {
-                // Handle error response
-                console.error('Error processing payroll: ' + error);
+                let response = JSON.parse(xhr.responseText);
+                alert(response.message);  // UI me error show karega
             }
         });
     }
@@ -75,7 +75,8 @@ $(document).ready(function() {
             option.textContent = month;
             monthSelect.appendChild(option);
         });
-    $('#generatepayroll').on('click', function(){        
+    $('#generatepayroll').on('click', function(){  
+        console.log('generatepayroll')      
         processPayroll();
     });
 });

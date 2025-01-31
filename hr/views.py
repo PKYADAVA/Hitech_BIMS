@@ -553,7 +553,7 @@ class EmployeeLeaveDashboard(View):
                 "leave_details": employee_leave_details,
                 "total_pending_leaves": total_pending_leaves,
                 "total_approved_leaves": total_approved_leaves,
-                "total_employees": Employee.objects.count(),
+                "total_employees": Employee.objects.filter(relieve=False).count(),
             }
 
             return render(request, "employee_leave_details.html", context)
@@ -696,6 +696,7 @@ class EmployeeAttendance(View):
                         )
                     ),
                 }
+                print(data)
                 return JsonResponse(data)
 
             except ValueError as e:
@@ -828,7 +829,7 @@ class EmployeePayrollDashboardView(View):
 
     def get(self, request):
         """Render the payroll dashboard page."""
-        employees = Employee.objects.all()
+        employees = Employee.objects.filter(relieve=False)
         return render(request, "employee_payroll.html", {"employee_detail": employees})
 
     def post(self, request):
