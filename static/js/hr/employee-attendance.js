@@ -227,6 +227,13 @@ $(document).ready(function(){
         var checkIn = $('#check_in').val();
         var checkOut = $('#check_out').val();
         var status = $('#status').val();
+
+        $('#attendance_id').val('');
+        $('#employee').val('');
+        $('#date').val('');
+        $('#check_in').val('');
+        $('#check_out').val('');
+        $('#status').val('');
     
         var data = {
             attendance_id: attendanceId,

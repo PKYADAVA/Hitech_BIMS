@@ -19,7 +19,6 @@ $(document).ready(function() {
                 month: month.value
             },
             success: function(response) {
-                console.log(response)
                 dynamicloadtable(response);
             },
             error: function(xhr, status, error) {
@@ -75,8 +74,7 @@ $(document).ready(function() {
             option.textContent = month;
             monthSelect.appendChild(option);
         });
-    $('#generatepayroll').on('click', function(){  
-        console.log('generatepayroll')      
+    $('#generatepayroll').on('click', function(){      
         processPayroll();
     });
 });

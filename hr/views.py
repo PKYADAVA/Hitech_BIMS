@@ -15,6 +15,7 @@ from datetime import datetime
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Q
+from django.utils.timezone import now
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -450,6 +451,7 @@ class EmployeeLeaveDashboard(View):
 
         if employee_id:
             try:
+                breakpoint()
                 # Fetch leave details for the specific employee
                 employee_leave = (
                     EmployeeLeave.objects.filter(id=employee_id)
@@ -576,16 +578,25 @@ class EmployeeLeaveDashboard(View):
             leave.status = new_status
             leave.save()
 
-            # Fetch updated counts
+            # Current month filter
+            current_month = now().month
+            current_year = now().year
+
+            # Count of pending and approved leaves in current month
             total_pending_leaves = EmployeeLeave.objects.filter(
-                status="Pending"
+                status="Pending",
+                created_date__month=current_month,
+                created_date__year=current_year,
             ).count()
+
             total_approved_leaves = EmployeeLeave.objects.filter(
-                status="Approved"
+                status="Approved",
+                created_date__month=current_month,
+                created_date__year=current_year,
             ).count()
+
             total_employees = Employee.objects.count()
 
-            # Return updated data in the response
             return JsonResponse(
                 {
                     "success": "Leave status updated successfully.",
@@ -849,7 +860,7 @@ class EmployeePayrollDashboardView(View):
                     "month": month,
                     "year": year,
                     "total_working_days": payroll.total_working_days,
-                    "payable_salary": payroll.payable_salary,
+                    "payable_salary": round(payroll.payable_salary, 2),
                     "gross_salary": payroll.gross_salary,
                 },
                 status=200,
@@ -868,40 +879,64 @@ class EmployeePayrollDashboardView(View):
 
     def generate_payroll(self, employee, year, month):
         """
-        Generate payroll for an employee based on working days.
+        Generate payroll for an employee based on attendance and leave records.
+        If the employee has no attendance or leave in the given month, set working days to 0.
         """
-        # Calculate total days in the month
+        # Get the number of days in the month
         _, total_days = monthrange(year, month)
         start_date = date(year, month, 1)
         end_date = date(year, month, total_days)
 
-        # Calculate total working days
-        working_days = 0
-        for day in range(total_days):
-            current_date = start_date + timedelta(days=day)
+        # Fetch attendance and leave records
+        attendance_records = Attendance.objects.filter(
+            employee=employee, date__range=(start_date, end_date)
+        )
+        leave_records = LeaveSelectedDate.objects.filter(
+            leave_request__employee=employee, date__range=(start_date, end_date)
+        )
 
-            # Skip weekends and holidays
-            if (
-                current_date.weekday() >= 5 or current_date
-            ):  # There seems to be a redundant condition `or current_date`
+        # Initialize working days counter
+        working_days = 0
+
+        # Iterate through each day of the month
+        for day in range(1, total_days + 1):
+            current_date = date(year, month, day)
+
+            # Skip weekends (Saturday & Sunday)
+            if current_date.weekday() in [5, 6]:  # 5 = Saturday, 6 = Sunday
                 continue
 
-            # Count attendance for the employee
-            if employee.attendance_records.filter(date=current_date).exists():
+            # Check attendance status
+            attendance = attendance_records.filter(date=current_date).first()
+            if attendance:
+                if attendance.status == "Present":
+                    working_days += 1
+                elif attendance.status in ["First Half", "Second Half"]:
+                    working_days += 0.5
+
+            # Check if the employee was on leave
+            elif leave_records.filter(date=current_date).exists():
                 working_days += 1
 
-        # Calculate payable salary
-        payable_salary = working_days * employee.daily_wage
+        # If no attendance or leave records, set working days to 0
+        if not attendance_records.exists() and not leave_records.exists():
+            working_days = 0
 
-        # Save payroll record
+        # Calculate payable salary based on working days
+        payable_salary = working_days * employee.daily_wage if working_days > 0 else 0
+
+        # Save or update payroll record
         payroll, created = Payroll.objects.update_or_create(
             employee=employee,
-            month=month,  # Pass the month as an integer (1-12)
-            year=year,  # Pass the year as an integer
+            month=month,
+            year=year,
             defaults={
                 "gross_salary": employee.salary,
-                "deductions": employee.advance,  # Example, adjust as needed
-                "net_salary": payable_salary,  # Assuming payable salary is the net salary
+                "deductions": employee.advance,  # Modify as needed
+                "net_salary": payable_salary,  # Assuming net salary is based on working days
+                "total_working_days": working_days,
+                "payable_salary": payable_salary,
             },
         )
+
         return payroll
