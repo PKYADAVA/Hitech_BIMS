@@ -4,10 +4,11 @@
 
 import random
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from django.db import models
 from django.contrib.auth.models import User
 from inventory.models import Warehouse
+
 
 class Group(models.Model):
     """Represents a group an employee belongs to."""
@@ -249,27 +250,40 @@ class Payroll(models.Model):
 
     def calculate_total_working_days(self):
         """Calculate total working days for the payroll month."""
-        # Get the number of days in the specified month
+        # Get the number of days in the month
         days_in_month = monthrange(self.year, self.month)[1]
         start_date = date(self.year, self.month, 1)
         end_date = date(self.year, self.month, days_in_month)
 
-        # Fetch attendance and leave records for the employee
+        # Count total weekdays (Monday-Friday) as working days
+        total_workable_days = sum(
+            1
+            for single_day in (
+                start_date + timedelta(days=i) for i in range(days_in_month)
+            )
+            if single_day.weekday() < 5  # 0-4 are Monday to Friday
+        )
+
+        # Fetch attendance records
         attendance_records = Attendance.objects.filter(
             employee=self.employee, date__range=(start_date, end_date)
         )
-        leave_records = LeaveSelectedDate.objects.filter(
-            leave_request__employee=self.employee, date__range=(start_date, end_date)
+
+        # Fetch approved leave records
+        approved_leaves = LeaveSelectedDate.objects.filter(
+            leave_request__employee=self.employee,
+            leave_request__status="Approved",
+            date__range=(start_date, end_date),
         )
 
-        # Count present days, half days, and leave days
+        # Count attendance details
         present_days = attendance_records.filter(status="Present").count()
         first_half_days = attendance_records.filter(status="First Half").count() * 0.5
         second_half_days = attendance_records.filter(status="Second Half").count() * 0.5
-        leave_days = leave_records.count()
+        leave_days = approved_leaves.count()  # Only approved leaves count
 
         # Calculate total working days
         total_working_days = (
-            present_days + first_half_days + second_half_days + leave_days
+            total_workable_days - leave_days + first_half_days + second_half_days
         )
-        return total_working_days
+        return max(0, total_working_days)  # Ensure it doesn't go negative

@@ -103,17 +103,17 @@ $(document).ready(function () {
                     $(`#employeeLeaveApprove-${response.leave_id}`).prop("disabled", true);
                     $(`#employeeLeaveReject-${response.leave_id}`).prop("disabled", true);
 
+                    // Optionally, update other UI elements like counts
+                    $("#total-employees-count").text(response.total_employees);
+                    $("#total-approved-leaves-count").text(response.total_approved_leaves);
+                    $("#total-pending-leaves-count").text(response.total_pending_leaves);
+
                     // Update the status badge in the table
                     const newStatusBadge = getBadgeHtml(response.new_status);
                     $(`#statusBadge-${response.leave_id}`).html(newStatusBadge);
 
                     // Hide the modal
                     $(`#${modalId}`).modal("hide");
-
-                    // Optionally, update other UI elements like counts
-                    $("#total-employees-count").text(response.total_employees);
-                    $("#total-approved-leaves-count").text(response.total_approved_leaves);
-                    $("#total-pending-leaves-count").text(response.total_pending_leaves);
                 } else {
                     console.error("Invalid response format from server:", response);
                     alert("Unexpected response format. Please contact support.");
@@ -163,10 +163,10 @@ $(document).ready(function () {
                 method: "GET",
                 data: payload,
                 success: function (response) {
+                    loaddatatable(response.leave_details);
                     $("#total-employees-count").text(response.total_employees);
                     $("#total-approved-leaves-count").text(response.total_approved_leaves);
                     $("#total-pending-leaves-count").text(response.total_pending_leaves);
-                    loaddatatable(response.leave_details);
                 },
                 error: function (xhr, status, error) {
                     console.log("Error:", error);
