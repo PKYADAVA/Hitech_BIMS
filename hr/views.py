@@ -434,6 +434,9 @@ class EmployeeLeaveRequest(View):
         return JsonResponse({"success": True, "message": "Leave marked successfully."})
 
 
+from django.db.models import Sum, Case, When, Value, FloatField, Count
+
+
 @method_decorator(login_required(login_url="login"), name="dispatch")
 @method_decorator(csrf_exempt, name="dispatch")
 class EmployeeLeaveDashboard(View):
@@ -451,7 +454,6 @@ class EmployeeLeaveDashboard(View):
 
         if employee_id:
             try:
-                breakpoint()
                 # Fetch leave details for the specific employee
                 employee_leave = (
                     EmployeeLeave.objects.filter(id=employee_id)
@@ -527,15 +529,57 @@ class EmployeeLeaveDashboard(View):
                 return JsonResponse({"error": "Invalid date format."}, status=400)
 
         else:
-            # Default behavior if no employee_id or date range is provided
             employee_leave_details = (
-                EmployeeLeave.objects.annotate(total_days=Count("selected_dates"))
-                .filter(
+                EmployeeLeave.objects.filter(
                     employee__isnull=False,
                     created_date__year=current_date.year,  # Current year
                     created_date__month=current_date.month,  # Current month
                 )
-                .prefetch_related("selected_dates")
+                .prefetch_related(
+                    "selected_dates"
+                )  # Fetch related selected_dates for each leave request
+                .annotate(
+                    total_days=Sum(
+                        Case(
+                            When(
+                                leave_type="Full Day", then=Value(1.0)
+                            ),  # Full Day = 1 day
+                            When(
+                                leave_type="First Half", then=Value(0.5)
+                            ),  # First Half = 0.5 day
+                            When(
+                                leave_type="Second Half", then=Value(0.5)
+                            ),  # Second Half = 0.5 day
+                            default=Value(0.0),  # Default to 0 if no match
+                            output_field=FloatField(),
+                        )
+                    )  # Sum leave days based on leave type
+                )
+                .annotate(
+                    total_selected_dates=Count(
+                        "selected_dates"
+                    )  # Count number of selected dates
+                )
+                .annotate(
+                    total_leave_days=Sum(
+                        Case(
+                            When(
+                                leave_type="Full Day", then=Value(1.0)
+                            ),  # Full Day = 1 day per selected date
+                            When(
+                                leave_type="First Half", then=Value(0.5)
+                            ),  # First Half = 0.5 day per selected date
+                            When(
+                                leave_type="Second Half", then=Value(0.5)
+                            ),  # Second Half = 0.5 day per selected date
+                            default=Value(0.0),  # Default to 0 if no match
+                            output_field=FloatField(),
+                        )
+                    )
+                    * Count(
+                        "selected_dates"
+                    )  # Multiply the days per leave type by the number of selected dates
+                )
             )
 
             # Count total pending and approved leaves for the current month
