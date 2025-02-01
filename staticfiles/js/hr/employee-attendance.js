@@ -233,7 +233,6 @@ $(document).ready(function(){
         $('#date').val('');
         $('#check_in').val('');
         $('#check_out').val('');
-        $('#status').val('');
     
         var data = {
             attendance_id: attendanceId,
