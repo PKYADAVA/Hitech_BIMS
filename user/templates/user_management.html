@@ -10,4 +10,14 @@
 
 {% include '_user_management_subnavbar.html' with active_tab='create_user' %}
 
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Find the active tab and trigger a click event
+      const activeTab = document.querySelector(".nav-link.active.activate");
+      if (activeTab) {
+        activeTab.click();
+      }
+    });
+  </script
+
 {% endblock %}
