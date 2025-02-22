@@ -27,7 +27,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: -1;
+         
         }
 
         .left-section img {
@@ -37,21 +37,23 @@
         }
 
         .right-section {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
+        
             padding: 20px;
             z-index: 1;
-            position: relative;
-            width: 100%;
+            position:absolute;
+        
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
 
         .card {
             border-radius: 15px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            border: 1px solid #E4E4E4;
             width: 100%;
-            max-width: 400px;
-            padding: 40px;
+            min-width:500px;
+            padding: 20px;
             background-color: rgba(255, 255, 255, 0.7); /* White with transparency */
         }
 
@@ -92,7 +94,16 @@
         .d-grid button {
             padding: 10px;
         }
-
+        .btn{
+            padding: 18px 20px!important;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 18px;
+        }
+        ::placeholder{
+            color: #6c757d;
+            
+        }
         /* Make the layout responsive */
         @media (max-width: 767px) {
             .card {
@@ -100,41 +111,57 @@
                 padding: 20px;
             }
         }
+        .form-control:focus{
+            box-shadow: none !important;
+
+        }
+        .form-control{
+            padding: 18px 20px;
+            border-radius: 30px;
+        }
+        
     </style>
 </head>
 <body>
     <div class="container">
+
+    
         <!-- Left Section for Poultry Image -->
         <div class="left-section">
             <img src="{% static 'images/istockphoto-888136924-2048x2048.jpg' %}" alt="Poultry Image">
-        </div>
-
-        <!-- Right Section for Login Form -->
-        <div class="right-section">
-            <div class="card">
-                <div class="card-body">
-                    <h2 class="card-title text-center mb-4">Login to BIMS</h2>
-                    <form method="POST" class="mb-3">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label for="username" class="form-label">Username</label>
-                            <input type="text" name="username" id="username" class="form-control" required placeholder="Enter your username">
+            <div class="right-section">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="card-title text-center mb-4">Login to BIMS</h2>
+                        <form method="POST" class="mb-3">
+                            {% csrf_token %}
+                            <div class="mb-3">
+                                <label for="username" class="form-label">Username</label>
+                                <input type="text" name="username" id="username" class="form-control" required placeholder="Enter your username">
+                            </div>
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <input type="password" name="password" id="password" class="form-control" required placeholder="Enter your password">
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success">Login</button>
+                            </div>
+                        </form>
+                        <div class="text-center footer-links">
+                            <a href="{% url 'forgot_password' %}">Forgot Password?</a>
+                            <p class="mb-0 mt-2">Don't have an account? <a href="{% url 'register' %}">Register here</a></p>
                         </div>
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Password</label>
-                            <input type="password" name="password" id="password" class="form-control" required placeholder="Enter your password">
-                        </div>
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-success">Login</button>
-                        </div>
-                    </form>
-                    <div class="text-center footer-links">
-                        <a href="{% url 'forgot_password' %}">Forgot Password?</a>
-                        <p class="mb-0 mt-2">Don't have an account? <a href="{% url 'register' %}">Register here</a></p>
                     </div>
                 </div>
             </div>
+
+          
         </div>
+
+        <!-- Right Section for Login Form -->
+        {% comment %} <div class="right-section">
+        
+        </div> {% endcomment %}
     </div>
 </body>
 </html>
