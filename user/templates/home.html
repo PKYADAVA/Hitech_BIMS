@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Home{% endblock %}
+{% block title %}Home - BIMS{% endblock %}
 
 {% block nav %}
 {% include 'main_top_navbar.html' with active_tab='home' %}
@@ -8,29 +8,35 @@
 
 {% block content %}
 <div class="container mt-4">
-    <!-- Dashboard Header Section -->
-    <div id="bimsCarousel" class="carousel slide mb-5" data-bs-ride="carousel">
+    <!-- Hero Carousel Section -->
+    <div id="bimsCarousel" class="carousel slide mb-5 shadow-lg rounded" data-bs-ride="carousel">
         <div class="carousel-inner">
             <div class="carousel-item active">
-                <div class="text-center">
-                    <h1 class="display-4 text-primary">Welcome to BIMS</h1>
-                    <p class="lead text-muted">
+                <div class="text-center p-5 bg-light rounded">
+                    <h1 class="display-4 text-primary fw-bold mb-4 animate__animated animate__fadeInDown">
+                        Welcome to BIMS
+                    </h1>
+                    <p class="lead text-muted animate__animated animate__fadeInUp">
                         BIMS is designed to record all the transactions and activities involved in a poultry farm. These solutions integrate Flock Performance, Purchases, Sales, Expenses, Feed Formulation, Feed Production, and Accounting.
                     </p>
                 </div>
             </div>
             <div class="carousel-item">
-                <div class="text-center">
-                    <h1 class="display-4 text-primary">Customizable Feed Formulas</h1>
-                    <p class="text-muted">
+                <div class="text-center p-5 bg-light rounded">
+                    <h1 class="display-4 text-primary fw-bold mb-4 animate__animated animate__fadeInDown">
+                        Customizable Feed Formulas
+                    </h1>
+                    <p class="lead text-muted animate__animated animate__fadeInUp">
                         Depending on Geographical, Climatic Conditions, Age, and Availability of Raw Materials, different Feed Formulae are adapted by Farmers. Our module helps create cost-effective solutions.
                     </p>
                 </div>
             </div>
             <div class="carousel-item">
-                <div class="text-center">
-                    <h1 class="display-4 text-primary">Comprehensive Poultry Management</h1>
-                    <p class="text-muted">
+                <div class="text-center p-5 bg-light rounded">
+                    <h1 class="display-4 text-primary fw-bold mb-4 animate__animated animate__fadeInDown">
+                        Comprehensive Poultry Management
+                    </h1>
+                    <p class="lead text-muted animate__animated animate__fadeInUp">
                         Track hen house production, vaccination schedules, cash balances, creditors, and more with ease.
                     </p>
                 </div>
@@ -48,71 +54,159 @@
 
     <!-- Dashboard Info Section -->
     <div class="dashboard-info">
-        <h2 class="text-center mb-4">BIMS Key Features</h2>
+        <h2 class="text-center mb-5 fw-bold text-primary">BIMS Key Features</h2>
         <div class="row g-4">
-            <!-- Card for Key Areas -->
+            <!-- Key Areas Card -->
             <div class="col-md-6">
-                <div class="card shadow-lg">
-                    <div class="card-header bg-success text-white">
-                        Key Areas
+                <div class="card shadow-lg h-100 border-0 hover-shadow">
+                    <div class="card-header bg-gradient-success text-white py-3">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-star me-2"></i>Key Areas
+                        </h5>
                     </div>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item">Hen house production and standards</li>
-                        <li class="list-group-item">Vaccination Schedules</li>
-                        <li class="list-group-item">Cash and Bank Balances</li>
-                        <li class="list-group-item">Creditors and Debtors</li>
-                        <li class="list-group-item">Expenditure Details</li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Hen house production and standards
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Vaccination Schedules
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Cash and Bank Balances
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Creditors and Debtors
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Expenditure Details
+                        </li>
                     </ul>
                 </div>
             </div>
 
-            <!-- Card for Additional Tracking Areas -->
+            <!-- Additional Tracking Areas Card -->
             <div class="col-md-6">
-                <div class="card shadow-lg">
-                    <div class="card-header bg-success text-white">
-                        Additional Tracking Areas
+                <div class="card shadow-lg h-100 border-0 hover-shadow">
+                    <div class="card-header bg-gradient-success text-white py-3">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-chart-line me-2"></i>Additional Tracking Areas
+                        </h5>
                     </div>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item">Employee Details</li>
-                        <li class="list-group-item">Shed Details</li>
-                        <li class="list-group-item">Flock Details</li>
-                        <li class="list-group-item">Daily Flock Entry Details</li>
-                        <li class="list-group-item">Mortality Ratio</li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Employee Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Shed Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Flock Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Daily Flock Entry Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Mortality Ratio
+                        </li>
                     </ul>
                 </div>
             </div>
         </div>
 
         <div class="row g-4 mt-4">
-            <!-- Card for Production and Sales Tracking -->
+            <!-- Production and Sales Tracking Card -->
             <div class="col-md-6">
-                <div class="card shadow-lg">
-                    <div class="card-header bg-success text-white">
-                        Production and Sales Tracking
+                <div class="card shadow-lg h-100 border-0 hover-shadow">
+                    <div class="card-header bg-gradient-success text-white py-3">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-industry me-2"></i>Production and Sales Tracking
+                        </h5>
                     </div>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item">Production Details</li>
-                        <li class="list-group-item">Feed Production Unit Details</li>
-                        <li class="list-group-item">Purchases and Sales Details</li>
-                        <li class="list-group-item">Medicine and Vaccination Details</li>
-                        <li class="list-group-item">Stock Information</li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Production Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Feed Production Unit Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Purchases and Sales Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Medicine and Vaccination Details
+                        </li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Stock Information
+                        </li>
                     </ul>
                 </div>
             </div>
 
-            <!-- Card for Financial and Bookkeeping -->
+            <!-- Financial and Bookkeeping Card -->
             <div class="col-md-6">
-                <div class="card shadow-lg">
-                    <div class="card-header bg-success text-white">
-                        Financial and Bookkeeping
+                <div class="card shadow-lg h-100 border-0 hover-shadow">
+                    <div class="card-header bg-gradient-success text-white py-3">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-book me-2"></i>Financial and Bookkeeping
+                        </h5>
                     </div>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item">Bookkeeping</li>
+                        <li class="list-group-item d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            Bookkeeping
+                        </li>
                     </ul>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .bg-gradient-success {
+        background: linear-gradient(45deg, #28a745, #20c997);
+    }
+    
+    .hover-shadow {
+        transition: all 0.3s ease;
+    }
+    
+    .hover-shadow:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 1rem 3rem rgba(0,0,0,.175)!important;
+    }
+    
+    .carousel-item {
+        min-height: 300px;
+    }
+    
+    .carousel-control-prev,
+    .carousel-control-next {
+        width: 5%;
+    }
+    
+    .list-group-item {
+        transition: all 0.2s ease;
+    }
+    
+    .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+</style>
 
 {% endblock %}
