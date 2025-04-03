@@ -1,81 +1,110 @@
 from django.contrib import admin
+from django.utils.translation import gettext_lazy as _
 from .models import FinancialYear, Schedule, ChartOfAccount, BankCode
 
 
 @admin.register(FinancialYear)
 class FinancialYearAdmin(admin.ModelAdmin):
-    list_display = ('id', 'start_date', 'end_date', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('is_active',)
+    """
+    Admin configuration for FinancialYear model.
+    
+    Provides a clean interface for managing financial years with proper validation
+    and display of important fields.
+    """
+    list_display = ('start_date', 'end_date', 'is_active', 'created_at')
+    list_filter = ('is_active', 'start_date', 'end_date')
     search_fields = ('start_date', 'end_date')
     ordering = ('-start_date',)
-    list_per_page = 25
+    list_per_page = 20
+    readonly_fields = ('created_at', 'updated_at')
+    
     fieldsets = (
-        ("Financial Year Details", {
+        (None, {
             'fields': ('start_date', 'end_date', 'is_active')
         }),
-        ("Timestamps", {
-            'fields': ('created_at', 'updated_at')
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
-    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(Schedule)
 class ScheduleAdmin(admin.ModelAdmin):
-    list_display = ('id', 'code', 'name', 'created_at', 'updated_at')
-    search_fields = ('code', 'name')
+    """
+    Admin configuration for Schedule model.
+    
+    Provides a clean interface for managing schedules with proper validation
+    and display of important fields.
+    """
+    list_display = ('code', 'name', 'description', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('code', 'name', 'description')
     ordering = ('code',)
-    list_per_page = 25
+    list_per_page = 20
+    readonly_fields = ('created_at', 'updated_at')
+    
     fieldsets = (
-        ("Schedule Details", {
+        (None, {
             'fields': ('code', 'name', 'description')
         }),
-        ("Timestamps", {
-            'fields': ('created_at', 'updated_at')
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
-    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(ChartOfAccount)
 class ChartOfAccountAdmin(admin.ModelAdmin):
-    list_display = ('id', 'code', 'description', 'type', 'status', 'schedule', 'created_at', 'updated_at')
-    list_filter = ('type', 'status')
-    search_fields = ('code', 'description', 'schedule__name')
-    autocomplete_fields = ('schedule',)
+    """
+    Admin configuration for ChartOfAccount model.
+    
+    Provides a clean interface for managing chart of accounts with proper validation
+    and display of important fields.
+    """
+    list_display = ('code', 'description', 'type', 'control_type', 'schedule', 'status', 'created_at')
+    list_filter = ('type', 'status', 'schedule', 'created_at')
+    search_fields = ('code', 'description', 'control_type')
     ordering = ('code',)
-    list_per_page = 25
+    list_per_page = 20
+    readonly_fields = ('created_at', 'updated_at')
+    
     fieldsets = (
-        ("Account Details", {
-            'fields': ('code', 'description', 'type', 'status')
+        (None, {
+            'fields': ('code', 'description', 'type', 'control_type', 'schedule', 'status')
         }),
-        ("Control and Schedule", {
-            'fields': ('control_type', 'schedule')
-        }),
-        ("Timestamps", {
-            'fields': ('created_at', 'updated_at')
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
-    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(BankCode)
 class BankCodeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'bank_code', 'bank_name', 'sector', 'email', 'phone', 'contact_person', 'created_at', 'updated_at')
-    list_filter = ('sector',)
-    search_fields = ('bank_code', 'bank_name', 'sector__name', 'email', 'phone')
-    autocomplete_fields = ('sector',)
+    """
+    Admin configuration for BankCode model.
+    
+    Provides a clean interface for managing bank codes with proper validation
+    and display of important fields.
+    """
+    list_display = ('bank_code', 'bank_name', 'sector', 'micr', 'contact_person', 'created_at')
+    list_filter = ('sector', 'created_at')
+    search_fields = ('bank_code', 'bank_name', 'micr', 'contact_person')
     ordering = ('bank_name',)
-    list_per_page = 25
+    list_per_page = 20
+    readonly_fields = ('created_at', 'updated_at')
+    
     fieldsets = (
-        ("Bank Details", {
-            'fields': ('bank_code', 'bank_name', 'sector')
+        (None, {
+            'fields': ('bank_code', 'bank_name', 'sector', 'micr')
         }),
-        ("Contact Information", {
-            'fields': ('micr', 'address', 'email', 'phone', 'fax', 'contact_person')
+        (_('Contact Information'), {
+            'fields': ('address', 'email', 'phone', 'fax', 'contact_person')
         }),
-        ("Timestamps", {
-            'fields': ('created_at', 'updated_at')
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
-    readonly_fields = ('created_at', 'updated_at')
