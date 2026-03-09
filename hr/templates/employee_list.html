@@ -1,143 +1,193 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}Employee List{% endblock title %}
+
+{% block title %}Employee List — BIMS{% endblock %}
+
 {% block nav %}
-    {% include 'main_top_navbar.html' with active_tab='hr' %}
-{% endblock nav %}
+  {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
 
 {% block body %}
-<div class="modal fade" id="relieveConfirmationModal" tabindex="-1" aria-labelledby="relieveConfirmationLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="relieveConfirmationLabel">Confirm Relieve</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p id="confirmationRelieveMessage">Are you sure you want to relieve this employee?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="confirmRelieveButton">Relieve</button>
-            </div>
-        </div>
+
+<!-- Confirm Relieve Modal -->
+<div class="modal fade" id="relieveConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header success-header">
+        <h5 class="modal-title"><i class="fas fa-user-check me-2"></i>Confirm Relieve</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmationRelieveMessage">Are you sure you want to relieve this employee?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancel
+        </button>
+        <button type="button" class="btn btn-success" id="confirmRelieveButton">
+          <i class="fas fa-user-check me-1"></i>Relieve
+        </button>
+      </div>
     </div>
+  </div>
 </div>
 
-<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-labelledby="deleteConfirmationLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="deleteConfirmationLabel">Confirm Deletion</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p id="confirmationMessage">Are you sure you want to delete this employee?</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="confirmDeleteButton">Delete</button>
-            </div>
-        </div>
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header danger-header">
+        <h5 class="modal-title"><i class="fas fa-trash me-2"></i>Confirm Deletion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmationMessage">Are you sure you want to delete this employee?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancel
+        </button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteButton">
+          <i class="fas fa-trash me-1"></i>Delete
+        </button>
+      </div>
     </div>
+  </div>
 </div>
-<div class="cstm-table" style="margin:17px;">
-    <table id="employeeTable" class="table table-bordered table-striped text-center custom-table">
-        <thead class="table-light">
-            <tr>
-                <th scope="col">Emp ID</th>
-                <th scope="col">Full Name</th>
-                <th scope="col">Designation</th>
-                <th scope="col">Salary</th>
-                <th scope="col">Salary Type</th>
-                {% comment %} <th scope="col">Advance</th> {% endcomment %}
-                <th scope="col">Personal Contact</th>
-                <th scope="col">Emergency Contact</th>
-                <th scope="col">Relieve</th>
-                <th scope="col">Profile Image</th>
-                <th scope="col">Action</th>
-            </tr>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fas fa-users"></i>
+      Employee List
+    </div>
+    <div class="page-header-subtitle">Manage and view all employee records</div>
+  </div>
+  <a href="{% url 'create_new_employee' %}" class="btn btn-primary">
+    <i class="fas fa-user-plus"></i>
+    Add Employee
+  </a>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header">
+    <i class="fas fa-table"></i>
+    All Employees
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="employeeTable" class="table table-hover table-bordered mb-0">
+        <thead>
+          <tr>
+            <th>Emp ID</th>
+            <th>Full Name</th>
+            <th>Designation</th>
+            <th>Salary</th>
+            <th>Salary Type</th>
+            <th>Personal Contact</th>
+            <th>Emergency Contact</th>
+            <th>Relieved</th>
+            <th>Photo</th>
+            <th>Actions</th>
+          </tr>
         </thead>
         <tbody>
-            {% for employee in employee_details %}
-            <tr>
-                <td><a href="{% url 'edit_employee' employee.id %}">{{ employee.employee_id }}</a></td>
-                <td>{{ employee.full_name }}</td>
-                <td>{{ employee.designation.title}}</td>
-                <td>{{ employee.salary }}</td>
-                <td>{{ employee.salary_type }}</td>
-                {% comment %} <td>{{ employee.advance }}</td> {% endcomment %}
-                <td>{{ employee.personal_contact }}</td>
-                <td>{{ employee.emergency_contact }}</td>
-
-                <td id="statusCell-{{ employee.id }}">
-                    {% if employee.relieve %}
-                    <span class="badge bg-danger">Yes</span>
-                    {% else %}
-                    <span class="badge bg-success">No</span>
-                    {% endif %}
-                </td>
-                <td>{% if employee.image %}
-                    <img src="{{ employee.image.url }}" alt="Employee Image" style="height: 50px;width:80px;">
-                  {% else %}
-                    <p>No Image Available</p>
-                  {% endif %}</td>
-                  <td>
-                    <a href="{% url 'edit_employee' employee.id %}">
-                        <button class="btn btn-outline-primary btn-sm" title="Edit">
-                            <i class="fa-regular fa-pen-to-square"></i> Edit
-                        </button>
-                    </a>
-                    {% comment %} <button class="btn btn-outline-danger btn-sm delete-btn" title="Delete" id="deleteEmployee-{{employee.id}}">
-                        <i class="fa-regular fa-trash"></i> Delete
-                    </button> {% endcomment %}
-                
-                    {% if not employee.relieve %}
-                    <button id="relieveEmployee-{{ employee.id }}" class="btn btn-outline-success btn-sm relieveEmployee"><i class="fa-solid fa-user-check"></i> Relieve</button>
-                    {% else %}
-                    <button class="btn btn-outline-secondary btn-sm" disabled><i class="fa-solid fa-user-check"></i> Relieved</button>
-                    {% endif %}
-                </td>              
-            </tr>
-            {% endfor %}
+          {% for employee in employee_details %}
+          <tr>
+            <td>
+              <a href="{% url 'edit_employee' employee.id %}" style="color:var(--primary);font-weight:600;">
+                {{ employee.employee_id }}
+              </a>
+            </td>
+            <td>{{ employee.full_name }}</td>
+            <td>{{ employee.designation.title }}</td>
+            <td>{{ employee.salary }}</td>
+            <td>
+              <span class="badge" style="background:#eff6ff;color:#1e40af;">
+                {{ employee.salary_type }}
+              </span>
+            </td>
+            <td>{{ employee.personal_contact }}</td>
+            <td>{{ employee.emergency_contact }}</td>
+            <td id="statusCell-{{ employee.id }}">
+              {% if employee.relieve %}
+                <span class="badge bg-danger">Yes</span>
+              {% else %}
+                <span class="badge bg-success">Active</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if employee.image %}
+                <img src="{{ employee.image.url }}" alt="Photo"
+                     style="height:44px;width:56px;border-radius:8px;object-fit:cover;">
+              {% else %}
+                <span class="text-muted" style="font-size:0.78rem;">No photo</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
+                <a href="{% url 'edit_employee' employee.id %}">
+                  <button class="btn btn-outline-primary btn-sm" title="Edit">
+                    <i class="fas fa-pen-to-square"></i>
+                  </button>
+                </a>
+                {% if not employee.relieve %}
+                  <button id="relieveEmployee-{{ employee.id }}"
+                          class="btn btn-outline-success btn-sm relieveEmployee"
+                          title="Relieve">
+                    <i class="fas fa-user-check"></i>
+                  </button>
+                {% else %}
+                  <button class="btn btn-secondary btn-sm" disabled title="Already Relieved">
+                    <i class="fas fa-user-check"></i>
+                  </button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
         </tbody>
-    </table>
+      </table>
+    </div>
+  </div>
 </div>
 
-{% endblock body %}
+{% endblock %}
+
 {% block js %}
 <script src="{% static 'js/hr/employee_list.js' %}"></script>
 <script>
-    $(document).ready(function () {
-        $('#myTable').DataTable({
-            paging: true,
-            searching: true,
-            ordering: true,
-            info: true,
-        });
+  $(document).ready(function () {
+    $('#employeeTable').DataTable({
+      paging: true,
+      searching: true,
+      ordering: true,
+      info: true,
+      responsive: true,
     });
+  });
 </script>
 <script>
 {% for message in messages %}
-    {% if message.tags == "error" %}
-        Toastify({
-            text: "{{ message }}",
-            duration: 3000,
-            newWindow: true,
-            gravity: "top", // `top` or `bottom`
-            positionLeft: true, // `true` or `false`
-            backgroundColor: "linear-gradient(to right, #1e81b0, #8e0000)"
-        }).showToast();
-    {% else %}
-        Toastify({
-            text: "{{ message }}",
-            duration: 3000,
-            newWindow: true,
-            gravity: "top", // `top` or `bottom`
-            positionLeft: true, // `true` or `false`
-            backgroundColor: "linear-gradient(to right,  #00b09b, #96c93d)"
-        }).showToast();
-    {% endif %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
 {% endfor %}
 </script>
-{% endblock js %}
+{% endblock %}

@@ -10,132 +10,136 @@
 
 {% include '_inventory_subnavbar.html' with active_tab='items' %}
 
-<div class="container-cstm mt-5">
-    <h2 class="text-center mb-4">Manage Items</h2>
-    <div class="row g-5">
-        <!-- Button to Open the Modal -->
-        <div class="text-end mb-3">
-            <button
-                class="btn btn-primary"
-                data-bs-toggle="modal"
-                data-bs-target="#itemFormModal"
-            >
-                Add New Item
-            </button>
-        </div>
-        <!-- Modal Structure -->
-        <div
-            class="modal fade"
-            id="itemFormModal"
-            tabindex="-1"
-            aria-labelledby="itemFormModalLabel"
-            aria-hidden="true"
+<div class="page-header">
+    <div class="page-header-title">Manage Items</div>
+    <div class="page-header-subtitle">Add and manage inventory items</div>
+</div>
+
+<div class="row g-4">
+    <!-- Button to Open the Modal -->
+    <div class="text-end mb-3">
+        <button
+            class="btn btn-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#itemFormModal"
         >
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title" id="itemFormModalLabel">Add New Item</h5>
-                        <button
-                            type="button"
-                            class="btn-close"
-                            data-bs-dismiss="modal"
-                            aria-label="Close"
-                        ></button>
-                    </div>
-                    <div class="modal-body">
-                        <!-- Form Section -->
-                        <form id="item-form">
-                            {% csrf_token %}
-                            <input type="hidden" id="item-id" />
-                            <div class="mb-3">
-                                <label for="item_code" class="form-label">Item Code</label>
-                                <input
-                                    type="text"
-                                    id="item_code"
-                                    class="form-control"
-                                    placeholder="Enter item code"
-                                    required
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="description" class="form-label">Description</label>
-                                <textarea
-                                    id="description"
-                                    class="form-control"
-                                    placeholder="Enter item description"
-                                    rows="3"
-                                ></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label for="category" class="form-label">Category</label>
-                                <select id="category" class="form-select" required>
-                                    <option value="" selected disabled>Select category</option>
-                                    {% for category in categories %}
-                                        <option value="{{ category.id }}">{{ category.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="warehouse" class="form-label">Warehouse</label>
-                                <select id="warehouse" class="form-select" required>
-                                    <option value="" selected disabled>Select warehouse</option>
-                                    {% for warehouse in warehouses %}
-                                        <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label for="valuation_method" class="form-label">Valuation Method</label>
-                                <select id="valuation_method" class="form-select" required>
-                                    <option value="" selected disabled>Select valuation method</option>
-                                    <option value="Weighted Average">Weighted Average</option>
-                                    <option value="Standard Costing">Standard Costing</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="standard_cost_per_unit" class="form-label">Standard Cost/Unit</label>
-                                <input
-                                    type="number"
-                                    id="standard_cost_per_unit"
-                                    class="form-control"
-                                    placeholder="Enter standard cost per unit"
-                                    step="0.01"
-                                    required
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="usage" class="form-label">Usage</label>
-                                <select id="usage" class="form-select">
-                                    <option value="" selected disabled>Select usage</option>
-                                    <option value="Produced">Produced</option>
-                                    <option value="Sales">Sales</option>
-                                </select>
-                            </div>
-                            <div class="text-end">
-                                <button type="submit" class="btn btn-primary">Save</button>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary"
-                                    data-bs-dismiss="modal"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+            <i class="fas fa-plus"></i> Add New Item
+        </button>
+    </div>
+    <!-- Modal Structure -->
+    <div
+        class="modal fade"
+        id="itemFormModal"
+        tabindex="-1"
+        aria-labelledby="itemFormModalLabel"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemFormModalLabel">Add New Item</h5>
+                    <button
+                        type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"
+                    ></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Form Section -->
+                    <form id="item-form">
+                        {% csrf_token %}
+                        <input type="hidden" id="item-id" />
+                        <div class="mb-3">
+                            <label for="item_code" class="form-label">Item Code</label>
+                            <input
+                                type="text"
+                                id="item_code"
+                                class="form-control"
+                                placeholder="Enter item code"
+                                required
+                            />
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea
+                                id="description"
+                                class="form-control"
+                                placeholder="Enter item description"
+                                rows="3"
+                            ></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="category" class="form-label">Category</label>
+                            <select id="category" class="form-select" required>
+                                <option value="" selected disabled>Select category</option>
+                                {% for category in categories %}
+                                    <option value="{{ category.id }}">{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="warehouse" class="form-label">Warehouse</label>
+                            <select id="warehouse" class="form-select" required>
+                                <option value="" selected disabled>Select warehouse</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="valuation_method" class="form-label">Valuation Method</label>
+                            <select id="valuation_method" class="form-select" required>
+                                <option value="" selected disabled>Select valuation method</option>
+                                <option value="Weighted Average">Weighted Average</option>
+                                <option value="Standard Costing">Standard Costing</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="standard_cost_per_unit" class="form-label">Standard Cost/Unit</label>
+                            <input
+                                type="number"
+                                id="standard_cost_per_unit"
+                                class="form-control"
+                                placeholder="Enter standard cost per unit"
+                                step="0.01"
+                                required
+                            />
+                        </div>
+                        <div class="mb-3">
+                            <label for="usage" class="form-label">Usage</label>
+                            <select id="usage" class="form-select">
+                                <option value="" selected disabled>Select usage</option>
+                                <option value="Produced">Produced</option>
+                                <option value="Sales">Sales</option>
+                            </select>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal"
+                            >
+                                Cancel
+                            </button>
+                            <button type="submit" class="btn btn-primary">Save</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
-        <!-- List Section -->
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-dark text-white">
-                    <h5 class="mb-0">Item List</h5>
-                </div>
-                <div class="card-body">
+    </div>
+    <!-- List Section -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Item List</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
                     <table
-                        class="table table-striped table-hover table-bordered"
+                        class="table table-hover table-bordered mb-0"
                         id="item-table"
                     >
                         <thead class="table-dark">
@@ -171,13 +175,13 @@
                     console.log(response, "response");
                     const table = $("#item-table");
                     const tableBody = $("#item-table-body");
-    
+
                     // Clear the current table body and destroy the DataTable if initialized
                     if ($.fn.DataTable.isDataTable(table)) {
                         table.DataTable().clear().destroy();
                     }
                     tableBody.empty();
-    
+
                     // Populate the table dynamically
                     response.forEach((item) => {
                         const tableRow = `
@@ -190,18 +194,18 @@
                                 <td>${item.standard_cost_per_unit}</td>
                                 <td>${item.usage}</td>
                                 <td>
-                                    <button class="btn btn-primary edit-item" 
-                                        data-item_id="${item.id}" 
-                                        data-item_code="${item.item_code}" 
-                                        data-description="${item.description}" 
-                                        data-category="${item.category__name}" 
-                                        data-warehouse="${item.warehouse__name}" 
-                                        data-valuation_method="${item.valuation_method}" 
-                                        data-standard_cost_per_unit="${item.standard_cost_per_unit}" 
+                                    <button class="btn btn-outline-primary btn-sm edit-item"
+                                        data-item_id="${item.id}"
+                                        data-item_code="${item.item_code}"
+                                        data-description="${item.description}"
+                                        data-category="${item.category__name}"
+                                        data-warehouse="${item.warehouse__name}"
+                                        data-valuation_method="${item.valuation_method}"
+                                        data-standard_cost_per_unit="${item.standard_cost_per_unit}"
                                         data-usage="${item.usage}">
                                         Edit
                                     </button>
-                                    <button class="btn btn-danger delete-item" 
+                                    <button class="btn btn-outline-danger btn-sm delete-item"
                                         data-id="${item.id}">
                                         Delete
                                     </button>
@@ -210,7 +214,7 @@
                         `;
                         tableBody.append(tableRow);
                     });
-    
+
                     // Reinitialize DataTable
                     table.DataTable();
                 },
@@ -219,10 +223,10 @@
                 },
             });
         }
-    
+
         // Load item list on page load
         loadItemList();
-    
+
         // Handle edit button click
         $(document).on("click", ".edit-item", function () {
             console.log("Edit button clicked", this);
@@ -236,7 +240,7 @@
                 <div class="modal fade" id="dynamicItemEditModal" tabindex="-1" aria-labelledby="dynamicItemEditModalLabel" aria-hidden="true">
                     <div class="modal-dialog modal-lg">
                         <div class="modal-content">
-                            <div class="modal-header bg-primary text-white">
+                            <div class="modal-header">
                                 <h5 class="modal-title" id="dynamicItemEditModalLabel">Edit Item</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
@@ -278,9 +282,9 @@
                                             <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
                                         </select>
                                     </div>
-                                    <div class="text-end">
-                                        <button type="submit" class="btn btn-primary">Save</button>
+                                    <div class="d-flex justify-content-end gap-2 mt-3">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-primary">Save</button>
                                     </div>
                                 </form>
                             </div>
@@ -316,8 +320,8 @@
 
                 // Send the updated data to the server
                 $.ajax({
-                    url: `/item/${updatedItemData.id}/`, 
-                    method: "PUT", 
+                    url: `/item/${updatedItemData.id}/`,
+                    method: "PUT",
                     headers: {
                         "X-CSRFToken": csrfToken,
                         "Content-Type": "application/json",
@@ -341,13 +345,13 @@
             });
         });
 
-    
+
         // Handle item form submission
         $("#item-form").on("submit", function (event) {
             event.preventDefault();
-    
+
             const csrfToken = "{{ csrf_token }}";
-    
+
             // Collect form data
             const itemData = {
                 item_code: $("#item_code").val(),
@@ -358,7 +362,7 @@
                 standard_cost_per_unit: parseFloat($("#standard_cost_per_unit").val()) || 0,
                 usage: $("#usage").val(),
             };
-    
+
             $.ajax({
                 url: "/create-item/",
                 method: "POST",
@@ -402,4 +406,4 @@
         });
     });
     </script>
-{% endblock %}    
+{% endblock %}

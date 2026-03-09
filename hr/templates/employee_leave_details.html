@@ -58,7 +58,12 @@
 </style>
 {% endblock %} 
 {% block content %}
-<div class="container mt-4">
+<div class="page-header">
+    <div class="page-header-title">Employee Leave Management</div>
+    <div class="page-header-subtitle">Review and manage employee leave applications</div>
+</div>
+
+<div>
     <!-- Approve Confirmation Modal -->
     <div class="modal fade" id="leaveApproveConfirmationModal" tabindex="-1" aria-labelledby="approveConfirmationLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -97,43 +102,28 @@
         </div>
     </div>
 
-    <!-- Header Section -->
-    <div class="row mb-4">
-        <div class="col">
-            <h2 class="text-primary">Employee Leave Management System</h2>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item">
-                        <a href="{% url 'home' %}">Dashboard</a>
-                    </li>
-                    <li class="breadcrumb-item active" aria-current="page">Leave Management</li>
-                </ol>
-            </nav>
-        </div>
-    </div>
-
     <!-- Summary Cards -->
     <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card bg-primary text-white">
+            <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Total Employees</h5>
+                    <h5 class="card-title text-primary">Total Employees</h5>
                     <h2 class="card-text total-employees-count" id="total-employees-count">{{ total_employees }}</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-success text-white">
+            <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Approved Leaves</h5>
+                    <h5 class="card-title text-success">Approved Leaves</h5>
                     <h2 class="card-text total-approved-leaves-count" id="total-approved-leaves-count">{{ total_approved_leaves }}</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-warning text-white">
+            <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Pending Leave</h5>
+                    <h5 class="card-title text-warning">Pending Leave</h5>
                     <h2 class="card-text total-pending-leaves-count" id="total-pending-leaves-count">{{ total_pending_leaves }}</h2>
                 </div>
             </div>

@@ -1,289 +1,270 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}
-  New Employee
-{% endblock %}
+{% block title %}Add Employee — BIMS{% endblock %}
+
 {% block nav %}
   {% include 'main_top_navbar.html' with active_tab='hr' %}
 {% endblock %}
+
 {% block content %}
-  <div class="container mt-5 mb-5 largest-margin">
-    <h2 class="mb-4 form-heading">Add New Employee</h2>
-    <form method="POST" id="employee-form" enctype="multipart/form-data">
-      {% csrf_token %}
-      
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Basic Information</h5>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="title">Title <span class="text-danger">*</span></label>
-              <select class="form-control" id="title" name="title">
-                <option value="Mr.">Mr.</option>
-                <option value="Ms.">Ms.</option>
-                <option value="Dr.">Dr.</option>
-              </select>
-            </div>
-            
-            <div class="col-md-4">
-              <label for="full_name">Full Name <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="full_name" placeholder="Enter Full Name" name="full_name" />
-            </div>
-            
-            <div class="col-md-4">
-              <label for="father_name">Father Name <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="father_name" name="father_name" placeholder="Enter Father Name" />
-            </div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="marital_status">Marital Status <span class="text-danger">*</span></label>
-              <select class="form-control" id="marital_status" name="marital_status">
-                <option value="Married">Married</option>
-                <option value="Single">Single</option>
-                <option value="Divorced">Divorced</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label for="gender">Gender <span class="text-danger">*</span></label>
-              <select class="form-control" id="gender" name="gender">
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label for="date_of_birth">Date of Birth <span class="text-danger">*</span></label>
-              <input type="date" class="form-control" id="date_of_birth" name="date_of_birth" />
-            </div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="designation">Designation <span class="text-danger">*</span></label>
-              <select class="form-control" id="designation" name="designation">
-                {% for designation in designation_detail %}
-                  <option value="{{ designation.id }}">{{ designation.title }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label for="salary">Salary <span class="text-danger">*</span></label>
-              <input type="number" class="form-control" id="salary" name="salary" placeholder="Salary" />
-            </div>
-            <div class="col-md-4">
-              <label for="qualification">Qualification <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="qualification" name="qualification" placeholder="Enter Qualification" />
-            </div> 
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="country">Country <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="country" name="country" placeholder="Enter Country" />
-            </div>
-            <div class="col-md-4">
-              <label for="personal_contact">Personal Contact <span class="text-danger">*</span></label>
-              <input type="number" class="form-control" id="personal_contact" name="personal_contact" placeholder="Enter Personal Contact" />
-            </div>         
-          </div>
-        </div>
-      </div>
-
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Job Specific Information</h5>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="warehouse">Warehouse <span class="text-danger">*</span></label>
-              <select class="form-control" id="warehouse" name="warehouse" required>
-                <option value="" disabled selected>Select Warehouse</option>
-                {% for warehouse in warehouse_detail %}
-                  <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            
-            <div class="col-md-4">
-              <label for="group">Group <span class="text-danger">*</span></label>
-              <select class="form-control" id="group" name="group" required>
-                <option value="" disabled selected>Select Group</option>
-                {% for group in group_detail %}
-                  <option value="{{ group.id }}">{{ group.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            
-          
-            <div class="col-md-4">
-              <label for="salary_type">Salary Type <span class="text-danger">*</span></label>
-              <select class="form-control" id="salary_type" name="salary_type">
-                <option value="Monthly">Monthly</option>
-                <option value="Hourly">Hourly</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Additional Information (Optional)</h5>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="pan_card">Pan Card</label>
-              <input type="text" class="form-control" id="pan_card" name="pan_card" placeholder="Enter Pan Card" />
-            </div>
-            <div class="col-md-4">
-              <label for="aadhar_number">Aadhar Number</label>
-              <input type="number" class="form-control" id="aadhar_number" name="aadhar_number" placeholder="Enter Adhar Card" />
-            </div>
-            <div class="col-md-4">
-              <label for="correspondence_address">Correspondence Address</label>
-              <textarea class="form-control" id="correspondence_address" name="correspondence_address" placeholder="Enter Permanent Address"></textarea>
-            </div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="blood_group">Blood Group</label>
-              <input type="text" class="form-control" id="blood_group" name="blood_group" placeholder="Enter Blood Group" />
-            </div>
-            <div class="col-md-4">
-              <label for="emergency_contact">Emergency Contact</label>
-              <input type="number" class="form-control" id="emergency_contact" name="emergency_contact" value="0" placeholder="Enter Emergency Contact" />
-            </div>
-            <div class="col-md-4 form-check form-switch">
-              <div>
-                <label class="form-check-label" for="driving_license">Driving License</label>
-              </div>
-              <div class="form-checkbox">
-                <input type="checkbox" class="form-check-input" id="driving_license" name="driving_license" style="height: 30px;width: 60px;" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="report_to">Report to </label>
-              <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Enter Report to" />
-            </div> 
-            <div class="col-md-4">
-              <label for="date_of_joining">Date of Joining</label>
-              <input type="date" class="form-control" id="date_of_joining" name="date_of_joining" />
-            </div>
-            <div class="col-md-4">
-              <label for="image">Image </label>
-              <input type="file" class="form-control" id="image" name="image" />
-            </div>
-          </div>
-      </div>
-
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Salary Information</h5>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="advance">Advance Salary</label>
-              <input type="number" class="form-control" id="advance" value="0" name="advance" placeholder="Enter Advance salary" />
-            </div>
-            <div class="col-md-4">
-              <label for="bank_name">Bank Name</label>
-              <input type="text" class="form-control" id="bank_name" name="bank_name" placeholder="Enter Bank Name" />
-            </div>
-            <div class="col-md-4">
-              <label for="saving">Savings Amount</label>
-              <input type="number" class="form-control" id="saving" name="saving" value="0" placeholder="Enter Savings Amount" />
-            </div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-4">
-              <label for="branch_name">Branch Name</label>
-              <input type="text" class="form-control" id="branch_name" name="branch_name" placeholder="Enter Branch Name" />
-            </div>
-            <div class="col-md-4">
-              <label for="salary_account">Salary Account</label>
-              <input type="text" class="form-control" id="salary_account" name="salary_account" placeholder="Enter Salary Account" />
-            </div>
-            <div class="col-md-4">
-              <label for="ifsc_code">IFSC Code</label>
-              <input type="text" class="form-control" id="ifsc_code" name="ifsc_code" placeholder="Enter IFSC Code" />
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-      <div class="row mt-5">
-        <div class="col-md-12 text-center">
-          <a href="{% url 'employee_list' %}" class="btn btn-secondary me-2">Back</a>
-          <button type="submit" class="btn btn-primary">Add Employee</button>
-        </div>
-      </div>
-      
-    </form>
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fas fa-user-plus"></i>
+      Add New Employee
+    </div>
+    <div class="page-header-subtitle">Fill in the details below to register a new employee</div>
   </div>
+  <a href="{% url 'employee_list' %}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i>
+    Back to List
+  </a>
+</div>
+
+<form method="POST" id="employee-form" enctype="multipart/form-data">
+  {% csrf_token %}
+
+  <!-- Basic Information -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <i class="fas fa-id-card"></i>
+      Basic Information
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="title">Title <span class="text-danger">*</span></label>
+          <select class="form-select" id="title" name="title">
+            <option value="Mr.">Mr.</option>
+            <option value="Ms.">Ms.</option>
+            <option value="Dr.">Dr.</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="full_name">Full Name <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="full_name" name="full_name" placeholder="Enter full name">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="father_name">Father Name <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="father_name" name="father_name" placeholder="Enter father's name">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="marital_status">Marital Status <span class="text-danger">*</span></label>
+          <select class="form-select" id="marital_status" name="marital_status">
+            <option value="Married">Married</option>
+            <option value="Single">Single</option>
+            <option value="Divorced">Divorced</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="gender">Gender <span class="text-danger">*</span></label>
+          <select class="form-select" id="gender" name="gender">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="date_of_birth">Date of Birth <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="date_of_birth" name="date_of_birth">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="designation">Designation <span class="text-danger">*</span></label>
+          <select class="form-select" id="designation" name="designation">
+            {% for designation in designation_detail %}
+              <option value="{{ designation.id }}">{{ designation.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="salary">Salary <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="salary" name="salary" placeholder="0.00">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="qualification">Qualification <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="qualification" name="qualification" placeholder="Enter qualification">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="country">Country <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="country" name="country" placeholder="Enter country">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="personal_contact">Personal Contact <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="personal_contact" name="personal_contact" placeholder="Contact number">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job Information -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <i class="fas fa-briefcase"></i>
+      Job Specific Information
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="warehouse">Warehouse <span class="text-danger">*</span></label>
+          <select class="form-select" id="warehouse" name="warehouse" required>
+            <option value="" disabled selected>Select Warehouse</option>
+            {% for warehouse in warehouse_detail %}
+              <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="group">Group <span class="text-danger">*</span></label>
+          <select class="form-select" id="group" name="group" required>
+            <option value="" disabled selected>Select Group</option>
+            {% for group in group_detail %}
+              <option value="{{ group.id }}">{{ group.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="salary_type">Salary Type <span class="text-danger">*</span></label>
+          <select class="form-select" id="salary_type" name="salary_type">
+            <option value="Monthly">Monthly</option>
+            <option value="Hourly">Hourly</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="date_of_joining">Date of Joining</label>
+          <input type="date" class="form-control" id="date_of_joining" name="date_of_joining">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="report_to">Report To</label>
+          <input type="text" class="form-control" id="report_to" name="report_to" placeholder="Supervisor name">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="image">Profile Photo</label>
+          <input type="file" class="form-control" id="image" name="image" accept="image/*">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Additional Information -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <i class="fas fa-info-circle"></i>
+      Additional Information <small class="fw-normal opacity-75">(Optional)</small>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="pan_card">PAN Card</label>
+          <input type="text" class="form-control" id="pan_card" name="pan_card" placeholder="Enter PAN card">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="aadhar_number">Aadhar Number</label>
+          <input type="number" class="form-control" id="aadhar_number" name="aadhar_number" placeholder="Enter Aadhar number">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="blood_group">Blood Group</label>
+          <input type="text" class="form-control" id="blood_group" name="blood_group" placeholder="e.g. B+">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="emergency_contact">Emergency Contact</label>
+          <input type="number" class="form-control" id="emergency_contact" name="emergency_contact" value="0">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="correspondence_address">Correspondence Address</label>
+          <textarea class="form-control" id="correspondence_address" name="correspondence_address"
+                    placeholder="Enter address" rows="2"></textarea>
+        </div>
+        <div class="col-md-4 d-flex flex-column justify-content-end">
+          <label class="form-label" for="driving_license">Driving License</label>
+          <div class="form-check form-switch mt-1">
+            <input class="form-check-input" type="checkbox" id="driving_license" name="driving_license"
+                   style="height:28px;width:54px;">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Salary Information -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <i class="fas fa-money-bill-wave"></i>
+      Salary &amp; Bank Information
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="advance">Advance Salary</label>
+          <input type="number" class="form-control" id="advance" name="advance" value="0" placeholder="0">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="saving">Savings Amount</label>
+          <input type="number" class="form-control" id="saving" name="saving" value="0" placeholder="0">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="bank_name">Bank Name</label>
+          <input type="text" class="form-control" id="bank_name" name="bank_name" placeholder="Enter bank name">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="branch_name">Branch Name</label>
+          <input type="text" class="form-control" id="branch_name" name="branch_name" placeholder="Enter branch name">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="salary_account">Salary Account Number</label>
+          <input type="text" class="form-control" id="salary_account" name="salary_account" placeholder="Account number">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="ifsc_code">IFSC Code</label>
+          <input type="text" class="form-control" id="ifsc_code" name="ifsc_code" placeholder="IFSC code">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <div class="d-flex justify-content-center gap-3 mb-4">
+    <a href="{% url 'employee_list' %}" class="btn btn-secondary">
+      <i class="fas fa-times"></i>Cancel
+    </a>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-save"></i>Add Employee
+    </button>
+  </div>
+
+</form>
 {% endblock %}
+
 {% block js %}
-  <script src="{% static 'js/hr/new-employee.js' %}"></script>
-  <script>
-    {% if error_message %}
+<script src="{% static 'js/hr/new-employee.js' %}"></script>
+<script>
+  {% if error_message %}
+    Toastify({
+      text: "{{ error_message }}",
+      duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% elif success %}
+    Toastify({
+      text: "{{ success }}",
+      duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% else %}
+    {% for message in messages %}
+      {% if message.tags == "error" %}
         Toastify({
-            text: "{{ error_message }}",
-            duration: 3000,
-            newWindow: true,
-            gravity: "top",
-            positionLeft: true,
-            backgroundColor: "linear-gradient(to right, #1e81b0, #8e0000)"
+          text: "{{ message }}",
+          duration: 3000, gravity: "top", position: "right",
+          style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
         }).showToast();
-    
-    {% elif success %}
+      {% else %}
         Toastify({
-            text: "{{ success }}",
-            duration: 3000,
-            newWindow: true,
-            gravity: "top",
-            positionLeft: true,
-            backgroundColor: "linear-gradient(to right,  #00b09b, #96c93d)"
+          text: "{{ message }}",
+          duration: 3000, gravity: "top", position: "right",
+          style: { background: "linear-gradient(135deg, #065f46, #059669)" }
         }).showToast();
-    
-    {% else %}
-        {% for message in messages %}
-            {% if message.tags == "error" %}
-                Toastify({
-                    text: "{{ message }}",
-                    duration: 3000,
-                    newWindow: true,
-                    gravity: "top",
-                    positionLeft: true,
-                    backgroundColor: "linear-gradient(to right, #1e81b0, #8e0000)"
-                }).showToast();
-            {% else %}
-                Toastify({
-                    text: "{{ message }}",
-                    duration: 3000,
-                    newWindow: true,
-                    gravity: "top",
-                    positionLeft: true,
-                    backgroundColor: "linear-gradient(to right,  #00b09b, #96c93d)"
-                }).showToast();
-            {% endif %}
-        {% endfor %}
-    {% endif %}
-  </script>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+</script>
 {% endblock %}

@@ -9,17 +9,28 @@
 {% block content %}
 
 {% include '_user_management_subnavbar.html' with active_tab='create_user' %}
-<div class="container-fluid py-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="text-primary fw-bold">All Employee Users</h3>
-        <button class="btn btn-success px-4" data-bs-toggle="modal" data-bs-target="#createUserModal">
-            <i class="fas fa-user-plus me-2"></i> Create User
+
+<div class="page-header">
+    <div class="page-header-title">Employee Users</div>
+    <div class="page-header-subtitle">Manage user accounts for employees</div>
+</div>
+
+<div class="row g-4">
+    <div class="text-end mb-3">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createUserModal">
+            <i class="fas fa-plus"></i> Create User
         </button>
     </div>
-    
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>All Employee Users</h5>
+            </div>
+            <div class="card-body">
     <div class="table-responsive">
-        <table class="table table-hover table-striped table-bordered text-center align-middle shadow-sm">
-            <thead class="bg-primary text-white">
+        <table class="table table-hover table-bordered mb-0 text-center align-middle">
+            <thead class="table-dark">
                 <tr>
                     <th>Employee Name</th>
                     <th>Designation</th>
@@ -51,13 +62,16 @@
             </tbody>
         </table>
     </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Create User Modal -->
 <div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
+            <div class="modal-header">
                 <h5 class="modal-title" id="createUserModalLabel">Create User</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -98,8 +112,9 @@
                         <input type="checkbox" name="is_superuser" id="is_superuser" class="form-check-input">
                         <label for="is_superuser" class="form-check-label">Is Superuser</label>
                     </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary btn-lg fw-bold">Create User</button>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create User</button>
                     </div>
                 </form>
             </div>

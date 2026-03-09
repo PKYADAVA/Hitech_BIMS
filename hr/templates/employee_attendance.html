@@ -25,10 +25,10 @@
         </div>
     </div>
     <div class="card">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Employee Attendance Management</h5>
-            <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#attendanceModal">
-                <i class="fas fa-plus-circle me-2"></i>Mark Attendance
+        <div class="card-header">
+            <i class="fas fa-calendar-check"></i>Employee Attendance Management
+            <button type="button" class="btn btn-secondary btn-sm ms-auto" data-bs-toggle="modal" data-bs-target="#attendanceModal">
+                <i class="fas fa-plus me-1"></i>Mark Attendance
             </button>
         </div>
         <div class="card-body">
@@ -60,12 +60,12 @@
 <div class="modal fade" id="attendanceModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
+            <div class="modal-header">
                 <h5 class="modal-title">
                     <i class="fas fa-user-clock me-2"></i>
                     <span id="modalTitle">Mark Attendance</span>
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="attendanceForm">

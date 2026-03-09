@@ -1,212 +1,297 @@
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Home - BIMS{% endblock %}
+{% block title %}Dashboard — BIMS{% endblock %}
 
 {% block nav %}
-{% include 'main_top_navbar.html' with active_tab='home' %}
+  {% include 'main_top_navbar.html' with active_tab='home' %}
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <!-- Hero Carousel Section -->
-    <div id="bimsCarousel" class="carousel slide mb-5 shadow-lg rounded" data-bs-ride="carousel">
-        <div class="carousel-inner">
-            <div class="carousel-item active">
-                <div class="text-center p-5 bg-light rounded">
-                    <h1 class="display-4 text-primary fw-bold mb-4 animate__animated animate__fadeInDown">
-                        Welcome to BIMS
-                    </h1>
-                    <p class="lead text-muted animate__animated animate__fadeInUp">
-                        BIMS is designed to record all the transactions and activities involved in a poultry farm. These solutions integrate Flock Performance, Purchases, Sales, Expenses, Feed Formulation, Feed Production, and Accounting.
-                    </p>
-                </div>
-            </div>
-            <div class="carousel-item">
-                <div class="text-center p-5 bg-light rounded">
-                    <h1 class="display-4 text-primary fw-bold mb-4 animate__animated animate__fadeInDown">
-                        Customizable Feed Formulas
-                    </h1>
-                    <p class="lead text-muted animate__animated animate__fadeInUp">
-                        Depending on Geographical, Climatic Conditions, Age, and Availability of Raw Materials, different Feed Formulae are adapted by Farmers. Our module helps create cost-effective solutions.
-                    </p>
-                </div>
-            </div>
-            <div class="carousel-item">
-                <div class="text-center p-5 bg-light rounded">
-                    <h1 class="display-4 text-primary fw-bold mb-4 animate__animated animate__fadeInDown">
-                        Comprehensive Poultry Management
-                    </h1>
-                    <p class="lead text-muted animate__animated animate__fadeInUp">
-                        Track hen house production, vaccination schedules, cash balances, creditors, and more with ease.
-                    </p>
-                </div>
-            </div>
-        </div>
-        <button class="carousel-control-prev" type="button" data-bs-target="#bimsCarousel" data-bs-slide="prev">
-            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-            <span class="visually-hidden">Previous</span>
-        </button>
-        <button class="carousel-control-next" type="button" data-bs-target="#bimsCarousel" data-bs-slide="next">
-            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-            <span class="visually-hidden">Next</span>
-        </button>
+<div class="container-fluid px-0">
+
+  <!-- Hero Banner -->
+  <div class="bims-hero mb-4">
+    <div class="bims-hero-content">
+      <div class="bims-hero-icon">
+        <i class="fas fa-egg"></i>
+      </div>
+      <div>
+        <h1 class="bims-hero-title">Hi Tech Farms — BIMS</h1>
+        <p class="bims-hero-sub">
+          Business Information Management System for comprehensive poultry farm operations
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="px-3 px-md-4">
+
+    <!-- Quick Access Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{% url 'broiler' %}" class="quick-card">
+          <div class="quick-icon blue"><i class="fa-solid fa-egg"></i></div>
+          <div class="quick-label">Broiler</div>
+        </a>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{% url 'purchase_master' %}" class="quick-card">
+          <div class="quick-icon amber"><i class="fas fa-shopping-cart"></i></div>
+          <div class="quick-label">Purchase</div>
+        </a>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{% url 'sales' %}" class="quick-card">
+          <div class="quick-icon green"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+          <div class="quick-label">Sales</div>
+        </a>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{% url 'account' %}" class="quick-card">
+          <div class="quick-icon cyan"><i class="fas fa-file-invoice"></i></div>
+          <div class="quick-label">Accounts</div>
+        </a>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{% url 'inventory' %}" class="quick-card">
+          <div class="quick-icon red"><i class="fas fa-warehouse"></i></div>
+          <div class="quick-label">Inventory</div>
+        </a>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{% url 'employee_list' %}" class="quick-card">
+          <div class="quick-icon blue"><i class="fas fa-users"></i></div>
+          <div class="quick-label">HR</div>
+        </a>
+      </div>
     </div>
 
-    <!-- Dashboard Info Section -->
-    <div class="dashboard-info">
-        <h2 class="text-center mb-5 fw-bold text-primary">BIMS Key Features</h2>
-        <div class="row g-4">
-            <!-- Key Areas Card -->
-            <div class="col-md-6">
-                <div class="card shadow-lg h-100 border-0 hover-shadow">
-                    <div class="card-header bg-gradient-success text-white py-3">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-star me-2"></i>Key Areas
-                        </h5>
-                    </div>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Hen house production and standards
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Vaccination Schedules
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Cash and Bank Balances
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Creditors and Debtors
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Expenditure Details
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Additional Tracking Areas Card -->
-            <div class="col-md-6">
-                <div class="card shadow-lg h-100 border-0 hover-shadow">
-                    <div class="card-header bg-gradient-success text-white py-3">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-chart-line me-2"></i>Additional Tracking Areas
-                        </h5>
-                    </div>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Employee Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Shed Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Flock Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Daily Flock Entry Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Mortality Ratio
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <div class="row g-4 mt-4">
-            <!-- Production and Sales Tracking Card -->
-            <div class="col-md-6">
-                <div class="card shadow-lg h-100 border-0 hover-shadow">
-                    <div class="card-header bg-gradient-success text-white py-3">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-industry me-2"></i>Production and Sales Tracking
-                        </h5>
-                    </div>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Production Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Feed Production Unit Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Purchases and Sales Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Medicine and Vaccination Details
-                        </li>
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Stock Information
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Financial and Bookkeeping Card -->
-            <div class="col-md-6">
-                <div class="card shadow-lg h-100 border-0 hover-shadow">
-                    <div class="card-header bg-gradient-success text-white py-3">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-book me-2"></i>Financial and Bookkeeping
-                        </h5>
-                    </div>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            Bookkeeping
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
+    <!-- Features Section -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h2 class="section-heading">BIMS Key Features</h2>
     </div>
+
+    <div class="row g-3">
+
+      <!-- Key Areas -->
+      <div class="col-md-6 col-xl-3">
+        <div class="card feature-card h-100">
+          <div class="card-header">
+            <i class="fas fa-star"></i>
+            Key Areas
+          </div>
+          <ul class="feature-list">
+            <li><i class="fas fa-check-circle"></i>Hen house production &amp; standards</li>
+            <li><i class="fas fa-check-circle"></i>Vaccination schedules</li>
+            <li><i class="fas fa-check-circle"></i>Cash &amp; bank balances</li>
+            <li><i class="fas fa-check-circle"></i>Creditors &amp; debtors</li>
+            <li><i class="fas fa-check-circle"></i>Expenditure details</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Additional Tracking -->
+      <div class="col-md-6 col-xl-3">
+        <div class="card feature-card h-100">
+          <div class="card-header">
+            <i class="fas fa-chart-line"></i>
+            Tracking Areas
+          </div>
+          <ul class="feature-list">
+            <li><i class="fas fa-check-circle"></i>Employee details</li>
+            <li><i class="fas fa-check-circle"></i>Shed details</li>
+            <li><i class="fas fa-check-circle"></i>Flock details</li>
+            <li><i class="fas fa-check-circle"></i>Daily flock entry</li>
+            <li><i class="fas fa-check-circle"></i>Mortality ratio</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Production & Sales -->
+      <div class="col-md-6 col-xl-3">
+        <div class="card feature-card h-100">
+          <div class="card-header">
+            <i class="fas fa-industry"></i>
+            Production &amp; Sales
+          </div>
+          <ul class="feature-list">
+            <li><i class="fas fa-check-circle"></i>Production details</li>
+            <li><i class="fas fa-check-circle"></i>Feed production units</li>
+            <li><i class="fas fa-check-circle"></i>Purchases &amp; sales</li>
+            <li><i class="fas fa-check-circle"></i>Medicine &amp; vaccination</li>
+            <li><i class="fas fa-check-circle"></i>Stock information</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Financial -->
+      <div class="col-md-6 col-xl-3">
+        <div class="card feature-card h-100">
+          <div class="card-header">
+            <i class="fas fa-book"></i>
+            Financial &amp; Bookkeeping
+          </div>
+          <ul class="feature-list">
+            <li><i class="fas fa-check-circle"></i>Complete bookkeeping</li>
+            <li><i class="fas fa-check-circle"></i>Chart of accounts</li>
+            <li><i class="fas fa-check-circle"></i>Financial year management</li>
+            <li><i class="fas fa-check-circle"></i>Bank &amp; cash masters</li>
+            <li><i class="fas fa-check-circle"></i>Financial schedules</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <style>
-    .bg-gradient-success {
-        background: linear-gradient(45deg, #28a745, #20c997);
-    }
-    
-    .hover-shadow {
-        transition: all 0.3s ease;
-    }
-    
-    .hover-shadow:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 1rem 3rem rgba(0,0,0,.175)!important;
-    }
-    
-    .carousel-item {
-        min-height: 300px;
-    }
-    
-    .carousel-control-prev,
-    .carousel-control-next {
-        width: 5%;
-    }
-    
-    .list-group-item {
-        transition: all 0.2s ease;
-    }
-    
-    .list-group-item:hover {
-        background-color: #f8f9fa;
-    }
-</style>
+/* Hero Banner */
+.bims-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+  padding: 32px 36px;
+  color: #ffffff;
+}
 
+.bims-hero-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: 800px;
+}
+
+.bims-hero-icon {
+  width: 60px;
+  height: 60px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.bims-hero-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+.bims-hero-sub {
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.65);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Quick Access */
+.quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px 12px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.quick-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  border-color: #bfdbfe;
+}
+
+.quick-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.quick-icon.blue  { background: #dbeafe; color: #1e40af; }
+.quick-icon.green { background: #d1fae5; color: #059669; }
+.quick-icon.amber { background: #fef3c7; color: #d97706; }
+.quick-icon.red   { background: #fee2e2; color: #dc2626; }
+.quick-icon.cyan  { background: #e0f2fe; color: #0891b2; }
+
+.quick-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+  text-align: center;
+}
+
+/* Section heading */
+.section-heading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+/* Feature Cards */
+.feature-card .card-header {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  font-size: 0.88rem;
+}
+
+.feature-list {
+  list-style: none;
+  padding: 16px 20px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.feature-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  font-size: 0.84rem;
+  color: #475569;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.2s;
+}
+
+.feature-list li:last-child {
+  border-bottom: none;
+}
+
+.feature-list li i {
+  color: #059669;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.feature-list li:hover {
+  color: #1e293b;
+}
+
+@media (max-width: 768px) {
+  .bims-hero {
+    padding: 24px 20px;
+  }
+
+  .bims-hero-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .bims-hero-title {
+    font-size: 1.25rem;
+  }
+}
+</style>
 {% endblock %}

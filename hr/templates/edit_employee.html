@@ -8,8 +8,13 @@
   {% include 'main_top_navbar.html' with active_tab='hr' %}
 {% endblock %}
 {% block content %}
-  <div class="container mt-5 mb-5 largest-margin">
-    <h2 class="mb-4 form-heading">Update Employee</h2>
+
+<div class="page-header">
+    <div class="page-header-title">Update Employee</div>
+    <div class="page-header-subtitle">Edit employee details and information</div>
+</div>
+
+  <div class="mb-5">
     <form method="POST" id="employee-form" enctype="multipart/form-data">
       {% csrf_token %}
       <span class="text-danger">*</span>    

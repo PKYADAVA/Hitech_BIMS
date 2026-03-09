@@ -10,46 +10,22 @@
 
 {% include '_user_management_subnavbar.html' with active_tab='assign_groups' %}
 
-<style>
-    /* Table Enhancements */
-    table th {
-        background-color: #0d6efd !important;
-        color: white;
-    }
-    table td {
-        vertical-align: middle !important;
-    }
-    table tbody tr:hover {
-        background-color: rgba(0, 0, 255, 0.05);
-    }
-    
-    /* Modal Enhancements */
-    .modal-content {
-        border-radius: 12px;
-        box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
-    }
-    
-    /* Button Enhancements */
-    .btn {
-        transition: all 0.2s ease-in-out;
-    }
-    .btn:hover {
-        transform: translateY(-2px);
-    }
-</style>
+<div class="page-header">
+    <div class="page-header-title">Assign User Groups</div>
+    <div class="page-header-subtitle">Manage group assignments for users</div>
+</div>
 
-<div class="container-fluid py-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-10">
-            <div class="card shadow-lg border-0 rounded-3">
-                <div class="card-header bg-primary text-white text-center rounded-top">
-                    <h4 class="mb-0">Manage User Groups</h4>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover table-bordered align-middle">
-                            <thead class="table-primary">
-                                <tr class="text-center">
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Manage User Groups</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0 align-middle">
+                        <thead class="table-dark">
+                            <tr class="text-center">
                                     <th>User</th>
                                     <th>Assigned Groups</th>
                                     <th>Modify Groups</th>
@@ -78,13 +54,17 @@
                             </tbody>
                         </table>
                     </div>
+            </div>
+        </div>
+    </div>
+</div>
 
                     <!-- Group Management Modal -->
                     <div class="modal fade" id="groupModal" tabindex="-1">
                         <div class="modal-dialog modal-dialog-centered">
-                            <div class="modal-content rounded-3">
-                                <div class="modal-header bg-light border-0">
-                                    <h5 class="modal-title text-primary">Manage Groups for <span id="modalUsername"></span></h5>
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Manage Groups for <span id="modalUsername"></span></h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
                                 <div class="modal-body">
@@ -95,19 +75,15 @@
                                             <label class="form-label fw-bold">Select Groups</label>
                                             <div id="groupList" class="d-flex flex-wrap gap-2"></div>
                                         </div>
-                                        <div class="d-grid">
-                                            <button type="submit" class="btn btn-primary shadow">Save Changes</button>
+                                        <div class="d-flex justify-content-end gap-2 mt-3">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary">Save Changes</button>
                                         </div>
                                     </form>
                                 </div>
                             </div>
                         </div>
-                    </div>                 
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+                    </div>
 
 <script>
     function addMoreGroups(userId, username) {

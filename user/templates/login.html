@@ -2,257 +2,315 @@
 {% load static %}
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - BIMS</title>
-    <!-- Bootstrap CSS -->
-    <link href="{% static 'css/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Hi Tech Farms BIMS</title>
+  <link href="{% static 'css/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary:       #1e40af;
+      --primary-light: #3b82f6;
+      --primary-dark:  #1e3a8a;
+      --success:       #059669;
+      --text:          #1e293b;
+      --text-secondary:#475569;
+      --border:        #e2e8f0;
+      --radius:        10px;
+      --radius-lg:     16px;
+    }
 
-        body {
-            min-height: 100vh;
-            font-family: 'Poppins', sans-serif;
-            background: url("{% static 'images/istockphoto-888136924-2048x2048.jpg' %}") no-repeat center center;
-            background-size: cover;
-            background-attachment: fixed;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            {% comment %} background: linear-gradient(135deg, rgba(40, 167, 69, 0.85), rgba(32, 201, 151, 0.85)); {% endcomment %}
-            z-index: 1;
-        }
+    body {
+      min-height: 100vh;
+      font-family: 'Poppins', sans-serif;
+      background: url("{% static 'images/istockphoto-888136924-2048x2048.jpg' %}") no-repeat center center;
+      background-size: cover;
+      background-attachment: fixed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
 
-        .right-section {
-            padding: 20px;
-            z-index: 2;
-            position: relative;
-            width: 100%;
-            max-width: 500px;
-        }
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(15,23,42,0.75) 0%, rgba(30,58,138,0.65) 100%);
+      z-index: 1;
+    }
 
-        .card {
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            border: none;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 30px;
-            transform: translateY(0);
-            transition: all 0.3s ease;
-        }
+    .login-wrapper {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 440px;
+      padding: 20px;
+    }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
-        }
+    /* Brand header above card */
+    .login-brand {
+      text-align: center;
+      margin-bottom: 24px;
+    }
 
-        .card-title {
-            font-size: 28px;
-            color: #2c3e50;
-            font-weight: 600;
-            margin-bottom: 30px;
-            text-align: center;
-        }
+    .login-brand img {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      border-radius: var(--radius-lg);
+      background: rgba(255,255,255,0.15);
+      padding: 8px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+    }
 
-        .form-label {
-            font-size: 14px;
-            color: #6c757d;
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
+    .login-brand .brand-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.2;
+    }
 
-        .form-control {
-            padding: 15px 20px;
-            border-radius: 12px;
-            border: 2px solid #e9ecef;
-            font-size: 15px;
-            transition: all 0.3s ease;
-            background: rgba(255, 255, 255, 0.9);
-        }
+    .login-brand .brand-sub {
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
 
-        .form-control:focus {
-            border-color: #28a745;
-            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
-            background: #ffffff;
-        }
+    /* Card */
+    .login-card {
+      background: rgba(255,255,255,0.97);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.3);
+      padding: 36px 32px;
+      backdrop-filter: blur(12px);
+      animation: slideUp 0.4s ease;
+    }
 
-        .input-group {
-            position: relative;
-            margin-bottom: 20px;
-        }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
 
-        .input-group i {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #6c757d;
-        }
+    .login-card .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
 
-        .input-group .form-control {
-            padding-left: 45px;
-        }
+    .login-card .card-subtitle {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
+    }
 
-        .btn-success {
-            background: linear-gradient(45deg, #28a745, #20c997);
-            border: none;
-            padding: 15px 30px;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 16px;
-            letter-spacing: 0.5px;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-        }
+    /* Divider */
+    .login-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
 
-        .btn-success:hover {
-            background: linear-gradient(45deg, #218838, #1e7e34);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
-        }
+    .login-divider::before,
+    .login-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
 
-        .footer-links {
-            font-size: 14px;
-            color: #6c757d;
-            margin-top: 25px;
-            text-align: center;
-        }
+    .login-divider span {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 600;
+    }
 
-        .footer-links a {
-            color: #28a745;
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
+    /* Form */
+    .form-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
 
-        .footer-links a:hover {
-            color: #218838;
-            text-decoration: none;
-        }
+    .input-wrapper {
+      position: relative;
+      margin-bottom: 18px;
+    }
 
-        .logo-container {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+    .input-wrapper .input-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #94a3b8;
+      font-size: 0.9rem;
+      pointer-events: none;
+    }
 
-        .logo-container img {
-            width: 80px;
-            height: 80px;
-            margin-bottom: 15px;
-            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-        }
+    .input-wrapper .form-control {
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.9rem;
+      padding: 12px 14px 12px 40px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      background: #f8fafc;
+      color: var(--text);
+      transition: all 0.25s ease;
+    }
 
-        .welcome-text {
-            color: #2c3e50;
-            font-size: 16px;
-            margin-bottom: 30px;
-            text-align: center;
-            font-weight: 500;
-        }
+    .input-wrapper .form-control:focus {
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+      background: #ffffff;
+      outline: none;
+    }
 
-        @media (max-width: 767px) {
-            .right-section {
-                padding: 20px;
-            }
+    /* Login button */
+    .btn-login {
+      width: 100%;
+      padding: 13px !important;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(30,64,175,0.35);
+      margin-top: 6px;
+    }
 
-            .card {
-                padding: 20px;
-                margin: 0 15px;
-            }
+    .btn-login:hover {
+      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+      box-shadow: 0 6px 20px rgba(30,64,175,0.45);
+      transform: translateY(-1px);
+      color: #ffffff;
+    }
 
-            .card-title {
-                font-size: 24px;
-            }
-        }
+    /* Footer links */
+    .login-footer {
+      margin-top: 22px;
+      text-align: center;
+    }
 
-        /* Animation classes */
-        .fade-in {
-            animation: fadeIn 0.5s ease-in;
-        }
+    .login-footer a {
+      font-size: 0.82rem;
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
 
-        .slide-up {
-            animation: slideUp 0.5s ease-out;
-        }
+    .login-footer a:hover {
+      color: var(--primary-dark);
+      text-decoration: underline;
+    }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
+    .login-footer .divider-dot {
+      color: #94a3b8;
+      margin: 0 8px;
+    }
 
-        @keyframes slideUp {
-            from {
-                transform: translateY(20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-    </style>
+    /* Error messages */
+    .login-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    @media (max-width: 480px) {
+      .login-card {
+        padding: 24px 20px;
+      }
+    }
+  </style>
 </head>
 <body>
-    <!-- Login Form Section -->
-    <div class="right-section">
-        <div class="card fade-in">
-            <div class="card-body">
-                <div class="logo-container">
-                    <img src="{% static 'images/logo.png' %}" alt="BIMS Logo" class="slide-up">
-                </div>
-                <h2 class="card-title">Welcome Back!</h2>
-                <p class="welcome-text">Please login to your BIMS account</p>
-                
-                <form method="POST" class="mb-3">
-                    {% csrf_token %}
-                    <div class="input-group mb-4">
-                        <i class="fas fa-user"></i>
-                        <input type="text" name="username" id="username" class="form-control" required 
-                               placeholder="Enter your username">
-                    </div>
-                    <div class="input-group mb-4">
-                        <i class="fas fa-lock"></i>
-                        <input type="password" name="password" id="password" class="form-control" required 
-                               placeholder="Enter your password">
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-sign-in-alt me-2"></i>Login
-                        </button>
-                    </div>
-                </form>
-                
-                <div class="footer-links">
-                    <a href="{% url 'forgot_password' %}" class="d-block mb-2">
-                        <i class="fas fa-key me-1"></i>Forgot Password?
-                    </a>
-                    <p class="mb-0">
-                        Don't have an account? 
-                        <a href="{% url 'register' %}">
-                            <i class="fas fa-user-plus me-1"></i>Register here
-                        </a>
-                    </p>
-                </div>
-            </div>
-        </div>
+  <div class="login-wrapper">
+
+    <!-- Brand -->
+    <div class="login-brand">
+      <img src="{% static 'images/logo.png' %}" alt="BIMS Logo"
+           onerror="this.style.display='none'">
+      <div class="brand-name">Hi Tech Farms</div>
+      <div class="brand-sub">Business Information Management System</div>
     </div>
+
+    <!-- Login Card -->
+    <div class="login-card">
+      <div class="card-title">Welcome back!</div>
+      <div class="card-subtitle">Sign in to your BIMS account to continue</div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="login-error">
+            <i class="fas fa-exclamation-circle"></i>
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="POST" autocomplete="off">
+        {% csrf_token %}
+
+        <div>
+          <label class="form-label" for="username">Username</label>
+          <div class="input-wrapper">
+            <i class="fas fa-user input-icon"></i>
+            <input type="text" id="username" name="username" class="form-control"
+                   placeholder="Enter your username" required autofocus>
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label" for="password">Password</label>
+          <div class="input-wrapper">
+            <i class="fas fa-lock input-icon"></i>
+            <input type="password" id="password" name="password" class="form-control"
+                   placeholder="Enter your password" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login">
+          <i class="fas fa-sign-in-alt"></i>
+          Sign In
+        </button>
+      </form>
+
+      <div class="login-footer">
+        <a href="{% url 'forgot_password' %}">
+          <i class="fas fa-key me-1"></i>Forgot Password?
+        </a>
+        <span class="divider-dot">·</span>
+        <a href="{% url 'register' %}">
+          <i class="fas fa-user-plus me-1"></i>Register
+        </a>
+      </div>
+    </div>
+
+  </div>
 </body>
 </html>
