@@ -88,12 +88,22 @@ WSGI_APPLICATION = "Hitech_BIMS.wsgi.application"
 
 # Database configuration
 if DEVELOPMENT_MODE:
+    # DATABASES = {
+    #     "default": {
+    #         "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+    #         "NAME": os.getenv("DB_NAME"),
+    #         "USER": os.getenv("DB_USER"),
+    #         "PASSWORD": os.getenv("DB_PASSWORD"),
+    #         "HOST": os.getenv("DB_HOST", "localhost"),
+    #         "PORT": os.getenv("DB_PORT", "5432"),
+    #     }
+    # }
     DATABASES = {
         "default": {
             "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-            "NAME": os.getenv("DB_NAME"),
-            "USER": os.getenv("DB_USER"),
-            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "NAME": "django_db",
+            "USER": "django_user",
+            "PASSWORD": "Prabhat@2207",
             "HOST": os.getenv("DB_HOST", "localhost"),
             "PORT": os.getenv("DB_PORT", "5432"),
         }
@@ -137,15 +147,12 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = "/static/"
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "static"),
-]
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Media files
-MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Email configuration
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
