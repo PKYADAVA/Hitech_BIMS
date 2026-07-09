@@ -8,395 +8,862 @@
 
 <div class="page-header">
     <div class="page-header-title">Manage Broiler Farm</div>
-    <div class="page-header-subtitle">Add and manage broiler farms</div>
+    <div class="page-header-subtitle">Add farmers and manage broiler farms</div>
 </div>
 
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        <button
-            class="btn btn-success"
-            data-bs-toggle="modal"
-            data-bs-target="#farmFormModal"
-            >
-        <i class="fas fa-plus"></i> Add New Farm
-        </button>
+<div class="card">
+    <div class="card-header p-0 border-bottom-0">
+        <ul class="nav nav-tabs px-3 pt-3" id="farmSectionTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="add-farmer-tab" data-bs-toggle="tab" data-bs-target="#add-farmer-pane" type="button" role="tab">
+                    <i class="fas fa-user me-1"></i>Add Farmer
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="add-farm-tab" data-bs-toggle="tab" data-bs-target="#add-farm-pane" type="button" role="tab">
+                    <i class="fas fa-tractor me-1"></i>Add Farm
+                </button>
+            </li>
+        </ul>
     </div>
-    <!-- Modal Structure -->
-    <div class="modal fade" id="farmFormModal" tabindex="-1" aria-labelledby="farmFormModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="farmFormModalLabel">Add New Farm</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="card-body">
+        <div class="tab-content" id="farmSectionTabsContent">
+
+            <!-- =========================== ADD FARMER =========================== -->
+            <div class="tab-pane fade show active" id="add-farmer-pane" role="tabpanel">
+                <h5 class="mb-3">Add Farmer</h5>
+                <form id="farmer-form" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" id="farmer_id" value="" />
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="farmer_name" class="form-label">Farmer Name<span class="text-danger">*</span></label>
+                            <input type="text" id="farmer_name" class="form-control" placeholder="Enter description" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="phone_no" class="form-label">Phone No.</label>
+                            <input type="text" id="phone_no" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="mobile_no" class="form-label">Mobile No.</label>
+                            <input type="text" id="mobile_no" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="mobile_2" class="form-label">Mobile 2</label>
+                            <input type="text" id="mobile_2" class="form-control" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="farmer_photo" class="form-label">Farmer Photo</label>
+                            <input type="file" id="farmer_photo" class="form-control" accept="image/*" />
+                            <div class="form-text" id="farmer_photo_current"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="pan_no" class="form-label">PAN No</label>
+                            <input type="text" id="pan_no" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="aadhar_no" class="form-label">Aadhar No</label>
+                            <input type="text" id="aadhar_no" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="national_id" class="form-label">National ID</label>
+                            <input type="text" id="national_id" class="form-control" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="pan_upload" class="form-label">PAN Upload</label>
+                            <input type="file" id="pan_upload" class="form-control" />
+                            <div class="form-text" id="pan_upload_current"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="aadhar_upload_front" class="form-label">Aadhar Upload (Front)</label>
+                            <input type="file" id="aadhar_upload_front" class="form-control" />
+                            <div class="form-text" id="aadhar_upload_front_current"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="aadhar_upload_back" class="form-label">Aadhar Upload (Back)</label>
+                            <input type="file" id="aadhar_upload_back" class="form-control" />
+                            <div class="form-text" id="aadhar_upload_back_current"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="usc" class="form-label">USC</label>
+                            <input type="text" id="usc" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="service_no" class="form-label">Service No</label>
+                            <input type="text" id="service_no" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="farmer_group" class="form-label">Farmer Group<span class="text-danger">*</span></label>
+                            <input type="text" id="farmer_group" class="form-control" placeholder="Farmer Group" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="tds_percent" class="form-label">TDS %</label>
+                            <input type="number" step="0.01" min="0" max="100" id="tds_percent" class="form-control" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="account_holder_name" class="form-label">Account Holder Name</label>
+                            <input type="text" id="account_holder_name" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="acc_no" class="form-label">Acc No</label>
+                            <input type="text" id="acc_no" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="ifsc_code" class="form-label">IFSC Code</label>
+                            <input type="text" id="ifsc_code" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="bank_name" class="form-label">Bank Name</label>
+                            <input type="text" id="bank_name" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="bank_branch" class="form-label">Bank Branch</label>
+                            <input type="text" id="bank_branch" class="form-control" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="farmer_address" class="form-label">Address</label>
+                            <textarea id="farmer_address" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>
+                        <button type="button" class="btn btn-secondary" id="farmer-cancel-btn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="farmer-save-btn">Save</button>
+                    </div>
+                </form>
+
+                <hr class="my-4" />
+
+                <h5 class="mb-3"><i class="fas fa-table me-2"></i>Farmer List</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered mb-0" id="farmer-table">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Farmer Name</th>
+                                <th>Mobile No.</th>
+                                <th>Farmer Group</th>
+                                <th>USC</th>
+                                <th>Service No</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
-                <div class="modal-body">
-                    <!-- Form Section -->
-                    <form id="farm-form">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label for="branch" class="form-label">Branch</label>
+            </div>
+
+            <!-- =========================== ADD FARM =========================== -->
+            <div class="tab-pane fade" id="add-farm-pane" role="tabpanel">
+                <h5 class="mb-3">Add Farm</h5>
+                <form id="farm-form" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" id="farm_id" value="" />
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="region" class="form-label">Region<span class="text-danger">*</span></label>
+                            <select id="region" class="form-control" required>
+                                <option value="" selected disabled>-Select-</option>
+                                {% for state in states_and_union_territories %}
+                                <option value="{{ state }}">{{ state }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="branch" class="form-label">Branch<span class="text-danger">*</span></label>
                             <select id="branch" class="form-control" required>
-                                <option value="" selected disabled>Select a branch</option>
+                                <option value="" selected disabled>-Select-</option>
                                 {% for branch in branches %}
                                 <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label for="supervisor" class="form-label">Supervisor</label>
+                        <div class="col-md-3">
+                            <label for="line" class="form-label">Line<span class="text-danger">*</span></label>
+                            <input type="text" id="line" class="form-control" placeholder="Enter line" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="supervisor" class="form-label">Supervisor<span class="text-danger">*</span></label>
                             <select id="supervisor" class="form-control" required>
                                 <option value="" selected disabled>Select a supervisor</option>
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label for="broiler_place" class="form-label">Broiler Place</label>
-                            <select id="broiler_place" class="form-control" required>
-                                <option value="" selected disabled>Select a broiler place</option>
+
+                        <div class="col-md-3">
+                            <label for="farm_code" class="form-label">Farm Code<span class="text-danger">*</span></label>
+                            <input type="text" id="farm_code" class="form-control" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
+                            <select id="farmer" class="form-control" required>
+                                <option value="" selected disabled>-Select- (add farmers on the Add Farmer tab)</option>
+                                {% for farmer in farmers %}
+                                <option value="{{ farmer.id }}">{{ farmer.farmer_name }}</option>
+                                {% endfor %}
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label for="farm_code" class="form-label">Farm Code</label>
-                            <input
-                                type="text"
-                                id="farm_code"
-                                class="form-control"
-                                placeholder="Enter farm code"
-                                required
-                                />
+                        <div class="col-md-3">
+                            <label for="farm_name" class="form-label">Farm Name<span class="text-danger">*</span></label>
+                            <input type="text" id="farm_name" class="form-control" required />
                         </div>
-                        <div class="mb-3">
-                            <label for="farm_name" class="form-label">Farm Name</label>
-                            <input
-                                type="text"
-                                id="farm_name"
-                                class="form-control"
-                                placeholder="Enter farm name"
-                                required
-                                />
+                        <div class="col-md-3">
+                            <label for="farm_pincode" class="form-label">Farm (Pincode)</label>
+                            <input type="text" id="farm_pincode" class="form-control" />
                         </div>
-                        <div class="mb-3">
-                            <label for="mobile_no" class="form-label">Mobile No</label>
-                            <input
-                                type="text"
-                                id="mobile_no"
-                                class="form-control"
-                                placeholder="Enter mobile number"
-                                required
-                                />
+
+                        <div class="col-md-3">
+                            <label for="farm_capacity" class="form-label">Farm (Capacity)<span class="text-danger">*</span></label>
+                            <input type="number" min="0" id="farm_capacity" class="form-control" required />
                         </div>
-                        <div class="mb-3">
-                            <label for="block_name" class="form-label">Block Name</label>
-                            <input
-                                type="text"
-                                id="block_name"
-                                class="form-control"
-                                placeholder="Enter block name"
-                                required
-                                />
+                        <div class="col-md-9">
+                            <label class="form-label d-block">Farm Type<span class="text-danger">*</span></label>
+                            <div class="d-flex gap-4 pt-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="farm_type" id="farm_type_own" value="own" required>
+                                    <label class="form-check-label" for="farm_type_own">Own</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="farm_type" id="farm_type_ec_shed" value="ec_shed">
+                                    <label class="form-check-label" for="farm_type_ec_shed">Ec Shed</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="farm_type" id="farm_type_integration" value="integration">
+                                    <label class="form-check-label" for="farm_type_integration">Integration</label>
+                                </div>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="address" class="form-label">Address</label>
-                            <textarea
-                                id="address"
-                                class="form-control"
-                                placeholder="Enter address"
-                                required
-                                ></textarea>
+
+                        <div class="col-md-4">
+                            <label for="state" class="form-label">State</label>
+                            <input type="text" id="state" class="form-control" placeholder="Enter state" />
                         </div>
-                        <div class="mb-3">
+                        <div class="col-md-4">
+                            <label for="district" class="form-label">District</label>
+                            <input type="text" id="district" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label for="area" class="form-label">Area</label>
+                            <input type="text" id="area" class="form-control" />
+                        </div>
+                        <div class="col-md-12">
+                            <label for="farm_address" class="form-label">Farm Address</label>
+                            <textarea id="farm_address" class="form-control" rows="2"></textarea>
+                        </div>
+
+                        <div class="col-md-5">
                             <label for="farm_latitude" class="form-label">Farm Latitude</label>
-                            <input
-                                type="number"
-                                step="any"
-                                id="farm_latitude"
-                                class="form-control"
-                                placeholder="Enter farm latitude"
-                                required
-                                />
+                            <input type="number" step="any" id="farm_latitude" class="form-control" />
                         </div>
-                        <div class="mb-3">
+                        <div class="col-md-5">
                             <label for="farm_longitude" class="form-label">Farm Longitude</label>
-                            <input
-                                type="number"
-                                step="any"
-                                id="farm_longitude"
-                                class="form-control"
-                                placeholder="Enter farm longitude"
-                                required
-                                />
+                            <input type="number" step="any" id="farm_longitude" class="form-control" />
                         </div>
-                        <div class="mb-3">
-                            <label for="farm_type" class="form-label">Farm Type</label>
-                            <input
-                                type="text"
-                                id="farm_type"
-                                class="form-control"
-                                placeholder="Enter farm type"
-                                required
-                                />
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-primary w-100" id="get-location-btn">Get Location</button>
                         </div>
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success">Save</button>
+
+                        <div class="col-md-4">
+                            <label for="agreement_start_date" class="form-label">Agreement Start Date<span class="text-danger">*</span></label>
+                            <input type="date" id="agreement_start_date" class="form-control" required />
                         </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- List Section -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Farm List</h5>
-            </div>
-            <div class="card-body">
+                        <div class="col-md-4">
+                            <label for="agreement_end_date" class="form-label">Agreement End Date<span class="text-danger">*</span></label>
+                            <input type="date" id="agreement_end_date" class="form-control" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label for="agreement_months" class="form-label">Agreement Months</label>
+                            <input type="number" min="0" id="agreement_months" class="form-control" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="agreement_copy" class="form-label">Agreement Copy<span class="text-danger">*</span></label>
+                            <input type="file" id="agreement_copy" class="form-control" />
+                            <div class="form-text" id="agreement_copy_current"></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="other_documents" class="form-label">Other Documents</label>
+                            <input type="file" id="other_documents" class="form-control" />
+                            <div class="form-text" id="other_documents_current"></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="farm_sqft" class="form-label">Farm Sq.ft</label>
+                            <input type="text" id="farm_sqft" class="form-control" />
+                        </div>
+
+                        <div class="col-md-12">
+                            <label for="farm_pictures" class="form-label">Farm Pictures (multiple)</label>
+                            <input type="file" id="farm_pictures" class="form-control" multiple accept="image/*" />
+                            <div class="form-text" id="farm_pictures_current"></div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Security Cheque 1</label>
+                                    <input type="text" id="cheque_1_no" class="form-control mb-2" placeholder="Cheque no." />
+                                    <input type="file" id="cheque_1_file" class="form-control" />
+                                    <div class="form-text" id="cheque_1_file_current"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Security Cheque 2</label>
+                                    <input type="text" id="cheque_2_no" class="form-control mb-2" placeholder="Cheque no." />
+                                    <input type="file" id="cheque_2_file" class="form-control" />
+                                    <div class="form-text" id="cheque_2_file_current"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Security Cheque 3</label>
+                                    <input type="text" id="cheque_3_no" class="form-control mb-2" placeholder="Cheque no." />
+                                    <input type="file" id="cheque_3_file" class="form-control" />
+                                    <div class="form-text" id="cheque_3_file_current"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Security Cheque 4</label>
+                                    <input type="text" id="cheque_4_no" class="form-control mb-2" placeholder="Cheque no." />
+                                    <input type="file" id="cheque_4_file" class="form-control" />
+                                    <div class="form-text" id="cheque_4_file_current"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <h6 class="text-muted text-center mt-2">Shed Information</h6>
+                            <div id="shed-rows"></div>
+                            <template id="shed-row-template">
+                                <div class="row g-3 shed-row align-items-end mb-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Shed No</label>
+                                        <input type="text" class="form-control shed-no" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Dimentions</label>
+                                        <input type="text" class="form-control shed-dimensions" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Sq Feet</label>
+                                        <input type="text" class="form-control shed-sqfeet" />
+                                    </div>
+                                    <div class="col-md-1">
+                                        <button type="button" class="btn btn-outline-danger btn-sm remove-shed-row"><i class="fas fa-times"></i></button>
+                                    </div>
+                                </div>
+                            </template>
+                            <button type="button" class="btn btn-outline-success btn-sm" id="add-shed-row-btn">
+                                <i class="fas fa-plus"></i> Add Shed
+                            </button>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label for="remarks" class="form-label">Remarks</label>
+                            <textarea id="remarks" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>
+                        <button type="button" class="btn btn-secondary" id="farm-cancel-btn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="farm-save-btn">Save</button>
+                    </div>
+                </form>
+
+                <hr class="my-4" />
+
+                <h5 class="mb-3"><i class="fas fa-table me-2"></i>Farm List</h5>
                 <div class="table-responsive">
-                    <table
-                        class="table table-hover table-bordered mb-0"
-                        id="farm-table"
-                        >
+                    <table class="table table-hover table-bordered mb-0" id="farm-table">
                         <thead class="table-dark">
                             <tr>
                                 <th>Branch</th>
                                 <th>Supervisor</th>
-                                <th>Place</th>
+                                <th>Farmer</th>
                                 <th>Farm Name</th>
+                                <th>Farm Code</th>
+                                <th>Farm Type</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- AJAX content will load here -->
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
 
 <script>
-    $(document).ready(function () {
-        // CSRF token setup for AJAX
-        function getCSRFToken() {
-            return $("input[name=csrfmiddlewaretoken]").val();
+$(document).ready(function () {
+    function getCSRFToken() {
+        return $("input[name=csrfmiddlewaretoken]").first().val();
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Shed Information rows (Add Farm)                                  */
+    /* ---------------------------------------------------------------- */
+    function addShedRow(shed) {
+        shed = shed || {};
+        const $row = $($("#shed-row-template").html());
+        $row.find(".shed-no").val(shed.shed_no || "");
+        $row.find(".shed-dimensions").val(shed.dimensions || "");
+        $row.find(".shed-sqfeet").val(shed.sq_feet || "");
+        $("#shed-rows").append($row);
+    }
+
+    $("#add-shed-row-btn").click(function () {
+        addShedRow();
+    });
+
+    $(document).on("click", ".remove-shed-row", function () {
+        $(this).closest(".shed-row").remove();
+    });
+
+    function collectSheds() {
+        const sheds = [];
+        $("#shed-rows .shed-row").each(function () {
+            const shed_no = $(this).find(".shed-no").val();
+            if (!shed_no) return;
+            sheds.push({
+                shed_no: shed_no,
+                dimensions: $(this).find(".shed-dimensions").val(),
+                sq_feet: $(this).find(".shed-sqfeet").val(),
+            });
+        });
+        return sheds;
+    }
+
+    function resetShedRows() {
+        $("#shed-rows").empty();
+        addShedRow();
+    }
+    resetShedRows();
+
+    /* ---------------------------------------------------------------- */
+    /* Get Location                                                       */
+    /* ---------------------------------------------------------------- */
+    $("#get-location-btn").click(function () {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser.");
+            return;
         }
-
-        // Function to load farms data into the table
-        function loadFarms() {
-            $.ajax({
-                url: "/broiler_farm/",
-                type: "GET",
-                success: function (data) {
-                    const table = $("#farm-table");
-
-                    // Destroy existing DataTable instance if it exists
-                    if ($.fn.DataTable.isDataTable(table)) {
-                        console.log("Destroying existing DataTable instance...");
-                        table.DataTable().clear().destroy();
-                    }
-
-                    // Clear and repopulate the table
-                    const tbody = table.find("tbody");
-                    tbody.empty();
-                    data.forEach(farm => {
-                        tbody.append(`
-                            <tr>
-                                <td>${farm.branch_name}</td>
-                                <td>${farm.supervisor_name}</td>
-                                <td>${farm.broiler_place_name}</td>
-                                <td>${farm.farm_name}</td>
-                                <td>
-                                    <button class="btn btn-outline-primary btn-sm edit-farm" data-id="${farm.id}">Edit</button>
-                                    <button class="btn btn-outline-danger btn-sm delete-farm" data-id="${farm.id}">Delete</button>
-                                </td>
-                            </tr>
-                        `);
-                    });
-
-                    // Reinitialize the DataTable
-                    table.DataTable({
-                        destroy: true,
-                        responsive: true, // Optional: Better for smaller screens
-                        retrieve: true, // Prevent multiple initializations
-                        paging: true,  // Enable pagination
-                        searching: true, // Enable search filter
-                        info: true     // Display "Showing X to Y of Z entries"
-                    });
-                },
-                error: function () {
-                    alert("Error loading farms. Please try again.");
-                }
-            });
-        }
-
-
-        // Load farms on page load
-        loadFarms();
-        // On branch selection, fetch supervisors
-        $('#branch').change(function() {
-            const branchId = $(this).val();
-            if (branchId) {
-                $.ajax({
-                    url: "{% url 'get_supervisors' %}",
-                    data: { branch_id: branchId },
-                    success: function(data) {
-                        const supervisors = data.supervisors;
-                        const supervisorSelect = $('#supervisor');
-                        supervisorSelect.empty();
-                        supervisorSelect.append('<option value="" selected disabled>Select a supervisor</option>');
-                        supervisors.forEach(function(supervisor) {
-                            supervisorSelect.append(`<option value="${supervisor.id}">${supervisor.name}</option>`);
-                        });
-                    }
-                });
-            }
+        navigator.geolocation.getCurrentPosition(function (position) {
+            $("#farm_latitude").val(position.coords.latitude);
+            $("#farm_longitude").val(position.coords.longitude);
+        }, function () {
+            alert("Unable to fetch your location.");
         });
+    });
 
-        // On supervisor selection, fetch places
-        $('#supervisor').change(function() {
-            const supervisorId = $(this).val();
-            if (supervisorId) {
-                $.ajax({
-                    url: "{% url 'get_broiler_places' %}",
-                    data: { supervisor_id: supervisorId },
-                    success: function(data) {
-                        const places = data.broiler_places;
-                        const placeSelect = $('#broiler_place');
-                        placeSelect.empty();
-                        placeSelect.append('<option value="" selected disabled>Select a broiler place</option>');
-                        places.forEach(function(place) {
-                            placeSelect.append(`<option value="${place.id}">${place.place_name}</option>`);
-                        });
-                    }
-                });
-            }
-        });
-
-        // Handle form submission
-        $("#farm-form").submit(function (e) {
-            e.preventDefault();
-            const formData = {
-                branch_id: $("#branch").val(),
-                supervisor_id: $("#supervisor").val(),
-                broiler_place_id: $("#broiler_place").val(),
-                farm_code: $("#farm_code").val(),
-                farm_name: $("#farm_name").val(),
-                mobile_no: $("#mobile_no").val(),
-                block_name: $("#block_name").val(),
-                address: $("#address").val(),
-                farm_latitude: $("#farm_latitude").val(),
-                farm_longitude: $("#farm_longitude").val(),
-                farm_type: $("#farm_type").val(),
-            };
-
-            $.ajax({
-                url: "/broiler_farm_create/",
-                type: "POST",
-                data: formData,
-                headers: {
-                    "X-CSRFToken": getCSRFToken()
-                },
-                success: function () {
-                    $("#farmFormModal").modal("hide");
-                     // Reset the form
-                    $("#farm-form")[0].reset();
-
-                    // Clear dependent dropdowns
-                    $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
-                    $("#broiler_place").empty().append('<option value="" selected disabled>Select a broiler place</option>');
-                    loadFarms();
-                    alert("Farm added successfully!");
-                },
-                error: function (xhr) {
-                    alert("Error adding farm. Please check your input.");
-                }
-            });
-        });
-
-        // Handle edit button click
-        $(document).on("click", ".edit-farm", function () {
-            const farmId = $(this).data("id");
-            $.ajax({
-                url: `/broiler_farm/${farmId}/`,
-                type: "GET",
-                success: function (farm) {
-                    $("#branch").val(farm.branch);
-                    $("#supervisor").val(farm.supervisor);
-                    $("#broiler_place").val(farm.place);
-                    $("#farm_code").val(farm.farm_code);
-                    $("#farm_name").val(farm.farm_name);
-                    $("#mobile_no").val(farm.mobile_no);
-                    $("#block_name").val(farm.block_name);
-                    $("#address").val(farm.address);
-                    $("#farm_latitude").val(farm.farm_latitude);
-                    $("#farm_longitude").val(farm.farm_longitude);
-                    $("#farm_type").val(farm.farm_type);
-                    $("#farmFormModal").modal("show");
-
-                    // Update form submit behavior
-                    $("#farm-form").off("submit").on("submit", function (e) {
-                        e.preventDefault();
-                        const updatedData = {
-                            branch: $("#branch").val(),
-                            supervisor: $("#supervisor").val(),
-                            broiler_place: $("#broiler_place").val(),
-                            farm_code: $("#farm_code").val(),
-                            farm_name: $("#farm_name").val(),
-                            mobile_no: $("#mobile_no").val(),
-                            block_name: $("#block_name").val(),
-                            address: $("#address").val(),
-                            farm_latitude: $("#farm_latitude").val(),
-                            farm_longitude: $("#farm_longitude").val(),
-                            farm_type: $("#farm_type").val(),
-                        };
-
-                        $.ajax({
-                            url: `/broiler_farm/${farmId}/update/`,
-                            type: "PUT",
-                            data: JSON.stringify(updatedData),
-                            contentType: "application/json",
-                            headers: {
-                                "X-CSRFToken": getCSRFToken()
-                            },
-                            success: function () {
-                                $("#farmFormModal").modal("hide");
-                                loadFarms();
-                                alert("Farm updated successfully!");
-                            },
-                            error: function (xhr) {
-                                alert("Error updating farm.");
-                            }
-                        });
-                    });
-                },
-                error: function () {
-                    alert("Error fetching farm details.");
-                }
-            });
-        });
-
-        // Handle delete button click
-        $(document).on("click", ".delete-farm", function () {
-            const farmId = $(this).data("id");
-            if (confirm("Are you sure you want to delete this farm?")) {
-                $.ajax({
-                    url: `/broiler_farm/${farmId}/delete/`,
-                    type: "DELETE",
-                    headers: {
-                        "X-CSRFToken": getCSRFToken()
-                    },
-                    success: function () {
-                        loadFarms();
-                        alert("Farm deleted successfully!");
-                    },
-                    error: function () {
-                        alert("Error deleting farm.");
-                    }
+    /* ---------------------------------------------------------------- */
+    /* Branch -> Supervisor cascade                                      */
+    /* ---------------------------------------------------------------- */
+    $("#branch").change(function () {
+        const branchId = $(this).val();
+        const supervisorSelect = $("#supervisor");
+        supervisorSelect.empty().append('<option value="" selected disabled>Select a supervisor</option>');
+        if (!branchId) return;
+        $.ajax({
+            url: "{% url 'get_supervisors' %}",
+            data: { branch_id: branchId },
+            success: function (data) {
+                data.supervisors.forEach(function (supervisor) {
+                    supervisorSelect.append(`<option value="${supervisor.id}">${supervisor.name}</option>`);
                 });
             }
         });
     });
+
+    /* ---------------------------------------------------------------- */
+    /* Farmer dropdown refresh (used after adding a new farmer)          */
+    /* ---------------------------------------------------------------- */
+    function refreshFarmerDropdown(selectId) {
+        $.ajax({
+            url: "{% url 'farmer_list' %}",
+            type: "GET",
+            success: function (farmers) {
+                const select = $("#farmer");
+                select.empty().append('<option value="" selected disabled>-Select- (add farmers on the Add Farmer tab)</option>');
+                farmers.forEach(function (farmer) {
+                    select.append(`<option value="${farmer.id}">${farmer.farmer_name}</option>`);
+                });
+                if (selectId) select.val(selectId);
+            }
+        });
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Farmer: form reset / cancel                                       */
+    /* ---------------------------------------------------------------- */
+    function resetFarmerForm() {
+        $("#farmer-form")[0].reset();
+        $("#farmer_id").val("");
+        $("#farmer-form .form-text").text("");
+        $("#farmer-save-btn").text("Save");
+        $("#farmer-form").off("submit").on("submit", handleFarmerSubmit);
+    }
+    $("#farmer-cancel-btn").click(resetFarmerForm);
+
+    /* ---------------------------------------------------------------- */
+    /* Farmer: list                                                       */
+    /* ---------------------------------------------------------------- */
+    function loadFarmers() {
+        $.ajax({
+            url: "{% url 'farmer_list' %}",
+            type: "GET",
+            success: function (data) {
+                const table = $("#farmer-table");
+                if ($.fn.DataTable.isDataTable(table)) {
+                    table.DataTable().clear().destroy();
+                }
+                const tbody = table.find("tbody");
+                tbody.empty();
+                data.forEach(function (farmer) {
+                    tbody.append(`
+                        <tr>
+                            <td>${farmer.farmer_name}</td>
+                            <td>${farmer.mobile_no || ""}</td>
+                            <td>${farmer.farmer_group || ""}</td>
+                            <td>${farmer.usc || ""}</td>
+                            <td>${farmer.service_no || ""}</td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm edit-farmer" data-id="${farmer.id}">Edit</button>
+                                <button class="btn btn-outline-danger btn-sm delete-farmer" data-id="${farmer.id}">Delete</button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                table.DataTable({ destroy: true, responsive: true, paging: true, searching: true, info: true });
+            },
+            error: function () {
+                alert("Error loading farmers. Please try again.");
+            }
+        });
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Farmer: create / update                                           */
+    /* ---------------------------------------------------------------- */
+    function handleFarmerSubmit(e) {
+        e.preventDefault();
+        const id = $("#farmer_id").val();
+        const formData = new FormData();
+        formData.append("farmer_name", $("#farmer_name").val());
+        formData.append("phone_no", $("#phone_no").val());
+        formData.append("mobile_no", $("#mobile_no").val());
+        formData.append("mobile_2", $("#mobile_2").val());
+        formData.append("pan_no", $("#pan_no").val());
+        formData.append("aadhar_no", $("#aadhar_no").val());
+        formData.append("national_id", $("#national_id").val());
+        formData.append("usc", $("#usc").val());
+        formData.append("service_no", $("#service_no").val());
+        formData.append("farmer_group", $("#farmer_group").val());
+        formData.append("tds_percent", $("#tds_percent").val());
+        formData.append("account_holder_name", $("#account_holder_name").val());
+        formData.append("acc_no", $("#acc_no").val());
+        formData.append("ifsc_code", $("#ifsc_code").val());
+        formData.append("bank_name", $("#bank_name").val());
+        formData.append("bank_branch", $("#bank_branch").val());
+        formData.append("address", $("#farmer_address").val());
+
+        ["farmer_photo", "pan_upload", "aadhar_upload_front", "aadhar_upload_back"].forEach(function (field) {
+            const file = $("#" + field)[0].files[0];
+            if (file) formData.append(field, file);
+        });
+
+        $.ajax({
+            url: id ? `/farmer/${id}/update/` : "{% url 'farmer_create' %}",
+            type: "POST",
+            processData: false,
+            contentType: false,
+            data: formData,
+            headers: { "X-CSRFToken": getCSRFToken() },
+            success: function (response) {
+                resetFarmerForm();
+                loadFarmers();
+                refreshFarmerDropdown(response.id);
+                alert(id ? "Farmer updated successfully!" : "Farmer added successfully!");
+            },
+            error: function () {
+                alert("Error saving farmer. Please check your input.");
+            }
+        });
+    }
+    $("#farmer-form").on("submit", handleFarmerSubmit);
+
+    /* ---------------------------------------------------------------- */
+    /* Farmer: edit / delete                                             */
+    /* ---------------------------------------------------------------- */
+    $(document).on("click", ".edit-farmer", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/farmer/${id}/`,
+            type: "GET",
+            success: function (farmer) {
+                $("#farmer_id").val(farmer.id);
+                $("#farmer_name").val(farmer.farmer_name);
+                $("#phone_no").val(farmer.phone_no);
+                $("#mobile_no").val(farmer.mobile_no);
+                $("#mobile_2").val(farmer.mobile_2);
+                $("#pan_no").val(farmer.pan_no);
+                $("#aadhar_no").val(farmer.aadhar_no);
+                $("#national_id").val(farmer.national_id);
+                $("#usc").val(farmer.usc);
+                $("#service_no").val(farmer.service_no);
+                $("#farmer_group").val(farmer.farmer_group);
+                $("#tds_percent").val(farmer.tds_percent);
+                $("#account_holder_name").val(farmer.account_holder_name);
+                $("#acc_no").val(farmer.acc_no);
+                $("#ifsc_code").val(farmer.ifsc_code);
+                $("#bank_name").val(farmer.bank_name);
+                $("#bank_branch").val(farmer.bank_branch);
+                $("#farmer_address").val(farmer.address);
+
+                ["farmer_photo", "pan_upload", "aadhar_upload_front", "aadhar_upload_back"].forEach(function (field) {
+                    const url = farmer[field];
+                    $("#" + field + "_current").html(url ? `Current: <a href="${url}" target="_blank">view file</a>` : "");
+                });
+
+                $("#farmer-save-btn").text("Update");
+                $("html, body").animate({ scrollTop: $("#farmer-form").offset().top - 100 }, 300);
+            },
+            error: function () {
+                alert("Error fetching farmer details.");
+            }
+        });
+    });
+
+    $(document).on("click", ".delete-farmer", function () {
+        const id = $(this).data("id");
+        if (!confirm("Are you sure you want to delete this farmer?")) return;
+        $.ajax({
+            url: `/farmer/${id}/delete/`,
+            type: "DELETE",
+            headers: { "X-CSRFToken": getCSRFToken() },
+            success: function () {
+                loadFarmers();
+                refreshFarmerDropdown();
+                alert("Farmer deleted successfully!");
+            },
+            error: function () {
+                alert("Error deleting farmer. It may be linked to an existing farm.");
+            }
+        });
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Farm: form reset / cancel                                         */
+    /* ---------------------------------------------------------------- */
+    function resetFarmForm() {
+        $("#farm-form")[0].reset();
+        $("#farm_id").val("");
+        $("#farm-form .form-text").text("");
+        $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
+        resetShedRows();
+        $("#farm-save-btn").text("Save");
+        $("#farm-form").off("submit").on("submit", handleFarmSubmit);
+    }
+    $("#farm-cancel-btn").click(resetFarmForm);
+
+    /* ---------------------------------------------------------------- */
+    /* Farm: list                                                        */
+    /* ---------------------------------------------------------------- */
+    const FARM_TYPE_LABELS = { own: "Own", ec_shed: "Ec Shed", integration: "Integration" };
+
+    function loadFarms() {
+        $.ajax({
+            url: "/broiler_farm/",
+            type: "GET",
+            success: function (data) {
+                const table = $("#farm-table");
+                if ($.fn.DataTable.isDataTable(table)) {
+                    table.DataTable().clear().destroy();
+                }
+                const tbody = table.find("tbody");
+                tbody.empty();
+                data.forEach(function (farm) {
+                    tbody.append(`
+                        <tr>
+                            <td>${farm.branch_name || ""}</td>
+                            <td>${farm.supervisor_name || ""}</td>
+                            <td>${farm.farmer_name || ""}</td>
+                            <td>${farm.farm_name}</td>
+                            <td>${farm.farm_code}</td>
+                            <td>${FARM_TYPE_LABELS[farm.farm_type] || farm.farm_type}</td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm edit-farm" data-id="${farm.id}">Edit</button>
+                                <button class="btn btn-outline-danger btn-sm delete-farm" data-id="${farm.id}">Delete</button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                table.DataTable({ destroy: true, responsive: true, paging: true, searching: true, info: true });
+            },
+            error: function () {
+                alert("Error loading farms. Please try again.");
+            }
+        });
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Farm: create / update                                             */
+    /* ---------------------------------------------------------------- */
+    function handleFarmSubmit(e) {
+        e.preventDefault();
+        const id = $("#farm_id").val();
+        const formData = new FormData();
+        formData.append("branch_id", $("#branch").val());
+        formData.append("supervisor_id", $("#supervisor").val());
+        formData.append("farmer_id", $("#farmer").val());
+        formData.append("region", $("#region").val());
+        formData.append("line", $("#line").val());
+        formData.append("farm_code", $("#farm_code").val());
+        formData.append("farm_name", $("#farm_name").val());
+        formData.append("farm_pincode", $("#farm_pincode").val());
+        formData.append("farm_capacity", $("#farm_capacity").val());
+        formData.append("farm_type", $("input[name=farm_type]:checked").val() || "");
+        formData.append("state", $("#state").val());
+        formData.append("district", $("#district").val());
+        formData.append("area", $("#area").val());
+        formData.append("farm_address", $("#farm_address").val());
+        formData.append("farm_latitude", $("#farm_latitude").val());
+        formData.append("farm_longitude", $("#farm_longitude").val());
+        formData.append("agreement_start_date", $("#agreement_start_date").val());
+        formData.append("agreement_end_date", $("#agreement_end_date").val());
+        formData.append("agreement_months", $("#agreement_months").val());
+        formData.append("farm_sqft", $("#farm_sqft").val());
+        formData.append("cheque_1_no", $("#cheque_1_no").val());
+        formData.append("cheque_2_no", $("#cheque_2_no").val());
+        formData.append("cheque_3_no", $("#cheque_3_no").val());
+        formData.append("cheque_4_no", $("#cheque_4_no").val());
+        formData.append("remarks", $("#remarks").val());
+        formData.append("sheds", JSON.stringify(collectSheds()));
+
+        ["agreement_copy", "other_documents", "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file"].forEach(function (field) {
+            const file = $("#" + field)[0].files[0];
+            if (file) formData.append(field, file);
+        });
+
+        const pictures = $("#farm_pictures")[0].files;
+        for (let i = 0; i < pictures.length; i++) {
+            formData.append("farm_pictures", pictures[i]);
+        }
+
+        if (!id && !$("#agreement_copy")[0].files[0]) {
+            alert("Agreement Copy is required.");
+            return;
+        }
+
+        $.ajax({
+            url: id ? `/broiler_farm/${id}/update/` : "{% url 'broiler_farm_create' %}",
+            type: "POST",
+            processData: false,
+            contentType: false,
+            data: formData,
+            headers: { "X-CSRFToken": getCSRFToken() },
+            success: function () {
+                resetFarmForm();
+                loadFarms();
+                alert(id ? "Farm updated successfully!" : "Farm added successfully!");
+            },
+            error: function () {
+                alert("Error saving farm. Please check your input.");
+            }
+        });
+    }
+    $("#farm-form").on("submit", handleFarmSubmit);
+
+    /* ---------------------------------------------------------------- */
+    /* Farm: edit / delete                                               */
+    /* ---------------------------------------------------------------- */
+    $(document).on("click", ".edit-farm", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/broiler_farm/${id}/`,
+            type: "GET",
+            success: function (farm) {
+                $("#farm_id").val(farm.id);
+                $("#region").val(farm.region);
+                $("#branch").val(farm.branch_id).trigger("change");
+                $("#line").val(farm.line);
+                $("#farm_code").val(farm.farm_code);
+                $("#farm_name").val(farm.farm_name);
+                $("#farm_pincode").val(farm.farm_pincode);
+                $("#farm_capacity").val(farm.farm_capacity);
+                $(`input[name=farm_type][value="${farm.farm_type}"]`).prop("checked", true);
+                $("#state").val(farm.state);
+                $("#district").val(farm.district);
+                $("#area").val(farm.area);
+                $("#farm_address").val(farm.farm_address);
+                $("#farm_latitude").val(farm.farm_latitude);
+                $("#farm_longitude").val(farm.farm_longitude);
+                $("#agreement_start_date").val(farm.agreement_start_date);
+                $("#agreement_end_date").val(farm.agreement_end_date);
+                $("#agreement_months").val(farm.agreement_months);
+                $("#farm_sqft").val(farm.farm_sqft);
+                $("#cheque_1_no").val(farm.cheque_1_no);
+                $("#cheque_2_no").val(farm.cheque_2_no);
+                $("#cheque_3_no").val(farm.cheque_3_no);
+                $("#cheque_4_no").val(farm.cheque_4_no);
+                $("#remarks").val(farm.remarks);
+
+                // Supervisor/Farmer selects populate asynchronously (branch change) - set once ready
+                setTimeout(function () {
+                    $("#supervisor").val(farm.supervisor_id);
+                    $("#farmer").val(farm.farmer_id);
+                }, 400);
+
+                ["agreement_copy", "other_documents", "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file"].forEach(function (field) {
+                    const url = farm[field];
+                    $("#" + field + "_current").html(url ? `Current: <a href="${url}" target="_blank">view file</a>` : "");
+                });
+                $("#farm_pictures_current").html(
+                    farm.images && farm.images.length
+                        ? "Current: " + farm.images.map(img => `<a href="${img.url}" target="_blank">image</a>`).join(", ")
+                        : ""
+                );
+
+                $("#shed-rows").empty();
+                if (farm.sheds && farm.sheds.length) {
+                    farm.sheds.forEach(function (shed) { addShedRow(shed); });
+                } else {
+                    addShedRow();
+                }
+
+                $("#farm-save-btn").text("Update");
+                $("html, body").animate({ scrollTop: $("#farm-form").offset().top - 100 }, 300);
+            },
+            error: function () {
+                alert("Error fetching farm details.");
+            }
+        });
+    });
+
+    $(document).on("click", ".delete-farm", function () {
+        const id = $(this).data("id");
+        if (!confirm("Are you sure you want to delete this farm?")) return;
+        $.ajax({
+            url: `/broiler_farm/${id}/delete/`,
+            type: "DELETE",
+            headers: { "X-CSRFToken": getCSRFToken() },
+            success: function () {
+                loadFarms();
+                alert("Farm deleted successfully!");
+            },
+            error: function () {
+                alert("Error deleting farm.");
+            }
+        });
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Init                                                               */
+    /* ---------------------------------------------------------------- */
+    loadFarmers();
+    loadFarms();
+});
 </script>
 {% endblock content %}

@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if hatch_setting_id %}Edit{% else %}New{% endif %} Hatch Register — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fa-solid fa-egg"></i>
+      {% if hatch_setting_id %}Edit{% else %}New{% endif %} Hatch Register &amp; Sales Sheet
+    </div>
+    <div class="page-header-subtitle">Record egg intake, hatch output grading and chick sales for one batch (Setting No)</div>
+  </div>
+  <a class="btn btn-secondary" href="{% url 'hatchery_list' %}">
+    <i class="fas fa-arrow-left"></i>
+    Back to List
+  </a>
+</div>
+
+<form id="hatch-setting-form">
+  {% csrf_token %}
+  <input type="hidden" id="hatch_setting_id" value="{{ hatch_setting_id|default:'' }}">
+
+  <!-- Section 1: Hatch Lot & Timeline Identification -->
+  <div class="card mb-4">
+    <div class="card-header"><i class="fas fa-id-card me-2"></i>1. Hatch Lot &amp; Timeline Identification</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Setting No (Batch ID) <span class="text-danger">*</span></label>
+          <input type="text" id="setting_no" class="form-control" placeholder="e.g. 44" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Batch / Flock No</label>
+          <input type="text" id="batch_flock_no" class="form-control" placeholder="e.g. 0806/01">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Supplier Name <span class="text-danger">*</span></label>
+          <input type="text" id="supplier_name" class="form-control" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Primary Machine Nos</label>
+          <input type="text" id="primary_machine_nos" class="form-control" placeholder="e.g. 39,40,41,42">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Received Date <span class="text-danger">*</span></label>
+          <input type="date" id="received_date" class="form-control" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Received Time</label>
+          <input type="time" id="received_time" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Setting Date <span class="text-danger">*</span></label>
+          <input type="date" id="setting_date" class="form-control" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Transfer Date</label>
+          <input type="date" id="transfer_date" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Hatch Date</label>
+          <input type="date" id="hatch_date" class="form-control">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Push Time</label>
+          <input type="time" id="push_time" class="form-control">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Egg Intake & Multi-Setter Settings -->
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-egg me-2"></i>2. Egg Intake &amp; Multi-Setter Settings</span>
+      <button type="button" class="btn btn-sm btn-primary" id="add-egg-row">
+        <i class="fas fa-plus"></i> Add Setter Row
+      </button>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        <div class="col-md-2">
+          <label class="form-label">Received Qty</label>
+          <input type="number" min="0" id="lot_received_qty" class="form-control lot-qty-input" value="0">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Breakage Qty</label>
+          <input type="number" min="0" id="lot_breakage_qty" class="form-control lot-qty-input" value="0">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Break %</label>
+          <input type="text" id="lot_breakage_percent" class="form-control" readonly value="0%">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Crack Qty</label>
+          <input type="number" min="0" id="lot_crack_qty" class="form-control lot-qty-input" value="0">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Crack %</label>
+          <input type="text" id="lot_crack_percent" class="form-control" readonly value="0%">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Setting Qty</label>
+          <input type="number" min="0" id="lot_setting_qty" class="form-control" readonly value="0">
+        </div>
+      </div>
+      <div class="small text-muted mb-3">Standard Targets -&gt; Max Allowable Breakage: &lt; 1.00% | Max Allowable Cracks: &lt; 0.75% | Min Target Setting: &gt; 98.00%</div>
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0" id="egg-intake-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:110px;">Sub-Lot / Flock</th>
+              <th style="min-width:100px;">Setter No.</th>
+              <th style="min-width:80px;">No. Trays</th>
+              <th style="min-width:80px;">Tray Size</th>
+              <th style="min-width:100px;">Total Eggs</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="egg-intake-tbody"></tbody>
+          <tfoot>
+            <tr class="table-light fw-bold">
+              <td colspan="2">TOTAL</td>
+              <td id="egg-total-trays">0</td>
+              <td></td>
+              <td id="egg-total-eggs">0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Candling, Hatcher Transfer & Final Hatch Output Grading -->
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-kiwi-bird me-2"></i>3. Candling, Hatcher Transfer &amp; Final Hatch Output Grading</span>
+      <button type="button" class="btn btn-sm btn-primary" id="add-hatcher-row">
+        <i class="fas fa-plus"></i> Add Hatcher Row
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0" id="hatcher-output-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:90px;">Hatcher No.</th>
+              <th style="min-width:90px;">Infertile Qty</th>
+              <th style="min-width:70px;">Infertile %</th>
+              <th style="min-width:90px;">Early Dead</th>
+              <th style="min-width:70px;">ED %</th>
+              <th style="min-width:90px;">Blasting Qty</th>
+              <th style="min-width:70px;">BQ %</th>
+              <th style="min-width:90px;">Transfer Qty</th>
+              <th style="min-width:70px;">TQ %</th>
+              <th style="min-width:100px;">Dead-In-Shell</th>
+              <th style="min-width:100px;">Culls / Malf.</th>
+              <th style="min-width:100px;">Saleable Chicks</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="hatcher-output-tbody"></tbody>
+          <tfoot>
+            <tr class="table-light fw-bold">
+              <td>TOTAL</td>
+              <td id="hatcher-total-infertile">0</td>
+              <td id="hatcher-total-infertile-pct">0%</td>
+              <td id="hatcher-total-ed">0</td>
+              <td id="hatcher-total-ed-pct">0%</td>
+              <td id="hatcher-total-bq">0</td>
+              <td id="hatcher-total-bq-pct">0%</td>
+              <td id="hatcher-total-tq">0</td>
+              <td id="hatcher-total-tq-pct">0%</td>
+              <td id="hatcher-total-dis">0</td>
+              <td id="hatcher-total-culls">0</td>
+              <td id="hatcher-total-saleable">0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center p-2">
+        <div class="small text-muted">Standard Targets -&gt; Max Infertility: &lt; 12.00% | Max Dead-in-Shell Loss: &lt; 2.00% | Min Target Saleable Hatch: &gt; 65.00% - 70.00%</div>
+        <div class="fw-bold">Hatch % (of Setting Qty): <span id="hatcher-total-hatch-pct" class="text-primary">0%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 4: Environmental & Post-Hatch Consumables Log -->
+  <div class="card mb-4">
+    <div class="card-header"><i class="fas fa-temperature-half me-2"></i>4. Environmental &amp; Post-Hatch Consumables Log</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Setter Temperature</label>
+          <input type="text" id="setter_temperature" class="form-control" placeholder="e.g. 99F">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Setter Humidity</label>
+          <input type="text" id="setter_humidity" class="form-control" placeholder="e.g. 60%">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Hatcher Temperature</label>
+          <input type="text" id="hatcher_temperature" class="form-control" placeholder="e.g. 98.5F">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Hatcher Humidity</label>
+          <input type="text" id="hatcher_humidity" class="form-control" placeholder="e.g. 70%">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Avg Egg / Chick Wt</label>
+          <input type="text" id="avg_chick_weight" class="form-control" placeholder="e.g. CHICKS WT 38-40 GM">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Medicine / Vaccine</label>
+          <input type="text" id="medicine_vaccine" class="form-control">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Packing Boxes Used</label>
+          <input type="number" min="0" id="packing_boxes_used" class="form-control">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Remarks / Notes</label>
+          <textarea id="remarks" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 5: Hatchery Sale & Commercial Clearance Details -->
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-truck me-2"></i>5. Hatchery Sale &amp; Commercial Clearance Details</span>
+      <button type="button" class="btn btn-sm btn-primary" id="add-sales-row">
+        <i class="fas fa-plus"></i> Add Customer Row
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0" id="sales-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:160px;">Trader / Customer Name</th>
+              <th style="min-width:90px;">Chicks Sold</th>
+              <th style="min-width:90px;">Free Chicks</th>
+              <th style="min-width:90px;">Billed Chicks</th>
+              <th style="min-width:90px;">Rate (₹)</th>
+              <th style="min-width:110px;">Total Amount (₹)</th>
+              <th style="min-width:110px;">Payment Status</th>
+              <th style="min-width:160px;">Delivery / Vehicle Notes</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="sales-tbody"></tbody>
+          <tfoot>
+            <tr class="table-light fw-bold">
+              <td>TOTAL SALES</td>
+              <td id="sales-total-sold">0</td>
+              <td id="sales-total-free">0</td>
+              <td id="sales-total-billed">0</td>
+              <td></td>
+              <td id="sales-total-amount">0.00</td>
+              <td colspan="3">Unsold Chicks: <span id="unsold-chicks-display">0</span></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sign-off -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Prepared By (Operator)</label>
+          <input type="text" id="prepared_by" class="form-control">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Verified By (Hatchery Manager)</label>
+          <input type="text" id="verified_by" class="form-control">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-end gap-2 mb-5">
+    <a class="btn btn-secondary" href="{% url 'hatchery_list' %}">
+      <i class="fas fa-times"></i> Cancel
+    </a>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-save"></i> Save Hatch Register
+    </button>
+  </div>
+</form>
+
+<script>
+$(document).ready(function () {
+  const hatchSettingId = $("#hatch_setting_id").val();
+
+  function eggRowHtml(row) {
+    row = row || {};
+    return `
+      <tr>
+        <td><input type="text" class="form-control form-control-sm" data-field="sub_lot_flock" value="${row.sub_lot_flock || ""}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="setter_no" value="${row.setter_no || ""}" required></td>
+        <td><input type="number" min="0" class="form-control form-control-sm egg-qty-input" data-field="no_trays" value="${row.no_trays ?? ""}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm egg-qty-input" data-field="tray_size" value="${row.tray_size ?? ""}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm" data-field="total_eggs" readonly value="${row.total_eggs ?? 0}"></td>
+        <td><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-trash"></i></button></td>
+      </tr>`;
+  }
+
+  function hatcherRowHtml(row) {
+    row = row || {};
+    return `
+      <tr>
+        <td><input type="text" class="form-control form-control-sm" data-field="hatcher_no" value="${row.hatcher_no || ""}" required></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="infertile_qty" value="${row.infertile_qty || 0}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="infertile_percent" readonly value="0%"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="early_dead_qty" value="${row.early_dead_qty || 0}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="ed_percent" readonly value="0%"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="blasting_qty" value="${row.blasting_qty || 0}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="bq_percent" readonly value="0%"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="transfer_qty" value="${row.transfer_qty || 0}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="tq_percent" readonly value="0%"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="dead_in_shell_qty" value="${row.dead_in_shell_qty || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="culls_malf_qty" value="${row.culls_malf_qty || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="saleable_chicks" value="${row.saleable_chicks || 0}"></td>
+        <td><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-trash"></i></button></td>
+      </tr>`;
+  }
+
+  function salesRowHtml(row) {
+    row = row || {};
+    const status = row.payment_status || "unpaid";
+    return `
+      <tr>
+        <td><input type="text" class="form-control form-control-sm" data-field="trader_customer_name" value="${row.trader_customer_name || ""}" required></td>
+        <td><input type="number" min="0" class="form-control form-control-sm sales-input" data-field="chicks_sold" value="${row.chicks_sold || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm sales-input" data-field="free_chicks" value="${row.free_chicks || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm sales-input" data-field="billed_chicks" value="${row.billed_chicks || 0}"></td>
+        <td><input type="number" min="0" step="0.01" class="form-control form-control-sm sales-input" data-field="rate" value="${row.rate || 0}"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="total_amount" readonly value="${row.total_amount || "0.00"}"></td>
+        <td>
+          <select class="form-select form-select-sm" data-field="payment_status">
+            <option value="unpaid" ${status === "unpaid" ? "selected" : ""}>Unpaid</option>
+            <option value="partial" ${status === "partial" ? "selected" : ""}>Partial</option>
+            <option value="paid" ${status === "paid" ? "selected" : ""}>Paid</option>
+          </select>
+        </td>
+        <td><input type="text" class="form-control form-control-sm" data-field="delivery_notes" value="${row.delivery_notes || ""}"></td>
+        <td><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-trash"></i></button></td>
+      </tr>`;
+  }
+
+  function recalcEggSection() {
+    const received = parseFloat($("#lot_received_qty").val()) || 0;
+    const breakage = parseFloat($("#lot_breakage_qty").val()) || 0;
+    const crack = parseFloat($("#lot_crack_qty").val()) || 0;
+    const setting = Math.max(received - breakage - crack, 0);
+    $("#lot_breakage_percent").val(received ? (breakage / received * 100).toFixed(2) + "%" : "0%");
+    $("#lot_crack_percent").val(received ? (crack / received * 100).toFixed(2) + "%" : "0%");
+    $("#lot_setting_qty").val(setting);
+    window.totalSettingQty = setting;
+
+    let totalTrays = 0, totalEggs = 0;
+    $("#egg-intake-tbody tr").each(function () {
+      const row = $(this);
+      const noTrays = parseFloat(row.find('[data-field="no_trays"]').val()) || 0;
+      const traySize = parseFloat(row.find('[data-field="tray_size"]').val()) || 0;
+      const eggs = noTrays * traySize;
+      row.find('[data-field="total_eggs"]').val(eggs);
+      totalTrays += noTrays; totalEggs += eggs;
+    });
+    $("#egg-total-trays").text(totalTrays);
+    $("#egg-total-eggs").text(totalEggs);
+    recalcHatcherSection();
+  }
+
+  function recalcHatcherSection() {
+    const settingQty = window.totalSettingQty || 0;
+    let totalInfertile = 0, totalED = 0, totalBQ = 0, totalTQ = 0, totalDIS = 0, totalCulls = 0, totalSaleable = 0;
+    $("#hatcher-output-tbody tr").each(function () {
+      const row = $(this);
+      const infertile = parseFloat(row.find('[data-field="infertile_qty"]').val()) || 0;
+      const ed = parseFloat(row.find('[data-field="early_dead_qty"]').val()) || 0;
+      const bq = parseFloat(row.find('[data-field="blasting_qty"]').val()) || 0;
+      const tq = parseFloat(row.find('[data-field="transfer_qty"]').val()) || 0;
+      const dis = parseFloat(row.find('[data-field="dead_in_shell_qty"]').val()) || 0;
+      const culls = parseFloat(row.find('[data-field="culls_malf_qty"]').val()) || 0;
+      const saleable = parseFloat(row.find('[data-field="saleable_chicks"]').val()) || 0;
+      row.find('[data-field="infertile_percent"]').val(settingQty ? (infertile / settingQty * 100).toFixed(2) + "%" : "0%");
+      row.find('[data-field="ed_percent"]').val(settingQty ? (ed / settingQty * 100).toFixed(2) + "%" : "0%");
+      row.find('[data-field="bq_percent"]').val(settingQty ? (bq / settingQty * 100).toFixed(2) + "%" : "0%");
+      row.find('[data-field="tq_percent"]').val(settingQty ? (tq / settingQty * 100).toFixed(2) + "%" : "0%");
+      totalInfertile += infertile; totalED += ed; totalBQ += bq; totalTQ += tq;
+      totalDIS += dis; totalCulls += culls; totalSaleable += saleable;
+    });
+    $("#hatcher-total-infertile").text(totalInfertile);
+    $("#hatcher-total-infertile-pct").text(settingQty ? (totalInfertile / settingQty * 100).toFixed(2) + "%" : "0%");
+    $("#hatcher-total-ed").text(totalED);
+    $("#hatcher-total-ed-pct").text(settingQty ? (totalED / settingQty * 100).toFixed(2) + "%" : "0%");
+    $("#hatcher-total-bq").text(totalBQ);
+    $("#hatcher-total-bq-pct").text(settingQty ? (totalBQ / settingQty * 100).toFixed(2) + "%" : "0%");
+    $("#hatcher-total-tq").text(totalTQ);
+    $("#hatcher-total-tq-pct").text(settingQty ? (totalTQ / settingQty * 100).toFixed(2) + "%" : "0%");
+    $("#hatcher-total-dis").text(totalDIS);
+    $("#hatcher-total-culls").text(totalCulls);
+    $("#hatcher-total-saleable").text(totalSaleable);
+    $("#hatcher-total-hatch-pct").text((settingQty ? (totalSaleable / settingQty * 100).toFixed(2) : 0) + "%");
+    window.totalSaleableChicks = totalSaleable;
+    recalcSalesSection();
+  }
+
+  function recalcSalesSection() {
+    let totalSold = 0, totalFree = 0, totalBilled = 0, totalAmount = 0;
+    $("#sales-tbody tr").each(function () {
+      const row = $(this);
+      const sold = parseFloat(row.find('[data-field="chicks_sold"]').val()) || 0;
+      const free = parseFloat(row.find('[data-field="free_chicks"]').val()) || 0;
+      const billed = parseFloat(row.find('[data-field="billed_chicks"]').val()) || 0;
+      const rate = parseFloat(row.find('[data-field="rate"]').val()) || 0;
+      const amount = billed * rate;
+      row.find('[data-field="total_amount"]').val(amount.toFixed(2));
+      totalSold += sold; totalFree += free; totalBilled += billed; totalAmount += amount;
+    });
+    $("#sales-total-sold").text(totalSold);
+    $("#sales-total-free").text(totalFree);
+    $("#sales-total-billed").text(totalBilled);
+    $("#sales-total-amount").text(totalAmount.toFixed(2));
+    $("#unsold-chicks-display").text((window.totalSaleableChicks || 0) - totalSold);
+  }
+
+  $("#add-egg-row").on("click", function () {
+    $("#egg-intake-tbody").append(eggRowHtml());
+  });
+  $("#add-hatcher-row").on("click", function () {
+    $("#hatcher-output-tbody").append(hatcherRowHtml());
+  });
+  $("#add-sales-row").on("click", function () {
+    $("#sales-tbody").append(salesRowHtml());
+  });
+
+  $(document).on("click", ".remove-row", function () {
+    $(this).closest("tr").remove();
+    recalcEggSection();
+  });
+
+  $(document).on("input", ".lot-qty-input", recalcEggSection);
+  $(document).on("input", ".egg-qty-input", recalcEggSection);
+  $(document).on("input", ".hatcher-qty-input", recalcHatcherSection);
+  $(document).on("input", ".sales-input", recalcSalesSection);
+
+  function collectRows(tbodySelector, fields) {
+    const rows = [];
+    $(`${tbodySelector} tr`).each(function () {
+      const row = $(this);
+      const data = {};
+      fields.forEach((f) => {
+        const el = row.find(`[data-field="${f}"]`);
+        data[f] = el.val();
+      });
+      rows.push(data);
+    });
+    return rows;
+  }
+
+  $("#hatch-setting-form").on("submit", function (e) {
+    e.preventDefault();
+
+    const payload = {
+      setting_no: $("#setting_no").val(),
+      batch_flock_no: $("#batch_flock_no").val(),
+      supplier_name: $("#supplier_name").val(),
+      primary_machine_nos: $("#primary_machine_nos").val(),
+      received_date: $("#received_date").val(),
+      received_time: $("#received_time").val(),
+      setting_date: $("#setting_date").val(),
+      transfer_date: $("#transfer_date").val(),
+      hatch_date: $("#hatch_date").val(),
+      push_time: $("#push_time").val(),
+      received_qty: $("#lot_received_qty").val(),
+      breakage_qty: $("#lot_breakage_qty").val(),
+      crack_qty: $("#lot_crack_qty").val(),
+      setting_qty: $("#lot_setting_qty").val(),
+      setter_temperature: $("#setter_temperature").val(),
+      setter_humidity: $("#setter_humidity").val(),
+      hatcher_temperature: $("#hatcher_temperature").val(),
+      hatcher_humidity: $("#hatcher_humidity").val(),
+      avg_chick_weight: $("#avg_chick_weight").val(),
+      medicine_vaccine: $("#medicine_vaccine").val(),
+      packing_boxes_used: $("#packing_boxes_used").val(),
+      remarks: $("#remarks").val(),
+      prepared_by: $("#prepared_by").val(),
+      verified_by: $("#verified_by").val(),
+      egg_intakes: collectRows("#egg-intake-tbody", [
+        "sub_lot_flock", "setter_no", "no_trays", "tray_size", "total_eggs",
+      ]),
+      hatcher_outputs: collectRows("#hatcher-output-tbody", [
+        "hatcher_no", "infertile_qty", "early_dead_qty", "blasting_qty",
+        "transfer_qty", "dead_in_shell_qty", "culls_malf_qty", "saleable_chicks",
+      ]),
+      sales_lines: collectRows("#sales-tbody", [
+        "trader_customer_name", "chicks_sold", "free_chicks", "billed_chicks",
+        "rate", "total_amount", "payment_status", "delivery_notes",
+      ]),
+    };
+
+    $.ajax({
+      url: hatchSettingId ? `/hatchery_api/${hatchSettingId}/` : "{% url 'hatchery_api_list' %}",
+      type: hatchSettingId ? "PUT" : "POST",
+      contentType: "application/json",
+      data: JSON.stringify(payload),
+      headers: { "X-CSRFToken": "{{ csrf_token }}" },
+      success: function () {
+        window.location.href = "{% url 'hatchery_list' %}";
+      },
+      error: function (xhr) {
+        const msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : "Failed to save hatch register.";
+        alert(msg);
+      },
+    });
+  });
+
+  function loadForEdit() {
+    $.ajax({
+      url: `/hatchery_api/${hatchSettingId}/`,
+      type: "GET",
+      success: function (hs) {
+        $("#setting_no").val(hs.setting_no);
+        $("#batch_flock_no").val(hs.batch_flock_no);
+        $("#supplier_name").val(hs.supplier_name);
+        $("#primary_machine_nos").val(hs.primary_machine_nos);
+        $("#received_date").val(hs.received_date);
+        $("#received_time").val(hs.received_time);
+        $("#setting_date").val(hs.setting_date);
+        $("#transfer_date").val(hs.transfer_date);
+        $("#hatch_date").val(hs.hatch_date);
+        $("#push_time").val(hs.push_time);
+        $("#lot_received_qty").val(hs.received_qty);
+        $("#lot_breakage_qty").val(hs.breakage_qty);
+        $("#lot_crack_qty").val(hs.crack_qty);
+        $("#setter_temperature").val(hs.setter_temperature);
+        $("#setter_humidity").val(hs.setter_humidity);
+        $("#hatcher_temperature").val(hs.hatcher_temperature);
+        $("#hatcher_humidity").val(hs.hatcher_humidity);
+        $("#avg_chick_weight").val(hs.avg_chick_weight);
+        $("#medicine_vaccine").val(hs.medicine_vaccine);
+        $("#packing_boxes_used").val(hs.packing_boxes_used);
+        $("#remarks").val(hs.remarks);
+        $("#prepared_by").val(hs.prepared_by);
+        $("#verified_by").val(hs.verified_by);
+
+        $("#egg-intake-tbody").empty();
+        (hs.egg_intakes || []).forEach((row) => $("#egg-intake-tbody").append(eggRowHtml(row)));
+
+        $("#hatcher-output-tbody").empty();
+        (hs.hatcher_outputs || []).forEach((row) => $("#hatcher-output-tbody").append(hatcherRowHtml(row)));
+
+        $("#sales-tbody").empty();
+        (hs.sales_lines || []).forEach((row) => $("#sales-tbody").append(salesRowHtml(row)));
+
+        recalcEggSection();
+      },
+      error: function () {
+        alert("Error loading hatch register for editing.");
+      },
+    });
+  }
+
+  if (hatchSettingId) {
+    loadForEdit();
+  } else {
+    $("#egg-intake-tbody").append(eggRowHtml());
+    $("#hatcher-output-tbody").append(hatcherRowHtml());
+    $("#sales-tbody").append(salesRowHtml());
+    recalcEggSection();
+  }
+});
+</script>
+{% endblock %}

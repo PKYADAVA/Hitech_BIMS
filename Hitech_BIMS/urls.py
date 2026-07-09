@@ -12,6 +12,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("user.urls")),
     path("", include("broiler.urls")),
+    path("", include("hatchery.urls")),
     path("", include("hr.urls")),
     path("", include("inventory.urls")),
     path("", include("account.urls")),

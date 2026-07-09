@@ -12,7 +12,10 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
-from .models import Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerPlace, Supervisor
+from .models import (
+    Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
+    BroilerFarmShed, BroilerPlace, Farmer, Supervisor,
+)
 import json
 import logging
 
@@ -158,15 +161,20 @@ class BroilerPlaceTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class BroilerFarmTemplateView(View):
-    """View for rendering the broiler farm template."""
-    
+    """View for rendering the broiler farm template (Add Farmer + Add Farm tabs)."""
+
     def get(self, request):
         cache_key = "branch_list"
         branches = cache.get(cache_key)
         if not branches:
             branches = list(Branch.objects.values())
             cache.set(cache_key, branches)
-        context = {"branches": branches}
+        farmers = list(Farmer.objects.values("id", "farmer_name"))
+        context = {
+            "branches": branches,
+            "farmers": farmers,
+            "states_and_union_territories": STATES_AND_TERRITORIES,
+        }
         return render(request, "broiler_farm.html", context)
 
 @method_decorator(login_required, name="dispatch")
@@ -328,6 +336,76 @@ class BroilerPlaceAPI(BaseAPIView):
             return self.handle_exception(e)
 
 @method_decorator(login_required, name="dispatch")
+class FarmerAPI(BaseAPIView):
+    """API endpoints for Farmer operations."""
+
+    FILE_FIELDS = ["farmer_photo", "pan_upload", "aadhar_upload_front", "aadhar_upload_back"]
+    FORM_FIELDS = [
+        "farmer_name", "phone_no", "mobile_no", "mobile_2", "pan_no", "aadhar_no",
+        "national_id", "usc", "service_no", "farmer_group", "tds_percent",
+        "account_holder_name", "acc_no", "ifsc_code", "bank_name", "bank_branch", "address",
+    ]
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                farmer = Farmer.objects.get(id=id)
+                data = {field: getattr(farmer, field) for field in self.FORM_FIELDS}
+                data["id"] = farmer.id
+                data["tds_percent"] = str(farmer.tds_percent) if farmer.tds_percent is not None else None
+                for field in self.FILE_FIELDS:
+                    file_obj = getattr(farmer, field)
+                    data[field] = file_obj.url if file_obj else None
+                return JsonResponse(data)
+
+            cache_key = "farmer_list"
+            cached_data = self.get_cached_data(cache_key)
+            if cached_data:
+                return JsonResponse(cached_data, safe=False)
+
+            farmers = list(
+                Farmer.objects.all().values(
+                    "id", "farmer_name", "mobile_no", "farmer_group", "usc", "service_no"
+                )
+            )
+            self.set_cached_data(cache_key, farmers)
+            return JsonResponse(farmers, safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            data = request.POST
+            with transaction.atomic():
+                farmer = Farmer.objects.get(id=id) if id else Farmer()
+                for field in self.FORM_FIELDS:
+                    if field not in data:
+                        continue
+                    setattr(farmer, field, data[field] or None if field == "tds_percent" else data[field])
+                for field in self.FILE_FIELDS:
+                    if field in request.FILES:
+                        setattr(farmer, field, request.FILES[field])
+                farmer.full_clean(exclude=self.FILE_FIELDS)
+                farmer.save()
+                cache.delete("farmer_list")
+            return JsonResponse(
+                {"message": "Farmer updated" if id else "Farmer created", "id": farmer.id},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            farmer = Farmer.objects.get(id=id)
+            with transaction.atomic():
+                farmer.delete()
+                cache.delete("farmer_list")
+            return JsonResponse({"message": "Farmer deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+@method_decorator(login_required, name="dispatch")
 class BroilerBatchAPI(BaseAPIView):
     """API endpoints for BroilerBatch operations."""
     
@@ -474,41 +552,53 @@ class BroilerDiseaseAPI(BaseAPIView):
 @method_decorator(login_required, name="dispatch")
 class BroilerFarmAPI(BaseAPIView):
     """API endpoints for BroilerFarm operations."""
-    
+
+    FILE_FIELDS = [
+        "agreement_copy", "other_documents",
+        "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file",
+    ]
+    FORM_FIELDS = [
+        "farm_code", "farm_name", "region", "line", "farm_pincode", "farm_capacity",
+        "farm_type", "state", "district", "area", "farm_address", "farm_latitude",
+        "farm_longitude", "agreement_start_date", "agreement_end_date", "agreement_months",
+        "farm_sqft", "cheque_1_no", "cheque_2_no", "cheque_3_no", "cheque_4_no", "remarks",
+    ]
+
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
                 broiler_farm = BroilerFarm.objects.select_related(
-                    "branch", "supervisor", "broiler_place"
-                ).get(id=id)
-                return JsonResponse({
+                    "branch", "supervisor", "farmer"
+                ).prefetch_related("sheds", "images").get(id=id)
+                data = {field: getattr(broiler_farm, field) for field in self.FORM_FIELDS}
+                data.update({
                     "id": broiler_farm.id,
-                    "farm_code": broiler_farm.farm_code,
-                    "farm_name": broiler_farm.farm_name,
-                    "branch_name": broiler_farm.branch.branch_name if broiler_farm.branch else None,
-                    "supervisor_name": broiler_farm.supervisor.name if broiler_farm.supervisor else None,
-                    "broiler_place_name": broiler_farm.broiler_place.name if broiler_farm.broiler_place else None,
-                    "mobile_no": broiler_farm.mobile_no,
-                    "block_name": broiler_farm.block_name,
-                    "address": broiler_farm.address,
-                    "farm_latitude": broiler_farm.farm_latitude,
-                    "farm_longitude": broiler_farm.farm_longitude,
-                    "farm_type": broiler_farm.farm_type,
+                    "branch_id": broiler_farm.branch_id,
+                    "supervisor_id": broiler_farm.supervisor_id,
+                    "farmer_id": broiler_farm.farmer_id,
+                    "agreement_start_date": broiler_farm.agreement_start_date.isoformat() if broiler_farm.agreement_start_date else None,
+                    "agreement_end_date": broiler_farm.agreement_end_date.isoformat() if broiler_farm.agreement_end_date else None,
+                    "sheds": list(broiler_farm.sheds.values("id", "shed_no", "dimensions", "sq_feet")),
+                    "images": [{"id": img.id, "url": img.image.url} for img in broiler_farm.images.all()],
                 })
-            
+                for field in self.FILE_FIELDS:
+                    file_obj = getattr(broiler_farm, field)
+                    data[field] = file_obj.url if file_obj else None
+                return JsonResponse(data)
+
             cache_key = "broiler_farm_list"
             cached_data = self.get_cached_data(cache_key)
             if cached_data:
                 return JsonResponse(cached_data, safe=False)
-            
+
             broiler_farms = list(
-                BroilerFarm.objects.select_related("branch", "supervisor", "broiler_place")
+                BroilerFarm.objects.select_related("branch", "supervisor", "farmer")
                 .values(
-                    "id", "farm_code", "farm_name", "mobile_no", "block_name",
-                    "address", "farm_latitude", "farm_longitude", "farm_type",
+                    "id", "farm_code", "farm_name", "region", "line", "farm_type",
+                    "agreement_start_date", "agreement_end_date",
                     branch_name=F("branch__branch_name"),
                     supervisor_name=F("supervisor__name"),
-                    broiler_place_name=F("broiler_place__place_name"),
+                    farmer_name=F("farmer__farmer_name"),
                 )
             )
             self.set_cached_data(cache_key, broiler_farms)
@@ -516,56 +606,51 @@ class BroilerFarmAPI(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
-    def post(self, request) -> JsonResponse:
+    def _save_sheds(self, broiler_farm, sheds_json: str) -> None:
+        """Replace this farm's sheds with the rows submitted from the form."""
+        sheds = json.loads(sheds_json) if sheds_json else []
+        broiler_farm.sheds.all().delete()
+        for shed in sheds:
+            if not shed.get("shed_no"):
+                continue
+            BroilerFarmShed.objects.create(
+                farm=broiler_farm,
+                shed_no=shed.get("shed_no", ""),
+                dimensions=shed.get("dimensions", ""),
+                sq_feet=shed.get("sq_feet", ""),
+            )
+
+    def post(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             data = request.POST
             with transaction.atomic():
-                branch = Branch.objects.get(id=data["branch_id"])
-                supervisor = Supervisor.objects.get(id=data["supervisor_id"])
-                broiler_place = BroilerPlace.objects.get(id=data["broiler_place_id"])
-                
-                BroilerFarm.objects.create(
-                    farm_code=data["farm_code"],
-                    farm_name=data["farm_name"],
-                    branch=branch,
-                    supervisor=supervisor,
-                    broiler_place=broiler_place,
-                    mobile_no=data["mobile_no"],
-                    block_name=data["block_name"],
-                    address=data["address"],
-                    farm_latitude=data["farm_latitude"],
-                    farm_longitude=data["farm_longitude"],
-                    farm_type=data["farm_type"],
-                )
-                cache.delete("broiler_farm_list")
-            return JsonResponse({"message": "BroilerFarm created"}, status=201)
-        except Exception as e:
-            return self.handle_exception(e)
+                broiler_farm = BroilerFarm.objects.get(id=id) if id else BroilerFarm()
 
-    def put(self, request, id: int) -> JsonResponse:
-        try:
-            broiler_farm = BroilerFarm.objects.get(id=id)
-            data = json.loads(request.body.decode("utf-8"))
-            with transaction.atomic():
-                broiler_farm.farm_code = data.get("farm_code", broiler_farm.farm_code)
-                broiler_farm.farm_name = data.get("farm_name", broiler_farm.farm_name)
-                broiler_farm.mobile_no = data.get("mobile_no", broiler_farm.mobile_no)
-                broiler_farm.block_name = data.get("block_name", broiler_farm.block_name)
-                broiler_farm.address = data.get("address", broiler_farm.address)
-                broiler_farm.farm_latitude = data.get("farm_latitude", broiler_farm.farm_latitude)
-                broiler_farm.farm_longitude = data.get("farm_longitude", broiler_farm.farm_longitude)
-                broiler_farm.farm_type = data.get("farm_type", broiler_farm.farm_type)
+                broiler_farm.branch = Branch.objects.get(id=data["branch_id"])
+                broiler_farm.supervisor = Supervisor.objects.get(id=data["supervisor_id"])
+                broiler_farm.farmer = Farmer.objects.get(id=data["farmer_id"])
 
-                if "branch_id" in data:
-                    broiler_farm.branch = Branch.objects.get(id=data["branch_id"])
-                if "supervisor_id" in data:
-                    broiler_farm.supervisor = Supervisor.objects.get(id=data["supervisor_id"])
-                if "broiler_place_id" in data:
-                    broiler_farm.broiler_place = BroilerPlace.objects.get(id=data["broiler_place_id"])
+                for field in self.FORM_FIELDS:
+                    if field in data:
+                        setattr(broiler_farm, field, data[field] or None)
 
+                for field in self.FILE_FIELDS:
+                    if field in request.FILES:
+                        setattr(broiler_farm, field, request.FILES[field])
+
+                broiler_farm.full_clean(exclude=self.FILE_FIELDS)
                 broiler_farm.save()
+
+                self._save_sheds(broiler_farm, data.get("sheds", "[]"))
+
+                for picture in request.FILES.getlist("farm_pictures"):
+                    BroilerFarmImage.objects.create(farm=broiler_farm, image=picture)
+
                 cache.delete("broiler_farm_list")
-            return JsonResponse({"message": "BroilerFarm updated"})
+            return JsonResponse(
+                {"message": "BroilerFarm updated" if id else "BroilerFarm created", "id": broiler_farm.id},
+                status=200 if id else 201,
+            )
         except Exception as e:
             return self.handle_exception(e)
 

@@ -27,6 +27,9 @@
   <link rel="stylesheet" href="{% static 'css/style.css' %}" />
 
   {% block css %}{% endblock %}
+
+  <!-- jQuery (loaded in head so inline scripts in templates can use $) -->
+  <script src="{% static 'js/jquery-3.7.1.min.js' %}"></script>
 </head>
 
 <body>
@@ -50,8 +53,7 @@
     </div>
   </footer>
 
-  <!-- jQuery & Bootstrap JS -->
-  <script src="{% static 'js/jquery-3.7.1.min.js' %}"></script>
+  <!-- Bootstrap JS -->
   <script src="{% static 'js/bootstrap/bootstrap.bundle.min.js' %}"></script>
 
   <!-- DataTables -->

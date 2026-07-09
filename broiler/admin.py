@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Branch, Supervisor, BroilerPlace, BroilerFarm, BroilerBatch, BroilerDisease
+from .models import (
+    Branch, Supervisor, BroilerPlace, Farmer, BroilerFarm, BroilerFarmShed,
+    BroilerFarmImage, BroilerBatch, BroilerDisease,
+)
 
 
 @admin.register(Branch)
@@ -43,17 +46,42 @@ class BroilerPlaceAdmin(admin.ModelAdmin):
     """
     Admin interface for BroilerPlace model with optimized display and filtering.
     """
-    list_display = ('id', 'place_name', 'supervisor', 'get_farm_count')
+    list_display = ('id', 'place_name', 'supervisor')
     search_fields = ('place_name',)
     list_filter = ('supervisor',)
     list_per_page = 20
     ordering = ('place_name',)
-    
+
+
+@admin.register(Farmer)
+class FarmerAdmin(admin.ModelAdmin):
+    """
+    Admin interface for Farmer model with optimized display and filtering.
+    """
+    list_display = (
+        'id', 'farmer_name', 'mobile_no', 'farmer_group', 'usc',
+        'service_no', 'get_farm_count'
+    )
+    search_fields = ('farmer_name', 'mobile_no', 'pan_no', 'aadhar_no', 'usc', 'service_no')
+    list_filter = ('farmer_group',)
+    list_per_page = 20
+    ordering = ('farmer_name',)
+
     def get_farm_count(self, obj):
-        """Returns the count of farms in this place."""
-        count = BroilerFarm.objects.filter(broiler_place=obj).count()
+        """Returns the count of farms belonging to this farmer."""
+        count = obj.get_farm_count()
         return format_html('<span class="badge bg-info">{}</span>', count)
     get_farm_count.short_description = 'Farm Count'
+
+
+class BroilerFarmShedInline(admin.TabularInline):
+    model = BroilerFarmShed
+    extra = 0
+
+
+class BroilerFarmImageInline(admin.TabularInline):
+    model = BroilerFarmImage
+    extra = 0
 
 
 @admin.register(BroilerFarm)
@@ -62,26 +90,42 @@ class BroilerFarmAdmin(admin.ModelAdmin):
     Admin interface for BroilerFarm model with comprehensive display and filtering options.
     """
     list_display = (
-        'id', 'farm_name', 'farm_code', 'branch', 'supervisor', 
-        'broiler_place', 'mobile_no', 'block_name', 'farm_type',
+        'id', 'farm_name', 'farm_code', 'branch', 'supervisor',
+        'farmer', 'farm_type', 'agreement_start_date', 'agreement_end_date',
         'get_batch_count'
     )
-    search_fields = ('farm_name', 'farm_code', 'mobile_no', 'block_name')
-    list_filter = ('branch', 'supervisor', 'broiler_place', 'farm_type')
+    search_fields = ('farm_name', 'farm_code', 'farmer__farmer_name', 'line')
+    list_filter = ('branch', 'supervisor', 'farm_type', 'region')
     list_per_page = 20
     ordering = ('farm_name',)
+    inlines = [BroilerFarmShedInline, BroilerFarmImageInline]
     fieldsets = (
         ('Basic Information', {
-            'fields': ('farm_name', 'farm_code', 'farm_type')
+            'fields': ('farm_name', 'farm_code', 'farm_type', 'farmer')
         }),
         ('Location Details', {
-            'fields': ('branch', 'supervisor', 'broiler_place', 'block_name')
+            'fields': (
+                'branch', 'supervisor', 'region', 'line', 'state', 'district',
+                'area', 'farm_address', 'farm_pincode', 'farm_latitude', 'farm_longitude',
+            )
         }),
-        ('Contact Information', {
-            'fields': ('mobile_no',)
+        ('Farm Details', {
+            'fields': ('farm_capacity', 'farm_sqft', 'remarks')
+        }),
+        ('Agreement', {
+            'fields': (
+                'agreement_start_date', 'agreement_end_date', 'agreement_months',
+                'agreement_copy', 'other_documents',
+            )
+        }),
+        ('Security Cheques', {
+            'fields': (
+                'cheque_1_no', 'cheque_1_file', 'cheque_2_no', 'cheque_2_file',
+                'cheque_3_no', 'cheque_3_file', 'cheque_4_no', 'cheque_4_file',
+            )
         }),
     )
-    
+
     def get_batch_count(self, obj):
         """Returns the count of batches in this farm."""
         count = BroilerBatch.objects.filter(broiler_farm=obj).count()

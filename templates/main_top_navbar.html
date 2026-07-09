@@ -48,6 +48,14 @@
         </ul>
       </li>
 
+      <!-- Hatchery -->
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'hatchery' %}active{% endif %}"
+           href="{% url 'hatchery_list' %}">
+          <i class="fa-solid fa-kiwi-bird me-1"></i>Hatchery
+        </a>
+      </li>
+
       <!-- Purchase -->
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'purchase' %}active{% endif %}"
@@ -227,8 +235,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // Hover to open dropdowns on desktop
   const navDropdowns = document.querySelectorAll("#mainNavbar .nav-item.dropdown");
   navDropdowns.forEach(item => {
+    let closeTimer;
     item.addEventListener("mouseenter", function () {
       if (window.innerWidth >= 992) {
+        clearTimeout(closeTimer);
         const menu = this.querySelector(":scope > .dropdown-menu");
         if (menu) menu.classList.add("show");
         this.querySelector(".nav-link")?.setAttribute("aria-expanded", "true");
@@ -237,8 +247,11 @@ document.addEventListener("DOMContentLoaded", function () {
     item.addEventListener("mouseleave", function () {
       if (window.innerWidth >= 992) {
         const menu = this.querySelector(":scope > .dropdown-menu");
-        if (menu) menu.classList.remove("show");
-        this.querySelector(".nav-link")?.setAttribute("aria-expanded", "false");
+        const link = this.querySelector(".nav-link");
+        closeTimer = setTimeout(() => {
+          if (menu) menu.classList.remove("show");
+          link?.setAttribute("aria-expanded", "false");
+        }, 150);
       }
     });
   });
@@ -246,13 +259,17 @@ document.addEventListener("DOMContentLoaded", function () {
   // Submenu hover
   const submenus = document.querySelectorAll("#mainNavbar .dropdown-submenu");
   submenus.forEach(item => {
+    let closeTimer;
     item.addEventListener("mouseenter", function () {
+      clearTimeout(closeTimer);
       const menu = this.querySelector(":scope > .dropdown-menu");
       if (menu) menu.classList.add("show");
     });
     item.addEventListener("mouseleave", function () {
       const menu = this.querySelector(":scope > .dropdown-menu");
-      if (menu) menu.classList.remove("show");
+      closeTimer = setTimeout(() => {
+        if (menu) menu.classList.remove("show");
+      }, 150);
     });
   });
 });

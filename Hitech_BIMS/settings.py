@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     # Custom apps
     "user",
     "broiler",
+    "hatchery",
     "inventory",
     "hr",
     "sales",

@@ -152,7 +152,7 @@ footer {
   box-shadow: var(--shadow-md);
   padding: 6px;
   min-width: 200px;
-  margin-top: 6px !important;
+  margin-top: 0 !important;
   display: none;
   position: absolute;
   left: 0;
