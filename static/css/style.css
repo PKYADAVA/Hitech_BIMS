@@ -583,6 +583,120 @@ footer {
   border-color: var(--border);
 }
 
+/* ---------- DataTables Controls ---------- */
+/* Applies to every DataTables-powered table site-wide so the search box and
+   page-length dropdown look the same everywhere instead of browser default. */
+.dataTables_wrapper {
+  padding: 18px 20px;
+}
+
+/* DataTables' own Bootstrap5 theme ships a higher-specificity rule
+   (div.table-responsive>div.dataTables_wrapper>div.row{margin:0}) that
+   zeroes out any margin we set here regardless of source order, since
+   specificity — not load order — decides ties. Use padding instead, which
+   that rule never touches, so the spacing actually survives. */
+.dataTables_wrapper .row:first-child {
+  align-items: center;
+  padding-bottom: 16px;
+}
+
+.dataTables_wrapper .row:last-child {
+  align-items: center;
+  padding-top: 16px;
+}
+
+.dataTables_length,
+.dataTables_filter {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.dataTables_length label,
+.dataTables_filter label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.dataTables_filter {
+  float: right !important;
+}
+
+.dataTables_filter input {
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.84rem;
+  padding: 8px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-white);
+  color: var(--text);
+  min-width: 200px;
+  transition: var(--transition);
+}
+
+.dataTables_filter input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+  outline: none;
+}
+
+.dataTables_length {
+  float: left !important;
+}
+
+.dataTables_length select {
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.84rem;
+  padding: 7px 32px 7px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-white);
+  color: var(--text);
+}
+
+.dataTables_info,
+.dataTables_paginate {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.dataTables_paginate {
+  display: flex;
+  gap: 4px;
+}
+
+.dataTables_paginate .paginate_button {
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.82rem;
+  padding: 6px 12px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid transparent !important;
+}
+
+.dataTables_paginate .paginate_button:hover {
+  background: var(--bg-subtle) !important;
+  border-color: var(--border) !important;
+  color: var(--primary) !important;
+}
+
+.dataTables_paginate .paginate_button.current {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light)) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+/* Optional wrapper for custom DataTables control placement (e.g. inside a
+   card-body p-0, above a flush table) — gives the length/filter row its own
+   breathing room since the card-body itself carries no padding. */
+.table-controls-wrapper {
+  padding: 14px 16px 0;
+}
+
 /* ---------- Badges ---------- */
 .badge {
   font-family: 'Poppins', sans-serif;
@@ -997,5 +1111,168 @@ input#driving_license { height: 30px; width: 60px; }
 
   .stat-card {
     padding: 16px;
+  }
+}
+
+/* ---------- Home Dashboard ---------- */
+.bims-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+  padding: 32px 36px;
+  color: #ffffff;
+}
+
+.bims-hero-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: 800px;
+}
+
+.bims-hero-icon {
+  width: 60px;
+  height: 60px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.bims-hero-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+.bims-hero-sub {
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.65);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.quick-access-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 992px) {
+  .quick-access-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .quick-access-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 12px;
+  text-decoration: none;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: #bfdbfe;
+}
+
+.quick-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.quick-icon.blue   { background: #dbeafe; color: var(--primary); }
+.quick-icon.green  { background: #d1fae5; color: var(--success); }
+.quick-icon.amber  { background: #fef3c7; color: var(--warning); }
+.quick-icon.red    { background: #fee2e2; color: var(--danger); }
+.quick-icon.cyan   { background: #e0f2fe; color: var(--info); }
+.quick-icon.purple { background: #ede9fe; color: #7c3aed; }
+
+.quick-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.section-heading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.feature-card .card-header {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  font-size: 0.88rem;
+}
+
+.feature-list {
+  list-style: none;
+  padding: 16px 20px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.feature-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--bg-subtle);
+  transition: color 0.2s;
+}
+
+.feature-list li:last-child {
+  border-bottom: none;
+}
+
+.feature-list li i {
+  color: var(--success);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.feature-list li:hover {
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .bims-hero {
+    padding: 24px 20px;
+  }
+
+  .bims-hero-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .bims-hero-title {
+    font-size: 1.25rem;
   }
 }

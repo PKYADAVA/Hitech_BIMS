@@ -6,40 +6,10 @@
 {% endblock %} 
 {% block css %}
 <style>
-    .dataTables_filter {
-      float: right !important;
-      margin-left: 1rem;
-    }
-    .dataTables_filter input {
-      margin-left: 0.5em;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      padding: 0.375rem 0.75rem;
-    }
-    .dataTables_length {
-      float: right !important;
-    }
-    .card-header-custom {
-      padding: 1rem;
-      background-color: #f8f9fa;
-    }
-    .table-top-controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
     .table-right-controls {
       display: flex;
       align-items: center;
       gap: 1rem;
-    }
-    /* Style for the entries dropdown */
-    .dataTables_length select {
-      padding: 0.375rem 2.25rem 0.375rem 0.75rem;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      background-color: #fff;
     }
     #leaveTable th,
     #leaveTable td {
@@ -47,16 +17,15 @@
       vertical-align: middle;
     }
     .selectedButton {
-        display: flex; /* This makes the content inside the <td> align horizontally */
-        gap: 4px; /* Adds space between buttons */
-        justify-content: start; /* Aligns the buttons to the left */
+        display: flex;
+        gap: 4px;
+        justify-content: start;
     }
-    
     .selectedButton button {
-        margin: 0; /* Removes any default margins around the buttons */
+        margin: 0;
     }
 </style>
-{% endblock %} 
+{% endblock %}
 {% block content %}
 <div class="page-header">
     <div class="page-header-title">Employee Leave Management</div>
@@ -132,30 +101,32 @@
     
     <!-- Leave Applications Table -->
     <div class="card">
-        <div class="card-header card-header-custom">
-            <div class="table-top-controls">
-                <h5 class="mb-0">Leave Applications</h5>
-                <div class="d-flex mt-2">
-                    <div class="me-3">
-                        <label for="fromDate" class="form-label">From Date</label>
-                        <input type="date" id="fromDate" class="form-control">
-                    </div>
-                    <div>
-                        <label for="toDate" class="form-label">To Date</label>
-                        <input type="date" id="toDate" class="form-control">
-                    </div>
+        <div class="card-header">
+            <i class="fas fa-table"></i>
+            Leave Applications
+        </div>
+        <div class="card-body pb-0">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="fromDate" class="form-label">From Date</label>
+                    <input type="date" id="fromDate" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label for="toDate" class="form-label">To Date</label>
+                    <input type="date" id="toDate" class="form-control">
                 </div>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <div class="table-controls-wrapper mb-3">
                 <div class="table-right-controls float-end">
                     <!-- Length and filter will be placed here by DataTables -->
                 </div>
                 <div class="clearfix"></div>
             </div>
-            <table id="leaveTable" class="table table-striped">
-                <thead>
+            <div class="table-responsive">
+            <table id="leaveTable" class="table table-hover table-bordered mb-0">
+                <thead class="table-dark">
                     <tr>
                         <th>Employee ID</th>
                         <th>Name</th>
@@ -202,6 +173,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
     <!-- Modal -->

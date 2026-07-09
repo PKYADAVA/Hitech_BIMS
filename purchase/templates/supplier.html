@@ -154,7 +154,7 @@
                         class="table table-hover table-bordered mb-0"
                         id="supplier-table"
                     >
-                        <thead>
+                        <thead class="table-dark">
                             <tr>
                                 <th>Name</th>
                                 <th>Address</th>
@@ -217,27 +217,29 @@ $(document).ready(function () {
                             <td>${item.credit_term}</td>
                             <td>${item.note}</td>
                             <td>
-                                <button class="btn btn-primary edit-button" 
-                                    data-bs-toggle="modal" 
-                                    data-bs-target="#${modalId}" 
-                                    data-id="${item.id}" 
-                                    data-name="${item.name}" 
-                                    data-address="${item.address}" 
-                                    data-place="${item.place}" 
-                                    data-mobile="${item.mobile}" 
-                                    data-contact_type="${item.contact_type}" 
-                                    data-pan="${item.pan}" 
-                                    data-supplier_group="${item.supplier_group}" 
-                                    data-gstin="${item.gstin}" 
-                                    data-state="${item.state}" 
-                                    data-credit_term="${item.credit_term}" 
+                                <div class="d-flex gap-1">
+                                <button class="btn btn-outline-warning btn-sm edit-button"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#${modalId}"
+                                    data-id="${item.id}"
+                                    data-name="${item.name}"
+                                    data-address="${item.address}"
+                                    data-place="${item.place}"
+                                    data-mobile="${item.mobile}"
+                                    data-contact_type="${item.contact_type}"
+                                    data-pan="${item.pan}"
+                                    data-supplier_group="${item.supplier_group}"
+                                    data-gstin="${item.gstin}"
+                                    data-state="${item.state}"
+                                    data-credit_term="${item.credit_term}"
                                     data-note="${item.note}">
-                                    Edit
+                                    <i class="fas fa-pen"></i>
                                 </button>
-                                <button class="btn btn-danger delete-supplier" 
+                                <button class="btn btn-outline-danger btn-sm delete-supplier"
                                     data-id="${item.id}">
-                                    Delete
+                                    <i class="fas fa-trash"></i>
                                 </button>
+                                </div>
                             </td>
                         </tr>
                     `;

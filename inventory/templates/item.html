@@ -136,7 +136,7 @@
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Item List</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table
                         class="table table-hover table-bordered mb-0"
@@ -194,7 +194,8 @@
                                 <td>${item.standard_cost_per_unit}</td>
                                 <td>${item.usage}</td>
                                 <td>
-                                    <button class="btn btn-outline-primary btn-sm edit-item"
+                                    <div class="d-flex gap-1">
+                                    <button class="btn btn-outline-warning btn-sm edit-item"
                                         data-item_id="${item.id}"
                                         data-item_code="${item.item_code}"
                                         data-description="${item.description}"
@@ -203,12 +204,13 @@
                                         data-valuation_method="${item.valuation_method}"
                                         data-standard_cost_per_unit="${item.standard_cost_per_unit}"
                                         data-usage="${item.usage}">
-                                        Edit
+                                        <i class="fas fa-pen"></i>
                                     </button>
                                     <button class="btn btn-outline-danger btn-sm delete-item"
                                         data-id="${item.id}">
-                                        Delete
+                                        <i class="fas fa-trash"></i>
                                     </button>
+                                    </div>
                                 </td>
                             </tr>
                         `;

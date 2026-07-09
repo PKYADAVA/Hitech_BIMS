@@ -96,7 +96,7 @@
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Disease List</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table
                         class="table table-hover table-bordered mb-0"
@@ -148,15 +148,17 @@
                             <td>${item.diagnosis}</td>
                             <td><img src="${item.image}" alt="Disease Image" class="img-fluid" style="max-width: 100px; height: auto;"></td>
                             <td>
-                                <button class="btn btn-outline-primary btn-sm edit-button"
+                                <div class="d-flex gap-1">
+                                <button class="btn btn-outline-warning btn-sm edit-button"
                                         data-id="${item.id}"
                                         data-code="${item.disease_code}"
                                         data-name="${item.disease_name}"
                                         data-symptoms="${item.symptoms}"
                                         data-diagnosis="${item.diagnosis}"
-                                        data-image="${item.image}">Edit</button>
+                                        data-image="${item.image}"><i class="fas fa-pen"></i></button>
                                 <button class="btn btn-outline-danger btn-sm delete-button"
-                                        data-id="${item.id}">Delete</button>
+                                        data-id="${item.id}"><i class="fas fa-trash"></i></button>
+                                </div>
                             </td>
                         </tr>`;
                     });

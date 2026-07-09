@@ -82,7 +82,7 @@
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Warehouse List</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table
                         class="table table-hover table-bordered mb-0"
@@ -130,17 +130,19 @@ $(document).ready(function () {
                         <tr>
                             <td>${warehouse.name}</td>
                             <td>
-                                <button class="btn btn-outline-primary btn-sm edit-warehouse"
+                                <div class="d-flex gap-1">
+                                <button class="btn btn-outline-warning btn-sm edit-warehouse"
                                     data-bs-toggle="modal"
                                     data-bs-target="#${modalId}"
                                     data-id="${warehouse.id}"
                                     data-name="${warehouse.name}">
-                                    Edit
+                                    <i class="fas fa-pen"></i>
                                 </button>
                                 <button class="btn btn-outline-danger btn-sm delete-warehouse"
                                     data-id="${warehouse.id}">
-                                    Delete
+                                    <i class="fas fa-trash"></i>
                                 </button>
+                                </div>
                             </td>
                         </tr>
                     `;

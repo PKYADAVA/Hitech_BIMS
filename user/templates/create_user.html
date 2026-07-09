@@ -27,7 +27,7 @@
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>All Employee Users</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
     <div class="table-responsive">
         <table class="table table-hover table-bordered mb-0 text-center align-middle">
             <thead class="table-dark">
@@ -60,12 +60,12 @@
                         </span>
                     </td>
                     <td>
-                        <button type="button" class="btn btn-outline-primary btn-sm edit-user-btn"
+                        <button type="button" class="btn btn-outline-warning btn-sm edit-user-btn"
                             data-id="{{ employee.user.id }}"
                             data-username="{{ employee.user.username }}"
                             data-group-id="{% if user_group %}{{ user_group.id }}{% endif %}"
                             data-superuser="{{ employee.user.is_superuser|yesno:'1,0' }}">
-                            <i class="fas fa-edit"></i> Edit
+                            <i class="fas fa-pen"></i>
                         </button>
                     </td>
                 </tr>

@@ -135,7 +135,7 @@ Manage Customers
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Customer List</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered mb-0" id="customer-table">
                         <thead class="table-dark">
@@ -190,16 +190,18 @@ Manage Customers
                             <td>${item.credit_limit}</td>
                             <td>${item.state}</td>
                             <td>
-                                <button class="btn btn-outline-primary btn-sm edit-button"
+                                <div class="d-flex gap-1">
+                                <button class="btn btn-outline-warning btn-sm edit-button"
                                     data-bs-toggle="modal"
                                     data-bs-target="#${modalId}"
                                     data-id="${item.id}">
-                                    Edit
+                                    <i class="fas fa-pen"></i>
                                 </button>
                                 <button class="btn btn-outline-danger btn-sm delete-customer"
                                     data-id="${item.id}">
-                                    Delete
+                                    <i class="fas fa-trash"></i>
                                 </button>
+                                </div>
                             </td>
                         </tr>
                     `;

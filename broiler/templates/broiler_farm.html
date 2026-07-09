@@ -563,8 +563,10 @@ $(document).ready(function () {
                             <td>${farmer.usc || ""}</td>
                             <td>${farmer.service_no || ""}</td>
                             <td>
-                                <button class="btn btn-outline-primary btn-sm edit-farmer" data-id="${farmer.id}">Edit</button>
-                                <button class="btn btn-outline-danger btn-sm delete-farmer" data-id="${farmer.id}">Delete</button>
+                                <div class="d-flex gap-1">
+                                <button class="btn btn-outline-warning btn-sm edit-farmer" data-id="${farmer.id}"><i class="fas fa-pen"></i></button>
+                                <button class="btn btn-outline-danger btn-sm delete-farmer" data-id="${farmer.id}"><i class="fas fa-trash"></i></button>
+                                </div>
                             </td>
                         </tr>
                     `);
@@ -727,8 +729,10 @@ $(document).ready(function () {
                             <td>${farm.farm_code}</td>
                             <td>${FARM_TYPE_LABELS[farm.farm_type] || farm.farm_type}</td>
                             <td>
-                                <button class="btn btn-outline-primary btn-sm edit-farm" data-id="${farm.id}">Edit</button>
-                                <button class="btn btn-outline-danger btn-sm delete-farm" data-id="${farm.id}">Delete</button>
+                                <div class="d-flex gap-1">
+                                <button class="btn btn-outline-warning btn-sm edit-farm" data-id="${farm.id}"><i class="fas fa-pen"></i></button>
+                                <button class="btn btn-outline-danger btn-sm delete-farm" data-id="${farm.id}"><i class="fas fa-trash"></i></button>
+                                </div>
                             </td>
                         </tr>
                     `);

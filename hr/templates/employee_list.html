@@ -79,7 +79,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table id="employeeTable" class="table table-hover table-bordered mb-0">
-        <thead>
+        <thead class="table-dark">
           <tr>
             <th>Emp ID</th>
             <th>Full Name</th>
@@ -129,8 +129,8 @@
             <td>
               <div class="d-flex gap-1 flex-wrap">
                 <a href="{% url 'edit_employee' employee.id %}">
-                  <button class="btn btn-outline-primary btn-sm" title="Edit">
-                    <i class="fas fa-pen-to-square"></i>
+                  <button class="btn btn-outline-warning btn-sm" title="Edit">
+                    <i class="fas fa-pen"></i>
                   </button>
                 </a>
                 {% if not employee.relieve %}

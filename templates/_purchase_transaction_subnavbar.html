@@ -1,16 +1,1 @@
-<nav class="module-subnav">
-  <button class="btn btn-sm btn-secondary d-lg-none me-2" type="button"
-          data-bs-toggle="collapse" data-bs-target="#purchaseTxSubNav">
-    <i class="fas fa-bars"></i>
-  </button>
-  <div class="collapse d-lg-flex" id="purchaseTxSubNav" style="width:100%;">
-    <ul class="subnav-tabs">
-      <li class="subnav-tab">
-        <a class="{% if active_tab == 'purchase_order' %}active{% endif %} activate"
-           href="{% url 'purchase_order' %}">
-          <i class="fas fa-file-invoice me-1"></i>Create Purchase Order
-        </a>
-      </li>
-    </ul>
-  </div>
-</nav>
+{% include '_subnav.html' with module='purchase_transaction' active_tab=active_tab %}

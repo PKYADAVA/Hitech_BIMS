@@ -110,7 +110,7 @@
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Chart of Accounts</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table
                         class="table table-hover table-bordered mb-0"
@@ -165,8 +165,9 @@
                                 <td>${account.schedule__name || "N/A"}</td>
                                 <td>${account.status}</td>
                                 <td>
+                                    <div class="d-flex gap-1">
                                     <button
-                                        class="btn btn-outline-primary btn-sm edit-button"
+                                        class="btn btn-outline-warning btn-sm edit-button"
                                         data-id="${account.id}"
                                         data-code="${account.code}"
                                         data-description="${account.description}"
@@ -175,14 +176,15 @@
                                         data-schedule="${account.schedule}"
                                         data-status="${account.status}"
                                     >
-                                        Edit
+                                        <i class="fas fa-pen"></i>
                                     </button>
                                     <button
                                         class="btn btn-outline-danger btn-sm delete-button"
                                         data-id="${account.id}"
                                     >
-                                        Delete
+                                        <i class="fas fa-trash"></i>
                                     </button>
+                                    </div>
                                 </td>
                             </tr>
                         `;

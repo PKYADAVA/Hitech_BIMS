@@ -8,251 +8,13 @@
   <link href="{% static 'css/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --primary:       #1e40af;
-      --primary-light: #3b82f6;
-      --primary-dark:  #1e3a8a;
-      --success:       #059669;
-      --text:          #1e293b;
-      --text-secondary:#475569;
-      --border:        #e2e8f0;
-      --radius:        10px;
-      --radius-lg:     16px;
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      min-height: 100vh;
-      font-family: 'Poppins', sans-serif;
-      background: url("{% static 'images/istockphoto-888136924-2048x2048.jpg' %}") no-repeat center center;
-      background-size: cover;
-      background-attachment: fixed;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-    }
-
-    body::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(15,23,42,0.75) 0%, rgba(30,58,138,0.65) 100%);
-      z-index: 1;
-    }
-
-    .login-wrapper {
-      position: relative;
-      z-index: 2;
-      width: 100%;
-      max-width: 440px;
-      padding: 20px;
-    }
-
-    /* Brand header above card */
-    .login-brand {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-
-    .login-brand img {
-      width: 72px;
-      height: 72px;
-      object-fit: contain;
-      border-radius: var(--radius-lg);
-      background: rgba(255,255,255,0.15);
-      padding: 8px;
-      margin-bottom: 12px;
-      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
-    }
-
-    .login-brand .brand-name {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #ffffff;
-      line-height: 1.2;
-    }
-
-    .login-brand .brand-sub {
-      font-size: 0.78rem;
-      color: rgba(255,255,255,0.6);
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      margin-top: 4px;
-    }
-
-    /* Card */
-    .login-card {
-      background: rgba(255,255,255,0.97);
-      border-radius: var(--radius-lg);
-      box-shadow: 0 24px 60px rgba(0,0,0,0.3);
-      padding: 36px 32px;
-      backdrop-filter: blur(12px);
-      animation: slideUp 0.4s ease;
-    }
-
-    @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0; }
-      to   { transform: translateY(0);    opacity: 1; }
-    }
-
-    .login-card .card-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 4px;
-    }
-
-    .login-card .card-subtitle {
-      font-size: 0.82rem;
-      color: var(--text-secondary);
-      margin-bottom: 28px;
-    }
-
-    /* Divider */
-    .login-divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .login-divider::before,
-    .login-divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .login-divider span {
-      font-size: 0.72rem;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      font-weight: 600;
-    }
-
-    /* Form */
-    .form-label {
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-    }
-
-    .input-wrapper {
-      position: relative;
-      margin-bottom: 18px;
-    }
-
-    .input-wrapper .input-icon {
-      position: absolute;
-      left: 14px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #94a3b8;
-      font-size: 0.9rem;
-      pointer-events: none;
-    }
-
-    .input-wrapper .form-control {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.9rem;
-      padding: 12px 14px 12px 40px;
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      background: #f8fafc;
-      color: var(--text);
-      transition: all 0.25s ease;
-    }
-
-    .input-wrapper .form-control:focus {
-      border-color: var(--primary-light);
-      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-      background: #ffffff;
-      outline: none;
-    }
-
-    /* Login button */
-    .btn-login {
-      width: 100%;
-      padding: 13px !important;
-      font-size: 0.9rem;
-      font-weight: 600;
-      font-family: 'Poppins', sans-serif;
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      color: #ffffff;
-      border: none;
-      border-radius: var(--radius);
-      cursor: pointer;
-      transition: all 0.25s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      box-shadow: 0 4px 16px rgba(30,64,175,0.35);
-      margin-top: 6px;
-    }
-
-    .btn-login:hover {
-      background: linear-gradient(135deg, var(--primary-dark), var(--primary));
-      box-shadow: 0 6px 20px rgba(30,64,175,0.45);
-      transform: translateY(-1px);
-      color: #ffffff;
-    }
-
-    /* Footer links */
-    .login-footer {
-      margin-top: 22px;
-      text-align: center;
-    }
-
-    .login-footer a {
-      font-size: 0.82rem;
-      color: var(--primary);
-      text-decoration: none;
-      font-weight: 500;
-      transition: color 0.2s;
-    }
-
-    .login-footer a:hover {
-      color: var(--primary-dark);
-      text-decoration: underline;
-    }
-
-    .login-footer .divider-dot {
-      color: #94a3b8;
-      margin: 0 8px;
-    }
-
-    /* Error messages */
-    .login-error {
-      background: #fee2e2;
-      color: #991b1b;
-      border-radius: var(--radius);
-      padding: 10px 14px;
-      font-size: 0.82rem;
-      margin-bottom: 18px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    @media (max-width: 480px) {
-      .login-card {
-        padding: 24px 20px;
-      }
-    }
-  </style>
+  <link href="{% static 'css/auth.css' %}" rel="stylesheet">
 </head>
 <body>
-  <div class="login-wrapper">
+  <div class="auth-wrapper">
 
     <!-- Brand -->
-    <div class="login-brand">
+    <div class="auth-brand">
       <img src="{% static 'images/logo.png' %}" alt="BIMS Logo"
            onerror="this.style.display='none'">
       <div class="brand-name">Hi Tech Farms</div>
@@ -260,13 +22,13 @@
     </div>
 
     <!-- Login Card -->
-    <div class="login-card">
+    <div class="auth-card">
       <div class="card-title">Welcome back!</div>
       <div class="card-subtitle">Sign in to your BIMS account to continue</div>
 
       {% if messages %}
         {% for message in messages %}
-          <div class="login-error">
+          <div class="auth-error">
             <i class="fas fa-exclamation-circle"></i>
             {{ message }}
           </div>
@@ -277,8 +39,8 @@
         {% csrf_token %}
 
         <div>
-          <label class="form-label" for="username">Username</label>
-          <div class="input-wrapper">
+          <label class="auth-form-label" for="username">Username</label>
+          <div class="auth-input-wrapper">
             <i class="fas fa-user input-icon"></i>
             <input type="text" id="username" name="username" class="form-control"
                    placeholder="Enter your username" required autofocus>
@@ -286,21 +48,21 @@
         </div>
 
         <div>
-          <label class="form-label" for="password">Password</label>
-          <div class="input-wrapper">
+          <label class="auth-form-label" for="password">Password</label>
+          <div class="auth-input-wrapper">
             <i class="fas fa-lock input-icon"></i>
             <input type="password" id="password" name="password" class="form-control"
                    placeholder="Enter your password" required>
           </div>
         </div>
 
-        <button type="submit" class="btn-login">
+        <button type="submit" class="btn-auth">
           <i class="fas fa-sign-in-alt"></i>
           Sign In
         </button>
       </form>
 
-      <div class="login-footer">
+      <div class="auth-footer">
         <a href="{% url 'forgot_password' %}">
           <i class="fas fa-key me-1"></i>Forgot Password?
         </a>

@@ -69,7 +69,7 @@
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Broiler Supervisor</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table
                         class="table table-hover table-bordered mb-0"
@@ -120,18 +120,20 @@
                                 <td>${item.branch_name}</td>
                                 <td>${item.name}</td>
                                 <td>
-                                    <button class="btn btn-outline-primary btn-sm edit-button"
+                                    <div class="d-flex gap-1">
+                                    <button class="btn btn-outline-warning btn-sm edit-button"
                                         data-bs-toggle="modal"
                                         data-bs-target="#${modalId}"
                                         data-id="${item.id}"
                                         data-branch="${item.branch_name}"
                                         data-supervisor-name="${item.name}">
-                                        Edit
+                                        <i class="fas fa-pen"></i>
                                     </button>
                                     <button class="btn btn-outline-danger btn-sm delete-supervisor"
                                         data-id="${item.id}">
-                                        Delete
+                                        <i class="fas fa-trash"></i>
                                     </button>
+                                    </div>
                                 </td>
                             </tr>
                         `;
