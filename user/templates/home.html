@@ -28,49 +28,35 @@
   <div class="px-3 px-md-4">
 
     <!-- Quick Access Cards -->
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'broiler' %}" class="quick-card">
-          <div class="quick-icon blue"><i class="fa-solid fa-egg"></i></div>
-          <div class="quick-label">Broiler</div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'purchase_master' %}" class="quick-card">
-          <div class="quick-icon amber"><i class="fas fa-shopping-cart"></i></div>
-          <div class="quick-label">Purchase</div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'sales' %}" class="quick-card">
-          <div class="quick-icon green"><i class="fa-solid fa-indian-rupee-sign"></i></div>
-          <div class="quick-label">Sales</div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'account' %}" class="quick-card">
-          <div class="quick-icon cyan"><i class="fas fa-file-invoice"></i></div>
-          <div class="quick-label">Accounts</div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'inventory' %}" class="quick-card">
-          <div class="quick-icon red"><i class="fas fa-warehouse"></i></div>
-          <div class="quick-label">Inventory</div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'employee_list' %}" class="quick-card">
-          <div class="quick-icon blue"><i class="fas fa-users"></i></div>
-          <div class="quick-label">HR</div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{% url 'hatchery_list' %}" class="quick-card">
-          <div class="quick-icon purple"><i class="fa-solid fa-kiwi-bird"></i></div>
-          <div class="quick-label">Hatchery</div>
-        </a>
-      </div>
+    <div class="quick-access-grid mb-4">
+      <a href="{% url 'branch_template' %}" class="quick-card">
+        <div class="quick-icon blue"><i class="fa-solid fa-egg"></i></div>
+        <div class="quick-label">Broiler</div>
+      </a>
+      <a href="{% url 'supplier' %}" class="quick-card">
+        <div class="quick-icon amber"><i class="fas fa-shopping-cart"></i></div>
+        <div class="quick-label">Purchase</div>
+      </a>
+      <a href="{% url 'customer_groups' %}" class="quick-card">
+        <div class="quick-icon green"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+        <div class="quick-label">Sales</div>
+      </a>
+      <a href="{% url 'fin_year' %}" class="quick-card">
+        <div class="quick-icon cyan"><i class="fas fa-file-invoice"></i></div>
+        <div class="quick-label">Accounts</div>
+      </a>
+      <a href="{% url 'item_category' %}" class="quick-card">
+        <div class="quick-icon red"><i class="fas fa-warehouse"></i></div>
+        <div class="quick-label">Inventory</div>
+      </a>
+      <a href="{% url 'employee_list' %}" class="quick-card">
+        <div class="quick-icon blue"><i class="fas fa-users"></i></div>
+        <div class="quick-label">HR</div>
+      </a>
+      <a href="{% url 'hatchery_list' %}" class="quick-card">
+        <div class="quick-icon purple"><i class="fa-solid fa-kiwi-bird"></i></div>
+        <div class="quick-label">Hatchery</div>
+      </a>
     </div>
 
     <!-- Features Section -->
@@ -195,6 +181,24 @@
 }
 
 /* Quick Access */
+.quick-access-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 992px) {
+  .quick-access-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .quick-access-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .quick-card {
   display: flex;
   flex-direction: column;

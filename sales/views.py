@@ -54,11 +54,6 @@ states_and_union_territories = [
         ]
 
 @login_required
-def sales(request):
-    return render(request, "sales.html")
-
-
-@login_required
 def customer(request):
     context = {
         "customer_groups": CustomerGroup.objects.all(),

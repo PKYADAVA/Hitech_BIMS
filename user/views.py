@@ -82,11 +82,6 @@ def forgot_password_view(request):
 
 
 @login_required
-def user_management(request):
-    return render(request, "user_management.html")
-
-
-@login_required
 def user_profile(request):
     return render(request, "user_profile.html")
 
@@ -150,6 +145,38 @@ def create_user(request):
             return JsonResponse({"error": str(e)}, status=500)
 
     return render(request, "create_user.html", context)
+
+
+@login_required
+def update_user(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+
+    if request.method == "POST":
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+        confirm_password = request.POST.get("confirm_password")
+        group_id = request.POST.get("group")
+        is_superuser = request.POST.get("is_superuser", "off") == "on"
+
+        if User.objects.filter(username=username).exclude(id=user.id).exists():
+            return JsonResponse({"error": "Username already exists."}, status=400)
+
+        if password or confirm_password:
+            if password != confirm_password:
+                return JsonResponse({"error": "Passwords do not match."}, status=400)
+            user.set_password(password)
+
+        user.username = username
+        user.is_superuser = is_superuser
+        user.save()
+
+        user.groups.clear()
+        if group_id:
+            user.groups.add(group_id)
+
+        return JsonResponse({"message": "User updated successfully."})
+
+    return JsonResponse({"error": "Invalid request method."}, status=405)
 
 
 @login_required

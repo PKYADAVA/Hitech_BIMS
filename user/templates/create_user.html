@@ -37,10 +37,12 @@
                     <th>Username</th>
                     <th>Group</th>
                     <th>Superuser</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for employee in employees %}
+                {% with user_group=employee.user.groups.first %}
                 <tr>
                     <td>{{ employee.full_name }}</td>
                     <td>{{ employee.designation }}</td>
@@ -57,7 +59,17 @@
                             {{ employee.user.is_superuser|yesno:"Yes,No" }}
                         </span>
                     </td>
+                    <td>
+                        <button type="button" class="btn btn-outline-primary btn-sm edit-user-btn"
+                            data-id="{{ employee.user.id }}"
+                            data-username="{{ employee.user.username }}"
+                            data-group-id="{% if user_group %}{{ user_group.id }}{% endif %}"
+                            data-superuser="{{ employee.user.is_superuser|yesno:'1,0' }}">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                    </td>
                 </tr>
+                {% endwith %}
                 {% endfor %}
             </tbody>
         </table>
@@ -122,6 +134,53 @@
     </div>
 </div>
 
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    {% csrf_token %}
+                    <input type="hidden" id="edit_user_id">
+                    <div class="mb-3">
+                        <label for="edit_username" class="form-label">Username</label>
+                        <input type="text" id="edit_username" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_password" class="form-label">New Password</label>
+                        <input type="password" id="edit_password" class="form-control" placeholder="Leave blank to keep current password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_confirm_password" class="form-label">Confirm New Password</label>
+                        <input type="password" id="edit_confirm_password" class="form-control" placeholder="Leave blank to keep current password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_group" class="form-label">Group</label>
+                        <select id="edit_group" class="form-select" required>
+                            <option value="">Select Group</option>
+                            {% for group in groups %}
+                            <option value="{{ group.id }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" id="edit_is_superuser" class="form-check-input">
+                        <label for="edit_is_superuser" class="form-check-label">Is Superuser</label>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     $(document).ready(function () {
         $('#userForm').on('submit', function (e) {
@@ -139,6 +198,44 @@
                 },
                 error: function (xhr, status, error) {
                     alert('An error occurred: ' + error);
+                }
+            });
+        });
+
+        $(document).on('click', '.edit-user-btn', function () {
+            $('#edit_user_id').val($(this).data('id'));
+            $('#edit_username').val($(this).data('username'));
+            $('#edit_group').val($(this).data('group-id') || '');
+            $('#edit_is_superuser').prop('checked', $(this).data('superuser') == 1);
+            $('#edit_password').val('');
+            $('#edit_confirm_password').val('');
+            $('#editUserModal').modal('show');
+        });
+
+        $('#editUserForm').on('submit', function (e) {
+            e.preventDefault();
+
+            var userId = $('#edit_user_id').val();
+            var formData = {
+                username: $('#edit_username').val(),
+                password: $('#edit_password').val(),
+                confirm_password: $('#edit_confirm_password').val(),
+                group: $('#edit_group').val(),
+                is_superuser: $('#edit_is_superuser').is(':checked') ? 'on' : 'off',
+                csrfmiddlewaretoken: '{{ csrf_token }}'
+            };
+
+            $.ajax({
+                url: '/update_user/' + userId + '/',
+                method: 'POST',
+                data: formData,
+                success: function (response) {
+                    alert('User updated successfully!');
+                    location.reload();
+                },
+                error: function (xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.error) || 'An error occurred while updating the user.';
+                    alert(message);
                 }
             });
         });

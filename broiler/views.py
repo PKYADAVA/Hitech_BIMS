@@ -53,11 +53,6 @@ class BaseAPIView(View):
         """Set data in cache with specified TTL."""
         cache.set(cache_key, data, ttl)
 
-@login_required()
-def broiler(request):
-    """Render the broiler template."""
-    return render(request, "broiler.html")
-
 @method_decorator(login_required, name="dispatch")
 class BranchTemplateView(View):
     """View for rendering the branch template."""

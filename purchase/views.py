@@ -14,14 +14,6 @@ import json
 def purchase_order(request):
     return render(request, "purchase_order.html")
 
-@login_required
-def purchase_master(request):
-    return render(request, "purchase.html")
-
-@login_required
-def purchase_transaction(request):
-    return render(request, "purchase_transaction.html")
-
 @login_required()
 def supplier(request):
     states_and_union_territories = [

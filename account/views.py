@@ -10,11 +10,6 @@ from account.models import ChartOfAccount, FinancialYear, Schedule
 
 # Create your views here.
 @login_required
-def account(request):
-    return render(request, "account.html")
-
-
-@login_required
 def coa(request):
     context = {
         'account_types': ChartOfAccount.TYPE_CHOICES,

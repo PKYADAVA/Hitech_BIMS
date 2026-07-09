@@ -2,8 +2,6 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-   
-    path('account/', views.account, name='account'),
     path('coa/', views.coa, name='coa'),
     path('chart-of-accounts/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_list'),
     path('chart-of-accounts/create/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_create'),

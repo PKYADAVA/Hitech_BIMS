@@ -5,7 +5,6 @@ from . import views
 from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmTemplateView, BroilerPlaceAPI, BroilerPlaceTemplateView, FarmerAPI, SupervisorAPI, SupervisorTemplateView
 
 urlpatterns = [
-    path('broiler/', views.broiler, name='broiler'),  
     path('branches/', BranchTemplateView.as_view(), name='branch_template'),
     path('branch_list/', BranchAPI.as_view(), name='branch_list'),  # For listing all branches
     path('create-branch/', BranchAPI.as_view(), name='branch_create'),  # For creating new branches

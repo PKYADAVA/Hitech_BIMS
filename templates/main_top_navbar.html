@@ -36,7 +36,7 @@
         <ul class="dropdown-menu" aria-labelledby="broilerDd">
           <li><h6 class="dropdown-header">Broiler</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'broiler' %}">
+          <li><a class="dropdown-item" href="{% url 'branch_template' %}">
             <i class="fas fa-sliders-h"></i>Master
           </a></li>
           <li><a class="dropdown-item" href="#">
@@ -65,10 +65,10 @@
         <ul class="dropdown-menu" aria-labelledby="purchaseDd">
           <li><h6 class="dropdown-header">Purchase</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'purchase_master' %}">
+          <li><a class="dropdown-item" href="{% url 'supplier' %}">
             <i class="fas fa-sliders-h"></i>Master
           </a></li>
-          <li><a class="dropdown-item" href="{% url 'purchase_transaction' %}">
+          <li><a class="dropdown-item" href="{% url 'purchase_order' %}">
             <i class="fas fa-exchange-alt"></i>Transactions
           </a></li>
           <li><a class="dropdown-item" href="#">
@@ -86,7 +86,7 @@
         <ul class="dropdown-menu" aria-labelledby="salesDd">
           <li><h6 class="dropdown-header">Sales</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'sales' %}">
+          <li><a class="dropdown-item" href="{% url 'customer_groups' %}">
             <i class="fas fa-sliders-h"></i>Master
           </a></li>
           <li><a class="dropdown-item" href="#">
@@ -107,7 +107,7 @@
         <ul class="dropdown-menu" aria-labelledby="accountDd">
           <li><h6 class="dropdown-header">Accounts</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'account' %}">
+          <li><a class="dropdown-item" href="{% url 'fin_year' %}">
             <i class="fas fa-sliders-h"></i>Master
           </a></li>
           <li><a class="dropdown-item" href="#">
@@ -128,7 +128,7 @@
         <ul class="dropdown-menu" aria-labelledby="inventoryDd">
           <li><h6 class="dropdown-header">Inventory</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'inventory' %}">
+          <li><a class="dropdown-item" href="{% url 'item_category' %}">
             <i class="fas fa-sliders-h"></i>Master
           </a></li>
           <li><a class="dropdown-item" href="#">
@@ -191,8 +191,8 @@
 
       <!-- User Management -->
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'user_management' %}active{% endif %}"
-           href="{% url 'user_management' %}">
+        <a class="nav-link {% if active_tab == 'user' %}active{% endif %}"
+           href="{% url 'create_user' %}">
           <i class="fa-solid fa-users-gear me-1"></i>Users
         </a>
       </li>
@@ -232,29 +232,9 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  // Hover to open dropdowns on desktop
-  const navDropdowns = document.querySelectorAll("#mainNavbar .nav-item.dropdown");
-  navDropdowns.forEach(item => {
-    let closeTimer;
-    item.addEventListener("mouseenter", function () {
-      if (window.innerWidth >= 992) {
-        clearTimeout(closeTimer);
-        const menu = this.querySelector(":scope > .dropdown-menu");
-        if (menu) menu.classList.add("show");
-        this.querySelector(".nav-link")?.setAttribute("aria-expanded", "true");
-      }
-    });
-    item.addEventListener("mouseleave", function () {
-      if (window.innerWidth >= 992) {
-        const menu = this.querySelector(":scope > .dropdown-menu");
-        const link = this.querySelector(".nav-link");
-        closeTimer = setTimeout(() => {
-          if (menu) menu.classList.remove("show");
-          link?.setAttribute("aria-expanded", "false");
-        }, 150);
-      }
-    });
-  });
+  // Top-level nav dropdowns (Account, Sales, etc.) open on click only via
+  // Bootstrap's default dropdown behavior (see main.js). Submenus below
+  // still open on hover since they're nested inside an already-open menu.
 
   // Submenu hover
   const submenus = document.querySelectorAll("#mainNavbar .dropdown-submenu");

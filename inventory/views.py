@@ -8,10 +8,6 @@ import json
 
 # Create your views here.
 @login_required
-def inventory(request):
-    return render(request, 'inventory.html')
-
-@login_required
 def items(request):
     categories  = ItemCategory.objects.all()
     warehouses = Warehouse.objects.all()
