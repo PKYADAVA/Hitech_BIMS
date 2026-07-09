@@ -1,0 +1,47 @@
+# Systemd unit for the Gunicorn/Django application server.
+#
+# Install:
+#   sudo cp deploy/gunicorn.service /etc/systemd/system/gunicorn.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now gunicorn
+#
+# The %h/%PROJECT_PATH%/%DEPLOY_USER% placeholders below must be replaced with
+# real values for this droplet (see DEPLOYMENT.md). GitHub Actions' deploy step
+# does this substitution automatically from repository secrets.
+
+[Unit]
+Description=Gunicorn daemon for Hitech BIMS (Django)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=notify
+User=%DEPLOY_USER%
+Group=%DEPLOY_USER%
+WorkingDirectory=%PROJECT_PATH%
+RuntimeDirectory=gunicorn
+RuntimeDirectoryMode=0750
+
+EnvironmentFile=%PROJECT_PATH%/.env
+Environment=GUNICORN_LOG_DIR=/var/log/gunicorn
+Environment=PATH=%PROJECT_PATH%/hitech_env/bin
+
+ExecStart=%PROJECT_PATH%/hitech_env/bin/gunicorn \
+    --config %PROJECT_PATH%/gunicorn.conf.py \
+    Hitech_BIMS.wsgi:application
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+# Hardening - the service only needs to write to its runtime socket dir,
+# the log dir, and the project's media directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=%PROJECT_PATH%/media %PROJECT_PATH%/logs /var/log/gunicorn /run/gunicorn
+
+[Install]
+WantedBy=multi-user.target

@@ -14,28 +14,59 @@ import os
 import dj_database_url
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Load environment variables from .env file
 load_dotenv()
 
+
+def env_bool(name: str, default: bool) -> bool:
+    """Parse a boolean-ish environment variable."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def env_list(name: str, default: str = "") -> list:
+    """Parse a comma-separated environment variable into a list."""
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Define the path for the log file
-LOG_FILE_PATH = BASE_DIR / "logs" / "info.log"
-
-# Create logs directory if it doesn't exist
-LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Define the path for the log files
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-#)8h+8a*2s4d!^_q2&ykr2r+opj^^3&*hued7xy1x&!n3a*lzm")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "SECRET_KEY environment variable is not set. Define it in your .env file "
+        "(see .env.example)."
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "True") == "True"
-DEVELOPMENT_MODE = os.getenv("DEVELOPMENT_MODE", "True") == "True"
+DEBUG = env_bool("DEBUG", False)
+DEVELOPMENT_MODE = env_bool("DEVELOPMENT_MODE", DEBUG)
 
-# Configure allowed hosts based on environment
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+# Configure allowed hosts based on environment.
+# No insecure "*" fallback: production must set ALLOWED_HOSTS explicitly.
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
+if not ALLOWED_HOSTS:
+    if DEBUG:
+        ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+    else:
+        raise ImproperlyConfigured(
+            "ALLOWED_HOSTS environment variable is not set. Define it in your .env "
+            "file (e.g. ALLOWED_HOSTS=yourdomain.com,your.droplet.ip)."
+        )
+
+# Origins allowed to submit cross-origin POSTs (required behind HTTPS with Django 4+).
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 # Application definition
 INSTALLED_APPS = [
@@ -87,7 +118,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "Hitech_BIMS.wsgi.application"
 
-# Database configuration
+# Database configuration.
+# CONN_MAX_AGE keeps connections open between requests (persistent connections)
+# instead of reconnecting to PostgreSQL on every request; CONN_HEALTH_CHECKS
+# verifies a pooled connection is still alive before reuse.
+DB_CONN_MAX_AGE = int(os.getenv("DB_CONN_MAX_AGE", "60"))
+DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
+
 if DEVELOPMENT_MODE:
     DATABASES = {
         "default": {
@@ -97,17 +134,34 @@ if DEVELOPMENT_MODE:
             "PASSWORD": os.getenv("DB_PASSWORD"),
             "HOST": os.getenv("DB_HOST", "localhost"),
             "PORT": os.getenv("DB_PORT", "5432"),
+            "CONN_MAX_AGE": DB_CONN_MAX_AGE,
+            "CONN_HEALTH_CHECKS": True,
+            "OPTIONS": {
+                "connect_timeout": DB_CONNECT_TIMEOUT,
+            },
         }
     }
-else:    
+else:
     DATABASES = {
-        'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
+        "default": dj_database_url.config(
+            default=os.getenv("DATABASE_URL"),
+            conn_max_age=DB_CONN_MAX_AGE,
+            conn_health_checks=True,
+        )
     }
+    DATABASES["default"].setdefault("OPTIONS", {})
+    DATABASES["default"]["OPTIONS"]["connect_timeout"] = DB_CONNECT_TIMEOUT
 
 # Authentication settings
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
+
+# Session security
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", str(8 * 60 * 60)))  # 8 hours
+SESSION_EXPIRE_AT_BROWSER_CLOSE = env_bool("SESSION_EXPIRE_AT_BROWSER_CLOSE", True)
+SESSION_SAVE_EVERY_REQUEST = True
+CSRF_COOKIE_HTTPONLY = True
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -123,9 +177,6 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
-
-
-    
     {
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
@@ -133,7 +184,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = os.getenv("TIME_ZONE", "UTC")
 USE_I18N = True
 USE_TZ = True
 
@@ -166,7 +217,30 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-# Logging configuration
+# Cache configuration.
+# Uses Django's built-in Redis backend (available since Django 4.0, needs only
+# the already-installed `redis` package) on its own logical DB so cached keys
+# don't collide with the Celery broker. A shared cache is required once the app
+# runs behind multiple Gunicorn workers/processes - an in-memory cache would be
+# invisible across workers and serve stale list data.
+REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://localhost:6379/1")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+        "TIMEOUT": 300,
+    }
+}
+
+# Logging configuration.
+# Django (info) and errors are split into separate rotating log files so an
+# operator can tail errors.log without wading through routine request logs.
+# Gunicorn's own access/error logs are configured independently in
+# gunicorn.conf.py. Console logging is kept quiet in production since
+# systemd/journald already captures it and duplicate verbose console output
+# is just noise there.
+CONSOLE_LOG_LEVEL = "INFO" if DEBUG else "WARNING"
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -178,14 +252,22 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "level": "INFO",
+            "level": CONSOLE_LOG_LEVEL,
             "class": "logging.StreamHandler",
             "formatter": "simple",
         },
         "info_file_handler": {
             "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": LOG_FILE_PATH,
+            "filename": LOG_DIR / "info.log",
+            "maxBytes": 1048576,  # 1 MB
+            "backupCount": 10,
+            "formatter": "verbose",
+        },
+        "error_file_handler": {
+            "level": "ERROR",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "error.log",
             "maxBytes": 1048576,  # 1 MB
             "backupCount": 10,
             "formatter": "verbose",
@@ -193,21 +275,30 @@ LOGGING = {
     },
     "loggers": {
         "": {
-            "handlers": ["console", "info_file_handler"],
+            "handlers": ["console", "info_file_handler", "error_file_handler"],
             "level": "INFO",
             "propagate": True,
         },
     },
 }
 
-# Security settings
+# Security settings.
+# SECURE_PROXY_SSL_HEADER lets Django trust the "X-Forwarded-Proto" header set
+# by Nginx (see nginx.conf) so SECURE_SSL_REDIRECT/HSTS work correctly with
+# Gunicorn running as a plain HTTP upstream behind the TLS-terminating proxy.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Configurable so SSL redirect can be disabled right after a fresh deploy,
+# before TLS certificates are issued, without touching code.
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", not DEBUG)
+
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'DENY'
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", str(31536000)))  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", True)
+    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", True)
+
+# Clickjacking protection - safe to apply in both DEBUG and production.
+X_FRAME_OPTIONS = "DENY"

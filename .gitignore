@@ -5,12 +5,12 @@ __pycache__/
 db.sqlite3  # Ignore if using SQLite database
 *.log  # Log files
 *.env  # Environment files for sensitive keys
+!.env.example  # Template is safe and must stay tracked
 venv/  # Your virtual environment folder
+hitech_env/
 media/
 logs/
 .env
+staticfiles/  # collectstatic output - regenerated on deploy, not versioned
 *.DS_Store
 .DS_Store
-
-
-

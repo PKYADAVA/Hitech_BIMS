@@ -1,0 +1,111 @@
+name: Test and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  # CI-only dummy values - never used outside ephemeral GitHub-hosted runners.
+  SECRET_KEY: ci-test-key-not-used-in-production-6f2a9d1c4e
+  DEBUG: "True"
+  DEVELOPMENT_MODE: "True"
+  ALLOWED_HOSTS: "localhost,127.0.0.1"
+  DB_ENGINE: django.db.backends.postgresql
+  DB_NAME: hitech_bims_test
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+  DB_HOST: localhost
+  DB_PORT: "5432"
+  REDIS_URL: redis://localhost:6379/0
+  REDIS_CACHE_URL: redis://localhost:6379/1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: hitech_bims_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Ruff/Pylint run only if this repo has a config for them. Neither is
+      # configured yet, so these steps currently no-op; add ruff.toml /
+      # .pylintrc (or pyproject.toml sections) to activate them.
+      - name: Ruff (if configured)
+        run: |
+          if [ -f "ruff.toml" ] || [ -f ".ruff.toml" ] || grep -q "\[tool.ruff\]" pyproject.toml 2>/dev/null; then
+            pip install ruff
+            ruff check .
+          else
+            echo "No Ruff configuration found - skipping."
+          fi
+
+      - name: Pylint (if configured)
+        run: |
+          if [ -f ".pylintrc" ] || grep -q "\[tool.pylint" pyproject.toml 2>/dev/null; then
+            pip install pylint pylint-django
+            pylint --load-plugins=pylint_django --django-settings-module=Hitech_BIMS.settings $(git ls-files '*.py' | grep -v migrations)
+          else
+            echo "No Pylint configuration found - skipping."
+          fi
+
+      - name: Django system checks
+        run: python manage.py check
+
+      - name: Run tests
+        run: python manage.py test --noinput
+
+      - name: Validate collectstatic
+        run: python manage.py collectstatic --noinput --dry-run
+
+  deploy:
+    name: Deploy to droplet
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            cd "${{ secrets.PROJECT_PATH }}"
+            ./deploy.sh
