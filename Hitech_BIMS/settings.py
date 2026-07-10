@@ -90,6 +90,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves STATIC_ROOT directly from Django/Gunicorn - required on platforms
+    # with no separate web server in front (e.g. DigitalOcean App Platform).
+    # On the Nginx/Droplet path, Nginx intercepts /static/ first (see
+    # deploy/nginx.conf) so this is simply never reached there.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -194,6 +199,12 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "static"),
 ]
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+# Gzip-compresses static files at collectstatic time (served by WhiteNoise
+# above). Deliberately not the Manifest/hashed variant - this codebase's
+# templates haven't been audited for collectstatic-safe static references,
+# and a missing manifest entry would hard-fail the whole build.
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # Media files
 MEDIA_URL = "/media/"
