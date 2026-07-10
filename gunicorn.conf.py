@@ -37,12 +37,16 @@ max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "100"))
 preload_app = True
 
 # --- Logging ---
-# Written to dedicated files (rotated externally via logrotate, see DEPLOYMENT.md)
-# rather than stdout/stderr, keeping Gunicorn's own logs separate from Django's
-# application logs configured in settings.py.
-LOG_DIR = os.getenv("GUNICORN_LOG_DIR", "/var/log/gunicorn")
-accesslog = os.path.join(LOG_DIR, "access.log")
-errorlog = os.path.join(LOG_DIR, "error.log")
+# Default to stdout/stderr ("-") so this works unmodified on any platform that
+# captures process output itself (DigitalOcean App Platform, Heroku-style
+# buildpacks, `docker logs`, journald via systemd's own stdout capture, etc.) -
+# an arbitrary /var/log path is not guaranteed to exist or be writable there.
+# Set GUNICORN_LOG_DIR explicitly (see deploy/gunicorn.service) to opt into
+# dedicated log files instead, e.g. for the systemd/Droplet deployment path
+# described in DEPLOYMENT.md.
+LOG_DIR = os.getenv("GUNICORN_LOG_DIR")
+accesslog = os.path.join(LOG_DIR, "access.log") if LOG_DIR else "-"
+errorlog = os.path.join(LOG_DIR, "error.log") if LOG_DIR else "-"
 loglevel = os.getenv("GUNICORN_LOG_LEVEL", "info")
 capture_output = True
 
