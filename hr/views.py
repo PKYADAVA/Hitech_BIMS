@@ -751,7 +751,6 @@ class EmployeeAttendance(View):
                         )
                     ),
                 }
-                print(data)
                 return JsonResponse(data)
 
             except ValueError as e:

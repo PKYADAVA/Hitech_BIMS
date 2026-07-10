@@ -113,7 +113,6 @@ class CustomerAPI(View):
     def post(self, request):
         try:
             data = json.loads(request.body)  # Expect JSON payload
-            print(data)
         except json.JSONDecodeError as e:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 

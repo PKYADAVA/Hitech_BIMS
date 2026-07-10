@@ -83,7 +83,6 @@ class BranchAPI(BaseAPIView):
             
             # If not in cache, get from database
             branches = list(Branch.objects.all().values())
-            print(branches, "branches")
             self.set_cached_data(cache_key, branches)
             return JsonResponse(branches, safe=False)
         except Exception as e:
@@ -289,7 +288,6 @@ class BroilerPlaceAPI(BaseAPIView):
                 .values("id", "place_name", "supervisor_name")
             )
             self.set_cached_data(cache_key, broiler_places)
-            print(broiler_places, "broiler_places")
             return JsonResponse(broiler_places, safe=False)
         except Exception as e:
             return self.handle_exception(e)

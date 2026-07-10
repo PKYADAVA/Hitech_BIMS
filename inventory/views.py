@@ -42,7 +42,6 @@ class CategoryAPI(View):
         try:
             data = json.loads(request.body)  # Expect JSON payload
         except json.JSONDecodeError as e:
-            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not data.get("name"):
@@ -114,7 +113,6 @@ class ItemAPI(View):
                     "type", "item_account", "lot_serial_control", "kg_per_bag", "hsn_code"
                 )
             )
-            print(items, "items")
             return JsonResponse(items, safe=False)
 
     def post(self, request):
@@ -134,7 +132,6 @@ class ItemAPI(View):
         except Warehouse.DoesNotExist:
             return JsonResponse({"error": "Invalid warehouse ID"}, status=400)
         
-        print(data, "data")
 
         Item.objects.create(
             item_code=data["item_code"],
@@ -207,11 +204,8 @@ class WarehouseAPI(View):
 
     def post(self, request):
         try:
-            print(request.body,"request.body")
             data = json.loads(request.body)  # Expect JSON payload
-            print(data,"data")
         except json.JSONDecodeError as e:
-            print("error", e)
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if not data.get("name"):

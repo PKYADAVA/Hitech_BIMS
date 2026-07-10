@@ -122,7 +122,6 @@ def create_user(request):
         confirm_password = request.POST.get("confirm_password")
         group_id = request.POST.get("group")
         is_superuser = request.POST.get("is_superuser", "off") == "on"
-        print(request.POST)
 
         if password != confirm_password:
             return JsonResponse({"error": "Passwords do not match"}, status=400)
@@ -208,7 +207,6 @@ def manage_groups(request):
     if request.method == "POST":
         group_name = request.POST.get("name")
         permissions = request.POST.getlist("permissions[]")
-        print(permissions)
 
         if group_name:
             group, created = Group.objects.get_or_create(name=group_name)

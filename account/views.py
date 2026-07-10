@@ -268,7 +268,6 @@ class ChartOfAccountsAPI(View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         try:
-            print(data, "data")
             coa = ChartOfAccount.objects.create(
                 code=data["code"],
                 description=data["description"],
@@ -291,7 +290,6 @@ class ChartOfAccountsAPI(View):
                 status=201,
             )
         except Exception as e:
-            print(e, "error")
             return JsonResponse({"error": str(e)}, status=400)
 
     def put(self, request, id):

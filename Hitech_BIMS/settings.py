@@ -156,6 +156,10 @@ else:
     }
     DATABASES["default"].setdefault("OPTIONS", {})
     DATABASES["default"]["OPTIONS"]["connect_timeout"] = DB_CONNECT_TIMEOUT
+    # Managed Postgres (DigitalOcean, etc.) rejects non-SSL connections.
+    # dj_database_url already picks up ?sslmode=... if present in DATABASE_URL;
+    # this only fills in a default when the URL itself doesn't specify one.
+    DATABASES["default"]["OPTIONS"].setdefault("sslmode", os.getenv("DB_SSLMODE", "require"))
 
 # Authentication settings
 LOGIN_URL = '/login/'
@@ -201,9 +205,10 @@ STATICFILES_DIRS = [
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # Gzip-compresses static files at collectstatic time (served by WhiteNoise
-# above). Deliberately not the Manifest/hashed variant - this codebase's
-# templates haven't been audited for collectstatic-safe static references,
-# and a missing manifest entry would hard-fail the whole build.
+# above). Deliberately not CompressedManifestStaticFilesStorage: verified
+# directly that staticfiles_storage.url() keeps returning un-hashed paths
+# even though the hash manifest is generated correctly, so the hashed/
+# cache-busting variant provides no benefit here and was reverted.
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # Media files

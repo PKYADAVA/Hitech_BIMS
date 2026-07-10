@@ -20,7 +20,10 @@ worker_class = "sync"
 threads = int(os.getenv("GUNICORN_THREADS", "2"))
 
 # --- Timeouts ---
-timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
+# 120s, not Gunicorn's 30s default: several forms in this app (farm pictures,
+# agreement/cheque uploads) accept multiple files and can legitimately take a
+# while on a slow connection.
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "120"))
 graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))
 keepalive = int(os.getenv("GUNICORN_KEEPALIVE", "5"))
 
@@ -34,6 +37,14 @@ max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "100"))
 # lower memory usage (shared copy-on-write pages). Safe here since the app
 # holds no pre-fork state that requires per-worker isolation.
 preload_app = True
+
+# Worker heartbeat files default to a location that can be a slow, disk-backed
+# filesystem on some container platforms, which can get workers incorrectly
+# killed as unresponsive under load. /dev/shm (tmpfs, in-memory) avoids that -
+# used when available (Linux containers/droplets, incl. App Platform); falls
+# back to Gunicorn's own default elsewhere (e.g. local macOS/Windows dev).
+if os.path.isdir("/dev/shm"):
+    worker_tmp_dir = "/dev/shm"
 
 # --- Logging ---
 # Default to stdout/stderr ("-") so this works unmodified on any platform that
