@@ -66,7 +66,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='broilerfarm',
             name='agreement_copy',
-            field=models.FileField(default=django.utils.timezone.now, help_text='Uploaded copy of the agreement', upload_to='farm/agreements/'),
+            field=models.FileField(default='', help_text='Uploaded copy of the agreement', upload_to='farm/agreements/'),
             preserve_default=False,
         ),
         migrations.AddField(
@@ -144,7 +144,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='broilerfarm',
             name='farm_capacity',
-            field=models.PositiveIntegerField(default=django.utils.timezone.now, help_text='Bird capacity of the farm'),
+            field=models.PositiveIntegerField(default=0, help_text='Bird capacity of the farm'),
             preserve_default=False,
         ),
         migrations.AddField(
@@ -160,7 +160,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='broilerfarm',
             name='line',
-            field=models.CharField(default=django.utils.timezone.now, help_text='Line for this farm', max_length=100),
+            field=models.CharField(default='', help_text='Line for this farm', max_length=100),
             preserve_default=False,
         ),
         migrations.AddField(
@@ -171,7 +171,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='broilerfarm',
             name='region',
-            field=models.CharField(default=django.utils.timezone.now, help_text='Region of the farm', max_length=100),
+            field=models.CharField(default='', help_text='Region of the farm', max_length=100),
             preserve_default=False,
         ),
         migrations.AddField(
@@ -183,12 +183,6 @@ class Migration(migrations.Migration):
             model_name='broilerfarm',
             name='state',
             field=models.CharField(blank=True, help_text='State where the farm is located', max_length=100, null=True),
-        ),
-        migrations.AlterField(
-            model_name='broilerdisease',
-            name='batch',
-            field=models.ForeignKey(default=django.utils.timezone.now, help_text='Batch affected by this disease', on_delete=django.db.models.deletion.CASCADE, related_name='broiler_diseases', to='broiler.broilerbatch'),
-            preserve_default=False,
         ),
         migrations.AlterField(
             model_name='broilerfarm',
@@ -239,7 +233,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='broilerfarm',
             name='farmer',
-            field=models.ForeignKey(default=django.utils.timezone.now, help_text='Farmer who owns/operates this farm', on_delete=django.db.models.deletion.CASCADE, related_name='broiler_farms', to='broiler.farmer'),
+            field=models.ForeignKey(default=1, help_text='Farmer who owns/operates this farm', on_delete=django.db.models.deletion.CASCADE, related_name='broiler_farms', to='broiler.farmer'),
             preserve_default=False,
         ),
     ]

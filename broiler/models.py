@@ -517,6 +517,8 @@ class BroilerDisease(models.Model):
         BroilerBatch,
         on_delete=models.CASCADE,
         related_name='broiler_diseases',
+        null=True,
+        blank=True,
         help_text=_("Batch affected by this disease")
     )
     disease_code = models.CharField(
