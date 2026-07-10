@@ -11,8 +11,8 @@
 
 [Unit]
 Description=Gunicorn daemon for Hitech BIMS (Django)
-After=network.target postgresql.service redis-server.service
-Wants=postgresql.service redis-server.service
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=notify

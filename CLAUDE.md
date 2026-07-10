@@ -6,14 +6,14 @@ Django-based Business Information Management System (BIMS) for broiler/poultry o
 ## Tech Stack
 - **Framework:** Django 4.2.6
 - **Database:** PostgreSQL (psycopg3), via `dj_database_url` in production
-- **Task Queue:** Celery 5.4 with Redis broker
+- **Cache:** Django local-memory cache (`LocMemCache`), per-process
 - **Admin Theme:** django-jazzmin
 - **API:** Django REST Framework
 - **Server:** Gunicorn (production), Django dev server (development)
 
 ## Project Structure
 ```
-Hitech_BIMS/         # Django project config (settings, urls, celery, wsgi)
+Hitech_BIMS/         # Django project config (settings, urls, wsgi)
 broiler/             # Broiler/poultry management app
 inventory/           # Inventory management app
 hr/                  # Human resources app
@@ -24,7 +24,7 @@ user/                # Authentication & user management app
 templates/           # Global templates directory
 static/              # Static source files
 staticfiles/         # Collected static files (STATIC_ROOT)
-logs/                # Log files (info.log, celery.log)
+logs/                # Log files (info.log)
 ```
 
 ## Environment Variables
@@ -40,7 +40,6 @@ DB_PASSWORD=
 DB_HOST=localhost
 DB_PORT=5432
 DATABASE_URL=          # Used in production (non-dev mode)
-REDIS_URL=redis://localhost:6379/0
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_HOST_USER=
@@ -59,12 +58,6 @@ python manage.py migrate
 
 # Collect static files
 python manage.py collectstatic
-
-# Start Celery worker
-celery -A Hitech_BIMS worker -l info
-
-# Start Celery Beat (scheduler)
-celery -A Hitech_BIMS beat -l info
 ```
 
 ## Key Conventions

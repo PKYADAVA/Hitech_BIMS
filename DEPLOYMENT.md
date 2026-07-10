@@ -27,19 +27,12 @@ SSH in as `root` (or a sudo-capable user) for the initial setup below.
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y python3.11 python3.11-venv python3-pip \
     postgresql postgresql-contrib libpq-dev \
-    nginx redis-server \
+    nginx \
     git build-essential curl
 ```
 
 - `libpq-dev` + `build-essential` are needed to build `psycopg` if a wheel
   isn't available for your platform.
-- `redis-server` is required — it's used for both the Celery broker and, as of
-  this deployment hardening pass, Django's cache backend (see `settings.py`,
-  `CACHES`). Enable it:
-
-```bash
-sudo systemctl enable --now redis-server
-```
 
 ---
 
@@ -140,7 +133,6 @@ Required for production (see `.env.example` for the full list and comments):
 | `ALLOWED_HOSTS` | Your domain and/or droplet IP, comma-separated, no `*` |
 | `CSRF_TRUSTED_ORIGINS` | e.g. `https://bims.yourcompany.com` |
 | `DATABASE_URL` or `DB_*` | From step 4 |
-| `REDIS_URL` / `REDIS_CACHE_URL` | Defaults (`redis://localhost:6379/0` and `/1`) are fine for a single-droplet setup |
 | `EMAIL_*` | SMTP credentials |
 
 `chmod 600 .env` so only `deploy` can read it — it holds real secrets.
@@ -214,7 +206,7 @@ will redirect to a non-existent HTTPS listener.
 
 ```bash
 curl -I http://localhost/            # via Nginx -> Gunicorn -> Django
-sudo systemctl status gunicorn nginx redis-server postgresql
+sudo systemctl status gunicorn nginx postgresql
 sudo journalctl -u gunicorn -n 50 --no-pager
 ```
 
@@ -245,8 +237,8 @@ holds the application's runtime secrets, exactly as configured in step 6.
 1. **test job** — installs dependencies, runs Ruff/Pylint *if configured*
    (neither has a config file in this repo yet, so these steps currently
    no-op — see below), `manage.py check`, `manage.py test`, and a
-   `collectstatic --dry-run` sanity check, against ephemeral Postgres/Redis
-   service containers.
+   `collectstatic --dry-run` sanity check, against an ephemeral Postgres
+   service container.
 2. **deploy job** — only runs on a push to `main` after `test` passes. SSHes
    in as `deploy` and runs `./deploy.sh` (see below) in `PROJECT_PATH`.
 
@@ -353,7 +345,7 @@ sudo systemctl restart gunicorn
 | `ImproperlyConfigured: SECRET_KEY environment variable is not set` | `.env` missing or not being read — confirm it's at `PROJECT_PATH/.env` and `EnvironmentFile=` in `gunicorn.service` points at it. |
 | `ImproperlyConfigured: ALLOWED_HOSTS environment variable is not set` | Same as above, or `ALLOWED_HOSTS` in `.env` is empty while `DEBUG=False`. |
 | Static files 404 | Did `collectstatic` run? Does `deploy/nginx.conf`'s `alias` path match `STATIC_ROOT` (`staticfiles/`)? |
-| Cached list data looks stale across requests | Confirm `redis-server` is running and `REDIS_CACHE_URL` in `.env` is reachable — `redis-cli -n 1 ping`. |
+| Cached list data looks stale across requests | The cache is per-process `LocMemCache` — restart Gunicorn workers to clear it, or reduce `CACHES.default.TIMEOUT` in `settings.py`. |
 | CSRF failures on forms in production | Add the real origin to `CSRF_TRUSTED_ORIGINS` in `.env` (must include scheme, e.g. `https://...`). |
 | Redirect loop on every page | `SECURE_SSL_REDIRECT=True` but Nginx isn't terminating TLS yet (no certbot run) — set `SECURE_SSL_REDIRECT=False` in `.env` until HTTPS is live, or run certbot first. |
 | `git reset --hard` in `deploy.sh` fails with local changes | Something was edited directly on the droplet outside of git — `git stash` or `git diff` to inspect before deploying again; the droplet's working tree should always be deploy-managed only. |
@@ -384,8 +376,7 @@ task's scope:
 - The `hatchery` app has model changes not yet captured in a migration.
 - ~20 stray `print()` debug statements remain across `sales`, `user`,
   `broiler`, `hr`, `inventory`, `purchase`, `account` views.
-- `djangorestframework` is installed but unused; `django-celery-beat` is
-  installed but not registered in `INSTALLED_APPS`.
+- `djangorestframework` is installed but unused.
 - 66 files under `staticfiles/` are still committed to git from before this
   change — `.gitignore` now excludes the directory going forward, but
   existing tracked files need an explicit one-time cleanup:

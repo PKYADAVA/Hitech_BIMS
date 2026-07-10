@@ -259,6 +259,7 @@ $(document).ready(function(){
         });
     });
     $("#fromDate, #toDate").change(function() {
+        console.log("called")
         // Get the selected 'from' and 'to' dates
         const fromDate = $("#fromDate").val();
         const toDate = $("#toDate").val();
@@ -276,6 +277,7 @@ $(document).ready(function(){
                 method: "GET",
                 data: payload,
                 success: function(response) {
+                    console.log("Data received:", response);
                     // Get the table body where rows will be added
                     let tableBody = $('#attendance-table-body');
                     let dataTable = $('#attendanceTable').DataTable();

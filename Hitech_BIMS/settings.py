@@ -221,24 +221,13 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Celery configuration
-CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-
 # Cache configuration.
-# Uses Django's built-in Redis backend (available since Django 4.0, needs only
-# the already-installed `redis` package) on its own logical DB so cached keys
-# don't collide with the Celery broker. A shared cache is required once the app
-# runs behind multiple Gunicorn workers/processes - an in-memory cache would be
-# invisible across workers and serve stale list data.
-REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://localhost:6379/1")
+# Local-memory cache - process-local, so entries aren't shared across
+# Gunicorn workers. Fine for the current single-worker deployment; revisit
+# if the app scales to multiple workers/processes and needs a shared cache.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_CACHE_URL,
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "TIMEOUT": 300,
     }
 }

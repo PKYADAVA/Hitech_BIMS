@@ -13,9 +13,8 @@ import os
 bind = os.getenv("GUNICORN_BIND", "unix:/run/gunicorn/hitech_bims.sock")
 
 # --- Workers ---
-# Sized conservatively for a 2GB droplet that also runs PostgreSQL, Redis, Nginx
-# and a Celery worker side by side. Override with WEB_CONCURRENCY if the droplet
-# is resized.
+# Sized conservatively for a 2GB droplet that also runs PostgreSQL and Nginx
+# side by side. Override with WEB_CONCURRENCY if the droplet is resized.
 workers = int(os.getenv("WEB_CONCURRENCY", str(min(3, multiprocessing.cpu_count() * 2 + 1))))
 worker_class = "sync"
 threads = int(os.getenv("GUNICORN_THREADS", "2"))
