@@ -1,4 +1,5 @@
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from .models import HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine
 
 
@@ -18,7 +19,7 @@ class HatchSalesLineInline(admin.TabularInline):
 
 
 @admin.register(HatchSetting)
-class HatchSettingAdmin(admin.ModelAdmin):
+class HatchSettingAdmin(ImportExportModelAdmin):
     """
     Admin interface for HatchSetting (hatch register & sales sheet) records.
     """

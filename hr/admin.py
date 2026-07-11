@@ -3,6 +3,7 @@ configration admin.py in hr modules
 """
 
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from hr.models import (
     Attendance,
     Employee,
@@ -15,12 +16,12 @@ from hr.models import (
 
 
 @admin.register(Group)
-class GroupAdmin(admin.ModelAdmin):
+class GroupAdmin(ImportExportModelAdmin):
     list_display = ("id", "name")
 
 
 @admin.register(Designation)
-class DesignationAdmin(admin.ModelAdmin):
+class DesignationAdmin(ImportExportModelAdmin):
     """
     register designations models
     """
@@ -29,7 +30,7 @@ class DesignationAdmin(admin.ModelAdmin):
 
 
 @admin.register(Employee)
-class EmployeeAdmin(admin.ModelAdmin):
+class EmployeeAdmin(ImportExportModelAdmin):
     """
     register employee models
     """
@@ -70,7 +71,7 @@ class EmployeeAdmin(admin.ModelAdmin):
 
 
 @admin.register(EmployeeLeave)
-class EmployeeLeaveAdmin(admin.ModelAdmin):
+class EmployeeLeaveAdmin(ImportExportModelAdmin):
     """
     register employee leave
     """
@@ -79,12 +80,12 @@ class EmployeeLeaveAdmin(admin.ModelAdmin):
 
 
 @admin.register(LeaveSelectedDate)
-class LeaveSelectedDateAdmin(admin.ModelAdmin):
+class LeaveSelectedDateAdmin(ImportExportModelAdmin):
     list_display = ("leave_request", "date")
 
 
 @admin.register(Attendance)
-class AttendanceAdmin(admin.ModelAdmin):
+class AttendanceAdmin(ImportExportModelAdmin):
     """
     register attendance models
     """
@@ -100,7 +101,7 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payroll)
-class PayrollAdmin(admin.ModelAdmin):
+class PayrollAdmin(ImportExportModelAdmin):
     """
     register payroll models
     """

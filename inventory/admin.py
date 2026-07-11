@@ -1,21 +1,22 @@
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from .models import ItemCategory, Warehouse, Item
 
 
 @admin.register(ItemCategory)
-class CategoryAdmin(admin.ModelAdmin):
+class CategoryAdmin(ImportExportModelAdmin):
     list_display = ('id', 'name')
     search_fields = ('name',)
 
 
 @admin.register(Warehouse)
-class WarehouseAdmin(admin.ModelAdmin):
+class WarehouseAdmin(ImportExportModelAdmin):
     list_display = ('id', 'name')
     search_fields = ('name',)
 
 
 @admin.register(Item)
-class ItemAdmin(admin.ModelAdmin):
+class ItemAdmin(ImportExportModelAdmin):
     list_display = ('id', 'item_code', 'description', 'category', 'warehouse', 'valuation_method', 
                     'usage', 'source', 'type', 'item_account', 'lot_serial_control')
     list_filter = ('category', 'warehouse', 'valuation_method', 'usage', 'source', 'type', 'item_account', 'lot_serial_control')

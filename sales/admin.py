@@ -1,16 +1,17 @@
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from .models import CustomerGroup, SalesPriceMaster, Customer
 
 
 @admin.register(CustomerGroup)
-class CustomerGroupAdmin(admin.ModelAdmin):
+class CustomerGroupAdmin(ImportExportModelAdmin):
     list_display = ('code', 'description', 'currency', 'control_account', 'advance_account')
     search_fields = ('code', 'description', 'currency')
     list_filter = ('currency',)
 
 
 @admin.register(SalesPriceMaster)
-class SalesPriceMasterAdmin(admin.ModelAdmin):
+class SalesPriceMasterAdmin(ImportExportModelAdmin):
     list_display = ('item_category', 'item', 'price', 'date')
     search_fields = ('item__name', 'item_category__name')
     list_filter = ('item_category', 'date')
@@ -18,7 +19,7 @@ class SalesPriceMasterAdmin(admin.ModelAdmin):
 
 
 @admin.register(Customer)
-class CustomerAdmin(admin.ModelAdmin):
+class CustomerAdmin(ImportExportModelAdmin):
     list_display = ('name', 'phone', 'mobile', 'contact_type', 'customer_group', 'supplier_group', 'credit_limit', 'state')
     search_fields = ('name', 'phone', 'mobile', 'gstin', 'state')
     list_filter = ('contact_type', 'state', 'customer_group', 'supplier_group')

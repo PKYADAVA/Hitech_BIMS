@@ -4,6 +4,7 @@ $(document).ready(function () {
         paging: true,       // Enable pagination
         searching: true,    // Enable search
         ordering: true,     // Enable column sorting
+        responsive: true,   // Collapse columns on small screens
         columnDefs: [
             { orderable: false, targets: -1 }, // Disable sorting on the "Action" column
         ],

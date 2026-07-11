@@ -1,10 +1,11 @@
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from django.utils.translation import gettext_lazy as _
 from .models import FinancialYear, Schedule, ChartOfAccount, BankCode, CoACategory
 
 
 @admin.register(CoACategory)
-class CoACategoryAdmin(admin.ModelAdmin):
+class CoACategoryAdmin(ImportExportModelAdmin):
     """
     Admin configuration for CoACategory model.
     """
@@ -27,7 +28,7 @@ class CoACategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(FinancialYear)
-class FinancialYearAdmin(admin.ModelAdmin):
+class FinancialYearAdmin(ImportExportModelAdmin):
     """
     Admin configuration for FinancialYear model.
     
@@ -53,7 +54,7 @@ class FinancialYearAdmin(admin.ModelAdmin):
 
 
 @admin.register(Schedule)
-class ScheduleAdmin(admin.ModelAdmin):
+class ScheduleAdmin(ImportExportModelAdmin):
     """
     Admin configuration for Schedule model.
     
@@ -79,7 +80,7 @@ class ScheduleAdmin(admin.ModelAdmin):
 
 
 @admin.register(ChartOfAccount)
-class ChartOfAccountAdmin(admin.ModelAdmin):
+class ChartOfAccountAdmin(ImportExportModelAdmin):
     """
     Admin configuration for ChartOfAccount model.
     
@@ -105,7 +106,7 @@ class ChartOfAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(BankCode)
-class BankCodeAdmin(admin.ModelAdmin):
+class BankCodeAdmin(ImportExportModelAdmin):
     """
     Admin configuration for BankCode model.
     
