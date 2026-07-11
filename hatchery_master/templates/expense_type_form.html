@@ -11,19 +11,19 @@
 {% include '_subnav.html' with module='hatchery_master' active_tab='expense_type' %}
 
 <div class="page-header">
-  <div>
     <div class="page-header-title">
       <i class="fas fa-tags"></i>
       {% if expense_type %}Edit Expense Type{% else %}Add Expense Type{% endif %}
     </div>
-    <div class="page-header-subtitle">
+    <div class="page-header-right">
+      <div class="page-header-subtitle">
       {% if expense_type %}Update this expense type's name{% else %}Register a new expense category{% endif %}
     </div>
-  </div>
-  <a href="{% url 'expense_type_list' %}" class="btn btn-secondary">
+        <a href="{% url 'expense_type_list' %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left"></i>
     Back to list
   </a>
+    </div>
 </div>
 
 <div class="card">

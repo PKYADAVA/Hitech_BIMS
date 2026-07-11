@@ -11,17 +11,17 @@
 {% include '_subnav.html' with module='hatchery_master' active_tab='hatcher' %}
 
 <div class="page-header">
-  <div>
     <div class="page-header-title">
       <i class="fas fa-temperature-high"></i>
       Add Hatcher
     </div>
-    <div class="page-header-subtitle">Register one or more hatcher machines for a hatchery</div>
-  </div>
-  <a href="{% url 'hatcher_list' %}" class="btn btn-secondary">
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Register one or more hatcher machines for a hatchery</div>
+        <a href="{% url 'hatcher_list' %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left"></i>
     Back to list
   </a>
+    </div>
 </div>
 
 <div class="card">

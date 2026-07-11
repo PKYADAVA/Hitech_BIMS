@@ -57,17 +57,17 @@
 
 <!-- Page Header -->
 <div class="page-header">
-  <div>
     <div class="page-header-title">
       <i class="fas fa-users"></i>
       Employee List
     </div>
-    <div class="page-header-subtitle">Manage and view all employee records</div>
-  </div>
-  <a href="{% url 'create_new_employee' %}" class="btn btn-primary">
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Manage and view all employee records</div>
+        <a href="{% url 'create_new_employee' %}" class="btn btn-primary">
     <i class="fas fa-user-plus"></i>
     Add Employee
   </a>
+    </div>
 </div>
 
 <!-- Table Card -->

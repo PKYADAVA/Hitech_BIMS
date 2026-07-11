@@ -10,17 +10,17 @@
 {% block content %}
 
 <div class="page-header">
-  <div>
     <div class="page-header-title">
       <i class="fa-solid fa-egg"></i>
       {% if hatch_setting_id %}Edit{% else %}New{% endif %} Hatch Register &amp; Sales Sheet
     </div>
-    <div class="page-header-subtitle">Record egg intake, hatch output grading and chick sales for one batch (Setting No)</div>
-  </div>
-  <a class="btn btn-secondary" href="{% url 'hatchery_list' %}">
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Record egg intake, hatch output grading and chick sales for one batch (Setting No)</div>
+        <a class="btn btn-secondary" href="{% url 'hatchery_list' %}">
     <i class="fas fa-arrow-left"></i>
     Back to List
   </a>
+    </div>
 </div>
 
 <form id="hatch-setting-form">

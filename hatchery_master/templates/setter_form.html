@@ -11,17 +11,17 @@
 {% include '_subnav.html' with module='hatchery_master' active_tab='setter' %}
 
 <div class="page-header">
-  <div>
     <div class="page-header-title">
       <i class="fas fa-layer-group"></i>
       Add Setter
     </div>
-    <div class="page-header-subtitle">Register one or more setter machines for a hatchery</div>
-  </div>
-  <a href="{% url 'setter_list' %}" class="btn btn-secondary">
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Register one or more setter machines for a hatchery</div>
+        <a href="{% url 'setter_list' %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left"></i>
     Back to list
   </a>
+    </div>
 </div>
 
 <div class="card">
