@@ -332,8 +332,11 @@ class Farmer(models.Model):
         null=True,
         help_text=_("Service number of the farmer")
     )
-    farmer_group = models.CharField(
-        max_length=100,
+    farmer_group = models.ForeignKey(
+        FarmerGroup,
+        on_delete=models.PROTECT,
+        related_name='farmers',
+        null=True,
         help_text=_("Group the farmer belongs to")
     )
     tds_percent = models.DecimalField(

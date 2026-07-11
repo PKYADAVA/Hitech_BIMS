@@ -422,6 +422,7 @@ class BroilerFarmTemplateView(View):
         context = {
             "regions": Region.objects.filter(is_active=True),
             "farmers": farmers,
+            "farmer_groups": FarmerGroup.objects.filter(is_active=True),
         }
         return render(request, "broiler_farm.html", context)
 
@@ -661,17 +662,19 @@ class FarmerAPI(BaseAPIView):
     FILE_FIELDS = ["farmer_photo", "pan_upload", "aadhar_upload_front", "aadhar_upload_back"]
     FORM_FIELDS = [
         "farmer_name", "phone_no", "mobile_no", "mobile_2", "pan_no", "aadhar_no",
-        "national_id", "usc", "service_no", "farmer_group", "tds_percent",
+        "national_id", "usc", "service_no", "tds_percent",
         "account_holder_name", "acc_no", "ifsc_code", "bank_name", "bank_branch", "address",
     ]
 
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                farmer = Farmer.objects.get(id=id)
+                farmer = Farmer.objects.select_related("farmer_group").get(id=id)
                 data = {field: getattr(farmer, field) for field in self.FORM_FIELDS}
                 data["id"] = farmer.id
                 data["tds_percent"] = str(farmer.tds_percent) if farmer.tds_percent is not None else None
+                data["farmer_group_id"] = farmer.farmer_group_id
+                data["farmer_group"] = farmer.farmer_group.description if farmer.farmer_group_id else None
                 for field in self.FILE_FIELDS:
                     file_obj = getattr(farmer, field)
                     data[field] = file_obj.url if file_obj else None
@@ -683,8 +686,9 @@ class FarmerAPI(BaseAPIView):
                 return JsonResponse(cached_data, safe=False)
 
             farmers = list(
-                Farmer.objects.all().values(
-                    "id", "farmer_name", "mobile_no", "farmer_group", "usc", "service_no"
+                Farmer.objects.select_related("farmer_group").values(
+                    "id", "farmer_name", "mobile_no", "usc", "service_no",
+                    farmer_group_name=F("farmer_group__description"),
                 )
             )
             self.set_cached_data(cache_key, farmers)
@@ -701,6 +705,8 @@ class FarmerAPI(BaseAPIView):
                     if field not in data:
                         continue
                     setattr(farmer, field, data[field] or None if field == "tds_percent" else data[field])
+                if "farmer_group" in data:
+                    farmer.farmer_group_id = data["farmer_group"] or None
                 for field in self.FILE_FIELDS:
                     if field in request.FILES:
                         setattr(farmer, field, request.FILES[field])

@@ -125,7 +125,12 @@
                     </div>
                     <div class="col-md-3">
                         <label for="farmer_group" class="form-label">Farmer Group<span class="text-danger">*</span></label>
-                        <input type="text" id="farmer_group" class="form-control" placeholder="e.g. Group A" required />
+                        <select id="farmer_group" class="form-control" required>
+                            <option value="" selected disabled>-Select-</option>
+                            {% for fg in farmer_groups %}
+                            <option value="{{ fg.id }}">{{ fg.description }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label for="usc" class="form-label">USC</label>
@@ -274,7 +279,7 @@
                     <div class="col-md-3">
                         <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
                         <select id="farmer" class="form-control" required>
-                            <option value="" selected disabled>-Select- (add farmers on the Farmers tab)</option>
+                            <option value="" selected disabled>-Select-</option>
                             {% for farmer in farmers %}
                             <option value="{{ farmer.id }}">{{ farmer.farmer_name }}</option>
                             {% endfor %}
@@ -507,18 +512,43 @@ $(document).ready(function () {
     resetShedRows();
 
     /* ---------------------------------------------------------------- */
-    /* Get Location                                                       */
+    /* Get Location (also reverse-geocodes State/District via Nominatim) */
     /* ---------------------------------------------------------------- */
     $("#get-location-btn").click(function () {
         if (!navigator.geolocation) {
             alert("Geolocation is not supported by your browser.");
             return;
         }
+        const $btn = $(this);
+        const originalText = $btn.text();
+        $btn.prop("disabled", true).text("Locating...");
+
         navigator.geolocation.getCurrentPosition(function (position) {
-            $("#farm_latitude").val(position.coords.latitude);
-            $("#farm_longitude").val(position.coords.longitude);
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            $("#farm_latitude").val(lat);
+            $("#farm_longitude").val(lon);
+
+            $.ajax({
+                url: "https://nominatim.openstreetmap.org/reverse",
+                data: { format: "jsonv2", lat: lat, lon: lon, addressdetails: 1 },
+                success: function (data) {
+                    const address = data.address || {};
+                    const state = address.state || "";
+                    const district = address.state_district || address.county || address.district || "";
+                    if (state) $("#state").val(state);
+                    if (district) $("#district").val(district);
+                },
+                error: function () {
+                    alert("Got your coordinates, but could not look up State/District automatically.");
+                },
+                complete: function () {
+                    $btn.prop("disabled", false).text(originalText);
+                }
+            });
         }, function () {
             alert("Unable to fetch your location.");
+            $btn.prop("disabled", false).text(originalText);
         });
     });
 
@@ -595,7 +625,7 @@ $(document).ready(function () {
             type: "GET",
             success: function (farmers) {
                 const select = $("#farmer");
-                select.empty().append('<option value="" selected disabled>-Select- (add farmers on the Add Farmer tab)</option>');
+                select.empty().append('<option value="" selected disabled>-Select-</option>');
                 farmers.forEach(function (farmer) {
                     select.append(`<option value="${farmer.id}">${farmer.farmer_name}</option>`);
                 });
@@ -649,7 +679,7 @@ $(document).ready(function () {
                         <tr>
                             <td>${farmer.farmer_name}</td>
                             <td>${farmer.mobile_no || ""}</td>
-                            <td>${farmer.farmer_group || ""}</td>
+                            <td>${farmer.farmer_group_name || ""}</td>
                             <td>${farmer.usc || ""}</td>
                             <td>${farmer.service_no || ""}</td>
                             <td>
@@ -739,7 +769,7 @@ $(document).ready(function () {
                 $("#national_id").val(farmer.national_id);
                 $("#usc").val(farmer.usc);
                 $("#service_no").val(farmer.service_no);
-                $("#farmer_group").val(farmer.farmer_group);
+                $("#farmer_group").val(farmer.farmer_group_id);
                 $("#tds_percent").val(farmer.tds_percent);
                 $("#account_holder_name").val(farmer.account_holder_name);
                 $("#acc_no").val(farmer.acc_no);
