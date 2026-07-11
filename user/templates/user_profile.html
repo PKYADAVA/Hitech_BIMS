@@ -53,11 +53,39 @@
                         />
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-3">
-                        <button type="submit" class="btn btn-success">Update Profile</button>
+                        <button type="submit" class="btn btn-primary">Update Profile</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    $(document).ready(function () {
+        $("#user-profile-form").on("submit", function (e) {
+            e.preventDefault();
+
+            $.ajax({
+                url: "{% url 'user_profile' %}",
+                type: "POST",
+                data: {
+                    first_name: $("#first_name").val(),
+                    last_name: $("#last_name").val(),
+                    email: $("#email").val(),
+                    csrfmiddlewaretoken: $("input[name=csrfmiddlewaretoken]").val(),
+                },
+                success: function (response) {
+                    alert(response.message || "Profile updated successfully!");
+                },
+                error: function (xhr) {
+                    const message = xhr.responseJSON && xhr.responseJSON.error
+                        ? xhr.responseJSON.error
+                        : "Error updating profile. Please try again.";
+                    alert(message);
+                },
+            });
+        });
+    });
+</script>
 {% endblock content %}

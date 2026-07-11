@@ -159,17 +159,6 @@
 {% block js %}
 <script src="{% static 'js/hr/employee_list.js' %}"></script>
 <script>
-  $(document).ready(function () {
-    $('#employeeTable').DataTable({
-      paging: true,
-      searching: true,
-      ordering: true,
-      info: true,
-      responsive: true,
-    });
-  });
-</script>
-<script>
 {% for message in messages %}
   {% if message.tags == "error" %}
     Toastify({

@@ -16,12 +16,12 @@
         <ul class="nav nav-tabs px-3 py-3" id="farmSectionTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="add-farmer-tab" data-bs-toggle="tab" data-bs-target="#add-farmer-pane" type="button" role="tab">
-                    <i class="fas fa-user me-1"></i>Add Farmer
+                    <i class="fas fa-user me-1"></i>Farmers
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="add-farm-tab" data-bs-toggle="tab" data-bs-target="#add-farm-pane" type="button" role="tab">
-                    <i class="fas fa-tractor me-1"></i>Add Farm
+                    <i class="fas fa-tractor me-1"></i>Farms
                 </button>
             </li>
         </ul>
@@ -31,135 +31,13 @@
 
             <!-- =========================== ADD FARMER =========================== -->
             <div class="tab-pane fade show active" id="add-farmer-pane" role="tabpanel">
-                <h5 class="mb-3">Add Farmer</h5>
-                <form id="farmer-form" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <input type="hidden" id="farmer_id" value="" />
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-user"></i>Personal Details</div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label for="farmer_name" class="form-label">Farmer Name<span class="text-danger">*</span></label>
-                                <input type="text" id="farmer_name" class="form-control" placeholder="Enter farmer's full name" required />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="phone_no" class="form-label">Phone No.</label>
-                                <input type="text" id="phone_no" class="form-control" placeholder="Landline number" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="mobile_no" class="form-label">Mobile No.</label>
-                                <input type="text" id="mobile_no" class="form-control" placeholder="Primary mobile number" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="mobile_2" class="form-label">Mobile 2</label>
-                                <input type="text" id="mobile_2" class="form-control" placeholder="Alternate mobile number" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="farmer_photo" class="form-label">Farmer Photo</label>
-                                <input type="file" id="farmer_photo" class="form-control" accept="image/*" />
-                                <div class="form-text" id="farmer_photo_current"></div>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="farmer_group" class="form-label">Farmer Group<span class="text-danger">*</span></label>
-                                <input type="text" id="farmer_group" class="form-control" placeholder="e.g. Group A" required />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="usc" class="form-label">USC</label>
-                                <input type="text" id="usc" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="service_no" class="form-label">Service No</label>
-                                <input type="text" id="service_no" class="form-control" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-id-card"></i>Identity Documents</div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label for="pan_no" class="form-label">PAN No</label>
-                                <input type="text" id="pan_no" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="aadhar_no" class="form-label">Aadhar No</label>
-                                <input type="text" id="aadhar_no" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="national_id" class="form-label">National ID</label>
-                                <input type="text" id="national_id" class="form-control" />
-                            </div>
-                            <div class="col-md-3"></div>
-
-                            <div class="col-md-4">
-                                <label for="pan_upload" class="form-label">PAN Upload</label>
-                                <input type="file" id="pan_upload" class="form-control" />
-                                <div class="form-text" id="pan_upload_current"></div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="aadhar_upload_front" class="form-label">Aadhar Upload (Front)</label>
-                                <input type="file" id="aadhar_upload_front" class="form-control" />
-                                <div class="form-text" id="aadhar_upload_front_current"></div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="aadhar_upload_back" class="form-label">Aadhar Upload (Back)</label>
-                                <input type="file" id="aadhar_upload_back" class="form-control" />
-                                <div class="form-text" id="aadhar_upload_back_current"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-university"></i>Bank Details</div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label for="account_holder_name" class="form-label">Account Holder Name</label>
-                                <input type="text" id="account_holder_name" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="acc_no" class="form-label">Acc No</label>
-                                <input type="text" id="acc_no" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="ifsc_code" class="form-label">IFSC Code</label>
-                                <input type="text" id="ifsc_code" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="tds_percent" class="form-label">TDS %</label>
-                                <input type="number" step="0.01" min="0" max="100" id="tds_percent" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="bank_name" class="form-label">Bank Name</label>
-                                <input type="text" id="bank_name" class="form-control" />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="bank_branch" class="form-label">Bank Branch</label>
-                                <input type="text" id="bank_branch" class="form-control" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-home"></i>Address</div>
-                        <div class="row g-3">
-                            <div class="col-md-8">
-                                <label for="farmer_address" class="form-label">Address</label>
-                                <textarea id="farmer_address" class="form-control" rows="3"></textarea>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-2 mt-4">
-                        <button type="button" class="btn btn-secondary" id="farmer-cancel-btn">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="farmer-save-btn">Save</button>
-                    </div>
-                </form>
-
-                <hr class="my-4" />
-
-                <h5 class="mb-3"><i class="fas fa-table me-2"></i>Farmer List</h5>
-                <div class="table-responsive">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><i class="fas fa-table me-2"></i>Farmer List</h5>
+                    <button type="button" class="btn btn-primary" id="show-add-farmer-btn">
+                        <i class="fas fa-plus"></i> Add Farmer
+                    </button>
+                </div>
+                <div class="table-responsive mb-4">
                     <table class="table table-hover table-bordered mb-0" id="farmer-table">
                         <thead class="table-dark">
                             <tr>
@@ -174,240 +52,18 @@
                         <tbody></tbody>
                     </table>
                 </div>
+
             </div>
 
             <!-- =========================== ADD FARM =========================== -->
             <div class="tab-pane fade" id="add-farm-pane" role="tabpanel">
-                <h5 class="mb-3">Add Farm</h5>
-                <form id="farm-form" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <input type="hidden" id="farm_id" value="" />
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-tractor"></i>Farm Identification</div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label for="region" class="form-label">Region<span class="text-danger">*</span></label>
-                                <select id="region" class="form-control" required>
-                                    <option value="" selected disabled>-Select-</option>
-                                    {% for state in states_and_union_territories %}
-                                    <option value="{{ state }}">{{ state }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="branch" class="form-label">Branch<span class="text-danger">*</span></label>
-                                <select id="branch" class="form-control" required>
-                                    <option value="" selected disabled>-Select-</option>
-                                    {% for branch in branches %}
-                                    <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="line" class="form-label">Line<span class="text-danger">*</span></label>
-                                <input type="text" id="line" class="form-control" placeholder="Enter line" required />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="supervisor" class="form-label">Supervisor<span class="text-danger">*</span></label>
-                                <select id="supervisor" class="form-control" required>
-                                    <option value="" selected disabled>Select a supervisor</option>
-                                </select>
-                            </div>
-
-                            <div class="col-md-3">
-                                <label for="farm_code" class="form-label">Farm Code<span class="text-danger">*</span></label>
-                                <input type="text" id="farm_code" class="form-control" required />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
-                                <select id="farmer" class="form-control" required>
-                                    <option value="" selected disabled>-Select- (add farmers on the Add Farmer tab)</option>
-                                    {% for farmer in farmers %}
-                                    <option value="{{ farmer.id }}">{{ farmer.farmer_name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="farm_name" class="form-label">Farm Name<span class="text-danger">*</span></label>
-                                <input type="text" id="farm_name" class="form-control" required />
-                            </div>
-                            <div class="col-md-3">
-                                <label for="farm_pincode" class="form-label">Farm (Pincode)</label>
-                                <input type="text" id="farm_pincode" class="form-control" />
-                            </div>
-
-                            <div class="col-md-3">
-                                <label for="farm_capacity" class="form-label">Farm (Capacity)<span class="text-danger">*</span></label>
-                                <input type="number" min="0" id="farm_capacity" class="form-control" required />
-                            </div>
-                            <div class="col-md-9">
-                                <label class="form-label d-block">Farm Type<span class="text-danger">*</span></label>
-                                <div class="d-flex gap-4 pt-1">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="farm_type" id="farm_type_own" value="own" required>
-                                        <label class="form-check-label" for="farm_type_own">Own</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="farm_type" id="farm_type_ec_shed" value="ec_shed">
-                                        <label class="form-check-label" for="farm_type_ec_shed">Ec Shed</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="farm_type" id="farm_type_integration" value="integration">
-                                        <label class="form-check-label" for="farm_type_integration">Integration</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-map-marker-alt"></i>Location</div>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label for="state" class="form-label">State</label>
-                                <input type="text" id="state" class="form-control" placeholder="Enter state" />
-                            </div>
-                            <div class="col-md-4">
-                                <label for="district" class="form-label">District</label>
-                                <input type="text" id="district" class="form-control" />
-                            </div>
-                            <div class="col-md-4">
-                                <label for="area" class="form-label">Area</label>
-                                <input type="text" id="area" class="form-control" />
-                            </div>
-                            <div class="col-md-12">
-                                <label for="farm_address" class="form-label">Farm Address</label>
-                                <textarea id="farm_address" class="form-control" rows="2"></textarea>
-                            </div>
-
-                            <div class="col-md-5">
-                                <label for="farm_latitude" class="form-label">Farm Latitude</label>
-                                <input type="number" step="any" id="farm_latitude" class="form-control" />
-                            </div>
-                            <div class="col-md-5">
-                                <label for="farm_longitude" class="form-label">Farm Longitude</label>
-                                <input type="number" step="any" id="farm_longitude" class="form-control" />
-                            </div>
-                            <div class="col-md-2 d-flex align-items-end">
-                                <button type="button" class="btn btn-primary w-100" id="get-location-btn">Get Location</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-file-contract"></i>Agreement &amp; Documents</div>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label for="agreement_start_date" class="form-label">Agreement Start Date<span class="text-danger">*</span></label>
-                                <input type="date" id="agreement_start_date" class="form-control" required />
-                            </div>
-                            <div class="col-md-4">
-                                <label for="agreement_end_date" class="form-label">Agreement End Date<span class="text-danger">*</span></label>
-                                <input type="date" id="agreement_end_date" class="form-control" required />
-                            </div>
-                            <div class="col-md-4">
-                                <label for="agreement_months" class="form-label">Agreement Months</label>
-                                <input type="number" min="0" id="agreement_months" class="form-control" />
-                            </div>
-
-                            <div class="col-md-4">
-                                <label for="agreement_copy" class="form-label">Agreement Copy<span class="text-danger">*</span></label>
-                                <input type="file" id="agreement_copy" class="form-control" />
-                                <div class="form-text" id="agreement_copy_current"></div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="other_documents" class="form-label">Other Documents</label>
-                                <input type="file" id="other_documents" class="form-control" />
-                                <div class="form-text" id="other_documents_current"></div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="farm_sqft" class="form-label">Farm Sq.ft</label>
-                                <input type="text" id="farm_sqft" class="form-control" />
-                            </div>
-
-                            <div class="col-md-12">
-                                <label for="farm_pictures" class="form-label">Farm Pictures (multiple)</label>
-                                <input type="file" id="farm_pictures" class="form-control" multiple accept="image/*" />
-                                <div class="form-text" id="farm_pictures_current"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-money-bill-wave"></i>Security Cheques</div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">Security Cheque 1</label>
-                                <input type="text" id="cheque_1_no" class="form-control mb-2" placeholder="Cheque no." />
-                                <input type="file" id="cheque_1_file" class="form-control" />
-                                <div class="form-text" id="cheque_1_file_current"></div>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Security Cheque 2</label>
-                                <input type="text" id="cheque_2_no" class="form-control mb-2" placeholder="Cheque no." />
-                                <input type="file" id="cheque_2_file" class="form-control" />
-                                <div class="form-text" id="cheque_2_file_current"></div>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Security Cheque 3</label>
-                                <input type="text" id="cheque_3_no" class="form-control mb-2" placeholder="Cheque no." />
-                                <input type="file" id="cheque_3_file" class="form-control" />
-                                <div class="form-text" id="cheque_3_file_current"></div>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Security Cheque 4</label>
-                                <input type="text" id="cheque_4_no" class="form-control mb-2" placeholder="Cheque no." />
-                                <input type="file" id="cheque_4_file" class="form-control" />
-                                <div class="form-text" id="cheque_4_file_current"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <div class="form-section-label"><i class="fas fa-warehouse"></i>Shed Information</div>
-                        <div id="shed-rows"></div>
-                        <template id="shed-row-template">
-                            <div class="row g-3 shed-row align-items-end mb-2">
-                                <div class="col-md-4">
-                                    <label class="form-label">Shed No</label>
-                                    <input type="text" class="form-control shed-no" />
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Dimentions</label>
-                                    <input type="text" class="form-control shed-dimensions" />
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Sq Feet</label>
-                                    <input type="text" class="form-control shed-sqfeet" />
-                                </div>
-                                <div class="col-md-1">
-                                    <button type="button" class="btn btn-outline-danger btn-sm remove-shed-row"><i class="fas fa-times"></i></button>
-                                </div>
-                            </div>
-                        </template>
-                        <button type="button" class="btn btn-outline-success btn-sm" id="add-shed-row-btn">
-                            <i class="fas fa-plus"></i> Add Shed
-                        </button>
-                    </div>
-
-                    <div class="row g-3 mt-1">
-                        <div class="col-md-12">
-                            <label for="remarks" class="form-label">Remarks</label>
-                            <textarea id="remarks" class="form-control" rows="2"></textarea>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-2 mt-4">
-                        <button type="button" class="btn btn-secondary" id="farm-cancel-btn">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="farm-save-btn">Save</button>
-                    </div>
-                </form>
-
-                <hr class="my-4" />
-
-                <h5 class="mb-3"><i class="fas fa-table me-2"></i>Farm List</h5>
-                <div class="table-responsive">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><i class="fas fa-table me-2"></i>Farm List</h5>
+                    <button type="button" class="btn btn-primary" id="show-add-farm-btn">
+                        <i class="fas fa-plus"></i> Add Farm
+                    </button>
+                </div>
+                <div class="table-responsive mb-4">
                     <table class="table table-hover table-bordered mb-0" id="farm-table">
                         <thead class="table-dark">
                             <tr>
@@ -423,10 +79,386 @@
                         <tbody></tbody>
                     </table>
                 </div>
+
             </div>
 
         </div>
     </div>
+</div>
+
+<!-- Add/Edit Farmer Modal -->
+<div class="modal fade" id="farmerFormModal" tabindex="-1" aria-labelledby="farmerFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="farmerFormModalLabel"><i class="fas fa-user me-2"></i><span id="farmer-form-title">Add Farmer</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="farmer-form" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" id="farmer_id" value="" />
+        <div class="modal-body" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-user"></i>Personal Details</div>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="farmer_name" class="form-label">Farmer Name<span class="text-danger">*</span></label>
+                        <input type="text" id="farmer_name" class="form-control" placeholder="Enter farmer's full name" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="phone_no" class="form-label">Phone No.</label>
+                        <input type="text" id="phone_no" class="form-control" placeholder="Landline number" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="mobile_no" class="form-label">Mobile No.</label>
+                        <input type="text" id="mobile_no" class="form-control" placeholder="Primary mobile number" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="mobile_2" class="form-label">Mobile 2</label>
+                        <input type="text" id="mobile_2" class="form-control" placeholder="Alternate mobile number" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="farmer_photo" class="form-label">Farmer Photo</label>
+                        <input type="file" id="farmer_photo" class="form-control" accept="image/*" />
+                        <div class="form-text" id="farmer_photo_current"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="farmer_group" class="form-label">Farmer Group<span class="text-danger">*</span></label>
+                        <input type="text" id="farmer_group" class="form-control" placeholder="e.g. Group A" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="usc" class="form-label">USC</label>
+                        <input type="text" id="usc" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="service_no" class="form-label">Service No</label>
+                        <input type="text" id="service_no" class="form-control" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-id-card"></i>Identity Documents</div>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="pan_no" class="form-label">PAN No</label>
+                        <input type="text" id="pan_no" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="aadhar_no" class="form-label">Aadhar No</label>
+                        <input type="text" id="aadhar_no" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="national_id" class="form-label">National ID</label>
+                        <input type="text" id="national_id" class="form-control" />
+                    </div>
+                    <div class="col-md-3"></div>
+
+                    <div class="col-md-4">
+                        <label for="pan_upload" class="form-label">PAN Upload</label>
+                        <input type="file" id="pan_upload" class="form-control" />
+                        <div class="form-text" id="pan_upload_current"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="aadhar_upload_front" class="form-label">Aadhar Upload (Front)</label>
+                        <input type="file" id="aadhar_upload_front" class="form-control" />
+                        <div class="form-text" id="aadhar_upload_front_current"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="aadhar_upload_back" class="form-label">Aadhar Upload (Back)</label>
+                        <input type="file" id="aadhar_upload_back" class="form-control" />
+                        <div class="form-text" id="aadhar_upload_back_current"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-university"></i>Bank Details</div>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="account_holder_name" class="form-label">Account Holder Name</label>
+                        <input type="text" id="account_holder_name" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="acc_no" class="form-label">Acc No</label>
+                        <input type="text" id="acc_no" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="ifsc_code" class="form-label">IFSC Code</label>
+                        <input type="text" id="ifsc_code" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="tds_percent" class="form-label">TDS %</label>
+                        <input type="number" step="0.01" min="0" max="100" id="tds_percent" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="bank_name" class="form-label">Bank Name</label>
+                        <input type="text" id="bank_name" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="bank_branch" class="form-label">Bank Branch</label>
+                        <input type="text" id="bank_branch" class="form-control" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-home"></i>Address</div>
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label for="farmer_address" class="form-label">Address</label>
+                        <textarea id="farmer_address" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="farmer-cancel-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="farmer-save-btn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Farm Modal -->
+<div class="modal fade" id="farmFormModal" tabindex="-1" aria-labelledby="farmFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="farmFormModalLabel"><i class="fas fa-tractor me-2"></i><span id="farm-form-title">Add Farm</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="farm-form" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" id="farm_id" value="" />
+        <div class="modal-body" style="max-height: calc(100vh - 210px); overflow-y: auto;">
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-tractor"></i>Farm Identification</div>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="region" class="form-label">Region<span class="text-danger">*</span></label>
+                        <select id="region" class="form-control" required>
+                            <option value="" selected disabled>-Select-</option>
+                            {% for state in states_and_union_territories %}
+                            <option value="{{ state }}">{{ state }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="branch" class="form-label">Branch<span class="text-danger">*</span></label>
+                        <select id="branch" class="form-control" required>
+                            <option value="" selected disabled>-Select-</option>
+                            {% for branch in branches %}
+                            <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="line" class="form-label">Line<span class="text-danger">*</span></label>
+                        <input type="text" id="line" class="form-control" placeholder="Enter line" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="supervisor" class="form-label">Supervisor<span class="text-danger">*</span></label>
+                        <select id="supervisor" class="form-control" required>
+                            <option value="" selected disabled>Select a supervisor</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="farm_code" class="form-label">Farm Code<span class="text-danger">*</span></label>
+                        <input type="text" id="farm_code" class="form-control" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
+                        <select id="farmer" class="form-control" required>
+                            <option value="" selected disabled>-Select- (add farmers on the Farmers tab)</option>
+                            {% for farmer in farmers %}
+                            <option value="{{ farmer.id }}">{{ farmer.farmer_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="farm_name" class="form-label">Farm Name<span class="text-danger">*</span></label>
+                        <input type="text" id="farm_name" class="form-control" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label for="farm_pincode" class="form-label">Farm (Pincode)</label>
+                        <input type="text" id="farm_pincode" class="form-control" />
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="farm_capacity" class="form-label">Farm (Capacity)<span class="text-danger">*</span></label>
+                        <input type="number" min="0" id="farm_capacity" class="form-control" required />
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label d-block">Farm Type<span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4 pt-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="farm_type" id="farm_type_own" value="own" required>
+                                <label class="form-check-label" for="farm_type_own">Own</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="farm_type" id="farm_type_ec_shed" value="ec_shed">
+                                <label class="form-check-label" for="farm_type_ec_shed">Ec Shed</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="farm_type" id="farm_type_integration" value="integration">
+                                <label class="form-check-label" for="farm_type_integration">Integration</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-map-marker-alt"></i>Location</div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="state" class="form-label">State</label>
+                        <input type="text" id="state" class="form-control" placeholder="Enter state" />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="district" class="form-label">District</label>
+                        <input type="text" id="district" class="form-control" />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="area" class="form-label">Area</label>
+                        <input type="text" id="area" class="form-control" />
+                    </div>
+                    <div class="col-md-12">
+                        <label for="farm_address" class="form-label">Farm Address</label>
+                        <textarea id="farm_address" class="form-control" rows="2"></textarea>
+                    </div>
+
+                    <div class="col-md-5">
+                        <label for="farm_latitude" class="form-label">Farm Latitude</label>
+                        <input type="number" step="any" id="farm_latitude" class="form-control" />
+                    </div>
+                    <div class="col-md-5">
+                        <label for="farm_longitude" class="form-label">Farm Longitude</label>
+                        <input type="number" step="any" id="farm_longitude" class="form-control" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="button" class="btn btn-primary w-100" id="get-location-btn">Get Location</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-file-contract"></i>Agreement &amp; Documents</div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="agreement_start_date" class="form-label">Agreement Start Date<span class="text-danger">*</span></label>
+                        <input type="date" id="agreement_start_date" class="form-control" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="agreement_end_date" class="form-label">Agreement End Date<span class="text-danger">*</span></label>
+                        <input type="date" id="agreement_end_date" class="form-control" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="agreement_months" class="form-label">Agreement Months</label>
+                        <input type="number" min="0" id="agreement_months" class="form-control" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="agreement_copy" class="form-label">Agreement Copy<span class="text-danger">*</span></label>
+                        <input type="file" id="agreement_copy" class="form-control" />
+                        <div class="form-text" id="agreement_copy_current"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="other_documents" class="form-label">Other Documents</label>
+                        <input type="file" id="other_documents" class="form-control" />
+                        <div class="form-text" id="other_documents_current"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="farm_sqft" class="form-label">Farm Sq.ft</label>
+                        <input type="text" id="farm_sqft" class="form-control" />
+                    </div>
+
+                    <div class="col-md-12">
+                        <label for="farm_pictures" class="form-label">Farm Pictures (multiple)</label>
+                        <input type="file" id="farm_pictures" class="form-control" multiple accept="image/*" />
+                        <div class="form-text" id="farm_pictures_current"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-money-bill-wave"></i>Security Cheques</div>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Security Cheque 1</label>
+                        <input type="text" id="cheque_1_no" class="form-control mb-2" placeholder="Cheque no." />
+                        <input type="file" id="cheque_1_file" class="form-control" />
+                        <div class="form-text" id="cheque_1_file_current"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Security Cheque 2</label>
+                        <input type="text" id="cheque_2_no" class="form-control mb-2" placeholder="Cheque no." />
+                        <input type="file" id="cheque_2_file" class="form-control" />
+                        <div class="form-text" id="cheque_2_file_current"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Security Cheque 3</label>
+                        <input type="text" id="cheque_3_no" class="form-control mb-2" placeholder="Cheque no." />
+                        <input type="file" id="cheque_3_file" class="form-control" />
+                        <div class="form-text" id="cheque_3_file_current"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Security Cheque 4</label>
+                        <input type="text" id="cheque_4_no" class="form-control mb-2" placeholder="Cheque no." />
+                        <input type="file" id="cheque_4_file" class="form-control" />
+                        <div class="form-text" id="cheque_4_file_current"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <div class="form-section-label"><i class="fas fa-warehouse"></i>Shed Information</div>
+                <div id="shed-rows"></div>
+                <template id="shed-row-template">
+                    <div class="row g-3 shed-row align-items-end mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label">Shed No</label>
+                            <input type="text" class="form-control shed-no" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Dimentions</label>
+                            <input type="text" class="form-control shed-dimensions" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sq Feet</label>
+                            <input type="text" class="form-control shed-sqfeet" />
+                        </div>
+                        <div class="col-md-1">
+                            <button type="button" class="btn btn-outline-danger btn-sm remove-shed-row"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                </template>
+                <button type="button" class="btn btn-outline-success btn-sm" id="add-shed-row-btn">
+                    <i class="fas fa-plus"></i> Add Shed
+                </button>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-md-12">
+                    <label for="remarks" class="form-label">Remarks</label>
+                    <textarea id="remarks" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="farm-cancel-btn">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="farm-save-btn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -529,16 +561,30 @@ $(document).ready(function () {
     }
 
     /* ---------------------------------------------------------------- */
-    /* Farmer: form reset / cancel                                       */
+    /* Farmer: form reset / cancel / show                                */
     /* ---------------------------------------------------------------- */
     function resetFarmerForm() {
         $("#farmer-form")[0].reset();
         $("#farmer_id").val("");
         $("#farmer-form .form-text").text("");
         $("#farmer-save-btn").text("Save");
+        $("#farmer-form-title").text("Add Farmer");
         $("#farmer-form").off("submit").on("submit", handleFarmerSubmit);
     }
-    $("#farmer-cancel-btn").click(resetFarmerForm);
+    function hideFarmerForm() {
+        $("#farmerFormModal").modal("hide");
+    }
+    function showFarmerForm() {
+        $("#farmerFormModal").modal("show");
+    }
+    $("#farmer-cancel-btn").click(function () {
+        resetFarmerForm();
+        hideFarmerForm();
+    });
+    $("#show-add-farmer-btn").click(function () {
+        resetFarmerForm();
+        showFarmerForm();
+    });
 
     /* ---------------------------------------------------------------- */
     /* Farmer: list                                                       */
@@ -618,6 +664,7 @@ $(document).ready(function () {
             headers: { "X-CSRFToken": getCSRFToken() },
             success: function (response) {
                 resetFarmerForm();
+                hideFarmerForm();
                 loadFarmers();
                 refreshFarmerDropdown(response.id);
                 alert(id ? "Farmer updated successfully!" : "Farmer added successfully!");
@@ -663,7 +710,8 @@ $(document).ready(function () {
                 });
 
                 $("#farmer-save-btn").text("Update");
-                $("html, body").animate({ scrollTop: $("#farmer-form").offset().top - 100 }, 300);
+                $("#farmer-form-title").text("Edit Farmer");
+                showFarmerForm();
             },
             error: function () {
                 alert("Error fetching farmer details.");
@@ -690,7 +738,7 @@ $(document).ready(function () {
     });
 
     /* ---------------------------------------------------------------- */
-    /* Farm: form reset / cancel                                         */
+    /* Farm: form reset / cancel / show                                  */
     /* ---------------------------------------------------------------- */
     function resetFarmForm() {
         $("#farm-form")[0].reset();
@@ -699,9 +747,23 @@ $(document).ready(function () {
         $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
         resetShedRows();
         $("#farm-save-btn").text("Save");
+        $("#farm-form-title").text("Add Farm");
         $("#farm-form").off("submit").on("submit", handleFarmSubmit);
     }
-    $("#farm-cancel-btn").click(resetFarmForm);
+    function hideFarmForm() {
+        $("#farmFormModal").modal("hide");
+    }
+    function showFarmForm() {
+        $("#farmFormModal").modal("show");
+    }
+    $("#farm-cancel-btn").click(function () {
+        resetFarmForm();
+        hideFarmForm();
+    });
+    $("#show-add-farm-btn").click(function () {
+        resetFarmForm();
+        showFarmForm();
+    });
 
     /* ---------------------------------------------------------------- */
     /* Farm: list                                                        */
@@ -803,6 +865,7 @@ $(document).ready(function () {
             headers: { "X-CSRFToken": getCSRFToken() },
             success: function () {
                 resetFarmForm();
+                hideFarmForm();
                 loadFarms();
                 alert(id ? "Farm updated successfully!" : "Farm added successfully!");
             },
@@ -871,7 +934,8 @@ $(document).ready(function () {
                 }
 
                 $("#farm-save-btn").text("Update");
-                $("html, body").animate({ scrollTop: $("#farm-form").offset().top - 100 }, 300);
+                $("#farm-form-title").text("Edit Farm");
+                showFarmForm();
             },
             error: function () {
                 alert("Error fetching farm details.");

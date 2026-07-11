@@ -83,6 +83,21 @@ def forgot_password_view(request):
 
 @login_required
 def user_profile(request):
+    if request.method == "POST":
+        first_name = request.POST.get("first_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        email = request.POST.get("email", "").strip()
+
+        if not first_name or not email:
+            return JsonResponse({"error": "First name and email are required."}, status=400)
+
+        user = request.user
+        user.first_name = first_name
+        user.last_name = last_name
+        user.email = email
+        user.save()
+        return JsonResponse({"message": "Profile updated successfully."})
+
     return render(request, "user_profile.html")
 
 
