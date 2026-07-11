@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "user",
     "broiler",
     "hatchery",
+    "hatchery_master",
     "inventory",
     "hr",
     "sales",

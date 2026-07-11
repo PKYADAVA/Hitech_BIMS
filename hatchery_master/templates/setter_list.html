@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Setter — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='hatchery_master' active_tab='setter' %}
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header danger-header">
+        <h5 class="modal-title"><i class="fas fa-trash me-2"></i>Confirm Deletion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this setter?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancel
+        </button>
+        <form id="confirmDeleteForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash me-1"></i>Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fas fa-layer-group"></i>
+      Setter
+    </div>
+    <div class="page-header-subtitle">Add and manage setter machines for each hatchery</div>
+  </div>
+  <a href="{% url 'setter_create' %}" class="btn btn-primary">
+    <i class="fas fa-plus"></i>
+    Add
+  </a>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header">
+    <i class="fas fa-table"></i>
+    Setter List
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="setterTable" class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Hatchery</th>
+            <th>Setter No</th>
+            <th>Capacity</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for setter in setters %}
+          <tr>
+            <td>
+              {{ setter.hatchery.hatchery_name }}
+              {% if not setter.is_active %}
+                <span class="badge bg-secondary ms-1">Inactive</span>
+              {% endif %}
+              {% if setter.is_locked %}
+                <span class="badge bg-warning text-dark ms-1">Locked</span>
+              {% endif %}
+            </td>
+            <td>{{ setter.setter_no }}</td>
+            <td>{{ setter.capacity }}</td>
+            <td>
+              <div class="d-flex gap-1 justify-content-center flex-wrap">
+                {% if setter.is_locked %}
+                  <button class="btn btn-outline-secondary btn-sm" disabled title="Locked">
+                    <i class="fas fa-pen"></i>
+                  </button>
+                {% else %}
+                  <a href="{% url 'setter_edit' setter.id %}">
+                    <button class="btn btn-outline-warning btn-sm" title="Edit">
+                      <i class="fas fa-pen"></i>
+                    </button>
+                  </a>
+                {% endif %}
+                <button class="btn btn-outline-danger btn-sm delete-setter"
+                        data-id="{{ setter.id }}"
+                        {% if setter.is_locked %}disabled{% endif %}
+                        title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm print-setter" title="Print">
+                  <i class="fas fa-print"></i>
+                </button>
+                <form class="d-inline" method="post" action="{% url 'setter_toggle_active' setter.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-info btn-sm"
+                          {% if setter.is_locked %}disabled{% endif %}
+                          title="{% if setter.is_active %}Pause{% else %}Activate{% endif %}">
+                    <i class="fas {% if setter.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+                  </button>
+                </form>
+                <form class="d-inline" method="post" action="{% url 'setter_toggle_lock' setter.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-dark btn-sm"
+                          title="{% if setter.is_locked %}Unlock{% else %}Lock{% endif %}">
+                    <i class="fas {% if setter.is_locked %}fa-lock{% else %}fa-lock-open{% endif %}"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+  $(document).ready(function () {
+    $('#setterTable').DataTable({
+      paging: true,
+      searching: true,
+      ordering: true,
+      info: true,
+      responsive: true,
+      language: { emptyTable: "No setters found" },
+    });
+
+    $(document).on("click", ".delete-setter", function () {
+      const id = $(this).data("id");
+      $("#confirmDeleteForm").attr("action", `/setter/${id}/delete/`);
+      $("#deleteConfirmationModal").modal("show");
+    });
+
+    $(document).on("click", ".print-setter", function () {
+      const row = $(this).closest("tr");
+      const cells = row.find("td");
+      const win = window.open("", "_blank");
+      win.document.write(`
+        <html>
+          <head><title>Setter Details</title></head>
+          <body style="font-family: sans-serif; padding: 24px;">
+            <h3>Setter Details</h3>
+            <table style="border-collapse: collapse;">
+              <tr><td style="padding:4px 12px;font-weight:bold;">Hatchery</td><td style="padding:4px 12px;">${cells.eq(0).text().trim()}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Setter No</td><td style="padding:4px 12px;">${cells.eq(1).text().trim()}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Capacity</td><td style="padding:4px 12px;">${cells.eq(2).text().trim()}</td></tr>
+            </table>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      win.print();
+    });
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

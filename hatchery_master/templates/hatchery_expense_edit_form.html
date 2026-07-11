@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit Hatchery Expense — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='hatchery_master' active_tab='hatchery_expense' %}
+
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fas fa-file-invoice-dollar"></i>
+      Edit Hatchery Expense
+    </div>
+    <div class="page-header-subtitle">Update this expense entry</div>
+  </div>
+  <a href="{% url 'hatchery_expense_list' %}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i>
+    Back to list
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="date" class="form-label">Date<span class="text-danger">*</span></label>
+          <input type="date" id="date" name="date" class="form-control" value="{{ expense.date|date:'Y-m-d' }}" required />
+        </div>
+        <div class="col-md-4">
+          <label for="hatchery" class="form-label">Hatchery<span class="text-danger">*</span></label>
+          <select id="hatchery" name="hatchery" class="form-select" required>
+            <option value="" disabled>Select</option>
+            {% for h in hatcheries %}
+            <option value="{{ h.id }}" {% if expense.hatchery_id == h.id %}selected{% endif %}>{{ h.hatchery_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-5 d-flex align-items-end">
+          <div class="form-check me-4">
+            <input class="form-check-input" type="radio" name="stage" id="stage_eggs" value="eggs" {% if expense.stage == 'eggs' %}checked{% endif %}>
+            <label class="form-check-label" for="stage_eggs">On Eggs</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="stage" id="stage_chicks" value="chicks" {% if expense.stage == 'chicks' %}checked{% endif %}>
+            <label class="form-check-label" for="stage_chicks">On Chicks</label>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label for="expense_type" class="form-label">Expense Type<span class="text-danger">*</span></label>
+          <select id="expense_type" name="expense_type" class="form-select" required>
+            <option value="" disabled>Select</option>
+            {% for et in expense_types %}
+            <option value="{{ et.id }}" {% if expense.expense_type_id == et.id %}selected{% endif %}>{{ et.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="amount" class="form-label">Expense Amount<span class="text-danger">*</span></label>
+          <input type="number" step="0.01" min="0" id="amount" name="amount" class="form-control"
+                 value="{{ expense.amount }}" required />
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="{% url 'hatchery_expense_list' %}" class="btn btn-danger">
+          <i class="fas fa-times"></i>Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i>Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 4000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

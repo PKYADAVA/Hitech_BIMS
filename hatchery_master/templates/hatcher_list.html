@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Hatcher — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='hatchery_master' active_tab='hatcher' %}
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header danger-header">
+        <h5 class="modal-title"><i class="fas fa-trash me-2"></i>Confirm Deletion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this hatcher?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancel
+        </button>
+        <form id="confirmDeleteForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash me-1"></i>Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fas fa-temperature-high"></i>
+      Hatcher
+    </div>
+    <div class="page-header-subtitle">Add and manage hatcher machines for each hatchery</div>
+  </div>
+  <a href="{% url 'hatcher_create' %}" class="btn btn-primary">
+    <i class="fas fa-plus"></i>
+    Add
+  </a>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+  <div class="card-header">
+    <i class="fas fa-table"></i>
+    Hatcher List
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="hatcherTable" class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Hatchery</th>
+            <th>Hatcher No</th>
+            <th>Capacity</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for hatcher in hatchers %}
+          <tr>
+            <td>
+              {{ hatcher.hatchery.hatchery_name }}
+              {% if not hatcher.is_active %}
+                <span class="badge bg-secondary ms-1">Inactive</span>
+              {% endif %}
+              {% if hatcher.is_locked %}
+                <span class="badge bg-warning text-dark ms-1">Locked</span>
+              {% endif %}
+            </td>
+            <td>{{ hatcher.hatcher_no }}</td>
+            <td>{{ hatcher.capacity }}</td>
+            <td>
+              <div class="d-flex gap-1 justify-content-center flex-wrap">
+                {% if hatcher.is_locked %}
+                  <button class="btn btn-outline-secondary btn-sm" disabled title="Locked">
+                    <i class="fas fa-pen"></i>
+                  </button>
+                {% else %}
+                  <a href="{% url 'hatcher_edit' hatcher.id %}">
+                    <button class="btn btn-outline-warning btn-sm" title="Edit">
+                      <i class="fas fa-pen"></i>
+                    </button>
+                  </a>
+                {% endif %}
+                <button class="btn btn-outline-danger btn-sm delete-hatcher"
+                        data-id="{{ hatcher.id }}"
+                        {% if hatcher.is_locked %}disabled{% endif %}
+                        title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm print-hatcher" title="Print">
+                  <i class="fas fa-print"></i>
+                </button>
+                <form class="d-inline" method="post" action="{% url 'hatcher_toggle_active' hatcher.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-info btn-sm"
+                          {% if hatcher.is_locked %}disabled{% endif %}
+                          title="{% if hatcher.is_active %}Pause{% else %}Activate{% endif %}">
+                    <i class="fas {% if hatcher.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+                  </button>
+                </form>
+                <form class="d-inline" method="post" action="{% url 'hatcher_toggle_lock' hatcher.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-dark btn-sm"
+                          title="{% if hatcher.is_locked %}Unlock{% else %}Lock{% endif %}">
+                    <i class="fas {% if hatcher.is_locked %}fa-lock{% else %}fa-lock-open{% endif %}"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+  $(document).ready(function () {
+    $('#hatcherTable').DataTable({
+      paging: true,
+      searching: true,
+      ordering: true,
+      info: true,
+      responsive: true,
+      language: { emptyTable: "No hatchers found" },
+    });
+
+    $(document).on("click", ".delete-hatcher", function () {
+      const id = $(this).data("id");
+      $("#confirmDeleteForm").attr("action", `/hatcher/${id}/delete/`);
+      $("#deleteConfirmationModal").modal("show");
+    });
+
+    $(document).on("click", ".print-hatcher", function () {
+      const row = $(this).closest("tr");
+      const cells = row.find("td");
+      const win = window.open("", "_blank");
+      win.document.write(`
+        <html>
+          <head><title>Hatcher Details</title></head>
+          <body style="font-family: sans-serif; padding: 24px;">
+            <h3>Hatcher Details</h3>
+            <table style="border-collapse: collapse;">
+              <tr><td style="padding:4px 12px;font-weight:bold;">Hatchery</td><td style="padding:4px 12px;">${cells.eq(0).text().trim()}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Hatcher No</td><td style="padding:4px 12px;">${cells.eq(1).text().trim()}</td></tr>
+              <tr><td style="padding:4px 12px;font-weight:bold;">Capacity</td><td style="padding:4px 12px;">${cells.eq(2).text().trim()}</td></tr>
+            </table>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      win.print();
+    });
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if hatchery %}Edit{% else %}Add{% endif %} Hatchery — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='hatchery_master' active_tab='hatchery_creation' %}
+
+<div class="page-header">
+  <div>
+    <div class="page-header-title">
+      <i class="fa-solid fa-kiwi-bird"></i>
+      {% if hatchery %}Edit Hatchery{% else %}Add Hatchery{% endif %}
+    </div>
+    <div class="page-header-subtitle">
+      {% if hatchery %}Update this hatchery's details{% else %}Register a new hatchery facility/partner{% endif %}
+    </div>
+  </div>
+  <a href="{% url 'hatchery_master_list' %}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i>
+    Back to list
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="hatchery_name" class="form-label">Hatchery<span class="text-danger">*</span></label>
+          <input type="text" id="hatchery_name" name="hatchery_name" class="form-control"
+                 placeholder="Enter hatchery name" value="{{ hatchery.hatchery_name|default:'' }}" required />
+        </div>
+        <div class="col-md-4">
+          <label for="operation_type" class="form-label">Operation Type<span class="text-danger">*</span></label>
+          <select id="operation_type" name="operation_type" class="form-select" required>
+            <option value="" {% if not hatchery %}selected{% endif %} disabled>Select</option>
+            {% for value, label in operation_types %}
+            <option value="{{ value }}" {% if hatchery.operation_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="owner_name" class="form-label">Owner Name</label>
+          <input type="text" id="owner_name" name="owner_name" class="form-control"
+                 placeholder="Enter owner's name" value="{{ hatchery.owner_name|default:'' }}" />
+        </div>
+        <div class="col-md-4">
+          <label for="contact" class="form-label">Contact</label>
+          <input type="text" id="contact" name="contact" class="form-control"
+                 placeholder="Enter contact number" value="{{ hatchery.contact|default:'' }}" />
+        </div>
+        <div class="col-md-4">
+          <label for="email" class="form-label">Email Id</label>
+          <input type="email" id="email" name="email" class="form-control"
+                 placeholder="Enter email address" value="{{ hatchery.email|default:'' }}" />
+        </div>
+        <div class="col-md-4">
+          <label for="state" class="form-label">State</label>
+          <select id="state" name="state" class="form-select">
+            <option value="" {% if not hatchery.state %}selected{% endif %}>Select</option>
+            {% for state in states_and_union_territories %}
+            <option value="{{ state }}" {% if hatchery.state == state %}selected{% endif %}>{{ state }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="agreement_months" class="form-label">Agreement Months</label>
+          <input type="number" id="agreement_months" name="agreement_months" class="form-control" min="0"
+                 placeholder="e.g. 12" value="{{ hatchery.agreement_months|default:'' }}" />
+        </div>
+        <div class="col-md-4">
+          <label for="document" class="form-label">Upload Document</label>
+          <input type="file" id="document" name="document" class="form-control" />
+          {% if hatchery.document %}
+          <div class="form-text">
+            Current: <a href="{{ hatchery.document.url }}" target="_blank">{{ hatchery.document.name }}</a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="{% url 'hatchery_master_list' %}" class="btn btn-secondary">
+          <i class="fas fa-times"></i>Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i>Save Hatchery
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 4000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

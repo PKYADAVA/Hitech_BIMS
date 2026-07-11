@@ -13,6 +13,7 @@ urlpatterns = [
     path("", include("user.urls")),
     path("", include("broiler.urls")),
     path("", include("hatchery.urls")),
+    path("", include("hatchery_master.urls")),
     path("", include("hr.urls")),
     path("", include("inventory.urls")),
     path("", include("account.urls")),

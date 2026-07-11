@@ -49,11 +49,24 @@
       </li>
 
       <!-- Hatchery -->
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'hatchery' %}active{% endif %}"
-           href="{% url 'hatchery_list' %}">
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'hatchery' %}active{% endif %}"
+           href="#" id="hatcheryDd" data-bs-toggle="dropdown">
           <i class="fa-solid fa-kiwi-bird me-1"></i>Hatchery
         </a>
+        <ul class="dropdown-menu" aria-labelledby="hatcheryDd">
+          <li><h6 class="dropdown-header">Hatchery</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url 'hatchery_master_list' %}">
+            <i class="fas fa-sliders-h"></i>Master
+          </a></li>
+          <li><a class="dropdown-item" href="{% url 'hatchery_list' %}">
+            <i class="fas fa-exchange-alt"></i>Transactions
+          </a></li>
+          <li><a class="dropdown-item" href="#">
+            <i class="fas fa-chart-bar"></i>Reports
+          </a></li>
+        </ul>
       </li>
 
       <!-- Purchase -->
