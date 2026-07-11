@@ -106,6 +106,66 @@ class Schedule(models.Model):
         ]
 
 
+class CoACategory(models.Model):
+    """High-level sector grouping (Asset/Liability/etc.) used to organize the chart of accounts."""
+    TYPE_CHOICES = [
+        ('Asset', _('Asset')),
+        ('Capital', _('Capital')),
+        ('Expense', _('Expense')),
+        ('Liability', _('Liability')),
+        ('Revenue', _('Revenue')),
+    ]
+
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this category")
+    )
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, help_text=_("Sector this category belongs to"))
+    description = models.CharField(max_length=150, help_text=_("Name of the category"))
+    is_active = models.BooleanField(default=True, help_text=_("Inactive categories are hidden from selection elsewhere"))
+    is_locked = models.BooleanField(default=False, help_text=_("Locked records can't be edited or deleted"))
+    created_at = models.DateTimeField(auto_now_add=True, help_text=_("Record created at"))
+    updated_at = models.DateTimeField(auto_now=True, help_text=_("Last updated at"))
+
+    def __str__(self):
+        return f"{self.code} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = self._next_code()
+            super().save(update_fields=['code'])
+
+    @classmethod
+    def _next_code(cls):
+        """CAT-<n+1>, where n is the highest numeric suffix already in use.
+
+        Not simply based on this row's own pk: categories are also bulk
+        imported from CSV/Excel with pre-assigned codes that have gaps, so a
+        pk-based code would collide with an already-imported higher number.
+        """
+        import re
+        max_num = 0
+        for existing_code in cls.objects.values_list('code', flat=True):
+            match = re.match(r'CAT-(\d+)$', existing_code or '')
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"CAT-{max_num + 1:04d}"
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = _("CoA Category")
+        verbose_name_plural = _("CoA Categories")
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['type']),
+        ]
+
+
 class ChartOfAccount(models.Model):
     """
     Model to manage the Chart of Accounts.

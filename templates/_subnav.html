@@ -39,6 +39,7 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
       {% elif module == 'account' %}
         <li class="subnav-tab"><a class="{% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}"><i class="fas fa-calendar-alt me-1"></i>Financial Year</a></li>
         <li class="subnav-tab"><a class="{% if active_tab == 'schedule' %}active{% endif %} activate" href="{% url 'schedule' %}"><i class="fas fa-clock me-1"></i>Schedule</a></li>
+        <li class="subnav-tab"><a class="{% if active_tab == 'coa_category' %}active{% endif %} activate" href="{% url 'coa_category' %}"><i class="fas fa-layer-group me-1"></i>CoA Category</a></li>
         <li class="subnav-tab"><a class="{% if active_tab == 'coa' %}active{% endif %} activate" href="{% url 'coa' %}"><i class="fas fa-sitemap me-1"></i>Chart of Accounts</a></li>
         <li class="subnav-tab"><a class="{% if active_tab == 'bank_cash' %}active{% endif %} activate" href="{% url 'bank_cash' %}"><i class="fas fa-university me-1"></i>Bank / Cash Masters</a></li>
       {% elif module == 'inventory' %}

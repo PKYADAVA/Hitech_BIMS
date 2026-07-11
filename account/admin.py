@@ -1,6 +1,29 @@
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import FinancialYear, Schedule, ChartOfAccount, BankCode
+from .models import FinancialYear, Schedule, ChartOfAccount, BankCode, CoACategory
+
+
+@admin.register(CoACategory)
+class CoACategoryAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for CoACategory model.
+    """
+    list_display = ('code', 'type', 'description', 'is_active', 'is_locked', 'created_at')
+    list_filter = ('type', 'is_active', 'is_locked')
+    search_fields = ('code', 'description')
+    ordering = ('code',)
+    list_per_page = 20
+    readonly_fields = ('code', 'created_at', 'updated_at')
+
+    fieldsets = (
+        (None, {
+            'fields': ('code', 'type', 'description', 'is_active', 'is_locked')
+        }),
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
 
 
 @admin.register(FinancialYear)

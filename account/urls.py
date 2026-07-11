@@ -3,6 +3,13 @@ from . import views
 
 urlpatterns = [
     path('coa/', views.coa, name='coa'),
+    path('coa-category/', views.coa_category, name='coa_category'),
+    path('coa_category_list/', views.CoACategoryAPI.as_view(), name='coa_category_list'),
+    path('coa_category/<int:id>/', views.CoACategoryAPI.as_view(), name='coa_category_detail'),
+    path('coa_category/<int:id>/delete/', views.CoACategoryAPI.as_view(), name='coa_category_delete'),
+    path('coa_category/<int:id>/toggle-active/', views.toggle_coa_category_active, name='coa_category_toggle_active'),
+    path('coa_category/<int:id>/toggle-lock/', views.toggle_coa_category_lock, name='coa_category_toggle_lock'),
+    path('coa_category/bulk-upload/', views.coa_category_bulk_upload, name='coa_category_bulk_upload'),
     path('chart-of-accounts/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_list'),
     path('chart-of-accounts/create/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_create'),
     path('chart-of-accounts/<int:id>/', views.ChartOfAccountsAPI.as_view(), name='chart-of-accounts_update'),
