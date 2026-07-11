@@ -38,15 +38,21 @@
         </div>
         <div class="col-md-3">
           <label class="form-label">Batch / Flock No</label>
-          <input type="text" id="batch_flock_no" class="form-control" placeholder="e.g. 0806/01">
+          <input type="text" id="batch_flock_no" class="form-control" readonly
+                 value="{{ next_batch_flock_no|default:'' }}" placeholder="e.g. 0806/01">
         </div>
         <div class="col-md-3">
           <label class="form-label">Supplier Name <span class="text-danger">*</span></label>
-          <input type="text" id="supplier_name" class="form-control" required>
+          <select id="supplier_name" class="form-control" required>
+            <option value=""></option>
+            {% for supplier in suppliers %}
+            <option value="{{ supplier.name }}">{{ supplier.name }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="col-md-3">
           <label class="form-label">Primary Machine Nos</label>
-          <input type="text" id="primary_machine_nos" class="form-control" placeholder="e.g. 39,40,41,42">
+          <input type="text" id="primary_machine_nos" class="form-control" readonly placeholder="Filled from Setter No. below">
         </div>
         <div class="col-md-3">
           <label class="form-label">Received Date <span class="text-danger">*</span></label>
@@ -306,12 +312,20 @@
 $(document).ready(function () {
   const hatchSettingId = $("#hatch_setting_id").val();
 
+  $("#supplier_name").select2({
+    theme: "bootstrap-5",
+    tags: true,
+    placeholder: "Select or type a supplier name",
+    allowClear: true,
+    width: "100%",
+  });
+
   function eggRowHtml(row) {
     row = row || {};
     return `
       <tr>
         <td><input type="text" class="form-control form-control-sm" data-field="sub_lot_flock" value="${row.sub_lot_flock || ""}"></td>
-        <td><input type="text" class="form-control form-control-sm" data-field="setter_no" value="${row.setter_no || ""}" required></td>
+        <td><input type="text" class="form-control form-control-sm setter-no-input" data-field="setter_no" value="${row.setter_no || ""}" required></td>
         <td><input type="number" min="0" class="form-control form-control-sm egg-qty-input" data-field="no_trays" value="${row.no_trays ?? ""}"></td>
         <td><input type="number" min="0" class="form-control form-control-sm egg-qty-input" data-field="tray_size" value="${row.tray_size ?? ""}"></td>
         <td><input type="number" min="0" class="form-control form-control-sm" data-field="total_eggs" readonly value="${row.total_eggs ?? 0}"></td>
@@ -460,6 +474,51 @@ $(document).ready(function () {
   $(document).on("input", ".hatcher-qty-input", recalcHatcherSection);
   $(document).on("input", ".sales-input", recalcSalesSection);
 
+  /* ---------------------------------------------------------------- */
+  /* Primary Machine Nos - filled automatically from Setter No. rows   */
+  /* ---------------------------------------------------------------- */
+  function recalcPrimaryMachineNos() {
+    const setterNos = [];
+    $("#egg-intake-tbody .setter-no-input").each(function () {
+      const val = $(this).val().trim();
+      if (val) setterNos.push(val);
+    });
+    $("#primary_machine_nos").val(setterNos.join(","));
+  }
+  $(document).on("input", ".setter-no-input", recalcPrimaryMachineNos);
+  $(document).on("click", ".remove-row", recalcPrimaryMachineNos);
+
+  /* ---------------------------------------------------------------- */
+  /* Transfer Date / Hatch Date - default to Setting Date + 18 / + 21  */
+  /* days, but stay editable once the user overrides them.             */
+  /* ---------------------------------------------------------------- */
+  let lastAutoTransferDate = "";
+  let lastAutoHatchDate = "";
+
+  function addDays(dateStr, days) {
+    const d = new Date(dateStr + "T00:00:00");
+    if (isNaN(d.getTime())) return "";
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  $("#setting_date").on("change", function () {
+    const settingDate = $(this).val();
+    if (!settingDate) return;
+
+    const currentTransfer = $("#transfer_date").val();
+    if (!currentTransfer || currentTransfer === lastAutoTransferDate) {
+      lastAutoTransferDate = addDays(settingDate, 18);
+      $("#transfer_date").val(lastAutoTransferDate);
+    }
+
+    const currentHatch = $("#hatch_date").val();
+    if (!currentHatch || currentHatch === lastAutoHatchDate) {
+      lastAutoHatchDate = addDays(settingDate, 21);
+      $("#hatch_date").val(lastAutoHatchDate);
+    }
+  });
+
   function collectRows(tbodySelector, fields) {
     const rows = [];
     $(`${tbodySelector} tr`).each(function () {
@@ -538,7 +597,10 @@ $(document).ready(function () {
       success: function (hs) {
         $("#setting_no").val(hs.setting_no);
         $("#batch_flock_no").val(hs.batch_flock_no);
-        $("#supplier_name").val(hs.supplier_name);
+        if (hs.supplier_name && $("#supplier_name option[value='" + hs.supplier_name.replace(/'/g, "\\'") + "']").length === 0) {
+          $("#supplier_name").append(new Option(hs.supplier_name, hs.supplier_name, true, true));
+        }
+        $("#supplier_name").val(hs.supplier_name).trigger("change");
         $("#primary_machine_nos").val(hs.primary_machine_nos);
         $("#received_date").val(hs.received_date);
         $("#received_time").val(hs.received_time);

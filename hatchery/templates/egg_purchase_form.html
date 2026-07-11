@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if egg_purchase_id %}Edit{% else %}Add{% endif %} Egg Purchase — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='egg_purchase' %}
+
+<div class="page-header">
+    <div class="page-header-title">
+      <i class="fas fa-shopping-basket"></i>
+      {% if egg_purchase_id %}Edit{% else %}Add{% endif %} Egg Purchase
+    </div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Record an egg purchase from a supplier</div>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form id="egg-purchase-form">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="date" name="date" required>
+        </div>
+        <div class="col-md-3">
+          <label for="supplier" class="form-label">Supplier <span class="text-danger">*</span></label>
+          <select class="form-select" id="supplier" name="supplier" required>
+            <option value="">select</option>
+            {% for s in suppliers %}
+              <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="warehouse" class="form-label">Warehouse <span class="text-danger">*</span></label>
+          <select class="form-select" id="warehouse" name="warehouse" required>
+            <option value="">select</option>
+            {% for w in warehouses %}
+              <option value="{{ w.id }}">{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="dc_no" class="form-label">Dc No.</label>
+          <input type="text" class="form-control" id="dc_no" name="dc_no">
+        </div>
+
+        <div class="col-md-3">
+          <label for="transaction_no" class="form-label">Transaction No.</label>
+          <input type="text" class="form-control" id="transaction_no" readonly>
+        </div>
+        <div class="col-md-3">
+          <label for="vehicle" class="form-label">Vehicle</label>
+          <input type="text" class="form-control" id="vehicle" name="vehicle">
+        </div>
+        <div class="col-md-3">
+          <label for="driver" class="form-label">Driver</label>
+          <input type="text" class="form-control" id="driver" name="driver">
+        </div>
+      </div>
+
+      <hr class="my-4">
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle" id="item-rows-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:220px;">Item <span class="text-danger">*</span></th>
+              <th style="min-width:100px;">Sent Qty</th>
+              <th style="min-width:100px;">Rcv Qty</th>
+              <th style="min-width:100px;">Free Qty</th>
+              <th style="min-width:110px;">No. of Boxes</th>
+              <th style="min-width:110px;">Amount <span class="text-danger">*</span></th>
+              <th style="min-width:90px;">Disc %</th>
+              <th style="min-width:90px;">Disc ₹</th>
+              <th style="min-width:120px;">Total Amount</th>
+              <th style="min-width:90px;">Rate</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="item-rows-body"></tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-item-row">
+        <i class="fas fa-plus"></i> Add Row
+      </button>
+
+      <hr class="my-4">
+
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="freight_type" class="form-label">Freight Type</label>
+          <select class="form-select" id="freight_type" name="freight_type">
+            <option value="Exclude">Exclude</option>
+            <option value="Include">Include</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">Payment Mode</label>
+          <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" checked>
+            <label class="form-check-label" for="pay_later">Pay Later</label>
+          </div>
+          <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_in_bill" value="pay_in_bill">
+            <label class="form-check-label" for="pay_in_bill">Pay In Bill</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label for="pay_account" class="form-label">Pay Account <span class="text-danger">*</span></label>
+          <select class="form-select" id="pay_account" name="pay_account" required>
+            <option value="">select</option>
+            {% for a in pay_accounts %}
+              <option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="freight_account" class="form-label">Freight Account</label>
+          <select class="form-select" id="freight_account" name="freight_account">
+            <option value="">select</option>
+            {% for a in pay_accounts %}
+              <option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="freight_amount" class="form-label">Freight Amount</label>
+          <input type="number" class="form-control" id="freight_amount" name="freight_amount" step="0.01" value="0">
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label d-block">TCS</label>
+          <input type="checkbox" class="form-check-input mt-2" id="tcs_applicable" name="tcs_applicable">
+        </div>
+        <div class="col-md-2">
+          <label for="tcs_percent" class="form-label">TCS %</label>
+          <input type="number" class="form-control" id="tcs_percent" name="tcs_percent" step="0.01" value="0.10">
+        </div>
+        <div class="col-md-2">
+          <label for="tcs_amount_display" class="form-label">TCS Amount</label>
+          <input type="text" class="form-control" id="tcs_amount_display" readonly value="0.00">
+        </div>
+        <div class="col-md-2">
+          <label for="supplier_amount_display" class="form-label">Supplier Amount</label>
+          <input type="text" class="form-control" id="supplier_amount_display" readonly value="0.00">
+        </div>
+
+        <div class="col-md-2">
+          <label for="net_quantity_display" class="form-label">Net Quantity</label>
+          <input type="text" class="form-control" id="net_quantity_display" readonly value="0.00">
+        </div>
+        <div class="col-md-2">
+          <label for="net_rate_display" class="form-label">Net Rate</label>
+          <input type="text" class="form-control" id="net_rate_display" readonly value="0.00">
+        </div>
+        <div class="col-md-2">
+          <label for="net_amount_display" class="form-label">Net Amount</label>
+          <input type="text" class="form-control" id="net_amount_display" readonly value="0.00">
+        </div>
+
+        <div class="col-md-12">
+          <label for="remarks" class="form-label">Remarks</label>
+          <textarea class="form-control" id="remarks" name="remarks" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Submit</button>
+        <a href="{% url 'egg_purchase_list' %}" class="btn btn-danger">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+$(document).ready(function () {
+    const csrfToken = "{{ csrf_token }}";
+    const eggPurchaseId = {{ egg_purchase_id|default:"null" }};
+    const itemOptions = [
+        {% for i in items %}
+        { id: {{ i.id }}, label: "{{ i.item_code|escapejs }} - {{ i.description|escapejs }}" },
+        {% endfor %}
+    ];
+    let rowCounter = 0;
+
+    function showToast(type, message) {
+        Toastify({
+            text: message,
+            duration: 3000,
+            gravity: "top",
+            position: "right",
+            backgroundColor: type === 'success' ? '#28a745' : '#dc3545',
+        }).showToast();
+    }
+
+    function itemOptionsHtml(selectedId) {
+        let html = '<option value="">select</option>';
+        itemOptions.forEach(function (opt) {
+            html += `<option value="${opt.id}" ${String(opt.id) === String(selectedId) ? 'selected' : ''}>${opt.label}</option>`;
+        });
+        return html;
+    }
+
+    function addItemRow(data) {
+        data = data || {};
+        rowCounter += 1;
+        const rowId = `row-${rowCounter}`;
+        const row = $(`
+            <tr data-row-id="${rowId}">
+                <td><select class="form-select item-select">${itemOptionsHtml(data.item)}</select></td>
+                <td><input type="number" class="form-control sent-qty" step="0.01" value="${data.sent_qty || 0}"></td>
+                <td><input type="number" class="form-control rcv-qty" step="0.01" value="${data.rcv_qty || 0}"></td>
+                <td><input type="number" class="form-control free-qty" step="0.01" value="${data.free_qty || 0}"></td>
+                <td><input type="number" class="form-control no-boxes" step="0.01" value="${data.no_of_boxes || 0}"></td>
+                <td><input type="number" class="form-control amount" step="0.01" value="${data.amount || 0}"></td>
+                <td><input type="number" class="form-control disc-percent" step="0.01" value="${data.discount_percent || 0}"></td>
+                <td><input type="number" class="form-control disc-amount" step="0.01" value="${data.discount_amount || 0}"></td>
+                <td><input type="text" class="form-control total-amount" readonly value="0.00"></td>
+                <td><input type="text" class="form-control rate" readonly value="0.00"></td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-times"></i></button></td>
+            </tr>
+        `);
+        $("#item-rows-body").append(row);
+        recalcRow(row);
+    }
+
+    function recalcRow(row) {
+        const amount = parseFloat(row.find(".amount").val()) || 0;
+        const discPercent = parseFloat(row.find(".disc-percent").val()) || 0;
+        const discAmount = parseFloat(row.find(".disc-amount").val()) || 0;
+        const rcvQty = parseFloat(row.find(".rcv-qty").val()) || 0;
+        const sentQty = parseFloat(row.find(".sent-qty").val()) || 0;
+
+        const discFromPercent = amount * discPercent / 100;
+        const total = amount - discFromPercent - discAmount;
+        const qtyBasis = rcvQty || sentQty;
+        const rate = qtyBasis ? (total / qtyBasis) : 0;
+
+        row.find(".total-amount").val(total.toFixed(2));
+        row.find(".rate").val(rate.toFixed(2));
+        recalcFooter();
+    }
+
+    function recalcFooter() {
+        let grossAmount = 0;
+        let netQuantity = 0;
+        $("#item-rows-body tr").each(function () {
+            grossAmount += parseFloat($(this).find(".total-amount").val()) || 0;
+            netQuantity += parseFloat($(this).find(".rcv-qty").val()) || 0;
+        });
+
+        const freightType = $("#freight_type").val();
+        const freightAmount = parseFloat($("#freight_amount").val()) || 0;
+        const freightIncludedAmount = grossAmount + (freightType === 'Include' ? freightAmount : 0);
+
+        const tcsApplicable = $("#tcs_applicable").is(":checked");
+        const tcsPercent = parseFloat($("#tcs_percent").val()) || 0;
+        const tcsAmount = tcsApplicable ? (freightIncludedAmount * tcsPercent / 100) : 0;
+
+        const netAmount = freightIncludedAmount + tcsAmount;
+        const netRate = netQuantity ? (netAmount / netQuantity) : 0;
+
+        $("#tcs_amount_display").val(tcsAmount.toFixed(2));
+        $("#supplier_amount_display").val(grossAmount.toFixed(2));
+        $("#net_quantity_display").val(netQuantity.toFixed(2));
+        $("#net_rate_display").val(netRate.toFixed(2));
+        $("#net_amount_display").val(netAmount.toFixed(2));
+    }
+
+    $("#item-rows-body").on("input change", "input", function () {
+        recalcRow($(this).closest("tr"));
+    });
+
+    $("#freight_type, #freight_amount, #tcs_applicable, #tcs_percent").on("input change", recalcFooter);
+
+    $("#add-item-row").on("click", function () {
+        addItemRow();
+    });
+
+    $("#item-rows-body").on("click", ".remove-row", function () {
+        $(this).closest("tr").remove();
+        recalcFooter();
+    });
+
+    function collectItemRows() {
+        const rows = [];
+        $("#item-rows-body tr").each(function () {
+            const row = $(this);
+            const itemId = row.find(".item-select").val();
+            if (!itemId) return;
+            rows.push({
+                item: itemId,
+                sent_qty: row.find(".sent-qty").val() || 0,
+                rcv_qty: row.find(".rcv-qty").val() || 0,
+                free_qty: row.find(".free-qty").val() || 0,
+                no_of_boxes: row.find(".no-boxes").val() || 0,
+                amount: row.find(".amount").val() || 0,
+                discount_percent: row.find(".disc-percent").val() || 0,
+                discount_amount: row.find(".disc-amount").val() || 0,
+            });
+        });
+        return rows;
+    }
+
+    function populateForm(ep) {
+        $("#date").val(ep.date);
+        $("#supplier").val(ep.supplier);
+        $("#warehouse").val(ep.warehouse);
+        $("#dc_no").val(ep.dc_no);
+        $("#transaction_no").val(ep.transaction_no);
+        $("#vehicle").val(ep.vehicle);
+        $("#driver").val(ep.driver);
+        $("#freight_type").val(ep.freight_type);
+        $(`input[name="payment_mode"][value="${ep.payment_mode}"]`).prop("checked", true);
+        $("#pay_account").val(ep.pay_account);
+        $("#freight_account").val(ep.freight_account || "");
+        $("#freight_amount").val(ep.freight_amount);
+        $("#tcs_applicable").prop("checked", ep.tcs_applicable);
+        $("#tcs_percent").val(ep.tcs_percent);
+        $("#remarks").val(ep.remarks);
+
+        $("#item-rows-body").empty();
+        (ep.items || []).forEach(function (row) {
+            addItemRow(row);
+        });
+        recalcFooter();
+    }
+
+    if (eggPurchaseId) {
+        $.ajax({
+            url: `/egg_purchase_api/${eggPurchaseId}/`,
+            type: "GET",
+            success: function (ep) {
+                populateForm(ep);
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to load egg purchase: ' + error);
+            }
+        });
+    } else {
+        addItemRow();
+        $.ajax({
+            url: "{% url 'egg_purchase_next_number' %}",
+            type: "GET",
+            success: function (resp) {
+                $("#transaction_no").val(resp.transaction_no);
+            }
+        });
+    }
+
+    $("#egg-purchase-form").on("submit", function (event) {
+        event.preventDefault();
+
+        const items = collectItemRows();
+        if (!items.length) {
+            showToast('danger', 'Add at least one item row.');
+            return;
+        }
+
+        const payload = {
+            date: $("#date").val(),
+            supplier: $("#supplier").val(),
+            warehouse: $("#warehouse").val(),
+            dc_no: $("#dc_no").val(),
+            vehicle: $("#vehicle").val(),
+            driver: $("#driver").val(),
+            freight_type: $("#freight_type").val(),
+            payment_mode: $('input[name="payment_mode"]:checked').val(),
+            pay_account: $("#pay_account").val(),
+            freight_account: $("#freight_account").val(),
+            freight_amount: $("#freight_amount").val() || 0,
+            tcs_applicable: $("#tcs_applicable").is(":checked"),
+            tcs_percent: $("#tcs_percent").val() || 0,
+            remarks: $("#remarks").val(),
+            items: items,
+        };
+
+        const url = eggPurchaseId ? `/egg_purchase_api/${eggPurchaseId}/` : "{% url 'egg_purchase_api_list' %}";
+        const method = eggPurchaseId ? "PUT" : "POST";
+
+        $.ajax({
+            url: url,
+            type: method,
+            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+            data: JSON.stringify(payload),
+            success: function () {
+                showToast('success', `Egg purchase ${eggPurchaseId ? 'updated' : 'created'} successfully!`);
+                window.location.href = "{% url 'egg_purchase_list' %}";
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to save egg purchase: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

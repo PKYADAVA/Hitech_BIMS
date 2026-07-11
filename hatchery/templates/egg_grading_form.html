@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if egg_grading_id %}Edit{% else %}Add{% endif %} Egg Grading — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='egg_grading' %}
+
+<div class="page-header">
+    <div class="page-header-title">
+      <i class="fas fa-layer-group"></i>
+      {% if egg_grading_id %}Edit{% else %}Add{% endif %} Egg Grading/Receiving
+    </div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Grade a purchased egg lot into hatch-ready stock</div>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form id="egg-grading-form">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="date" name="date" required>
+        </div>
+        <div class="col-md-2">
+          <label for="storage_location" class="form-label">Storage Loc <span class="text-danger">*</span></label>
+          <select class="form-select" id="storage_location" name="storage_location" required>
+            <option value="">select</option>
+            {% for w in storage_locations %}
+              <option value="{{ w.id }}">{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="supplier" class="form-label">Supplier <span class="text-danger">*</span></label>
+          <select class="form-select" id="supplier" name="supplier" required>
+            <option value="">select</option>
+            {% for s in suppliers %}
+              <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="purchase_invoice" class="form-label">Purchase Inv <span class="text-danger">*</span></label>
+          <select class="form-select" id="purchase_invoice" name="purchase_invoice" required disabled>
+            <option value="">select supplier first</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="item" class="form-label">Item <span class="text-danger">*</span></label>
+          <select class="form-select" id="item" name="item" required>
+            <option value="">select</option>
+            {% for i in items %}
+              <option value="{{ i.id }}">{{ i.item_code }} - {{ i.description }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="transaction_no" class="form-label">Trnum</label>
+          <input type="text" class="form-control" id="transaction_no" readonly>
+        </div>
+
+        <div class="col-md-2">
+          <label for="quantity" class="form-label">Quantity <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="quantity" name="quantity" step="0.01" required>
+        </div>
+        <div class="col-md-2">
+          <label for="stock" class="form-label">Stock <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="stock" readonly value="0.00">
+        </div>
+      </div>
+
+      <hr class="my-4">
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle" id="hatch-item-rows-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:260px;">Hatch Item</th>
+              <th style="min-width:120px;">Quantity</th>
+              <th style="width:40px;"></th>
+            </tr>
+          </thead>
+          <tbody id="hatch-item-rows-body"></tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-hatch-item-row">
+        <i class="fas fa-plus"></i> Add Hatch Item
+      </button>
+
+      <hr class="my-4">
+
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label for="broken_eggs" class="form-label">Broken Eggs</label>
+          <input type="number" class="form-control rejection-input" id="broken_eggs" name="broken_eggs" step="0.01" value="0">
+        </div>
+        <div class="col-md-2">
+          <label for="damage_eggs" class="form-label">Damage Eggs</label>
+          <input type="number" class="form-control rejection-input" id="damage_eggs" name="damage_eggs" step="0.01" value="0">
+        </div>
+        <div class="col-md-2">
+          <label for="misshapped_eggs" class="form-label">Misshapped</label>
+          <input type="number" class="form-control rejection-input" id="misshapped_eggs" name="misshapped_eggs" step="0.01" value="0">
+        </div>
+        <div class="col-md-2">
+          <label for="dirty_eggs" class="form-label">Dirty</label>
+          <input type="number" class="form-control rejection-input" id="dirty_eggs" name="dirty_eggs" step="0.01" value="0">
+        </div>
+        <div class="col-md-2">
+          <label for="total_rejections_display" class="form-label">Total</label>
+          <input type="text" class="form-control" id="total_rejections_display" readonly value="0.00">
+        </div>
+        <div class="col-md-2">
+          <label for="eggs_to_stock_display" class="form-label">Eggs to Stock</label>
+          <input type="text" class="form-control" id="eggs_to_stock_display" readonly value="0.00">
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Submit</button>
+        <a href="{% url 'egg_grading_list' %}" class="btn btn-danger">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+$(document).ready(function () {
+    const csrfToken = "{{ csrf_token }}";
+    const eggGradingId = {{ egg_grading_id|default:"null" }};
+    const itemOptions = [
+        {% for i in items %}
+        { id: {{ i.id }}, label: "{{ i.item_code|escapejs }} - {{ i.description|escapejs }}" },
+        {% endfor %}
+    ];
+    let rowCounter = 0;
+
+    function showToast(type, message) {
+        Toastify({
+            text: message,
+            duration: 3000,
+            gravity: "top",
+            position: "right",
+            backgroundColor: type === 'success' ? '#28a745' : '#dc3545',
+        }).showToast();
+    }
+
+    function itemOptionsHtml(selectedId) {
+        let html = '<option value="">select</option>';
+        itemOptions.forEach(function (opt) {
+            html += `<option value="${opt.id}" ${String(opt.id) === String(selectedId) ? 'selected' : ''}>${opt.label}</option>`;
+        });
+        return html;
+    }
+
+    function addHatchItemRow(data) {
+        data = data || {};
+        rowCounter += 1;
+        const rowId = `row-${rowCounter}`;
+        const row = $(`
+            <tr data-row-id="${rowId}">
+                <td><select class="form-select hatch-item-select">${itemOptionsHtml(data.hatch_item)}</select></td>
+                <td><input type="number" class="form-control hatch-item-qty" step="0.01" value="${data.quantity || 0}"></td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-times"></i></button></td>
+            </tr>
+        `);
+        $("#hatch-item-rows-body").append(row);
+    }
+
+    $("#add-hatch-item-row").on("click", function () {
+        addHatchItemRow();
+    });
+
+    $("#hatch-item-rows-body").on("click", ".remove-row", function () {
+        $(this).closest("tr").remove();
+    });
+
+    function recalcRejections() {
+        const broken = parseFloat($("#broken_eggs").val()) || 0;
+        const damage = parseFloat($("#damage_eggs").val()) || 0;
+        const misshapped = parseFloat($("#misshapped_eggs").val()) || 0;
+        const dirty = parseFloat($("#dirty_eggs").val()) || 0;
+        const quantity = parseFloat($("#quantity").val()) || 0;
+
+        const totalRejections = broken + damage + misshapped + dirty;
+        const eggsToStock = Math.max(quantity - totalRejections, 0);
+
+        $("#total_rejections_display").val(totalRejections.toFixed(2));
+        $("#eggs_to_stock_display").val(eggsToStock.toFixed(2));
+    }
+
+    $(".rejection-input, #quantity").on("input change", recalcRejections);
+
+    function loadPurchaseInvoices(supplierId, selectedId) {
+        const select = $("#purchase_invoice");
+        if (!supplierId) {
+            select.html('<option value="">select supplier first</option>').prop("disabled", true);
+            return;
+        }
+        select.prop("disabled", false);
+        $.ajax({
+            url: "{% url 'egg_purchase_api_list' %}",
+            type: "GET",
+            data: { supplier: supplierId },
+            success: function (response) {
+                let html = '<option value="">select</option>';
+                response.forEach(function (ep) {
+                    html += `<option value="${ep.id}" ${String(ep.id) === String(selectedId) ? 'selected' : ''}>${ep.transaction_no}</option>`;
+                });
+                select.html(html);
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to load purchase invoices: ' + error);
+            }
+        });
+    }
+
+    $("#supplier").on("change", function () {
+        loadPurchaseInvoices($(this).val(), null);
+    });
+
+    function checkStock() {
+        const purchaseInvoice = $("#purchase_invoice").val();
+        const item = $("#item").val();
+        if (!purchaseInvoice || !item) {
+            $("#stock").val("0.00");
+            return;
+        }
+        $.ajax({
+            url: "{% url 'egg_grading_stock_check' %}",
+            type: "GET",
+            data: { purchase_invoice: purchaseInvoice, item: item, exclude_id: eggGradingId || "" },
+            success: function (resp) {
+                $("#stock").val(parseFloat(resp.stock).toFixed(2));
+            }
+        });
+    }
+
+    $("#purchase_invoice, #item").on("change", checkStock);
+
+    function populateForm(eg) {
+        $("#date").val(eg.date);
+        $("#storage_location").val(eg.storage_location);
+        $("#supplier").val(eg.supplier);
+        $("#item").val(eg.item);
+        $("#transaction_no").val(eg.transaction_no);
+        $("#quantity").val(eg.quantity);
+        $("#broken_eggs").val(eg.broken_eggs);
+        $("#damage_eggs").val(eg.damage_eggs);
+        $("#misshapped_eggs").val(eg.misshapped_eggs);
+        $("#dirty_eggs").val(eg.dirty_eggs);
+
+        loadPurchaseInvoices(eg.supplier, eg.purchase_invoice);
+
+        $("#hatch-item-rows-body").empty();
+        (eg.hatch_items || []).forEach(function (row) {
+            addHatchItemRow(row);
+        });
+        recalcRejections();
+        setTimeout(checkStock, 500);
+    }
+
+    if (eggGradingId) {
+        $.ajax({
+            url: `/egg_grading_api/${eggGradingId}/`,
+            type: "GET",
+            success: function (eg) {
+                populateForm(eg);
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to load egg grading: ' + error);
+            }
+        });
+    } else {
+        addHatchItemRow();
+        $.ajax({
+            url: "{% url 'egg_grading_next_number' %}",
+            type: "GET",
+            success: function (resp) {
+                $("#transaction_no").val(resp.transaction_no);
+            }
+        });
+    }
+
+    function collectHatchItemRows() {
+        const rows = [];
+        $("#hatch-item-rows-body tr").each(function () {
+            const row = $(this);
+            const hatchItemId = row.find(".hatch-item-select").val();
+            if (!hatchItemId) return;
+            rows.push({
+                hatch_item: hatchItemId,
+                quantity: row.find(".hatch-item-qty").val() || 0,
+            });
+        });
+        return rows;
+    }
+
+    $("#egg-grading-form").on("submit", function (event) {
+        event.preventDefault();
+
+        const payload = {
+            date: $("#date").val(),
+            storage_location: $("#storage_location").val(),
+            supplier: $("#supplier").val(),
+            purchase_invoice: $("#purchase_invoice").val(),
+            item: $("#item").val(),
+            quantity: $("#quantity").val() || 0,
+            broken_eggs: $("#broken_eggs").val() || 0,
+            damage_eggs: $("#damage_eggs").val() || 0,
+            misshapped_eggs: $("#misshapped_eggs").val() || 0,
+            dirty_eggs: $("#dirty_eggs").val() || 0,
+            hatch_items: collectHatchItemRows(),
+        };
+
+        if (!payload.purchase_invoice) {
+            showToast('danger', 'Select a purchase invoice.');
+            return;
+        }
+
+        const url = eggGradingId ? `/egg_grading_api/${eggGradingId}/` : "{% url 'egg_grading_api_list' %}";
+        const method = eggGradingId ? "PUT" : "POST";
+
+        $.ajax({
+            url: url,
+            type: method,
+            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+            data: JSON.stringify(payload),
+            success: function () {
+                showToast('success', `Egg grading ${eggGradingId ? 'updated' : 'created'} successfully!`);
+                window.location.href = "{% url 'egg_grading_list' %}";
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to save egg grading: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
