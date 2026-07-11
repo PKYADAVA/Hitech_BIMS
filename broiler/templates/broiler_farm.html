@@ -243,8 +243,8 @@
                         <label for="region" class="form-label">Region<span class="text-danger">*</span></label>
                         <select id="region" class="form-control" required>
                             <option value="" selected disabled>-Select-</option>
-                            {% for state in states_and_union_territories %}
-                            <option value="{{ state }}">{{ state }}</option>
+                            {% for r in regions %}
+                            <option value="{{ r.id }}">{{ r.description }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -252,14 +252,13 @@
                         <label for="branch" class="form-label">Branch<span class="text-danger">*</span></label>
                         <select id="branch" class="form-control" required>
                             <option value="" selected disabled>-Select-</option>
-                            {% for branch in branches %}
-                            <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
-                            {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="line" class="form-label">Line<span class="text-danger">*</span></label>
-                        <input type="text" id="line" class="form-control" placeholder="Enter line" required />
+                        <select id="line" class="form-control" required>
+                            <option value="" selected disabled>-Select-</option>
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label for="supervisor" class="form-label">Supervisor<span class="text-danger">*</span></label>
@@ -524,12 +523,35 @@ $(document).ready(function () {
     });
 
     /* ---------------------------------------------------------------- */
-    /* Branch -> Supervisor cascade                                      */
+    /* Region -> Branch cascade                                          */
+    /* ---------------------------------------------------------------- */
+    $("#region").change(function () {
+        const regionId = $(this).val();
+        const branchSelect = $("#branch");
+        branchSelect.empty().append('<option value="" selected disabled>-Select-</option>');
+        $("#line").empty().append('<option value="" selected disabled>-Select-</option>');
+        $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
+        if (!regionId) return;
+        $.ajax({
+            url: "{% url 'get_branches_by_region' %}",
+            data: { region_id: regionId },
+            success: function (data) {
+                data.branches.forEach(function (branch) {
+                    branchSelect.append(`<option value="${branch.id}">${branch.branch_name}</option>`);
+                });
+            }
+        });
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Branch -> Line + Supervisor cascade                                */
     /* ---------------------------------------------------------------- */
     $("#branch").change(function () {
         const branchId = $(this).val();
         const supervisorSelect = $("#supervisor");
+        const lineSelect = $("#line");
         supervisorSelect.empty().append('<option value="" selected disabled>Select a supervisor</option>');
+        lineSelect.empty().append('<option value="" selected disabled>-Select-</option>');
         if (!branchId) return;
         $.ajax({
             url: "{% url 'get_supervisors' %}",
@@ -540,6 +562,28 @@ $(document).ready(function () {
                 });
             }
         });
+        $.ajax({
+            url: "{% url 'get_lines_by_branch' %}",
+            data: { branch_id: branchId },
+            success: function (data) {
+                data.lines.forEach(function (line) {
+                    lineSelect.append(`<option value="${line.description}">${line.description}</option>`);
+                });
+            }
+        });
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Farm Name defaults to the selected Farmer's name (editable)       */
+    /* ---------------------------------------------------------------- */
+    let lastAutoFilledFarmName = "";
+    $("#farmer").on("change", function () {
+        const farmerName = $(this).find("option:selected").text().trim();
+        const current = $("#farm_name").val().trim();
+        if (!current || current === lastAutoFilledFarmName) {
+            $("#farm_name").val(farmerName);
+            lastAutoFilledFarmName = farmerName;
+        }
     });
 
     /* ---------------------------------------------------------------- */
@@ -744,7 +788,10 @@ $(document).ready(function () {
         $("#farm-form")[0].reset();
         $("#farm_id").val("");
         $("#farm-form .form-text").text("");
+        $("#branch").empty().append('<option value="" selected disabled>-Select-</option>');
+        $("#line").empty().append('<option value="" selected disabled>-Select-</option>');
         $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
+        lastAutoFilledFarmName = "";
         resetShedRows();
         $("#farm-save-btn").text("Save");
         $("#farm-form-title").text("Add Farm");
@@ -817,7 +864,7 @@ $(document).ready(function () {
         formData.append("branch_id", $("#branch").val());
         formData.append("supervisor_id", $("#supervisor").val());
         formData.append("farmer_id", $("#farmer").val());
-        formData.append("region", $("#region").val());
+        formData.append("region", $("#region option:selected").text());
         formData.append("line", $("#line").val());
         formData.append("farm_code", $("#farm_code").val());
         formData.append("farm_name", $("#farm_name").val());
@@ -886,9 +933,51 @@ $(document).ready(function () {
             type: "GET",
             success: function (farm) {
                 $("#farm_id").val(farm.id);
-                $("#region").val(farm.region);
-                $("#branch").val(farm.branch_id).trigger("change");
-                $("#line").val(farm.line);
+
+                // Resolve region name -> id, then cascade region -> branch -> [line + supervisor]
+                const regionOption = $("#region option").filter(function () {
+                    return $(this).text().trim() === (farm.region || "").trim();
+                });
+                $("#region").val(regionOption.val());
+
+                $.ajax({
+                    url: "{% url 'get_branches_by_region' %}",
+                    data: { region_id: regionOption.val() },
+                    success: function (data) {
+                        const branchSelect = $("#branch");
+                        branchSelect.empty().append('<option value="" selected disabled>-Select-</option>');
+                        data.branches.forEach(function (branch) {
+                            branchSelect.append(`<option value="${branch.id}">${branch.branch_name}</option>`);
+                        });
+                        branchSelect.val(farm.branch_id);
+
+                        $.ajax({
+                            url: "{% url 'get_lines_by_branch' %}",
+                            data: { branch_id: farm.branch_id },
+                            success: function (lineData) {
+                                const lineSelect = $("#line");
+                                lineSelect.empty().append('<option value="" selected disabled>-Select-</option>');
+                                lineData.lines.forEach(function (line) {
+                                    lineSelect.append(`<option value="${line.description}">${line.description}</option>`);
+                                });
+                                lineSelect.val(farm.line);
+                            }
+                        });
+                        $.ajax({
+                            url: "{% url 'get_supervisors' %}",
+                            data: { branch_id: farm.branch_id },
+                            success: function (supData) {
+                                const supervisorSelect = $("#supervisor");
+                                supervisorSelect.empty().append('<option value="" selected disabled>Select a supervisor</option>');
+                                supData.supervisors.forEach(function (supervisor) {
+                                    supervisorSelect.append(`<option value="${supervisor.id}">${supervisor.name}</option>`);
+                                });
+                                supervisorSelect.val(farm.supervisor_id);
+                            }
+                        });
+                    }
+                });
+
                 $("#farm_code").val(farm.farm_code);
                 $("#farm_name").val(farm.farm_name);
                 $("#farm_pincode").val(farm.farm_pincode);
@@ -909,12 +998,7 @@ $(document).ready(function () {
                 $("#cheque_3_no").val(farm.cheque_3_no);
                 $("#cheque_4_no").val(farm.cheque_4_no);
                 $("#remarks").val(farm.remarks);
-
-                // Supervisor/Farmer selects populate asynchronously (branch change) - set once ready
-                setTimeout(function () {
-                    $("#supervisor").val(farm.supervisor_id);
-                    $("#farmer").val(farm.farmer_id);
-                }, 400);
+                $("#farmer").val(farm.farmer_id);
 
                 ["agreement_copy", "other_documents", "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file"].forEach(function (field) {
                     const url = farm[field];

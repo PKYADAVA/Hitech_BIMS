@@ -14,8 +14,9 @@ from django.core.cache import cache
 from django.conf import settings
 from .models import (
     Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
-    BroilerFarmShed, BroilerPlace, Farmer, Supervisor,
+    BroilerFarmShed, BroilerLine, Farmer, FarmerGroup, Region, Supervisor,
 )
+from account.models import ChartOfAccount
 import json
 import logging
 
@@ -54,37 +55,44 @@ class BaseAPIView(View):
         cache.set(cache_key, data, ttl)
 
 @method_decorator(login_required, name="dispatch")
-class BranchTemplateView(View):
-    """View for rendering the branch template."""
-    
+class FarmerGroupTemplateView(View):
+    """View for rendering the farmer group template."""
+
     def get(self, request):
-        context = {"states_and_union_territories": STATES_AND_TERRITORIES}
-        return render(request, "branch.html", context)
+        context = {"chart_of_accounts": ChartOfAccount.objects.filter(status='Active')}
+        return render(request, "farmer_group.html", context)
 
 @method_decorator(login_required, name="dispatch")
-class BranchAPI(BaseAPIView):
-    """API endpoints for Branch operations."""
-    
+class FarmerGroupAPI(BaseAPIView):
+    """API endpoints for FarmerGroup operations."""
+
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                branch = Branch.objects.get(id=id)
+                fg = FarmerGroup.objects.get(id=id)
                 return JsonResponse({
-                    "id": branch.id,
-                    "state": branch.state,
-                    "branch_name": branch.branch_name,
+                    "id": fg.id,
+                    "code": fg.code,
+                    "description": fg.description,
+                    "pay_account_id": fg.pay_account_id,
+                    "pay_account_name": fg.pay_account.description,
+                    "advance_account_id": fg.advance_account_id,
+                    "advance_account_name": fg.advance_account.description,
+                    "is_active": fg.is_active,
+                    "is_locked": fg.is_locked,
                 })
-            
-            # Try to get from cache first
-            cache_key = "branch_list"
-            cached_data = self.get_cached_data(cache_key)
-            if cached_data:
-                return JsonResponse(cached_data, safe=False)
-            
-            # If not in cache, get from database
-            branches = list(Branch.objects.all().values())
-            self.set_cached_data(cache_key, branches)
-            return JsonResponse(branches, safe=False)
+
+            farmer_groups = FarmerGroup.objects.select_related("pay_account", "advance_account").all()
+            results = [{
+                "id": fg.id,
+                "code": fg.code,
+                "description": fg.description,
+                "pay_account_name": fg.pay_account.description,
+                "advance_account_name": fg.advance_account.description,
+                "is_active": fg.is_active,
+                "is_locked": fg.is_locked,
+            } for fg in farmer_groups]
+            return JsonResponse(results, safe=False)
         except Exception as e:
             return self.handle_exception(e)
 
@@ -92,25 +100,249 @@ class BranchAPI(BaseAPIView):
         try:
             data = request.POST
             with transaction.atomic():
-                branch = Branch.objects.create(
-                    state=data["state"],
-                    branch_name=data["branch_name"]
+                FarmerGroup.objects.create(
+                    description=data["description"],
+                    pay_account_id=data["pay_account"],
+                    advance_account_id=data["advance_account"],
                 )
-                # Invalidate cache
+            return JsonResponse({"message": "Farmer group created"}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            fg = FarmerGroup.objects.get(id=id)
+            if fg.is_locked:
+                return JsonResponse({"error": "This farmer group is locked."}, status=400)
+            data = json.loads(request.body)
+            with transaction.atomic():
+                fg.description = data["description"]
+                fg.pay_account_id = data["pay_account"]
+                fg.advance_account_id = data["advance_account"]
+                fg.save()
+            return JsonResponse({"message": "Farmer group updated"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            fg = FarmerGroup.objects.get(id=id)
+            if fg.is_locked:
+                return JsonResponse({"error": "This farmer group is locked."}, status=400)
+            with transaction.atomic():
+                fg.delete()
+            return JsonResponse({"message": "Farmer group deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def toggle_farmer_group_active(request, id):
+    """Toggle a farmer group's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        fg = FarmerGroup.objects.get(id=id)
+        if fg.is_locked:
+            return JsonResponse({"error": "This farmer group is locked."}, status=400)
+        fg.is_active = not fg.is_active
+        fg.save(update_fields=["is_active"])
+        return JsonResponse({"message": "Farmer group updated", "is_active": fg.is_active})
+    except FarmerGroup.DoesNotExist:
+        return JsonResponse({"error": "Farmer group not found."}, status=404)
+
+
+@login_required
+def toggle_farmer_group_lock(request, id):
+    """Toggle a farmer group's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        fg = FarmerGroup.objects.get(id=id)
+        fg.is_locked = not fg.is_locked
+        fg.save(update_fields=["is_locked"])
+        return JsonResponse({"message": "Farmer group updated", "is_locked": fg.is_locked})
+    except FarmerGroup.DoesNotExist:
+        return JsonResponse({"error": "Farmer group not found."}, status=404)
+
+
+@method_decorator(login_required, name="dispatch")
+class RegionTemplateView(View):
+    """View for rendering the region template."""
+
+    def get(self, request):
+        context = {"states_and_union_territories": STATES_AND_TERRITORIES}
+        return render(request, "region.html", context)
+
+@method_decorator(login_required, name="dispatch")
+class RegionAPI(BaseAPIView):
+    """API endpoints for Region operations."""
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                region = Region.objects.get(id=id)
+                return JsonResponse({
+                    "id": region.id,
+                    "code": region.code,
+                    "description": region.description,
+                    "is_active": region.is_active,
+                    "is_locked": region.is_locked,
+                })
+
+            regions = Region.objects.all()
+            results = [{
+                "id": region.id,
+                "code": region.code,
+                "description": region.description,
+                "is_active": region.is_active,
+                "is_locked": region.is_locked,
+            } for region in regions]
+            return JsonResponse(results, safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request) -> JsonResponse:
+        try:
+            data = request.POST
+            with transaction.atomic():
+                Region.objects.create(description=data["description"])
+            return JsonResponse({"message": "Region created"}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            region = Region.objects.get(id=id)
+            if region.is_locked:
+                return JsonResponse({"error": "This region is locked."}, status=400)
+            data = json.loads(request.body)
+            with transaction.atomic():
+                region.description = data["description"]
+                region.save()
+            return JsonResponse({"message": "Region updated"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            region = Region.objects.get(id=id)
+            if region.is_locked:
+                return JsonResponse({"error": "This region is locked."}, status=400)
+            with transaction.atomic():
+                region.delete()
+            return JsonResponse({"message": "Region deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def toggle_region_active(request, id):
+    """Toggle a region's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        region = Region.objects.get(id=id)
+        if region.is_locked:
+            return JsonResponse({"error": "This region is locked."}, status=400)
+        region.is_active = not region.is_active
+        region.save(update_fields=["is_active"])
+        return JsonResponse({"message": "Region updated", "is_active": region.is_active})
+    except Region.DoesNotExist:
+        return JsonResponse({"error": "Region not found."}, status=404)
+
+
+@login_required
+def toggle_region_lock(request, id):
+    """Toggle a region's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        region = Region.objects.get(id=id)
+        region.is_locked = not region.is_locked
+        region.save(update_fields=["is_locked"])
+        return JsonResponse({"message": "Region updated", "is_locked": region.is_locked})
+    except Region.DoesNotExist:
+        return JsonResponse({"error": "Region not found."}, status=404)
+
+
+@method_decorator(login_required, name="dispatch")
+class BranchTemplateView(View):
+    """View for rendering the branch template."""
+
+    def get(self, request):
+        context = {"regions": Region.objects.filter(is_active=True)}
+        return render(request, "branch.html", context)
+
+def _branch_to_dict(branch: Branch) -> dict:
+    return {
+        "id": branch.id,
+        "code": branch.code,
+        "branch_name": branch.branch_name,
+        "region_id": branch.region_id,
+        "region_name": branch.region.description,
+        "prefix": branch.prefix,
+        "is_active": branch.is_active,
+        "is_locked": branch.is_locked,
+    }
+
+@method_decorator(login_required, name="dispatch")
+class BranchAPI(BaseAPIView):
+    """API endpoints for Branch operations."""
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                branch = Branch.objects.select_related("region").get(id=id)
+                return JsonResponse(_branch_to_dict(branch))
+
+            branches = Branch.objects.select_related("region").all()
+            return JsonResponse([_branch_to_dict(b) for b in branches], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request) -> JsonResponse:
+        """Create one or more branches against a single region in one submit."""
+        try:
+            data = request.POST
+            region = Region.objects.filter(id=data.get("region")).first()
+            if not region:
+                return JsonResponse({"error": "Select a valid region."}, status=400)
+
+            branch_names = data.getlist("branch_name[]")
+            prefixes = data.getlist("prefix[]")
+
+            created = 0
+            with transaction.atomic():
+                for branch_name, prefix in zip(branch_names, prefixes):
+                    branch_name = branch_name.strip()
+                    prefix = prefix.strip()
+                    if not branch_name or not prefix:
+                        continue
+                    Branch.objects.create(region=region, branch_name=branch_name, prefix=prefix)
+                    created += 1
                 cache.delete("branch_list")
-            return JsonResponse({"message": "Branch created"}, status=201)
+
+            if not created:
+                return JsonResponse({"error": "Enter at least one branch name and prefix."}, status=400)
+            return JsonResponse({"message": f"{created} branch(es) created"}, status=201)
         except Exception as e:
             return self.handle_exception(e)
 
     def put(self, request, id: int) -> JsonResponse:
         try:
             branch = Branch.objects.get(id=id)
+            if branch.is_locked:
+                return JsonResponse({"error": "This branch is locked."}, status=400)
             data = json.loads(request.body)
+            region = Region.objects.filter(id=data.get("region")).first()
+            if not region:
+                return JsonResponse({"error": "Select a valid region."}, status=400)
             with transaction.atomic():
-                branch.state = data["state"]
+                branch.region = region
                 branch.branch_name = data["branch_name"]
+                branch.prefix = data["prefix"]
                 branch.save()
-                # Invalidate cache
                 cache.delete("branch_list")
             return JsonResponse({"message": "Branch updated"})
         except Exception as e:
@@ -119,13 +351,46 @@ class BranchAPI(BaseAPIView):
     def delete(self, request, id: int) -> JsonResponse:
         try:
             branch = Branch.objects.get(id=id)
+            if branch.is_locked:
+                return JsonResponse({"error": "This branch is locked."}, status=400)
             with transaction.atomic():
                 branch.delete()
-                # Invalidate cache
                 cache.delete("branch_list")
             return JsonResponse({"message": "Branch deleted"})
         except Exception as e:
             return self.handle_exception(e)
+
+
+@login_required
+def toggle_branch_active(request, id):
+    """Toggle a branch's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        branch = Branch.objects.get(id=id)
+        if branch.is_locked:
+            return JsonResponse({"error": "This branch is locked."}, status=400)
+        branch.is_active = not branch.is_active
+        branch.save(update_fields=["is_active"])
+        cache.delete("branch_list")
+        return JsonResponse({"message": "Branch updated", "is_active": branch.is_active})
+    except Branch.DoesNotExist:
+        return JsonResponse({"error": "Branch not found."}, status=404)
+
+
+@login_required
+def toggle_branch_lock(request, id):
+    """Toggle a branch's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        branch = Branch.objects.get(id=id)
+        branch.is_locked = not branch.is_locked
+        branch.save(update_fields=["is_locked"])
+        cache.delete("branch_list")
+        return JsonResponse({"message": "Branch updated", "is_locked": branch.is_locked})
+    except Branch.DoesNotExist:
+        return JsonResponse({"error": "Branch not found."}, status=404)
 
 @method_decorator(login_required, name="dispatch")
 class SupervisorTemplateView(View):
@@ -141,33 +406,22 @@ class SupervisorTemplateView(View):
         return render(request, "supervisor.html", context)
 
 @method_decorator(login_required, name="dispatch")
-class BroilerPlaceTemplateView(View):
-    """View for rendering the broiler place template."""
-    
+class BroilerLineTemplateView(View):
+    """View for rendering the broiler line template."""
+
     def get(self, request):
-        cache_key = "supervisor_list"
-        supervisors = cache.get(cache_key)
-        if not supervisors:
-            supervisors = list(Supervisor.objects.values())
-            cache.set(cache_key, supervisors)
-        context = {"supervisors": supervisors}
-        return render(request, "broiler_place.html", context)
+        context = {"regions": Region.objects.filter(is_active=True)}
+        return render(request, "broiler_line.html", context)
 
 @method_decorator(login_required, name="dispatch")
 class BroilerFarmTemplateView(View):
     """View for rendering the broiler farm template (Add Farmer + Add Farm tabs)."""
 
     def get(self, request):
-        cache_key = "branch_list"
-        branches = cache.get(cache_key)
-        if not branches:
-            branches = list(Branch.objects.values())
-            cache.set(cache_key, branches)
         farmers = list(Farmer.objects.values("id", "farmer_name"))
         context = {
-            "branches": branches,
+            "regions": Region.objects.filter(is_active=True),
             "farmers": farmers,
-            "states_and_union_territories": STATES_AND_TERRITORIES,
         }
         return render(request, "broiler_farm.html", context)
 
@@ -263,70 +517,142 @@ class SupervisorAPI(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
+def _broiler_line_to_dict(line: BroilerLine) -> dict:
+    return {
+        "id": line.id,
+        "code": line.code,
+        "description": line.description,
+        "region_id": line.region_id,
+        "region_name": line.region.description,
+        "branch_id": line.branch_id,
+        "branch_name": line.branch.branch_name,
+        "is_active": line.is_active,
+        "is_locked": line.is_locked,
+    }
+
 @method_decorator(login_required, name="dispatch")
-class BroilerPlaceAPI(BaseAPIView):
-    """API endpoints for BroilerPlace operations."""
-    
+class BroilerLineAPI(BaseAPIView):
+    """API endpoints for BroilerLine operations."""
+
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                broiler_place = BroilerPlace.objects.select_related("supervisor").get(id=id)
-                return JsonResponse({
-                    "id": broiler_place.id,
-                    "name": broiler_place.place_name,
-                    "supervisor_name": broiler_place.supervisor.name,
-                })
-            
-            cache_key = "broiler_place_list"
-            cached_data = self.get_cached_data(cache_key)
-            if cached_data:
-                return JsonResponse(cached_data, safe=False)
-            
-            broiler_places = list(
-                BroilerPlace.objects.select_related("supervisor")
-                .annotate(supervisor_name=F("supervisor__name"))
-                .values("id", "place_name", "supervisor_name")
-            )
-            self.set_cached_data(cache_key, broiler_places)
-            return JsonResponse(broiler_places, safe=False)
+                line = BroilerLine.objects.select_related("region", "branch").get(id=id)
+                return JsonResponse(_broiler_line_to_dict(line))
+
+            lines = BroilerLine.objects.select_related("region", "branch").all()
+            return JsonResponse([_broiler_line_to_dict(l) for l in lines], safe=False)
         except Exception as e:
             return self.handle_exception(e)
 
     def post(self, request) -> JsonResponse:
+        """Create one or more lines against a single region/branch in one submit."""
         try:
             data = request.POST
-            super_obj = Supervisor.objects.get(id=data["supervisor_id"])
+            region = Region.objects.filter(id=data.get("region")).first()
+            branch = Branch.objects.filter(id=data.get("branch")).first()
+            if not region or not branch:
+                return JsonResponse({"error": "Select a valid region and branch."}, status=400)
+
+            descriptions = data.getlist("description[]")
+
+            created = 0
             with transaction.atomic():
-                BroilerPlace.objects.create(
-                    place_name=data["place_name"],
-                    supervisor=super_obj
-                )
-                cache.delete("broiler_place_list")
-            return JsonResponse({"message": "BroilerPlace created"}, status=201)
+                for description in descriptions:
+                    description = description.strip()
+                    if not description:
+                        continue
+                    BroilerLine.objects.create(region=region, branch=branch, description=description)
+                    created += 1
+
+            if not created:
+                return JsonResponse({"error": "Enter at least one line."}, status=400)
+            return JsonResponse({"message": f"{created} line(s) created"}, status=201)
         except Exception as e:
             return self.handle_exception(e)
 
     def put(self, request, id: int) -> JsonResponse:
         try:
-            broiler_place = BroilerPlace.objects.get(id=id)
+            line = BroilerLine.objects.get(id=id)
+            if line.is_locked:
+                return JsonResponse({"error": "This line is locked."}, status=400)
             data = json.loads(request.body)
+            region = Region.objects.filter(id=data.get("region")).first()
+            branch = Branch.objects.filter(id=data.get("branch")).first()
+            if not region or not branch:
+                return JsonResponse({"error": "Select a valid region and branch."}, status=400)
             with transaction.atomic():
-                broiler_place.place_name = data["place_name"]
-                broiler_place.save()
-                cache.delete("broiler_place_list")
-            return JsonResponse({"message": "BroilerPlace updated"})
+                line.region = region
+                line.branch = branch
+                line.description = data["description"]
+                line.save()
+            return JsonResponse({"message": "Line updated"})
         except Exception as e:
             return self.handle_exception(e)
 
     def delete(self, request, id: int) -> JsonResponse:
         try:
-            broiler_place = BroilerPlace.objects.get(id=id)
+            line = BroilerLine.objects.get(id=id)
+            if line.is_locked:
+                return JsonResponse({"error": "This line is locked."}, status=400)
             with transaction.atomic():
-                broiler_place.delete()
-                cache.delete("broiler_place_list")
-            return JsonResponse({"message": "BroilerPlace deleted"})
+                line.delete()
+            return JsonResponse({"message": "Line deleted"})
         except Exception as e:
             return self.handle_exception(e)
+
+
+@login_required
+def toggle_broiler_line_active(request, id):
+    """Toggle a broiler line's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        line = BroilerLine.objects.get(id=id)
+        if line.is_locked:
+            return JsonResponse({"error": "This line is locked."}, status=400)
+        line.is_active = not line.is_active
+        line.save(update_fields=["is_active"])
+        return JsonResponse({"message": "Line updated", "is_active": line.is_active})
+    except BroilerLine.DoesNotExist:
+        return JsonResponse({"error": "Line not found."}, status=404)
+
+
+@login_required
+def toggle_broiler_line_lock(request, id):
+    """Toggle a broiler line's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        line = BroilerLine.objects.get(id=id)
+        line.is_locked = not line.is_locked
+        line.save(update_fields=["is_locked"])
+        return JsonResponse({"message": "Line updated", "is_locked": line.is_locked})
+    except BroilerLine.DoesNotExist:
+        return JsonResponse({"error": "Line not found."}, status=404)
+
+
+@login_required
+def get_branches_by_region(request) -> JsonResponse:
+    """Get branches for a specific region."""
+    try:
+        region_id = request.GET.get('region_id')
+        branches = list(Branch.objects.filter(region_id=region_id, is_active=True).values('id', 'branch_name'))
+        return JsonResponse({'branches': branches})
+    except Exception as e:
+        logger.error(f"Error in get_branches_by_region: {str(e)}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+@login_required
+def get_lines_by_branch(request) -> JsonResponse:
+    """Get broiler lines for a specific branch."""
+    try:
+        branch_id = request.GET.get('branch_id')
+        lines = list(BroilerLine.objects.filter(branch_id=branch_id, is_active=True).values('id', 'description'))
+        return JsonResponse({'lines': lines})
+    except Exception as e:
+        logger.error(f"Error in get_lines_by_branch: {str(e)}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
 
 @method_decorator(login_required, name="dispatch")
 class FarmerAPI(BaseAPIView):
@@ -675,20 +1001,3 @@ def get_supervisors(request) -> JsonResponse:
         logger.error(f"Error in get_supervisors: {str(e)}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
 
-@login_required()
-def get_broiler_places(request) -> JsonResponse:
-    """Get broiler places for a specific supervisor."""
-    try:
-        supervisor_id = request.GET.get('supervisor_id')
-        cache_key = f"broiler_places_supervisor_{supervisor_id}"
-        
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return JsonResponse({'broiler_places': cached_data})
-        
-        broiler_places = list(BroilerPlace.objects.filter(supervisor_id=supervisor_id).values('id', 'place_name'))
-        cache.set(cache_key, broiler_places, 300)  # Cache for 5 minutes
-        return JsonResponse({'broiler_places': broiler_places})
-    except Exception as e:
-        logger.error(f"Error in get_broiler_places: {str(e)}", exc_info=True)
-        return JsonResponse({"error": str(e)}, status=500)

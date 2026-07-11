@@ -5,18 +5,136 @@ from django.core.exceptions import ValidationError
 import os
 
 
+class FarmerGroup(models.Model):
+    """
+    Represents an accounting group that farmers are assigned to, tying
+    each group to the ledger accounts used for their payables/advances.
+    """
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this farmer group")
+    )
+    description = models.CharField(
+        max_length=150,
+        help_text=_("Name of the farmer group")
+    )
+    pay_account = models.ForeignKey(
+        'account.ChartOfAccount',
+        on_delete=models.PROTECT,
+        related_name='farmer_group_pay_accounts',
+        help_text=_("Payable account for this group")
+    )
+    advance_account = models.ForeignKey(
+        'account.ChartOfAccount',
+        on_delete=models.PROTECT,
+        related_name='farmer_group_advance_accounts',
+        help_text=_("Advance account for this group")
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Inactive groups are hidden from selection elsewhere")
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=_("Locked records can't be edited or deleted")
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Farmer Group")
+        verbose_name_plural = _("Farmer Groups")
+        ordering = ['code']
+
+    def __str__(self):
+        return f"{self.code} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"FGP-{self.pk:04d}"
+            super().save(update_fields=['code'])
+
+
+class Region(models.Model):
+    """
+    Represents a region (state) master used to categorize branches/farms.
+    """
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this region")
+    )
+    description = models.CharField(
+        max_length=100,
+        help_text=_("Name of the region (state)")
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Inactive regions are hidden from selection elsewhere")
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=_("Locked records can't be edited or deleted")
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Region")
+        verbose_name_plural = _("Regions")
+        ordering = ['code']
+
+    def __str__(self):
+        return f"{self.code} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"RGN-{self.pk:04d}"
+            super().save(update_fields=['code'])
+
+
 class Branch(models.Model):
     """
     Represents a branch location in the broiler management system.
     """
-    state = models.CharField(
-        max_length=100,
-        help_text=_("State where the branch is located")
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this branch")
     )
     branch_name = models.CharField(
         max_length=100,
         unique=True,
         help_text=_("Name of the branch")
+    )
+    region = models.ForeignKey(
+        Region,
+        on_delete=models.PROTECT,
+        related_name='branches',
+        help_text=_("Region this branch belongs to")
+    )
+    prefix = models.CharField(
+        max_length=10,
+        help_text=_("Short prefix code for this branch")
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Inactive branches are hidden from selection elsewhere")
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=_("Locked records can't be edited or deleted")
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -24,14 +142,21 @@ class Branch(models.Model):
     class Meta:
         verbose_name = _("Branch")
         verbose_name_plural = _("Branches")
-        ordering = ['state', 'branch_name']
+        ordering = ['code']
 
     def __str__(self):
-        return f"{self.branch_name} ({self.state})"
+        return f"{self.branch_name} ({self.region.description})"
 
     def get_farm_count(self):
         """Returns the number of farms in this branch."""
         return self.broilerfarm_set.count()
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"BRH-{self.pk:04d}"
+            super().save(update_fields=['code'])
 
 
 class Supervisor(models.Model):
@@ -71,36 +196,60 @@ class Supervisor(models.Model):
     def __str__(self):
         return f"{self.name} ({self.branch.branch_name})"
 
-    def get_place_count(self):
-        """Returns the number of places managed by this supervisor."""
-        return self.broilerplace_set.count()
 
-
-class BroilerPlace(models.Model):
+class BroilerLine(models.Model):
     """
-    Represents a location where broiler farms are situated.
+    Represents a line (formerly "broiler place") within a branch/region
+    where broiler farms are situated.
     """
-    supervisor = models.ForeignKey(
-        Supervisor, 
-        on_delete=models.CASCADE,
-        related_name='broiler_places',
-        help_text=_("Supervisor managing this place")
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this line")
     )
-    place_name = models.CharField(
+    description = models.CharField(
         max_length=100,
-        help_text=_("Name of the place")
+        help_text=_("Name of the line")
+    )
+    region = models.ForeignKey(
+        Region,
+        on_delete=models.PROTECT,
+        related_name='broiler_lines',
+        help_text=_("Region this line belongs to")
+    )
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.PROTECT,
+        related_name='broiler_lines',
+        help_text=_("Branch this line belongs to")
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Inactive lines are hidden from selection elsewhere")
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=_("Locked records can't be edited or deleted")
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = _("Broiler Place")
-        verbose_name_plural = _("Broiler Places")
-        ordering = ['place_name']
-        unique_together = ['supervisor', 'place_name']
+        verbose_name = _("Broiler Line")
+        verbose_name_plural = _("Broiler Lines")
+        ordering = ['code']
 
     def __str__(self):
-        return f"{self.place_name} ({self.supervisor.name})"
+        return f"{self.code} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"LNS-{self.pk:04d}"
+            super().save(update_fields=['code'])
 
 
 class Farmer(models.Model):

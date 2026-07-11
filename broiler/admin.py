@@ -1,9 +1,27 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
-    Branch, Supervisor, BroilerPlace, Farmer, BroilerFarm, BroilerFarmShed,
-    BroilerFarmImage, BroilerBatch, BroilerDisease,
+    Branch, Supervisor, BroilerLine, Farmer, FarmerGroup, Region, BroilerFarm,
+    BroilerFarmShed, BroilerFarmImage, BroilerBatch, BroilerDisease,
 )
+
+
+@admin.register(FarmerGroup)
+class FarmerGroupAdmin(admin.ModelAdmin):
+    """Admin interface for FarmerGroup records."""
+    list_display = ('code', 'description', 'pay_account', 'advance_account', 'is_active', 'is_locked')
+    search_fields = ('code', 'description')
+    list_filter = ('is_active', 'is_locked')
+    list_per_page = 20
+
+
+@admin.register(Region)
+class RegionAdmin(admin.ModelAdmin):
+    """Admin interface for Region records."""
+    list_display = ('code', 'description', 'is_active', 'is_locked')
+    search_fields = ('code', 'description')
+    list_filter = ('is_active', 'is_locked')
+    list_per_page = 20
 
 
 @admin.register(Branch)
@@ -11,10 +29,11 @@ class BranchAdmin(admin.ModelAdmin):
     """
     Admin interface for Branch model with optimized display and search functionality.
     """
-    list_display = ('id', 'state', 'branch_name', 'get_farm_count')
-    search_fields = ('branch_name', 'state')
+    list_display = ('code', 'branch_name', 'region', 'prefix', 'get_farm_count', 'is_active', 'is_locked')
+    search_fields = ('code', 'branch_name', 'prefix')
+    list_filter = ('region', 'is_active', 'is_locked')
     list_per_page = 20
-    ordering = ('state', 'branch_name')
+    ordering = ('code',)
     
     def get_farm_count(self, obj):
         """Returns the count of farms associated with this branch."""
@@ -28,29 +47,23 @@ class SupervisorAdmin(admin.ModelAdmin):
     """
     Admin interface for Supervisor model with enhanced filtering and display.
     """
-    list_display = ('id', 'name', 'phone_no', 'branch', 'get_place_count')
+    list_display = ('id', 'name', 'phone_no', 'branch')
     search_fields = ('name', 'phone_no')
     list_filter = ('branch',)
     list_per_page = 20
     ordering = ('name',)
-    
-    def get_place_count(self, obj):
-        """Returns the count of places managed by this supervisor."""
-        count = BroilerPlace.objects.filter(supervisor=obj).count()
-        return format_html('<span class="badge bg-info">{}</span>', count)
-    get_place_count.short_description = 'Place Count'
 
 
-@admin.register(BroilerPlace)
-class BroilerPlaceAdmin(admin.ModelAdmin):
+@admin.register(BroilerLine)
+class BroilerLineAdmin(admin.ModelAdmin):
     """
-    Admin interface for BroilerPlace model with optimized display and filtering.
+    Admin interface for BroilerLine model with optimized display and filtering.
     """
-    list_display = ('id', 'place_name', 'supervisor')
-    search_fields = ('place_name',)
-    list_filter = ('supervisor',)
+    list_display = ('code', 'description', 'region', 'branch', 'is_active', 'is_locked')
+    search_fields = ('code', 'description')
+    list_filter = ('region', 'branch', 'is_active', 'is_locked')
     list_per_page = 20
-    ordering = ('place_name',)
+    ordering = ('code',)
 
 
 @admin.register(Farmer)

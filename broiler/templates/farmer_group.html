@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Farmer Groups{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_broiler_subnavbar.html' with active_tab='farmer_group' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-users"></i>Farmer Group</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Add and manage farmer group records</div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#farmerGroupFormModal">
+    <i class="fas fa-plus"></i>Add
+  </button>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i>Farmer Group List</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="farmer-group-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Code</th>
+            <th>Description</th>
+            <th>Pay Account</th>
+            <th>Advance Account</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="farmer-group-table-body">
+          <!-- AJAX content will load here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Farmer Group Modal -->
+<div class="modal fade" id="farmerGroupFormModal" tabindex="-1" aria-labelledby="farmerGroupFormModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="farmerGroupFormModalLabel"><i class="fas fa-plus me-2"></i>Add Farmer Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="farmer-group-form">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="description" class="form-label">Group Name<span class="text-danger">*</span></label>
+                            <input type="text" id="description" class="form-control" placeholder="Enter description..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label for="pay_account" class="form-label">Payable Account<span class="text-danger">*</span></label>
+                            <select id="pay_account" class="form-select" required>
+                                <option value="" selected disabled>select</option>
+                                {% for account in chart_of_accounts %}
+                                <option value="{{ account.id }}">{{ account.description }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="advance_account" class="form-label">Advance Account<span class="text-danger">*</span></label>
+                            <div class="d-flex gap-2 align-items-start">
+                                <select id="advance_account" class="form-select" required>
+                                    <option value="" selected disabled>select</option>
+                                    {% for account in chart_of_accounts %}
+                                    <option value="{{ account.id }}">{{ account.description }}</option>
+                                    {% endfor %}
+                                </select>
+                                <a href="{% url 'coa' %}" target="_blank" class="btn btn-link text-primary px-1" title="Add a new account">
+                                    <i class="fas fa-plus"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Submit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Farmer Group Modal Template -->
+<template id="editFarmerGroupModalTemplate">
+    <div class="modal fade" id="editFarmerGroupModal-{id}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-pen me-2"></i>Edit Farmer Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="edit-farmer-group-form-{id}">
+                    <div class="modal-body">
+                        <input type="hidden" name="farmer-group-id" value="{id}">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Group Name<span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="description" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Payable Account<span class="text-danger">*</span></label>
+                                <select class="form-select" name="pay_account" required>
+                                    {% for account in chart_of_accounts %}
+                                    <option value="{{ account.id }}">{{ account.description }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Advance Account<span class="text-danger">*</span></label>
+                                <select class="form-select" name="advance_account" required>
+                                    {% for account in chart_of_accounts %}
+                                    <option value="{{ account.id }}">{{ account.description }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</template>
+
+
+<script>
+$(document).ready(function () {
+    let farmerGroupTable;
+    const csrfToken = "{{ csrf_token }}";
+
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({
+            text: message,
+            duration: 3000,
+            gravity: "top",
+            position: "right",
+            style: { background: colors[type] || colors.success }
+        }).showToast();
+    }
+
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function initializeDataTable() {
+        farmerGroupTable = $('#farmer-group-table').DataTable({
+            responsive: true,
+            language: { emptyTable: "No farmer groups found" },
+            order: [[0, 'asc']]
+        });
+    }
+
+    function loadFarmerGroupList() {
+        $.ajax({
+            url: "{% url 'farmer_group_list' %}",
+            type: "GET",
+            success: function (response) {
+                if (farmerGroupTable) {
+                    farmerGroupTable.destroy();
+                }
+
+                const tableBody = $("#farmer-group-table-body");
+                tableBody.empty();
+
+                response.forEach((fg) => {
+                    const row = `
+                        <tr>
+                            <td>${escapeHtml(fg.code)}
+                                ${!fg.is_active ? '<span class="badge bg-secondary ms-1">Inactive</span>' : ''}
+                                ${fg.is_locked ? '<span class="badge bg-warning text-dark ms-1">Locked</span>' : ''}
+                            </td>
+                            <td>${escapeHtml(fg.description)}</td>
+                            <td>${escapeHtml(fg.pay_account_name)}</td>
+                            <td>${escapeHtml(fg.advance_account_name)}</td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center flex-wrap">
+                                ${fg.is_locked ? `
+                                <button class="btn btn-outline-secondary btn-sm" disabled title="Locked"><i class="fas fa-pen"></i></button>
+                                ` : `
+                                <button class="btn btn-outline-warning btn-sm edit-farmer-group"
+                                    data-id="${fg.id}" title="Edit">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                `}
+                                <button class="btn btn-outline-danger btn-sm delete-farmer-group"
+                                    data-id="${fg.id}" ${fg.is_locked ? 'disabled' : ''} title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm print-farmer-group" title="Print">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                                <button class="btn btn-outline-info btn-sm toggle-active-farmer-group"
+                                    data-id="${fg.id}" ${fg.is_locked ? 'disabled' : ''}
+                                    title="${fg.is_active ? 'Pause' : 'Activate'}">
+                                    <i class="fas ${fg.is_active ? 'fa-pause' : 'fa-play'}"></i>
+                                </button>
+                                <button class="btn btn-outline-dark btn-sm toggle-lock-farmer-group"
+                                    data-id="${fg.id}" title="${fg.is_locked ? 'Unlock' : 'Lock'}">
+                                    <i class="fas ${fg.is_locked ? 'fa-lock' : 'fa-lock-open'}"></i>
+                                </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    tableBody.append(row);
+                });
+
+                initializeDataTable();
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to load farmer groups: ' + error);
+            }
+        });
+    }
+
+    // Add New Farmer Group
+    $("#farmer-group-form").on("submit", function (event) {
+        event.preventDefault();
+        const formData = {
+            description: $("#description").val(),
+            pay_account: $("#pay_account").val(),
+            advance_account: $("#advance_account").val(),
+        };
+
+        $.ajax({
+            url: "{% url 'farmer_group_list' %}",
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            data: formData,
+            success: function () {
+                $("#farmerGroupFormModal").modal("hide");
+                $("#farmer-group-form")[0].reset();
+                loadFarmerGroupList();
+                showToast('success', 'Farmer group added successfully!');
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to add farmer group: ' + error);
+            }
+        });
+    });
+
+    // Edit Farmer Group
+    $(document).on("click", ".edit-farmer-group", function () {
+        const id = $(this).data("id");
+
+        $.ajax({
+            url: `/farmer_group/${id}/`,
+            type: "GET",
+            success: function (fg) {
+                $(`#editFarmerGroupModal-${id}`).remove();
+
+                const template = document.getElementById('editFarmerGroupModalTemplate').innerHTML;
+                const modalHtml = template.replace(/{id}/g, id);
+
+                $('body').append(modalHtml);
+                $(`#editFarmerGroupModal-${id}`).modal('show');
+
+                $(`#edit-farmer-group-form-${id} [name="description"]`).val(fg.description);
+                $(`#edit-farmer-group-form-${id} [name="pay_account"]`).val(fg.pay_account_id);
+                $(`#edit-farmer-group-form-${id} [name="advance_account"]`).val(fg.advance_account_id);
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Error fetching farmer group: ' + error);
+            }
+        });
+    });
+
+    // Update Farmer Group
+    $(document).on("submit", "[id^='edit-farmer-group-form-']", function (e) {
+        e.preventDefault();
+        const id = $(this).find('[name="farmer-group-id"]').val();
+        const formData = {
+            description: $(this).find('[name="description"]').val(),
+            pay_account: $(this).find('[name="pay_account"]').val(),
+            advance_account: $(this).find('[name="advance_account"]').val(),
+        };
+
+        $.ajax({
+            url: `/farmer_group/${id}/`,
+            type: "PUT",
+            headers: {
+                "X-CSRFToken": csrfToken,
+                "Content-Type": "application/json"
+            },
+            data: JSON.stringify(formData),
+            success: function () {
+                $(`#editFarmerGroupModal-${id}`).modal("hide");
+                loadFarmerGroupList();
+                showToast('success', 'Farmer group updated successfully!');
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to update farmer group: ' + error);
+            }
+        });
+    });
+
+    // Delete Farmer Group
+    $(document).on("click", ".delete-farmer-group", function () {
+        const id = $(this).data("id");
+
+        if (confirm("Are you sure you want to delete this farmer group?")) {
+            $.ajax({
+                url: `/farmer_group/${id}/delete/`,
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrfToken },
+                success: function () {
+                    loadFarmerGroupList();
+                    showToast('success', 'Farmer group deleted successfully!');
+                },
+                error: function (xhr, status, error) {
+                    showToast('danger', 'Failed to delete farmer group: ' + (xhr.responseJSON?.error || error));
+                }
+            });
+        }
+    });
+
+    // Print Farmer Group
+    $(document).on("click", ".print-farmer-group", function () {
+        const row = $(this).closest("tr");
+        const cells = row.find("td");
+        const win = window.open("", "_blank");
+        win.document.write(`
+            <html>
+              <head><title>Farmer Group Details</title></head>
+              <body style="font-family: sans-serif; padding: 24px;">
+                <h3>Farmer Group Details</h3>
+                <table style="border-collapse: collapse;">
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Code</td><td style="padding:4px 12px;">${cells.eq(0).text().trim()}</td></tr>
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Description</td><td style="padding:4px 12px;">${cells.eq(1).text().trim()}</td></tr>
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Pay Account</td><td style="padding:4px 12px;">${cells.eq(2).text().trim()}</td></tr>
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Advance Account</td><td style="padding:4px 12px;">${cells.eq(3).text().trim()}</td></tr>
+                </table>
+              </body>
+            </html>
+        `);
+        win.document.close();
+        win.print();
+    });
+
+    // Toggle Active
+    $(document).on("click", ".toggle-active-farmer-group", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/farmer_group/${id}/toggle-active/`,
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                loadFarmerGroupList();
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to update status: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+
+    // Toggle Lock
+    $(document).on("click", ".toggle-lock-farmer-group", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/farmer_group/${id}/toggle-lock/`,
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                loadFarmerGroupList();
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to update lock: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+
+    // Initialize
+    loadFarmerGroupList();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+
+
+
+{% block title %}Manage Broiler Lines{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_broiler_subnavbar.html' with active_tab='broiler_line' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-map-marker-alt"></i>Line</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Add and manage broiler lines</div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#lineFormModal">
+    <i class="fas fa-plus"></i>Add
+  </button>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i>Line List</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="line-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Code</th>
+            <th>Description</th>
+            <th>Region</th>
+            <th>Branch</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="line-table-body">
+          <!-- AJAX content will load here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Line Modal -->
+<div class="modal fade" id="lineFormModal" tabindex="-1" aria-labelledby="lineFormModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lineFormModalLabel"><i class="fas fa-plus me-2"></i>Add Line</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="line-form">
+                    {% csrf_token %}
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="region" class="form-label">Region<span class="text-danger">*</span></label>
+                            <select id="region" class="form-select" required>
+                                <option value="" selected disabled>select</option>
+                                {% for r in regions %}
+                                <option value="{{ r.id }}">{{ r.description }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="branch" class="form-label">Branch<span class="text-danger">*</span></label>
+                            <select id="branch" class="form-select" required>
+                                <option value="" selected disabled>select</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <label class="form-label d-block">Line<span class="text-danger">*</span></label>
+                    <div id="line-rows">
+                        <div class="row g-2 align-items-center mb-2 line-row">
+                            <div class="col-md-10">
+                                <input type="text" name="description[]" class="form-control" placeholder="Enter description..." required />
+                            </div>
+                            <div class="col-md-1">
+                                <button type="button" class="btn btn-outline-success btn-sm add-line-row" title="Add another row">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Submit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Line Modal Template -->
+<template id="editLineModalTemplate">
+    <div class="modal fade" id="editLineModal-{id}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-pen me-2"></i>Edit Line</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="edit-line-form-{id}">
+                    <div class="modal-body">
+                        <input type="hidden" name="line-id" value="{id}">
+                        <div class="mb-3">
+                            <label class="form-label">Region<span class="text-danger">*</span></label>
+                            <select class="form-select" name="region" required>
+                                <option value="" selected disabled>select</option>
+                                {% for r in regions %}
+                                <option value="{{ r.id }}">{{ r.description }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Branch<span class="text-danger">*</span></label>
+                            <select class="form-select" name="branch" required>
+                                <option value="" selected disabled>select</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Line</label>
+                            <input type="text" class="form-control" name="description" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</template>
+
+
+<script>
+$(document).ready(function () {
+    let lineTable;
+    const csrfToken = "{{ csrf_token }}";
+
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({
+            text: message,
+            duration: 3000,
+            gravity: "top",
+            position: "right",
+            style: { background: colors[type] || colors.success }
+        }).showToast();
+    }
+
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function initializeDataTable() {
+        lineTable = $('#line-table').DataTable({
+            responsive: true,
+            language: { emptyTable: "No lines found" },
+            order: [[0, 'asc']]
+        });
+    }
+
+    function loadLineList() {
+        $.ajax({
+            url: "{% url 'broiler_line_list' %}",
+            type: "GET",
+            success: function (response) {
+                if (lineTable) {
+                    lineTable.destroy();
+                }
+
+                const tableBody = $("#line-table-body");
+                tableBody.empty();
+
+                response.forEach((line) => {
+                    const row = `
+                        <tr>
+                            <td>${escapeHtml(line.code)}
+                                ${!line.is_active ? '<span class="badge bg-secondary ms-1">Inactive</span>' : ''}
+                                ${line.is_locked ? '<span class="badge bg-warning text-dark ms-1">Locked</span>' : ''}
+                            </td>
+                            <td>${escapeHtml(line.description)}</td>
+                            <td>${escapeHtml(line.region_name)}</td>
+                            <td>${escapeHtml(line.branch_name)}</td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center flex-wrap">
+                                ${line.is_locked ? `
+                                <button class="btn btn-outline-secondary btn-sm" disabled title="Locked"><i class="fas fa-pen"></i></button>
+                                ` : `
+                                <button class="btn btn-outline-warning btn-sm edit-line"
+                                    data-id="${line.id}"
+                                    data-region-id="${line.region_id}"
+                                    data-branch-id="${line.branch_id}"
+                                    data-description="${escapeHtml(line.description)}" title="Edit">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                `}
+                                <button class="btn btn-outline-danger btn-sm delete-line"
+                                    data-id="${line.id}" ${line.is_locked ? 'disabled' : ''} title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm print-line" title="Print">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                                <button class="btn btn-outline-info btn-sm toggle-active-line"
+                                    data-id="${line.id}" ${line.is_locked ? 'disabled' : ''}
+                                    title="${line.is_active ? 'Pause' : 'Activate'}">
+                                    <i class="fas ${line.is_active ? 'fa-pause' : 'fa-play'}"></i>
+                                </button>
+                                <button class="btn btn-outline-dark btn-sm toggle-lock-line"
+                                    data-id="${line.id}" title="${line.is_locked ? 'Unlock' : 'Lock'}">
+                                    <i class="fas ${line.is_locked ? 'fa-lock' : 'fa-lock-open'}"></i>
+                                </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    tableBody.append(row);
+                });
+
+                initializeDataTable();
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to load lines: ' + error);
+            }
+        });
+    }
+
+    // Region -> Branch cascade (Add form)
+    $("#region").change(function () {
+        const regionId = $(this).val();
+        const branchSelect = $("#branch");
+        branchSelect.empty().append('<option value="" selected disabled>select</option>');
+        if (!regionId) return;
+        $.ajax({
+            url: "{% url 'get_branches_by_region' %}",
+            data: { region_id: regionId },
+            success: function (data) {
+                data.branches.forEach(function (branch) {
+                    branchSelect.append(`<option value="${branch.id}">${escapeHtml(branch.branch_name)}</option>`);
+                });
+            }
+        });
+    });
+
+    // Region -> Branch cascade (Edit forms)
+    $(document).on("change", "[id^='editLineModal-'] [name='region']", function () {
+        const regionId = $(this).val();
+        const branchSelect = $(this).closest("form").find("[name='branch']");
+        branchSelect.empty().append('<option value="" selected disabled>select</option>');
+        if (!regionId) return;
+        $.ajax({
+            url: "{% url 'get_branches_by_region' %}",
+            data: { region_id: regionId },
+            success: function (data) {
+                data.branches.forEach(function (branch) {
+                    branchSelect.append(`<option value="${branch.id}">${escapeHtml(branch.branch_name)}</option>`);
+                });
+            }
+        });
+    });
+
+    // Dynamic Line rows
+    function lineRowHtml() {
+        return `
+            <div class="row g-2 align-items-center mb-2 line-row">
+                <div class="col-md-10">
+                    <input type="text" name="description[]" class="form-control" placeholder="Enter description..." required />
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-line-row" title="Remove row">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                </div>
+            </div>`;
+    }
+
+    $(document).on("click", ".add-line-row", function () {
+        $("#line-rows").append(lineRowHtml());
+    });
+
+    $(document).on("click", ".remove-line-row", function () {
+        $(this).closest(".line-row").remove();
+    });
+
+    // Add New Line (bulk)
+    $("#line-form").on("submit", function (event) {
+        event.preventDefault();
+        const formData = $(this).serializeArray();
+        formData.push({ name: "region", value: $("#region").val() });
+        formData.push({ name: "branch", value: $("#branch").val() });
+
+        $.ajax({
+            url: "{% url 'broiler_line_list' %}",
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            data: $.param(formData),
+            success: function () {
+                $("#lineFormModal").modal("hide");
+                $("#line-form")[0].reset();
+                $("#branch").empty().append('<option value="" selected disabled>select</option>');
+                $("#line-rows").html(lineRowHtml().replace('remove-line-row', 'add-line-row').replace('fa-minus', 'fa-plus'));
+                loadLineList();
+                showToast('success', 'Line added successfully!');
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to add line: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+
+    // Edit Line
+    $(document).on("click", ".edit-line", function () {
+        const id = $(this).data("id");
+        const regionId = $(this).data("region-id");
+        const branchId = $(this).data("branch-id");
+        const description = $(this).data("description");
+
+        $(`#editLineModal-${id}`).remove();
+
+        const template = document.getElementById('editLineModalTemplate').innerHTML;
+        const modalHtml = template.replace(/{id}/g, id);
+
+        $('body').append(modalHtml);
+        $(`#editLineModal-${id}`).modal('show');
+
+        $(`#edit-line-form-${id} [name="region"]`).val(regionId);
+        $(`#edit-line-form-${id} [name="description"]`).val(description);
+
+        $.ajax({
+            url: "{% url 'get_branches_by_region' %}",
+            data: { region_id: regionId },
+            success: function (data) {
+                const branchSelect = $(`#edit-line-form-${id} [name="branch"]`);
+                branchSelect.empty();
+                data.branches.forEach(function (branch) {
+                    branchSelect.append(`<option value="${branch.id}">${escapeHtml(branch.branch_name)}</option>`);
+                });
+                branchSelect.val(branchId);
+            }
+        });
+    });
+
+    // Update Line
+    $(document).on("submit", "[id^='edit-line-form-']", function (e) {
+        e.preventDefault();
+        const id = $(this).find('[name="line-id"]').val();
+        const formData = {
+            region: $(this).find('[name="region"]').val(),
+            branch: $(this).find('[name="branch"]').val(),
+            description: $(this).find('[name="description"]').val(),
+        };
+
+        $.ajax({
+            url: `/broiler_line/${id}/`,
+            type: "PUT",
+            headers: {
+                "X-CSRFToken": csrfToken,
+                "Content-Type": "application/json"
+            },
+            data: JSON.stringify(formData),
+            success: function () {
+                $(`#editLineModal-${id}`).modal("hide");
+                loadLineList();
+                showToast('success', 'Line updated successfully!');
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to update line: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+
+    // Delete Line
+    $(document).on("click", ".delete-line", function () {
+        const id = $(this).data("id");
+
+        if (confirm("Are you sure you want to delete this line?")) {
+            $.ajax({
+                url: `/broiler_line/${id}/delete/`,
+                method: "DELETE",
+                headers: { "X-CSRFToken": csrfToken },
+                success: function () {
+                    loadLineList();
+                    showToast('success', 'Line deleted successfully!');
+                },
+                error: function (xhr, status, error) {
+                    showToast('danger', 'Failed to delete line: ' + (xhr.responseJSON?.error || error));
+                }
+            });
+        }
+    });
+
+    // Print Line
+    $(document).on("click", ".print-line", function () {
+        const row = $(this).closest("tr");
+        const cells = row.find("td");
+        const win = window.open("", "_blank");
+        win.document.write(`
+            <html>
+              <head><title>Line Details</title></head>
+              <body style="font-family: sans-serif; padding: 24px;">
+                <h3>Line Details</h3>
+                <table style="border-collapse: collapse;">
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Code</td><td style="padding:4px 12px;">${cells.eq(0).text().trim()}</td></tr>
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Description</td><td style="padding:4px 12px;">${cells.eq(1).text().trim()}</td></tr>
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Region</td><td style="padding:4px 12px;">${cells.eq(2).text().trim()}</td></tr>
+                  <tr><td style="padding:4px 12px;font-weight:bold;">Branch</td><td style="padding:4px 12px;">${cells.eq(3).text().trim()}</td></tr>
+                </table>
+              </body>
+            </html>
+        `);
+        win.document.close();
+        win.print();
+    });
+
+    // Toggle Active
+    $(document).on("click", ".toggle-active-line", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/broiler_line/${id}/toggle-active/`,
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                loadLineList();
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to update status: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+
+    // Toggle Lock
+    $(document).on("click", ".toggle-lock-line", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/broiler_line/${id}/toggle-lock/`,
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                loadLineList();
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to update lock: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+    });
+
+    // Initialize
+    loadLineList();
+});
+</script>
+{% endblock %}
