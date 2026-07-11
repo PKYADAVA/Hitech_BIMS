@@ -1,7 +1,31 @@
 from django.contrib import admin
+from import_export import resources
 from import_export.admin import ImportExportModelAdmin
+from import_export.fields import Field
+from import_export.widgets import ForeignKeyWidget
 from django.utils.translation import gettext_lazy as _
+from inventory.models import Warehouse
 from .models import FinancialYear, Schedule, ChartOfAccount, BankCode, CoACategory
+
+
+class ChartOfAccountResource(resources.ModelResource):
+    schedule = Field(
+        attribute='schedule', column_name='schedule',
+        widget=ForeignKeyWidget(Schedule, field='code'),
+    )
+
+    class Meta:
+        model = ChartOfAccount
+
+
+class BankCodeResource(resources.ModelResource):
+    sector = Field(
+        attribute='sector', column_name='sector',
+        widget=ForeignKeyWidget(Warehouse, field='name'),
+    )
+
+    class Meta:
+        model = BankCode
 
 
 @admin.register(CoACategory)
@@ -87,6 +111,7 @@ class ChartOfAccountAdmin(ImportExportModelAdmin):
     Provides a clean interface for managing chart of accounts with proper validation
     and display of important fields.
     """
+    resource_classes = [ChartOfAccountResource]
     list_display = ('code', 'description', 'type', 'control_type', 'schedule', 'status', 'created_at')
     list_filter = ('type', 'status', 'schedule', 'created_at')
     search_fields = ('code', 'description', 'control_type')
@@ -113,6 +138,7 @@ class BankCodeAdmin(ImportExportModelAdmin):
     Provides a clean interface for managing bank codes with proper validation
     and display of important fields.
     """
+    resource_classes = [BankCodeResource]
     list_display = ('bank_code', 'bank_name', 'sector', 'micr', 'contact_person', 'created_at')
     list_filter = ('sector', 'created_at')
     search_fields = ('bank_code', 'bank_name', 'micr', 'contact_person')

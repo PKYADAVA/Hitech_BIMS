@@ -3,7 +3,12 @@ configration admin.py in hr modules
 """
 
 from django.contrib import admin
+from django.contrib.auth.models import User
+from import_export import resources
 from import_export.admin import ImportExportModelAdmin
+from import_export.fields import Field
+from import_export.widgets import ForeignKeyWidget
+from inventory.models import Warehouse
 from hr.models import (
     Attendance,
     Employee,
@@ -13,6 +18,58 @@ from hr.models import (
     LeaveSelectedDate,
     Payroll,
 )
+
+
+class EmployeeResource(resources.ModelResource):
+    designation = Field(
+        attribute='designation', column_name='designation',
+        widget=ForeignKeyWidget(Designation, field='title'),
+    )
+    warehouse = Field(
+        attribute='warehouse', column_name='warehouse',
+        widget=ForeignKeyWidget(Warehouse, field='name'),
+    )
+    group = Field(
+        attribute='group', column_name='group',
+        widget=ForeignKeyWidget(Group, field='name'),
+    )
+    user = Field(
+        attribute='user', column_name='user',
+        widget=ForeignKeyWidget(User, field='username'),
+    )
+
+    class Meta:
+        model = Employee
+
+
+class EmployeeLeaveResource(resources.ModelResource):
+    employee = Field(
+        attribute='employee', column_name='employee',
+        widget=ForeignKeyWidget(Employee, field='employee_id'),
+    )
+
+    class Meta:
+        model = EmployeeLeave
+
+
+class AttendanceResource(resources.ModelResource):
+    employee = Field(
+        attribute='employee', column_name='employee',
+        widget=ForeignKeyWidget(Employee, field='employee_id'),
+    )
+
+    class Meta:
+        model = Attendance
+
+
+class PayrollResource(resources.ModelResource):
+    employee = Field(
+        attribute='employee', column_name='employee',
+        widget=ForeignKeyWidget(Employee, field='employee_id'),
+    )
+
+    class Meta:
+        model = Payroll
 
 
 @admin.register(Group)
@@ -34,6 +91,7 @@ class EmployeeAdmin(ImportExportModelAdmin):
     """
     register employee models
     """
+    resource_classes = [EmployeeResource]
 
     list_display = [
         "full_name",
@@ -75,6 +133,7 @@ class EmployeeLeaveAdmin(ImportExportModelAdmin):
     """
     register employee leave
     """
+    resource_classes = [EmployeeLeaveResource]
 
     list_display = ("employee", "reason", "leave_type", "status", "created_date")
 
@@ -89,6 +148,7 @@ class AttendanceAdmin(ImportExportModelAdmin):
     """
     register attendance models
     """
+    resource_classes = [AttendanceResource]
 
     list_display = (
         "employee",
@@ -105,6 +165,7 @@ class PayrollAdmin(ImportExportModelAdmin):
     """
     register payroll models
     """
+    resource_classes = [PayrollResource]
 
     list_display = (
         "employee",
