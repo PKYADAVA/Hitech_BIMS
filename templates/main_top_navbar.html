@@ -247,10 +247,11 @@
 document.addEventListener("DOMContentLoaded", function () {
   // Top-level nav dropdowns (Account, Sales, etc.) open on click only via
   // Bootstrap's default dropdown behavior (see main.js). Submenus below
-  // still open on hover since they're nested inside an already-open menu.
+  // open on hover on pointer devices AND on tap for touch/collapsed menus.
 
-  // Submenu hover
   const submenus = document.querySelectorAll("#mainNavbar .dropdown-submenu");
+
+  // Hover behaviour for fine pointers (mouse) on the desktop fly-out menus.
   submenus.forEach(item => {
     let closeTimer;
     item.addEventListener("mouseenter", function () {
@@ -263,6 +264,25 @@ document.addEventListener("DOMContentLoaded", function () {
       closeTimer = setTimeout(() => {
         if (menu) menu.classList.remove("show");
       }, 150);
+    });
+  });
+
+  // Tap/click support so submenus work on touch screens and inside the
+  // collapsed mobile menu (hover never fires there). Toggle the child menu
+  // and stop the event closing the parent dropdown it lives in.
+  submenus.forEach(item => {
+    const toggle = item.querySelector(":scope > .dropdown-toggle");
+    const menu = item.querySelector(":scope > .dropdown-menu");
+    if (!toggle || !menu) return;
+    toggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const isOpen = menu.classList.contains("show");
+      // Close sibling submenus in the same parent for a clean accordion feel.
+      item.parentElement
+        .querySelectorAll(":scope > .dropdown-submenu > .dropdown-menu.show")
+        .forEach(m => { if (m !== menu) m.classList.remove("show"); });
+      menu.classList.toggle("show", !isOpen);
     });
   });
 });

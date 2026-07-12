@@ -48,3 +48,15 @@
     margin: 5px 0;
     display: inline-block;
 }
+
+/* Mobile: shrink the fixed 40px day cells + padding so a full 7-day week
+   fits within a 320px viewport without forcing horizontal scroll. */
+@media (max-width: 400px) {
+    .calendar .days { padding: 8px; }
+    .calendar .day {
+        width: 36px;
+        height: 36px;
+        margin: 1px;
+        font-size: 0.85rem;
+    }
+}

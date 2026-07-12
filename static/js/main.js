@@ -18,18 +18,14 @@ $.extend(true, $.fn.dataTable.defaults, {
 $(document).ready(function () {
   $('#example').DataTable();
 
-  $('.dropdown-toggle').each(function () {
+  // Initialise Bootstrap dropdowns, but NOT the nested submenu toggles —
+  // those are driven manually (hover + tap) in main_top_navbar.html, and a
+  // Bootstrap instance on them would fight that handler on touch devices.
+  $('.dropdown-toggle').not('.dropdown-submenu > .dropdown-toggle').each(function () {
     new bootstrap.Dropdown(this);
   });
 
-  $('.dropdown-submenu').on('mouseenter', function () {
-    $(this).find('.dropdown-menu').addClass('show');
-  });
-
-  $('.dropdown-submenu').on('mouseleave', function () {
-    $(this).find('.dropdown-menu').removeClass('show');
-  });
-
+  // Close any open menu when tapping/clicking outside a dropdown.
   $(document).on('click', function (e) {
     if (!$(e.target).closest('.dropdown').length) {
       $('.dropdown-menu').removeClass('show');

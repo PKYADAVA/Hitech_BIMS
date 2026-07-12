@@ -9,6 +9,7 @@ $(document).ready(function () {
         }
     
         employeeTable = $('#leaveTable').DataTable({
+            responsive: true,
             paging: true,
             searching: true,
             ordering: true,

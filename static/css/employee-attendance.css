@@ -114,3 +114,22 @@
     content: " *";
     color: red;
 }
+
+/* Mobile: the 250px fixed search box and right float overflow narrow
+   screens — go full width and let the top bar stack cleanly. */
+@media (max-width: 575.98px) {
+    .search-container {
+        float: none;
+        width: 100%;
+        min-width: 0;
+    }
+    .custom-search-input {
+        width: 100%;
+        max-width: 100%;
+    }
+    .table-top-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .custom-search-input { font-size: 16px; } /* avoid iOS zoom */
+}

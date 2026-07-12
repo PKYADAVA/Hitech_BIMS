@@ -228,8 +228,24 @@ body::before {
   text-align: center;
 }
 
+/* iOS Safari performs poorly with fixed background attachment (jank / blank
+   paint). Fall back to a scrolling background on touch devices. */
+@media (hover: none) and (pointer: coarse) {
+  body { background-attachment: scroll; }
+}
+
 @media (max-width: 480px) {
   .auth-card {
     padding: 24px 20px;
+  }
+
+  .auth-wrapper { padding: 16px; }
+  .auth-brand img { width: 60px; height: 60px; }
+  .auth-brand .brand-name { font-size: 1.3rem; }
+
+  /* >=16px prevents iOS Safari from zooming in when a field is focused. */
+  .auth-input-wrapper .form-control,
+  .auth-input-wrapper .form-select {
+    font-size: 16px;
   }
 }

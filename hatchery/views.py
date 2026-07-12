@@ -1,10 +1,12 @@
+import csv
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.core.exceptions import ValidationError
 from django.db import transaction
 import json
@@ -630,3 +632,215 @@ class EggGradingAPI(BaseAPIView):
             )
 
         return eg
+
+
+# ---------------------------------------------------------------------------
+# Hatchery Sheet Report
+# ---------------------------------------------------------------------------
+
+# Report columns as (row-key, display label). Used to render the on-screen
+# table header, the Excel sheet and the CSV file from a single source so they
+# always stay in sync.
+HATCH_REPORT_COLUMNS = [
+    ("setting_no", "Setting No"),
+    ("batch_flock_no", "Batch/Flock No"),
+    ("setting_date", "Setting Date"),
+    ("received_date", "Received Date"),
+    ("transfer_date", "Transfer Date"),
+    ("hatch_date", "Hatch Date"),
+    ("supplier_name", "Supplier"),
+    ("primary_machine_nos", "Machine Nos"),
+    ("received_qty", "Received Qty"),
+    ("breakage_qty", "Breakage"),
+    ("crack_qty", "Crack"),
+    ("setting_qty", "Setting Qty"),
+    ("saleable_chicks", "Saleable Chicks"),
+    ("hatch_percent", "Hatch %"),
+    ("chicks_sold", "Chicks Sold"),
+    ("unsold_chicks", "Unsold"),
+    ("sales_amount", "Sales Amount"),
+]
+
+# Row keys that get summed into the totals footer.
+HATCH_REPORT_TOTAL_KEYS = [
+    "received_qty", "breakage_qty", "crack_qty", "setting_qty",
+    "saleable_chicks", "chicks_sold", "unsold_chicks", "sales_amount",
+]
+
+
+def _build_hatch_report_rows(queryset):
+    """Turn prefetched HatchSetting records into flat report row dicts.
+
+    Aggregates are computed in Python from the prefetched child rows to avoid
+    a per-record DB round trip (unlike the model's own helper methods).
+    """
+    rows = []
+    for hs in queryset:
+        saleable = sum(o.saleable_chicks for o in hs.hatcher_outputs.all())
+        sold = sum(s.chicks_sold for s in hs.sales_lines.all())
+        sales_amount = sum((s.total_amount for s in hs.sales_lines.all()), Decimal("0"))
+        hatch_percent = round(saleable / hs.setting_qty * 100, 2) if hs.setting_qty else 0
+        rows.append({
+            "id": hs.id,
+            "setting_no": hs.setting_no,
+            "batch_flock_no": hs.batch_flock_no or "",
+            "setting_date": hs.setting_date.isoformat() if hs.setting_date else "",
+            "received_date": hs.received_date.isoformat() if hs.received_date else "",
+            "transfer_date": hs.transfer_date.isoformat() if hs.transfer_date else "",
+            "hatch_date": hs.hatch_date.isoformat() if hs.hatch_date else "",
+            "supplier_name": hs.supplier_name,
+            "primary_machine_nos": hs.primary_machine_nos or "",
+            "received_qty": hs.received_qty,
+            "breakage_qty": hs.breakage_qty,
+            "crack_qty": hs.crack_qty,
+            "setting_qty": hs.setting_qty,
+            "saleable_chicks": saleable,
+            "hatch_percent": hatch_percent,
+            "chicks_sold": sold,
+            "unsold_chicks": saleable - sold,
+            "sales_amount": sales_amount,
+        })
+    return rows
+
+
+def _hatch_report_totals(rows):
+    totals = {key: 0 for key in HATCH_REPORT_TOTAL_KEYS}
+    for row in rows:
+        for key in HATCH_REPORT_TOTAL_KEYS:
+            totals[key] += row[key]
+    return totals
+
+
+def _filter_hatch_report_queryset(request):
+    """Applies the report bar filters (date range on setting_date, supplier,
+    payment status) and returns (queryset, applied_filters_dict)."""
+    from_date = request.GET.get("from_date", "").strip()
+    to_date = request.GET.get("to_date", "").strip()
+    supplier = request.GET.get("supplier", "").strip()
+    payment_status = request.GET.get("payment_status", "").strip()
+
+    qs = HatchSetting.objects.prefetch_related("hatcher_outputs", "sales_lines")
+    if from_date:
+        qs = qs.filter(setting_date__gte=from_date)
+    if to_date:
+        qs = qs.filter(setting_date__lte=to_date)
+    if supplier:
+        qs = qs.filter(supplier_name=supplier)
+    if payment_status:
+        qs = qs.filter(sales_lines__payment_status=payment_status).distinct()
+    qs = qs.order_by("setting_date", "id")
+
+    return qs, {
+        "from_date": from_date,
+        "to_date": to_date,
+        "supplier": supplier,
+        "payment_status": payment_status,
+    }
+
+
+def _hatch_report_csv_response(rows):
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="hatchery_report_{date.today().isoformat()}.csv"'
+    writer = csv.writer(response)
+    writer.writerow([label for _, label in HATCH_REPORT_COLUMNS])
+    for row in rows:
+        writer.writerow([row[key] for key, _ in HATCH_REPORT_COLUMNS])
+    totals = _hatch_report_totals(rows)
+    writer.writerow([
+        "TOTAL" if key == "setting_no" else totals.get(key, "")
+        for key, _ in HATCH_REPORT_COLUMNS
+    ])
+    return response
+
+
+def _hatch_report_xlsx_response(rows, filters):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Hatchery Report"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1F3B73", end_color="1F3B73", fill_type="solid")
+    title_font = Font(bold=True, size=14)
+
+    ws.append(["Hi Tech Farms — Hatchery Sheet Report"])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(HATCH_REPORT_COLUMNS))
+    ws["A1"].font = title_font
+    ws["A1"].alignment = Alignment(horizontal="center")
+
+    range_bits = []
+    if filters["from_date"] or filters["to_date"]:
+        range_bits.append(f"Setting Date: {filters['from_date'] or '…'} to {filters['to_date'] or '…'}")
+    if filters["supplier"]:
+        range_bits.append(f"Supplier: {filters['supplier']}")
+    if filters["payment_status"]:
+        range_bits.append(f"Payment: {filters['payment_status'].title()}")
+    ws.append([" | ".join(range_bits) if range_bits else "All records"])
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(HATCH_REPORT_COLUMNS))
+    ws.append([])
+
+    header_row_idx = ws.max_row + 1
+    ws.append([label for _, label in HATCH_REPORT_COLUMNS])
+    for cell in ws[header_row_idx]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    for row in rows:
+        ws.append([row[key] for key, _ in HATCH_REPORT_COLUMNS])
+
+    totals = _hatch_report_totals(rows)
+    total_row = []
+    for key, _ in HATCH_REPORT_COLUMNS:
+        if key == "setting_no":
+            total_row.append("TOTAL")
+        elif key in totals:
+            total_row.append(totals[key])
+        else:
+            total_row.append("")
+    ws.append(total_row)
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True)
+
+    for col_idx, (_, label) in enumerate(HATCH_REPORT_COLUMNS, start=1):
+        ws.column_dimensions[ws.cell(row=header_row_idx, column=col_idx).column_letter].width = max(12, len(label) + 3)
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = f'attachment; filename="hatchery_report_{date.today().isoformat()}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@method_decorator(login_required, name="dispatch")
+class HatchReportView(View):
+    """Filterable hatchery sheet report with on-screen table, print and
+    Excel/CSV export (all driven by the same GET filters)."""
+
+    def get(self, request):
+        qs, filters = _filter_hatch_report_queryset(request)
+        rows = _build_hatch_report_rows(qs)
+
+        export = request.GET.get("export", "").strip().lower()
+        if export == "csv":
+            return _hatch_report_csv_response(rows)
+        if export == "xlsx":
+            return _hatch_report_xlsx_response(rows, filters)
+
+        context = {
+            "columns": HATCH_REPORT_COLUMNS,
+            "total_keys": HATCH_REPORT_TOTAL_KEYS,
+            "rows": rows,
+            "totals": _hatch_report_totals(rows),
+            "filters": filters,
+            "suppliers": (
+                HatchSetting.objects.exclude(supplier_name="")
+                .values_list("supplier_name", flat=True).distinct().order_by("supplier_name")
+            ),
+            "payment_statuses": HatchSetting.PAYMENT_STATUS_CHOICES,
+            "has_filters": any(filters.values()),
+        }
+        return render(request, "hatchery_report.html", context)
