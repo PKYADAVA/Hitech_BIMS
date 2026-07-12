@@ -19,6 +19,7 @@ urlpatterns = [
     path("", include("account.urls")),
     path("", include("purchase.urls")),
     path("", include("sales.urls")),
+    path("", include("notification.urls")),
 ]
 
 # Serve media files in development

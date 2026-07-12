@@ -169,9 +169,6 @@
               <i class="fas fa-user-cog"></i>Employee Management
             </a>
             <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'create_new_employee' %}">
-                <i class="fas fa-user-plus"></i>Add Employee
-              </a></li>
               <li><a class="dropdown-item" href="{% url 'employee_list' %}">
                 <i class="fas fa-users"></i>Employee List
               </a></li>
@@ -208,6 +205,21 @@
            href="{% url 'create_user' %}">
           <i class="fa-solid fa-users-gear me-1"></i>Users
         </a>
+      </li>
+
+      <!-- Notifications -->
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'notifications' %}active{% endif %}"
+           href="#" id="notificationsDd" data-bs-toggle="dropdown">
+          <i class="fa-solid fa-bell me-1"></i>Notifications
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="notificationsDd">
+          <li><h6 class="dropdown-header">Notifications</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url 'sms_templates' %}">
+            <i class="fa-solid fa-comment-sms"></i>SMS Templates
+          </a></li>
+        </ul>
       </li>
 
     </ul>

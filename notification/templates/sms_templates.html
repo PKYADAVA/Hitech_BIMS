@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+
+{% block title %}SMS Templates{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='notifications' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_subnav.html' with module='notification' active_tab='sms_templates' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fa-solid fa-comment-sms"></i>SMS Templates</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Configure the SMS message sent for each application module</div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#smsTemplateFormModal">
+      <i class="fas fa-plus"></i>Add Template
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-table"></i>Template List</span>
+    <div class="d-flex align-items-center gap-2">
+      <label for="module-filter" class="mb-0 small text-white-50">Module</label>
+      <select id="module-filter" class="form-select form-select-sm" style="min-width:160px;">
+        <option value="">All modules</option>
+        {% for value, label in modules %}
+        <option value="{{ label }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="sms-template-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Key</th>
+            <th>Module</th>
+            <th>Name</th>
+            <th>Placeholders</th>
+            <th>DLT ID</th>
+            <th>Status</th>
+            <th>Updated</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody id="sms-template-table-body">
+          <!-- AJAX content will load here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Template Modal -->
+<div class="modal fade" id="smsTemplateFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Add SMS Template</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="sms-template-form">
+          {% csrf_token %}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="tpl-key" class="form-label">Key<span class="text-danger">*</span></label>
+              <input type="text" id="tpl-key" name="key" class="form-control"
+                     placeholder="e.g. sales.payment_reminder" required>
+              <div class="form-text">Stable identifier used in code. Cannot be changed later.</div>
+            </div>
+            <div class="col-md-6">
+              <label for="tpl-module" class="form-label">Module<span class="text-danger">*</span></label>
+              <select id="tpl-module" name="module" class="form-select" required>
+                <option value="" selected disabled>Select module</option>
+                {% for value, label in modules %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-12">
+              <label for="tpl-name" class="form-label">Name<span class="text-danger">*</span></label>
+              <input type="text" id="tpl-name" name="name" class="form-control"
+                     placeholder="Human-readable name" required>
+            </div>
+            <div class="col-md-6">
+              <label for="tpl-description" class="form-label">Description</label>
+              <input type="text" id="tpl-description" name="description" class="form-control"
+                     placeholder="What this template is used for">
+            </div>
+            <div class="col-md-6">
+              <label for="tpl-dlt" class="form-label">DLT Template ID</label>
+              <input type="text" id="tpl-dlt" name="dlt_template_id" class="form-control"
+                     placeholder="e.g. 1707177597686267032">
+              <div class="form-text">Required for Indian traffic; overrides the global default.</div>
+            </div>
+            <div class="col-md-12">
+              <label for="tpl-body" class="form-label">Message Body<span class="text-danger">*</span></label>
+              <textarea id="tpl-body" name="body" class="form-control tpl-body-input" rows="4"
+                        placeholder="Your OTP is {otp}. Valid for {validity} minutes." required></textarea>
+              <div class="form-text">
+                Use <code>{placeholder}</code> tokens for dynamic values.
+                Detected: <span class="tpl-placeholder-preview"><span class="text-muted">none</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Template Modal Template -->
+<template id="editSmsTemplateModalTemplate">
+  <div class="modal fade" id="editSmsTemplateModal-{id}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-pen me-2"></i>Edit SMS Template</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="edit-sms-template-form-{id}">
+          <div class="modal-body">
+            <input type="hidden" name="template-id" value="{id}">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Key</label>
+                <input type="text" name="key" class="form-control" readonly>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Module<span class="text-danger">*</span></label>
+                <select name="module" class="form-select" required>
+                  {% for value, label in modules %}
+                  <option value="{{ value }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-12">
+                <label class="form-label">Name<span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Description</label>
+                <input type="text" name="description" class="form-control">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">DLT Template ID</label>
+                <input type="text" name="dlt_template_id" class="form-control"
+                       placeholder="e.g. 1707177597686267032">
+              </div>
+              <div class="col-md-12">
+                <label class="form-label">Message Body<span class="text-danger">*</span></label>
+                <textarea name="body" class="form-control tpl-body-input" rows="4" required></textarea>
+                <div class="form-text">
+                  Detected: <span class="tpl-placeholder-preview"><span class="text-muted">none</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- Send SMS Modal (fields populated per template) -->
+<div class="modal fade" id="sendSmsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header success-header">
+        <h5 class="modal-title"><i class="fas fa-paper-plane me-2"></i>Send SMS</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="send-sms-form">
+          {% csrf_token %}
+          <input type="hidden" name="template-id" value="">
+          <p class="mb-3 text-muted small send-sms-template-name"></p>
+          <div class="mb-3">
+            <label for="send-phone" class="form-label">Phone Number<span class="text-danger">*</span></label>
+            <input type="tel" id="send-phone" name="phone" class="form-control"
+                   placeholder="e.g. 9876543210" required>
+          </div>
+          <div class="row g-3" id="send-sms-fields">
+            <!-- One input per {placeholder}, injected by JS -->
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-paper-plane"></i>Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+$(document).ready(function () {
+  let templateTable;
+  const csrfToken = "{{ csrf_token }}";
+
+  function showToast(type, message) {
+    const colors = {
+      success: "linear-gradient(135deg, #065f46, #059669)",
+      danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+    };
+    Toastify({
+      text: message, duration: 3000, gravity: "top", position: "right",
+      style: { background: colors[type] || colors.success }
+    }).showToast();
+  }
+
+  function escapeHtml(unsafe) {
+    return (unsafe ?? "").toString()
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  // Extract unique {placeholder} root names from message text.
+  function extractPlaceholders(text) {
+    const found = new Set();
+    const regex = /\{\s*([\w.]+?)\s*\}/g;
+    let match;
+    while ((match = regex.exec(text || "")) !== null) {
+      found.add(match[1].split(".")[0].split("[")[0]);
+    }
+    return [...found];
+  }
+
+  function placeholderBadges(list) {
+    if (!list.length) return '<span class="text-muted">none</span>';
+    return list.map(p => `<span class="badge bg-info me-1">${escapeHtml(p)}</span>`).join("");
+  }
+
+  // Live placeholder preview for any template body textarea (add + edit).
+  $(document).on("input", ".tpl-body-input", function () {
+    const preview = $(this).closest("form").find(".tpl-placeholder-preview");
+    preview.html(placeholderBadges(extractPlaceholders($(this).val())));
+  });
+
+  function initTable() {
+    templateTable = $('#sms-template-table').DataTable({
+      responsive: true,
+      order: [[1, 'asc'], [0, 'asc']],
+      language: { emptyTable: "No SMS templates found. Click 'Add Template' or run seed_sms_templates." }
+    });
+    $('#module-filter').off('change').on('change', function () {
+      templateTable.column(1).search(this.value).draw();
+    });
+  }
+
+  function loadTemplates() {
+    $.ajax({
+      url: "{% url 'sms_template_list' %}",
+      type: "GET",
+      success: function (rows) {
+        if (templateTable) { templateTable.destroy(); }
+        const body = $("#sms-template-table-body");
+        body.empty();
+        rows.forEach(function (t) {
+          body.append(`
+            <tr>
+              <td><code>${escapeHtml(t.key)}</code></td>
+              <td>${escapeHtml(t.module_display)}</td>
+              <td>${escapeHtml(t.name)}</td>
+              <td>${placeholderBadges(t.placeholders)}</td>
+              <td>${t.dlt_template_id
+                    ? `<code>${escapeHtml(t.dlt_template_id)}</code>`
+                    : '<span class="text-muted">—</span>'}</td>
+              <td>${t.is_active
+                    ? '<span class="badge bg-success">Active</span>'
+                    : '<span class="badge bg-secondary">Inactive</span>'}</td>
+              <td>${escapeHtml(t.updated_at)}</td>
+              <td class="text-center">
+                <div class="d-flex gap-1 justify-content-center flex-wrap">
+                  <button class="btn btn-outline-success btn-sm send-template"
+                          data-id="${t.id}" title="Send SMS"><i class="fas fa-paper-plane"></i></button>
+                  <button class="btn btn-outline-warning btn-sm edit-template"
+                          data-id="${t.id}" title="Edit"><i class="fas fa-pen"></i></button>
+                  <button class="btn btn-outline-info btn-sm toggle-template"
+                          data-id="${t.id}" title="${t.is_active ? 'Deactivate' : 'Activate'}">
+                    <i class="fas ${t.is_active ? 'fa-pause' : 'fa-play'}"></i>
+                  </button>
+                  <button class="btn btn-outline-danger btn-sm delete-template"
+                          data-id="${t.id}" title="Delete"><i class="fas fa-trash"></i></button>
+                </div>
+              </td>
+            </tr>`);
+        });
+        initTable();
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', 'Failed to load templates: ' + error);
+      }
+    });
+  }
+
+  // Create
+  $("#sms-template-form").on("submit", function (e) {
+    e.preventDefault();
+    $.ajax({
+      url: "{% url 'sms_template_create' %}",
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: $(this).serialize(),
+      success: function () {
+        $("#smsTemplateFormModal").modal("hide");
+        $("#sms-template-form")[0].reset();
+        $("#sms-template-form .tpl-placeholder-preview").html('<span class="text-muted">none</span>');
+        loadTemplates();
+        showToast('success', 'Template created successfully!');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to create template: ' + error));
+      }
+    });
+  });
+
+  // Open edit modal
+  $(document).on("click", ".edit-template", function () {
+    const id = $(this).data("id");
+    $.ajax({
+      url: `/sms-templates/${id}/`,
+      type: "GET",
+      success: function (t) {
+        $(`#editSmsTemplateModal-${id}`).remove();
+        const html = document.getElementById('editSmsTemplateModalTemplate').innerHTML.replace(/{id}/g, id);
+        $('body').append(html);
+        const form = $(`#edit-sms-template-form-${id}`);
+        form.find('[name="key"]').val(t.key);
+        form.find('[name="module"]').val(t.module);
+        form.find('[name="name"]').val(t.name);
+        form.find('[name="description"]').val(t.description);
+        form.find('[name="dlt_template_id"]').val(t.dlt_template_id);
+        form.find('[name="body"]').val(t.body).trigger("input");
+        $(`#editSmsTemplateModal-${id}`).modal('show');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', 'Failed to load template: ' + error);
+      }
+    });
+  });
+
+  // Update
+  $(document).on("submit", "[id^='edit-sms-template-form-']", function (e) {
+    e.preventDefault();
+    const id = $(this).find('[name="template-id"]').val();
+    const payload = {
+      module: $(this).find('[name="module"]').val(),
+      name: $(this).find('[name="name"]').val(),
+      description: $(this).find('[name="description"]').val(),
+      dlt_template_id: $(this).find('[name="dlt_template_id"]').val(),
+      body: $(this).find('[name="body"]').val(),
+    };
+    $.ajax({
+      url: `/sms-templates/${id}/`,
+      type: "PUT",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify(payload),
+      success: function () {
+        $(`#editSmsTemplateModal-${id}`).modal("hide");
+        loadTemplates();
+        showToast('success', 'Template updated successfully!');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to update template: ' + error));
+      }
+    });
+  });
+
+  // Toggle active
+  $(document).on("click", ".toggle-template", function () {
+    const id = $(this).data("id");
+    $.ajax({
+      url: `/sms-templates/${id}/toggle-active/`,
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () { loadTemplates(); },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to update status: ' + error));
+      }
+    });
+  });
+
+  // Delete
+  $(document).on("click", ".delete-template", function () {
+    const id = $(this).data("id");
+    if (!confirm("Delete this template? Sending will fall back to the built-in default.")) return;
+    $.ajax({
+      url: `/sms-templates/${id}/delete/`,
+      method: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        loadTemplates();
+        showToast('success', 'Template deleted successfully!');
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', xhr.responseJSON?.error || ('Failed to delete template: ' + error));
+      }
+    });
+  });
+
+  // Open Send SMS modal — build one input per placeholder for this template.
+  $(document).on("click", ".send-template", function () {
+    const id = $(this).data("id");
+    $.ajax({
+      url: `/sms-templates/${id}/`,
+      type: "GET",
+      success: function (t) {
+        const form = $("#send-sms-form");
+        form[0].reset();
+        form.find('[name="template-id"]').val(t.id);
+        $(".send-sms-template-name").html(
+          `<i class="fas fa-tag me-1"></i><strong>${escapeHtml(t.name)}</strong> ` +
+          `<code>${escapeHtml(t.key)}</code>`
+        );
+        const fields = $("#send-sms-fields").empty();
+        if (!t.placeholders.length) {
+          fields.append('<div class="col-12 text-muted small">This template has no placeholders.</div>');
+        }
+        t.placeholders.forEach(function (name) {
+          fields.append(`
+            <div class="col-md-6">
+              <label class="form-label text-capitalize">${escapeHtml(name.replace(/_/g, ' '))}</label>
+              <input type="text" name="var_${escapeHtml(name)}" class="form-control"
+                     placeholder="{${escapeHtml(name)}}" required>
+            </div>`);
+        });
+        $("#sendSmsModal").modal("show");
+      },
+      error: function (xhr, status, error) {
+        showToast('danger', 'Failed to load template: ' + error);
+      }
+    });
+  });
+
+  // Submit Send SMS — calls the service, respects SMS_ENABLED/SMS_MOCK.
+  $("#send-sms-form").on("submit", function (e) {
+    e.preventDefault();
+    const id = $(this).find('[name="template-id"]').val();
+    const btn = $(this).find('button[type="submit"]');
+    btn.prop("disabled", true);
+    $.ajax({
+      url: `/sms-templates/${id}/send/`,
+      method: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: $(this).serialize(),
+      success: function (res) {
+        $("#sendSmsModal").modal("hide");
+        showToast('success', `SMS ${res.status}` + (res.message_id ? ` (id: ${res.message_id})` : ''));
+      },
+      error: function (xhr) {
+        const res = xhr.responseJSON || {};
+        showToast('danger', res.error || `Send failed (${res.status || 'error'})`);
+      },
+      complete: function () { btn.prop("disabled", false); }
+    });
+  });
+
+  loadTemplates();
+});
+</script>
+{% endblock %}

@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "sales",
     "purchase",
     "account",
+    "notification",
 ]
 
 MIDDLEWARE = [
@@ -224,6 +225,31 @@ EMAIL_USE_TLS = True
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+# SMS / Notification configuration.
+# All values are read here (see notification/conf.py) so the notification app
+# never touches settings directly. SMS is opt-in: it stays disabled until
+# SMS_ENABLED is set, and runs in mock mode automatically during local
+# development so no real messages are sent.
+SMS_ENABLED = env_bool("SMS_ENABLED", False)
+SMS_MOCK = env_bool("SMS_MOCK", DEBUG)
+SMS_PROVIDER = os.getenv("SMS_PROVIDER", "smsgatewayhub")
+SMS_TIMEOUT = int(os.getenv("SMS_TIMEOUT", "10"))
+SMS_MAX_RETRIES = int(os.getenv("SMS_MAX_RETRIES", "2"))
+SMS_RETRY_BACKOFF = float(os.getenv("SMS_RETRY_BACKOFF", "0.5"))
+SMS_DEFAULT_COUNTRY_CODE = os.getenv("SMS_DEFAULT_COUNTRY_CODE", "91")
+SMS_MAX_LENGTH = int(os.getenv("SMS_MAX_LENGTH", "1000"))
+
+# SMSGatewayHub provider credentials/routing.
+SMS_GATEWAYHUB_BASE_URL = os.getenv("SMS_GATEWAYHUB_BASE_URL", "https://www.smsgatewayhub.com")
+SMS_GATEWAYHUB_API_KEY = os.getenv("SMS_GATEWAYHUB_API_KEY", "")
+SMS_GATEWAYHUB_SENDER_ID = os.getenv("SMS_GATEWAYHUB_SENDER_ID", "")
+SMS_GATEWAYHUB_ROUTE = os.getenv("SMS_GATEWAYHUB_ROUTE", "1")
+SMS_GATEWAYHUB_CHANNEL = os.getenv("SMS_GATEWAYHUB_CHANNEL", "2")
+SMS_GATEWAYHUB_DCS = os.getenv("SMS_GATEWAYHUB_DCS", "0")
+# DLT registration fields (required for Indian traffic when provisioned).
+SMS_GATEWAYHUB_ENTITY_ID = os.getenv("SMS_GATEWAYHUB_ENTITY_ID", "")
+SMS_GATEWAYHUB_DLT_TEMPLATE_ID = os.getenv("SMS_GATEWAYHUB_DLT_TEMPLATE_ID", "")
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
