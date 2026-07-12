@@ -13,6 +13,7 @@ from .views import (
     EggGradingAPI,
     egg_grading_next_number,
     egg_grading_stock_check,
+    HatchReportView,
 )
 
 urlpatterns = [
@@ -40,4 +41,6 @@ urlpatterns = [
 
     path('egg_grading_api/', EggGradingAPI.as_view(), name='egg_grading_api_list'),
     path('egg_grading_api/<int:id>/', EggGradingAPI.as_view(), name='egg_grading_api_detail'),
+
+    path('hatchery/report/', HatchReportView.as_view(), name='hatchery_report'),
 ]

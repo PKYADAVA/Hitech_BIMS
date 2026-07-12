@@ -638,34 +638,75 @@ class EggGradingAPI(BaseAPIView):
 # Hatchery Sheet Report
 # ---------------------------------------------------------------------------
 
-# Report columns as (row-key, display label). Used to render the on-screen
-# table header, the Excel sheet and the CSV file from a single source so they
-# always stay in sync.
+# Report columns as (row-key, display label, kind). `kind` drives formatting,
+# alignment and totals behaviour, and is shared by the on-screen table, the
+# Excel sheet and the CSV so all three stay in sync.
+#   text  - left aligned, no total
+#   date  - left aligned, no total
+#   num   - right aligned integer, summed in the totals row
+#   pct   - right aligned percentage (value + "%"), recomputed in totals
+#   money - right aligned 2dp amount, summed in the totals row
 HATCH_REPORT_COLUMNS = [
-    ("setting_no", "Setting No"),
-    ("batch_flock_no", "Batch/Flock No"),
-    ("setting_date", "Setting Date"),
-    ("received_date", "Received Date"),
-    ("transfer_date", "Transfer Date"),
-    ("hatch_date", "Hatch Date"),
-    ("supplier_name", "Supplier"),
-    ("primary_machine_nos", "Machine Nos"),
-    ("received_qty", "Received Qty"),
-    ("breakage_qty", "Breakage"),
-    ("crack_qty", "Crack"),
-    ("setting_qty", "Setting Qty"),
-    ("saleable_chicks", "Saleable Chicks"),
-    ("hatch_percent", "Hatch %"),
-    ("chicks_sold", "Chicks Sold"),
-    ("unsold_chicks", "Unsold"),
-    ("sales_amount", "Sales Amount"),
+    # Identity
+    ("setting_no", "Setting No", "text"),
+    ("batch_flock_no", "Batch/Flock No", "text"),
+    ("supplier_name", "Supplier", "text"),
+    ("primary_machine_nos", "Machine Nos", "text"),
+    ("avg_egg_weight", "Avg Egg Wt", "text"),
+    ("received_date", "Received Date", "date"),
+    ("received_time", "Received Time", "text"),
+    ("setting_date", "Setting Date", "date"),
+    ("transfer_date", "Transfer Date", "date"),
+    ("hatch_date", "Hatch Date", "date"),
+    ("push_time", "Push Time", "text"),
+    # Egg intake
+    ("received_qty", "Received Qty", "num"),
+    ("breakage_qty", "Breakage", "num"),
+    ("breakage_pct", "Breakage %", "pct"),
+    ("crack_qty", "Crack", "num"),
+    ("crack_pct", "Crack %", "pct"),
+    ("setting_qty", "Setting Qty", "num"),
+    # Candling & hatch output
+    ("infertile_qty", "Infertile", "num"),
+    ("infertile_pct", "Infertile %", "pct"),
+    ("early_dead_qty", "Early Dead", "num"),
+    ("early_dead_pct", "Early Dead %", "pct"),
+    ("blasting_qty", "Blasting", "num"),
+    ("blasting_pct", "Blasting %", "pct"),
+    ("transfer_qty", "Transfer Qty", "num"),
+    ("transfer_pct", "Transfer %", "pct"),
+    ("dead_in_shell_qty", "Dead-In-Shell", "num"),
+    ("culls_malf_qty", "Culls / Malf.", "num"),
+    ("saleable_chicks", "Saleable Chicks", "num"),
+    ("hatch_pct", "Hatch %", "pct"),
+    # Environmental & consumables
+    ("avg_chick_weight", "Avg Chick Wt", "text"),
+    ("medicine_vaccine", "Medicine / Vaccine", "text"),
+    ("packing_boxes_used", "Packing Boxes", "num"),
+    # Sales
+    ("chicks_sold", "Chicks Sold", "num"),
+    ("unsold_chicks", "Unsold", "num"),
+    ("sales_amount", "Sales Amount", "money"),
 ]
 
-# Row keys that get summed into the totals footer.
-HATCH_REPORT_TOTAL_KEYS = [
-    "received_qty", "breakage_qty", "crack_qty", "setting_qty",
-    "saleable_chicks", "chicks_sold", "unsold_chicks", "sales_amount",
-]
+# Percentage columns and the (numerator, denominator) qty keys they derive
+# from. Used for both per-row and totals-row percentages.
+HATCH_REPORT_PCT_SOURCES = {
+    "breakage_pct": ("breakage_qty", "received_qty"),
+    "crack_pct": ("crack_qty", "received_qty"),
+    "infertile_pct": ("infertile_qty", "setting_qty"),
+    "early_dead_pct": ("early_dead_qty", "setting_qty"),
+    "blasting_pct": ("blasting_qty", "setting_qty"),
+    "transfer_pct": ("transfer_qty", "setting_qty"),
+    "hatch_pct": ("saleable_chicks", "setting_qty"),
+}
+
+# Column keys summed into the totals footer.
+HATCH_REPORT_SUM_KEYS = [key for key, _, kind in HATCH_REPORT_COLUMNS if kind in ("num", "money")]
+
+
+def _pct(numerator, denominator):
+    return round(numerator / denominator * 100, 2) if denominator else 0
 
 
 def _build_hatch_report_rows(queryset):
@@ -676,38 +717,68 @@ def _build_hatch_report_rows(queryset):
     """
     rows = []
     for hs in queryset:
-        saleable = sum(o.saleable_chicks for o in hs.hatcher_outputs.all())
-        sold = sum(s.chicks_sold for s in hs.sales_lines.all())
-        sales_amount = sum((s.total_amount for s in hs.sales_lines.all()), Decimal("0"))
-        hatch_percent = round(saleable / hs.setting_qty * 100, 2) if hs.setting_qty else 0
-        rows.append({
+        outputs = list(hs.hatcher_outputs.all())
+        sales = list(hs.sales_lines.all())
+
+        infertile = sum(o.infertile_qty for o in outputs)
+        early_dead = sum(o.early_dead_qty for o in outputs)
+        blasting = sum(o.blasting_qty for o in outputs)
+        transfer = sum(o.transfer_qty for o in outputs)
+        dead_in_shell = sum(o.dead_in_shell_qty for o in outputs)
+        culls = sum(o.culls_malf_qty for o in outputs)
+        saleable = sum(o.saleable_chicks for o in outputs)
+        sold = sum(s.chicks_sold for s in sales)
+        sales_amount = sum((s.total_amount for s in sales), Decimal("0"))
+
+        row = {
             "id": hs.id,
             "setting_no": hs.setting_no,
             "batch_flock_no": hs.batch_flock_no or "",
-            "setting_date": hs.setting_date.isoformat() if hs.setting_date else "",
-            "received_date": hs.received_date.isoformat() if hs.received_date else "",
-            "transfer_date": hs.transfer_date.isoformat() if hs.transfer_date else "",
-            "hatch_date": hs.hatch_date.isoformat() if hs.hatch_date else "",
             "supplier_name": hs.supplier_name,
             "primary_machine_nos": hs.primary_machine_nos or "",
+            "avg_egg_weight": hs.avg_egg_weight or "",
+            "received_date": hs.received_date.isoformat() if hs.received_date else "",
+            "received_time": hs.received_time.strftime("%H:%M") if hs.received_time else "",
+            "setting_date": hs.setting_date.isoformat() if hs.setting_date else "",
+            "transfer_date": hs.transfer_date.isoformat() if hs.transfer_date else "",
+            "hatch_date": hs.hatch_date.isoformat() if hs.hatch_date else "",
+            "push_time": hs.push_time.strftime("%H:%M") if hs.push_time else "",
             "received_qty": hs.received_qty,
             "breakage_qty": hs.breakage_qty,
             "crack_qty": hs.crack_qty,
             "setting_qty": hs.setting_qty,
+            "infertile_qty": infertile,
+            "early_dead_qty": early_dead,
+            "blasting_qty": blasting,
+            "transfer_qty": transfer,
+            "dead_in_shell_qty": dead_in_shell,
+            "culls_malf_qty": culls,
             "saleable_chicks": saleable,
-            "hatch_percent": hatch_percent,
+            "setter_temperature": hs.setter_temperature or "",
+            "setter_humidity": hs.setter_humidity or "",
+            "hatcher_temperature": hs.hatcher_temperature or "",
+            "hatcher_humidity": hs.hatcher_humidity or "",
+            "avg_chick_weight": hs.avg_chick_weight or "",
+            "medicine_vaccine": hs.medicine_vaccine or "",
+            "packing_boxes_used": hs.packing_boxes_used or 0,
             "chicks_sold": sold,
             "unsold_chicks": saleable - sold,
             "sales_amount": sales_amount,
-        })
+        }
+        for pct_key, (num_key, den_key) in HATCH_REPORT_PCT_SOURCES.items():
+            row[pct_key] = _pct(row[num_key], row[den_key])
+        rows.append(row)
     return rows
 
 
 def _hatch_report_totals(rows):
-    totals = {key: 0 for key in HATCH_REPORT_TOTAL_KEYS}
+    totals = {key: 0 for key in HATCH_REPORT_SUM_KEYS}
+    totals["sales_amount"] = Decimal("0")
     for row in rows:
-        for key in HATCH_REPORT_TOTAL_KEYS:
-            totals[key] += row[key]
+        for key in HATCH_REPORT_SUM_KEYS:
+            totals[key] += row[key] or 0
+    for pct_key, (num_key, den_key) in HATCH_REPORT_PCT_SOURCES.items():
+        totals[pct_key] = _pct(totals.get(num_key, 0), totals.get(den_key, 0))
     return totals
 
 
@@ -738,17 +809,27 @@ def _filter_hatch_report_queryset(request):
     }
 
 
+def _report_export_value(kind, value):
+    """Coerce a cell to a spreadsheet/CSV-friendly value (numbers stay numeric)."""
+    if kind == "money":
+        return float(value or 0)
+    if kind in ("num", "pct"):
+        return value if value not in ("", None) else 0
+    return value if value not in ("", None) else ""
+
+
 def _hatch_report_csv_response(rows):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="hatchery_report_{date.today().isoformat()}.csv"'
     writer = csv.writer(response)
-    writer.writerow([label for _, label in HATCH_REPORT_COLUMNS])
+    writer.writerow([label for _, label, _ in HATCH_REPORT_COLUMNS])
     for row in rows:
-        writer.writerow([row[key] for key, _ in HATCH_REPORT_COLUMNS])
+        writer.writerow([_report_export_value(kind, row[key]) for key, _, kind in HATCH_REPORT_COLUMNS])
     totals = _hatch_report_totals(rows)
     writer.writerow([
-        "TOTAL" if key == "setting_no" else totals.get(key, "")
-        for key, _ in HATCH_REPORT_COLUMNS
+        "TOTAL" if key == "setting_no"
+        else (_report_export_value(kind, totals[key]) if key in totals else "")
+        for key, _, kind in HATCH_REPORT_COLUMNS
     ])
     return response
 
@@ -765,7 +846,7 @@ def _hatch_report_xlsx_response(rows, filters):
     header_fill = PatternFill(start_color="1F3B73", end_color="1F3B73", fill_type="solid")
     title_font = Font(bold=True, size=14)
 
-    ws.append(["Hi Tech Farms — Hatchery Sheet Report"])
+    ws.append(["Hi Tech Farms — Hatch Register Report"])
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(HATCH_REPORT_COLUMNS))
     ws["A1"].font = title_font
     ws["A1"].alignment = Alignment(horizontal="center")
@@ -782,29 +863,29 @@ def _hatch_report_xlsx_response(rows, filters):
     ws.append([])
 
     header_row_idx = ws.max_row + 1
-    ws.append([label for _, label in HATCH_REPORT_COLUMNS])
+    ws.append([label for _, label, _ in HATCH_REPORT_COLUMNS])
     for cell in ws[header_row_idx]:
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center")
 
     for row in rows:
-        ws.append([row[key] for key, _ in HATCH_REPORT_COLUMNS])
+        ws.append([_report_export_value(kind, row[key]) for key, _, kind in HATCH_REPORT_COLUMNS])
 
     totals = _hatch_report_totals(rows)
     total_row = []
-    for key, _ in HATCH_REPORT_COLUMNS:
+    for key, _, kind in HATCH_REPORT_COLUMNS:
         if key == "setting_no":
             total_row.append("TOTAL")
         elif key in totals:
-            total_row.append(totals[key])
+            total_row.append(_report_export_value(kind, totals[key]))
         else:
             total_row.append("")
     ws.append(total_row)
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True)
 
-    for col_idx, (_, label) in enumerate(HATCH_REPORT_COLUMNS, start=1):
+    for col_idx, (_, label, _kind) in enumerate(HATCH_REPORT_COLUMNS, start=1):
         ws.column_dimensions[ws.cell(row=header_row_idx, column=col_idx).column_letter].width = max(12, len(label) + 3)
 
     response = HttpResponse(
@@ -813,6 +894,43 @@ def _hatch_report_xlsx_response(rows, filters):
     response["Content-Disposition"] = f'attachment; filename="hatchery_report_{date.today().isoformat()}.xlsx"'
     wb.save(response)
     return response
+
+
+def _format_hatch_report_cell(kind, value):
+    """Returns (display_value, css_align_class) for one report cell so the
+    template can render rows without needing variable-key dict lookups."""
+    if kind == "pct":
+        return f"{value}%", "text-end"
+    if kind == "money":
+        return f"{Decimal(value or 0):,.2f}", "text-end"
+    if kind == "num":
+        return (value if value not in ("", None) else "-"), "text-end"
+    return (value if value not in ("", None) else "-"), ""
+
+
+def _hatch_report_display_rows(rows):
+    """Each row -> ordered list of {value, align} cells matching HATCH_REPORT_COLUMNS."""
+    display = []
+    for row in rows:
+        cells = []
+        for key, _, kind in HATCH_REPORT_COLUMNS:
+            value, align = _format_hatch_report_cell(kind, row[key])
+            cells.append({"value": value, "align": align})
+        display.append(cells)
+    return display
+
+
+def _hatch_report_display_totals(totals):
+    cells = []
+    for key, _, kind in HATCH_REPORT_COLUMNS:
+        if key == "setting_no":
+            cells.append({"value": "TOTAL", "align": ""})
+        elif key in totals:
+            value, align = _format_hatch_report_cell(kind, totals[key])
+            cells.append({"value": value, "align": align})
+        else:
+            cells.append({"value": "", "align": ""})
+    return cells
 
 
 @method_decorator(login_required, name="dispatch")
@@ -830,11 +948,12 @@ class HatchReportView(View):
         if export == "xlsx":
             return _hatch_report_xlsx_response(rows, filters)
 
+        totals = _hatch_report_totals(rows)
         context = {
             "columns": HATCH_REPORT_COLUMNS,
-            "total_keys": HATCH_REPORT_TOTAL_KEYS,
-            "rows": rows,
-            "totals": _hatch_report_totals(rows),
+            "display_rows": _hatch_report_display_rows(rows),
+            "display_totals": _hatch_report_display_totals(totals),
+            "row_count": len(rows),
             "filters": filters,
             "suppliers": (
                 HatchSetting.objects.exclude(supplier_name="")

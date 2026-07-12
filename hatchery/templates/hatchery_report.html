@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Hatch Register Report — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='hatchery_report' active_tab='hatch_sheet_report' %}
+
+<!-- Page Header -->
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fa-solid fa-chart-bar"></i>
+    Hatch Register Report
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Full batch-wise hatch register: egg intake, candling &amp; hatch output and chick sales, with percentages</div>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-outline-secondary" id="report-print-btn">
+        <i class="fas fa-print"></i> Print
+      </button>
+      <button type="button" class="btn btn-outline-success" id="report-excel-btn">
+        <i class="fas fa-file-excel"></i> Excel
+      </button>
+      <button type="button" class="btn btn-outline-primary" id="report-csv-btn">
+        <i class="fas fa-file-csv"></i> CSV
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-3 report-filter-card">
+  <div class="card-body">
+    <form method="get" id="report-filter-form" class="row g-3 align-items-end">
+      <input type="hidden" name="export" id="report-export-field" value="">
+      <div class="col-md-2 col-6">
+        <label class="form-label">From Date</label>
+        <input type="date" name="from_date" class="form-control" value="{{ filters.from_date }}">
+      </div>
+      <div class="col-md-2 col-6">
+        <label class="form-label">To Date</label>
+        <input type="date" name="to_date" class="form-control" value="{{ filters.to_date }}">
+      </div>
+      <div class="col-md-3 col-12">
+        <label class="form-label">Supplier</label>
+        <select name="supplier" class="form-select report-select2">
+          <option value="">-All-</option>
+          {% for s in suppliers %}
+            <option value="{{ s }}" {% if s == filters.supplier %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 col-6">
+        <label class="form-label">Payment Status</label>
+        <select name="payment_status" class="form-select">
+          <option value="">-All-</option>
+          {% for value, label in payment_statuses %}
+            <option value="{{ value }}" {% if value == filters.payment_status %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-6 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">
+          <i class="fas fa-filter"></i> Submit
+        </button>
+        <a href="{% url 'hatchery_report' %}" class="btn btn-outline-secondary">
+          <i class="fas fa-undo"></i> Reset
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Report -->
+<div class="card">
+  <div class="card-body p-0">
+    <!-- Company header: shown only on print, like a physical report sheet -->
+    <div class="report-print-header d-none">
+      <h3>Hi Tech Farms</h3>
+      <div class="report-company-meta">
+        Santosh Nagar, Lacchipur, Sonauli Road, Gorakhpur – 273007, Uttar Pradesh IN
+      </div>
+      <div class="report-company-meta">GSTIN: 09AQBPJ7559A1ZW &nbsp;|&nbsp; Cont: 9451144595</div>
+      <h4>Hatch Register Report</h4>
+      <div class="report-company-meta">
+        {% if filters.from_date or filters.to_date %}
+          Setting Date: {{ filters.from_date|default:"…" }} to {{ filters.to_date|default:"…" }}
+        {% else %}All Records{% endif %}
+        {% if filters.supplier %} &nbsp;|&nbsp; Supplier: {{ filters.supplier }}{% endif %}
+        {% if filters.payment_status %} &nbsp;|&nbsp; Payment: {{ filters.payment_status|capfirst }}{% endif %}
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 report-table" id="hatchery-report-table">
+        <thead class="table-dark">
+          <tr class="report-group-row">
+            <th rowspan="2">#</th>
+            <th colspan="11">Batch Identity</th>
+            <th colspan="6">Egg Intake</th>
+            <th colspan="12">Candling &amp; Hatch Output</th>
+            <th colspan="3">Environmental &amp; Consumables</th>
+            <th colspan="3">Sales</th>
+          </tr>
+          <tr>
+            {% for key, label, kind in columns %}
+              <th class="{% if kind == 'num' or kind == 'pct' or kind == 'money' %}text-end{% endif %}">{{ label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for cells in display_rows %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              {% for cell in cells %}
+                <td class="{{ cell.align }}">{{ cell.value }}</td>
+              {% endfor %}
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="{{ columns|length|add:1 }}" class="text-center text-muted py-4">
+                No hatchery records match the selected filters.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if row_count %}
+        <tfoot>
+          <tr class="table-secondary fw-bold report-totals-row">
+            <td></td>
+            {% for cell in display_totals %}
+              <td class="{{ cell.align }}">{{ cell.value }}</td>
+            {% endfor %}
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+</div>
+
+<style>
+.report-print-header { text-align: center; padding: 16px; }
+.report-print-header h3 { margin: 0; font-weight: 700; }
+.report-print-header h4 { margin: 8px 0 4px; font-weight: 600; font-size: 1.05rem; }
+.report-company-meta { font-size: 12px; color: #444; }
+.report-table th, .report-table td { white-space: nowrap; font-size: 12.5px; }
+.report-group-row th { text-align: center; border-left: 2px solid rgba(255,255,255,.2); }
+
+@media print {
+  @page { size: landscape; margin: 1cm; }
+  body * { visibility: hidden; }
+  .report-print-header, .report-print-header *,
+  #hatchery-report-table, #hatchery-report-table * { visibility: visible; }
+  .report-print-header { display: block !important; }
+
+  .bims-navbar, .module-subnav, .page-header, .report-filter-card, footer { display: none !important; }
+  .card { border: none !important; box-shadow: none !important; }
+
+  #hatchery-report-table { position: absolute; left: 0; top: 0; width: 100%; border-collapse: collapse; }
+  #hatchery-report-table th, #hatchery-report-table td {
+    border: 1px solid #333 !important; padding: 4px 6px; font-size: 11px;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  #hatchery-report-table thead th { background: #eee !important; color: #000 !important; }
+  #hatchery-report-table tr { page-break-inside: avoid; }
+  .report-print-header { position: absolute; left: 0; top: 0; width: 100%; }
+}
+</style>
+
+<script>
+$(document).ready(function () {
+  if ($.fn.select2) {
+    $(".report-select2").select2({ theme: "bootstrap-5", width: "100%" });
+  }
+
+  // Export buttons resubmit the current filters with an export flag so the
+  // downloaded file always matches what's on screen.
+  function submitWithExport(format) {
+    const field = document.getElementById("report-export-field");
+    field.value = format;
+    document.getElementById("report-filter-form").submit();
+    // Reset so a later normal Submit doesn't accidentally re-export.
+    setTimeout(function () { field.value = ""; }, 100);
+  }
+
+  $("#report-excel-btn").on("click", function () { submitWithExport("xlsx"); });
+  $("#report-csv-btn").on("click", function () { submitWithExport("csv"); });
+  $("#report-print-btn").on("click", function () { window.print(); });
+});
+</script>
+{% endblock %}
