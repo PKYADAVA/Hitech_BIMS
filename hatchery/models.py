@@ -40,6 +40,9 @@ class HatchSetting(models.Model):
         blank=True,
         help_text=_("Primary setter machine numbers (e.g. 39,40,41,42)")
     )
+    avg_egg_weight = models.CharField(
+        max_length=50, blank=True, help_text=_("e.g. EGG WT 55-58 GM")
+    )
     received_date = models.DateField(help_text=_("Date eggs were received"))
     received_time = models.TimeField(blank=True, null=True, help_text=_("Time eggs were received"))
     setting_date = models.DateField(help_text=_("Date eggs were set"))
@@ -65,7 +68,7 @@ class HatchSetting(models.Model):
     hatcher_temperature = models.CharField(max_length=20, blank=True, help_text=_("e.g. 98.5F"))
     hatcher_humidity = models.CharField(max_length=20, blank=True, help_text=_("e.g. 70%"))
     avg_chick_weight = models.CharField(
-        max_length=50, blank=True, help_text=_("e.g. CHICKS WT 38-40 GM")
+        max_length=50, blank=True, help_text=_("Avg Chicks Weight, e.g. CHICKS WT 38-40 GM")
     )
     medicine_vaccine = models.CharField(max_length=150, blank=True)
     packing_boxes_used = models.PositiveIntegerField(blank=True, null=True)
@@ -199,7 +202,12 @@ class HatchSalesLine(models.Model):
         help_text=_("Hatch setting this sale row belongs to")
     )
     trader_customer_name = models.CharField(max_length=150)
-    chicks_sold = models.PositiveIntegerField(default=0)
+    chicks_sold = models.PositiveIntegerField(
+        default=0, help_text=_("Total chicks dispatched, inclusive of the free-chick bonus (e.g. 102 = 100 + 2%)")
+    )
+    discount_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0, help_text=_("Free-chick bonus % baked into Chicks Sold")
+    )
     free_chicks = models.PositiveIntegerField(default=0)
     billed_chicks = models.PositiveIntegerField(default=0)
     rate = models.DecimalField(max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)])

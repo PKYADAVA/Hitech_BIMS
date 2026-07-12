@@ -13,6 +13,7 @@ import logging
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
 from purchase.models import Supplier
+from hatchery_master.models import Setter, Hatcher
 
 from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
@@ -50,6 +51,14 @@ class HatchSettingFormTemplateView(View):
         context = {
             "hatch_setting_id": id,
             "suppliers": Supplier.objects.all(),
+            "setter_nos": (
+                Setter.objects.filter(is_active=True)
+                .values_list("setter_no", flat=True).distinct().order_by("setter_no")
+            ),
+            "hatcher_nos": (
+                Hatcher.objects.filter(is_active=True)
+                .values_list("hatcher_no", flat=True).distinct().order_by("hatcher_no")
+            ),
             "next_batch_flock_no": HatchSetting._next_batch_flock_no() if id is None else None,
         }
         return render(request, "hatchery_form.html", context)
@@ -90,6 +99,7 @@ def _sales_line_to_dict(row: HatchSalesLine) -> dict:
         "id": row.id,
         "trader_customer_name": row.trader_customer_name,
         "chicks_sold": row.chicks_sold,
+        "discount_percent": str(row.discount_percent),
         "free_chicks": row.free_chicks,
         "billed_chicks": row.billed_chicks,
         "rate": str(row.rate),
@@ -106,6 +116,7 @@ def _hatch_setting_to_dict(hs: HatchSetting) -> dict:
         "batch_flock_no": hs.batch_flock_no,
         "supplier_name": hs.supplier_name,
         "primary_machine_nos": hs.primary_machine_nos,
+        "avg_egg_weight": hs.avg_egg_weight,
         "received_date": hs.received_date.isoformat() if hs.received_date else None,
         "received_time": hs.received_time.strftime("%H:%M") if hs.received_time else None,
         "setting_date": hs.setting_date.isoformat() if hs.setting_date else None,
@@ -163,12 +174,13 @@ class HatchSettingAPI(BaseAPIView):
                     "setting_no": hs.setting_no,
                     "batch_flock_no": hs.batch_flock_no,
                     "supplier_name": hs.supplier_name,
-                    "received_date": hs.received_date.isoformat() if hs.received_date else None,
                     "setting_date": hs.setting_date.isoformat() if hs.setting_date else None,
+                    "transfer_date": hs.transfer_date.isoformat() if hs.transfer_date else None,
                     "hatch_date": hs.hatch_date.isoformat() if hs.hatch_date else None,
                     "total_setting_qty": hs.total_setting_qty(),
                     "total_saleable_chicks": hs.total_saleable_chicks(),
                     "hatch_percent": hs.hatch_percent(),
+                    "total_chicks_sold": hs.total_chicks_sold(),
                     "unsold_chicks": hs.unsold_chicks(),
                 })
             return JsonResponse(results, safe=False)
@@ -203,7 +215,7 @@ class HatchSettingAPI(BaseAPIView):
 
     def _save_hatch_setting(self, data: dict, hatch_setting_id: Optional[int] = None) -> HatchSetting:
         header_fields = [
-            "setting_no", "supplier_name", "primary_machine_nos",
+            "setting_no", "supplier_name", "primary_machine_nos", "avg_egg_weight",
             "received_date", "received_time", "setting_date", "transfer_date",
             "hatch_date", "push_time", "received_qty", "breakage_qty",
             "crack_qty", "setting_qty", "setter_temperature", "setter_humidity",
@@ -255,6 +267,7 @@ class HatchSettingAPI(BaseAPIView):
                 hatch_setting=hs,
                 trader_customer_name=row["trader_customer_name"],
                 chicks_sold=row.get("chicks_sold") or 0,
+                discount_percent=row.get("discount_percent") or 0,
                 free_chicks=row.get("free_chicks") or 0,
                 billed_chicks=row.get("billed_chicks") or 0,
                 rate=row.get("rate") or 0,

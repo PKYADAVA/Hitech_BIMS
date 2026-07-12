@@ -27,6 +27,14 @@
   {% csrf_token %}
   <input type="hidden" id="hatch_setting_id" value="{{ hatch_setting_id|default:'' }}">
 
+  <!-- Setter / Hatcher number options, sourced from the Hatchery masters -->
+  <datalist id="setter-no-options">
+    {% for no in setter_nos %}<option value="{{ no }}"></option>{% endfor %}
+  </datalist>
+  <datalist id="hatcher-no-options">
+    {% for no in hatcher_nos %}<option value="{{ no }}"></option>{% endfor %}
+  </datalist>
+
   <!-- Section 1: Hatch Lot & Timeline Identification -->
   <div class="card mb-4">
     <div class="card-header"><i class="fas fa-id-card me-2"></i>1. Hatch Lot &amp; Timeline Identification</div>
@@ -53,6 +61,10 @@
         <div class="col-md-3">
           <label class="form-label">Primary Machine Nos</label>
           <input type="text" id="primary_machine_nos" class="form-control" readonly placeholder="Filled from Setter No. below">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Avg Egg Weight</label>
+          <input type="text" id="avg_egg_weight" class="form-control" placeholder="e.g. EGG WT 55-58 GM">
         </div>
         <div class="col-md-3">
           <label class="form-label">Received Date <span class="text-danger">*</span></label>
@@ -142,6 +154,9 @@
           </tfoot>
         </table>
       </div>
+      <div class="d-flex justify-content-end p-2">
+        <div class="fw-bold">Balance Egg Qty: <span id="egg-balance-qty" class="text-primary">0</span></div>
+      </div>
     </div>
   </div>
 
@@ -222,7 +237,7 @@
           <input type="text" id="hatcher_humidity" class="form-control" placeholder="e.g. 70%">
         </div>
         <div class="col-md-4">
-          <label class="form-label">Avg Egg / Chick Wt</label>
+          <label class="form-label">Avg Chicks Weight</label>
           <input type="text" id="avg_chick_weight" class="form-control" placeholder="e.g. CHICKS WT 38-40 GM">
         </div>
         <div class="col-md-4">
@@ -254,8 +269,9 @@
         <table class="table table-bordered table-sm mb-0" id="sales-table">
           <thead class="table-light">
             <tr>
-              <th style="min-width:160px;">Trader / Customer Name</th>
+              <th style="min-width:160px;">Customer Name</th>
               <th style="min-width:90px;">Chicks Sold</th>
+              <th style="min-width:80px;">Discount %</th>
               <th style="min-width:90px;">Free Chicks</th>
               <th style="min-width:90px;">Billed Chicks</th>
               <th style="min-width:90px;">Rate (₹)</th>
@@ -270,6 +286,7 @@
             <tr class="table-light fw-bold">
               <td>TOTAL SALES</td>
               <td id="sales-total-sold">0</td>
+              <td></td>
               <td id="sales-total-free">0</td>
               <td id="sales-total-billed">0</td>
               <td></td>
@@ -325,7 +342,7 @@ $(document).ready(function () {
     return `
       <tr>
         <td><input type="text" class="form-control form-control-sm" data-field="sub_lot_flock" value="${row.sub_lot_flock || ""}"></td>
-        <td><input type="text" class="form-control form-control-sm setter-no-input" data-field="setter_no" value="${row.setter_no || ""}" required></td>
+        <td><input type="text" class="form-control form-control-sm setter-no-input" list="setter-no-options" data-field="setter_no" value="${row.setter_no || ""}" required></td>
         <td><input type="number" min="0" class="form-control form-control-sm egg-qty-input" data-field="no_trays" value="${row.no_trays ?? ""}"></td>
         <td><input type="number" min="0" class="form-control form-control-sm egg-qty-input" data-field="tray_size" value="${row.tray_size ?? ""}"></td>
         <td><input type="number" min="0" class="form-control form-control-sm" data-field="total_eggs" readonly value="${row.total_eggs ?? 0}"></td>
@@ -337,18 +354,18 @@ $(document).ready(function () {
     row = row || {};
     return `
       <tr>
-        <td><input type="text" class="form-control form-control-sm" data-field="hatcher_no" value="${row.hatcher_no || ""}" required></td>
+        <td><input type="text" class="form-control form-control-sm" list="hatcher-no-options" data-field="hatcher_no" value="${row.hatcher_no || ""}" required></td>
         <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="infertile_qty" value="${row.infertile_qty || 0}"></td>
         <td><input type="text" class="form-control form-control-sm" data-field="infertile_percent" readonly value="0%"></td>
         <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="early_dead_qty" value="${row.early_dead_qty || 0}"></td>
         <td><input type="text" class="form-control form-control-sm" data-field="ed_percent" readonly value="0%"></td>
         <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="blasting_qty" value="${row.blasting_qty || 0}"></td>
         <td><input type="text" class="form-control form-control-sm" data-field="bq_percent" readonly value="0%"></td>
-        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="transfer_qty" value="${row.transfer_qty || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm" data-field="transfer_qty" readonly value="${row.transfer_qty || 0}"></td>
         <td><input type="text" class="form-control form-control-sm" data-field="tq_percent" readonly value="0%"></td>
         <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="dead_in_shell_qty" value="${row.dead_in_shell_qty || 0}"></td>
         <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="culls_malf_qty" value="${row.culls_malf_qty || 0}"></td>
-        <td><input type="number" min="0" class="form-control form-control-sm hatcher-qty-input" data-field="saleable_chicks" value="${row.saleable_chicks || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm" data-field="saleable_chicks" readonly value="${row.saleable_chicks || 0}"></td>
         <td><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-trash"></i></button></td>
       </tr>`;
   }
@@ -360,8 +377,9 @@ $(document).ready(function () {
       <tr>
         <td><input type="text" class="form-control form-control-sm" data-field="trader_customer_name" value="${row.trader_customer_name || ""}" required></td>
         <td><input type="number" min="0" class="form-control form-control-sm sales-input" data-field="chicks_sold" value="${row.chicks_sold || 0}"></td>
-        <td><input type="number" min="0" class="form-control form-control-sm sales-input" data-field="free_chicks" value="${row.free_chicks || 0}"></td>
-        <td><input type="number" min="0" class="form-control form-control-sm sales-input" data-field="billed_chicks" value="${row.billed_chicks || 0}"></td>
+        <td><input type="number" min="0" step="0.01" class="form-control form-control-sm sales-input" data-field="discount_percent" value="${row.discount_percent || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm" data-field="free_chicks" readonly value="${row.free_chicks || 0}"></td>
+        <td><input type="number" min="0" class="form-control form-control-sm" data-field="billed_chicks" readonly value="${row.billed_chicks || 0}"></td>
         <td><input type="number" min="0" step="0.01" class="form-control form-control-sm sales-input" data-field="rate" value="${row.rate || 0}"></td>
         <td><input type="text" class="form-control form-control-sm" data-field="total_amount" readonly value="${row.total_amount || "0.00"}"></td>
         <td>
@@ -397,6 +415,13 @@ $(document).ready(function () {
     });
     $("#egg-total-trays").text(totalTrays);
     $("#egg-total-eggs").text(totalEggs);
+
+    const balance = setting - totalEggs;
+    const balanceEl = $("#egg-balance-qty");
+    balanceEl.text(balance);
+    balanceEl.toggleClass("text-primary", balance === 0);
+    balanceEl.toggleClass("text-danger", balance !== 0);
+
     recalcHatcherSection();
   }
 
@@ -408,10 +433,14 @@ $(document).ready(function () {
       const infertile = parseFloat(row.find('[data-field="infertile_qty"]').val()) || 0;
       const ed = parseFloat(row.find('[data-field="early_dead_qty"]').val()) || 0;
       const bq = parseFloat(row.find('[data-field="blasting_qty"]').val()) || 0;
-      const tq = parseFloat(row.find('[data-field="transfer_qty"]').val()) || 0;
       const dis = parseFloat(row.find('[data-field="dead_in_shell_qty"]').val()) || 0;
       const culls = parseFloat(row.find('[data-field="culls_malf_qty"]').val()) || 0;
-      const saleable = parseFloat(row.find('[data-field="saleable_chicks"]').val()) || 0;
+
+      const tq = Math.max(settingQty - (infertile + ed + bq), 0);
+      const saleable = Math.max(tq - (dis + culls), 0);
+      row.find('[data-field="transfer_qty"]').val(tq);
+      row.find('[data-field="saleable_chicks"]').val(saleable);
+
       row.find('[data-field="infertile_percent"]').val(settingQty ? (infertile / settingQty * 100).toFixed(2) + "%" : "0%");
       row.find('[data-field="ed_percent"]').val(settingQty ? (ed / settingQty * 100).toFixed(2) + "%" : "0%");
       row.find('[data-field="bq_percent"]').val(settingQty ? (bq / settingQty * 100).toFixed(2) + "%" : "0%");
@@ -440,9 +469,17 @@ $(document).ready(function () {
     $("#sales-tbody tr").each(function () {
       const row = $(this);
       const sold = parseFloat(row.find('[data-field="chicks_sold"]').val()) || 0;
-      const free = parseFloat(row.find('[data-field="free_chicks"]').val()) || 0;
-      const billed = parseFloat(row.find('[data-field="billed_chicks"]').val()) || 0;
+      const discountPercent = parseFloat(row.find('[data-field="discount_percent"]').val()) || 0;
       const rate = parseFloat(row.find('[data-field="rate"]').val()) || 0;
+
+      // Chicks Sold is inclusive of the free-chick bonus baked in by Discount %
+      // (e.g. 102 sold @ 2% = 100 billed + 2 free). Billed Chicks = Sold / (1 + Discount%),
+      // Free Chicks = Sold - Billed Chicks.
+      const billed = Math.round(sold / (1 + discountPercent / 100));
+      const free = Math.round(sold - billed);
+      row.find('[data-field="free_chicks"]').val(free);
+      row.find('[data-field="billed_chicks"]').val(billed);
+
       const amount = billed * rate;
       row.find('[data-field="total_amount"]').val(amount.toFixed(2));
       totalSold += sold; totalFree += free; totalBilled += billed; totalAmount += amount;
@@ -481,7 +518,7 @@ $(document).ready(function () {
     const setterNos = [];
     $("#egg-intake-tbody .setter-no-input").each(function () {
       const val = $(this).val().trim();
-      if (val) setterNos.push(val);
+      if (val && !setterNos.includes(val)) setterNos.push(val);
     });
     $("#primary_machine_nos").val(setterNos.join(","));
   }
@@ -496,10 +533,14 @@ $(document).ready(function () {
   let lastAutoHatchDate = "";
 
   function addDays(dateStr, days) {
-    const d = new Date(dateStr + "T00:00:00");
-    if (isNaN(d.getTime())) return "";
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    const parts = dateStr.split("-").map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return "";
+    const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + days);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   $("#setting_date").on("change", function () {
@@ -541,6 +582,7 @@ $(document).ready(function () {
       batch_flock_no: $("#batch_flock_no").val(),
       supplier_name: $("#supplier_name").val(),
       primary_machine_nos: $("#primary_machine_nos").val(),
+      avg_egg_weight: $("#avg_egg_weight").val(),
       received_date: $("#received_date").val(),
       received_time: $("#received_time").val(),
       setting_date: $("#setting_date").val(),
@@ -569,7 +611,7 @@ $(document).ready(function () {
         "transfer_qty", "dead_in_shell_qty", "culls_malf_qty", "saleable_chicks",
       ]),
       sales_lines: collectRows("#sales-tbody", [
-        "trader_customer_name", "chicks_sold", "free_chicks", "billed_chicks",
+        "trader_customer_name", "chicks_sold", "discount_percent", "free_chicks", "billed_chicks",
         "rate", "total_amount", "payment_status", "delivery_notes",
       ]),
     };
@@ -602,12 +644,19 @@ $(document).ready(function () {
         }
         $("#supplier_name").val(hs.supplier_name).trigger("change");
         $("#primary_machine_nos").val(hs.primary_machine_nos);
+        $("#avg_egg_weight").val(hs.avg_egg_weight);
         $("#received_date").val(hs.received_date);
         $("#received_time").val(hs.received_time);
         $("#setting_date").val(hs.setting_date);
         $("#transfer_date").val(hs.transfer_date);
         $("#hatch_date").val(hs.hatch_date);
         $("#push_time").val(hs.push_time);
+
+        // Treat the loaded transfer/hatch dates as the "auto" baseline so the
+        // next Setting Date change recalculates them, unless the user then
+        // edits transfer/hatch date by hand (which makes it sticky again).
+        lastAutoTransferDate = hs.transfer_date || "";
+        lastAutoHatchDate = hs.hatch_date || "";
         $("#lot_received_qty").val(hs.received_qty);
         $("#lot_breakage_qty").val(hs.breakage_qty);
         $("#lot_crack_qty").val(hs.crack_qty);
