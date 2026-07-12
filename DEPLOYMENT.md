@@ -30,8 +30,13 @@ needed) and uses:
 - **`requirements.txt`** — dependencies.
 - **`Procfile`** — the run command:
   ```
-  web: python manage.py migrate --noinput && gunicorn --config gunicorn.conf.py --bind 0.0.0.0:$PORT Hitech_BIMS.wsgi:application
+  web: python manage.py migrate --noinput && (python manage.py seed_sms_templates || true) && gunicorn --config gunicorn.conf.py --bind 0.0.0.0:$PORT Hitech_BIMS.wsgi:application
   ```
+  `seed_sms_templates` is idempotent — it creates any SMS templates missing
+  from the database and leaves existing (possibly admin-edited) ones untouched,
+  so new templates ship automatically on deploy. It's wrapped in
+  `(... || true)` so a seeding hiccup can never block Gunicorn from starting;
+  `migrate` still gates startup as before.
 
 ### Build Command
 
@@ -56,7 +61,7 @@ overrides the `Procfile` if both are present — don't set both to different
 things):
 
 ```bash
-python manage.py migrate --noinput && gunicorn --config gunicorn.conf.py --bind 0.0.0.0:$PORT Hitech_BIMS.wsgi:application
+python manage.py migrate --noinput && (python manage.py seed_sms_templates || true) && gunicorn --config gunicorn.conf.py --bind 0.0.0.0:$PORT Hitech_BIMS.wsgi:application
 ```
 
 Running `migrate` as part of the run command (rather than a separate step)
@@ -378,9 +383,15 @@ Same required variables as Part A2, plus for this path specifically:
 ```bash
 source hitech_env/bin/activate
 python manage.py migrate
+python manage.py seed_sms_templates
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
 ```
+
+On the Droplet path the run command comes from `deploy/gunicorn.service`, not
+the `Procfile`, so seeding isn't automatic there. Run `seed_sms_templates`
+after each `migrate` (e.g. add it to your GitHub Actions deploy step, right
+after the migrate command). It's idempotent, so re-running it is harmless.
 
 ## B8. Gunicorn (systemd)
 
