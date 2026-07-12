@@ -17,25 +17,6 @@ from hr.models import Employee
 from .models import UserProfile
 
 
-def register(request):
-    if request.method == "POST":
-        username = request.POST["username"]
-        password = request.POST["password"]
-        department = request.POST.get("department")
-        role = request.POST.get("role")
-
-        if User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists.")
-        else:
-            user = User.objects.create_user(username=username, password=password)
-            # Create UserProfile if additional fields are needed
-            UserProfile.objects.create(user=user, department=department, role=role)
-            messages.success(request, "Registration successful!")
-            return redirect("login")
-
-    return render(request, "register.html")
-
-
 from django.contrib.auth import login as auth_login, logout as auth_logout
 
 
