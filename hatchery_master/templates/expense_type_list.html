@@ -44,10 +44,10 @@
     </div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Manage the expense categories used on Hatchery Expense entries</div>
-        <a href="{% url 'expense_type_create' %}" class="btn btn-primary">
+        {% if page_perms.add %}<a href="{% url 'expense_type_create' %}" class="btn btn-primary">
     <i class="fas fa-plus"></i>
     Add
-  </a>
+  </a>{% endif %}
     </div>
 </div>
 
@@ -86,17 +86,17 @@
                   </button>
                 {% else %}
                   <a href="{% url 'expense_type_edit' expense_type.id %}">
-                    <button class="btn btn-outline-warning btn-sm" title="Edit">
+                    {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm" title="Edit">
                       <i class="fas fa-pen"></i>
-                    </button>
+                    </button>{% endif %}
                   </a>
                 {% endif %}
-                <button class="btn btn-outline-danger btn-sm delete-expense-type"
+                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-expense-type"
                         data-id="{{ expense_type.id }}"
                         {% if expense_type.is_locked %}disabled{% endif %}
                         title="Delete">
                   <i class="fas fa-trash"></i>
-                </button>
+                </button>{% endif %}
                 <form class="d-inline" method="post" action="{% url 'expense_type_toggle_active' expense_type.id %}">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-outline-info btn-sm"

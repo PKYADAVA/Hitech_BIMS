@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Sensors — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='sensors' %}
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-microchip"></i>
+    Sensors
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">T310 sensors discovered by polling, mapped to setters</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-table"></i> Sensor List</span>
+    <div class="btn-group btn-group-sm" role="group" id="tempUnitToggle" aria-label="Temperature unit">
+      <input type="radio" class="btn-check" name="tempUnit" value="C" id="unitC" autocomplete="off">
+      <label class="btn btn-outline-secondary" for="unitC">°C</label>
+      <input type="radio" class="btn-check" name="tempUnit" value="F" id="unitF" autocomplete="off">
+      <label class="btn btn-outline-secondary" for="unitF">°F</label>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="sensorTable" class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Sensor</th>
+            <th>Hub</th>
+            <th>Setter</th>
+            <th>Model</th>
+            <th>Temperature</th>
+            <th>Humidity</th>
+            <th>Battery</th>
+            <th>Signal</th>
+            <th>Status</th>
+            <th>Last Update</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sensor in sensors %}
+          <tr>
+            <td>
+              {{ sensor.alias|default:sensor }}
+              {% if not sensor.is_active %}<span class="badge bg-secondary ms-1">Inactive</span>{% endif %}
+            </td>
+            <td>{{ sensor.hub.name }}</td>
+            <td>{% if sensor.setter %}{{ sensor.setter.setter_no }} ({{ sensor.setter.hatchery.hatchery_name }}){% else %}<span class="badge bg-warning text-dark">Unmapped</span>{% endif %}</td>
+            <td>{{ sensor.get_device_type_display }}</td>
+            <td class="cell-temp {% if sensor.is_temperature_out_of_range %}text-danger fw-bold{% endif %}"
+                data-temp-c="{{ sensor.temperature_c|default_if_none:'' }}"
+                title="{% if sensor.is_temperature_out_of_range %}Outside configured range{% endif %}">{{ sensor.temperature_c|default:"—" }}</td>
+            <td class="{% if sensor.is_humidity_out_of_range %}text-danger fw-bold{% endif %}"
+                title="{% if sensor.is_humidity_out_of_range %}Outside configured range{% endif %}">{{ sensor.humidity_pct|default:"—" }}</td>
+            <td class="{% if sensor.is_battery_low %}text-danger fw-bold{% endif %}"
+                title="{% if sensor.is_battery_low %}Low battery{% endif %}">{{ sensor.battery_pct|default:"—" }}</td>
+            <td>{{ sensor.signal_strength|default:"—" }}</td>
+            <td>
+              <span class="badge {% if sensor.status == 'online' %}bg-success{% elif sensor.status == 'offline' %}bg-danger{% elif sensor.status == 'error' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                {{ sensor.get_status_display }}
+              </span>
+            </td>
+            <td>{{ sensor.last_update|date:"Y-m-d H:i:s"|default:"—" }}</td>
+            <td class="text-center">
+              <a href="{% url 'env_sensor_edit' sensor.id %}">
+                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm" title="Edit / Map to Setter">
+                  <i class="fas fa-pen"></i>
+                </button>{% endif %}
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'js/environmental_monitoring/temp_unit.js' %}"></script>
+<script>
+  function applyTempUnitToSensorTable() {
+    document.querySelectorAll("#sensorTable .cell-temp").forEach(function (cell) {
+      cell.textContent = EnvTempUnit.format(cell.dataset.tempC);
+    });
+  }
+
+  $(document).ready(function () {
+    $('#sensorTable').DataTable({
+      paging: true, searching: true, ordering: true, info: true, responsive: true,
+      language: { emptyTable: "No sensors found" },
+    });
+    EnvTempUnit.initToggle("#tempUnitToggle", applyTempUnitToSensorTable);
+    applyTempUnitToSensorTable();
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

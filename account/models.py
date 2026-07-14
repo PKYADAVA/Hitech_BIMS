@@ -321,4 +321,48 @@ class BankCode(models.Model):
         indexes = [
             models.Index(fields=['bank_code']),
             models.Index(fields=['bank_name']),
-        ]        
+        ]
+
+
+class CompanyProfile(models.Model):
+    """Single record holding the company's own letterhead/bank details, used on printed documents."""
+    name = models.CharField(max_length=255, default="Company Name")
+    address = models.TextField(blank=True)
+    state = models.CharField(max_length=50, blank=True, help_text=_("Company's own state, for GST place-of-supply comparisons"))
+    mobile = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    gstin = models.CharField(max_length=15, blank=True)
+    pan = models.CharField(max_length=10, blank=True)
+    bank_name = models.CharField(max_length=100, blank=True)
+    bank_account_no = models.CharField(max_length=50, blank=True)
+    ifsc_code = models.CharField(max_length=20, blank=True)
+    bank_branch = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        verbose_name = _("Company Profile")
+        verbose_name_plural = _("Company Profile")
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class TermsConditions(models.Model):
+    class PartyType(models.TextChoices):
+        SUPPLIER = "Supplier", _("Supplier")
+        CUSTOMER = "Customer", _("Customer")
+
+    type = models.CharField(max_length=100, null=True, blank=True)
+    party_type = models.CharField(max_length=20, choices=PartyType.choices, default=PartyType.CUSTOMER)
+    condition = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return self.type or "Unnamed Terms and Condition"

@@ -7,7 +7,7 @@ from django.views import View
 from django.http import Http404, JsonResponse
 from django.db.models import F
 from django.core.files.storage import default_storage
-from .models import Supplier, TaxMaster, TermsConditions
+from .models import Supplier, TaxMaster
 import json
 
 @login_required
@@ -59,11 +59,6 @@ def supplier(request):
     context = {"states_and_union_territories": states_and_union_territories}
     return render(request, "supplier.html", context)
 
-
-
-@login_required()
-def terms(request):
-    return render(request, "t&c.html")
 
 
 
@@ -318,63 +313,3 @@ class TaxMasterAPI(View):
         return JsonResponse({"message": "TaxMaster deleted"})
 
 
-@method_decorator(login_required, name="dispatch")
-class TermsConditionsAPI(View):
-
-    def get(self, request, id=None):
-        if id:
-            try:
-                terms_conditions = TermsConditions.objects.get(id=id)
-                return JsonResponse(
-                    {
-                        "id": terms_conditions.id,
-                        "type": terms_conditions.type,
-                        "condition": terms_conditions.condition,
-                    }
-                )
-            except TermsConditions.DoesNotExist:
-                raise Http404("TermsConditions not found")
-        else:
-            terms_conditions = list(
-                TermsConditions.objects.values("id", "type", "condition")
-            )
-            return JsonResponse(terms_conditions, safe=False)
-
-    def post(self, request):
-        try:
-            data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        TermsConditions.objects.create(
-            type=data.get("type"),
-            condition=data.get("condition"),
-        )
-        return JsonResponse({"message": "TermsConditions created"}, status=201)
-
-    def put(self, request, id):
-        try:
-            terms_conditions = TermsConditions.objects.get(id=id)
-        except TermsConditions.DoesNotExist:
-            raise Http404("TermsConditions not found")
-
-        try:
-            data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        terms_conditions.type = data.get("type", terms_conditions.type)
-        terms_conditions.condition = data.get("condition", terms_conditions.condition)
-        terms_conditions.save()
-
-        return JsonResponse({"message": "TermsConditions updated"})
-
-    def delete(self, request, id):
-        try:
-            terms_conditions = TermsConditions.objects.get(id=id)
-        except TermsConditions.DoesNotExist:
-            raise Http404("TermsConditions not found")
-
-        terms_conditions.delete()
-        return JsonResponse({"message": "TermsConditions deleted"})
-    

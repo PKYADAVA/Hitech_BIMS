@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
 from purchase.models import Supplier
+from sales.models import Customer
 
 
 class HatchSetting(models.Model):
@@ -471,3 +472,93 @@ class EggGradingHatchItem(models.Model):
 
     def __str__(self):
         return f"{self.hatch_item} ({self.egg_grading.transaction_no})"
+
+
+class DeliveryChallan(models.Model):
+    """Dispatch document raised by the hatchery transaction team."""
+    challan_no = models.CharField(max_length=30, unique=True, editable=False, blank=True)
+    date = models.DateField()
+    place_of_supply = models.CharField(max_length=50, blank=True)
+    overall_discount = models.DecimalField(max_digits=12, decimal_places=2, default=0, blank=True)
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="hatchery_challans")
+    shipping_address = models.TextField(blank=True)
+    transport_mode = models.CharField(max_length=20, default="Road")
+    vehicle_no = models.CharField(max_length=50, blank=True)
+    driver_name = models.CharField(max_length=100, blank=True)
+    driver_mobile = models.CharField(max_length=20, blank=True)
+    transporter_name = models.CharField(max_length=150, blank=True)
+    transport_document_no = models.CharField(max_length=50, blank=True)
+    transport_document_date = models.DateField(null=True, blank=True)
+    eway_bill_no = models.CharField(max_length=50, blank=True)
+    eway_bill_date = models.DateField(null=True, blank=True)
+    print_price_details = models.BooleanField(default=True)
+    terms = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.challan_no
+
+    @classmethod
+    def next_challan_no(cls, on_date=None):
+        from django.utils import timezone
+        current_date = on_date or timezone.localdate()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        financial_year = f"{start_year % 100:02d}-{(start_year + 1) % 100:02d}"
+        prefix = f"HF/DC/{financial_year}/"
+        serials = []
+        for number in cls.objects.filter(challan_no__startswith=prefix).values_list("challan_no", flat=True):
+            match = re.match(r"^HF/DC/\d{2}-\d{2}/(\d+)$", number or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.challan_no:
+            self.challan_no = self.next_challan_no(self.date)
+        super().save(*args, **kwargs)
+
+    def total_quantity(self):
+        return self.items.aggregate(total=models.Sum("quantity"))["total"] or 0
+
+    def total_units(self):
+        return self.items.aggregate(total=models.Sum("units"))["total"] or 0
+
+    def total_amount(self):
+        return self.items.aggregate(total=models.Sum("amount"))["total"] or 0
+
+    def total_tax(self):
+        total = 0
+        for row in self.items.all():
+            subtotal = row.quantity * row.price * (1 - row.discount_percent / 100)
+            total += subtotal * row.tax_percent / 100
+        return total
+
+    def grand_total(self):
+        return self.total_amount() - (self.overall_discount or 0)
+
+
+class DeliveryChallanItem(models.Model):
+    challan = models.ForeignKey(DeliveryChallan, on_delete=models.CASCADE, related_name="items")
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="delivery_challan_items")
+    packing_size = models.DecimalField(max_digits=10, decimal_places=2, default=1)
+    units = models.DecimalField(max_digits=10, decimal_places=2, default=1)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    unit = models.CharField(max_length=30, blank=True)
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["id"]
+
+    def save(self, *args, **kwargs):
+        if not self.quantity:
+            self.quantity = self.packing_size * self.units
+        subtotal = self.quantity * self.price * (1 - self.discount_percent / 100)
+        self.amount = subtotal * (1 + self.tax_percent / 100)
+        super().save(*args, **kwargs)

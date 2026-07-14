@@ -1,7 +1,7 @@
 import csv
 import io
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, Http404
 from django.views import View
@@ -10,7 +10,11 @@ from django.db import transaction
 import json
 import openpyxl
 
-from account.models import ChartOfAccount, CoACategory, FinancialYear, Schedule
+from django.contrib import messages
+from django.core.exceptions import ValidationError
+
+from account.models import ChartOfAccount, CoACategory, CompanyProfile, FinancialYear, Schedule, TermsConditions
+from hatchery_master.models import STATES_AND_TERRITORIES
 
 # Create your views here.
 @login_required
@@ -520,4 +524,103 @@ class ChartOfAccountsAPI(View):
         
         coa.delete()
         return JsonResponse({"message": "Chart of Account deleted"})
-    
+
+
+@login_required
+def company_profile(request):
+    profile = CompanyProfile.get_solo()
+
+    if request.method == "POST":
+        profile.name = request.POST.get("name", "").strip()
+        profile.address = request.POST.get("address", "").strip()
+        profile.state = request.POST.get("state", "").strip()
+        profile.mobile = request.POST.get("mobile", "").strip()
+        profile.email = request.POST.get("email", "").strip()
+        profile.gstin = request.POST.get("gstin", "").strip()
+        profile.pan = request.POST.get("pan", "").strip()
+        profile.bank_name = request.POST.get("bank_name", "").strip()
+        profile.bank_account_no = request.POST.get("bank_account_no", "").strip()
+        profile.ifsc_code = request.POST.get("ifsc_code", "").strip()
+        profile.bank_branch = request.POST.get("bank_branch", "").strip()
+        try:
+            profile.full_clean()
+            profile.save()
+            messages.success(request, "Company profile updated successfully.")
+            return redirect("company_profile")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "company_profile.html", {
+        "profile": profile,
+        "states_and_union_territories": STATES_AND_TERRITORIES,
+    })
+
+
+@login_required()
+def terms(request):
+    return render(request, "t&c.html", {"party_types": TermsConditions.PartyType.choices})
+
+
+@method_decorator(login_required, name="dispatch")
+class TermsConditionsAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                terms_conditions = TermsConditions.objects.get(id=id)
+                return JsonResponse(
+                    {
+                        "id": terms_conditions.id,
+                        "type": terms_conditions.type,
+                        "party_type": terms_conditions.party_type,
+                        "condition": terms_conditions.condition,
+                    }
+                )
+            except TermsConditions.DoesNotExist:
+                raise Http404("TermsConditions not found")
+        else:
+            terms_conditions = list(
+                TermsConditions.objects.values("id", "type", "party_type", "condition")
+            )
+            return JsonResponse(terms_conditions, safe=False)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)  # Expect JSON payload
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        TermsConditions.objects.create(
+            type=data.get("type"),
+            party_type=data.get("party_type") or TermsConditions.PartyType.CUSTOMER,
+            condition=data.get("condition"),
+        )
+        return JsonResponse({"message": "TermsConditions created"}, status=201)
+
+    def put(self, request, id):
+        try:
+            terms_conditions = TermsConditions.objects.get(id=id)
+        except TermsConditions.DoesNotExist:
+            raise Http404("TermsConditions not found")
+
+        try:
+            data = json.loads(request.body)  # Expect JSON payload
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        terms_conditions.type = data.get("type", terms_conditions.type)
+        terms_conditions.party_type = data.get("party_type", terms_conditions.party_type)
+        terms_conditions.condition = data.get("condition", terms_conditions.condition)
+        terms_conditions.save()
+
+        return JsonResponse({"message": "TermsConditions updated"})
+
+    def delete(self, request, id):
+        try:
+            terms_conditions = TermsConditions.objects.get(id=id)
+        except TermsConditions.DoesNotExist:
+            raise Http404("TermsConditions not found")
+
+        terms_conditions.delete()
+        return JsonResponse({"message": "TermsConditions deleted"})
+

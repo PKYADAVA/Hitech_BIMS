@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Environmental Monitoring — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='dashboard' %}
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-temperature-half"></i>
+    Environmental Monitoring
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Live Tapo H100 / T310 hub &amp; sensor readings</div>
+  </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon blue"><i class="fas fa-hub"></i></div>
+      <div>
+        <div class="stat-card-value">{{ total_hubs }}</div>
+        <div class="stat-card-label">Total Hubs</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon green"><i class="fas fa-wifi"></i></div>
+      <div>
+        <div class="stat-card-value">{{ online_hubs }}</div>
+        <div class="stat-card-label">Online Hubs</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon red"><i class="fas fa-plug-circle-xmark"></i></div>
+      <div>
+        <div class="stat-card-value">{{ offline_hubs }}</div>
+        <div class="stat-card-label">Offline Hubs</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon cyan"><i class="fas fa-microchip"></i></div>
+      <div>
+        <div class="stat-card-value">{{ total_sensors }}</div>
+        <div class="stat-card-label">Total Sensors</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon amber"><i class="fas fa-temperature-high"></i></div>
+      <div>
+        <div class="stat-card-value">{{ temperature_alerts }}</div>
+        <div class="stat-card-label">Temperature Alerts</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon amber"><i class="fas fa-droplet"></i></div>
+      <div>
+        <div class="stat-card-value">{{ humidity_alerts }}</div>
+        <div class="stat-card-label">Humidity Alerts</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon red"><i class="fas fa-battery-quarter"></i></div>
+      <div>
+        <div class="stat-card-value">{{ low_battery_sensors }}</div>
+        <div class="stat-card-label">Low Battery Sensors</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card">
+      <div class="stat-card-icon red"><i class="fas fa-triangle-exclamation"></i></div>
+      <div>
+        <div class="stat-card-value">{{ communication_errors }}</div>
+        <div class="stat-card-label">Communication Errors</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Sensor Table -->
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-satellite-dish"></i> Live Sensor Readings</span>
+    <div class="d-flex align-items-center gap-2">
+      <div class="btn-group btn-group-sm" role="group" id="tempUnitToggle" aria-label="Temperature unit">
+        <input type="radio" class="btn-check" name="tempUnit" value="C" id="unitC" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="unitC">°C</label>
+        <input type="radio" class="btn-check" name="tempUnit" value="F" id="unitF" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="unitF">°F</label>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn" title="Refresh now">
+        <i class="fas fa-rotate"></i>
+      </button>
+      <span class="badge bg-secondary" id="lastRefreshBadge">Updating…</span>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="liveSensorTable" class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Sensor</th>
+            <th>Hub</th>
+            <th>Setter</th>
+            <th>Temperature</th>
+            <th>Humidity</th>
+            <th>Battery</th>
+            <th>Status</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody id="liveSensorBody">
+          {% for sensor in sensors %}
+          <tr data-sensor-id="{{ sensor.id }}">
+            <td class="cell-alias">{{ sensor.alias|default:sensor }}</td>
+            <td class="cell-hub">{{ sensor.hub.name }}</td>
+            <td class="cell-setter">{{ sensor.setter.setter_no|default:"—" }}</td>
+            <td class="cell-temp {% if sensor.is_temperature_out_of_range %}text-danger fw-bold{% endif %}"
+                data-temp-c="{{ sensor.temperature_c|default_if_none:'' }}">{{ sensor.temperature_c|default:"—" }}</td>
+            <td class="cell-humidity {% if sensor.is_humidity_out_of_range %}text-danger fw-bold{% endif %}">{{ sensor.humidity_pct|default:"—" }}</td>
+            <td class="cell-battery {% if sensor.is_battery_low %}text-danger fw-bold{% endif %}">{{ sensor.battery_pct|default:"—" }}</td>
+            <td class="cell-status">
+              <span class="badge {% if sensor.status == 'online' %}bg-success{% elif sensor.status == 'offline' %}bg-danger{% elif sensor.status == 'error' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                {{ sensor.get_status_display }}
+              </span>
+            </td>
+            <td class="cell-last-update">{{ sensor.last_update|date:"Y-m-d H:i:s"|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted">No sensors yet — add a hub and run a poll.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- History Charts -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-chart-line"></i> Sensor History</span>
+    <select id="historySensorSelect" class="form-select form-select-sm" style="width:auto;">
+      {% for sensor in sensors %}
+      <option value="{{ sensor.id }}">{{ sensor.alias|default:sensor }} ({{ sensor.hub.name }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6">
+        <canvas id="temperatureChart" height="220"></canvas>
+      </div>
+      <div class="col-md-6">
+        <canvas id="humidityChart" height="220"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'js/environmental_monitoring/temp_unit.js' %}"></script>
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>
+$(function () {
+  const statusColor = { online: "bg-success", offline: "bg-danger", error: "bg-warning text-dark", unknown: "bg-secondary" };
+
+  function applyTempUnitToLiveTable() {
+    document.querySelectorAll("#liveSensorBody .cell-temp").forEach(function (cell) {
+      cell.textContent = EnvTempUnit.format(cell.dataset.tempC);
+    });
+  }
+
+  function refreshLiveTable() {
+    fetch("{% url 'env_api_status' %}")
+      .then(r => r.json())
+      .then(data => {
+        data.sensors.forEach(sensor => {
+          const row = document.querySelector(`#liveSensorBody tr[data-sensor-id="${sensor.id}"]`);
+          if (!row) return;
+          const tempCell = row.querySelector(".cell-temp");
+          tempCell.dataset.tempC = sensor.temperature_c ?? "";
+          tempCell.textContent = EnvTempUnit.format(sensor.temperature_c);
+          tempCell.classList.toggle("text-danger", sensor.temp_out_of_range);
+          tempCell.classList.toggle("fw-bold", sensor.temp_out_of_range);
+
+          const humidityCell = row.querySelector(".cell-humidity");
+          humidityCell.textContent = sensor.humidity_pct ?? "—";
+          humidityCell.classList.toggle("text-danger", sensor.humidity_out_of_range);
+          humidityCell.classList.toggle("fw-bold", sensor.humidity_out_of_range);
+
+          const batteryCell = row.querySelector(".cell-battery");
+          batteryCell.textContent = sensor.battery_pct ?? "—";
+          batteryCell.classList.toggle("text-danger", sensor.battery_low);
+          batteryCell.classList.toggle("fw-bold", sensor.battery_low);
+          row.querySelector(".cell-last-update").textContent = sensor.last_update ?? "—";
+          const badge = row.querySelector(".cell-status .badge");
+          badge.className = "badge " + (statusColor[sensor.status] || "bg-secondary");
+          badge.textContent = sensor.status.charAt(0).toUpperCase() + sensor.status.slice(1);
+        });
+        document.getElementById("lastRefreshBadge").textContent = "Updated " + new Date().toLocaleTimeString();
+      })
+      .catch(() => {
+        document.getElementById("lastRefreshBadge").textContent = "Refresh failed";
+      });
+  }
+
+  // Wire up the live sensor table first, independent of anything chart
+  // related below - a Chart.js failure (CDN blocked, network hiccup) must
+  // never be able to stop the live table from refreshing.
+  EnvTempUnit.initToggle("#tempUnitToggle", function () {
+    applyTempUnitToLiveTable();
+    if (typeof refreshHistory === "function") refreshHistory();
+  });
+  applyTempUnitToLiveTable();
+  refreshLiveTable();
+  setInterval(refreshLiveTable, 5000);
+
+  document.getElementById("manualRefreshBtn").addEventListener("click", function () {
+    refreshLiveTable();
+    if (typeof refreshHistory === "function") refreshHistory();
+  });
+
+  let temperatureChart, humidityChart, refreshHistory;
+
+  try {
+    const tempCtx = document.getElementById("temperatureChart");
+    const humidityCtx = document.getElementById("humidityChart");
+    temperatureChart = new Chart(tempCtx, {
+      type: "line",
+      data: { labels: [], datasets: [{ label: "Temperature", data: [], borderColor: "#dc2626", tension: 0.3 }] },
+      options: { responsive: true, scales: { x: { ticks: { maxTicksLimit: 8 } } } },
+    });
+    humidityChart = new Chart(humidityCtx, {
+      type: "line",
+      data: { labels: [], datasets: [{ label: "Humidity (%)", data: [], borderColor: "#0891b2", tension: 0.3 }] },
+      options: { responsive: true, scales: { x: { ticks: { maxTicksLimit: 8 } } } },
+    });
+
+    refreshHistory = function () {
+      const sensorId = $("#historySensorSelect").val();
+      if (!sensorId) return;
+      fetch(`/environmental-monitoring/api/sensor/${sensorId}/history/`)
+        .then(r => r.json())
+        .then(data => {
+          const labels = data.readings.map(r => new Date(r.timestamp).toLocaleTimeString());
+          temperatureChart.data.labels = labels;
+          temperatureChart.data.datasets[0].label = "Temperature (" + EnvTempUnit.unitLabel() + ")";
+          temperatureChart.data.datasets[0].data = data.readings.map(r => EnvTempUnit.toDisplayValue(r.temperature_c));
+          temperatureChart.update();
+          humidityChart.data.labels = labels;
+          humidityChart.data.datasets[0].data = data.readings.map(r => r.humidity_pct);
+          humidityChart.update();
+        });
+    };
+
+    refreshHistory();
+    $("#historySensorSelect").on("change", refreshHistory);
+    setInterval(refreshHistory, 5000);
+  } catch (e) {
+    console.error("Chart initialization failed - live sensor table is unaffected:", e);
+  }
+});
+</script>
+{% endblock %}

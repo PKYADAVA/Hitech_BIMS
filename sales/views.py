@@ -1,18 +1,19 @@
 #pylint: disable=no-member
 
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.http import require_POST
 from django.http import Http404, JsonResponse
-from django.db.models import F
-from django.core.files.storage import default_storage
+from django.utils import timezone
 
 import json
 
 from inventory.models import Item, ItemCategory
-from purchase.models import CreditTerm, Supplier, VendorGroup
-from sales.models import Customer, CustomerGroup, SalesPriceMaster
+from sales.models import Customer, CustomerGroup, CustomerShippingAddress, SalesPriceMaster
 
 states_and_union_territories = [
             "Andhra Pradesh",
@@ -55,14 +56,120 @@ states_and_union_territories = [
 
 @login_required
 def customer(request):
-    context = {
-        "customer_groups": CustomerGroup.objects.all(),
-        "contact_types": Customer._meta.get_field('contact_type').choices,
-        "supplier_groups": Supplier.objects.all(),
-        "credit_terms": CreditTerm.objects.all(),
+    return render(request, "customer.html", {"customers": Customer.objects.all()})
+
+
+def _customer_form_context(customer=None):
+    return {
+        "customer": customer,
+        "next_code": Customer.next_code() if not customer else None,
         "states_and_union_territories": states_and_union_territories,
-    } 
-    return render(request, "customer.html", context)
+        "contact_types": Customer.ContactType.choices,
+        "party_categories": Customer.PartyCategory.choices,
+        "to_pay_to_receive_choices": Customer.ToPayToReceive.choices,
+        "today": timezone.localdate().isoformat(),
+    }
+
+
+def _apply_posted_customer_fields(instance, request):
+    instance.name = request.POST.get("name", "").strip()
+    instance.address = request.POST.get("address", "").strip()
+    instance.mobile = request.POST.get("mobile", "").strip()
+    instance.mobile_2 = request.POST.get("mobile_2", "").strip()
+    instance.email = request.POST.get("email", "").strip()
+    instance.pan_tin = request.POST.get("pan_tin", "").strip()
+    instance.aadhar = request.POST.get("aadhar", "").strip()
+    instance.contact_type = request.POST.get("contact_type") or Customer.ContactType.BOTH
+    instance.party_category = request.POST.get("party_category") or None
+    instance.gstin = request.POST.get("gstin", "").strip()
+    instance.state = request.POST.get("state", "").strip()
+    instance.opening_balance = request.POST.get("opening_balance") or None
+    instance.to_pay_to_receive = request.POST.get("to_pay_to_receive") or None
+    instance.as_on_date = request.POST.get("as_on_date") or None
+    instance.note = request.POST.get("note", "").strip()
+    instance.credit_period = request.POST.get("credit_period") or None
+    instance.credit_limit = request.POST.get("credit_limit") or 0
+    instance.country = request.POST.get("country", "").strip()
+    instance.currency = request.POST.get("currency", "").strip()
+    instance.account_no = request.POST.get("account_no", "").strip()
+    instance.ifsc_code = request.POST.get("ifsc_code", "").strip()
+    instance.bank_details = request.POST.get("bank_details", "").strip()
+    instance.terms = request.POST.get("terms", "").strip()
+    instance.agreement_start_date = request.POST.get("agreement_start_date") or None
+    instance.agreement_months = request.POST.get("agreement_months") or None
+    if request.FILES.get("agreement_copy"):
+        instance.agreement_copy = request.FILES["agreement_copy"]
+    if request.FILES.get("other_documents"):
+        instance.other_documents = request.FILES["other_documents"]
+
+
+@login_required(login_url="login")
+def create_customer(request):
+    """Add a new customer master record."""
+    if request.method == "POST":
+        instance = Customer()
+        _apply_posted_customer_fields(instance, request)
+        try:
+            instance.full_clean()
+            instance.save()
+            _create_posted_shipping_addresses(instance, request)
+            messages.success(request, "Customer added successfully.")
+            return redirect("customer")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "customer_form.html", _customer_form_context())
+
+
+def _create_posted_shipping_addresses(instance, request):
+    try:
+        addresses = json.loads(request.POST.get("shipping_addresses_json") or "[]")
+    except json.JSONDecodeError:
+        addresses = []
+    if not addresses and instance.address:
+        addresses = [{"label": instance.address[:100], "address": instance.address, "is_default": True}]
+    default_assigned = False
+    for entry in addresses:
+        label = (entry.get("label") or "").strip()
+        address_text = (entry.get("address") or "").strip()
+        if not label or not address_text:
+            continue
+        is_default = bool(entry.get("is_default")) and not default_assigned
+        default_assigned = default_assigned or is_default
+        CustomerShippingAddress.objects.create(
+            customer=instance, label=label, address=address_text,
+            contact_person=(entry.get("contact_person") or "").strip(),
+            mobile=(entry.get("mobile") or "").strip(),
+            is_default=is_default,
+        )
+
+
+@login_required(login_url="login")
+def edit_customer(request, id):
+    """Edit an existing customer master record."""
+    instance = get_object_or_404(Customer, id=id)
+
+    if request.method == "POST":
+        _apply_posted_customer_fields(instance, request)
+        try:
+            instance.full_clean()
+            instance.save()
+            messages.success(request, "Customer updated successfully.")
+            return redirect("customer")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "customer_form.html", _customer_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_customer(request, id):
+    """Delete a customer master record."""
+    instance = get_object_or_404(Customer, id=id)
+    instance.delete()
+    messages.success(request, "Customer deleted successfully.")
+    return redirect("customer")
 
 
 @login_required
@@ -76,108 +183,66 @@ def sales_price(request):
 
 
 @method_decorator(login_required, name="dispatch")
-class CustomerAPI(View):
-    def get(self, request, id=None):
+class CustomerShippingAddressAPI(View):
+    """Customer Master addresses, also used by transaction forms."""
+    def get(self, request, customer_id, id=None):
+        customer = Customer.objects.get(id=customer_id)
+        addresses = customer.shipping_addresses.all()
         if id:
-            try:
-                customer = Customer.objects.get(id=id)
-                # Returning all fields from the customer model
-                customer_data = {
-                    "id": customer.id,
-                    "name": customer.name,
-                    "address": customer.address,
-                    "place": customer.place,
-                    "phone": customer.phone,
-                    "mobile": customer.mobile,
-                    "contact_type": customer.contact_type,
-                    "pan_tin": customer.pan_tin,
-                    "credit_limit": customer.credit_limit,
-                    "state": customer.state,
-                    "note": customer.note,
-                    "supplier_address": customer.supplier_address,
-                    "customer_group": customer.customer_group.id if customer.customer_group else None,
-                    "credit_term": customer.credit_term.id if customer.credit_term else None,
-                }
-                return JsonResponse(customer_data)
-            except Customer.DoesNotExist:
-                raise Http404("Customer not found")
-        else:
-            # For all customers, retrieve all relevant fields
-            customers = list(Customer.objects.values(
-                "id", "name", "address", "place", "phone", "mobile", "contact_type", 
-                "pan_tin", "credit_limit", "state", "note", "supplier_address",
-                "customer_group", "credit_term"
-            ))
-            return JsonResponse(customers, safe=False)
+            addresses = addresses.filter(id=id)
+        result = [{
+            "id": address.id, "label": address.label, "address": address.address,
+            "contact_person": address.contact_person, "mobile": address.mobile,
+            "is_default": address.is_default,
+        } for address in addresses]
+        if id:
+            if not result:
+                return JsonResponse({"error": "Shipping address not found"}, status=404)
+            return JsonResponse(result[0])
+        return JsonResponse(result, safe=False)
 
-    def post(self, request):
-        try:
-            data = json.loads(request.body)  # Expect JSON payload
-        except json.JSONDecodeError as e:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-
-        try:
-            # Fetch optional related fields and handle null/blank cases
-            customer_group = None
-            if "customer_group" in data:
-                customer_group = CustomerGroup.objects.filter(id=data["customer_group"]).first()
-
-            supplier_group = None
-            if "supplier_group" in data:
-                supplier_group = VendorGroup.objects.filter(id=data["supplier_group"]).first()
-
-            credit_term = None
-            if "credit_term" in data:
-                credit_term = CreditTerm.objects.filter(id=data["credit_term"]).first()
-
-            # Create a new Customer instance
-            customer = Customer.objects.create(
-                name=data["name"],
-                address=data.get("address", ""),
-                place=data.get("place", ""),
-                phone=data.get("phone"),
-                mobile=data.get("mobile"),
-                contact_type=data.get("contact_type", "Both"),
-                pan_tin=data.get("pan_tin", ""),
-                customer_group=customer_group,
-                supplier_group=supplier_group,
-                credit_limit=data.get("credit_limit", 0.00),
-                credit_term=credit_term,
-                gstin=data.get("gstin", ""),
-                state=data.get("state", ""),
-                note=data.get("note", ""),
-                supplier_address=data.get("supplier_address", ""),
-            )
-
-            return JsonResponse({"message": "Customer created", "id": customer.id}, status=201)
-
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
-
-    def put(self, request, id):
-        try:
-            customer = Customer.objects.get(id=id)
-        except Customer.DoesNotExist:
-            return JsonResponse({"error": "Customer not found"}, status=404)
-
+    def post(self, request, customer_id):
         try:
             data = json.loads(request.body)
-        except json.JSONDecodeError as e:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-        customer.name = data.get("name", customer.name)
-        customer.save()
-        return JsonResponse({"message": "Customer updated"})
-
-    def delete(self, request, id):
-        try:
-            customer = Customer.objects.get(id=id)
+            customer = Customer.objects.get(id=customer_id)
+            if not data.get("label") or not data.get("address"):
+                return JsonResponse({"error": "Address label and address are required"}, status=400)
+            if data.get("is_default"):
+                customer.shipping_addresses.update(is_default=False)
+            address = CustomerShippingAddress.objects.create(
+                customer=customer, label=data["label"], address=data["address"],
+                contact_person=data.get("contact_person", ""), mobile=data.get("mobile", ""),
+                is_default=bool(data.get("is_default")),
+            )
+            return JsonResponse({"id": address.id, "message": "Shipping address saved"}, status=201)
         except Customer.DoesNotExist:
             return JsonResponse({"error": "Customer not found"}, status=404)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
 
-        customer.delete()
-        return JsonResponse({"message": "Customer deleted"}, status=204)
+    def put(self, request, customer_id, id):
+        try:
+            data = json.loads(request.body)
+            address = CustomerShippingAddress.objects.get(id=id, customer_id=customer_id)
+            if data.get("is_default"):
+                CustomerShippingAddress.objects.filter(customer_id=customer_id).exclude(id=id).update(is_default=False)
+            for field in ("label", "address", "contact_person", "mobile"):
+                if field in data:
+                    setattr(address, field, data[field])
+            address.is_default = bool(data.get("is_default", address.is_default))
+            address.full_clean(); address.save()
+            return JsonResponse({"message": "Shipping address updated"})
+        except CustomerShippingAddress.DoesNotExist:
+            return JsonResponse({"error": "Shipping address not found"}, status=404)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def delete(self, request, customer_id, id):
+        try:
+            CustomerShippingAddress.objects.get(id=id, customer_id=customer_id).delete()
+            return JsonResponse({"message": "Shipping address deleted"})
+        except CustomerShippingAddress.DoesNotExist:
+            return JsonResponse({"error": "Shipping address not found"}, status=404)
 
 
 @method_decorator(login_required, name="dispatch")

@@ -4,7 +4,7 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.fields import Field
 from import_export.widgets import ForeignKeyWidget
 from inventory.models import Item, ItemCategory
-from .models import Supplier, TaxMaster, VendorGroup, TermsConditions, CreditTerm, PurchaseOrder,PurchaseOrderLineItem
+from .models import Supplier, TaxMaster, VendorGroup, CreditTerm, PurchaseOrder,PurchaseOrderLineItem
 
 
 class PurchaseOrderResource(resources.ModelResource):
@@ -56,11 +56,6 @@ class VendorGroupAdmin(ImportExportModelAdmin):
     list_display = ('code', 'currency', 'control_account', 'prepayment_account')
     search_fields = ('code', 'description')
     list_filter = ('currency',)
-
-@admin.register(TermsConditions)
-class TermsConditionsAdmin(ImportExportModelAdmin):
-    list_display = ('type', 'condition')
-    search_fields = ('type',)
 
 # Register the CreditTerm model
 @admin.register(CreditTerm)

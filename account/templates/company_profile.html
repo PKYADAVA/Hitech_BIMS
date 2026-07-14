@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}Company Profile — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+{% include '_account_subnavbar.html' with active_tab='company_profile' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-building"></i> Company Profile</div>
+    <div class="page-header-subtitle">Your company's letterhead and bank details, used on printed documents</div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="name" class="form-label">Company Name<span class="text-danger">*</span></label>
+          <input type="text" id="name" name="name" class="form-control" value="{{ profile.name }}" required>
+        </div>
+        <div class="col-md-3">
+          <label for="mobile" class="form-label">Mobile</label>
+          <input type="text" id="mobile" name="mobile" class="form-control" value="{{ profile.mobile }}">
+        </div>
+        <div class="col-md-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" id="email" name="email" class="form-control" value="{{ profile.email }}">
+        </div>
+        <div class="col-md-8">
+          <label for="address" class="form-label">Address</label>
+          <textarea id="address" name="address" class="form-control" rows="2">{{ profile.address }}</textarea>
+        </div>
+        <div class="col-md-4">
+          <label for="state" class="form-label">State</label>
+          <select id="state" name="state" class="form-select">
+            <option value="" {% if not profile.state %}selected{% endif %}>Select</option>
+            {% for st in states_and_union_territories %}
+            <option value="{{ st }}" {% if profile.state == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="gstin" class="form-label">GSTIN</label>
+          <input type="text" id="gstin" name="gstin" class="form-control" value="{{ profile.gstin }}">
+        </div>
+        <div class="col-md-3">
+          <label for="pan" class="form-label">PAN</label>
+          <input type="text" id="pan" name="pan" class="form-control" value="{{ profile.pan }}">
+        </div>
+      </div>
+
+      <h6 class="mt-4 mb-3">Bank Details <span class="text-muted small">(shown on printed documents)</span></h6>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="bank_name" class="form-label">Bank Name</label>
+          <input type="text" id="bank_name" name="bank_name" class="form-control" value="{{ profile.bank_name }}">
+        </div>
+        <div class="col-md-3">
+          <label for="bank_account_no" class="form-label">Account No.</label>
+          <input type="text" id="bank_account_no" name="bank_account_no" class="form-control" value="{{ profile.bank_account_no }}">
+        </div>
+        <div class="col-md-3">
+          <label for="ifsc_code" class="form-label">IFSC Code</label>
+          <input type="text" id="ifsc_code" name="ifsc_code" class="form-control" value="{{ profile.ifsc_code }}">
+        </div>
+        <div class="col-md-3">
+          <label for="bank_branch" class="form-label">Branch</label>
+          <input type="text" id="bank_branch" name="bank_branch" class="form-control" value="{{ profile.bank_branch }}">
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right", style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right", style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

@@ -1,0 +1,531 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if customer %}Edit{% else %}Add{% endif %} Customer — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='sales' %}
+{% endblock %}
+
+{% block content %}
+{% include '_sales_subnavbar.html' with active_tab='customer' %}
+
+<div class="page-header">
+    <div class="page-header-title">
+      <i class="fas fa-user"></i>
+      {% if customer %}Edit Customer{% else %}Add Customer{% endif %}
+    </div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">
+        {% if customer %}Update this customer's details{% else %}Register a new customer/party record{% endif %}
+      </div>
+      <a href="{% url 'customer' %}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to list
+      </a>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data" id="customer-form">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="code" class="form-label">Code</label>
+          <input type="text" id="code" class="form-control" readonly value="{{ customer.code|default:next_code }}">
+        </div>
+        <div class="col-md-3">
+          <label for="name" class="form-label">Name<span class="text-danger">*</span></label>
+          <input type="text" id="name" name="name" class="form-control" placeholder="Enter Name..." value="{{ customer.name|default:'' }}" required>
+        </div>
+        <div class="col-md-3">
+          <label for="mobile" class="form-label">SMS/WhatsApp No<span class="text-danger">*</span></label>
+          <input type="text" id="mobile" name="mobile" class="form-control" placeholder="Enter Mobile..." value="{{ customer.mobile|default:'' }}" required>
+        </div>
+        <div class="col-md-3">
+          <label for="mobile_2" class="form-label">Mobile No 2</label>
+          <input type="text" id="mobile_2" name="mobile_2" class="form-control" placeholder="Enter Mobile2..." value="{{ customer.mobile_2|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" id="email" name="email" class="form-control" placeholder="Enter E-mail..." value="{{ customer.email|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="pan_tin" class="form-label">PAN</label>
+          <input type="text" id="pan_tin" name="pan_tin" class="form-control" placeholder="Enter PAN..." value="{{ customer.pan_tin|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="aadhar" class="form-label">Aadhar</label>
+          <input type="text" id="aadhar" name="aadhar" class="form-control" placeholder="Enter Aadhar..." value="{{ customer.aadhar|default:'' }}">
+        </div>
+
+        <div class="col-md-3">
+          <label for="contact_type" class="form-label">Party Type<span class="text-danger">*</span></label>
+          <select id="contact_type" name="contact_type" class="form-select" required>
+            <option value="" {% if not customer %}selected{% endif %} disabled>select</option>
+            {% for value, label in contact_types %}
+            <option value="{{ value }}" {% if customer.contact_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="party_category" class="form-label">Party Category<span class="text-danger">*</span></label>
+          <select id="party_category" name="party_category" class="form-select" required>
+            <option value="" {% if not customer.party_category %}selected{% endif %} disabled>select</option>
+            {% for value, label in party_categories %}
+            <option value="{{ value }}" {% if customer.party_category == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="gstin" class="form-label">GSTIN</label>
+          <input type="text" id="gstin" name="gstin" class="form-control" placeholder="Enter GSTIN..." value="{{ customer.gstin|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="state" class="form-label">State of Supply</label>
+          <select id="state" name="state" class="form-select">
+            <option value="" {% if not customer.state %}selected{% endif %}>select</option>
+            {% for st in states_and_union_territories %}
+            <option value="{{ st }}" {% if customer.state == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Billing Address<span class="text-danger">*</span></label>
+          <div class="border rounded p-2 bg-light" id="billing_address_preview" role="button" style="cursor:pointer;">
+            <div id="billing_address_summary">{{ customer.address|default:'No billing address added.' }}</div>
+          </div>
+          <textarea id="address" name="address" class="d-none">{{ customer.address|default:'' }}</textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Shipping Address</label>
+          <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" id="shipping_address_preview">
+            <div id="shipping_address_summary" class="flex-grow-1">No shipping address selected.</div>
+            <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address">Change Shipping Address</button>
+          </div>
+          {% if not customer %}
+          <input type="hidden" id="shipping_addresses_json" name="shipping_addresses_json" value="[]">
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="row g-3 mt-0">
+        <div class="col-md-2">
+          <label for="opening_balance" class="form-label">Opening Balance</label>
+          <input type="number" step="0.01" id="opening_balance" name="opening_balance" class="form-control" placeholder="Enter Amount" value="{{ customer.opening_balance|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label for="to_pay_to_receive" class="form-label">To Pay /To Receive</label>
+          <select id="to_pay_to_receive" name="to_pay_to_receive" class="form-select">
+            <option value="" {% if not customer.to_pay_to_receive %}selected{% endif %}>select</option>
+            {% for value, label in to_pay_to_receive_choices %}
+            <option value="{{ value }}" {% if customer.to_pay_to_receive == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="as_on_date" class="form-label">As on Date</label>
+          <input type="date" id="as_on_date" name="as_on_date" class="form-control" value="{{ customer.as_on_date|date:'Y-m-d'|default:today }}">
+        </div>
+        <div class="col-md-2">
+          <label for="note" class="form-label">Remarks</label>
+          <textarea id="note" name="note" class="form-control" rows="1">{{ customer.note|default:'' }}</textarea>
+        </div>
+        <div class="col-md-2">
+          <label for="credit_period" class="form-label">Credit Period</label>
+          <input type="number" id="credit_period" name="credit_period" class="form-control" placeholder="0" value="{{ customer.credit_period|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label for="credit_limit" class="form-label">Credit Limit</label>
+          <input type="number" step="0.01" id="credit_limit" name="credit_limit" class="form-control" placeholder="0" value="{{ customer.credit_limit|default:'0' }}">
+        </div>
+
+        <div class="col-md-2">
+          <label for="country" class="form-label">Country</label>
+          <input type="text" id="country" name="country" class="form-control" value="{{ customer.country|default:'India' }}">
+        </div>
+        <div class="col-md-2">
+          <label for="currency" class="form-label">Currency</label>
+          <input type="text" id="currency" name="currency" class="form-control" value="{{ customer.currency|default:'INR' }}">
+        </div>
+        <div class="col-md-2">
+          <label for="account_no" class="form-label">Account No</label>
+          <input type="text" id="account_no" name="account_no" class="form-control" value="{{ customer.account_no|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label for="ifsc_code" class="form-label">IFSC Code</label>
+          <input type="text" id="ifsc_code" name="ifsc_code" class="form-control" value="{{ customer.ifsc_code|default:'' }}">
+        </div>
+        <div class="col-md-4">
+          <label for="bank_details" class="form-label">Bank Details</label>
+          <textarea id="bank_details" name="bank_details" class="form-control" rows="1">{{ customer.bank_details|default:'' }}</textarea>
+        </div>
+
+        <div class="col-md-12">
+          <label for="terms" class="form-label">Terms</label>
+          <textarea id="terms" name="terms" class="form-control" rows="2">{{ customer.terms|default:'' }}</textarea>
+        </div>
+
+        <div class="col-md-3">
+          <label for="agreement_start_date" class="form-label">Agreement Start Date</label>
+          <input type="date" id="agreement_start_date" name="agreement_start_date" class="form-control" value="{{ customer.agreement_start_date|date:'Y-m-d'|default:today }}">
+        </div>
+        <div class="col-md-3">
+          <label for="agreement_months" class="form-label">Agreement Months</label>
+          <input type="number" id="agreement_months" name="agreement_months" class="form-control" min="0" value="{{ customer.agreement_months|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label for="agreement_copy" class="form-label">Agreement Copy</label>
+          <input type="file" id="agreement_copy" name="agreement_copy" class="form-control">
+          {% if customer.agreement_copy %}
+          <div class="form-text">Current: <a href="{{ customer.agreement_copy.url }}" target="_blank">{{ customer.agreement_copy.name }}</a></div>
+          {% endif %}
+        </div>
+        <div class="col-md-3">
+          <label for="other_documents" class="form-label">Other Documents</label>
+          <input type="file" id="other_documents" name="other_documents" class="form-control">
+          {% if customer.other_documents %}
+          <div class="form-text">Current: <a href="{{ customer.other_documents.url }}" target="_blank">{{ customer.other_documents.name }}</a></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="{% url 'customer' %}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {% if customer %}Update{% else %}Save{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="billingAddressModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Billing Address</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Street Address <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="billing_street" rows="3" required></textarea>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">State</label>
+            <select class="form-select" id="billing_state">
+              <option value="">Enter State</option>
+              {% for st in states_and_union_territories %}
+              <option value="{{ st }}">{{ st }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Pincode</label>
+            <input class="form-control" id="billing_pincode" maxlength="10">
+          </div>
+        </div>
+        <div class="mb-3 mt-3">
+          <label class="form-label">City</label>
+          <input class="form-control" id="billing_city">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="save_billing_address">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="shippingAddressModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="shipping-address-form">
+      <div class="modal-header">
+        <h5 class="modal-title" id="shipping_address_modal_title">Add Shipping Address</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Street Address <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="shipping_street" rows="3" required></textarea>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">State</label>
+            <select class="form-select" id="shipping_state">
+              <option value="">Enter State</option>
+              {% for st in states_and_union_territories %}
+              <option value="{{ st }}">{{ st }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Pincode</label>
+            <input class="form-control" id="shipping_pincode" maxlength="10">
+          </div>
+        </div>
+        <div class="mb-3 mt-3">
+          <label class="form-label">City</label>
+          <input class="form-control" id="shipping_city">
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Contact Person</label>
+            <input class="form-control" id="shipping_contact_person">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Mobile</label>
+            <input class="form-control" id="shipping_mobile">
+          </div>
+        </div>
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" id="shipping_is_default">
+          <label class="form-check-label" for="shipping_is_default">Set as default shipping address</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Address</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="changeShippingAddressModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Change Shipping Address</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-end mb-2">
+          <button type="button" class="btn btn-sm btn-success" id="open_add_shipping_address"><i class="fas fa-plus"></i> Add New Address</button>
+        </div>
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Address</th><th class="text-center" style="width:70px">Edit</th><th class="text-center" style="width:70px">Delete</th><th class="text-center" style="width:70px">Select</th></tr></thead>
+          <tbody id="shipping_address_list"><tr><td colspan="4" class="text-center text-muted">No shipping addresses yet.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirm_shipping_address">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+const get = id => document.getElementById(id);
+function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+
+function composeAddress(street, city, state, pincode){
+  return [street, city, state, pincode].map(s=>(s||'').trim()).filter(Boolean).join(', ');
+}
+function parseComposedAddress(current){
+  const parts = (current||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(parts.length === 4){ return {street:parts[0], city:parts[1], state:parts[2], pincode:parts[3]}; }
+  return {street: current||'', city:'', state:'', pincode:''};
+}
+
+const billingAddressModal = new bootstrap.Modal(get('billingAddressModal'));
+function composeBillingAddress(){
+  return composeAddress(get('billing_street').value, get('billing_city').value, get('billing_state').value, get('billing_pincode').value);
+}
+function updateBillingSummary(){
+  get('billing_address_summary').textContent = get('address').value.trim() || 'No billing address added.';
+}
+get('billing_address_preview').onclick=()=>{
+  const p = parseComposedAddress(get('address').value.trim());
+  get('billing_street').value = p.street;
+  get('billing_city').value = p.city;
+  get('billing_state').value = p.state;
+  get('billing_pincode').value = p.pincode;
+  billingAddressModal.show();
+};
+get('save_billing_address').onclick=()=>{
+  if(!get('billing_street').value.trim()){ return alert('Street address is required.'); }
+  get('address').value = composeBillingAddress();
+  updateBillingSummary();
+  if(!selectedShippingAddressId) showShippingAddress(null);
+  billingAddressModal.hide();
+};
+get('customer-form').addEventListener('submit', e=>{
+  if(!get('address').value.trim()){
+    e.preventDefault();
+    alert('Billing address is required.');
+  }
+});
+
+let shippingAddresses = [];
+let selectedShippingAddressId = null;
+let pendingShippingAddressId = null;
+let editingShippingAddressId = null;
+const shippingAddressModal = new bootstrap.Modal(get('shippingAddressModal'));
+const changeShippingAddressModal = new bootstrap.Modal(get('changeShippingAddressModal'));
+function addressCard(a){ const p=parseComposedAddress(a.address); const heading=p.city||p.state||p.street.slice(0,40)||'Shipping Address'; return `<b>${heading}</b>${a.is_default?' <span class="badge bg-primary">Default</span>':''}<br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`; }
+function billingAsShippingFallback(){
+  const billing = get('address').value.trim();
+  return billing ? {label:'Billing Address', address: billing, is_default:true} : null;
+}
+function showShippingAddress(address){
+  const shown = address || billingAsShippingFallback();
+  get('shipping_address_summary').innerHTML = shown ? addressCard(shown) : 'No shipping address selected.';
+}
+function renderShippingAddressList(){
+  const tbody = get('shipping_address_list');
+  if(!shippingAddresses.length){ tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No saved shipping address. Click "Add New Address" to create one.</td></tr>'; return; }
+  tbody.innerHTML = shippingAddresses.map(a=>`<tr><td>${addressCard(a)}</td><td class="text-center"><button type="button" class="btn btn-sm btn-outline-secondary edit-address" data-id="${a.id}"><i class="fas fa-pen"></i></button></td><td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger delete-address" data-id="${a.id}"><i class="fas fa-trash"></i></button></td><td class="text-center"><input type="radio" class="form-check-input select-address" name="shipping_address_radio" value="${a.id}" ${String(a.id)===String(pendingShippingAddressId)?'checked':''}></td></tr>`).join('');
+}
+function composeShippingAddress(){
+  return composeAddress(get('shipping_street').value, get('shipping_city').value, get('shipping_state').value, get('shipping_pincode').value);
+}
+function fillShippingAddressFields(composed){
+  const p = parseComposedAddress(composed||'');
+  get('shipping_street').value = p.street;
+  get('shipping_city').value = p.city;
+  get('shipping_state').value = p.state;
+  get('shipping_pincode').value = p.pincode;
+}
+get('change_shipping_address').onclick=()=>{ pendingShippingAddressId=selectedShippingAddressId; renderShippingAddressList(); changeShippingAddressModal.show(); };
+get('shipping_address_list').addEventListener('change', e=>{ if(e.target.classList.contains('select-address')) pendingShippingAddressId=e.target.value; });
+get('open_add_shipping_address').onclick=()=>{ get('shipping_address_modal_title').textContent='Add Shipping Address'; get('shipping-address-form').reset(); fillShippingAddressFields(get('address').value); editingShippingAddressId=null; changeShippingAddressModal.hide(); shippingAddressModal.show(); };
+get('shippingAddressModal').addEventListener('hidden.bs.modal', ()=>{ changeShippingAddressModal.show(); });
+
+{% if customer %}
+const customerId = {{ customer.id }};
+async function loadShippingAddresses(){
+  const response = await fetch(`/customer/${customerId}/shipping-addresses/`);
+  shippingAddresses = response.ok ? await response.json() : [];
+  const def = shippingAddresses.find(a=>a.is_default) || shippingAddresses[0];
+  selectedShippingAddressId = def?.id || null;
+  showShippingAddress(def);
+}
+get('shipping_address_list').addEventListener('click', async e=>{
+  const editBtn = e.target.closest('.edit-address');
+  const deleteBtn = e.target.closest('.delete-address');
+  if(editBtn){
+    const response = await fetch(`/customer/${customerId}/shipping-addresses/${editBtn.dataset.id}/`);
+    if(!response.ok) return;
+    const address = await response.json();
+    get('shipping_address_modal_title').textContent='Edit Shipping Address';
+    fillShippingAddressFields(address.address);
+    get('shipping_contact_person').value=address.contact_person||'';
+    get('shipping_mobile').value=address.mobile||'';
+    get('shipping_is_default').checked=address.is_default;
+    editingShippingAddressId=address.id;
+    changeShippingAddressModal.hide();
+    shippingAddressModal.show();
+  }
+  if(deleteBtn){
+    if(!confirm('Delete this shipping address?')) return;
+    await fetch(`/customer/${customerId}/shipping-addresses/${deleteBtn.dataset.id}/`, {method:'DELETE', headers:{'X-CSRFToken':csrf()}});
+    await loadShippingAddresses();
+    pendingShippingAddressId = selectedShippingAddressId;
+    renderShippingAddressList();
+  }
+});
+get('shipping-address-form').onsubmit=async event=>{
+  event.preventDefault();
+  const composedAddress=composeShippingAddress();
+  const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:get('shipping_contact_person').value,mobile:get('shipping_mobile').value,is_default:get('shipping_is_default').checked};
+  const id=editingShippingAddressId;
+  const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
+  if(!response.ok){const err=await response.json();return alert(err.error||'Unable to save shipping address.')}
+  const result=await response.json();
+  const savedId=id||result.id;
+  await loadShippingAddresses();
+  pendingShippingAddressId=savedId;
+  renderShippingAddressList();
+  shippingAddressModal.hide();
+};
+get('confirm_shipping_address').onclick=async()=>{
+  if(pendingShippingAddressId && String(pendingShippingAddressId)!==String(selectedShippingAddressId)){
+    await fetch(`/customer/${customerId}/shipping-addresses/${pendingShippingAddressId}/`,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify({is_default:true})});
+    await loadShippingAddresses();
+  }
+  changeShippingAddressModal.hide();
+};
+loadShippingAddresses();
+{% else %}
+let localShippingIdCounter = 0;
+function syncShippingAddressesField(){ get('shipping_addresses_json').value = JSON.stringify(shippingAddresses); }
+function refreshLocalShippingSummary(){
+  const def = shippingAddresses.find(a=>a.is_default) || shippingAddresses[0];
+  selectedShippingAddressId = def?.id || null;
+  showShippingAddress(def);
+  syncShippingAddressesField();
+}
+get('shipping_address_list').addEventListener('click', e=>{
+  const editBtn = e.target.closest('.edit-address');
+  const deleteBtn = e.target.closest('.delete-address');
+  if(editBtn){
+    const address = shippingAddresses.find(a=>String(a.id)===String(editBtn.dataset.id));
+    if(!address) return;
+    get('shipping_address_modal_title').textContent='Edit Shipping Address';
+    fillShippingAddressFields(address.address);
+    get('shipping_contact_person').value=address.contact_person||'';
+    get('shipping_mobile').value=address.mobile||'';
+    get('shipping_is_default').checked=address.is_default;
+    editingShippingAddressId=address.id;
+    changeShippingAddressModal.hide();
+    shippingAddressModal.show();
+  }
+  if(deleteBtn){
+    if(!confirm('Delete this shipping address?')) return;
+    shippingAddresses = shippingAddresses.filter(a=>String(a.id)!==String(deleteBtn.dataset.id));
+    if(String(pendingShippingAddressId)===String(deleteBtn.dataset.id)){
+      pendingShippingAddressId = (shippingAddresses.find(a=>a.is_default) || shippingAddresses[0])?.id || null;
+    }
+    renderShippingAddressList();
+  }
+});
+get('shipping-address-form').onsubmit=event=>{
+  event.preventDefault();
+  const address=composeShippingAddress(), label=address.slice(0,100), contact_person=get('shipping_contact_person').value, mobile=get('shipping_mobile').value, is_default=get('shipping_is_default').checked;
+  if(is_default) shippingAddresses.forEach(a=>a.is_default=false);
+  if(editingShippingAddressId){
+    Object.assign(shippingAddresses.find(a=>String(a.id)===String(editingShippingAddressId)), {label, address, contact_person, mobile, is_default});
+    pendingShippingAddressId=editingShippingAddressId;
+  } else {
+    localShippingIdCounter += 1;
+    const newAddr={id:`local-${localShippingIdCounter}`, label, address, contact_person, mobile, is_default};
+    shippingAddresses.push(newAddr);
+    pendingShippingAddressId=newAddr.id;
+  }
+  renderShippingAddressList();
+  shippingAddressModal.hide();
+};
+get('confirm_shipping_address').onclick=()=>{
+  if(pendingShippingAddressId) shippingAddresses.forEach(a=>a.is_default=String(a.id)===String(pendingShippingAddressId));
+  refreshLocalShippingSummary();
+  changeShippingAddressModal.hide();
+};
+refreshLocalShippingSummary();
+{% endif %}
+
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 4000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

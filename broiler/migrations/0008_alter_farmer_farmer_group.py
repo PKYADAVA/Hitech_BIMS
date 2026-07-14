@@ -15,12 +15,11 @@ class Migration(migrations.Migration):
         # key referencing the new FarmerGroup table. No FarmerGroup rows
         # could have existed before this migration, so any pre-existing
         # farmer_group text is guaranteed to be old free-text data that
-        # can't be cast to a valid FK id - clear it out (and allow NULL on
-        # the still-old-typed column) before changing the column type, or
-        # Postgres fails with "invalid input syntax for type bigint".
+        # can't be cast to a valid FK id - clear it out before changing the
+        # column type. The SQL is written in a backend-agnostic way so it
+        # works in local SQLite and PostgreSQL.
         migrations.RunSQL(
             sql=(
-                'ALTER TABLE broiler_farmer ALTER COLUMN farmer_group DROP NOT NULL;'
                 'UPDATE broiler_farmer SET farmer_group = NULL;'
             ),
             reverse_sql=migrations.RunSQL.noop,

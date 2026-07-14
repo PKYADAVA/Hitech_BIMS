@@ -28,6 +28,7 @@
       </li>
 
       <!-- Broiler -->
+      {% if 'broiler' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'broiler' %}active{% endif %}"
            href="#" id="broilerDd" data-bs-toggle="dropdown">
@@ -36,19 +37,21 @@
         <ul class="dropdown-menu" aria-labelledby="broilerDd">
           <li><h6 class="dropdown-header">Broiler</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'farmer_group' %}">
+          {% if 'broiler_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.broiler_master }}">
             <i class="fas fa-sliders-h"></i>Master
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'broiler_transactions' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-exchange-alt"></i>Transactions
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'broiler_reports' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-chart-bar"></i>Reports
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- Hatchery -->
+      {% if 'hatchery' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'hatchery' %}active{% endif %}"
            href="#" id="hatcheryDd" data-bs-toggle="dropdown">
@@ -57,19 +60,24 @@
         <ul class="dropdown-menu" aria-labelledby="hatcheryDd">
           <li><h6 class="dropdown-header">Hatchery</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'hatchery_master_list' %}">
+          {% if 'hatchery_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.hatchery_master }}">
             <i class="fas fa-sliders-h"></i>Master
-          </a></li>
-          <li><a class="dropdown-item" href="{% url 'egg_purchase_list' %}">
+          </a></li>{% endif %}
+          {% if 'hatchery_transactions' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.hatchery_transactions }}">
             <i class="fas fa-exchange-alt"></i>Transactions
-          </a></li>
-          <li><a class="dropdown-item" href="{% url 'hatchery_report' %}">
+          </a></li>{% endif %}
+          {% if 'hatchery_environmental_monitoring' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.hatchery_environmental_monitoring }}">
+            <i class="fas fa-temperature-half"></i>Environmental Monitoring
+          </a></li>{% endif %}
+          {% if 'hatchery_reports' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.hatchery_reports }}">
             <i class="fas fa-chart-bar"></i>Reports
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- Purchase -->
+      {% if 'purchase' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'purchase' %}active{% endif %}"
            href="#" id="purchaseDd" data-bs-toggle="dropdown">
@@ -78,19 +86,21 @@
         <ul class="dropdown-menu" aria-labelledby="purchaseDd">
           <li><h6 class="dropdown-header">Purchase</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'supplier' %}">
+          {% if 'purchase_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.purchase_master }}">
             <i class="fas fa-sliders-h"></i>Master
-          </a></li>
-          <li><a class="dropdown-item" href="{% url 'purchase_order' %}">
+          </a></li>{% endif %}
+          {% if 'purchase_transactions' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.purchase_transactions }}">
             <i class="fas fa-exchange-alt"></i>Transactions
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'purchase_reports' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-chart-bar"></i>Reports
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- Sales -->
+      {% if 'sales' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'sales' %}active{% endif %}"
            href="#" id="salesDd" data-bs-toggle="dropdown">
@@ -99,19 +109,21 @@
         <ul class="dropdown-menu" aria-labelledby="salesDd">
           <li><h6 class="dropdown-header">Sales</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'customer_groups' %}">
+          {% if 'sales_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.sales_master }}">
             <i class="fas fa-sliders-h"></i>Master
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'sales_transactions' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-exchange-alt"></i>Transactions
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'sales_reports' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-chart-bar"></i>Reports
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- Account -->
+      {% if 'account' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'account' %}active{% endif %}"
            href="#" id="accountDd" data-bs-toggle="dropdown">
@@ -120,19 +132,21 @@
         <ul class="dropdown-menu" aria-labelledby="accountDd">
           <li><h6 class="dropdown-header">Accounts</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'fin_year' %}">
+          {% if 'account_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.account_master }}">
             <i class="fas fa-sliders-h"></i>Master
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'account_transactions' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-exchange-alt"></i>Transactions
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'account_reports' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-chart-bar"></i>Reports
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- Inventory -->
+      {% if 'inventory' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'inventory' %}active{% endif %}"
            href="#" id="inventoryDd" data-bs-toggle="dropdown">
@@ -141,19 +155,21 @@
         <ul class="dropdown-menu" aria-labelledby="inventoryDd">
           <li><h6 class="dropdown-header">Inventory</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'item_category' %}">
+          {% if 'inventory_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.inventory_master }}">
             <i class="fas fa-sliders-h"></i>Master
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'inventory_transactions' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-exchange-alt"></i>Transactions
-          </a></li>
-          <li><a class="dropdown-item" href="#">
+          </a></li>{% endif %}
+          {% if 'inventory_reports' in allowed_sections %}<li><a class="dropdown-item" href="#">
             <i class="fas fa-chart-bar"></i>Reports
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- Human Resource -->
+      {% if 'hr' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'hr' %}active{% endif %}"
            href="#" id="hrDd" data-bs-toggle="dropdown">
@@ -164,6 +180,7 @@
           <li><hr class="dropdown-divider"></li>
 
           <!-- Employee Submenu -->
+          {% if 'hr_employee_management' in allowed_sections %}
           <li class="dropdown-submenu">
             <a class="dropdown-item dropdown-toggle" href="#" id="empDd">
               <i class="fas fa-user-cog"></i>Employee Management
@@ -174,40 +191,47 @@
               </a></li>
             </ul>
           </li>
+          {% endif %}
 
           <!-- Attendance Submenu -->
+          {% if 'hr_attendance' in allowed_sections %}
           <li class="dropdown-submenu">
             <a class="dropdown-item dropdown-toggle" href="#" id="attDd">
               <i class="fas fa-calendar-check"></i>Attendance
             </a>
             <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'leave_employee' %}">
+              {% if 'leave_employee' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'leave_employee' %}">
                 <i class="fas fa-user-times"></i>Leave Placed
-              </a></li>
-              <li><a class="dropdown-item" href="{% url 'employee_leave_details' %}">
+              </a></li>{% endif %}
+              {% if 'employee_leave_details' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_leave_details' %}">
                 <i class="fas fa-list-alt"></i>Leave Details
-              </a></li>
-              <li><a class="dropdown-item" href="{% url 'employee_attendance' %}">
+              </a></li>{% endif %}
+              {% if 'employee_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_attendance' %}">
                 <i class="fas fa-user-check"></i>Attendance
-              </a></li>
+              </a></li>{% endif %}
             </ul>
           </li>
+          {% endif %}
 
-          <li><a class="dropdown-item" href="{% url 'payroll' %}">
+          {% if 'hr_payroll' in allowed_sections %}<li><a class="dropdown-item" href="{% url 'payroll' %}">
             <i class="fas fa-money-bill-wave"></i>Payroll
-          </a></li>
+          </a></li>{% endif %}
         </ul>
       </li>
+      {% endif %}
 
       <!-- User Management -->
+      {% if 'user' in allowed_nav %}
       <li class="nav-item">
         <a class="nav-link {% if active_tab == 'user' %}active{% endif %}"
            href="{% url 'create_user' %}">
           <i class="fa-solid fa-users-gear me-1"></i>Users
         </a>
       </li>
+      {% endif %}
 
       <!-- Notifications -->
+      {% if 'notifications' in allowed_nav %}
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle {% if active_tab == 'notifications' %}active{% endif %}"
            href="#" id="notificationsDd" data-bs-toggle="dropdown">
@@ -221,6 +245,7 @@
           </a></li>
         </ul>
       </li>
+      {% endif %}
 
     </ul>
 
@@ -236,9 +261,9 @@
         </button>
         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
           <li><h6 class="dropdown-header">My Account</h6></li>
-          <li><a class="dropdown-item" href="/admin">
+          {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
             <i class="fas fa-tools"></i>Django Admin
-          </a></li>
+          </a></li>{% endif %}
           <li><a class="dropdown-item" href="{% url 'user_profile' %}">
             <i class="fas fa-id-card"></i>View Profile
           </a></li>

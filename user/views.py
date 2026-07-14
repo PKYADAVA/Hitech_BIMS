@@ -12,9 +12,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import Group, Permission
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 
 from hr.models import Employee
-from .models import UserProfile
+from .models import UserProfile, GroupTabPermission, GroupAccessProfile
+from .access import MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES
 
 
 from django.contrib.auth import login as auth_login, logout as auth_logout
@@ -106,8 +108,9 @@ def update_password(request):
 @login_required
 def create_user(request):
     context = {
-        "users": User.objects.all(),
-        "employees": Employee.objects.filter(user__isnull=False).all(),
+        "users": User.objects.all().order_by("username"),
+        # Only employees not yet linked to a user can be attached to a new account.
+        "employees": Employee.objects.filter(user__isnull=True).all(),
         "groups": Group.objects.all(),
     }
 
@@ -129,11 +132,16 @@ def create_user(request):
                 password=password,
                 is_superuser=is_superuser,
             )
-            user.groups.add(group_id)
+            if group_id:
+                user.groups.add(group_id)
             user.save()
-            emp_obj = Employee.objects.get(id=employee_id)
-            emp_obj.user = user
-            emp_obj.save()
+
+            # Linking an employee is optional — a user does not have to be an
+            # employee to use the ERP.
+            if employee_id:
+                emp_obj = Employee.objects.get(id=employee_id)
+                emp_obj.user = user
+                emp_obj.save()
 
             return render(request, "create_user.html", context)
         except Exception as e:
@@ -200,52 +208,44 @@ def assign_groups(request):
 
 @login_required
 def manage_groups(request):
+    """Create/edit a user group AND define its Web-Access permission matrix in a
+    single page. A group's permissions are the matrix defined here."""
     if request.method == "POST":
-        group_name = request.POST.get("name")
-        permissions = request.POST.getlist("permissions[]")
+        group_id = request.POST.get("group")
+        group_name = (request.POST.get("name") or "").strip()
 
-        if group_name:
-            group, created = Group.objects.get_or_create(name=group_name)
-            group.permissions.clear()
-            group.permissions.set(permissions)
-            return JsonResponse(
-                {
-                    "message": f"Group '{group_name}' {'created' if created else 'updated'} successfully!"
-                }
-            )
-        return JsonResponse({"error": "Group name is required."}, status=400)
+        if group_id:
+            group = get_object_or_404(Group, id=group_id)
+            if group_name and group_name != group.name:
+                if Group.objects.filter(name=group_name).exclude(id=group.id).exists():
+                    messages.error(request, f"A group named '{group_name}' already exists.")
+                    return redirect(f"{reverse('user_groups')}?group={group.id}#webaccess")
+                group.name = group_name
+                group.save()
+        elif group_name:
+            group, _created = Group.objects.get_or_create(name=group_name)
+        else:
+            messages.error(request, "Group name is required.")
+            return redirect("user_groups")
 
-    # Exclude system apps
-    excluded_apps = ["admin", "auth", "contenttypes", "sessions"]
-    permissions = Permission.objects.select_related("content_type").all()
-    grouped_permissions = defaultdict(list)
+        return _persist_web_access(request, group)
 
-    for perm in permissions:
-        app_label = perm.content_type.app_label
-        if app_label not in excluded_apps:  # Exclude system apps
-            grouped_permissions[app_label].append(perm)
-
-    # Fetch all groups and their assigned permissions
+    # GET: list of groups + the Web-Access editor for the selected group.
+    groups = Group.objects.all().order_by("name")
     groups_with_permissions = []
-    groups = Group.objects.prefetch_related("permissions").all()
-
     for group in groups:
+        tab_count = group.tab_permissions.count()
         groups_with_permissions.append(
-            {
-                "name": group.name,
-                "id": group.id,
-                "permissions": list(group.permissions.values("id", "name")),
-            }
+            {"name": group.name, "id": group.id, "tab_count": tab_count}
         )
 
-    return render(
-        request,
-        "manage_groups.html",
-        {
-            "grouped_permissions": dict(grouped_permissions),
-            "groups_with_permissions": groups_with_permissions,  # Pass groups and permissions to the template
-        },
-    )
+    context = {
+        "groups": groups,
+        "groups_with_permissions": groups_with_permissions,
+        "creating": request.GET.get("new") == "1",
+    }
+    context.update(build_web_access_context(request.GET.get("group")))
+    return render(request, "manage_groups.html", context)
 
 
 @login_required
@@ -270,6 +270,137 @@ def delete_group(request):
 
         except Group.DoesNotExist:
             return JsonResponse({"error": "Group not found."}, status=400)
+
+
+def _persist_web_access(request, group):
+    """Persist the Web-Access matrix + data scoping for *group*. Returns a
+    redirect back to the Manage-User-Groups page with the group pre-selected."""
+    # --- Permission matrix ---------------------------------------------------
+    for tab_code in ALL_TAB_CODES:
+        values = {
+            f"can_{action}": (request.POST.get(f"perm_{tab_code}_{action}") == "on")
+            for action in ACTIONS
+        }
+        if any(values.values()):
+            GroupTabPermission.objects.update_or_create(
+                group=group, tab_code=tab_code, defaults=values
+            )
+        else:
+            # Nothing ticked for this tab -> remove any stale row.
+            GroupTabPermission.objects.filter(group=group, tab_code=tab_code).delete()
+
+    # --- Access profile + data scoping ---------------------------------------
+    profile, _ = GroupAccessProfile.objects.get_or_create(group=group)
+    profile.is_superuser = request.POST.get("is_superuser") == "on"
+    profile.access_type = request.POST.get("access_type", "sub_admin")
+    profile.login_type = request.POST.get("login_type", "password")
+    profile.sale_multiple_edit = request.POST.get("sale_multiple_edit") == "yes"
+    profile.sale_multiple_delete = request.POST.get("sale_multiple_delete") == "yes"
+    profile.dashboard = request.POST.get("dashboard", "yes") == "yes"
+
+    scope_fields = ["branches", "lines", "farms", "sectors",
+                    "customer_groups", "supplier_groups"]
+    for field in scope_fields:
+        setattr(profile, f"all_{field}", request.POST.get(f"all_{field}") == "on")
+    profile.save()
+
+    for field in scope_fields:
+        getattr(profile, field).set(request.POST.getlist(f"{field}[]"))
+
+    messages.success(request, f"Web access saved for group '{group.name}'.")
+    return redirect(f"{reverse('user_groups')}?group={group.id}#webaccess")
+
+
+def build_web_access_context(selected_id):
+    """Build the Web-Access matrix + scoping context for a selected group id
+    (or an empty/defaults context when none is selected)."""
+    from broiler.models import Branch, BroilerLine, BroilerFarm
+    from inventory.models import Warehouse
+    from sales.models import CustomerGroup
+    from purchase.models import VendorGroup
+
+    selected_group = None
+    saved_perms = {}
+    profile = None
+    if selected_id:
+        selected_group = get_object_or_404(Group, id=selected_id)
+        for tp in selected_group.tab_permissions.all():
+            saved_perms[tp.tab_code] = {a: getattr(tp, f"can_{a}") for a in ACTIONS}
+        profile = getattr(selected_group, "access_profile", None)
+
+    def _scope(field):
+        if profile is None:
+            return set()
+        return set(getattr(profile, field).values_list("id", flat=True))
+
+    # Pre-compute checked state per tab so the template only iterates. The matrix
+    # follows the navbar: module (category row) -> section (Master/Transactions/
+    # Reports, module row) -> tabs. `cid`/`mid` are stable ids for the header/row
+    # "select all" toggles in the template.
+    matrix = []
+    for ci, module in enumerate(MODULE_REGISTRY):
+        sections = []
+        for si, section in enumerate(module["sections"]):
+            mid = f"{ci}-{si}"
+            tabs = []
+            for tab in section["tabs"]:
+                code, label = tab[0], tab[1]
+                perms = saved_perms.get(code, {})
+                tabs.append(
+                    {
+                        "code": code,
+                        "label": label,
+                        "cells": [
+                            {"action": a, "checked": perms.get(a, False)}
+                            for a in ACTIONS
+                        ],
+                    }
+                )
+            sections.append({"label": section["label"], "mid": mid, "tabs": tabs})
+        matrix.append(
+            {"category": module["label"], "cid": str(ci), "modules": sections}
+        )
+
+    def _all_flag(flag):
+        # Default to True (unrestricted) when no profile has been saved yet.
+        return getattr(profile, flag) if profile else True
+
+    def _opts(queryset, label_attr):
+        return [
+            {"id": obj.id, "label": getattr(obj, label_attr) or f"#{obj.id}"}
+            for obj in queryset
+        ]
+
+    scopes = [
+        {"label": "Branch", "field": "branches", "all": _all_flag("all_branches"),
+         "options": _opts(Branch.objects.all(), "branch_name"),
+         "selected": _scope("branches")},
+        {"label": "Line", "field": "lines", "all": _all_flag("all_lines"),
+         "options": _opts(BroilerLine.objects.all(), "description"),
+         "selected": _scope("lines")},
+        {"label": "Farm", "field": "farms", "all": _all_flag("all_farms"),
+         "options": _opts(BroilerFarm.objects.all(), "farm_name"),
+         "selected": _scope("farms")},
+        {"label": "Sector", "field": "sectors", "all": _all_flag("all_sectors"),
+         "options": _opts(Warehouse.objects.all(), "name"),
+         "selected": _scope("sectors")},
+        {"label": "Customer Group Access", "field": "customer_groups",
+         "all": _all_flag("all_customer_groups"),
+         "options": _opts(CustomerGroup.objects.all(), "code"),
+         "selected": _scope("customer_groups")},
+        {"label": "Supplier Group Access", "field": "supplier_groups",
+         "all": _all_flag("all_supplier_groups"),
+         "options": _opts(VendorGroup.objects.all(), "code"),
+         "selected": _scope("supplier_groups")},
+    ]
+
+    return {
+        "matrix": matrix,
+        "actions": ACTIONS,
+        "wa_selected_group": selected_group,
+        "profile": profile,
+        "scopes": scopes,
+    }
 
 
 @login_required

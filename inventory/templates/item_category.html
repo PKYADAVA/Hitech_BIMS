@@ -17,13 +17,13 @@
 <div class="row g-4">
     <!-- Button to Open the Modal -->
     <div class="text-end mb-3">
-        <button
+        {% if page_perms.add %}<button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#categoryFormModal"
         >
             <i class="fas fa-plus"></i> Add New Category
-        </button>
+        </button>{% endif %}
     </div>
     <!-- Modal Structure -->
     <div
@@ -131,15 +131,15 @@
                                 <td>${category.name}</td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                    <button class="btn btn-outline-warning btn-sm edit-category"
+                                    {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-category"
                                         data-id="${category.id}"
                                         data-name="${category.name}">
                                         <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger btn-sm delete-category"
+                                    </button>{% endif %}
+                                    {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-category"
                                         data-id="${category.id}">
                                         <i class="fas fa-trash"></i>
-                                    </button>
+                                    </button>{% endif %}
                                     </div>
                                 </td>
                             </tr>
@@ -162,7 +162,7 @@
                                             </div>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                <button type="submit" class="btn btn-primary">Save changes</button>
+                                                <button type="submit" class="btn btn-primary">Update</button>
                                             </div>
                                         </form>
                                     </div>

@@ -13,9 +13,9 @@
   <div class="page-header-title"><i class="fa-solid fa-comment-sms"></i>SMS Templates</div>
   <div class="page-header-right">
     <div class="page-header-subtitle">Configure the SMS message sent for each application module</div>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#smsTemplateFormModal">
+    {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#smsTemplateFormModal">
       <i class="fas fa-plus"></i>Add Template
-    </button>
+    </button>{% endif %}
   </div>
 </div>
 
@@ -167,7 +167,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
-            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Changes</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Update</button>
           </div>
         </form>
       </div>
@@ -287,14 +287,14 @@ $(document).ready(function () {
                 <div class="d-flex gap-1 justify-content-center flex-wrap">
                   <button class="btn btn-outline-success btn-sm send-template"
                           data-id="${t.id}" title="Send SMS"><i class="fas fa-paper-plane"></i></button>
-                  <button class="btn btn-outline-warning btn-sm edit-template"
-                          data-id="${t.id}" title="Edit"><i class="fas fa-pen"></i></button>
+                  {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-template"
+                          data-id="${t.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
                   <button class="btn btn-outline-info btn-sm toggle-template"
                           data-id="${t.id}" title="${t.is_active ? 'Deactivate' : 'Activate'}">
                     <i class="fas ${t.is_active ? 'fa-pause' : 'fa-play'}"></i>
                   </button>
-                  <button class="btn btn-outline-danger btn-sm delete-template"
-                          data-id="${t.id}" title="Delete"><i class="fas fa-trash"></i></button>
+                  {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-template"
+                          data-id="${t.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
                 </div>
               </td>
             </tr>`);

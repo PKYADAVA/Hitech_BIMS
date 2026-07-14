@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Alerts — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='alerts' %}
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-bell"></i>
+    Alerts
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Temperature, humidity, battery and connectivity alerts</div>
+    {% if alerts %}
+    <form method="post" action="{% url 'env_alert_clear_all' %}"
+          onsubmit="return confirm('Permanently delete all {{ alerts|length }} alert(s)? This cannot be undone.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i class="fas fa-trash"></i>
+        Clear All
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <i class="fas fa-table"></i>
+    Alert List
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="alertTable" class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Type</th>
+            <th>Sensor / Hub</th>
+            <th>Message</th>
+            <th>Triggered</th>
+            <th>Resolved</th>
+            <th>Acknowledged</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alert in alerts %}
+          <tr>
+            <td><span class="badge {% if alert.resolved_at %}bg-secondary{% else %}bg-danger{% endif %}">{{ alert.get_alert_type_display }}</span></td>
+            <td>{% if alert.sensor %}{{ alert.sensor.alias|default:alert.sensor }}{% else %}{{ alert.hub.name }}{% endif %}</td>
+            <td>{{ alert.message }}</td>
+            <td>{{ alert.triggered_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ alert.resolved_at|date:"Y-m-d H:i:s"|default:"Open" }}</td>
+            <td>
+              {% if alert.is_acknowledged %}
+                <span class="badge bg-success">Yes</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">No</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if not alert.is_acknowledged %}
+              <form method="post" action="{% url 'env_alert_acknowledge' alert.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-success btn-sm" title="Acknowledge">
+                  <i class="fas fa-check"></i>
+                </button>
+              </form>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+  $(document).ready(function () {
+    $('#alertTable').DataTable({
+      paging: true, searching: true, ordering: true, info: true, responsive: true,
+      order: [[3, 'desc']],
+      language: { emptyTable: "No alerts found" },
+    });
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

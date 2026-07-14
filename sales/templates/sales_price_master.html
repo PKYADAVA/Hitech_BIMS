@@ -20,13 +20,13 @@
 <div class="row g-4">
   <!-- Button to Open the Modal -->
   <div class="text-end mb-3">
-    <button
+    {% if page_perms.add %}<button
       class="btn btn-primary"
       data-bs-toggle="modal"
       data-bs-target="#salesPriceFormModal"
     >
       <i class="fas fa-plus"></i> Add New Sales Price
-    </button>
+    </button>{% endif %}
   </div>
   <!-- Modal Structure -->
   <div class="modal fade" id="salesPriceFormModal" tabindex="-1" aria-labelledby="salesPriceFormModalLabel" aria-hidden="true">

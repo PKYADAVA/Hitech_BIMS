@@ -18,10 +18,10 @@
     </div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Manage hatchery setting batches, egg intake, hatch output and chick sales</div>
-        <a class="btn btn-primary" href="{% url 'hatchery_add' %}">
+        {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'hatchery_add' %}">
     <i class="fas fa-plus"></i>
     New Hatch Register
-  </a>
+  </a>{% endif %}
     </div>
 </div>
 
@@ -355,21 +355,21 @@ $(document).ready(function () {
               <td>${hs.unsold_chicks}</td>
               <td>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-outline-primary btn-sm complete-button" data-id="${hs.id}" title="Fill in pending data (transfer/hatch, candling, environmental, sales)">
+                  {% if page_perms.add %}<button class="btn btn-outline-primary btn-sm complete-button" data-id="${hs.id}" title="Fill in pending data (transfer/hatch, candling, environmental, sales)">
                     <i class="fas fa-plus"></i>
-                  </button>
-                  <button class="btn btn-outline-info btn-sm view-button" data-id="${hs.id}" title="View">
+                  </button>{% endif %}
+                  {% if page_perms.view %}<button class="btn btn-outline-info btn-sm view-button" data-id="${hs.id}" title="View">
                     <i class="fas fa-eye"></i>
-                  </button>
-                  <button class="btn btn-outline-secondary btn-sm print-button" data-id="${hs.id}" title="Print">
+                  </button>{% endif %}
+                  {% if page_perms.print %}<button class="btn btn-outline-secondary btn-sm print-button" data-id="${hs.id}" title="Print">
                     <i class="fas fa-print"></i>
-                  </button>
-                  <a class="btn btn-outline-warning btn-sm" href="/hatchery/${hs.id}/edit/" title="Edit">
+                  </button>{% endif %}
+                  {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/hatchery/${hs.id}/edit/" title="Edit">
                     <i class="fas fa-pen"></i>
-                  </a>
-                  <button class="btn btn-outline-danger btn-sm delete-button" data-id="${hs.id}" title="Delete">
+                  </a>{% endif %}
+                  {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${hs.id}" title="Delete">
                     <i class="fas fa-trash"></i>
-                  </button>
+                  </button>{% endif %}
                 </div>
               </td>
             </tr>`);

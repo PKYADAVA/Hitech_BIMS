@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Default Thresholds — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='default_thresholds' %}
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-sliders-h"></i>
+    Default Thresholds
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Global alert thresholds used by any sensor without its own override</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="temp_min" class="form-label">Min Temperature (°C)<span class="text-danger">*</span></label>
+          <input type="number" step="0.01" id="temp_min" name="temp_min" class="form-control" value="{{ thresholds.temp_min }}" required />
+        </div>
+        <div class="col-md-3">
+          <label for="temp_max" class="form-label">Max Temperature (°C)<span class="text-danger">*</span></label>
+          <input type="number" step="0.01" id="temp_max" name="temp_max" class="form-control" value="{{ thresholds.temp_max }}" required />
+        </div>
+        <div class="col-md-3">
+          <label for="humidity_min" class="form-label">Min Humidity (%)<span class="text-danger">*</span></label>
+          <input type="number" step="0.01" id="humidity_min" name="humidity_min" class="form-control" value="{{ thresholds.humidity_min }}" required />
+        </div>
+        <div class="col-md-3">
+          <label for="humidity_max" class="form-label">Max Humidity (%)<span class="text-danger">*</span></label>
+          <input type="number" step="0.01" id="humidity_max" name="humidity_max" class="form-control" value="{{ thresholds.humidity_max }}" required />
+        </div>
+        <div class="col-md-3">
+          <label for="battery_low_pct" class="form-label">Low Battery Threshold (%)<span class="text-danger">*</span></label>
+          <input type="number" id="battery_low_pct" name="battery_low_pct" class="form-control" value="{{ thresholds.battery_low_pct }}" required />
+        </div>
+      </div>
+      <p class="text-muted small mt-2 mb-0">
+        <i class="fas fa-circle-info me-1"></i>
+        Stored in the database, not an environment variable, so it can be changed here without a server restart.
+        Any sensor can still override these individually on its edit page.
+      </p>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i>Save
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

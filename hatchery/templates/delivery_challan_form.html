@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}{% if delivery_challan_id %}Edit{% else %}Add{% endif %} Delivery Challan - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
+{% block css %}
+<style>
+  .challan-print { display:none; color:#111; font-family:Arial,sans-serif; border:1px solid #333; padding:18px; }
+  .challan-print h2 { text-align:center; margin:0 0 10px; font-size:20px; letter-spacing:1px; }
+  .challan-print .company-header { text-align:center; border-bottom:2px solid #333; padding-bottom:8px; margin-bottom:10px; }
+  .challan-print .company-header h3 { margin:0 0 4px; font-size:16px; }
+  .challan-print .company-header div { font-size:12px; }
+  .challan-print .detail-grid { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid #333; border-bottom:1px solid #333; margin-bottom:10px; font-size:12px; }
+  .challan-print .detail-grid > div { padding:8px 10px; }
+  .challan-print .detail-grid > div + div { border-left:1px solid #333; }
+  .challan-print .detail-grid hr { margin:4px 0 6px; border-top:1px solid #999; }
+  .challan-print table { width:100%; border-collapse:collapse; margin-top:4px; }
+  .challan-print th,.challan-print td { border:1px solid #333; padding:6px; font-size:12px; }
+  .challan-print th { background:#eee; }
+  .challan-print .discount-row { text-align:right; padding:6px 4px; font-size:13px; }
+  .challan-print .total-row { text-align:right; font-size:15px; font-weight:700; padding:8px 4px; background:#fbe4d5; }
+  .challan-print .amount-words { margin-top:6px; font-size:12px; }
+  .challan-print .tax-line { font-size:12px; margin-top:2px; }
+  .challan-print .footer-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:10px; margin-top:20px; font-size:12px; }
+  .challan-print .footer-grid .signature-box { text-align:right; }
+  .challan-print .signature-line { margin-top:50px; border-top:1px solid #333; padding-top:4px; }
+  @media print { body * { visibility:hidden; } .challan-print,.challan-print * { visibility:visible; } .challan-print { display:block; position:absolute; left:0; top:0; width:100%; border:0; } .container-cstm, footer { padding:0; margin:0; } }
+</style>
+{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='delivery_challan' %}
+<div class="page-header"><div class="page-header-title"><i class="fas fa-truck"></i> {% if delivery_challan_id %}Edit{% else %}New{% endif %} Delivery Challan</div><div class="page-header-right"><a href="{% url 'delivery_challan_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div></div>
+<form id="challan-form"><div class="card mb-3"><div class="card-header">Challan Details</div><div class="card-body"><div class="row g-3"><div class="col-md-3"><label class="form-label">Challan No.</label><input class="form-control" id="challan_no" readonly value="{{ next_challan_no|default:'' }}"></div><div class="col-md-3"><label class="form-label">Challan Date <span class="text-danger">*</span></label><input type="date" class="form-control" id="date" required></div><div class="col-md-3"><label class="form-label">Place of Supply</label><select class="form-select" id="place_of_supply"><option value="">Select</option>{% for st in states_and_union_territories %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Customer <span class="text-danger">*</span></label><select class="form-select" id="customer" required><option value="">Select customer</option>{% for customer in customers %}<option value="{{ customer.id }}" data-address="{{ customer.address|escapejs }}" data-mobile="{{ customer.mobile|escapejs }}" data-gstin="{{ customer.gstin|default:''|escapejs }}" data-email="{{ customer.email|default:''|escapejs }}">{{ customer.name }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Billing Address</label><div class="form-control bg-light" id="billing_address" style="height:auto;min-height:58px"></div></div><div class="col-md-6"><label class="form-label">Shipping Address</label><div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" id="shipping_address_preview"><div id="shipping_address_summary" class="flex-grow-1">Select a customer first.</div><button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address" disabled>Change Shipping Address</button></div><textarea class="d-none" id="shipping_address"></textarea></div></div></div></div>
+<div class="card mb-3"><div class="card-header">Transportation Details</div><div class="card-body"><div class="row g-3"><div class="col-md-3"><label class="form-label">Transport Mode</label><select id="transport_mode" class="form-select"><option>Road</option><option>Rail</option><option>Air</option><option>Courier</option></select></div><div class="col-md-3"><label class="form-label">Vehicle No.</label><input class="form-control" id="vehicle_no"></div><div class="col-md-3"><label class="form-label">Driver Name</label><input class="form-control" id="driver_name"></div><div class="col-md-3"><label class="form-label">Driver Mobile</label><input class="form-control" id="driver_mobile"></div><div class="col-md-3"><label class="form-label">Transporter Name</label><input class="form-control" id="transporter_name"></div><div class="col-md-3"><label class="form-label">Transport Document No.</label><input class="form-control" id="transport_document_no"></div><div class="col-md-3"><label class="form-label">Transport Document Date</label><input type="date" class="form-control" id="transport_document_date"></div><div class="col-md-3"><label class="form-label">E-Way Bill No.</label><input class="form-control" id="eway_bill_no"></div><div class="col-md-3"><label class="form-label">E-Way Bill Date</label><input type="date" class="form-control" id="eway_bill_date"></div></div></div></div>
+<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-start"><div><div><i class="fas fa-boxes-stacked me-1"></i><strong>Challan Items</strong></div><div class="form-text mb-0">Quantity is auto-calculated as Packing Size &times; No. of Units, but can be overridden</div></div><button class="btn btn-sm btn-primary" type="button" id="add-row"><i class="fas fa-plus"></i> Add Row</button></div><div class="card-body p-0"><div class="table-responsive"><table class="table table-bordered mb-0" id="item-table"><thead class="table-light"><tr><th>Sr.</th><th>Item Description</th><th>HSN/SAC</th><th>Packing Size</th><th>No. of Units</th><th>Qty</th><th>Price</th><th>Per</th><th>Disc. %</th><th>Tax %</th><th>Amount</th><th></th></tr></thead><tbody></tbody><tfoot><tr><th colspan="4" class="text-end">Total</th><th id="total_units">0</th><th id="total_qty">0</th><th colspan="4"></th><th id="total_amount">0.00</th><th></th></tr></tfoot></table></div><div class="d-flex justify-content-end align-items-center gap-2 p-3 border-top price-column"><label class="form-label mb-0" for="overall_discount">Overall Discount</label><input type="number" step="0.01" min="0" class="form-control" style="max-width:150px" id="overall_discount" value="0"><span class="fw-bold ms-3">Grand Total: &#8377;<span id="grand_total">0.00</span></span></div></div></div>
+<div class="card mb-3"><div class="card-body"><div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="print_price_details" checked><label class="form-check-label" for="print_price_details">Print price and amount details</label></div><div class="d-flex justify-content-between align-items-center mb-1"><label class="form-label mb-0">Terms and Conditions</label><select class="form-select form-select-sm" id="terms_template" style="max-width:260px"><option value="">Select from master...</option>{% for tc in terms_conditions %}<option value="{{ forloop.counter0 }}" data-condition="{{ tc.condition|escapejs }}">{{ tc.type|default:"Unnamed" }}</option>{% endfor %}</select></div><textarea class="form-control" id="terms" rows="3"></textarea></div></div>
+<div class="d-flex gap-2 mb-4"><button class="btn btn-primary" type="submit"><i class="fas fa-floppy-disk"></i> {% if delivery_challan_id %}Update{% else %}Save{% endif %} Challan</button><button class="btn btn-dark" type="button" id="print"><i class="fas fa-print"></i> Print Challan</button><a href="{% url 'delivery_challan_list' %}" class="btn btn-danger"><i class="fas fa-times"></i> Cancel</a></div></form>
+<div class="modal fade" id="shippingAddressModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form class="modal-content" id="shipping-address-form"><div class="modal-header"><h5 class="modal-title" id="shipping_address_modal_title">Add Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label">Street Address <span class="text-danger">*</span></label><textarea class="form-control" id="shipping_street" rows="3" required></textarea></div><div class="row g-3"><div class="col-md-6"><label class="form-label">State</label><select class="form-select" id="shipping_state"><option value="">Enter State</option>{% for st in states_and_union_territories %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Pincode</label><input class="form-control" id="shipping_pincode" maxlength="10"></div></div><div class="mb-3 mt-3"><label class="form-label">City</label><input class="form-control" id="shipping_city"></div><div class="row g-3"><div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" id="shipping_contact_person"></div><div class="col-md-6"><label class="form-label">Mobile</label><input class="form-control" id="shipping_mobile"></div></div><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="shipping_is_default"><label class="form-check-label" for="shipping_is_default">Set as default shipping address</label></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Address</button></div></form></div></div>
+<div class="modal fade" id="changeShippingAddressModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Change Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="d-flex justify-content-between align-items-center mb-2"><div class="form-text mb-0">New shipping addresses added here are saved directly in Customer Master.</div><button type="button" class="btn btn-sm btn-success text-nowrap ms-2" id="open_add_shipping_address"><i class="fas fa-plus"></i> Add New Address</button></div><table class="table align-middle mb-0"><thead><tr><th>Address</th><th class="text-center" style="width:70px">Edit</th><th class="text-center" style="width:70px">Select</th></tr></thead><tbody id="shipping_address_list"><tr><td colspan="3" class="text-center text-muted">Select a customer first.</td></tr></tbody></table></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-primary" id="confirm_shipping_address">Done</button></div></div></div></div>
+<section class="challan-print" id="print-area">
+  <h2>DELIVERY CHALLAN</h2>
+  <div class="company-header">
+    <h3>{{ company.name }}</h3>
+    <div>{{ company.address|linebreaksbr }}</div>
+    <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
+    <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
+  </div>
+  <div class="detail-grid">
+    <div>
+      <b>Challan Number:</b> <span id="p_no"></span><br>
+      <b>Challan Date:</b> <span id="p_date"></span><br>
+      <b>Place of Supply:</b> <span id="p_place_of_supply"></span>
+    </div>
+    <div>
+      <b>Transporter Details</b><hr>
+      <div id="p_transporter_details"></div>
+    </div>
+  </div>
+  <div class="detail-grid">
+    <div>
+      <b>Billing Details</b><br>
+      Name: <span id="p_bill_name"></span><br>
+      GSTIN: <span id="p_bill_gstin"></span> | Mobile: <span id="p_bill_mobile"></span><br>
+      Email: <span id="p_bill_email"></span><br>
+      Address: <span id="p_billing"></span>
+    </div>
+    <div>
+      <b>Shipping Details</b><br>
+      Name: <span id="p_ship_name"></span><br>
+      GSTIN: <span id="p_ship_gstin"></span> | Mobile: <span id="p_ship_mobile"></span><br>
+      Email: <span id="p_ship_email"></span><br>
+      Address: <span id="p_shipping"></span>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Sr.</th><th>Item Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit</th>
+      <th class="price-column">List Price</th><th class="price-column">Disc.</th><th class="price-column">Tax %</th><th class="price-column">Amount (&#8377;)</th>
+    </tr></thead>
+    <tbody id="p_items"></tbody>
+  </table>
+  <div class="discount-row price-column" id="p_discount_row">Discount &nbsp; <span id="p_discount"></span></div>
+  <div class="total-row price-column">Total &nbsp; <span id="p_total"></span></div>
+  <div class="amount-words price-column" id="p_words"></div>
+  <div class="tax-line price-column" id="p_tax_line"></div>
+  <div class="footer-grid">
+    <div><b>Terms and Conditions</b><br><span id="p_terms" style="white-space:pre-line;"></span></div>
+    <div class="price-column"><b>Bank Details</b><br>A/c: {{ company.bank_account_no }}<br>Bank: {{ company.bank_name }}<br>IFSC: {{ company.ifsc_code }}<br>Branch: {{ company.bank_branch }}</div>
+    <div class="signature-box">For {{ company.name }}<div class="signature-line">Signature</div></div>
+  </div>
+</section>
+{% endblock %}
+{% block js %}
+<script>
+const editId = {{ delivery_challan_id|default:'null' }};
+const itemOptions = `{% for item in items %}<option value="{{ item.id }}" data-code="{{ item.item_code|escapejs }}" data-hsn="{{ item.hsn_code|default:''|escapejs }}" data-unit="{{ item.storage_uom|escapejs }}">{{ item.item_code }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const get = id => document.getElementById(id); const value = id => get(id).value;
+function itemRow(row={}) { const tr=document.createElement('tr'); tr.innerHTML=`<td class="sr text-center"></td><td><select class="form-select item" required><option value="">Select item</option>${itemOptions}</select></td><td class="hsn"></td><td><input class="form-control packing" type="number" min="0" step=".01" value="${row.packing_size||1}"></td><td><input class="form-control units" type="number" min="0" step=".01" value="${row.units||1}"></td><td><input class="form-control qty" type="number" min="0" step=".01" value="${row.quantity||0}"></td><td><input class="form-control price" type="number" min="0" step=".01" value="${row.price||0}"></td><td><input class="form-control unit" value="${row.unit||''}"></td><td><input class="form-control discount" type="number" min="0" step=".01" value="${row.discount_percent||0}"></td><td><input class="form-control tax" type="number" min="0" step=".01" value="${row.tax_percent||0}"></td><td class="amount text-end">0.00</td><td><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`; get('item-table').tBodies[0].append(tr); if(row.item) tr.querySelector('.item').value=row.item; tr.dataset.qtyOverridden='false'; if(!row.quantity) recalcQty(tr); calculate(tr); renumberRows(); }
+function recalcQty(tr){ const num=s=>Number(tr.querySelector(s).value)||0; tr.querySelector('.qty').value=num('.packing')*num('.units'); }
+function calculate(tr) { const num=s=>Number(tr.querySelector(s).value)||0; const amount=num('.qty')*num('.price')*(1-num('.discount')/100)*(1+num('.tax')/100); tr.querySelector('.amount').textContent=amount.toFixed(2); const selected=tr.querySelector('.item').selectedOptions[0]; tr.querySelector('.hsn').textContent=selected?.dataset.hsn||''; if(!tr.querySelector('.unit').value) tr.querySelector('.unit').value=selected?.dataset.unit||''; totals(); }
+function totals() { let units=0, qty=0, amount=0; document.querySelectorAll('#item-table tbody tr').forEach(tr=>{units+=Number(tr.querySelector('.units').value)||0; qty+=Number(tr.querySelector('.qty').value)||0; amount+=Number(tr.querySelector('.amount').textContent)||0}); get('total_units').textContent=units.toFixed(2); get('total_qty').textContent=qty.toFixed(2); get('total_amount').textContent=amount.toFixed(2); const discount=Number(get('overall_discount').value)||0; get('grand_total').textContent=(amount-discount).toFixed(2); }
+get('overall_discount').addEventListener('input', totals);
+function renumberRows(){ document.querySelectorAll('#item-table tbody tr').forEach((tr,i)=>{tr.querySelector('.sr').textContent=i+1;}); }
+get('add-row').onclick=()=>itemRow();
+get('terms_template').onchange=e=>{ const opt=e.target.selectedOptions[0]; if(opt && opt.dataset.condition) get('terms').value=opt.dataset.condition; e.target.value=''; };
+get('item-table').addEventListener('input',e=>{ const tr=e.target.closest('tr'); if(!tr) return; if(e.target.classList.contains('qty')){ tr.dataset.qtyOverridden = e.target.value.trim()==='' ? 'false' : 'true'; if(tr.dataset.qtyOverridden==='false') recalcQty(tr); } else if(e.target.classList.contains('packing') || e.target.classList.contains('units')){ if(tr.dataset.qtyOverridden!=='true') recalcQty(tr); } calculate(tr); });
+get('item-table').addEventListener('change',e=>{const tr=e.target.closest('tr'); if(tr) calculate(tr)});
+get('item-table').addEventListener('click',e=>{if(e.target.closest('.remove')) { e.target.closest('tr').remove(); totals(); renumberRows(); }});
+let selectedShippingAddressId = null;
+let pendingShippingAddressId = null;
+let shippingAddresses = [];
+const shippingAddressModal = new bootstrap.Modal(get('shippingAddressModal'));
+const changeShippingAddressModal = new bootstrap.Modal(get('changeShippingAddressModal'));
+function selectedCustomer(){ return get('customer').value; }
+function addressCard(a){ const p=parseComposedAddress(a.address); const heading=p.city||p.state||p.street.slice(0,40)||'Shipping Address'; return `<b>${heading}</b><br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`; }
+function composeAddress(street, city, state, pincode){ return [street, city, state, pincode].map(s=>(s||'').trim()).filter(Boolean).join(', '); }
+function parseComposedAddress(current){ const parts=(current||'').split(',').map(s=>s.trim()).filter(Boolean); if(parts.length===4){ return {street:parts[0], city:parts[1], state:parts[2], pincode:parts[3]}; } return {street:current||'', city:'', state:'', pincode:''}; }
+function composeShippingAddress(){ return composeAddress(get('shipping_street').value, get('shipping_city').value, get('shipping_state').value, get('shipping_pincode').value); }
+function fillShippingAddressFields(composed){ const p=parseComposedAddress(composed||''); get('shipping_street').value=p.street; get('shipping_city').value=p.city; get('shipping_state').value=p.state; get('shipping_pincode').value=p.pincode; }
+function billingAsShippingFallback(){
+  const billing = get('billing_address').textContent.trim();
+  return billing ? {label:'Billing Address', address: billing, is_default:true} : null;
+}
+function showShippingAddress(address){
+  const shown = address || billingAsShippingFallback();
+  get('shipping_address').value = shown ? shown.address : '';
+  get('shipping_address_summary').innerHTML = shown ? addressCard(shown) : 'No shipping address selected.';
+}
+function renderShippingAddressList(){
+  const tbody = get('shipping_address_list');
+  if(!shippingAddresses.length){ tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No saved shipping address. Click "Add New Address" to create one.</td></tr>'; return; }
+  tbody.innerHTML = shippingAddresses.map(a=>`<tr><td>${addressCard(a)}</td><td class="text-center"><button type="button" class="btn btn-sm btn-outline-secondary edit-address" data-id="${a.id}"><i class="fas fa-pen"></i></button></td><td class="text-center"><input type="radio" class="form-check-input select-address" name="shipping_address_radio" value="${a.id}" ${String(a.id)===String(pendingShippingAddressId)?'checked':''}></td></tr>`).join('');
+}
+async function loadShippingAddresses(preferredId=null){
+  const customerId = selectedCustomer();
+  if(!customerId){ shippingAddresses=[]; selectedShippingAddressId=null; get('change_shipping_address').disabled=true; get('shipping_address').value=''; get('shipping_address_summary').textContent='Select a customer first.'; return; }
+  const response = await fetch(`/customer/${customerId}/shipping-addresses/`); shippingAddresses = response.ok ? await response.json() : [];
+  get('change_shipping_address').disabled=false;
+  const existingText = value('shipping_address');
+  const address = shippingAddresses.find(a=>String(a.id)===String(preferredId)) || shippingAddresses.find(a=>a.address===existingText) || shippingAddresses.find(a=>a.is_default) || shippingAddresses[0];
+  selectedShippingAddressId = address?.id || null; showShippingAddress(address);
+}
+get('customer').onchange=async()=>{const o=get('customer').selectedOptions[0]; get('billing_address').textContent=o?.dataset.address||''; selectedShippingAddressId=null; get('shipping_address').value=''; await loadShippingAddresses();};
+get('change_shipping_address').onclick=()=>{ if(!selectedCustomer()) return; pendingShippingAddressId=selectedShippingAddressId; renderShippingAddressList(); changeShippingAddressModal.show(); };
+get('shipping_address_list').addEventListener('change', e=>{ if(e.target.classList.contains('select-address')) pendingShippingAddressId=e.target.value; });
+get('shipping_address_list').addEventListener('click', e=>{ const btn=e.target.closest('.edit-address'); if(!btn) return; const address=shippingAddresses.find(a=>String(a.id)===String(btn.dataset.id)); if(!address) return; get('shipping_address_modal_title').textContent='Edit Shipping Address'; fillShippingAddressFields(address.address); get('shipping_contact_person').value=address.contact_person||''; get('shipping_mobile').value=address.mobile||''; get('shipping_is_default').checked=address.is_default; selectedShippingAddressId=address.id; changeShippingAddressModal.hide(); shippingAddressModal.show(); });
+get('open_add_shipping_address').onclick=()=>{ get('shipping_address_modal_title').textContent='Add Shipping Address'; get('shipping-address-form').reset(); fillShippingAddressFields(get('billing_address').textContent); get('shipping_mobile').value=get('customer').selectedOptions[0]?.dataset.mobile||''; selectedShippingAddressId=null; changeShippingAddressModal.hide(); shippingAddressModal.show(); };
+get('shippingAddressModal').addEventListener('hidden.bs.modal', ()=>{ if(selectedCustomer()) changeShippingAddressModal.show(); });
+get('shipping-address-form').onsubmit=async event=>{event.preventDefault(); const customerId=selectedCustomer(); const composedAddress=composeShippingAddress(); const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:value('shipping_contact_person'),mobile:value('shipping_mobile'),is_default:get('shipping_is_default').checked}; const id=selectedShippingAddressId; const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)}); if(!response.ok){const err=await response.json();return alert(err.error||'Unable to save shipping address.')} const result=await response.json(); const savedId=id||result.id; await loadShippingAddresses(savedId); pendingShippingAddressId=savedId; renderShippingAddressList(); shippingAddressModal.hide();};
+get('confirm_shipping_address').onclick=()=>{ selectedShippingAddressId=pendingShippingAddressId; showShippingAddress(shippingAddresses.find(a=>String(a.id)===String(selectedShippingAddressId))); changeShippingAddressModal.hide(); };
+function payload() { return {date:value('date'),place_of_supply:value('place_of_supply'),overall_discount:value('overall_discount'),customer:value('customer'),shipping_address:value('shipping_address'),transport_mode:value('transport_mode'),vehicle_no:value('vehicle_no'),driver_name:value('driver_name'),driver_mobile:value('driver_mobile'),transporter_name:value('transporter_name'),transport_document_no:value('transport_document_no'),transport_document_date:value('transport_document_date'),eway_bill_no:value('eway_bill_no'),eway_bill_date:value('eway_bill_date'),print_price_details:get('print_price_details').checked,terms:value('terms'),items:[...document.querySelectorAll('#item-table tbody tr')].map(tr=>({item:tr.querySelector('.item').value,packing_size:tr.querySelector('.packing').value,units:tr.querySelector('.units').value,quantity:tr.querySelector('.qty').value,unit:tr.querySelector('.unit').value,price:tr.querySelector('.price').value,discount_percent:tr.querySelector('.discount').value,tax_percent:tr.querySelector('.tax').value}))}; }
+function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+get('challan-form').onsubmit=async e=>{e.preventDefault(); const data=payload(); if(!data.items.length||data.items.some(x=>!x.item)) return alert('Add at least one item.'); const url=editId?`/delivery_challan_api/${editId}/`:'{% url "delivery_challan_api_list" %}'; const res=await fetch(url,{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)}); if(!res.ok){const err=await res.json();return alert(err.error||'Unable to save challan.')} location.href='/delivery-challan/';};
+function numberToWordsIndian(num){
+  num=Math.round(Number(num)||0); if(num===0) return 'Zero';
+  const ones=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tens=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function twoDigits(n){ if(n<20) return ones[n]; return tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:''); }
+  function threeDigits(n){ let s=''; if(n>=100){ s+=ones[Math.floor(n/100)]+' Hundred'; n%=100; if(n) s+=' '; } if(n) s+=twoDigits(n); return s; }
+  const crore=Math.floor(num/10000000); num%=10000000;
+  const lakh=Math.floor(num/100000); num%=100000;
+  const thousand=Math.floor(num/1000); num%=1000;
+  const hundred=num;
+  const parts=[];
+  if(crore) parts.push(threeDigits(crore)+' Crore');
+  if(lakh) parts.push(twoDigits(lakh)+' Lakh');
+  if(thousand) parts.push(twoDigits(thousand)+' Thousand');
+  if(hundred) parts.push(threeDigits(hundred));
+  return parts.join(' ');
+}
+function detailLines(pairs){ return pairs.filter(([label,val])=>val).map(([label,val])=>`<b>${label}:</b> ${val}`).join('<br>'); }
+function fillPrint(){
+  const customerOption=get('customer').selectedOptions[0];
+  get('p_no').textContent=value('challan_no');
+  get('p_date').textContent=value('date');
+  get('p_place_of_supply').textContent=value('place_of_supply');
+  get('p_transporter_details').innerHTML=detailLines([
+    ['Transporter', value('transporter_name')],
+    ['Vehicle No.', value('vehicle_no')],
+    ['Driver Name', value('driver_name')],
+    ['Driver Mobile', value('driver_mobile')],
+    ['Transporter Doc No.', value('transport_document_no')],
+    ['Transporter Doc Date', value('transport_document_date')],
+    ['E-Way Bill No.', value('eway_bill_no')],
+    ['E-Way Bill Date', value('eway_bill_date')],
+  ]);
+  get('p_bill_name').textContent=customerOption?.textContent||'';
+  get('p_bill_gstin').textContent=customerOption?.dataset.gstin||'';
+  get('p_bill_mobile').textContent=customerOption?.dataset.mobile||'';
+  get('p_bill_email').textContent=customerOption?.dataset.email||'';
+  get('p_billing').textContent=get('billing_address').textContent;
+  get('p_ship_name').textContent=customerOption?.textContent||'';
+  get('p_ship_gstin').textContent=customerOption?.dataset.gstin||'';
+  get('p_ship_mobile').textContent=customerOption?.dataset.mobile||'';
+  get('p_ship_email').textContent=customerOption?.dataset.email||'';
+  get('p_shipping').textContent=value('shipping_address');
+  get('p_terms').textContent=value('terms');
+  const items=[...document.querySelectorAll('#item-table tbody tr')];
+  get('p_items').innerHTML=items.map((tr,i)=>`<tr><td>${i+1}</td><td>${tr.querySelector('.item').selectedOptions[0]?.textContent||''}</td><td>${tr.querySelector('.hsn').textContent}</td><td>${tr.querySelector('.qty').value}</td><td>${tr.querySelector('.unit').value}</td><td class="price-column">${tr.querySelector('.price').value}</td><td class="price-column">${tr.querySelector('.discount').value}%</td><td class="price-column">${tr.querySelector('.tax').value}%</td><td class="price-column">${tr.querySelector('.amount').textContent}</td></tr>`).join('');
+  const totalAmount=Number(get('total_amount').textContent)||0;
+  const discount=Number(get('overall_discount').value)||0;
+  const grandTotal=totalAmount-discount;
+  get('p_discount').textContent=discount.toFixed(2);
+  get('p_total').textContent=grandTotal.toFixed(2);
+  get('p_words').textContent='Rs. '+numberToWordsIndian(grandTotal)+' Only';
+  let totalTax=0;
+  items.forEach(tr=>{const qty=Number(tr.querySelector('.qty').value)||0,price=Number(tr.querySelector('.price').value)||0,disc=Number(tr.querySelector('.discount').value)||0,tax=Number(tr.querySelector('.tax').value)||0; totalTax+=qty*price*(1-disc/100)*tax/100;});
+  get('p_tax_line').textContent='Tax: Rs. '+totalTax.toFixed(2);
+  document.querySelectorAll('.price-column').forEach(el=>el.style.display=get('print_price_details').checked?'':'none');
+  get('p_discount_row').style.display=(get('print_price_details').checked && discount)?'':'none';
+}
+get('print').onclick=()=>{fillPrint();window.print();};
+(async()=>{get('date').value=new Date().toISOString().slice(0,10); if(editId){const data=await fetch(`/delivery_challan_api/${editId}/`).then(r=>r.json()); Object.entries(data).forEach(([key,val])=>{const el=get(key);if(el&&key!=='items'){if(el.type==='checkbox')el.checked=val;else el.value=val||''}});get('challan_no').value=data.challan_no;const customerOption=get('customer').selectedOptions[0];get('billing_address').textContent=customerOption?.dataset.address||'';get('shipping_address').value=data.shipping_address;await loadShippingAddresses();data.items.forEach(itemRow);} else itemRow();})();
+</script>
+{% endblock %}

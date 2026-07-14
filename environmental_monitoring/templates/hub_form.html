@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if hub %}Edit Hub{% else %}Add Hub{% endif %} — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='hubs' %}
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-hub"></i>
+    {% if hub %}Edit Hub{% else %}Add Hub{% endif %}
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Register a Tapo H100 hub by its LAN IP address</div>
+    <a href="{% url 'env_hub_list' %}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left"></i>
+      Back to list
+    </a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="name" class="form-label">Hub Name<span class="text-danger">*</span></label>
+          <input type="text" id="name" name="name" class="form-control" value="{{ hub.name|default:'' }}" required />
+        </div>
+        <div class="col-md-4">
+          <label for="ip_address" class="form-label">IP Address<span class="text-danger">*</span></label>
+          <input type="text" id="ip_address" name="ip_address" class="form-control" value="{{ hub.ip_address|default:'' }}" required />
+        </div>
+        <div class="col-md-4">
+          <label for="mac_address" class="form-label">MAC Address</label>
+          <input type="text" id="mac_address" name="mac_address" class="form-control" value="{{ hub.mac_address|default:'' }}" />
+        </div>
+        <div class="col-md-4">
+          <label for="device_id" class="form-label">Device ID</label>
+          <input type="text" id="device_id" name="device_id" class="form-control" value="{{ hub.device_id|default:'' }}"
+                 placeholder="Auto-filled after first poll if left blank" />
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <div class="form-check">
+            <input type="checkbox" id="is_active" name="is_active" class="form-check-input" {% if hub.is_active|default:True %}checked{% endif %} />
+            <label for="is_active" class="form-check-label">Active (included in polling)</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="{% url 'env_hub_list' %}" class="btn btn-danger">
+          <i class="fas fa-times"></i>Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i>{% if hub %}Update{% else %}Save{% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if hub %}
+<div class="card mt-3">
+  <div class="card-header">
+    <i class="fas fa-satellite-dish"></i>
+    On-Site Collector
+  </div>
+  <div class="card-body">
+    <p class="text-muted">
+      This ERP runs in the cloud and can't reach the hub's local network directly.
+      Run <code>environmental_monitoring/collector/hub_collector.py</code> on a small
+      always-on device (e.g. a Raspberry Pi) on the <strong>same Wi-Fi as this hub</strong>,
+      scheduled via cron, using this token to authenticate its pushed readings.
+    </p>
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label">API Token</label>
+        <div class="input-group">
+          <input type="text" id="apiToken" class="form-control" value="{{ hub.api_token }}" readonly />
+          <button class="btn btn-outline-secondary" type="button" id="copyTokenBtn">
+            <i class="fas fa-copy"></i> Copy
+          </button>
+        </div>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <form method="post" action="{% url 'env_hub_regenerate_token' hub.id %}"
+              onsubmit="return confirm('Regenerating invalidates the current token immediately. The collector script must be updated with the new one. Continue?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger">
+            <i class="fas fa-rotate"></i> Regenerate Token
+          </button>
+        </form>
+      </div>
+      <div class="col-md-12">
+        <label class="form-label">Ingest URL</label>
+        <input type="text" class="form-control" readonly
+               value="{{ request.scheme }}://{{ request.get_host }}{% url 'env_api_ingest' %}" />
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block js %}
+<script>
+  document.getElementById('copyTokenBtn')?.addEventListener('click', function () {
+    const input = document.getElementById('apiToken');
+    input.select();
+    navigator.clipboard.writeText(input.value);
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

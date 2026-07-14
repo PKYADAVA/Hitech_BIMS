@@ -40,12 +40,6 @@ class VendorGroup(models.Model):
     def __str__(self):
         return self.code or "Unnamed Vendor Group"
 
-class TermsConditions(models.Model):
-    type = models.CharField(max_length=100, null=True, blank=True)
-    condition = models.TextField(null=True, blank=True)
-
-    def __str__(self):
-        return self.type or "Unnamed Terms and Condition"
 
 class CreditTerm(models.Model):
     term = models.CharField(verbose_name="Credit Term", max_length=50, unique=True)

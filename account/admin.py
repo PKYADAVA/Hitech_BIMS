@@ -5,7 +5,7 @@ from import_export.fields import Field
 from import_export.widgets import ForeignKeyWidget
 from django.utils.translation import gettext_lazy as _
 from inventory.models import Warehouse
-from .models import FinancialYear, Schedule, ChartOfAccount, BankCode, CoACategory
+from .models import FinancialYear, Schedule, ChartOfAccount, BankCode, CoACategory, TermsConditions
 
 
 class ChartOfAccountResource(resources.ModelResource):
@@ -158,3 +158,10 @@ class BankCodeAdmin(ImportExportModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(TermsConditions)
+class TermsConditionsAdmin(ImportExportModelAdmin):
+    list_display = ('type', 'party_type', 'condition')
+    list_filter = ('party_type',)
+    search_fields = ('type',)

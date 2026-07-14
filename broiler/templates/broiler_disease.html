@@ -14,13 +14,14 @@
 <div class="row g-4">
     <!-- Button to Open the Modal -->
     <div class="text-end mb-3">
-        <button
+        {% if page_perms.add %}<button
+            id="add-disease-btn"
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#diseaseFormModal"
             >
         <i class="fas fa-plus"></i> Add New Disease
-        </button>
+        </button>{% endif %}
     </div>
     <!-- Modal Structure -->
     <div class="modal fade" id="diseaseFormModal" tabindex="-1" aria-labelledby="diseaseFormModalLabel" aria-hidden="true">
@@ -83,7 +84,7 @@
                         </div>
                         <div class="d-flex justify-content-end gap-2 mt-3">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Save</button>
+                            <button type="submit" id="disease-submit-btn" class="btn btn-primary">Save</button>
                         </div>
                     </form>
                 </div>
@@ -149,15 +150,15 @@
                             <td><img src="${item.image}" alt="Disease Image" class="img-fluid" style="max-width: 100px; height: auto;"></td>
                             <td>
                                 <div class="d-flex gap-1">
-                                <button class="btn btn-outline-warning btn-sm edit-button"
+                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
                                         data-id="${item.id}"
                                         data-code="${item.disease_code}"
                                         data-name="${item.disease_name}"
                                         data-symptoms="${item.symptoms}"
                                         data-diagnosis="${item.diagnosis}"
-                                        data-image="${item.image}"><i class="fas fa-pen"></i></button>
-                                <button class="btn btn-outline-danger btn-sm delete-button"
-                                        data-id="${item.id}"><i class="fas fa-trash"></i></button>
+                                        data-image="${item.image}"><i class="fas fa-pen"></i></button>{% endif %}
+                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button"
+                                        data-id="${item.id}"><i class="fas fa-trash"></i></button>{% endif %}
                                 </div>
                             </td>
                         </tr>`;
@@ -186,37 +187,45 @@
         loadDiseaseList();
 
         // Add New Disease
-        $("#disease-form").submit(function (e) {
-            e.preventDefault();
-            let formData = new FormData();
-            formData.append("disease_code", $("#disease_code").val());
-            formData.append("disease_name", $("#disease_name").val());
-            formData.append("symptoms", $("#symptoms").val());
-            formData.append("diagnosis", $("#diagnosis").val());
-            formData.append("image", $("#image")[0].files[0]);
-            formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
+        function bindDiseaseAddMode() {
+            $("#diseaseFormModalLabel").text("Add New Disease");
+            $("#disease-submit-btn").text("Save");
+            $("#disease-form").trigger("reset");
+            $("#disease-form").off("submit").on("submit", function (e) {
+                e.preventDefault();
+                let formData = new FormData();
+                formData.append("disease_code", $("#disease_code").val());
+                formData.append("disease_name", $("#disease_name").val());
+                formData.append("symptoms", $("#symptoms").val());
+                formData.append("diagnosis", $("#diagnosis").val());
+                formData.append("image", $("#image")[0].files[0]);
+                formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
 
-            $.ajax({
-                url: "{% url 'broiler_disease_create' %}",
-                type: "POST",
-                processData: false,
-                contentType: false,
-                data: formData,
-                success: function () {
-                    $("#diseaseFormModal").modal("hide");
-                    $("#disease-form").trigger("reset");
-                    loadDiseaseList();
-                },
-                error: function () {
-                    alert("An error occurred while adding the disease.");
-                },
+                $.ajax({
+                    url: "{% url 'broiler_disease_create' %}",
+                    type: "POST",
+                    processData: false,
+                    contentType: false,
+                    data: formData,
+                    success: function () {
+                        $("#diseaseFormModal").modal("hide");
+                        $("#disease-form").trigger("reset");
+                        loadDiseaseList();
+                    },
+                    error: function () {
+                        alert("An error occurred while adding the disease.");
+                    },
+                });
             });
-        });
+        }
+        bindDiseaseAddMode();
+        $("#add-disease-btn").on("click", bindDiseaseAddMode);
 
         // Edit Disease
         $(document).on("click", ".edit-button", function () {
             const id = $(this).data("id");
             $("#diseaseFormModalLabel").text("Edit Disease");
+            $("#disease-submit-btn").text("Update");
             $("#diseaseFormModal").modal("show");
             $("#disease_code").val($(this).data("code"));
             $("#disease_name").val($(this).data("name"));

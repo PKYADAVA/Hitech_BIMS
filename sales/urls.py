@@ -3,10 +3,11 @@ from . import views
 
 urlpatterns = [
     path('customer/', views.customer, name='customer'),
-    path('customers/', views.CustomerAPI.as_view(), name='customer_list'),
-    path('customer/create/', views.CustomerAPI.as_view(), name='customer_create'),
-    path('customer/<int:id>/', views.CustomerAPI.as_view(), name='customer_update'),
-    path('customer/<int:id>/delete/', views.CustomerAPI.as_view(), name='customer_delete'),
+    path('customer/add/', views.create_customer, name='customer_add'),
+    path('customer/<int:id>/edit/', views.edit_customer, name='customer_edit'),
+    path('customer/<int:id>/delete/', views.delete_customer, name='customer_delete'),
+    path('customer/<int:customer_id>/shipping-addresses/', views.CustomerShippingAddressAPI.as_view(), name='customer_shipping_address_list'),
+    path('customer/<int:customer_id>/shipping-addresses/<int:id>/', views.CustomerShippingAddressAPI.as_view(), name='customer_shipping_address_detail'),
     # path('terms/', views.terms, name='terms'),
     # path('terms_conditions/', views.TermsConditionsAPI.as_view(), name='terms_conditions_list'),
     # path('terms_conditions/create/', views.TermsConditionsAPI.as_view(), name='terms_conditions_create'),

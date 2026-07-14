@@ -12,102 +12,281 @@
 
 <div class="page-header">
     <div class="page-header-title">Manage User Groups</div>
-    <div class="page-header-subtitle">Create and manage permission groups</div>
+    <div class="page-header-subtitle">Create a group and define its module &amp; tab permissions</div>
 </div>
 
-<!-- Button to Open the Modal -->
-<div class="text-end mb-3">
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
-        <i class="fas fa-plus"></i> Create New Group
-    </button>
+<style>
+    :root { --wa-purple:#6f42c1; --wa-purple-soft:#f4eefc; --wa-border:#e7e0f3; }
+
+    /* ---- Editor card ---- */
+    .wa-editor { border:1px solid var(--wa-border); border-radius:14px; background:#fff;
+                 box-shadow:0 6px 22px rgba(111,66,193,.08); margin-bottom:1.5rem; }
+    .wa-editor-head { display:flex; flex-wrap:wrap; align-items:center; gap:12px;
+                      padding:16px 20px; color:#fff; border-radius:13px 13px 0 0;
+                      background:linear-gradient(120deg,#6f42c1,#8b5cf6); }
+    .wa-editor-head .wa-eh-icon { width:42px; height:42px; border-radius:10px; flex:0 0 auto;
+                      background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; font-size:1.2rem; }
+    .wa-editor-head h5 { margin:0; font-weight:700; }
+    .wa-editor-head small { opacity:.85; }
+    .wa-editor-body { padding:20px; }
+    .wa-section-title { font-weight:700; color:#3d2c66; margin:22px 0 12px; display:flex; align-items:center; gap:8px; }
+    .wa-section-title:first-child { margin-top:4px; }
+
+    /* ---- Matrix ---- */
+    .wa-header { background:var(--wa-purple); color:#fff; padding:12px 16px; border-radius:10px 10px 0 0;
+                 font-weight:600; font-size:1.02rem; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    .wa-scroll { max-height:540px; overflow:auto; border:1px solid var(--wa-border); border-top:0; border-radius:0 0 10px 10px; }
+    /* min-width keeps the 9 columns tappable; the container scrolls horizontally on small screens. */
+    .wa-matrix { width:100%; min-width:720px; border-collapse:collapse; table-layout:fixed; }
+    .wa-matrix th, .wa-matrix td { padding:8px 4px; border-bottom:1px solid #f1eef7; }
+    .wa-matrix thead th { background:var(--wa-purple-soft); color:var(--wa-purple); position:sticky; top:0; z-index:1; font-size:.82rem; }
+    .wa-matrix th.link-cell, .wa-matrix td.link-cell { text-align:left; width:auto; }
+    .wa-matrix th.act-col, .wa-matrix td.act-col { text-align:center; width:8%; }
+    .wa-cat-row td { background:#f7f1ff; font-weight:700; font-size:.92rem; }
+    .wa-mod-row td { background:#fcfaff; font-weight:600; }
+    .wa-tab-row td.link-cell { font-weight:400; }
+    .wa-tab-row:hover td { background:#faf7ff; }
+    /* Bigger, higher-contrast checkboxes so ticks are easy to see and hit. */
+    .wa-matrix .form-check-input { margin:0; float:none; vertical-align:middle; cursor:pointer;
+        width:19px; height:19px; border:1.6px solid #b7add1; border-radius:5px; background-color:#fff; }
+    .wa-matrix .form-check-input:hover { border-color:var(--wa-purple); box-shadow:0 0 0 2px rgba(111,66,193,.12); }
+    .wa-matrix .form-check-input:focus { border-color:var(--wa-purple); box-shadow:0 0 0 .2rem rgba(111,66,193,.25); }
+    .wa-matrix .form-check-input:checked,
+    .wa-matrix .form-check-input:indeterminate { background-color:var(--wa-purple); border-color:var(--wa-purple); }
+    /* Slightly larger folder/row "select all" boxes to stand out from cell boxes. */
+    .wa-cat-all, .wa-mod-all, .wa-row-all { width:18px; height:18px; }
+    .wa-matrix thead th input { margin-top:4px; width:18px; height:18px; }
+    /* Tree node: indentation is driven by the level, chevron + icon + label. */
+    .wa-node { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+    .wa-lvl0 { padding-left:2px; }
+    .wa-lvl1 { padding-left:22px; }
+    .wa-lvl2 { padding-left:48px; }
+    .wa-toggle { cursor:pointer; display:inline-flex; width:14px; justify-content:center; color:#8a63c9; flex:0 0 auto; }
+    .wa-caret { transition: transform .15s ease; font-size:.7rem; }
+    .wa-toggle.collapsed .wa-caret { transform: rotate(-90deg); }
+    .wa-ficon { width:15px; text-align:center; flex:0 0 auto; }
+    .wa-cat-row .wa-ficon { color:var(--wa-purple); }
+    .wa-mod-row .wa-ficon { color:#c8922a; }
+    .wa-tab-row .wa-ficon { color:#9aa4b2; }
+    .wa-spacer { display:inline-block; width:14px; flex:0 0 auto; }
+    .wa-treebar { display:flex; gap:10px; align-items:center; padding:8px 2px; }
+    .wa-treebar a { font-size:.85rem; cursor:pointer; text-decoration:none; color:var(--wa-purple); }
+
+    /* ---- Data-scope cards ---- */
+    .wa-scope-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; }
+    .wa-scope-card { border:1px solid var(--wa-border); border-radius:10px; padding:12px 14px; background:#fcfbfe; }
+    .wa-scope-card .wa-scope-label { font-weight:600; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .wa-scope-card select { border-radius:8px; }
+    .wa-scope-card small { display:block; margin-top:6px; }
+
+    /* ---- Access-flag segmented controls ---- */
+    .wa-flags { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+    .wa-flag { border:1px solid var(--wa-border); border-radius:10px; padding:12px 14px; background:#fcfbfe;
+               display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .wa-flag-label { font-weight:600; color:#3d2c66; }
+    .wa-seg { display:inline-flex; border:1px solid var(--wa-border); border-radius:8px; overflow:hidden; background:#fff; }
+    .wa-seg label { margin:0; cursor:pointer; }
+    .wa-seg input { position:absolute; opacity:0; pointer-events:none; }
+    .wa-seg span { display:inline-block; padding:6px 15px; font-size:.86rem; color:#555; transition:.15s; }
+    .wa-seg label + label span { border-left:1px solid var(--wa-border); }
+    .wa-seg input:checked + span { background:var(--wa-purple); color:#fff; }
+
+    /* ---- Sticky action bar ---- */
+    .wa-actions { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--wa-border);
+                  border-radius:0 0 13px 13px; padding:14px 20px; display:flex; justify-content:flex-end;
+                  gap:10px; flex-wrap:wrap; box-shadow:0 -3px 10px rgba(0,0,0,.03); }
+
+    @media (max-width:576px){
+        .wa-editor-body { padding:14px; }
+        .wa-actions .btn { flex:1 1 auto; }
+    }
+</style>
+
+<!-- Toolbar: pick a group to edit, or start a new one -->
+<div class="d-flex flex-wrap gap-3 align-items-end justify-content-between mb-4">
+    <form method="get" class="flex-grow-1" style="max-width:420px;">
+        <label for="group" class="form-label mb-1 fw-semibold">Edit existing group</label>
+        <select name="group" id="group" class="form-select" onchange="this.form.submit()">
+            <option value="">Select a group…</option>
+            {% for g in groups %}
+            <option value="{{ g.id }}" {% if wa_selected_group and g.id == wa_selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+    <a href="?new=1#webaccess" class="btn btn-primary flex-shrink-0"><i class="fas fa-plus me-1"></i>Create New Group</a>
 </div>
 
-<!-- Create Group Modal -->
-<div class="modal fade" id="createGroupModal" tabindex="-1" aria-labelledby="createGroupModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="createGroupModalLabel">Create New Group</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="groupForm" method="post">
-                    {% csrf_token %}
-                    
-                    <!-- Group Name Field -->
-                    <div class="mb-4">
-                        <label for="name" class="form-label fw-bold">Group Name</label>
-                        <input type="text" 
-                               name="name" 
-                               id="name" 
-                               class="form-control form-control-lg" 
-                               placeholder="Enter group name" 
-                               required>
-                    </div>
-                    
-                    <!-- Accordion for Permissions -->
-                    <div class="accordion" id="permissionsAccordion">
-                        <div class="row">
-                            {% for app, permissions in grouped_permissions.items %}
-                                <div class="col-md-6">
-                                    <div class="accordion-item">
-                                        <h2 class="accordion-header" id="heading-{{ app }}">
-                                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" 
-                                                    type="button" 
-                                                    data-bs-toggle="collapse" 
-                                                    data-bs-target="#collapse-{{ app }}" 
-                                                    aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" 
-                                                    aria-controls="collapse-{{ app }}">
-                                                {{ app|capfirst }} Module Permissions
-                                            </button>
-                                        </h2>
-                                        <div id="collapse-{{ app }}" 
-                                             class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" 
-                                             aria-labelledby="heading-{{ app }}" 
-                                             data-bs-parent="#permissionsAccordion">
-                                            <div class="accordion-body" style="max-height: 300px; overflow-y: auto;">
-                                            
-                                                <!-- Select All Checkbox for this app -->
-                                                <div class="form-check mb-3">
-                                                    <input type="checkbox" class="form-check-input select-all" id="select_all_{{ app }}">
-                                                    <label class="form-check-label" for="select_all_{{ app }}">
-                                                        Select All
-                                                    </label>
-                                                </div>
-
-                                                {% for permission in permissions %}
-                                                <div class="form-check">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        class="form-check-input perm-checkbox" 
-                                                        id="perm_{{ permission.id }}" 
-                                                        name="permissions" 
-                                                        value="{{ permission.id }}">
-                                                    <label for="perm_{{ permission.id }}" class="form-check-label">
-                                                        {{ permission.name }}
-                                                    </label>
-                                                </div>
-                                                {% endfor %}
-                                                
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <!-- Submit Button -->
-                    <div class="d-grid mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="fas fa-check-circle me-2"></i> Save Group
-                        </button>
-                    </div>
-                </form>
-            </div>
+{% if creating or wa_selected_group %}
+<a id="webaccess"></a>
+<div class="wa-editor">
+    <div class="wa-editor-head">
+        <div class="wa-eh-icon"><i class="fas {% if wa_selected_group %}fa-user-pen{% else %}fa-user-plus{% endif %}"></i></div>
+        <div class="flex-grow-1">
+            <h5>{% if wa_selected_group %}Edit Group{% else %}Create New Group{% endif %}</h5>
+            <small>{% if wa_selected_group %}Update “{{ wa_selected_group.name }}” and its module &amp; tab permissions{% else %}Name the group and choose what it can access{% endif %}</small>
         </div>
     </div>
-</div>
+
+<form method="post" action="{% url 'user_groups' %}#webaccess">
+    {% csrf_token %}
+    {% if wa_selected_group %}<input type="hidden" name="group" value="{{ wa_selected_group.id }}">{% endif %}
+    <div class="wa-editor-body">
+
+    <div class="mb-4" style="max-width:460px;">
+        <label for="name" class="form-label fw-semibold">Group Name</label>
+        <input type="text" name="name" id="name" class="form-control form-control-lg"
+               value="{% if wa_selected_group %}{{ wa_selected_group.name }}{% endif %}"
+               placeholder="e.g. Branch Managers" required>
+    </div>
+
+    <div class="wa-header">
+        <span><i class="fas fa-shield-halved me-2"></i>Web-Access Details</span>
+        <span class="wa-treebar" style="padding:0;">
+            <a id="wa-expand-all" class="text-white"><i class="fas fa-angles-down me-1"></i>Expand all</a>
+            <span style="opacity:.6;">|</span>
+            <a id="wa-collapse-all" class="text-white"><i class="fas fa-angles-up me-1"></i>Collapse all</a>
+        </span>
+    </div>
+    <div class="wa-scroll">
+        <table class="wa-matrix">
+            <thead>
+                <tr>
+                    <th class="link-cell">Link<br><input type="checkbox" class="form-check-input wa-all" title="Select every permission"></th>
+                    {% for action in actions %}
+                    <th class="act-col">{{ action|capfirst }}<br><input type="checkbox" class="form-check-input wa-col" data-action="{{ action }}" title="Select all {{ action }}"></th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for section in matrix %}
+                <tr class="wa-cat-row" data-cat="{{ section.cid }}">
+                    <td class="link-cell">
+                        <span class="wa-node wa-lvl0">
+                            <span class="wa-toggle" data-toggle-cat="{{ section.cid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
+                            <i class="fas fa-folder-open wa-ficon"></i>
+                            <input type="checkbox" class="form-check-input wa-cat-all" data-cat="{{ section.cid }}">
+                            <span>{{ section.category }}</span>
+                        </span>
+                    </td>
+                    {% for action in actions %}
+                    <td class="act-col"><input type="checkbox" class="form-check-input wa-cat-col" data-cat="{{ section.cid }}" data-action="{{ action }}"></td>
+                    {% endfor %}
+                </tr>
+                {% for module in section.modules %}
+                <tr class="wa-mod-row child-of-cat-{{ section.cid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
+                    <td class="link-cell">
+                        <span class="wa-node wa-lvl1">
+                            <span class="wa-toggle" data-toggle-mod="{{ module.mid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
+                            <i class="fas fa-folder-open wa-ficon"></i>
+                            <input type="checkbox" class="form-check-input wa-mod-all" data-mod="{{ module.mid }}">
+                            <span>{{ module.label }}</span>
+                        </span>
+                    </td>
+                    {% for action in actions %}
+                    <td class="act-col"><input type="checkbox" class="form-check-input wa-mod-col" data-mod="{{ module.mid }}" data-action="{{ action }}"></td>
+                    {% endfor %}
+                </tr>
+                {% for tab in module.tabs %}
+                <tr class="wa-tab-row child-of-cat-{{ section.cid }} child-of-mod-{{ module.mid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
+                    <td class="link-cell">
+                        <span class="wa-node wa-lvl2">
+                            <span class="wa-spacer"></span>
+                            <i class="fas fa-file-lines wa-ficon"></i>
+                            <input type="checkbox" class="form-check-input wa-row-all" title="Select all permissions for this tab">
+                            <span>{{ tab.label }}</span>
+                        </span>
+                    </td>
+                    {% for cell in tab.cells %}
+                    <td class="act-col"><input type="checkbox" class="form-check-input wa-cell" name="perm_{{ tab.code }}_{{ cell.action }}" data-action="{{ cell.action }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}" {% if cell.checked %}checked{% endif %}></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Data scoping -->
+    <div class="wa-section-title"><i class="fas fa-sitemap"></i>Data Scope</div>
+    <div class="wa-scope-grid">
+        {% for scope in scopes %}
+        <div class="wa-scope-card">
+            <div class="wa-scope-label">
+                <span>{{ scope.label }}</span>
+                <span class="form-check form-switch m-0">
+                    <input type="checkbox" role="switch" class="form-check-input scope-all" data-target="{{ scope.field }}" name="all_{{ scope.field }}" id="all_{{ scope.field }}" {% if scope.all %}checked{% endif %}>
+                    <label class="form-check-label small" for="all_{{ scope.field }}">All</label>
+                </span>
+            </div>
+            <select name="{{ scope.field }}[]" id="sel_{{ scope.field }}" class="form-select" multiple size="5">
+                {% for opt in scope.options %}
+                <option value="{{ opt.id }}" {% if opt.id in scope.selected %}selected{% endif %}>{{ opt.label }}</option>
+                {% empty %}
+                <option value="" disabled>No records available</option>
+                {% endfor %}
+            </select>
+            <small class="text-muted">Tick <strong>All</strong> for full access, or untick &amp; Ctrl/Cmd-click to pick specific records.</small>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Access flags -->
+    <div class="wa-section-title"><i class="fas fa-user-shield"></i>Access Settings</div>
+    <div class="wa-flags">
+        <div class="wa-flag">
+            <span class="wa-flag-label">Is Superuser</span>
+            <span class="form-check form-switch m-0">
+                <input type="checkbox" role="switch" class="form-check-input" name="is_superuser" id="is_superuser" {% if profile.is_superuser %}checked{% endif %}>
+                <label class="form-check-label small" for="is_superuser">Full unrestricted access</label>
+            </span>
+        </div>
+        <div class="wa-flag">
+            <span class="wa-flag-label">Access Type</span>
+            <span class="wa-seg">
+                <label><input type="radio" name="access_type" value="admin" {% if profile.access_type == 'admin' %}checked{% endif %}><span>Admin</span></label>
+                <label><input type="radio" name="access_type" value="sub_admin" {% if not profile or profile.access_type == 'sub_admin' %}checked{% endif %}><span>Sub-Admin</span></label>
+            </span>
+        </div>
+        <div class="wa-flag">
+            <span class="wa-flag-label">Login Type</span>
+            <span class="wa-seg">
+                <label><input type="radio" name="login_type" value="password" {% if not profile or profile.login_type == 'password' %}checked{% endif %}><span>Password</span></label>
+                <label><input type="radio" name="login_type" value="otp" {% if profile.login_type == 'otp' %}checked{% endif %}><span>OTP</span></label>
+            </span>
+        </div>
+        <div class="wa-flag">
+            <span class="wa-flag-label">Sale (Multiple-Edit)</span>
+            <span class="wa-seg">
+                <label><input type="radio" name="sale_multiple_edit" value="yes" {% if profile.sale_multiple_edit %}checked{% endif %}><span>Yes</span></label>
+                <label><input type="radio" name="sale_multiple_edit" value="no" {% if not profile or not profile.sale_multiple_edit %}checked{% endif %}><span>No</span></label>
+            </span>
+        </div>
+        <div class="wa-flag">
+            <span class="wa-flag-label">Sale (Multiple-Delete)</span>
+            <span class="wa-seg">
+                <label><input type="radio" name="sale_multiple_delete" value="yes" {% if profile.sale_multiple_delete %}checked{% endif %}><span>Yes</span></label>
+                <label><input type="radio" name="sale_multiple_delete" value="no" {% if not profile or not profile.sale_multiple_delete %}checked{% endif %}><span>No</span></label>
+            </span>
+        </div>
+        <div class="wa-flag">
+            <span class="wa-flag-label">Dashboard</span>
+            <span class="wa-seg">
+                <label><input type="radio" name="dashboard" value="yes" {% if not profile or profile.dashboard %}checked{% endif %}><span>Yes</span></label>
+                <label><input type="radio" name="dashboard" value="no" {% if profile and not profile.dashboard %}checked{% endif %}><span>No</span></label>
+            </span>
+        </div>
+    </div>
+
+    </div><!-- /wa-editor-body -->
+
+    <div class="wa-actions">
+        <a href="{% url 'user_groups' %}" class="btn btn-outline-secondary"><i class="fas fa-xmark me-1"></i>Cancel</a>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>{% if wa_selected_group %}Update{% else %}Save{% endif %} Group</button>
+    </div>
+</form>
+</div><!-- /wa-editor -->
+{% endif %}
 
 <!-- Existing Groups Table -->
 <div class="card mt-4">
@@ -119,30 +298,25 @@
         <table class="table table-hover table-bordered mb-0">
             <thead class="table-dark text-center">
                 <tr>
-                    <th style="width: 30%;">Group Name</th>
-                    <th style="width: 60%;">Permissions</th>
-                    <th style="width: 10%;">Actions</th>
+                    <th style="width: 45%;">Group Name</th>
+                    <th style="width: 35%;">Tabs Configured</th>
+                    <th style="width: 20%;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for group in groups_with_permissions %}
                 <tr>
-                    <td class="fw-bold text-center align-middle">{{ group.name }}</td>
-                    <td>
-                        <div style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
-                            <ul class="list-unstyled mb-0">
-                                {% for permission in group.permissions %}
-                                    <li>• {{ permission.name }}</li>
-                                {% empty %}
-                                    <li class="text-muted">No permissions assigned</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
+                    <td class="fw-bold align-middle">{{ group.name }}</td>
+                    <td class="text-center align-middle">
+                        {% if group.tab_count %}
+                            <span class="badge bg-info text-dark">{{ group.tab_count }} tab{{ group.tab_count|pluralize }}</span>
+                        {% else %}
+                            <span class="text-muted">Unrestricted (not configured)</span>
+                        {% endif %}
                     </td>
                     <td class="text-center align-middle">
-                        <button class="btn btn-outline-danger btn-sm delete-group" data-group="{{ group.name }}" data-group-id="{{ group.id }}">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <a href="?group={{ group.id }}#webaccess" class="btn btn-outline-warning btn-sm" title="Edit permissions"><i class="fas fa-pen"></i></a>
+                        <button class="btn btn-outline-danger btn-sm delete-group" data-group="{{ group.name }}" data-group-id="{{ group.id }}" title="Delete group"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
                 {% empty %}
@@ -156,75 +330,162 @@
     </div>
 </div>
 
-
 <script>
-   
-        $(document).ready(function () {
-            // Event handler for each "Select All" checkbox
-            $(".select-all").on("change", function () {
-                // Get the related app's checkbox group ID
-                var appId = $(this).attr('id').split('_')[2]; 
-                var isChecked = $(this).prop('checked');
-                $("#collapse-" + appId + " .perm-checkbox").prop('checked', isChecked);
-            });
-    
-            $("#groupForm").on("submit", function (e) {
-                e.preventDefault(); 
+    $(document).ready(function () {
+        // ---- Matrix "select all" cascades ----------------------------------
+        // Whole matrix
+        $(".wa-all").on("change", function () {
+            $(".wa-cell").prop("checked", this.checked);
+            syncAll();
+        });
+        // Entire column (e.g. all "View")
+        $(".wa-col").on("change", function () {
+            var a = $(this).data("action");
+            $('.wa-cell[data-action="' + a + '"]').prop("checked", this.checked);
+            syncAll();
+        });
+        // Whole row / one tab (the Link-column checkbox on a tab row)
+        $(".wa-row-all").on("change", function () {
+            $(this).closest("tr").find(".wa-cell").prop("checked", this.checked);
+            syncAll();
+        });
+        // Whole category (label checkbox)
+        $(".wa-cat-all").on("change", function () {
+            var c = $(this).data("cat");
+            $('.wa-cell[data-cat="' + c + '"]').prop("checked", this.checked);
+            syncAll();
+        });
+        // One column within a category
+        $(".wa-cat-col").on("change", function () {
+            var c = $(this).data("cat"), a = $(this).data("action");
+            $('.wa-cell[data-cat="' + c + '"][data-action="' + a + '"]').prop("checked", this.checked);
+            syncAll();
+        });
+        // Whole module (label checkbox)
+        $(".wa-mod-all").on("change", function () {
+            var m = $(this).data("mod");
+            $('.wa-cell[data-mod="' + m + '"]').prop("checked", this.checked);
+            syncAll();
+        });
+        // One column within a module (the pink row)
+        $(".wa-mod-col").on("change", function () {
+            var m = $(this).data("mod"), a = $(this).data("action");
+            $('.wa-cell[data-mod="' + m + '"][data-action="' + a + '"]').prop("checked", this.checked);
+            syncAll();
+        });
+        // Ticking cells directly keeps the row/column "select all" boxes in sync.
+        $(".wa-cell").on("change", syncAll);
 
-                const groupName = $("#name").val();
-                const selectedPermissions = $("input[name='permissions']:checked")
-                    .map(function () {
-                        return $(this).val();
-                    })
-                    .get();
-    
-                // Send AJAX request
-                $.ajax({
-                    url: "{% url 'user_groups' %}",
-                    method: "POST",
-                    data: {
-                        csrfmiddlewaretoken: "{{ csrf_token }}",  // Include CSRF token
-                        name: groupName,
-                        permissions: selectedPermissions,
-                    },
-                    success: function (response) {
-                        alert("Group created/updated successfully!");
-                        $("#groupForm")[0].reset();  // Reset the form after success
-                    },
-                    error: function (xhr, status, error) {
-                        alert("An error occurred: " + xhr.responseText || "Please try again.");
-                    }
-                });
+        // Column header box reflects whether its whole column is ticked.
+        function syncColumnBoxes() {
+            $(".wa-col").each(function () {
+                var a = $(this).data("action");
+                var all = $('.wa-cell[data-action="' + a + '"]');
+                $(this).prop("checked", all.length && all.filter(":checked").length === all.length);
             });
-            $(".delete-group").on("click", function () {
-                let groupId = $(this).data("group-id");  // Get group ID
-                let row = $(this).closest("tr");  // Select row to remove after deletion
-                console.log(groupId);
-                
-                // Show Confirmation Dialog
-                if (!confirm("Are you sure you want to delete this group?")) {
-                    return;
-                }
-        
-                $.ajax({
-                    url: "{% url 'delete_group' %}",  // Django URL (configure in urls.py)
-                    type: "POST",
-                    data: {
-                        group_id: groupId,
-                        csrfmiddlewaretoken: "{{ csrf_token }}"  // Pass CSRF token for security
-                    },
-                    success: function (response) {
-                        alert(response.message);  // Show success message
-                        row.fadeOut(500, function () { 
-                            $(this).remove();  // Remove row from table
-                        });
-                    },
-                    error: function (xhr) {
-                        alert("Error deleting group: " + xhr.responseJSON.error);
-                    }
+        }
+        // Link-column boxes (tab / section / category) mean "this is ACTIVE":
+        // ticked when ANY action under it is on (page becomes accessible when any
+        // permission is given), shown as a dash (indeterminate) when only some
+        // actions are on, and a full tick when all are on.
+        function setActiveState($box, cells) {
+            var total = cells.length, on = cells.filter(":checked").length;
+            $box.prop("checked", on > 0);
+            $box.prop("indeterminate", on > 0 && on < total);
+        }
+        function syncRowBoxes() {
+            $(".wa-row-all").each(function () {
+                setActiveState($(this), $(this).closest("tr").find(".wa-cell"));
+            });
+        }
+        function syncFolderBoxes() {
+            $(".wa-mod-all").each(function () {
+                setActiveState($(this), $('.wa-cell[data-mod="' + $(this).data("mod") + '"]'));
+            });
+            $(".wa-cat-all").each(function () {
+                setActiveState($(this), $('.wa-cell[data-cat="' + $(this).data("cat") + '"]'));
+            });
+        }
+        function syncAll() { syncColumnBoxes(); syncRowBoxes(); syncFolderBoxes(); }
+        syncAll();
+
+        // ---- File-explorer style expand / collapse -------------------------
+        // Swap the folder icon (open when expanded, closed when collapsed).
+        function setFolderIcon($toggle, collapsed) {
+            $toggle.closest("td").find("> .wa-node > .wa-ficon.fa-folder, > .wa-node > .wa-ficon.fa-folder-open")
+                   .toggleClass("fa-folder", collapsed).toggleClass("fa-folder-open", !collapsed);
+        }
+        function setModule($toggle, collapse) {
+            $toggle.toggleClass("collapsed", collapse);
+            var m = $toggle.data("toggle-mod");
+            $(".child-of-mod-" + m).toggle(!collapse);
+            setFolderIcon($toggle, collapse);
+        }
+        function setCategory($toggle, collapse) {
+            $toggle.toggleClass("collapsed", collapse);
+            var c = $toggle.data("toggle-cat");
+            setFolderIcon($toggle, collapse);
+            if (collapse) {
+                $(".child-of-cat-" + c).hide();
+            } else {
+                // Show module rows; each module's own tabs follow its own state.
+                $('.wa-mod-row[data-cat="' + c + '"]').show();
+                $('.wa-mod-row[data-cat="' + c + '"] .wa-toggle[data-toggle-mod]').each(function () {
+                    var m = $(this).data("toggle-mod");
+                    $(".child-of-mod-" + m).toggle(!$(this).hasClass("collapsed"));
                 });
+            }
+        }
+        $(".wa-toggle[data-toggle-cat]").on("click", function () {
+            setCategory($(this), !$(this).hasClass("collapsed"));
+        });
+        $(".wa-toggle[data-toggle-mod]").on("click", function (e) {
+            e.stopPropagation();
+            setModule($(this), !$(this).hasClass("collapsed"));
+        });
+        $("#wa-collapse-all").on("click", function () {
+            $(".wa-toggle[data-toggle-mod]").each(function () { setModule($(this), true); });
+            $(".wa-toggle[data-toggle-cat]").each(function () { setCategory($(this), true); });
+        });
+        $("#wa-expand-all").on("click", function () {
+            $(".wa-toggle[data-toggle-cat]").each(function () { setCategory($(this), false); });
+            $(".wa-toggle[data-toggle-mod]").each(function () { setModule($(this), false); });
+        });
+
+        // Data-scope: "All" and specific selection are mutually exclusive, but
+        // the list stays enabled so individual records are always selectable.
+        $(".scope-all").on("change", function () {
+            if (this.checked) {
+                var sel = document.getElementById('sel_' + this.dataset.target);
+                if (sel) Array.from(sel.options).forEach(function (o) { o.selected = false; });
+            }
+        });
+        // Picking specific records automatically turns "All" off.
+        $("select[id^='sel_']").on("change", function () {
+            var field = this.id.replace('sel_', '');
+            if ($(this).val() && $(this).val().length) {
+                $('#all_' + field).prop('checked', false);
+            }
+        });
+
+        $(".delete-group").on("click", function () {
+            let groupId = $(this).data("group-id");
+            let row = $(this).closest("tr");
+            if (!confirm("Are you sure you want to delete this group?")) { return; }
+            $.ajax({
+                url: "{% url 'delete_group' %}",
+                type: "POST",
+                data: { group_id: groupId, csrfmiddlewaretoken: "{{ csrf_token }}" },
+                success: function (response) {
+                    alert(response.message);
+                    row.fadeOut(500, function () { $(this).remove(); });
+                },
+                error: function (xhr) {
+                    alert("Error deleting group: " + (xhr.responseJSON ? xhr.responseJSON.error : "Please try again."));
+                }
             });
         });
-    </script>
-    
+    });
+</script>
+
 {% endblock %}

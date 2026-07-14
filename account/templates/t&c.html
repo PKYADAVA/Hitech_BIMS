@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
-{% block title %}Manage Purchase{% endblock %}
+{% block title %}Terms &amp; Conditions{% endblock %}
 
 {% block nav %}
- {% include 'main_top_navbar.html' with active_tab='purchase' %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
 {% endblock %}
 
 {% block content %}
-{% include '_purchase_subnavbar.html' with active_tab='terms' %}
+{% include '_account_subnavbar.html' with active_tab='terms' %}
 
 <div class="page-header">
     <div class="page-header-title">
@@ -15,11 +15,11 @@
             Terms &amp; Conditions
         </div>
     <div class="page-header-right">
-      <div class="page-header-subtitle">Manage purchase terms and conditions</div>
-          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#termsConditionsFormModal">
+      <div class="page-header-subtitle">Manage terms and conditions for suppliers and customers</div>
+          {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#termsConditionsFormModal">
         <i class="fas fa-plus"></i>
         Add New Term
-    </button>
+    </button>{% endif %}
     </div>
 </div>
 
@@ -45,6 +45,14 @@
                             placeholder="Enter type"
                             required
                         />
+                    </div>
+                    <div class="mb-3">
+                        <label for="party_type" class="form-label">For</label>
+                        <select id="party_type" class="form-select" required>
+                            {% for value, label in party_types %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label for="condition" class="form-label">Condition</label>
@@ -82,6 +90,7 @@
                 <thead class="table-dark">
                     <tr>
                         <th>Type</th>
+                        <th>For</th>
                         <th>Condition</th>
                         <th>Actions</th>
                     </tr>
@@ -104,42 +113,43 @@
                 success: function (response) {
                     const table = $("#terms-conditions-table");
                     const tableBody = $("#terms-conditions-table-body");
-    
+
                     // Clear the current table body and destroy the DataTable if initialized
                     if ($.fn.DataTable.isDataTable(table)) {
                         table.DataTable().clear().destroy();
                     }
                     tableBody.empty();
-    
+
                     // Populate the table dynamically
                     response.forEach((item) => {
                         const modalId = `editTermsConditionsModal-${item.id}`;
                         const formId = `edit-terms-conditions-form-${item.id}`;
-                        console.log(item, "item");
-    
+
                         const tableRow = `
                             <tr>
                                 <td>${item.type}</td>
+                                <td>${item.party_type}</td>
                                 <td>${item.condition}</td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                        <button class="btn btn-outline-warning btn-sm edit-button"
+                                        {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
                                             data-bs-toggle="modal"
                                             data-bs-target="#${modalId}"
                                             data-id="${item.id}"
                                             data-type="${item.type}"
+                                            data-party-type="${item.party_type}"
                                             data-condition="${item.condition}">
                                             <i class="fas fa-pen"></i>
-                                        </button>
-                                        <button class="btn btn-outline-danger btn-sm delete-terms-conditions"
+                                        </button>{% endif %}
+                                        {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-terms-conditions"
                                             data-id="${item.id}">
                                             <i class="fas fa-trash"></i>
-                                        </button>
+                                        </button>{% endif %}
                                     </div>
                                 </td>
                             </tr>
                         `;
-    
+
                         const modal = `
                             <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
                                 <div class="modal-dialog">
@@ -156,34 +166,41 @@
                                                     <input type="text" class="form-control" name="type" value="${item.type}" required>
                                                 </div>
                                                 <div class="mb-3">
+                                                    <label class="form-label">For</label>
+                                                    <select class="form-select" name="party_type" required>
+                                                        {% for value, label in party_types %}
+                                                        <option value="{{ value }}" ${item.party_type === "{{ value }}" ? "selected" : ""}>{{ label }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="mb-3">
                                                     <label class="form-label">Condition</label>
                                                     <textarea class="form-control" name="condition" required>${item.condition}</textarea>
                                                 </div>
                                             </div>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                <button type="submit" class="btn btn-primary">Update</button>
                                             </div>
                                         </form>
                                     </div>
                                 </div>
                             </div>
                         `;
-    
+
                         tableBody.append(tableRow);
                         $("body").append(modal);
-    
+
                         // Add event listener for the form inside modal
                         $(`#${formId}`).off("submit").on("submit", function (e) {
                             e.preventDefault();
-    
+
                             const jsonData = {
                                 type: $(`#${formId} [name="type"]`).val(),
+                                party_type: $(`#${formId} [name="party_type"]`).val(),
                                 condition: $(`#${formId} [name="condition"]`).val(),
                             };
-    
-                            console.log(jsonData, "jsonData");
-    
+
                             $.ajax({
                                 url: `/terms_conditions/${item.id}/`,
                                 type: "PUT",
@@ -203,7 +220,7 @@
                             });
                         });
                     });
-    
+
                     // Reinitialize DataTable
                     table.DataTable();
                 },
@@ -212,18 +229,18 @@
                 },
             });
         }
-    
+
         // Load terms and conditions list on page load
         loadTermsConditionsList();
-    
+
         // Add Term or Condition
         $("#terms-conditions-form").submit(function (e) {
             e.preventDefault();
-    
-            const formData = $(this).serialize();
+
             const type = $("#type").val();
+            const party_type = $("#party_type").val();
             const condition = $("#condition").val();
-    
+
             $.ajax({
                 url: "{% url 'terms_conditions_create' %}",
                 type: "POST",
@@ -231,6 +248,7 @@
                     "X-CSRFToken": "{{ csrf_token }}"},
                 data: JSON.stringify({
                     type: type,
+                    party_type: party_type,
                     condition: condition,
                 }),
                 success: function () {
@@ -244,11 +262,11 @@
                 },
             });
         });
-    
+
         // Delete Term or Condition
         $(document).on("click", ".delete-terms-conditions", function () {
             const termsConditionsId = $(this).data("id");
-    
+
             $.ajax({
                 url: `/terms_conditions/${termsConditionsId}/delete/`,
                 type: "DELETE",
@@ -263,8 +281,7 @@
             });
         });
     });
-    
+
 </script>
- 
-  
+
 {% endblock %}

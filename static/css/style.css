@@ -968,6 +968,26 @@ footer p {
   color: #ffffff;
 }
 
+/* Same problem for a btn-check toggle group (e.g. the °C/°F switch) sitting
+   inside a gradient .card-header - the default outline-secondary border/text
+   is too low-contrast against the blue gradient to read as a real button. */
+.card-header .btn-outline-secondary {
+  color: rgba(255,255,255,0.85);
+  border-color: rgba(255,255,255,0.55);
+}
+
+.card-header .btn-outline-secondary:hover {
+  background: rgba(255,255,255,0.15);
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.75);
+}
+
+.card-header .btn-check:checked + .btn-outline-secondary {
+  background: #ffffff;
+  color: var(--primary);
+  border-color: #ffffff;
+}
+
 .card-header .nav-tabs .nav-item.show .nav-link,
 .card-header .nav-tabs .nav-link.active {
   background: #ffffff;

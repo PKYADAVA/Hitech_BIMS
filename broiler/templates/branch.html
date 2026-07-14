@@ -15,9 +15,9 @@
     <div class="page-header-title"><i class="fas fa-code-branch"></i>Branch</div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Add and manage branch locations</div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#branchFormModal">
+        {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#branchFormModal">
     <i class="fas fa-plus"></i>Add
-  </button>
+  </button>{% endif %}
     </div>
 </div>
 
@@ -65,13 +65,18 @@
                     </div>
 
                     <label class="form-label d-block">Branch / Prefix<span class="text-danger">*</span></label>
+                    <div class="row g-2 mb-1">
+                        <div class="col-md-5"><small class="text-muted fw-semibold">Branch name</small></div>
+                        <div class="col-md-5"><small class="text-muted fw-semibold">Prefix</small></div>
+                        <div class="col-md-1"></div>
+                    </div>
                     <div id="branch-rows">
                         <div class="row g-2 align-items-center mb-2 branch-row">
                             <div class="col-md-5">
-                                <input type="text" name="branch_name[]" class="form-control" placeholder="Enter description..." required />
+                                <input type="text" name="branch_name[]" class="form-control" placeholder="Enter branch name..." required />
                             </div>
                             <div class="col-md-5">
-                                <input type="text" name="prefix[]" class="form-control" placeholder="Enter description..." required />
+                                <input type="text" name="prefix[]" class="form-control" placeholder="Enter prefix..." required />
                             </div>
                             <div class="col-md-1">
                                 <button type="button" class="btn btn-outline-success btn-sm add-branch-row" title="Add another row">
@@ -83,7 +88,7 @@
 
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Submit</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save</button>
                     </div>
                 </form>
             </div>
@@ -122,7 +127,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save Changes</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Update</button>
                     </div>
                 </form>
             </div>
@@ -198,18 +203,18 @@ $(document).ready(function () {
                                 ${branch.is_locked ? `
                                 <button class="btn btn-outline-secondary btn-sm" disabled title="Locked"><i class="fas fa-pen"></i></button>
                                 ` : `
-                                <button class="btn btn-outline-warning btn-sm edit-branch"
+                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-branch"
                                     data-id="${branch.id}"
                                     data-region-id="${branch.region_id}"
                                     data-branch-name="${escapeHtml(branch.branch_name)}"
                                     data-prefix="${escapeHtml(branch.prefix)}" title="Edit">
                                     <i class="fas fa-pen"></i>
-                                </button>
+                                </button>{% endif %}
                                 `}
-                                <button class="btn btn-outline-danger btn-sm delete-branch"
+                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-branch"
                                     data-id="${branch.id}" ${branch.is_locked ? 'disabled' : ''} title="Delete">
                                     <i class="fas fa-trash"></i>
-                                </button>
+                                </button>{% endif %}
                                 <button class="btn btn-outline-secondary btn-sm print-branch" title="Print">
                                     <i class="fas fa-print"></i>
                                 </button>
@@ -242,15 +247,15 @@ $(document).ready(function () {
         return `
             <div class="row g-2 align-items-center mb-2 branch-row">
                 <div class="col-md-5">
-                    <input type="text" name="branch_name[]" class="form-control" placeholder="Enter description..." required />
+                    <input type="text" name="branch_name[]" class="form-control" placeholder="Enter branch name..." required />
                 </div>
                 <div class="col-md-5">
-                    <input type="text" name="prefix[]" class="form-control" placeholder="Enter description..." required />
+                    <input type="text" name="prefix[]" class="form-control" placeholder="Enter prefix..." required />
                 </div>
                 <div class="col-md-1">
-                    <button type="button" class="btn btn-outline-danger btn-sm remove-branch-row" title="Remove row">
+                    {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm remove-branch-row" title="Remove row">
                         <i class="fas fa-minus"></i>
-                    </button>
+                    </button>{% endif %}
                 </div>
             </div>`;
     }

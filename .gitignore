@@ -1,16 +1,38 @@
+# Python bytecode
 *.pyc
 *.pyo
 *.pyd
 __pycache__/
-db.sqlite3  # Ignore if using SQLite database
-*.log  # Log files
-*.env  # Environment files for sensitive keys
-!.env.example  # Template is safe and must stay tracked
-venv/  # Your virtual environment folder
+
+# SQLite database and backups (local dev only; prod uses PostgreSQL)
+db.sqlite3*
+
+# Log files
+*.log
+
+# Environment files for sensitive keys
+*.env
+.env
+# keep the template tracked
+!.env.example
+
+# Virtual environments
+venv/
 hitech_env/
+
+# User-uploaded media and generated logs
 media/
 logs/
-.env
-staticfiles/  # collectstatic output - regenerated on deploy, not versioned
+
+# collectstatic output - regenerated on deploy, not versioned
+staticfiles/
+
+# OS cruft
 *.DS_Store
 .DS_Store
+
+# Claude Code local config
+.claude/
+
+# Angel instrument master cache (downloaded at runtime)
+market_data/scrip_cache/

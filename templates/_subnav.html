@@ -11,54 +11,63 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
   <div class="collapse d-lg-flex" id="{{ module }}-subnav" style="width:100%;">
     <ul class="subnav-tabs">
       {% if module == 'broiler' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'farmer_group' %}active{% endif %} activate" href="{% url 'farmer_group' %}"><i class="fas fa-users me-1"></i>Farmer Group</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'region' %}active{% endif %} activate" href="{% url 'region' %}"><i class="fas fa-map-marked-alt me-1"></i>Region</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'branch' %}active{% endif %} activate" href="{% url 'branch_template' %}"><i class="fas fa-code-branch me-1"></i>Branch</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'supervisor' %}active{% endif %} activate" href="{% url 'supervisor_template' %}"><i class="fas fa-user-tie me-1"></i>Supervisor</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'broiler_line' %}active{% endif %} activate" href="{% url 'broiler_line' %}"><i class="fas fa-map-marker-alt me-1"></i>Broiler Line</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'broiler_farm' %}active{% endif %} activate" href="{% url 'branch_farm' %}"><i class="fas fa-tractor me-1"></i>Broiler Farm</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'broiler_batch' %}active{% endif %} activate" href="{% url 'broiler_batch' %}"><i class="fas fa-layer-group me-1"></i>Broiler Batch</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'broiler_disease' %}active{% endif %} activate" href="{% url 'broiler_disease' %}"><i class="fas fa-virus me-1"></i>Broiler Disease</a></li>
+        {% if 'farmer_group' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'farmer_group' %}active{% endif %} activate" href="{% url 'farmer_group' %}"><i class="fas fa-users me-1"></i>Farmer Group</a></li>{% endif %}
+        {% if 'region' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'region' %}active{% endif %} activate" href="{% url 'region' %}"><i class="fas fa-map-marked-alt me-1"></i>Region</a></li>{% endif %}
+        {% if 'branch_template' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'branch' %}active{% endif %} activate" href="{% url 'branch_template' %}"><i class="fas fa-code-branch me-1"></i>Branch</a></li>{% endif %}
+        {% if 'supervisor_template' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'supervisor' %}active{% endif %} activate" href="{% url 'supervisor_template' %}"><i class="fas fa-user-tie me-1"></i>Supervisor</a></li>{% endif %}
+        {% if 'broiler_line' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'broiler_line' %}active{% endif %} activate" href="{% url 'broiler_line' %}"><i class="fas fa-map-marker-alt me-1"></i>Broiler Line</a></li>{% endif %}
+        {% if 'branch_farm' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'broiler_farm' %}active{% endif %} activate" href="{% url 'branch_farm' %}"><i class="fas fa-tractor me-1"></i>Broiler Farm</a></li>{% endif %}
+        {% if 'broiler_batch' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'broiler_batch' %}active{% endif %} activate" href="{% url 'broiler_batch' %}"><i class="fas fa-layer-group me-1"></i>Broiler Batch</a></li>{% endif %}
+        {% if 'broiler_disease' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'broiler_disease' %}active{% endif %} activate" href="{% url 'broiler_disease' %}"><i class="fas fa-virus me-1"></i>Broiler Disease</a></li>{% endif %}
       {% elif module == 'hatchery_master' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'hatchery_creation' %}active{% endif %} activate" href="{% url 'hatchery_master_list' %}"><i class="fa-solid fa-kiwi-bird me-1"></i>Hatchery Creation</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'setter' %}active{% endif %} activate" href="{% url 'setter_list' %}"><i class="fas fa-layer-group me-1"></i>Setter</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'hatcher' %}active{% endif %} activate" href="{% url 'hatcher_list' %}"><i class="fas fa-temperature-high me-1"></i>Hatcher</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'expense_type' %}active{% endif %} activate" href="{% url 'expense_type_list' %}"><i class="fas fa-tags me-1"></i>Expense Type</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'hatchery_expense' %}active{% endif %} activate" href="{% url 'hatchery_expense_list' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Hatchery Expense</a></li>
+        {% if 'hatchery_master_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hatchery_creation' %}active{% endif %} activate" href="{% url 'hatchery_master_list' %}"><i class="fa-solid fa-kiwi-bird me-1"></i>Hatchery Creation</a></li>{% endif %}
+        {% if 'setter_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'setter' %}active{% endif %} activate" href="{% url 'setter_list' %}"><i class="fas fa-layer-group me-1"></i>Setter</a></li>{% endif %}
+        {% if 'hatcher_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hatcher' %}active{% endif %} activate" href="{% url 'hatcher_list' %}"><i class="fas fa-temperature-high me-1"></i>Hatcher</a></li>{% endif %}
+        {% if 'expense_type_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'expense_type' %}active{% endif %} activate" href="{% url 'expense_type_list' %}"><i class="fas fa-tags me-1"></i>Expense Type</a></li>{% endif %}
+        {% if 'hatchery_expense_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hatchery_expense' %}active{% endif %} activate" href="{% url 'hatchery_expense_list' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Hatchery Expense</a></li>{% endif %}
       {% elif module == 'purchase' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'supplier' %}active{% endif %} activate" href="{% url 'supplier' %}"><i class="fas fa-truck me-1"></i>Supplier</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'vendor_groups' %}active{% endif %} activate" href="{% url 'vendor_groups' %}"><i class="fas fa-users me-1"></i>Vendor Groups</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'tax_master' %}active{% endif %} activate" href="{% url 'tax_master' %}"><i class="fas fa-percentage me-1"></i>Tax Master</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'terms' %}active{% endif %} activate" href="{% url 'terms' %}"><i class="fas fa-file-contract me-1"></i>Terms &amp; Conditions</a></li>
+        {% if 'supplier' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'supplier' %}active{% endif %} activate" href="{% url 'supplier' %}"><i class="fas fa-truck me-1"></i>Supplier</a></li>{% endif %}
+        {% if 'vendor_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'vendor_groups' %}active{% endif %} activate" href="{% url 'vendor_groups' %}"><i class="fas fa-users me-1"></i>Vendor Groups</a></li>{% endif %}
+        {% if 'tax_master' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'tax_master' %}active{% endif %} activate" href="{% url 'tax_master' %}"><i class="fas fa-percentage me-1"></i>Tax Master</a></li>{% endif %}
       {% elif module == 'purchase_transaction' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'purchase_order' %}active{% endif %} activate" href="{% url 'purchase_order' %}"><i class="fas fa-file-invoice me-1"></i>Create Purchase Order</a></li>
+        {% if 'purchase_order' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'purchase_order' %}active{% endif %} activate" href="{% url 'purchase_order' %}"><i class="fas fa-file-invoice me-1"></i>Create Purchase Order</a></li>{% endif %}
       {% elif module == 'hatchery_transaction' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'hatch_register' %}active{% endif %} activate" href="{% url 'hatchery_list' %}"><i class="fa-solid fa-egg me-1"></i>Hatch Register</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'egg_purchase' %}active{% endif %} activate" href="{% url 'egg_purchase_list' %}"><i class="fas fa-shopping-basket me-1"></i>Egg Purchase</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'egg_grading' %}active{% endif %} activate" href="{% url 'egg_grading_list' %}"><i class="fas fa-layer-group me-1"></i>Egg Grading</a></li>
+        {% if 'hatchery_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hatch_register' %}active{% endif %} activate" href="{% url 'hatchery_list' %}"><i class="fa-solid fa-egg me-1"></i>Hatch Register</a></li>{% endif %}
+        {% if 'egg_purchase_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'egg_purchase' %}active{% endif %} activate" href="{% url 'egg_purchase_list' %}"><i class="fas fa-shopping-basket me-1"></i>Egg Purchase</a></li>{% endif %}
+        {% if 'egg_grading_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'egg_grading' %}active{% endif %} activate" href="{% url 'egg_grading_list' %}"><i class="fas fa-layer-group me-1"></i>Egg Grading</a></li>{% endif %}
+        {% if 'delivery_challan_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'delivery_challan' %}active{% endif %} activate" href="{% url 'delivery_challan_list' %}"><i class="fas fa-truck me-1"></i>Delivery Challan</a></li>{% endif %}
       {% elif module == 'hatchery_report' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'hatch_sheet_report' %}active{% endif %} activate" href="{% url 'hatchery_report' %}"><i class="fas fa-chart-bar me-1"></i>Hatch Register Report</a></li>
+        {% if 'hatchery_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hatch_sheet_report' %}active{% endif %} activate" href="{% url 'hatchery_report' %}"><i class="fas fa-chart-bar me-1"></i>Hatch Register Report</a></li>{% endif %}
       {% elif module == 'sales' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'customer_groups' %}active{% endif %} activate" href="{% url 'customer_groups' %}"><i class="fas fa-layer-group me-1"></i>Customer Groups</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'customer' %}active{% endif %} activate" href="{% url 'customer' %}"><i class="fas fa-user me-1"></i>Customer</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'sales_price_master' %}active{% endif %} activate" href="{% url 'sales_price_master' %}"><i class="fas fa-tag me-1"></i>Price Master</a></li>
+        {% if 'customer_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'customer_groups' %}active{% endif %} activate" href="{% url 'customer_groups' %}"><i class="fas fa-layer-group me-1"></i>Customer Groups</a></li>{% endif %}
+        {% if 'customer' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'customer' %}active{% endif %} activate" href="{% url 'customer' %}"><i class="fas fa-user me-1"></i>Customer</a></li>{% endif %}
+        {% if 'sales_price_master' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sales_price_master' %}active{% endif %} activate" href="{% url 'sales_price_master' %}"><i class="fas fa-tag me-1"></i>Price Master</a></li>{% endif %}
       {% elif module == 'account' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}"><i class="fas fa-calendar-alt me-1"></i>Financial Year</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'schedule' %}active{% endif %} activate" href="{% url 'schedule' %}"><i class="fas fa-clock me-1"></i>Schedule</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'coa_category' %}active{% endif %} activate" href="{% url 'coa_category' %}"><i class="fas fa-layer-group me-1"></i>CoA Category</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'coa' %}active{% endif %} activate" href="{% url 'coa' %}"><i class="fas fa-sitemap me-1"></i>Chart of Accounts</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'bank_cash' %}active{% endif %} activate" href="{% url 'bank_cash' %}"><i class="fas fa-university me-1"></i>Bank / Cash Masters</a></li>
+        {% if 'fin_year' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}"><i class="fas fa-calendar-alt me-1"></i>Financial Year</a></li>{% endif %}
+        {% if 'schedule' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'schedule' %}active{% endif %} activate" href="{% url 'schedule' %}"><i class="fas fa-clock me-1"></i>Schedule</a></li>{% endif %}
+        {% if 'coa_category' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'coa_category' %}active{% endif %} activate" href="{% url 'coa_category' %}"><i class="fas fa-layer-group me-1"></i>CoA Category</a></li>{% endif %}
+        {% if 'coa' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'coa' %}active{% endif %} activate" href="{% url 'coa' %}"><i class="fas fa-sitemap me-1"></i>Chart of Accounts</a></li>{% endif %}
+        {% if 'bank_cash' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'bank_cash' %}active{% endif %} activate" href="{% url 'bank_cash' %}"><i class="fas fa-university me-1"></i>Bank / Cash Masters</a></li>{% endif %}
+        {% if 'company_profile' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'company_profile' %}active{% endif %} activate" href="{% url 'company_profile' %}"><i class="fas fa-building me-1"></i>Company Profile</a></li>{% endif %}
+        {% if 'terms' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'terms' %}active{% endif %} activate" href="{% url 'terms' %}"><i class="fas fa-file-contract me-1"></i>Terms &amp; Conditions</a></li>{% endif %}
       {% elif module == 'inventory' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'item_category' %}active{% endif %} activate" href="{% url 'item_category' %}"><i class="fas fa-folder me-1"></i>Item Category</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'items' %}active{% endif %} activate" href="{% url 'items' %}"><i class="fas fa-box me-1"></i>Items</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'warehouse' %}active{% endif %} activate" href="{% url 'warehouse' %}"><i class="fas fa-warehouse me-1"></i>Warehouse</a></li>
+        {% if 'item_category' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'item_category' %}active{% endif %} activate" href="{% url 'item_category' %}"><i class="fas fa-folder me-1"></i>Item Category</a></li>{% endif %}
+        {% if 'items' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'items' %}active{% endif %} activate" href="{% url 'items' %}"><i class="fas fa-box me-1"></i>Items</a></li>{% endif %}
+        {% if 'warehouse' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'warehouse' %}active{% endif %} activate" href="{% url 'warehouse' %}"><i class="fas fa-warehouse me-1"></i>Warehouse</a></li>{% endif %}
       {% elif module == 'notification' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'sms_templates' %}active{% endif %} activate" href="{% url 'sms_templates' %}"><i class="fas fa-comment-sms me-1"></i>SMS Templates</a></li>
+        {% if 'sms_templates' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_templates' %}active{% endif %} activate" href="{% url 'sms_templates' %}"><i class="fas fa-comment-sms me-1"></i>SMS Templates</a></li>{% endif %}
+      {% elif module == 'environmental_monitoring' %}
+        {% if 'env_dashboard' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'dashboard' %}active{% endif %} activate" href="{% url 'env_dashboard' %}"><i class="fas fa-gauge-high me-1"></i>Dashboard</a></li>{% endif %}
+        {% if 'env_hub_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hubs' %}active{% endif %} activate" href="{% url 'env_hub_list' %}"><i class="fas fa-hub me-1"></i>Hubs</a></li>{% endif %}
+        {% if 'env_sensor_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sensors' %}active{% endif %} activate" href="{% url 'env_sensor_list' %}"><i class="fas fa-microchip me-1"></i>Sensors</a></li>{% endif %}
+        {% if 'env_alert_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'alerts' %}active{% endif %} activate" href="{% url 'env_alert_list' %}"><i class="fas fa-bell me-1"></i>Alerts</a></li>{% endif %}
+        {% if 'env_tapo_account' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'tapo_account' %}active{% endif %} activate" href="{% url 'env_tapo_account' %}"><i class="fas fa-key me-1"></i>Tapo Account</a></li>{% endif %}
+        {% if 'env_default_thresholds' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'default_thresholds' %}active{% endif %} activate" href="{% url 'env_default_thresholds' %}"><i class="fas fa-sliders-h me-1"></i>Default Thresholds</a></li>{% endif %}
       {% elif module == 'user_management' %}
-        <li class="subnav-tab"><a class="{% if active_tab == 'create_user' %}active{% endif %} activate" href="{% url 'create_user' %}"><i class="fas fa-user-plus me-1"></i>Create User</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'assign_groups' %}active{% endif %} activate" href="{% url 'assign_groups' %}"><i class="fas fa-users-cog me-1"></i>Assign Groups</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'user_groups' %}active{% endif %} activate" href="{% url 'user_groups' %}"><i class="fas fa-layer-group me-1"></i>Manage User Groups</a></li>
-        <li class="subnav-tab"><a class="{% if active_tab == 'user_analytics' %}active{% endif %} activate" href="{% url 'user_analytics' %}"><i class="fas fa-chart-line me-1"></i>User Analytics</a></li>
+        {% if 'create_user' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'create_user' %}active{% endif %} activate" href="{% url 'create_user' %}"><i class="fas fa-user-plus me-1"></i>Create User</a></li>{% endif %}
+        {% if 'assign_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'assign_groups' %}active{% endif %} activate" href="{% url 'assign_groups' %}"><i class="fas fa-users-cog me-1"></i>Assign Groups</a></li>{% endif %}
+        {% if 'user_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'user_groups' %}active{% endif %} activate" href="{% url 'user_groups' %}"><i class="fas fa-layer-group me-1"></i>Manage User Groups</a></li>{% endif %}
+        {% if 'user_analytics' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'user_analytics' %}active{% endif %} activate" href="{% url 'user_analytics' %}"><i class="fas fa-chart-line me-1"></i>User Analytics</a></li>{% endif %}
       {% endif %}
     </ul>
   </div>

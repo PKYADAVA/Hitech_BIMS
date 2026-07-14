@@ -18,13 +18,13 @@
 <div class="row g-4">
     <!-- Button to Open the Modal -->
     <div class="text-end mb-3">
-        <button
+        {% if page_perms.add %}<button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#taxMasterFormModal"
         >
             <i class="fas fa-plus"></i> Add New Tax
-        </button>
+        </button>{% endif %}
     </div>
     <!-- Modal Structure -->
     <div class="modal fade" id="taxMasterFormModal" tabindex="-1" aria-labelledby="taxMasterFormModalLabel" aria-hidden="true">
@@ -159,7 +159,7 @@
                                 <td>${item.coa}</td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                    <button class="btn btn-outline-warning btn-sm edit-button"
+                                    {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
                                         data-bs-toggle="modal"
                                         data-bs-target="#${modalId}"
                                         data-id="${item.id}"
@@ -169,11 +169,11 @@
                                         data-rule="${item.rule}"
                                         data-coa="${item.coa}">
                                         <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger btn-sm delete-tax-master"
+                                    </button>{% endif %}
+                                    {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-tax-master"
                                         data-id="${item.id}">
                                         <i class="fas fa-trash"></i>
-                                    </button>
+                                    </button>{% endif %}
                                     </div>
                                 </td>
                             </tr>
@@ -213,7 +213,7 @@
                                             </div>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                <button type="submit" class="btn btn-primary">Update</button>
                                             </div>
                                         </form>
                                     </div>

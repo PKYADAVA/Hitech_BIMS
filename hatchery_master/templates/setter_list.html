@@ -44,10 +44,10 @@
     </div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Add and manage setter machines for each hatchery</div>
-        <a href="{% url 'setter_create' %}" class="btn btn-primary">
+        {% if page_perms.add %}<a href="{% url 'setter_create' %}" class="btn btn-primary">
     <i class="fas fa-plus"></i>
     Add
-  </a>
+  </a>{% endif %}
     </div>
 </div>
 
@@ -90,17 +90,17 @@
                   </button>
                 {% else %}
                   <a href="{% url 'setter_edit' setter.id %}">
-                    <button class="btn btn-outline-warning btn-sm" title="Edit">
+                    {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm" title="Edit">
                       <i class="fas fa-pen"></i>
-                    </button>
+                    </button>{% endif %}
                   </a>
                 {% endif %}
-                <button class="btn btn-outline-danger btn-sm delete-setter"
+                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-setter"
                         data-id="{{ setter.id }}"
                         {% if setter.is_locked %}disabled{% endif %}
                         title="Delete">
                   <i class="fas fa-trash"></i>
-                </button>
+                </button>{% endif %}
                 <button class="btn btn-outline-secondary btn-sm print-setter" title="Print">
                   <i class="fas fa-print"></i>
                 </button>

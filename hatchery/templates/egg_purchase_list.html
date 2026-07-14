@@ -18,10 +18,10 @@
     </div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Manage hatchery egg purchase transactions</div>
-      <a class="btn btn-primary" href="{% url 'egg_purchase_add' %}">
+      {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'egg_purchase_add' %}">
         <i class="fas fa-plus"></i>
         Add
-      </a>
+      </a>{% endif %}
     </div>
 </div>
 
@@ -126,12 +126,12 @@ $(document).ready(function () {
                     <td>${escapeHtml(ep.warehouse_name)}</td>
                     <td class="text-center">
                         <div class="d-flex gap-1 justify-content-center flex-wrap">
-                        <a class="btn btn-outline-warning btn-sm" href="/egg-purchase/${ep.id}/edit/" title="Edit">
+                        {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/egg-purchase/${ep.id}/edit/" title="Edit">
                             <i class="fas fa-pen"></i>
-                        </a>
-                        <button class="btn btn-outline-danger btn-sm delete-egg-purchase" data-id="${ep.id}" title="Delete">
+                        </a>{% endif %}
+                        {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-egg-purchase" data-id="${ep.id}" title="Delete">
                             <i class="fas fa-trash"></i>
-                        </button>
+                        </button>{% endif %}
                         </div>
                     </td>
                 </tr>

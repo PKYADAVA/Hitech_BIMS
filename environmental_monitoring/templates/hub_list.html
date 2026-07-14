@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Hubs — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='hubs' %}
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header danger-header">
+        <h5 class="modal-title"><i class="fas fa-trash me-2"></i>Confirm Deletion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this hub? Its sensors and history will also be removed.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancel
+        </button>
+        <form id="confirmDeleteForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash me-1"></i>Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-hub"></i>
+    Hubs
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Register and manage Tapo H100 hubs</div>
+    {% if page_perms.add %}<a href="{% url 'env_hub_create' %}" class="btn btn-primary">
+      <i class="fas fa-plus"></i>
+      Add
+    </a>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <i class="fas fa-table"></i>
+    Hub List
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="hubTable" class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Name</th>
+            <th>IP Address</th>
+            <th>MAC Address</th>
+            <th>Firmware</th>
+            <th>Signal</th>
+            <th>Status</th>
+            <th>Last Communication</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for hub in hubs %}
+          <tr>
+            <td>
+              {{ hub.name }}
+              {% if not hub.is_active %}<span class="badge bg-secondary ms-1">Inactive</span>{% endif %}
+            </td>
+            <td>{{ hub.ip_address }}</td>
+            <td>{{ hub.mac_address|default:"—" }}</td>
+            <td>{{ hub.firmware_version|default:"—" }}</td>
+            <td>{{ hub.signal_strength|default:"—" }}</td>
+            <td>
+              <span class="badge {% if hub.status == 'online' %}bg-success{% elif hub.status == 'offline' %}bg-danger{% elif hub.status == 'error' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                {{ hub.get_status_display }}
+              </span>
+            </td>
+            <td>{{ hub.last_seen|date:"Y-m-d H:i:s"|default:"—" }}</td>
+            <td>
+              <div class="d-flex gap-1 justify-content-center flex-wrap">
+                {% if page_perms.edit %}<a href="{% url 'env_hub_edit' hub.id %}">
+                  <button class="btn btn-outline-warning btn-sm" title="Edit">
+                    <i class="fas fa-pen"></i>
+                  </button>
+                </a>{% endif %}
+                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-hub" data-id="{{ hub.id }}" title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>{% endif %}
+                {% if not page_perms.edit and not page_perms.delete %}<span class="text-muted small">—</span>{% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+  $(document).ready(function () {
+    $('#hubTable').DataTable({
+      paging: true, searching: true, ordering: true, info: true, responsive: true,
+      language: { emptyTable: "No hubs found" },
+    });
+
+    $(document).on("click", ".delete-hub", function () {
+      const id = $(this).data("id");
+      $("#confirmDeleteForm").attr("action", `/environmental-monitoring/hubs/${id}/delete/`);
+      $("#deleteConfirmationModal").modal("show");
+    });
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit Sensor — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
+{% endblock %}
+
+{% block body %}
+{% include '_subnav.html' with module='environmental_monitoring' active_tab='sensors' %}
+
+<div class="page-header">
+  <div class="page-header-title">
+    <i class="fas fa-microchip"></i>
+    Edit Sensor
+  </div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">{{ sensor.device_id }} · {{ sensor.get_device_type_display }} on {{ sensor.hub.name }}</div>
+    <a href="{% url 'env_sensor_list' %}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left"></i>
+      Back to list
+    </a>
+  </div>
+</div>
+
+{% if sensor.last_alarm_at %}
+<div class="card mb-3">
+  <div class="card-body py-2 px-3">
+    <span class="text-muted small">
+      <i class="fas fa-bell me-1"></i>
+      Last Device Alarm: <strong>{{ sensor.last_alarm_event }}</strong>
+      at {{ sensor.last_alarm_at|date:"Y-m-d H:i:s" }}
+      <span title="Sourced directly from the hub's own event log for this sensor, not our poll time">
+        <i class="fas fa-circle-info"></i>
+      </span>
+    </span>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      <h6 class="mb-3"><i class="fas fa-layer-group me-1"></i>Setter Mapping</h6>
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <label for="alias" class="form-label">Label</label>
+          <input type="text" id="alias" name="alias" class="form-control" value="{{ sensor.alias }}" placeholder="e.g. Setter 3 - Top Shelf" />
+        </div>
+        <div class="col-md-4">
+          <label for="setter" class="form-label">Setter</label>
+          <select id="setter" name="setter" class="form-select">
+            <option value="">— Unmapped —</option>
+            {% for setter in setters %}
+            <option value="{{ setter.id }}" {% if sensor.setter_id == setter.id %}selected{% endif %}>
+              {{ setter.setter_no }} ({{ setter.hatchery.hatchery_name }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <div class="form-check">
+            <input type="checkbox" id="is_active" name="is_active" class="form-check-input" {% if sensor.is_active %}checked{% endif %} />
+            <label for="is_active" class="form-check-label">Active</label>
+          </div>
+        </div>
+      </div>
+
+      <h6 class="mb-3"><i class="fas fa-sliders-h me-1"></i>Calibration</h6>
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <label for="calibration_offset_temp" class="form-label">Temperature Offset (°C)</label>
+          <input type="number" step="0.01" id="calibration_offset_temp" name="calibration_offset_temp" class="form-control" value="{{ sensor.calibration_offset_temp }}" />
+        </div>
+        <div class="col-md-6">
+          <label for="calibration_offset_humidity" class="form-label">Humidity Offset (%)</label>
+          <input type="number" step="0.01" id="calibration_offset_humidity" name="calibration_offset_humidity" class="form-control" value="{{ sensor.calibration_offset_humidity }}" />
+        </div>
+      </div>
+
+      <h6 class="mb-3"><i class="fas fa-bell me-1"></i>Alert Thresholds <small class="text-muted">(blank = use global default)</small></h6>
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label for="temp_min" class="form-label">Min Temperature (°C)</label>
+          <input type="number" step="0.01" id="temp_min" name="temp_min" class="form-control" value="{{ sensor.temp_min|default_if_none:'' }}" />
+        </div>
+        <div class="col-md-3">
+          <label for="temp_max" class="form-label">Max Temperature (°C)</label>
+          <input type="number" step="0.01" id="temp_max" name="temp_max" class="form-control" value="{{ sensor.temp_max|default_if_none:'' }}" />
+        </div>
+        <div class="col-md-3">
+          <label for="humidity_min" class="form-label">Min Humidity (%)</label>
+          <input type="number" step="0.01" id="humidity_min" name="humidity_min" class="form-control" value="{{ sensor.humidity_min|default_if_none:'' }}" />
+        </div>
+        <div class="col-md-3">
+          <label for="humidity_max" class="form-label">Max Humidity (%)</label>
+          <input type="number" step="0.01" id="humidity_max" name="humidity_max" class="form-control" value="{{ sensor.humidity_max|default_if_none:'' }}" />
+        </div>
+        <div class="col-md-3">
+          <label for="battery_low_pct" class="form-label">Low Battery Threshold (%)</label>
+          <input type="number" id="battery_low_pct" name="battery_low_pct" class="form-control" value="{{ sensor.battery_low_pct|default_if_none:'' }}" />
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a href="{% url 'env_sensor_list' %}" class="btn btn-danger">
+          <i class="fas fa-times"></i>Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save"></i>Update
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+  $(document).ready(function () {
+    $('#setter').select2({ theme: 'bootstrap-5', width: '100%' });
+  });
+</script>
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({ text: "{{ message }}", duration: 4000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" } }).showToast();
+  {% else %}
+    Toastify({ text: "{{ message }}", duration: 3000, gravity: "top", position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" } }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
+{% endblock %}

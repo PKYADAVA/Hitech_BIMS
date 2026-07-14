@@ -18,10 +18,10 @@
     </div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Manage broiler batch records</div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#batchFormModal">
+        {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#batchFormModal">
     <i class="fas fa-plus"></i>
     Add New Batch
-  </button>
+  </button>{% endif %}
     </div>
 </div>
 
@@ -115,16 +115,16 @@ $(document).ready(function () {
               <td>${batch.batch_name}</td>
               <td>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-outline-warning btn-sm edit-button"
+                  {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
                     data-bs-toggle="modal" data-bs-target="#${modalId}"
                     data-id="${batch.id}"
                     data-broiler-farm="${batch.broiler_farm}"
                     data-batch-name="${batch.batch_name}">
                     <i class="fas fa-pen"></i>
-                  </button>
-                  <button class="btn btn-outline-danger btn-sm delete-button" data-id="${batch.id}">
+                  </button>{% endif %}
+                  {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${batch.id}">
                     <i class="fas fa-trash"></i>
-                  </button>
+                  </button>{% endif %}
                 </div>
               </td>
             </tr>`;
@@ -156,7 +156,7 @@ $(document).ready(function () {
                         <i class="fas fa-times"></i>Cancel
                       </button>
                       <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i>Save Changes
+                        <i class="fas fa-save"></i>Update
                       </button>
                     </div>
                   </form>

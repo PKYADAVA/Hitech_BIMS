@@ -24,6 +24,12 @@ urlpatterns = [
     path('schedule_list/', views.ScheduleAPI.as_view(), name='schedule_list'),
     path('schedule/create/', views.ScheduleAPI.as_view(), name='schedule_create'),
     path('schedule/<int:id>/', views.ScheduleAPI.as_view(), name='schedule_update'),
-    path('schedule/<int:id>/delete/', views.ScheduleAPI.as_view(), name='schedule_delete')
+    path('schedule/<int:id>/delete/', views.ScheduleAPI.as_view(), name='schedule_delete'),
+    path('company-profile/', views.company_profile, name='company_profile'),
+    path('terms/', views.terms, name='terms'),
+    path('terms_conditions/', views.TermsConditionsAPI.as_view(), name='terms_conditions_list'),
+    path('terms_conditions/create/', views.TermsConditionsAPI.as_view(), name='terms_conditions_create'),
+    path('terms_conditions/<int:id>/', views.TermsConditionsAPI.as_view(), name='terms_conditions_update'),
+    path('terms_conditions/<int:id>/delete', views.TermsConditionsAPI.as_view(), name='terms_conditions_delete'),
 
 ]

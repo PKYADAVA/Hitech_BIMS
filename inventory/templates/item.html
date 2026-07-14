@@ -18,13 +18,13 @@
 <div class="row g-4">
     <!-- Button to Open the Modal -->
     <div class="text-end mb-3">
-        <button
+        {% if page_perms.add %}<button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#itemFormModal"
         >
             <i class="fas fa-plus"></i> Add New Item
-        </button>
+        </button>{% endif %}
     </div>
     <!-- Modal Structure -->
     <div
@@ -195,7 +195,7 @@
                                 <td>${item.usage}</td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                    <button class="btn btn-outline-warning btn-sm edit-item"
+                                    {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-item"
                                         data-item_id="${item.id}"
                                         data-item_code="${item.item_code}"
                                         data-description="${item.description}"
@@ -205,11 +205,11 @@
                                         data-standard_cost_per_unit="${item.standard_cost_per_unit}"
                                         data-usage="${item.usage}">
                                         <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger btn-sm delete-item"
+                                    </button>{% endif %}
+                                    {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-item"
                                         data-id="${item.id}">
                                         <i class="fas fa-trash"></i>
-                                    </button>
+                                    </button>{% endif %}
                                     </div>
                                 </td>
                             </tr>
@@ -286,7 +286,7 @@
                                     </div>
                                     <div class="d-flex justify-content-end gap-2 mt-3">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" class="btn btn-primary">Save</button>
+                                        <button type="submit" class="btn btn-primary">Update</button>
                                     </div>
                                 </form>
                             </div>

@@ -89,6 +89,7 @@ INSTALLED_APPS = [
     "purchase",
     "account",
     "notification",
+    "environmental_monitoring",
 ]
 
 MIDDLEWARE = [
@@ -104,6 +105,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Enforces the per-group Web-Access matrix server-side (see user/access.py).
+    "user.middleware.WebAccessMiddleware",
 ]
 
 ROOT_URLCONF = "Hitech_BIMS.urls"
@@ -119,6 +122,9 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                # Exposes allowed_nav/allowed_tabs/allowed_sections/section_url/
+                # page_perms for nav-hiding and per-page button-hiding.
+                "user.context_processors.web_access",
             ],
         },
     },
@@ -133,10 +139,19 @@ WSGI_APPLICATION = "Hitech_BIMS.wsgi.application"
 DB_CONN_MAX_AGE = int(os.getenv("DB_CONN_MAX_AGE", "60"))
 DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
 
+
+def db_options_for_engine(engine: str) -> dict:
+    """Return backend-specific connection options for the selected engine."""
+    if "postgresql" in engine:
+        return {"connect_timeout": DB_CONNECT_TIMEOUT}
+    return {}
+
+
 if DEVELOPMENT_MODE:
+    db_engine = os.getenv("DB_ENGINE", "django.db.backends.postgresql")
     DATABASES = {
         "default": {
-            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+            "ENGINE": db_engine,
             "NAME": os.getenv("DB_NAME"),
             "USER": os.getenv("DB_USER"),
             "PASSWORD": os.getenv("DB_PASSWORD"),
@@ -144,9 +159,7 @@ if DEVELOPMENT_MODE:
             "PORT": os.getenv("DB_PORT", "5432"),
             "CONN_MAX_AGE": DB_CONN_MAX_AGE,
             "CONN_HEALTH_CHECKS": True,
-            "OPTIONS": {
-                "connect_timeout": DB_CONNECT_TIMEOUT,
-            },
+            "OPTIONS": db_options_for_engine(db_engine),
         }
     }
 else:
@@ -158,11 +171,13 @@ else:
         )
     }
     DATABASES["default"].setdefault("OPTIONS", {})
-    DATABASES["default"]["OPTIONS"]["connect_timeout"] = DB_CONNECT_TIMEOUT
+    if "postgresql" in DATABASES["default"].get("ENGINE", ""):
+        DATABASES["default"]["OPTIONS"]["connect_timeout"] = DB_CONNECT_TIMEOUT
     # Managed Postgres (DigitalOcean, etc.) rejects non-SSL connections.
     # dj_database_url already picks up ?sslmode=... if present in DATABASE_URL;
     # this only fills in a default when the URL itself doesn't specify one.
-    DATABASES["default"]["OPTIONS"].setdefault("sslmode", os.getenv("DB_SSLMODE", "require"))
+    if "postgresql" in DATABASES["default"].get("ENGINE", ""):
+        DATABASES["default"]["OPTIONS"].setdefault("sslmode", os.getenv("DB_SSLMODE", "require"))
 
 # Authentication settings
 LOGIN_URL = '/login/'
@@ -250,6 +265,14 @@ SMS_GATEWAYHUB_DCS = os.getenv("SMS_GATEWAYHUB_DCS", "0")
 # DLT registration fields (required for Indian traffic when provisioned).
 SMS_GATEWAYHUB_ENTITY_ID = os.getenv("SMS_GATEWAYHUB_ENTITY_ID", "")
 SMS_GATEWAYHUB_DLT_TEMPLATE_ID = os.getenv("SMS_GATEWAYHUB_DLT_TEMPLATE_ID", "")
+
+# Environmental Monitoring (Tapo H100 / T310) configuration.
+# Operational tuning is read here (see environmental_monitoring/conf.py); the
+# Tapo account credentials and default alert thresholds are both DB-backed
+# master records, editable from the ERP UI under Environmental Monitoring,
+# not environment variables.
+ENV_MONITORING_POLL_INTERVAL_SECONDS = int(os.getenv("ENV_MONITORING_POLL_INTERVAL_SECONDS", "60"))
+ENV_MONITORING_OFFLINE_AFTER_MINUTES = int(os.getenv("ENV_MONITORING_OFFLINE_AFTER_MINUTES", "15"))
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

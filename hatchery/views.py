@@ -12,14 +12,16 @@ from django.db import transaction
 import json
 import logging
 
-from account.models import ChartOfAccount
+from account.models import ChartOfAccount, CompanyProfile, TermsConditions
 from inventory.models import Item, Warehouse
 from purchase.models import Supplier
-from hatchery_master.models import Setter, Hatcher
+from hatchery_master.models import Setter, Hatcher, STATES_AND_TERRITORIES
+from sales.models import Customer
 
 from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
+    DeliveryChallan, DeliveryChallanItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -635,6 +637,127 @@ class EggGradingAPI(BaseAPIView):
 
 
 # ---------------------------------------------------------------------------
+# Delivery Challans
+@method_decorator(login_required, name="dispatch")
+class DeliveryChallanListTemplateView(View):
+    def get(self, request):
+        return render(request, "delivery_challan_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class DeliveryChallanFormTemplateView(View):
+    def get(self, request, id: Optional[int] = None):
+        return render(request, "delivery_challan_form.html", {
+            "delivery_challan_id": id,
+            "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
+            "items": Item.objects.all().order_by("item_code"),
+            "next_challan_no": DeliveryChallan.next_challan_no() if id is None else None,
+            "states_and_union_territories": STATES_AND_TERRITORIES,
+            "company": CompanyProfile.get_solo(),
+            "terms_conditions": TermsConditions.objects.filter(party_type=TermsConditions.PartyType.CUSTOMER).exclude(condition__isnull=True).exclude(condition__exact="").order_by("type"),
+        })
+
+
+def _delivery_challan_to_dict(challan):
+    company = CompanyProfile.get_solo()
+    return {
+        "id": challan.id, "challan_no": challan.challan_no, "date": challan.date.isoformat(),
+        "place_of_supply": challan.place_of_supply, "overall_discount": str(challan.overall_discount or 0),
+        "customer": challan.customer_id, "customer_name": challan.customer.name,
+        "customer_address": challan.customer.address, "customer_mobile": challan.customer.mobile,
+        "customer_gstin": challan.customer.gstin or "", "customer_email": challan.customer.email or "",
+        "shipping_address": challan.shipping_address, "transport_mode": challan.transport_mode,
+        "vehicle_no": challan.vehicle_no, "driver_name": challan.driver_name,
+        "driver_mobile": challan.driver_mobile, "transporter_name": challan.transporter_name,
+        "transport_document_no": challan.transport_document_no,
+        "transport_document_date": challan.transport_document_date.isoformat() if challan.transport_document_date else "",
+        "eway_bill_no": challan.eway_bill_no,
+        "eway_bill_date": challan.eway_bill_date.isoformat() if challan.eway_bill_date else "",
+        "print_price_details": challan.print_price_details, "terms": challan.terms,
+        "total_quantity": str(challan.total_quantity()), "total_units": str(challan.total_units()),
+        "total_amount": str(challan.total_amount()), "total_tax": str(challan.total_tax()),
+        "grand_total": str(challan.grand_total()),
+        "company": {
+            "name": company.name, "address": company.address, "state": company.state,
+            "mobile": company.mobile, "email": company.email, "gstin": company.gstin, "pan": company.pan,
+            "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
+            "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
+        },
+        "items": [{
+            "id": row.id, "item": row.item_id, "item_code": row.item.item_code,
+            "item_description": row.item.description, "hsn_code": row.item.hsn_code or "",
+            "packing_size": str(row.packing_size), "units": str(row.units),
+            "quantity": str(row.quantity), "unit": row.unit, "price": str(row.price),
+            "discount_percent": str(row.discount_percent), "tax_percent": str(row.tax_percent),
+            "amount": str(row.amount),
+        } for row in challan.items.select_related("item")],
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class DeliveryChallanAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None):
+        try:
+            if id:
+                return JsonResponse(_delivery_challan_to_dict(get_object_or_404(DeliveryChallan.objects.select_related("customer"), id=id)))
+            challans = DeliveryChallan.objects.select_related("customer").prefetch_related("items").all()
+            return JsonResponse([{
+                "id": c.id, "challan_no": c.challan_no, "date": c.date.isoformat(),
+                "customer_name": c.customer.name, "vehicle_no": c.vehicle_no,
+                "total_quantity": str(c.total_quantity()), "total_amount": str(c.total_amount()),
+            } for c in challans], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body)).id}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body), id).id})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            get_object_or_404(DeliveryChallan, id=id).delete()
+            return JsonResponse({"message": "Delivery challan deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def _save(self, data, challan_id=None):
+        fields = ["date", "place_of_supply", "shipping_address", "transport_mode",
+                  "vehicle_no", "driver_name", "driver_mobile", "transporter_name", "transport_document_no",
+                  "transport_document_date", "eway_bill_no", "eway_bill_date", "terms"]
+        values = {field: data.get(field) or (None if field.endswith("_date") else "") for field in fields}
+        values["customer"] = get_object_or_404(Customer, id=data["customer"])
+        values["print_price_details"] = bool(data.get("print_price_details", True))
+        values["overall_discount"] = Decimal(str(data.get("overall_discount") or 0))
+        if challan_id:
+            challan = get_object_or_404(DeliveryChallan, id=challan_id)
+            for field, value in values.items(): setattr(challan, field, value)
+            challan.full_clean(exclude=["challan_no"])
+            challan.save(); challan.items.all().delete()
+        else:
+            challan = DeliveryChallan(**values)
+            challan.full_clean(exclude=["challan_no"])
+            challan.save()
+        for row in data.get("items", []):
+            DeliveryChallanItem.objects.create(
+                challan=challan, item=get_object_or_404(Item, id=row["item"]),
+                packing_size=Decimal(str(row.get("packing_size") or 1)), units=Decimal(str(row.get("units") or 1)),
+                quantity=Decimal(str(row.get("quantity") or 0)), unit=row.get("unit", ""),
+                price=Decimal(str(row.get("price") or 0)), discount_percent=Decimal(str(row.get("discount_percent") or 0)),
+                tax_percent=Decimal(str(row.get("tax_percent") or 0)),
+            )
+        return challan
+
+
 # Hatchery Sheet Report
 # ---------------------------------------------------------------------------
 
