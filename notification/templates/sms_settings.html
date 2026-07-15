@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}SMS Settings - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='notification_master' active_tab='sms_settings' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-gear"></i> SMS Settings</div>
+  <div class="page-header-right"><div class="page-header-subtitle">Gateway configuration — changes apply immediately, no restart needed</div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header"><i class="fas fa-sliders-h"></i> Configuration</div>
+      <div class="card-body">
+        <form id="sms-settings-form">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="cfg-enabled" {% if row.enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                <label class="form-check-label fw-semibold" for="cfg-enabled">SMS Sending Enabled</label>
+                <div class="form-text">Master switch. Off = every send is refused with "disabled".</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="cfg-mock" {% if row.mock %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                <label class="form-check-label fw-semibold" for="cfg-mock">Mock Mode</label>
+                <div class="form-text">On = simulate sends (logged, no real SMS, no cost). Off = real gateway.</div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Sender ID (DLT Header)</label>
+              <input type="text" class="form-control" id="cfg-sender" maxlength="10" value="{{ row.sender_id }}" placeholder="e.g. HTFARM" {% if not can_edit %}disabled{% endif %}>
+              <div class="form-text">Blank = use .env value{% if effective.sender_id %} (currently: {{ effective.sender_id }}){% endif %}.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">DLT Entity ID</label>
+              <input type="text" class="form-control" id="cfg-entity" maxlength="30" value="{{ row.entity_id }}" placeholder="Principal entity ID" {% if not can_edit %}disabled{% endif %}>
+              <div class="form-text">Blank = use .env value.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">API Key</label>
+              <input type="password" class="form-control" id="cfg-api-key" autocomplete="new-password"
+                     placeholder="{% if api_key_in_db %}•••••••• saved here — enter to replace{% elif api_key_effective %}Using .env key — enter to override{% else %}Not configured{% endif %}"
+                     {% if not can_edit %}disabled{% endif %}>
+              <div class="form-text">
+                Never shown once saved. Leave blank to keep the current key.
+                {% if api_key_in_db and can_edit %}<a href="#" id="clear-api-key" class="text-danger">Clear saved key (fall back to .env)</a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Default Country Code</label>
+              <input type="text" class="form-control" id="cfg-country" maxlength="4" value="{{ row.default_country_code }}" {% if not can_edit %}disabled{% endif %}>
+              <div class="form-text">Prefixed to 10-digit numbers, e.g. 91 for India.</div>
+            </div>
+          </div>
+          {% if can_edit %}
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Settings</button>
+          </div>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header"><i class="fas fa-circle-check"></i> Effective Configuration</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-bordered mb-0">
+          <tr><th style="width:45%">SMS Sending</th>
+              <td>{% if effective.enabled %}<span class="badge bg-success">Enabled</span>{% else %}<span class="badge bg-danger">Disabled</span>{% endif %}</td></tr>
+          <tr><th>Mode</th>
+              <td>{% if effective.mock %}<span class="badge bg-info">Mock (simulated)</span>{% else %}<span class="badge bg-warning text-dark">LIVE — real SMS</span>{% endif %}</td></tr>
+          <tr><th>Provider</th><td>{{ effective.provider }}</td></tr>
+          <tr><th>Sender ID</th><td>{{ effective.sender_id|default:"—" }}</td></tr>
+          <tr><th>Entity ID</th><td>{{ effective.entity_id|default:"—" }}</td></tr>
+          <tr><th>API Key</th>
+              <td>{% if api_key_effective %}<span class="badge bg-success">Configured</span> <span class="small text-muted">({% if api_key_in_db %}from this page{% else %}from .env{% endif %})</span>{% else %}<span class="badge bg-danger">Missing</span>{% endif %}</td></tr>
+          <tr><th>Country Code</th><td>+{{ effective.country_code }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    {% if can_edit %}
+    <div class="card">
+      <div class="card-header"><i class="fas fa-vial"></i> Send Test SMS</div>
+      <div class="card-body">
+        <div class="mb-2">
+          <label class="form-label">Mobile Number</label>
+          <input type="text" class="form-control" id="test-mobile" placeholder="Your own number, e.g. 98XXXXXXXX">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Message <span class="text-muted small">(optional — default test text used if blank)</span></label>
+          <textarea class="form-control" id="test-message" rows="2" placeholder="Test SMS from BIMS"></textarea>
+          <div class="form-text">In LIVE mode, DLT may reject text that doesn't match an approved template — the gateway response below will say why.</div>
+        </div>
+        <button type="button" class="btn btn-outline-primary" id="test-send-btn"><i class="fas fa-paper-plane"></i> Send Test</button>
+        <div id="test-result" class="mt-2 d-none">
+          <div class="small fw-semibold mb-1">Result: <span id="test-status"></span></div>
+          <pre class="bg-light border rounded p-2 small mb-0" style="max-height:160px; overflow:auto;" id="test-detail"></pre>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let clearApiKey = false;
+
+  $("#clear-api-key").on("click", function (e) {
+    e.preventDefault();
+    if (!confirm("Clear the API key saved here and fall back to the .env key?")) return;
+    clearApiKey = true;
+    $("#cfg-api-key").val("").attr("placeholder", "Will be cleared on save");
+    $(this).addClass("fw-bold").text("Key will be cleared when you save");
+  });
+
+  $("#sms-settings-form").on("submit", function (e) {
+    e.preventDefault();
+    const enabled = $("#cfg-enabled").is(":checked");
+    const mock = $("#cfg-mock").is(":checked");
+    if (enabled && !mock && !confirm("LIVE mode: every send will hit the real gateway and consume SMS credit. Continue?")) return;
+    $.ajax({
+      url: "{% url 'sms_settings' %}",
+      type: "POST",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({
+        enabled: enabled,
+        mock: mock,
+        sender_id: $("#cfg-sender").val(),
+        entity_id: $("#cfg-entity").val(),
+        api_key: $("#cfg-api-key").val(),
+        clear_api_key: clearApiKey,
+        default_country_code: $("#cfg-country").val(),
+      }),
+      success: function () {
+        Toastify({ text: "SMS settings saved — active immediately.", backgroundColor: "#28a745", duration: 2500 }).showToast();
+        setTimeout(function () { location.reload(); }, 800);
+      },
+      error: function (xhr) {
+        Toastify({ text: xhr.responseJSON?.error || "Failed to save settings.", backgroundColor: "#dc3545", duration: 3500 }).showToast();
+      },
+    });
+  });
+
+  $("#test-send-btn").on("click", function () {
+    const btn = $(this);
+    const mobile = $("#test-mobile").val().trim();
+    if (!/^\+?\d{10,15}$/.test(mobile)) {
+      Toastify({ text: "Enter a valid mobile number first.", backgroundColor: "#dc3545", duration: 3000 }).showToast();
+      return;
+    }
+    btn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm"></span> Sending...');
+    $.ajax({
+      url: "{% url 'sms_settings_test' %}",
+      type: "POST",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({ mobile: mobile, message: $("#test-message").val() }),
+      complete: function (xhr) {
+        btn.prop("disabled", false).html('<i class="fas fa-paper-plane"></i> Send Test');
+        const r = xhr.responseJSON || {};
+        $("#test-result").removeClass("d-none");
+        $("#test-status").html(r.success
+          ? '<span class="badge bg-success text-capitalize">' + (r.status || "sent") + "</span>"
+          : '<span class="badge bg-danger text-capitalize">' + (r.status || "failed") + "</span>");
+        $("#test-detail").text(JSON.stringify(r, null, 2));
+      },
+    });
+  });
+});
+</script>
+{% endblock %}

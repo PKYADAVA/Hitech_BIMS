@@ -172,8 +172,9 @@
         </div>
       </div>
 
+      {% if request_mode %}<div class="alert alert-warning mt-4 mb-0"><i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.</div>{% endif %}
       <div class="mt-4 d-flex gap-2">
-        <button type="submit" class="btn btn-primary">{% if egg_purchase_id %}Update{% else %}Save{% endif %}</button>
+        <button type="submit" class="btn btn-primary">{% if request_mode %}Submit for Approval{% else %}{% if egg_purchase_id %}Update{% else %}Save{% endif %}{% endif %}</button>
         <a href="{% url 'egg_purchase_list' %}" class="btn btn-danger">Cancel</a>
       </div>
     </form>
@@ -385,6 +386,24 @@ $(document).ready(function () {
             remarks: $("#remarks").val(),
             items: items,
         };
+
+        {% if request_mode %}
+        const note = prompt('Reason for this change (optional):') || '';
+        $.ajax({
+            url: "{% url 'change_request_api_list' %}",
+            type: "POST",
+            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+            data: JSON.stringify({ module: 'egg_purchase', object_id: eggPurchaseId, action: 'edit', payload: payload, note: note }),
+            success: function () {
+                alert('Change request submitted for approval.');
+                window.location.href = "{% url 'egg_purchase_list' %}";
+            },
+            error: function (xhr, status, error) {
+                showToast('danger', 'Failed to submit change request: ' + (xhr.responseJSON?.error || error));
+            }
+        });
+        return;
+        {% endif %}
 
         const url = eggPurchaseId ? `/egg_purchase_api/${eggPurchaseId}/` : "{% url 'egg_purchase_api_list' %}";
         const method = eggPurchaseId ? "PUT" : "POST";

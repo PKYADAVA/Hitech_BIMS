@@ -832,3 +832,29 @@ class ChickSaleItem(models.Model):
             self.net_qty = max(self.sale_qty - (self.free_qty or 0), 0)
         self.amount = (self.net_qty or 0) * (self.sale_rate or 0) - (self.discount_amount or 0)
         super().save(*args, **kwargs)
+
+
+class ChangeRequest(models.Model):
+    """A pending modification/deletion of a transaction, raised by a user who
+    lacks the edit/delete right and reviewed by a user who holds it."""
+    ACTION_CHOICES = [('edit', _('Modification')), ('delete', _('Deletion'))]
+    STATUS_CHOICES = [('pending', _('Pending')), ('approved', _('Approved')), ('rejected', _('Rejected'))]
+
+    module = models.CharField(max_length=40, help_text=_("Handler key, e.g. delivery_challan"))
+    object_id = models.PositiveIntegerField()
+    object_label = models.CharField(max_length=100, blank=True, help_text=_("Human label, e.g. the transaction number"))
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    payload = models.JSONField(null=True, blank=True, help_text=_("Proposed new values (edit requests)"))
+    note = models.TextField(blank=True, help_text=_("Requester's reason/remarks"))
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    requested_by = models.ForeignKey('auth.User', on_delete=models.PROTECT, related_name='change_requests')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey('auth.User', on_delete=models.PROTECT, null=True, blank=True, related_name='reviewed_change_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self):
+        return f"{self.get_action_display()} of {self.module} #{self.object_id} ({self.status})"

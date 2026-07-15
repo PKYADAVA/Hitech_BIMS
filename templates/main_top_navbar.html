@@ -220,6 +220,17 @@
       </li>
       {% endif %}
 
+      <!-- Change Requests -->
+      {% if 'change_requests' in allowed_nav %}
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'change_requests' %}active{% endif %}"
+           href="{% url 'change_requests' %}">
+          <i class="fa-solid fa-clipboard-check me-1"></i>Change Requests
+          {% if pending_change_requests %}<span class="badge rounded-pill bg-danger ms-1">{{ pending_change_requests }}</span>{% endif %}
+        </a>
+      </li>
+      {% endif %}
+
       <!-- User Management -->
       {% if 'user' in allowed_nav %}
       <li class="nav-item">
@@ -240,9 +251,15 @@
         <ul class="dropdown-menu" aria-labelledby="notificationsDd">
           <li><h6 class="dropdown-header">Notifications</h6></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'sms_templates' %}">
-            <i class="fa-solid fa-comment-sms"></i>SMS Templates
-          </a></li>
+          {% if 'notifications_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.notifications_master }}">
+            <i class="fas fa-sliders-h"></i>Master
+          </a></li>{% endif %}
+          {% if 'notifications_transactions' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.notifications_transactions }}">
+            <i class="fas fa-exchange-alt"></i>Transactions
+          </a></li>{% endif %}
+          {% if 'notifications_reports' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.notifications_reports }}">
+            <i class="fas fa-chart-bar"></i>Reports
+          </a></li>{% endif %}
         </ul>
       </li>
       {% endif %}

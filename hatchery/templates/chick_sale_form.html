@@ -146,8 +146,9 @@
     </div>
   </div>
 
+  {% if request_mode %}<div class="alert alert-warning mb-3 mx-auto" style="max-width:900px"><i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.</div>{% endif %}
   <div class="d-flex gap-2 mb-4 justify-content-center">
-    <button class="btn btn-primary" type="submit">{% if chick_sale_id %}Update{% else %}Save{% endif %}</button>
+    <button class="btn btn-primary" type="submit">{% if request_mode %}Submit for Approval{% else %}{% if chick_sale_id %}Update{% else %}Save{% endif %}{% endif %}</button>
     <a href="{% url 'chick_sale_list' %}" class="btn btn-danger">Cancel</a>
   </div>
   <input type="hidden" id="delivery_challan" value="">
@@ -160,6 +161,15 @@
 {% block js %}
 <script>
 const editId = {{ chick_sale_id|default:'null' }};
+const requestMode = {{ request_mode|yesno:'true,false' }};
+async function submitChangeRequest(module, payloadData, listUrl) {
+  const note = prompt('Reason for this change (optional):') || '';
+  const res = await fetch('/change_request_api/', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},
+    body: JSON.stringify({module: module, object_id: editId, action: 'edit', payload: payloadData, note: note})});
+  if (!res.ok) { const err = await res.json(); return alert(err.error || 'Unable to submit change request.'); }
+  alert('Change request submitted for approval.');
+  location.href = listUrl;
+}
 const fromChallan = {{ from_challan|safe }};
 const itemOptions = `{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const get = id => document.getElementById(id); const value = id => get(id).value;
@@ -292,6 +302,7 @@ get('chick-sale-form').onsubmit=async e=>{
   e.preventDefault();
   const data=payload();
   if(!data.items.length||data.items.some(x=>!x.item)) return alert('Add at least one item line.');
+  if (requestMode) return submitChangeRequest('chick_sale', data, '{% url "chick_sale_list" %}');
   const url=editId?`/chick_sale_api/${editId}/`:'{% url "chick_sale_api_list" %}';
   const res=await fetch(url,{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
   if(!res.ok){const err=await res.json();return alert(err.error||'Unable to save chick sale.')}

@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Change Requests - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='change_requests' %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-clipboard-check"></i> Change Requests</div>
+  <div class="page-header-right"><div class="page-header-subtitle">Modification/deletion requests awaiting review by permitted users</div></div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-list"></i> Requests</span>
+    <div class="btn-group btn-group-sm" role="group" id="status-filter">
+      <button type="button" class="btn btn-outline-light active" data-status="pending">Pending <span class="badge bg-warning text-dark" id="count-pending">0</span></button>
+      <button type="button" class="btn btn-outline-light" data-status="approved">Approved <span class="badge bg-success" id="count-approved">0</span></button>
+      <button type="button" class="btn btn-outline-light" data-status="rejected">Rejected <span class="badge bg-danger" id="count-rejected">0</span></button>
+      <button type="button" class="btn btn-outline-light" data-status="all">All</button>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="change-request-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Requested At</th>
+            <th>Requested By</th>
+            <th>Module</th>
+            <th>Record</th>
+            <th>Request</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Reviewed By</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Proposed changes modal (field-by-field diff against the saved record) -->
+<div class="modal fade" id="payloadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="payload-title">Proposed Changes</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:70vh; overflow:auto;">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+          <div id="diff-summary"></div>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="changes-only-toggle">
+            <label class="form-check-label small" for="changes-only-toggle">Show changes only</label>
+          </div>
+        </div>
+        <div id="payload-body"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success d-none" id="modal-approve"><i class="fas fa-check"></i> Approve &amp; Apply</button>
+        <button type="button" class="btn btn-danger d-none" id="modal-reject"><i class="fas fa-times"></i> Reject</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#payload-body table { font-size: 12.5px; }
+#payload-body .diff-changed { background: #fff3cd !important; }
+#payload-body .diff-was { color: #b02a37; font-size: 11px; display: block; text-decoration: line-through; }
+#payload-body .changed-stamp { font-size: 10px; vertical-align: middle; }
+#payload-body h6 { margin-top: 14px; border-bottom: 1px solid #dee2e6; padding-bottom: 4px; }
+#payload-body .delta-badge { font-size: 10px; margin-left: 4px; }
+.changes-only #payload-body tr.diff-same { display: none; }
+#diff-summary .badge { margin-right: 4px; }
+</style>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let table = null;
+  let allRows = [];
+  let fkLabels = {};
+  let statusFilter = "pending";
+  let modalRowId = null;
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  const statusBadge = {
+    pending: '<span class="badge bg-warning text-dark">Pending</span>',
+    approved: '<span class="badge bg-success">Approved</span>',
+    rejected: '<span class="badge bg-danger">Rejected</span>',
+  };
+
+  function renderRows() {
+    if (table) { table.destroy(); }
+    const rows = statusFilter === "all" ? allRows : allRows.filter(r => r.status === statusFilter);
+    const tbody = $("#change-request-table tbody");
+    tbody.empty();
+    rows.forEach(function (row) {
+      let actions = '';
+      if (row.action === 'edit' && row.payload) {
+        actions += `<button class="btn btn-outline-info btn-sm view-payload" data-id="${row.id}" title="View proposed changes"><i class="fas fa-eye"></i></button>`;
+      }
+      if (row.status === 'pending' && row.can_review) {
+        actions += ` <button class="btn btn-outline-success btn-sm approve-button" data-id="${row.id}" title="Approve & apply"><i class="fas fa-check"></i></button>
+          <button class="btn btn-outline-danger btn-sm reject-button" data-id="${row.id}" title="Reject"><i class="fas fa-times"></i></button>`;
+      }
+      tbody.append(`<tr>
+        <td>${escapeHtml(row.requested_at)}</td>
+        <td>${escapeHtml(row.requested_by)}</td>
+        <td>${escapeHtml(row.module_label)}</td>
+        <td>${escapeHtml(row.object_label)}</td>
+        <td>${row.action === 'delete' ? '<span class="badge bg-danger">Deletion</span>' : '<span class="badge bg-primary">Modification</span>'}</td>
+        <td>${escapeHtml(row.note) || "-"}</td>
+        <td>${statusBadge[row.status] || escapeHtml(row.status)}${row.review_note ? `<div class="small text-muted">${escapeHtml(row.review_note)}</div>` : ''}</td>
+        <td>${escapeHtml(row.reviewed_by) || "-"}${row.reviewed_at ? `<div class="small text-muted">${escapeHtml(row.reviewed_at)}</div>` : ''}</td>
+        <td class="text-center"><div class="d-flex gap-1 justify-content-center">${actions || '-'}</div></td>
+      </tr>`);
+    });
+    table = $('#change-request-table').DataTable({ responsive: true, order: [[0, 'desc']], language: { emptyTable: "No change requests" } });
+  }
+
+  function updateCounts() {
+    ["pending", "approved", "rejected"].forEach(s => {
+      $(`#count-${s}`).text(allRows.filter(r => r.status === s).length);
+    });
+  }
+
+  function loadRequests() {
+    $.getJSON('{% url "change_request_api_list" %}', function (resp) {
+      allRows = resp.requests || [];
+      fkLabels = resp.labels || {};
+      updateCounts();
+      renderRows();
+    });
+  }
+
+  $("#status-filter button").on("click", function () {
+    $("#status-filter button").removeClass("active");
+    $(this).addClass("active");
+    statusFilter = $(this).data("status");
+    renderRows();
+  });
+
+  /* ---------------- diff modal ---------------- */
+  function labelize(key) {
+    return key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function resolveLabel(key, v) {
+    const map = fkLabels[key];
+    if (map && v !== null && v !== undefined && map[String(v)]) return map[String(v)];
+    return null;
+  }
+
+  function sameValue(a, b) {
+    if (a === undefined || a === null) a = "";
+    if (b === undefined || b === null) b = "";
+    if (typeof a === "boolean" || typeof b === "boolean") return Boolean(a) === Boolean(b) || String(a) === String(b);
+    const na = Number(a), nb = Number(b);
+    if (a !== "" && b !== "" && !isNaN(na) && !isNaN(nb)) return na === nb;
+    return String(a).trim() === String(b).trim();
+  }
+
+  function displayVal(key, v) {
+    const label = resolveLabel(key, v);
+    if (label) return escapeHtml(label);
+    if (v === undefined || v === null || String(v).trim() === "") return "-";
+    if (typeof v === "boolean") return v ? "Yes" : "No";
+    return escapeHtml(v);
+  }
+
+  function deltaBadge(key, cur, prop) {
+    if (resolveLabel(key, cur) || resolveLabel(key, prop)) return "";
+    const nc = Number(cur), np = Number(prop);
+    if (cur === "" || prop === "" || cur === null || prop === null || isNaN(nc) || isNaN(np)) return "";
+    const diff = np - nc;
+    if (!diff) return "";
+    const txt = (diff > 0 ? "+" : "−") + (+Math.abs(diff).toFixed(2));
+    return `<span class="badge ${diff > 0 ? "bg-success" : "bg-danger"} delta-badge">${txt}</span>`;
+  }
+
+  const CHANGED_STAMP = '<span class="badge bg-warning text-dark changed-stamp ms-1">CHANGED</span>';
+
+  function buildDiffHtml(payload, current) {
+    let html = "";
+    const stats = { changed: 0, added: 0, removed: 0 };
+    const scalarKeys = [], arrayKeys = [];
+    Object.keys(payload).forEach(k => (Array.isArray(payload[k]) ? arrayKeys : scalarKeys).push(k));
+
+    html += '<h6>Details</h6><table class="table table-bordered table-sm mb-2"><thead class="table-light"><tr><th style="width:25%">Field</th><th style="width:37%">Current (saved)</th><th style="width:38%">Proposed</th></tr></thead><tbody>';
+    scalarKeys.forEach(k => {
+      const cur = current ? current[k] : undefined;
+      const changed = current && (k in current) && !sameValue(cur, payload[k]);
+      if (changed) stats.changed += 1;
+      html += `<tr class="${changed ? "diff-changed" : "diff-same"}"><td>${labelize(k)}${changed ? CHANGED_STAMP : ""}</td><td>${current && (k in current) ? displayVal(k, cur) : "-"}</td><td>${displayVal(k, payload[k])}${changed ? deltaBadge(k, cur, payload[k]) : ""}</td></tr>`;
+    });
+    html += "</tbody></table>";
+
+    arrayKeys.forEach(k => {
+      const propRows = payload[k] || [];
+      const curRows = (current && Array.isArray(current[k])) ? current[k] : [];
+      const cols = propRows.length ? Object.keys(propRows[0]) : (curRows.length ? Object.keys(curRows[0]) : []);
+      html += `<h6>${labelize(k)}</h6>`;
+      if (!cols.length) { html += '<div class="text-muted small mb-2">No rows.</div>'; return; }
+      html += '<table class="table table-bordered table-sm mb-2"><thead class="table-light"><tr><th>#</th>' +
+        cols.map(c => `<th>${labelize(c)}</th>`).join("") + "<th></th></tr></thead><tbody>";
+      const count = Math.max(propRows.length, curRows.length);
+      for (let i = 0; i < count; i++) {
+        const prop = propRows[i], cur = curRows[i];
+        if (prop && !cur) {
+          stats.added += 1;
+          html += `<tr class="diff-changed"><td>${i + 1}</td>` + cols.map(c => `<td>${displayVal(c, prop[c])}</td>`).join("") + '<td><span class="badge bg-success changed-stamp">NEW ROW</span></td></tr>';
+        } else if (!prop && cur) {
+          stats.removed += 1;
+          html += `<tr class="diff-changed"><td>${i + 1}</td>` + cols.map(c => `<td><s>${displayVal(c, cur[c])}</s></td>`).join("") + '<td><span class="badge bg-danger changed-stamp">REMOVED</span></td></tr>';
+        } else {
+          let rowChanged = false;
+          const cells = cols.map(c => {
+            const changed = (c in cur) && !sameValue(cur[c], prop[c]);
+            if (changed) { rowChanged = true; stats.changed += 1; }
+            return `<td class="${changed ? "diff-changed" : ""}">${changed ? `<span class="diff-was">${displayVal(c, cur[c])}</span>` : ""}${displayVal(c, prop[c])}${changed ? deltaBadge(c, cur[c], prop[c]) : ""}</td>`;
+          }).join("");
+          html += `<tr class="${rowChanged ? "" : "diff-same"}"><td>${i + 1}</td>${cells}<td>${rowChanged ? CHANGED_STAMP : ""}</td></tr>`;
+        }
+      }
+      html += "</tbody></table>";
+    });
+    return { html: html, stats: stats };
+  }
+
+  function renderSummary(stats, hasCurrent) {
+    if (!hasCurrent) {
+      $("#diff-summary").html('<span class="badge bg-secondary">Saved record unavailable — showing proposed values only</span>');
+      return;
+    }
+    const total = stats.changed + stats.added + stats.removed;
+    let chips = total
+      ? `<span class="badge bg-warning text-dark">${stats.changed} field${stats.changed === 1 ? "" : "s"} changed</span>`
+      : '<span class="badge bg-secondary">No differences from the saved record</span>';
+    if (stats.added) chips += `<span class="badge bg-success">${stats.added} row${stats.added === 1 ? "" : "s"} added</span>`;
+    if (stats.removed) chips += `<span class="badge bg-danger">${stats.removed} row${stats.removed === 1 ? "" : "s"} removed</span>`;
+    $("#diff-summary").html(chips);
+  }
+
+  function setModalReviewButtons(row) {
+    const show = row.status === "pending" && row.can_review;
+    $("#modal-approve, #modal-reject").toggleClass("d-none", !show);
+  }
+
+  $(document).on("click", ".view-payload", function () {
+    const row = allRows.find(r => r.id === $(this).data("id"));
+    modalRowId = row.id;
+    $("#payload-title").text(`Proposed Changes — ${row.module_label} ${row.object_label}`);
+    $("#payload-body").html('<div class="text-center text-muted py-4">Loading...</div>');
+    $("#diff-summary").empty();
+    $("#changes-only-toggle").prop("checked", false);
+    $("#payloadModal .modal-body").removeClass("changes-only");
+    setModalReviewButtons(row);
+    new bootstrap.Modal(document.getElementById("payloadModal")).show();
+    if (!row.detail_api) {
+      const out = buildDiffHtml(row.payload, null);
+      $("#payload-body").html(out.html);
+      renderSummary(out.stats, false);
+      return;
+    }
+    $.getJSON(`${row.detail_api}${row.object_id}/`, function (current) {
+      const out = buildDiffHtml(row.payload, current);
+      $("#payload-body").html(out.html);
+      renderSummary(out.stats, true);
+    }).fail(function () {
+      const out = buildDiffHtml(row.payload, null);
+      $("#payload-body").html(out.html);
+      renderSummary(out.stats, false);
+    });
+  });
+
+  $("#changes-only-toggle").on("change", function () {
+    $("#payloadModal .modal-body").toggleClass("changes-only", this.checked);
+  });
+
+  /* ---------------- review actions ---------------- */
+  function review(id, decision, note) {
+    $.ajax({
+      url: `/change_request_api/${id}/${decision}/`,
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify({ review_note: note || "" }),
+      success: function () {
+        const modal = bootstrap.Modal.getInstance(document.getElementById("payloadModal"));
+        if (modal) modal.hide();
+        loadRequests();
+      },
+      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to review request."); },
+    });
+  }
+
+  $(document).on("click", ".approve-button", function () {
+    if (!confirm("Approve and apply this change?")) return;
+    review($(this).data("id"), "approve", "");
+  });
+
+  $(document).on("click", ".reject-button", function () {
+    const note = prompt("Reason for rejection (optional):") || "";
+    review($(this).data("id"), "reject", note);
+  });
+
+  $("#modal-approve").on("click", function () {
+    if (!confirm("Approve and apply this change?")) return;
+    review(modalRowId, "approve", "");
+  });
+
+  $("#modal-reject").on("click", function () {
+    const note = prompt("Reason for rejection (optional):") || "";
+    review(modalRowId, "reject", note);
+  });
+
+  loadRequests();
+});
+</script>
+{% endblock %}

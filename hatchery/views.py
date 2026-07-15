@@ -23,7 +23,7 @@ from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
     DeliveryChallan, DeliveryChallanItem, TraySetting, TraySettingLine,
-    HatchEntry, HatchEntryVaccine, ChickSale, ChickSaleItem,
+    HatchEntry, HatchEntryVaccine, ChickSale, ChickSaleItem, ChangeRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,9 +53,10 @@ class HatchSettingListTemplateView(View):
 class HatchSettingFormTemplateView(View):
     """Renders the full hatch register form page for add/edit."""
 
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         context = {
             "hatch_setting_id": id,
+            "request_mode": request_mode,
             "suppliers": Supplier.objects.all(),
             "setter_nos": (
                 Setter.objects.filter(is_active=True)
@@ -297,9 +298,10 @@ class EggPurchaseListTemplateView(View):
 class EggPurchaseFormTemplateView(View):
     """Renders the egg purchase add/edit page."""
 
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         context = {
             "egg_purchase_id": id,
+            "request_mode": request_mode,
             "suppliers": Supplier.objects.all().order_by("name"),
             "warehouses": Warehouse.objects.all().order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
@@ -483,9 +485,10 @@ class EggGradingListTemplateView(View):
 class EggGradingFormTemplateView(View):
     """Renders the egg grading add/edit page."""
 
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         context = {
             "egg_grading_id": id,
+            "request_mode": request_mode,
             "suppliers": Supplier.objects.all().order_by("name"),
             "storage_locations": Warehouse.objects.all().order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
@@ -648,9 +651,10 @@ class DeliveryChallanListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class DeliveryChallanFormTemplateView(View):
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         return render(request, "delivery_challan_form.html", {
             "delivery_challan_id": id,
+            "request_mode": request_mode,
             "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
             "next_challan_no": DeliveryChallan.next_challan_no() if id is None else None,
@@ -1099,9 +1103,10 @@ class TraySetListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class TraySetFormTemplateView(View):
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         return render(request, "tray_set_form.html", {
             "tray_setting_id": id,
+            "request_mode": request_mode,
             "hatcheries": Hatchery.objects.filter(is_active=True).order_by("hatchery_name"),
             "employees": Employee.objects.all().order_by("full_name"),
             "gradings": EggGrading.objects.all().order_by("-date", "-id"),
@@ -1238,11 +1243,12 @@ class HatchEntryListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class HatchEntryFormTemplateView(View):
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         used = HatchEntry.objects.exclude(id=id or 0).values_list("tray_setting_id", flat=True)
         tray_settings = TraySetting.objects.exclude(id__in=used).select_related("hatchery", "grading__purchase_invoice")
         return render(request, "hatch_entry_form.html", {
             "hatch_entry_id": id,
+            "request_mode": request_mode,
             "hatcheries": Hatchery.objects.filter(is_active=True).order_by("hatchery_name"),
             "tray_settings": json.dumps([{
                 "id": ts.id, "setting_no": ts.setting_no, "hatchery": ts.hatchery_id,
@@ -1360,7 +1366,7 @@ class ChickSaleListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class ChickSaleFormTemplateView(View):
-    def get(self, request, id: Optional[int] = None):
+    def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         from_challan = None
         challan_id = request.GET.get("from_challan")
         if id is None and challan_id:
@@ -1379,6 +1385,7 @@ class ChickSaleFormTemplateView(View):
                 }
         return render(request, "chick_sale_form.html", {
             "chick_sale_id": id,
+            "request_mode": request_mode,
             "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
             "warehouses": Warehouse.objects.all().order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
@@ -1809,3 +1816,184 @@ class ChickSaleReportView(View):
                 "options": [(c.id, c.name) for c in Customer.objects.order_by("name")],
             }],
         )
+
+
+# --------------------------------------------------------------------------
+# Change requests: users without edit/delete rights submit proposed changes;
+# users holding the right review and apply them.
+# --------------------------------------------------------------------------
+from django.utils import timezone as _tz
+from user.access import user_can
+
+CHANGE_REQUEST_HANDLERS = {
+    "egg_purchase": {
+        "api": "/egg_purchase_api/",
+        "label": "Egg Purchase", "tab": "egg_purchase_list", "model": EggPurchase,
+        "save": lambda data, oid: EggPurchaseAPI()._save_egg_purchase(data, oid),
+        "number": lambda obj: obj.transaction_no,
+    },
+    "egg_grading": {
+        "api": "/egg_grading_api/",
+        "label": "Egg Grading", "tab": "egg_grading_list", "model": EggGrading,
+        "save": lambda data, oid: EggGradingAPI()._save_egg_grading(data, oid),
+        "number": lambda obj: obj.transaction_no,
+    },
+    "tray_set": {
+        "api": "/tray_set_api/",
+        "label": "Tray Set", "tab": "tray_set_list", "model": TraySetting,
+        "save": lambda data, oid: TraySettingAPI()._save(data, oid),
+        "number": lambda obj: obj.setting_no,
+    },
+    "hatch_entry": {
+        "api": "/hatch_entry_api/",
+        "label": "Hatch Entry", "tab": "hatch_entry_list", "model": HatchEntry,
+        "save": lambda data, oid: HatchEntryAPI()._save(data, oid),
+        "number": lambda obj: obj.transaction_no,
+    },
+    "hatchery": {
+        "api": "/hatchery_api/",
+        "label": "Hatch Register", "tab": "hatchery_list", "model": HatchSetting,
+        "save": lambda data, oid: HatchSettingAPI()._save_hatch_setting(data, oid),
+        "number": lambda obj: obj.setting_no,
+    },
+    "delivery_challan": {
+        "api": "/delivery_challan_api/",
+        "label": "Delivery Challan", "tab": "delivery_challan_list", "model": DeliveryChallan,
+        "save": lambda data, oid: DeliveryChallanAPI()._save(data, oid),
+        "number": lambda obj: obj.challan_no,
+    },
+    "chick_sale": {
+        "api": "/chick_sale_api/",
+        "label": "Chick Sale", "tab": "chick_sale_list", "model": ChickSale,
+        "save": lambda data, oid: ChickSaleAPI()._save(data, oid),
+        "number": lambda obj: obj.bill_no,
+    },
+}
+
+
+@method_decorator(login_required, name="dispatch")
+class ChangeRequestListTemplateView(View):
+    def get(self, request):
+        return render(request, "change_request_list.html")
+
+
+def _change_request_to_dict(cr, user):
+    handler = CHANGE_REQUEST_HANDLERS.get(cr.module, {})
+    return {
+        "id": cr.id, "module": cr.module, "module_label": handler.get("label", cr.module),
+        "object_id": cr.object_id, "object_label": cr.object_label,
+        "action": cr.action, "action_label": cr.get_action_display(),
+        "status": cr.status, "note": cr.note,
+        "payload": cr.payload,
+        "requested_by": cr.requested_by.username,
+        "requested_at": _tz.localtime(cr.requested_at).strftime("%Y-%m-%d %H:%M"),
+        "reviewed_by": cr.reviewed_by.username if cr.reviewed_by else "",
+        "reviewed_at": _tz.localtime(cr.reviewed_at).strftime("%Y-%m-%d %H:%M") if cr.reviewed_at else "",
+        "review_note": cr.review_note,
+        "can_review": user_can(user, handler.get("tab", ""), cr.action) if handler else False,
+        "detail_api": handler.get("api", ""),
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class ChangeRequestAPI(BaseAPIView):
+    @staticmethod
+    def _fk_labels():
+        """id -> human label per payload field name, so the diff viewer can show
+        names instead of raw foreign-key ids (both current and proposed sides)."""
+        items = {str(i.id): f"{i.item_code} - {i.description}" for i in Item.objects.all()}
+        warehouses = {str(w.id): w.name for w in Warehouse.objects.all()}
+        accounts = {str(a.id): f"{a.code} - {a.description}" for a in ChartOfAccount.objects.all()}
+        return {
+            "supplier": {str(s.id): s.name for s in Supplier.objects.all()},
+            "customer": {str(c.id): c.name for c in Customer.objects.all()},
+            "warehouse": warehouses,
+            "storage_location": warehouses,
+            "item": items,
+            "hatch_item": items,
+            "pay_account": accounts,
+            "freight_account": accounts,
+            "hatchery": {str(h.id): h.hatchery_name for h in Hatchery.objects.all()},
+            "setter": {str(s.id): s.setter_no for s in Setter.objects.all()},
+            "grading": {str(g.id): g.transaction_no for g in EggGrading.objects.all()},
+            "purchase_invoice": {str(p.id): p.transaction_no for p in EggPurchase.objects.all()},
+            "tray_setting": {str(t.id): t.setting_no for t in TraySetting.objects.all()},
+            "delivery_challan": {str(d.id): d.challan_no for d in DeliveryChallan.objects.all()},
+        }
+
+    def get(self, request):
+        try:
+            requests_qs = ChangeRequest.objects.select_related("requested_by", "reviewed_by").all()[:300]
+            return JsonResponse({
+                "requests": [_change_request_to_dict(cr, request.user) for cr in requests_qs],
+                "labels": self._fk_labels(),
+            })
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request):
+        """Create a change request: {module, object_id, action, payload?, note?}."""
+        try:
+            data = json.loads(request.body)
+            handler = CHANGE_REQUEST_HANDLERS.get(data.get("module"))
+            if not handler:
+                raise ValidationError("Unknown module for change request.")
+            if not user_can(request.user, handler["tab"], "view"):
+                raise ValidationError("You do not have access to this module.")
+            action = data.get("action")
+            if action not in ("edit", "delete"):
+                raise ValidationError("Invalid action.")
+            obj = get_object_or_404(handler["model"], id=data.get("object_id"))
+            if action == "edit" and not data.get("payload"):
+                raise ValidationError("No proposed changes supplied.")
+            cr = ChangeRequest.objects.create(
+                module=data["module"], object_id=obj.id,
+                object_label=handler["number"](obj),
+                action=action,
+                payload=data.get("payload") if action == "edit" else None,
+                note=data.get("note") or "",
+                requested_by=request.user,
+            )
+            return JsonResponse({"id": cr.id, "message": "Change request submitted for approval."}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@method_decorator(login_required, name="dispatch")
+class ChangeRequestReviewAPI(BaseAPIView):
+    """POST /change_request_api/<id>/approve|reject/ — reviewer must hold the
+    matching edit/delete right on the target module's tab."""
+
+    @transaction.atomic
+    def post(self, request, id, decision):
+        try:
+            cr = get_object_or_404(ChangeRequest, id=id)
+            if cr.status != "pending":
+                raise ValidationError("This request has already been reviewed.")
+            handler = CHANGE_REQUEST_HANDLERS.get(cr.module)
+            if not handler:
+                raise ValidationError("Unknown module for change request.")
+            if not user_can(request.user, handler["tab"], cr.action):
+                return JsonResponse(
+                    {"error": "You do not have permission to review this request."}, status=403)
+            data = json.loads(request.body) if request.body else {}
+            if decision == "approve":
+                obj = handler["model"].objects.filter(id=cr.object_id).first()
+                if obj is None:
+                    raise ValidationError("The record no longer exists.")
+                if cr.action == "delete":
+                    obj.delete()
+                else:
+                    handler["save"](cr.payload, cr.object_id)
+                cr.status = "approved"
+            elif decision == "reject":
+                cr.status = "rejected"
+            else:
+                raise ValidationError("Invalid decision.")
+            cr.reviewed_by = request.user
+            cr.reviewed_at = _tz.now()
+            cr.review_note = data.get("review_note") or ""
+            cr.save()
+            return JsonResponse({"message": f"Request {cr.status}."})
+        except Exception as e:
+            return self.handle_exception(e)

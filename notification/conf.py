@@ -5,7 +5,7 @@ rest of the subsystem never touches Django settings directly. This keeps the
 provider and service layers easy to test with overridden configuration.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.conf import settings
 
@@ -36,8 +36,42 @@ class SmsConfig:  # pylint: disable=too-many-instance-attributes
 
 
 def load_config() -> SmsConfig:
-    """Build an :class:`SmsConfig` from the current Django settings."""
+    """Build an :class:`SmsConfig` from Django settings, overlaid with the
+    :class:`~notification.models.SmsSettings` master row when one exists.
 
+    The DB row is authoritative for the enabled/mock switches; its text
+    fields override the environment only when non-blank, so a blank API key
+    in the master keeps using the ``.env`` credential.
+    """
+
+    config = _load_env_config()
+    row = _load_db_settings()
+    if row is None:
+        return config
+    return replace(
+        config,
+        enabled=row.enabled,
+        mock=row.mock,
+        api_key=row.api_key or config.api_key,
+        sender_id=row.sender_id or config.sender_id,
+        entity_id=row.entity_id or config.entity_id,
+        default_country_code=row.default_country_code or config.default_country_code,
+    )
+
+
+def _load_db_settings():
+    """Return the SmsSettings singleton row, or ``None`` when unavailable
+    (row never created, table missing mid-migration, etc.)."""
+
+    try:
+        from .models import SmsSettings  # local import: avoid circulars at load time
+
+        return SmsSettings.objects.filter(pk=1).first()
+    except Exception:  # pylint: disable=broad-except
+        return None
+
+
+def _load_env_config() -> SmsConfig:
     return SmsConfig(
         enabled=bool(getattr(settings, "SMS_ENABLED", False)),
         mock=bool(getattr(settings, "SMS_MOCK", False)),

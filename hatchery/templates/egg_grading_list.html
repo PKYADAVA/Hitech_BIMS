@@ -121,9 +121,11 @@ $(document).ready(function () {
                         {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/egg-grading/${eg.id}/edit/" title="Edit">
                             <i class="fas fa-pen"></i>
                         </a>{% endif %}
+                        {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/egg-grading/${eg.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
                         {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-egg-grading" data-id="${eg.id}" title="Delete">
                             <i class="fas fa-trash"></i>
                         </button>{% endif %}
+                        {% if not page_perms.delete %}<button class="btn btn-outline-danger btn-sm request-delete" data-id="${eg.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
                         </div>
                     </td>
                 </tr>
@@ -194,6 +196,19 @@ $(document).ready(function () {
     }
 
     loadEggGradingList();
+
+  $(document).on("click", ".request-delete", function () {
+    const note = prompt("Reason for deletion request (optional):");
+    if (note === null) return;
+    $.ajax({
+      url: "/change_request_api/",
+      type: "POST",
+      headers: { "X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/json" },
+      data: JSON.stringify({ module: "egg_grading", object_id: $(this).data("id"), action: "delete", note: note || "" }),
+      success: function () { alert("Deletion request submitted for approval."); },
+      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to submit deletion request."); },
+    });
+  });
 });
 </script>
 {% endblock %}

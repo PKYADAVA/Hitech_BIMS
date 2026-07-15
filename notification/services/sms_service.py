@@ -147,17 +147,37 @@ class SmsService:
 
 
 _default_service = None  # pylint: disable=invalid-name
+_settings_stamp = None  # pylint: disable=invalid-name
+
+
+def _current_settings_stamp():
+    """Version marker for the SmsSettings master row (its ``modified_at``).
+
+    A change in the stamp means the shared service must be rebuilt so edits
+    made in the SMS Settings page apply immediately, without a restart and in
+    every worker process.
+    """
+
+    try:
+        from ..models import SmsSettings  # local import: avoid circulars at load time
+
+        return (SmsSettings.objects.filter(pk=1)
+                .values_list("modified_at", flat=True).first())
+    except Exception:  # pylint: disable=broad-except
+        return None
 
 
 def get_sms_service() -> SmsService:
-    """Return a lazily-instantiated shared :class:`SmsService`.
+    """Return a shared :class:`SmsService`, rebuilt when SMS Settings change.
 
     Convenient for view/signal code that just wants ``get_sms_service().send_sms(...)``.
     Construct :class:`SmsService` directly when you need custom config/provider
     (e.g. in tests).
     """
 
-    global _default_service  # pylint: disable=global-statement
-    if _default_service is None:
+    global _default_service, _settings_stamp  # pylint: disable=global-statement
+    stamp = _current_settings_stamp()
+    if _default_service is None or stamp != _settings_stamp:
         _default_service = SmsService()
+        _settings_stamp = stamp
     return _default_service

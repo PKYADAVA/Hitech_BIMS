@@ -187,6 +187,18 @@ MODULE_REGISTRY = [
         ],
     },
     {
+        "nav": "change_requests",
+        "label": "Change Requests",
+        "sections": [
+            {
+                "label": "Requests",
+                "tabs": [
+                    ("change_requests", "Change Requests"),
+                ],
+            },
+        ],
+    },
+    {
         "nav": "user",
         "label": "User",
         "sections": [
@@ -209,6 +221,19 @@ MODULE_REGISTRY = [
                 "label": "Master",
                 "tabs": [
                     ("sms_templates", "SMS Templates"),
+                    ("sms_settings", "SMS Settings", ("sms_settings_test",)),
+                ],
+            },
+            {
+                "label": "Transactions",
+                "tabs": [
+                    ("sms_transaction", "SMS Transaction"),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("sms_history", "SMS History"),
                 ],
             },
         ],

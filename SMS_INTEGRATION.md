@@ -54,8 +54,8 @@ All are optional; SMS stays disabled until `SMS_ENABLED=True`. See `.env.example
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SMS_ENABLED` | `False` | Master switch. `False` → nothing is sent. |
-| `SMS_MOCK` | `DEBUG` | Route to in-memory mock provider (no network/cost). |
+| `SMS_ENABLED` | `True` | Master switch. `False` → nothing is sent. |
+| `SMS_MOCK` | `FALSE` | Route to in-memory mock provider (no network/cost). |
 | `SMS_PROVIDER` | `smsgatewayhub` | Provider selector. |
 | `SMS_TIMEOUT` | `10` | Per-request timeout (seconds). |
 | `SMS_MAX_RETRIES` | `2` | Extra attempts after the first, transient failures only. |
@@ -63,12 +63,12 @@ All are optional; SMS stays disabled until `SMS_ENABLED=True`. See `.env.example
 | `SMS_DEFAULT_COUNTRY_CODE` | `91` | Prepended to bare national numbers. |
 | `SMS_MAX_LENGTH` | `1000` | Hard cap on message length. |
 | `SMS_GATEWAYHUB_BASE_URL` | `https://www.smsgatewayhub.com` | API base URL. |
-| `SMS_GATEWAYHUB_API_KEY` | — | **Secret.** Account API key. |
-| `SMS_GATEWAYHUB_SENDER_ID` | — | Approved sender/header ID. |
+| `SMS_GATEWAYHUB_API_KEY` | `5pvGZ0sHkUis0D88uHDNBA` | **Secret.** Account API key. |
+| `SMS_GATEWAYHUB_SENDER_ID` | `HTFARM` | Approved sender/header ID. |
 | `SMS_GATEWAYHUB_ROUTE` | `1` | Provider route. |
 | `SMS_GATEWAYHUB_CHANNEL` | `2` | `2` = transactional, `1` = promotional. |
 | `SMS_GATEWAYHUB_DCS` | `0` | Data coding scheme (`0` GSM-7, `8` Unicode). |
-| `SMS_GATEWAYHUB_ENTITY_ID` | — | DLT entity ID (Indian traffic). |
+| `SMS_GATEWAYHUB_ENTITY_ID` | `1301160705981331943` | DLT entity ID (Indian traffic). |
 | `SMS_GATEWAYHUB_DLT_TEMPLATE_ID` | — | DLT template ID (Indian traffic). |
 
 Secrets are read only in `settings.py` and used only inside the provider. They

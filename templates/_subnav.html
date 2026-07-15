@@ -61,8 +61,13 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'item_category' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'item_category' %}active{% endif %} activate" href="{% url 'item_category' %}"><i class="fas fa-folder me-1"></i>Item Category</a></li>{% endif %}
         {% if 'items' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'items' %}active{% endif %} activate" href="{% url 'items' %}"><i class="fas fa-box me-1"></i>Items</a></li>{% endif %}
         {% if 'warehouse' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'warehouse' %}active{% endif %} activate" href="{% url 'warehouse' %}"><i class="fas fa-warehouse me-1"></i>Warehouse</a></li>{% endif %}
-      {% elif module == 'notification' %}
+      {% elif module == 'notification_master' %}
         {% if 'sms_templates' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_templates' %}active{% endif %} activate" href="{% url 'sms_templates' %}"><i class="fas fa-comment-sms me-1"></i>SMS Templates</a></li>{% endif %}
+        {% if 'sms_settings' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_settings' %}active{% endif %} activate" href="{% url 'sms_settings' %}"><i class="fas fa-gear me-1"></i>SMS Settings</a></li>{% endif %}
+      {% elif module == 'notification_transaction' %}
+        {% if 'sms_transaction' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_transaction' %}active{% endif %} activate" href="{% url 'sms_transaction' %}"><i class="fas fa-paper-plane me-1"></i>SMS Transaction</a></li>{% endif %}
+      {% elif module == 'notification_report' %}
+        {% if 'sms_history' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sms_history' %}active{% endif %} activate" href="{% url 'sms_history' %}"><i class="fas fa-clock-rotate-left me-1"></i>SMS History</a></li>{% endif %}
       {% elif module == 'environmental_monitoring' %}
         {% if 'env_dashboard' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'dashboard' %}active{% endif %} activate" href="{% url 'env_dashboard' %}"><i class="fas fa-gauge-high me-1"></i>Dashboard</a></li>{% endif %}
         {% if 'env_hub_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hubs' %}active{% endif %} activate" href="{% url 'env_hub_list' %}"><i class="fas fa-hub me-1"></i>Hubs</a></li>{% endif %}

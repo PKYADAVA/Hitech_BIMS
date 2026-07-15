@@ -7,7 +7,7 @@
 {% endblock nav %}
 
 {% block content %}
-{% include '_subnav.html' with module='notification' active_tab='sms_templates' %}
+{% include '_subnav.html' with module='notification_master' active_tab='sms_templates' %}
 
 <div class="page-header">
   <div class="page-header-title"><i class="fa-solid fa-comment-sms"></i>SMS Templates</div>
@@ -23,7 +23,7 @@
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <span><i class="fas fa-table"></i>Template List</span>
     <div class="d-flex align-items-center gap-2">
-      <label for="module-filter" class="mb-0 small text-white-50">Module</label>
+      <label for="module-filter" class="mb-0 small text-white-50 text-nowrap flex-shrink-0">Module</label>
       <select id="module-filter" class="form-select form-select-sm" style="min-width:160px;">
         <option value="">All modules</option>
         {% for value, label in modules %}
@@ -39,6 +39,7 @@
           <tr>
             <th>Key</th>
             <th>Module</th>
+            <th>Transaction</th>
             <th>Name</th>
             <th>Placeholders</th>
             <th>DLT ID</th>
@@ -73,19 +74,46 @@
                      placeholder="e.g. sales.payment_reminder" required>
               <div class="form-text">Stable identifier used in code. Cannot be changed later.</div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-3">
               <label for="tpl-module" class="form-label">Module<span class="text-danger">*</span></label>
-              <select id="tpl-module" name="module" class="form-select" required>
+              <select id="tpl-module" name="module" class="form-select tpl-module-select" required>
                 <option value="" selected disabled>Select module</option>
                 {% for value, label in modules %}
                 <option value="{{ value }}">{{ label }}</option>
                 {% endfor %}
               </select>
             </div>
+            <div class="col-md-3">
+              <label for="tpl-transaction" class="form-label">Transaction</label>
+              <select id="tpl-transaction" name="transaction" class="form-select tpl-transaction-select">
+                <option value="">— All / Generic —</option>
+              </select>
+              <div class="form-text">Transactions of the selected module.</div>
+            </div>
             <div class="col-md-12">
               <label for="tpl-name" class="form-label">Name<span class="text-danger">*</span></label>
               <input type="text" id="tpl-name" name="name" class="form-control"
                      placeholder="Human-readable name" required>
+            </div>
+            <div class="col-md-4">
+              <label for="tpl-category" class="form-label">Category</label>
+              <select id="tpl-category" name="category" class="form-select">
+                {% for value, label in categories %}
+                <option value="{{ value }}" {% if value == 'general' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="tpl-sms-type" class="form-label">SMS Type</label>
+              <select id="tpl-sms-type" name="sms_type" class="form-select">
+                <option value="transactional" selected>Transactional</option>
+                <option value="promotional">Promotional</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label for="tpl-sender" class="form-label">Sender ID</label>
+              <input type="text" id="tpl-sender" name="sender_id" class="form-control" maxlength="10"
+                     placeholder="Overrides global">
             </div>
             <div class="col-md-6">
               <label for="tpl-description" class="form-label">Description</label>
@@ -105,6 +133,16 @@
               <div class="form-text">
                 Use <code>{placeholder}</code> tokens for dynamic values.
                 Detected: <span class="tpl-placeholder-preview"><span class="text-muted">none</span></span>
+              </div>
+              <div class="mt-2">
+                <div class="small fw-semibold mb-1">Insert variable:</div>
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                  {% for var, hint in sms_variables.items %}
+                  <button type="button" class="btn btn-outline-secondary btn-sm py-0 insert-variable" data-var="{{ var }}" title="{{ hint }}">{{ var }}</button>
+                  {% endfor %}
+                </div>
+                <div class="small text-muted sms-meta">0 characters | 160 remaining | 1 SMS part | GSM</div>
+                <div class="border rounded bg-light p-2 mt-1 small sms-preview text-muted">Live preview appears here...</div>
               </div>
             </div>
           </div>
@@ -135,17 +173,42 @@
                 <label class="form-label">Key</label>
                 <input type="text" name="key" class="form-control" readonly>
               </div>
-              <div class="col-md-6">
+              <div class="col-md-3">
                 <label class="form-label">Module<span class="text-danger">*</span></label>
-                <select name="module" class="form-select" required>
+                <select name="module" class="form-select tpl-module-select" required>
                   {% for value, label in modules %}
                   <option value="{{ value }}">{{ label }}</option>
                   {% endfor %}
                 </select>
               </div>
+              <div class="col-md-3">
+                <label class="form-label">Transaction</label>
+                <select name="transaction" class="form-select tpl-transaction-select">
+                  <option value="">— All / Generic —</option>
+                </select>
+              </div>
               <div class="col-md-12">
                 <label class="form-label">Name<span class="text-danger">*</span></label>
                 <input type="text" name="name" class="form-control" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Category</label>
+                <select name="category" class="form-select">
+                  {% for value, label in categories %}
+                  <option value="{{ value }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">SMS Type</label>
+                <select name="sms_type" class="form-select">
+                  <option value="transactional">Transactional</option>
+                  <option value="promotional">Promotional</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Sender ID</label>
+                <input type="text" name="sender_id" class="form-control" maxlength="10">
               </div>
               <div class="col-md-6">
                 <label class="form-label">Description</label>
@@ -162,6 +225,16 @@
                 <div class="form-text">
                   Detected: <span class="tpl-placeholder-preview"><span class="text-muted">none</span></span>
                 </div>
+              <div class="mt-2">
+                <div class="small fw-semibold mb-1">Insert variable:</div>
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                  {% for var, hint in sms_variables.items %}
+                  <button type="button" class="btn btn-outline-secondary btn-sm py-0 insert-variable" data-var="{{ var }}" title="{{ hint }}">{{ var }}</button>
+                  {% endfor %}
+                </div>
+                <div class="small text-muted sms-meta">0 characters | 160 remaining | 1 SMS part | GSM</div>
+                <div class="border rounded bg-light p-2 mt-1 small sms-preview text-muted">Live preview appears here...</div>
+              </div>
               </div>
             </div>
           </div>
@@ -210,6 +283,62 @@
 $(document).ready(function () {
   let templateTable;
   const csrfToken = "{{ csrf_token }}";
+  const MODULE_TRANSACTIONS = {{ module_transactions_json|safe }};
+  const TRANSACTION_VARIABLES = {{ transaction_variables_json|safe }};
+  const GENERIC_VARIABLES = {{ generic_variables_json|safe }};
+
+  // Fill the Transaction dropdown with the selected module's sub-transactions.
+  function fillTransactionOptions(form, moduleValue, selected) {
+    const select = form.find(".tpl-transaction-select");
+    if (!select.length) return;
+    select.empty().append('<option value="">— All / Generic —</option>');
+    (MODULE_TRANSACTIONS[moduleValue] || []).forEach(function (opt) {
+      select.append(`<option value="${escapeHtml(opt[0])}">${escapeHtml(opt[1])}</option>`);
+    });
+    select.val(selected || "");
+    updateVariablePicker(form);
+  }
+  $(document).on("change", ".tpl-module-select", function () {
+    fillTransactionOptions($(this).closest("form"), $(this).val(), "");
+  });
+  $(document).on("change", ".tpl-transaction-select", function () {
+    updateVariablePicker($(this).closest("form"));
+  });
+
+  // Variables the selected transaction fills; null = no source registered,
+  // so everything is allowed.
+  function allowedVars(form) {
+    const txn = form.find(".tpl-transaction-select").val() || "";
+    const list = TRANSACTION_VARIABLES[txn];
+    if (!list) return null;
+    return new Set(list.concat(GENERIC_VARIABLES));
+  }
+
+  // Every registered variable stays insertable for every transaction (DLT
+  // templates get adjusted as needed). The ones the selected transaction
+  // auto-fills are highlighted and listed first; the rest follow muted.
+  function updateVariablePicker(form) {
+    const allowed = allowedVars(form);
+    const buttons = form.find(".insert-variable");
+    if (!buttons.length) return;
+    const wrap = buttons.first().parent();
+    const sorted = buttons.get().sort(function (a, b) {
+      const rank = el => (!allowed || allowed.has(String($(el).data("var")))) ? 0 : 1;
+      return rank(a) - rank(b);
+    });
+    sorted.forEach(function (el) {
+      const btn = $(el);
+      if (btn.data("hint") === undefined) btn.data("hint", btn.attr("title") || "");
+      const ok = !allowed || allowed.has(String(btn.data("var")));
+      btn.toggleClass("btn-outline-primary fw-semibold", ok)
+         .toggleClass("btn-outline-secondary", !ok)
+         .css("opacity", ok ? "" : ".55")
+         .attr("title", ok ? btn.data("hint")
+                           : btn.data("hint") + " — not auto-filled by this transaction");
+      wrap.append(btn);
+    });
+    form.find(".tpl-body-input").trigger("input");
+  }
 
   function showToast(type, message) {
     const colors = {
@@ -245,9 +374,18 @@ $(document).ready(function () {
   }
 
   // Live placeholder preview for any template body textarea (add + edit).
+  // Placeholders the selected transaction cannot fill are flagged red.
   $(document).on("input", ".tpl-body-input", function () {
-    const preview = $(this).closest("form").find(".tpl-placeholder-preview");
-    preview.html(placeholderBadges(extractPlaceholders($(this).val())));
+    const form = $(this).closest("form");
+    const allowed = allowedVars(form);
+    const badges = extractPlaceholders($(this).val()).map(function (p) {
+      const ok = !allowed || allowed.has(p);
+      return `<span class="badge ${ok ? "bg-info" : "bg-danger"} me-1"` +
+             `${ok ? "" : ' title="Not filled by this transaction — will render blank"'}>` +
+             `${escapeHtml(p)}${ok ? "" : ' <i class="fas fa-triangle-exclamation"></i>'}</span>`;
+    });
+    form.find(".tpl-placeholder-preview").html(
+      badges.length ? badges.join("") : '<span class="text-muted">none</span>');
   });
 
   function initTable() {
@@ -274,6 +412,9 @@ $(document).ready(function () {
             <tr>
               <td><code>${escapeHtml(t.key)}</code></td>
               <td>${escapeHtml(t.module_display)}</td>
+              <td>${t.transaction_display
+                    ? escapeHtml(t.transaction_display)
+                    : '<span class="text-muted">All / Generic</span>'}</td>
               <td>${escapeHtml(t.name)}</td>
               <td>${placeholderBadges(t.placeholders)}</td>
               <td>${t.dlt_template_id
@@ -328,6 +469,36 @@ $(document).ready(function () {
     });
   });
 
+
+  // ---- SMS editor tooling: char/parts/unicode meter, live preview, variable picker ----
+  function smsMetrics(text) {
+    const isUnicode = /[^\x00-\x7F]/.test(text);
+    const len = text.length;
+    const single = isUnicode ? 70 : 160, multi = isUnicode ? 67 : 153;
+    const parts = len === 0 ? 1 : (len <= single ? 1 : Math.ceil(len / multi));
+    const limit = parts === 1 ? single : multi * parts;
+    return { len: len, parts: parts, remaining: limit - len, unicode: isUnicode };
+  }
+  $(document).on("input", ".tpl-body-input", function () {
+    const wrap = $(this).closest("form");
+    const m = smsMetrics(this.value);
+    wrap.find(".sms-meta").text(`${m.len} characters | ${m.remaining} remaining | ${m.parts} SMS part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode (UCS-2)" : "GSM"}`);
+    const preview = wrap.find(".sms-preview");
+    preview.text(this.value || "Live preview appears here...").toggleClass("text-muted", !this.value);
+  });
+  $(document).on("click", ".insert-variable", function () {
+    if ($(this).hasClass("disabled")) return;
+    const form = $(this).closest("form");
+    const input = form.find(".tpl-body-input")[0];
+    if (!input) return;
+    const token = "{" + $(this).data("var") + "}";
+    const start = input.selectionStart || input.value.length;
+    input.value = input.value.slice(0, start) + token + input.value.slice(input.selectionEnd || start);
+    input.selectionStart = input.selectionEnd = start + token.length;
+    input.focus();
+    $(input).trigger("input");
+  });
+
   // Open edit modal
   $(document).on("click", ".edit-template", function () {
     const id = $(this).data("id");
@@ -341,9 +512,13 @@ $(document).ready(function () {
         const form = $(`#edit-sms-template-form-${id}`);
         form.find('[name="key"]').val(t.key);
         form.find('[name="module"]').val(t.module);
+        fillTransactionOptions(form, t.module, t.transaction);
         form.find('[name="name"]').val(t.name);
         form.find('[name="description"]').val(t.description);
         form.find('[name="dlt_template_id"]').val(t.dlt_template_id);
+        form.find('[name="category"]').val(t.category);
+        form.find('[name="sms_type"]').val(t.sms_type);
+        form.find('[name="sender_id"]').val(t.sender_id);
         form.find('[name="body"]').val(t.body).trigger("input");
         $(`#editSmsTemplateModal-${id}`).modal('show');
       },
@@ -359,9 +534,13 @@ $(document).ready(function () {
     const id = $(this).find('[name="template-id"]').val();
     const payload = {
       module: $(this).find('[name="module"]').val(),
+      transaction: $(this).find('[name="transaction"]').val(),
       name: $(this).find('[name="name"]').val(),
       description: $(this).find('[name="description"]').val(),
       dlt_template_id: $(this).find('[name="dlt_template_id"]').val(),
+      category: $(this).find('[name="category"]').val(),
+      sms_type: $(this).find('[name="sms_type"]').val(),
+      sender_id: $(this).find('[name="sender_id"]').val(),
       body: $(this).find('[name="body"]').val(),
     };
     $.ajax({

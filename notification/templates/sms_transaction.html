@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}SMS Transaction - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='notification_transaction' active_tab='sms_transaction' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-paper-plane"></i> SMS Transaction</div>
+  <div class="page-header-right"><div class="page-header-subtitle">Send templated SMS to customers/suppliers from ERP documents</div></div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Module</label>
+        <select class="form-select" id="module">
+          {% for key, label, ptype, txn in doc_sources %}
+          <option value="{{ key }}" data-party-type="{{ ptype }}" data-transaction="{{ txn }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" id="party-label">Customer</label>
+        <select class="form-select" id="party-customer">
+          <option value="">-All-</option>
+          {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+        <select class="form-select d-none" id="party-supplier">
+          <option value="">-All-</option>
+          {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Template <span class="text-danger">*</span></label>
+        <select class="form-select" id="template">
+          <option value="">select template</option>
+          {% for t in templates %}<option value="{{ t.id }}" data-body="{{ t.body|escapejs }}" data-transaction="{{ t.transaction }}">{{ t.name }} ({{ t.get_module_display }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 d-flex gap-2">
+        <button class="btn btn-primary" id="search-btn"><i class="fas fa-search"></i> Search</button>
+        <button class="btn btn-outline-secondary" id="clear-btn"><i class="fas fa-undo"></i> Clear</button>
+        <button class="btn btn-outline-info" id="preview-btn"><i class="fas fa-eye"></i> Preview</button>
+        <button class="btn btn-success" id="send-btn"><i class="fas fa-paper-plane"></i> Send SMS</button>
+      </div>
+    </div>
+    <div class="mt-3 d-none" id="progress-wrap">
+      <div class="d-flex justify-content-between small mb-1">
+        <span id="progress-text">Sending...</span>
+        <span id="progress-counts"></span>
+      </div>
+      <div class="progress" style="height: 10px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Grid -->
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i> Documents</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="sms-doc-table">
+        <thead class="table-dark">
+          <tr>
+            <th style="width:36px" class="text-center"><input type="checkbox" class="form-check-input" id="select-all"></th>
+            <th>Date</th>
+            <th>Party Type</th>
+            <th>Name</th>
+            <th>Mobile</th>
+            <th>Document No</th>
+            <th>Amount</th>
+            <th>SMS Status</th>
+            <th class="text-center">Preview</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Preview modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-eye me-2"></i>SMS Preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:65vh; overflow:auto;" id="preview-body"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success" id="preview-send-btn"><i class="fas fa-paper-plane"></i> Send</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const COMPANY_NAME = "{{ company_name|escapejs }}";
+  const USER_NAME = "{{ request.user.username|escapejs }}";
+  let table = null;
+  let rows = [];
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function partyType() {
+    return $("#module option:selected").data("party-type") || "customer";
+  }
+
+  function partyValue() {
+    return partyType() === "supplier" ? $("#party-supplier").val() : $("#party-customer").val();
+  }
+
+  $("#module").on("change", function () {
+    const supplier = partyType() === "supplier";
+    $("#party-label").text(supplier ? "Supplier" : "Customer");
+    $("#party-supplier").toggleClass("d-none", !supplier);
+    $("#party-customer").toggleClass("d-none", supplier);
+
+    // Offer only templates tagged for this module's transaction (or generic ones).
+    const txn = $("#module option:selected").data("transaction") || "";
+    $("#template option").each(function () {
+      if (!this.value) return; // keep the "select template" placeholder
+      const tplTxn = $(this).data("transaction") || "";
+      $(this).toggleClass("d-none", !!(tplTxn && txn && tplTxn !== txn)).prop(
+        "disabled", !!(tplTxn && txn && tplTxn !== txn));
+    });
+    if ($("#template option:selected").prop("disabled")) $("#template").val("");
+  });
+
+  function smsMetrics(text) {
+    const isUnicode = /[^\x00-\x7F]/.test(text);
+    const len = text.length;
+    const single = isUnicode ? 70 : 160, multi = isUnicode ? 67 : 153;
+    const parts = len === 0 ? 1 : (len <= single ? 1 : Math.ceil(len / multi));
+    return { len: len, parts: parts, unicode: isUnicode };
+  }
+
+  function renderMessage(body, ctx) {
+    const now = new Date();
+    const full = Object.assign({
+      CompanyName: COMPANY_NAME, UserName: USER_NAME,
+      CurrentDate: now.toLocaleDateString("en-GB").replace(/\//g, "-"),
+      CurrentTime: now.toTimeString().slice(0, 5),
+    }, ctx);
+    return body.replace(/\{(\w+)\}/g, (m, name) => (name in full ? full[name] : m));
+  }
+
+  function templateBody() {
+    return $("#template option:selected").data("body") || "";
+  }
+
+  function renderRows() {
+    if (table) { table.destroy(); }
+    const tbody = $("#sms-doc-table tbody");
+    tbody.empty();
+    rows.forEach(function (r, i) {
+      tbody.append(`<tr>
+        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"}></td>
+        <td>${escapeHtml(r.date)}</td>
+        <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
+        <td>${escapeHtml(r.party_name)}</td>
+        <td>${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
+        <td>${escapeHtml(r.doc_no)}</td>
+        <td class="text-end">${Number(r.amount).toFixed(2)}</td>
+        <td>${r.already_sent ? '<span class="badge bg-success">Sent</span>' : '<span class="badge bg-secondary">Pending</span>'}</td>
+        <td class="text-center"><button class="btn btn-outline-info btn-sm row-preview" data-index="${i}"><i class="fas fa-eye"></i></button></td>
+      </tr>`);
+    });
+    table = $("#sms-doc-table").DataTable({
+      responsive: true, order: [[1, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "print"],
+      columnDefs: [{ orderable: false, targets: [0, 8] }],
+      language: { emptyTable: "No documents match the filters" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'sms_transaction_source' %}", {
+      module: $("#module").val(), from_date: $("#from-date").val(),
+      to_date: $("#to-date").val(), party: partyValue(),
+    }, function (resp) {
+      rows = resp.rows || [];
+      renderRows();
+      $("#select-all").prop("checked", false);
+    }).fail(function (xhr) {
+      alert(xhr.responseJSON?.error || "Failed to load documents.");
+    });
+  }
+
+  $("#search-btn").on("click", loadRows);
+  $("#clear-btn").on("click", function () {
+    $("#from-date").val(today); $("#to-date").val(today);
+    $("#party-customer").val(""); $("#party-supplier").val("");
+    $("#template").val("");
+    loadRows();
+  });
+
+  $("#select-all").on("change", function () {
+    $(".row-check:not(:disabled)").prop("checked", this.checked);
+  });
+
+  function selectedIndexes() {
+    return $(".row-check:checked").map(function () { return Number($(this).data("index")); }).get();
+  }
+
+  function previewCards(indexes) {
+    const body = templateBody();
+    return indexes.map(i => {
+      const r = rows[i];
+      const msg = renderMessage(body, r.context);
+      const m = smsMetrics(msg);
+      return `<div class="border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between small text-muted">
+          <span><b>${escapeHtml(r.party_name)}</b> — ${escapeHtml(r.mobile)}</span>
+          <span>${escapeHtml(r.doc_no)} | ${m.len} chars | ${m.parts} part${m.parts > 1 ? "s" : ""} | ${m.unicode ? "Unicode" : "GSM"}</span>
+        </div>
+        <div class="mt-1">${escapeHtml(msg)}</div>
+      </div>`;
+    }).join("");
+  }
+
+  function requireSelection() {
+    if (!$("#template").val()) { alert("Select a template first."); return null; }
+    const idx = selectedIndexes();
+    if (!idx.length) { alert("Select at least one record."); return null; }
+    return idx;
+  }
+
+  $("#preview-btn").on("click", function () {
+    const idx = requireSelection();
+    if (!idx) return;
+    $("#preview-body").html(previewCards(idx));
+    new bootstrap.Modal(document.getElementById("previewModal")).show();
+  });
+
+  $(document).on("click", ".row-preview", function () {
+    if (!$("#template").val()) { alert("Select a template first."); return; }
+    $("#preview-body").html(previewCards([Number($(this).data("index"))]));
+    new bootstrap.Modal(document.getElementById("previewModal")).show();
+  });
+
+  async function sendOne(r, force) {
+    const resp = await fetch("{% url 'sms_transaction_send' %}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      body: JSON.stringify({ module: $("#module").val(), doc_id: r.doc_id,
+                             template_id: $("#template").val(), force: force }),
+    });
+    return { status: resp.status, data: await resp.json() };
+  }
+
+  async function sendSelected() {
+    const idx = requireSelection();
+    if (!idx) return;
+    $("#send-btn, #preview-send-btn").prop("disabled", true);
+    $("#progress-wrap").removeClass("d-none");
+    let ok = 0, failed = 0, skipped = 0;
+    for (let n = 0; n < idx.length; n++) {
+      const r = rows[idx[n]];
+      $("#progress-text").text(`Sending ${n + 1} of ${idx.length} — ${r.party_name}`);
+      $("#progress-bar").css("width", `${((n + 1) / idx.length) * 100}%`);
+      try {
+        let out = await sendOne(r, false);
+        if (out.status === 409 && out.data.duplicate) {
+          if (confirm(`${r.party_name} (${r.doc_no}): ${out.data.error}`)) {
+            out = await sendOne(r, true);
+          } else { skipped++; continue; }
+        }
+        if (out.data.success) { ok++; } else { failed++; }
+      } catch (e) { failed++; }
+      $("#progress-counts").text(`OK ${ok} | Failed ${failed} | Skipped ${skipped}`);
+    }
+    $("#progress-text").text(`Done — sent ${ok}, failed ${failed}, skipped ${skipped}.`);
+    $("#send-btn, #preview-send-btn").prop("disabled", false);
+    loadRows();
+  }
+
+  $("#send-btn").on("click", sendSelected);
+  $("#preview-send-btn").on("click", function () {
+    bootstrap.Modal.getInstance(document.getElementById("previewModal"))?.hide();
+    sendSelected();
+  });
+
+  $("#module").trigger("change");
+  loadRows();
+});
+</script>
+{% endblock %}

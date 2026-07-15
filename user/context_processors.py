@@ -33,10 +33,20 @@ def web_access(request):
         if tab is not None:
             page_perms = tab_action_perms(user, tab)
 
+    allowed_tabs = allowed_view_tabs(user)
+
+    # Pending change-request count for the navbar badge (only for users who
+    # can see the Change Requests page at all).
+    pending_change_requests = 0
+    if "change_requests" in allowed_tabs:
+        from hatchery.models import ChangeRequest
+        pending_change_requests = ChangeRequest.objects.filter(status="pending").count()
+
     return {
-        "allowed_tabs": allowed_view_tabs(user),
+        "allowed_tabs": allowed_tabs,
         "allowed_nav": allowed_nav_groups(user),
         "allowed_sections": allowed_section_groups(user),
         "section_url": section_landing_urls(user),
         "page_perms": page_perms,
+        "pending_change_requests": pending_change_requests,
     }

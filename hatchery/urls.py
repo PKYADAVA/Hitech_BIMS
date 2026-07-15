@@ -30,6 +30,9 @@ from .views import (
     IncubationReportView,
     DeliveryChallanReportView,
     ChickSaleReportView,
+    ChangeRequestListTemplateView,
+    ChangeRequestAPI,
+    ChangeRequestReviewAPI,
 )
 
 urlpatterns = [
@@ -87,4 +90,16 @@ urlpatterns = [
     path('delivery-challan/<int:id>/edit/', DeliveryChallanFormTemplateView.as_view(), name='delivery_challan_edit'),
     path('delivery_challan_api/', DeliveryChallanAPI.as_view(), name='delivery_challan_api_list'),
     path('delivery_challan_api/<int:id>/', DeliveryChallanAPI.as_view(), name='delivery_challan_api_detail'),
+
+    # Change requests (request-mode edit pages reuse the form views)
+    path('change-requests/', ChangeRequestListTemplateView.as_view(), name='change_requests'),
+    path('change_request_api/', ChangeRequestAPI.as_view(), name='change_request_api_list'),
+    path('change_request_api/<int:id>/<str:decision>/', ChangeRequestReviewAPI.as_view(), name='change_request_api_review'),
+    path('hatchery/<int:id>/request-edit/', HatchSettingFormTemplateView.as_view(), {'request_mode': True}, name='hatchery_request_change'),
+    path('egg-purchase/<int:id>/request-edit/', EggPurchaseFormTemplateView.as_view(), {'request_mode': True}, name='egg_purchase_request_change'),
+    path('egg-grading/<int:id>/request-edit/', EggGradingFormTemplateView.as_view(), {'request_mode': True}, name='egg_grading_request_change'),
+    path('tray-set/<int:id>/request-edit/', TraySetFormTemplateView.as_view(), {'request_mode': True}, name='tray_set_request_change'),
+    path('hatch-entry/<int:id>/request-edit/', HatchEntryFormTemplateView.as_view(), {'request_mode': True}, name='hatch_entry_request_change'),
+    path('delivery-challan/<int:id>/request-edit/', DeliveryChallanFormTemplateView.as_view(), {'request_mode': True}, name='delivery_challan_request_change'),
+    path('chick-sale/<int:id>/request-edit/', ChickSaleFormTemplateView.as_view(), {'request_mode': True}, name='chick_sale_request_change'),
 ]
