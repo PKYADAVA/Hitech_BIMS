@@ -62,13 +62,13 @@ MODULE_REGISTRY = [
             {
                 "label": "Transactions",
                 "tabs": [
-                    ("hatchery_list", "Hatch Register"),
                     ("egg_purchase_list", "Egg Purchase"),
                     ("egg_grading_list", "Egg Grading"),
                     ("tray_set_list", "Tray Set"),
                     ("hatch_entry_list", "Hatch Entry"),
-                    ("chick_sale_list", "Chick Sale"),
+                    ("hatchery_list", "Hatch Register"),
                     ("delivery_challan_list", "Delivery Challan"),
+                    ("chick_sale_list", "Chick Sale"),
                 ],
             },
             {
