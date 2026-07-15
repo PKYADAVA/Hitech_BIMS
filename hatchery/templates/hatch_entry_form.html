@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{% if hatch_entry_id %}Edit{% else %}Add{% endif %} Hatch Entry - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='hatch_entry' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-dove"></i> {% if hatch_entry_id %}Edit{% else %}Add{% endif %} Hatch Entry</div>
+  <div class="page-header-right"><a href="{% url 'hatch_entry_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+<form id="hatch-entry-form">
+  <div class="card mb-3">
+    <div class="card-header">Entry Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Trnum</label>
+          <input class="form-control" id="transaction_no" readonly value="{{ next_transaction_no|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Hatchery <span class="text-danger">*</span></label>
+          <select class="form-select" id="hatchery" required>
+            <option value="">select</option>
+            {% for h in hatcheries %}<option value="{{ h.id }}">{{ h.hatchery_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Setting No. <span class="text-danger">*</span></label>
+          <select class="form-select" id="tray_setting" required>
+            <option value="">select</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Setting Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control bg-light" id="setting_date" readonly>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Hatch Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="hatch_date">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-calculator me-1"></i>Hatch Costing</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="costing-table">
+          <thead class="table-light">
+            <tr><th style="width:34%">Description</th><th>Total / Type</th><th>Rate</th><th>Amount</th><th style="width:46px"></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="align-middle">Eggs Details <span class="text-muted small">(from Egg Purchase)</span></td>
+              <td><input class="form-control bg-light" id="eggs_total" readonly value="0"></td>
+              <td><input class="form-control bg-light" id="egg_rate" readonly value="0.00"></td>
+              <td><input class="form-control bg-light" id="eggs_amount" readonly value="0.00"></td>
+              <td></td>
+            </tr>
+            <tr>
+              <td class="align-middle">Chicks Details <span class="text-muted small">(rate = net cost &divide; saleable chicks)</span></td>
+              <td><input class="form-control" id="chicks_total" type="number" min="0" step="1" value="0"></td>
+              <td><input class="form-control bg-light" id="chick_rate" readonly value="0.00"></td>
+              <td><input class="form-control bg-light" id="chicks_amount" readonly value="0.00"></td>
+              <td></td>
+            </tr>
+            <tr class="table-primary"><th colspan="4" class="text-center">Vaccine Consumptions</th><th class="text-center"><button type="button" class="btn btn-sm btn-success" id="add-vaccine"><i class="fas fa-plus"></i></button></th></tr>
+          </tbody>
+          <tbody id="vaccine-rows"></tbody>
+          <tbody>
+            <tr>
+              <th class="align-middle">Net Chicks Rate</th>
+              <td></td>
+              <td><input class="form-control bg-light" id="net_rate" readonly value="0.00"></td>
+              <td><input class="form-control bg-light" id="net_amount" readonly value="0.00"></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <label class="form-label">Remarks</label>
+      <textarea class="form-control" id="remarks" rows="3"></textarea>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">{% if hatch_entry_id %}Update{% else %}Save{% endif %}</button>
+    <a href="{% url 'hatch_entry_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const editId = {{ hatch_entry_id|default:'null' }};
+const traySettings = {{ tray_settings|safe }};
+const itemOptions = `{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const get = id => document.getElementById(id); const value = id => get(id).value;
+const num = id => Number(value(id)) || 0;
+
+function rebuildSettingOptions(keepValue) {
+  const hatcheryId = value('hatchery');
+  const options = traySettings.filter(ts => !hatcheryId || String(ts.hatchery) === String(hatcheryId));
+  get('tray_setting').innerHTML = '<option value="">select</option>' +
+    options.map(ts => `<option value="${ts.id}">${ts.setting_no}</option>`).join('');
+  if (keepValue && [...get('tray_setting').options].some(o => o.value === String(keepValue))) {
+    get('tray_setting').value = keepValue;
+  }
+}
+
+function applySetting() {
+  const ts = traySettings.find(t => String(t.id) === value('tray_setting'));
+  get('setting_date').value = ts ? ts.setting_date : '';
+  get('hatch_date').value = ts ? ts.hatch_date : '';
+  get('eggs_total').value = ts ? ts.purchase_qty : 0;
+  get('egg_rate').value = ts ? Number(ts.purchase_rate).toFixed(2) : '0.00';
+  get('eggs_amount').value = ts ? Number(ts.purchase_amount).toFixed(2) : '0.00';
+  if (ts && !editId && !num('chicks_total')) get('chicks_total').value = Math.round(Number(ts.expected_chicks) || 0);
+  recalc();
+}
+
+function vaccineRow(row = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><select class="form-select vaccine-item"><option value="">select</option>${itemOptions}</select></td>
+    <td><input class="form-control vaccine-qty" type="number" min="0" step=".01" value="${row.quantity || 0}"></td>
+    <td><input class="form-control vaccine-rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
+    <td><input class="form-control bg-light vaccine-amount" readonly value="0.00"></td>
+    <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`;
+  get('vaccine-rows').append(tr);
+  if (row.item) tr.querySelector('.vaccine-item').value = row.item;
+  recalc();
+}
+
+function recalc() {
+  let vaccineTotal = 0;
+  document.querySelectorAll('#vaccine-rows tr').forEach(tr => {
+    const qty = Number(tr.querySelector('.vaccine-qty').value) || 0;
+    const rate = Number(tr.querySelector('.vaccine-rate').value) || 0;
+    const amount = qty * rate;
+    tr.querySelector('.vaccine-amount').value = amount.toFixed(2);
+    vaccineTotal += amount;
+  });
+  const netAmount = num('eggs_amount') + vaccineTotal;
+  const netRate = num('chicks_total') ? netAmount / num('chicks_total') : 0;
+  get('net_amount').value = netAmount.toFixed(2);
+  get('net_rate').value = netRate.toFixed(2);
+  get('chick_rate').value = netRate.toFixed(2);
+  get('chicks_amount').value = netAmount.toFixed(2);
+}
+
+get('hatchery').addEventListener('change', () => { rebuildSettingOptions(); applySetting(); });
+get('tray_setting').addEventListener('change', applySetting);
+get('chicks_total').addEventListener('input', recalc);
+get('add-vaccine').onclick = () => vaccineRow();
+get('vaccine-rows').addEventListener('input', recalc);
+get('vaccine-rows').addEventListener('click', e => {
+  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); recalc(); }
+});
+
+function payload() {
+  return {
+    tray_setting: value('tray_setting'), hatch_date: value('hatch_date'),
+    chicks_total: value('chicks_total'), remarks: value('remarks'),
+    vaccines: [...document.querySelectorAll('#vaccine-rows tr')].map(tr => ({
+      item: tr.querySelector('.vaccine-item').value,
+      quantity: tr.querySelector('.vaccine-qty').value,
+      rate: tr.querySelector('.vaccine-rate').value,
+    })),
+  };
+}
+function csrf() { return document.cookie.split('; ').find(v => v.startsWith('csrftoken='))?.split('=')[1] || '{{ csrf_token }}'; }
+
+get('hatch-entry-form').onsubmit = async e => {
+  e.preventDefault();
+  if (!value('tray_setting')) return alert('Select a Setting No.');
+  const data = payload();
+  const url = editId ? `/hatch_entry_api/${editId}/` : '{% url "hatch_entry_api_list" %}';
+  const res = await fetch(url, { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(data) });
+  if (!res.ok) { const err = await res.json(); return alert(err.error || 'Unable to save hatch entry.'); }
+  location.href = '{% url "hatch_entry_list" %}';
+};
+
+(async () => {
+  rebuildSettingOptions();
+  if (editId) {
+    const data = await fetch(`/hatch_entry_api/${editId}/`).then(r => r.json());
+    get('transaction_no').value = data.transaction_no;
+    get('hatchery').value = data.hatchery;
+    rebuildSettingOptions(data.tray_setting);
+    get('setting_date').value = data.setting_date;
+    get('hatch_date').value = data.hatch_date;
+    get('eggs_total').value = data.eggs_total;
+    get('egg_rate').value = data.egg_rate;
+    get('eggs_amount').value = data.eggs_amount;
+    get('chicks_total').value = data.chicks_total;
+    get('remarks').value = data.remarks || '';
+    data.vaccines.forEach(vaccineRow);
+    recalc();
+  }
+})();
+</script>
+{% endblock %}

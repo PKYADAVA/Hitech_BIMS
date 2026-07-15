@@ -441,8 +441,8 @@ $(document).ready(function () {
 
     html += '<h6 class="mb-2"><i class="fas fa-egg me-1"></i>Egg Intake</h6><div class="row mb-2">';
     html += viewField("Received Qty", hs.received_qty);
-    html += viewField("Breakage Qty", `${hs.breakage_qty} (${hs.breakage_percent}%)`);
-    html += viewField("Crack Qty", `${hs.crack_qty} (${hs.crack_percent}%)`);
+    html += viewField("Damage", `${hs.breakage_qty} (${hs.breakage_percent}%)`);
+    html += viewField("Broken", `${hs.crack_qty} (${hs.crack_percent}%)`);
     html += viewField("Setting Qty", hs.setting_qty);
     html += "</div>";
     if (hs.egg_intakes && hs.egg_intakes.length) {

@@ -17,6 +17,15 @@ from .views import (
     DeliveryChallanListTemplateView,
     DeliveryChallanFormTemplateView,
     DeliveryChallanAPI,
+    TraySetListTemplateView,
+    TraySetFormTemplateView,
+    TraySettingAPI,
+    HatchEntryListTemplateView,
+    HatchEntryFormTemplateView,
+    HatchEntryAPI,
+    ChickSaleListTemplateView,
+    ChickSaleFormTemplateView,
+    ChickSaleAPI,
 )
 
 urlpatterns = [
@@ -46,6 +55,24 @@ urlpatterns = [
     path('egg_grading_api/<int:id>/', EggGradingAPI.as_view(), name='egg_grading_api_detail'),
 
     path('hatchery/report/', HatchReportView.as_view(), name='hatchery_report'),
+
+    path('tray-set/', TraySetListTemplateView.as_view(), name='tray_set_list'),
+    path('tray-set/add/', TraySetFormTemplateView.as_view(), name='tray_set_add'),
+    path('tray-set/<int:id>/edit/', TraySetFormTemplateView.as_view(), name='tray_set_edit'),
+    path('tray_set_api/', TraySettingAPI.as_view(), name='tray_set_api_list'),
+    path('tray_set_api/<int:id>/', TraySettingAPI.as_view(), name='tray_set_api_detail'),
+
+    path('hatch-entry/', HatchEntryListTemplateView.as_view(), name='hatch_entry_list'),
+    path('hatch-entry/add/', HatchEntryFormTemplateView.as_view(), name='hatch_entry_add'),
+    path('hatch-entry/<int:id>/edit/', HatchEntryFormTemplateView.as_view(), name='hatch_entry_edit'),
+    path('hatch_entry_api/', HatchEntryAPI.as_view(), name='hatch_entry_api_list'),
+    path('hatch_entry_api/<int:id>/', HatchEntryAPI.as_view(), name='hatch_entry_api_detail'),
+
+    path('chick-sale/', ChickSaleListTemplateView.as_view(), name='chick_sale_list'),
+    path('chick-sale/add/', ChickSaleFormTemplateView.as_view(), name='chick_sale_add'),
+    path('chick-sale/<int:id>/edit/', ChickSaleFormTemplateView.as_view(), name='chick_sale_edit'),
+    path('chick_sale_api/', ChickSaleAPI.as_view(), name='chick_sale_api_list'),
+    path('chick_sale_api/<int:id>/', ChickSaleAPI.as_view(), name='chick_sale_api_detail'),
 
     path('delivery-challan/', DeliveryChallanListTemplateView.as_view(), name='delivery_challan_list'),
     path('delivery-challan/add/', DeliveryChallanFormTemplateView.as_view(), name='delivery_challan_add'),

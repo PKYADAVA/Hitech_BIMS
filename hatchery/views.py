@@ -15,13 +15,15 @@ import logging
 from account.models import ChartOfAccount, CompanyProfile, TermsConditions
 from inventory.models import Item, Warehouse
 from purchase.models import Supplier
-from hatchery_master.models import Setter, Hatcher, STATES_AND_TERRITORIES
+from hatchery_master.models import Hatchery, Setter, Hatcher, STATES_AND_TERRITORIES
+from hr.models import Employee
 from sales.models import Customer
 
 from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
-    DeliveryChallan, DeliveryChallanItem,
+    DeliveryChallan, DeliveryChallanItem, TraySetting, TraySettingLine,
+    HatchEntry, HatchEntryVaccine, ChickSale, ChickSaleItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -784,10 +786,10 @@ HATCH_REPORT_COLUMNS = [
     ("push_time", "Push Time", "text"),
     # Egg intake
     ("received_qty", "Received Qty", "num"),
-    ("breakage_qty", "Breakage", "num"),
-    ("breakage_pct", "Breakage %", "pct"),
-    ("crack_qty", "Crack", "num"),
-    ("crack_pct", "Crack %", "pct"),
+    ("breakage_qty", "Damage", "num"),
+    ("breakage_pct", "Damage %", "pct"),
+    ("crack_qty", "Broken", "num"),
+    ("crack_pct", "Broken %", "pct"),
     ("setting_qty", "Setting Qty", "num"),
     # Candling & hatch output
     ("infertile_qty", "Infertile", "num"),
@@ -1086,3 +1088,415 @@ class HatchReportView(View):
             "has_filters": any(filters.values()),
         }
         return render(request, "hatchery_report.html", context)
+
+
+@method_decorator(login_required, name="dispatch")
+class TraySetListTemplateView(View):
+    def get(self, request):
+        return render(request, "tray_set_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class TraySetFormTemplateView(View):
+    def get(self, request, id: Optional[int] = None):
+        return render(request, "tray_set_form.html", {
+            "tray_setting_id": id,
+            "hatcheries": Hatchery.objects.filter(is_active=True).order_by("hatchery_name"),
+            "employees": Employee.objects.all().order_by("full_name"),
+            "gradings": EggGrading.objects.all().order_by("-date", "-id"),
+            "suppliers": Supplier.objects.all().order_by("name"),
+            "setters": Setter.objects.filter(is_active=True).select_related("hatchery").order_by("setter_no"),
+            "items": Item.objects.all().order_by("item_code"),
+            "next_setting_no": TraySetting.next_setting_no() if id is None else None,
+        })
+
+
+def _tray_setting_to_dict(ts):
+    return {
+        "id": ts.id, "setting_no": ts.setting_no,
+        "hatchery": ts.hatchery_id, "hatchery_name": ts.hatchery.hatchery_name,
+        "setting_date": ts.setting_date.isoformat(),
+        "transfer_date": ts.transfer_date.isoformat() if ts.transfer_date else "",
+        "hatch_date": ts.hatch_date.isoformat(),
+        "setting_time": ts.setting_time.strftime("%H:%M") if ts.setting_time else "",
+        "loaded_by": ts.loaded_by,
+        "loaded_by_name": ts.loaded_by,
+        "grading": ts.grading_id, "grading_no": ts.grading.transaction_no,
+        "total_eggs": str(ts.total_eggs()), "total_broken": str(ts.total_broken()),
+        "total_damaged": str(ts.total_damaged()), "total_eggs_set": str(ts.total_eggs_set()),
+        "total_expected_chicks": str(ts.total_expected_chicks()),
+        "supplier_names": ts.supplier_names(),
+        "lines": [{
+            "id": line.id, "supplier": line.supplier_id,
+            "supplier_name": line.supplier.name if line.supplier else "",
+            "setter": line.setter_id, "setter_no": line.setter.setter_no,
+            "item": line.item_id,
+            "total_eggs": str(line.total_eggs), "broken": str(line.broken),
+            "damaged": str(line.damaged), "eggs_set": str(line.eggs_set),
+            "avg_weight": str(line.avg_weight), "expected_chicks": line.expected_chicks,
+        } for line in ts.lines.select_related("supplier", "setter")],
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class TraySettingAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None):
+        try:
+            if id:
+                ts = get_object_or_404(
+                    TraySetting.objects.select_related("hatchery", "grading"), id=id)
+                return JsonResponse(_tray_setting_to_dict(ts))
+            settings = TraySetting.objects.select_related(
+                "hatchery", "grading").prefetch_related("lines__supplier").all()
+            return JsonResponse([{
+                "id": ts.id, "setting_no": ts.setting_no,
+                "setting_date": ts.setting_date.isoformat(), "hatch_date": ts.hatch_date.isoformat(),
+                "hatchery_name": ts.hatchery.hatchery_name, "supplier_names": ts.supplier_names(),
+                "grading_no": ts.grading.transaction_no,
+                "total_eggs_set": str(ts.total_eggs_set()), "total_broken": str(ts.total_broken()),
+                "total_damaged": str(ts.total_damaged()), "total_eggs": str(ts.total_eggs()),
+                "setting_time": ts.setting_time.strftime("%H:%M") if ts.setting_time else "",
+                "loaded_by_name": ts.loaded_by,
+                "total_expected_chicks": str(ts.total_expected_chicks()),
+            } for ts in settings], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body)).id}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body), id).id})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            get_object_or_404(TraySetting, id=id).delete()
+            return JsonResponse({"message": "Tray setting deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def _save(self, data, tray_setting_id=None):
+        values = {
+            "hatchery": get_object_or_404(Hatchery, id=data["hatchery"]),
+            "grading": get_object_or_404(EggGrading, id=data["grading"]),
+            "setting_date": data["setting_date"],
+            "transfer_date": data.get("transfer_date") or None,
+            "hatch_date": data.get("hatch_date") or None,
+            "setting_time": data.get("setting_time") or None,
+            "loaded_by": (data.get("loaded_by") or "").strip(),
+        }
+        from datetime import timedelta
+        if not values["transfer_date"]:
+            values["transfer_date"] = date.fromisoformat(values["setting_date"]) + timedelta(days=18)
+        if not values["hatch_date"]:
+            values["hatch_date"] = date.fromisoformat(values["setting_date"]) + timedelta(days=21)
+        if tray_setting_id:
+            ts = get_object_or_404(TraySetting, id=tray_setting_id)
+            for field, value in values.items():
+                setattr(ts, field, value)
+            ts.full_clean(exclude=["setting_no"])
+            ts.save()
+            ts.lines.all().delete()
+        else:
+            ts = TraySetting(**values)
+            ts.full_clean(exclude=["setting_no"])
+            ts.save()
+        for row in data.get("lines", []):
+            if not row.get("setter"):
+                continue
+            TraySettingLine.objects.create(
+                tray_setting=ts,
+                supplier=Supplier.objects.filter(id=row.get("supplier") or 0).first(),
+                setter=get_object_or_404(Setter, id=row["setter"]),
+                item=Item.objects.filter(id=row.get("item") or 0).first(),
+                total_eggs=Decimal(str(row.get("total_eggs") or 0)),
+                broken=Decimal(str(row.get("broken") or 0)),
+                damaged=Decimal(str(row.get("damaged") or 0)),
+                eggs_set=Decimal(str(row.get("eggs_set") or 0)),
+                avg_weight=Decimal(str(row.get("avg_weight") or 0)),
+                expected_chicks=int(float(row.get("expected_chicks") or 0)),
+            )
+        if not ts.lines.exists():
+            raise ValidationError("Add at least one setter line.")
+        return ts
+
+
+@method_decorator(login_required, name="dispatch")
+class HatchEntryListTemplateView(View):
+    def get(self, request):
+        return render(request, "hatch_entry_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class HatchEntryFormTemplateView(View):
+    def get(self, request, id: Optional[int] = None):
+        used = HatchEntry.objects.exclude(id=id or 0).values_list("tray_setting_id", flat=True)
+        tray_settings = TraySetting.objects.exclude(id__in=used).select_related("hatchery", "grading__purchase_invoice")
+        return render(request, "hatch_entry_form.html", {
+            "hatch_entry_id": id,
+            "hatcheries": Hatchery.objects.filter(is_active=True).order_by("hatchery_name"),
+            "tray_settings": json.dumps([{
+                "id": ts.id, "setting_no": ts.setting_no, "hatchery": ts.hatchery_id,
+                "setting_date": ts.setting_date.isoformat(), "hatch_date": ts.hatch_date.isoformat(),
+                "eggs_set": str(ts.total_eggs_set()), "expected_chicks": str(ts.total_expected_chicks()),
+                "purchase_qty": str(ts.grading.purchase_invoice.net_quantity()),
+                "purchase_rate": str(ts.grading.purchase_invoice.net_rate()),
+                "purchase_amount": str(ts.grading.purchase_invoice.net_amount()),
+            } for ts in tray_settings]),
+            "items": Item.objects.all().order_by("item_code"),
+            "next_transaction_no": HatchEntry.next_transaction_no() if id is None else None,
+        })
+
+
+def _hatch_entry_to_dict(he):
+    ts = he.tray_setting
+    return {
+        "id": he.id, "transaction_no": he.transaction_no,
+        "tray_setting": ts.id, "setting_no": ts.setting_no,
+        "hatchery": ts.hatchery_id, "hatchery_name": ts.hatchery.hatchery_name,
+        "setting_date": ts.setting_date.isoformat(),
+        "hatch_date": (he.hatch_date or ts.hatch_date).isoformat(),
+        "eggs_total": str(he.eggs_total), "egg_rate": str(he.egg_rate), "eggs_amount": str(he.eggs_amount),
+        "chicks_total": str(he.chicks_total), "chick_rate": str(he.chick_rate), "chicks_amount": str(he.chicks_amount),
+        "net_rate": str(he.net_rate), "net_amount": str(he.net_amount),
+        "remarks": he.remarks,
+        "vaccines": [{
+            "id": v.id, "item": v.item_id, "item_label": f"{v.item.item_code} - {v.item.description}",
+            "quantity": str(v.quantity), "rate": str(v.rate), "amount": str(v.amount),
+        } for v in he.vaccines.select_related("item")],
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class HatchEntryAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None):
+        try:
+            if id:
+                he = get_object_or_404(
+                    HatchEntry.objects.select_related("tray_setting__hatchery"), id=id)
+                return JsonResponse(_hatch_entry_to_dict(he))
+            entries = HatchEntry.objects.select_related("tray_setting__hatchery").all()
+            return JsonResponse([{
+                "id": he.id, "transaction_no": he.transaction_no,
+                "setting_date": he.tray_setting.setting_date.isoformat(),
+                "hatch_date": (he.hatch_date or he.tray_setting.hatch_date).isoformat(),
+                "tse_no": he.tray_setting_id, "setting_no": he.tray_setting.setting_no,
+                "hatchery_name": he.tray_setting.hatchery.hatchery_name,
+                "description": he.remarks, "eggs_total": str(he.eggs_total),
+                "chicks_total": str(he.chicks_total), "net_amount": str(he.net_amount),
+            } for he in entries], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body)).id}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body), id).id})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            get_object_or_404(HatchEntry, id=id).delete()
+            return JsonResponse({"message": "Hatch entry deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def _save(self, data, hatch_entry_id=None):
+        ts = get_object_or_404(TraySetting, id=data["tray_setting"])
+        clash = HatchEntry.objects.filter(tray_setting=ts).exclude(id=hatch_entry_id or 0)
+        if clash.exists():
+            raise ValidationError("A hatch entry already exists for this setting number.")
+        values = {
+            "tray_setting": ts,
+            "hatch_date": data.get("hatch_date") or ts.hatch_date,
+            "chicks_total": Decimal(str(data.get("chicks_total") or 0)),
+            "remarks": data.get("remarks") or "",
+        }
+        if hatch_entry_id:
+            he = get_object_or_404(HatchEntry, id=hatch_entry_id)
+            for field, value in values.items():
+                setattr(he, field, value)
+        else:
+            he = HatchEntry(**values)
+        he.apply_purchase_snapshot()
+        he.full_clean(exclude=["transaction_no"])
+        he.save()
+        if hatch_entry_id:
+            he.vaccines.all().delete()
+        for row in data.get("vaccines", []):
+            if not row.get("item"):
+                continue
+            HatchEntryVaccine.objects.create(
+                hatch_entry=he, item=get_object_or_404(Item, id=row["item"]),
+                quantity=Decimal(str(row.get("quantity") or 0)),
+                rate=Decimal(str(row.get("rate") or 0)),
+            )
+        he.recalculate_net()
+        return he
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleListTemplateView(View):
+    def get(self, request):
+        return render(request, "chick_sale_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleFormTemplateView(View):
+    def get(self, request, id: Optional[int] = None):
+        from_challan = None
+        challan_id = request.GET.get("from_challan")
+        if id is None and challan_id:
+            challan = DeliveryChallan.objects.filter(id=challan_id).select_related("customer").first()
+            if challan:
+                from_challan = {
+                    "id": challan.id, "challan_no": challan.challan_no,
+                    "customer": challan.customer_id, "shipping_address": challan.shipping_address,
+                    "vehicle": challan.vehicle_no, "driver": challan.driver_name,
+                    "items": [{
+                        "item": row.item_id, "total_qty": str(row.quantity),
+                        "sale_rate": str(row.price),
+                    } for row in challan.items.all()],
+                }
+        return render(request, "chick_sale_form.html", {
+            "chick_sale_id": id,
+            "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
+            "warehouses": Warehouse.objects.all().order_by("name"),
+            "items": Item.objects.all().order_by("item_code"),
+            "accounts": ChartOfAccount.objects.all().order_by("code"),
+            "states_and_union_territories": STATES_AND_TERRITORIES,
+            "next_bill_no": ChickSale.next_bill_no() if id is None else None,
+            "from_challan": json.dumps(from_challan),
+        })
+
+
+def _chick_sale_to_dict(cs):
+    return {
+        "id": cs.id, "bill_no": cs.bill_no, "date": cs.date.isoformat(),
+        "customer": cs.customer_id, "customer_name": cs.customer.name,
+        "customer_address": cs.customer.address, "customer_mobile": cs.customer.mobile,
+        "warehouse": cs.warehouse_id, "warehouse_name": cs.warehouse.name,
+        "delivery_challan": cs.delivery_challan_id,
+        "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
+        "shipping_address": cs.shipping_address, "vehicle": cs.vehicle, "driver": cs.driver,
+        "freight_type": cs.freight_type, "payment_mode": cs.payment_mode,
+        "pay_account": cs.pay_account_id, "freight_account": cs.freight_account_id,
+        "freight_amount": str(cs.freight_amount), "final_amount": str(cs.final_amount),
+        "avg_amount": str(cs.avg_amount), "profit_amount": str(cs.profit_amount),
+        "remarks": cs.remarks,
+        "items": [{
+            "id": row.id, "item": row.item_id, "farm": row.farm,
+            "total_qty": str(row.total_qty), "mortality": str(row.mortality),
+            "culls": str(row.culls), "sale_qty": str(row.sale_qty),
+            "discount_percent": str(row.discount_percent), "discount_amount": str(row.discount_amount),
+            "free_qty": str(row.free_qty),
+            "net_qty": str(row.net_qty), "sale_rate": str(row.sale_rate), "amount": str(row.amount),
+        } for row in cs.items.select_related("item")],
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None):
+        try:
+            if id:
+                cs = get_object_or_404(
+                    ChickSale.objects.select_related("customer", "warehouse", "delivery_challan"), id=id)
+                return JsonResponse(_chick_sale_to_dict(cs))
+            sales = ChickSale.objects.select_related(
+                "customer", "warehouse", "delivery_challan").prefetch_related("items__item").all()
+            return JsonResponse([{
+                "id": cs.id, "bill_no": cs.bill_no, "date": cs.date.isoformat(),
+                "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
+                "customer_name": cs.customer.name, "item_names": cs.item_names(),
+                "total_birds": str(cs.total_birds()), "total_net_qty": str(cs.total_net_qty()),
+                "total_free_qty": str(cs.total_free_qty()), "avg_amount": str(cs.avg_amount),
+                "final_amount": str(cs.final_amount), "warehouse_name": cs.warehouse.name,
+            } for cs in sales], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body)).id}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id):
+        try:
+            return JsonResponse({"id": self._save(json.loads(request.body), id).id})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            get_object_or_404(ChickSale, id=id).delete()
+            return JsonResponse({"message": "Chick sale deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def _save(self, data, chick_sale_id=None):
+        values = {
+            "date": data["date"],
+            "customer": get_object_or_404(Customer, id=data["customer"]),
+            "warehouse": get_object_or_404(Warehouse, id=data["warehouse"]),
+            "delivery_challan": DeliveryChallan.objects.filter(id=data.get("delivery_challan") or 0).first(),
+            "shipping_address": data.get("shipping_address") or "",
+            "vehicle": data.get("vehicle") or "",
+            "driver": data.get("driver") or "",
+            "freight_type": data.get("freight_type") or "Paid by Customer",
+            "payment_mode": data.get("payment_mode") or "pay_later",
+            "pay_account": ChartOfAccount.objects.filter(id=data.get("pay_account") or 0).first(),
+            "freight_account": ChartOfAccount.objects.filter(id=data.get("freight_account") or 0).first(),
+            "freight_amount": Decimal(str(data.get("freight_amount") or 0)),
+            "remarks": data.get("remarks") or "",
+        }
+        if chick_sale_id:
+            cs = get_object_or_404(ChickSale, id=chick_sale_id)
+            for field, value in values.items():
+                setattr(cs, field, value)
+            cs.full_clean(exclude=["bill_no"])
+            cs.save()
+            cs.items.all().delete()
+        else:
+            cs = ChickSale(**values)
+            cs.full_clean(exclude=["bill_no"])
+            cs.save()
+        for row in data.get("items", []):
+            if not row.get("item"):
+                continue
+            ChickSaleItem.objects.create(
+                sale=cs, item=get_object_or_404(Item, id=row["item"]),
+                farm=row.get("farm") or "",
+                total_qty=Decimal(str(row.get("total_qty") or 0)),
+                mortality=Decimal(str(row.get("mortality") or 0)),
+                culls=Decimal(str(row.get("culls") or 0)),
+                sale_qty=Decimal(str(row.get("sale_qty") or 0)),
+                discount_percent=Decimal(str(row.get("discount_percent") or 0)),
+                discount_amount=Decimal(str(row.get("discount_amount") or 0)),
+                free_qty=Decimal(str(row.get("free_qty") or 0)),
+                net_qty=Decimal(str(row.get("net_qty") or 0)),
+                sale_rate=Decimal(str(row.get("sale_rate") or 0)),
+            )
+        if not cs.items.exists():
+            raise ValidationError("Add at least one item line.")
+        cs.recalculate()
+        return cs

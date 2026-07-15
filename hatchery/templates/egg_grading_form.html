@@ -85,15 +85,12 @@
             <tr>
               <th style="min-width:260px;">Hatch Item</th>
               <th style="min-width:120px;">Quantity</th>
-              <th style="width:40px;"></th>
+              <th style="width:90px;"></th>
             </tr>
           </thead>
           <tbody id="hatch-item-rows-body"></tbody>
         </table>
       </div>
-      <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="add-hatch-item-row">
-        <i class="fas fa-plus"></i> Add Hatch Item
-      </button>
 
       <hr class="my-4">
 
@@ -172,18 +169,24 @@ $(document).ready(function () {
             <tr data-row-id="${rowId}">
                 <td><select class="form-select hatch-item-select">${itemOptionsHtml(data.hatch_item)}</select></td>
                 <td><input type="number" class="form-control hatch-item-qty" step="0.01" value="${data.quantity || 0}"></td>
-                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-times"></i></button></td>
+                <td class="text-center">
+                    <div class="d-flex gap-1 justify-content-center">
+                        <button type="button" class="btn btn-outline-success btn-sm add-row" title="Add row"><i class="fas fa-plus"></i></button>
+                        <button type="button" class="btn btn-outline-danger btn-sm remove-row" title="Remove row"><i class="fas fa-times"></i></button>
+                    </div>
+                </td>
             </tr>
         `);
         $("#hatch-item-rows-body").append(row);
     }
 
-    $("#add-hatch-item-row").on("click", function () {
+    $("#hatch-item-rows-body").on("click", ".add-row", function () {
         addHatchItemRow();
     });
 
     $("#hatch-item-rows-body").on("click", ".remove-row", function () {
         $(this).closest("tr").remove();
+        if (!$("#hatch-item-rows-body tr").length) addHatchItemRow();
     });
 
     function recalcRejections() {
@@ -216,7 +219,7 @@ $(document).ready(function () {
             success: function (response) {
                 let html = '<option value="">select</option>';
                 response.forEach(function (ep) {
-                    html += `<option value="${ep.id}" ${String(ep.id) === String(selectedId) ? 'selected' : ''}>${ep.transaction_no}</option>`;
+                    html += `<option value="${ep.id}" ${String(ep.id) === String(selectedId) ? 'selected' : ''}>${ep.transaction_no} (${ep.date})</option>`;
                 });
                 select.html(html);
             },
@@ -267,6 +270,7 @@ $(document).ready(function () {
         (eg.hatch_items || []).forEach(function (row) {
             addHatchItemRow(row);
         });
+        if (!$("#hatch-item-rows-body tr").length) addHatchItemRow();
         recalcRejections();
         setTimeout(checkStock, 500);
     }

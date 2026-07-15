@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}{% if chick_sale_id %}Edit{% else %}Add{% endif %} Chick Sale - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='chick_sale' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-cash-register"></i> {% if chick_sale_id %}Edit{% else %}Add{% endif %} Chick Sale</div>
+  <div class="page-header-right"><a href="{% url 'chick_sale_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+<form id="chick-sale-form">
+  <div class="card mb-3">
+    <div class="card-header">Sale Details <span id="dc_badge" class="badge bg-info d-none ms-2"></span></div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Bill No.</label>
+          <input class="form-control" id="bill_no" readonly value="{{ next_bill_no|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="date" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Customer <span class="text-danger">*</span></label>
+          <select class="form-select" id="customer" required>
+            <option value="">select</option>
+            {% for customer in customers %}<option value="{{ customer.id }}" data-address="{{ customer.address|escapejs }}" data-mobile="{{ customer.mobile|escapejs }}">{{ customer.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Stock Point <span class="text-danger">*</span></label>
+          <select class="form-select" id="warehouse" required>
+            <option value="">select</option>
+            {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Vehicle</label>
+          <input class="form-control" id="vehicle">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Driver</label>
+          <input class="form-control" id="driver">
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">Billing Address</label>
+          <div class="form-control bg-light" id="billing_address" style="height:auto;min-height:58px"></div>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">Shipping Address</label>
+          <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" id="shipping_address_preview">
+            <div id="shipping_address_summary" class="flex-grow-1">Select a customer first.</div>
+            <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address" disabled>Change Shipping Address</button>
+          </div>
+          <textarea class="d-none" id="shipping_address"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-start">
+      <div><i class="fas fa-kiwi-bird me-1"></i><strong>Sale Items</strong></div>
+      <button class="btn btn-sm btn-primary" type="button" id="add-row"><i class="fas fa-plus"></i> Add Row</button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="item-table">
+          <thead class="table-light">
+            <tr>
+              <th>Sr.</th><th style="min-width:200px">Item <span class="text-danger">*</span></th><th>Total Qty</th><th>Mortality</th><th>Culls</th>
+              <th>Sale Qty</th><th>Disc %</th><th>Disc Amount</th><th>Free Qty</th><th>Billed Qty</th><th>Sale Rate</th><th>Amount</th><th style="min-width:140px">Farm</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><th colspan="2" class="text-end">Total</th><th id="total_birds">0</th><th></th><th></th><th id="total_sale">0</th><th></th><th></th><th id="total_free">0</th><th id="total_net">0</th><th></th><th id="total_amount">0.00</th><th></th><th></th></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Freight &amp; Payment</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Freight Type</label>
+          <select class="form-select" id="freight_type">
+            <option value="Paid by Customer">Paid by Customer</option>
+            <option value="Include in Bill">Include in Bill</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label d-block">Payment</label>
+          <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" checked>
+            <label class="form-check-label" for="pay_later">Pay Later</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_in_bill" value="pay_in_bill">
+            <label class="form-check-label" for="pay_in_bill">Pay In Bill</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Pay Account</label>
+          <select class="form-select" id="pay_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Freight Account</label>
+          <select class="form-select" id="freight_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Freight Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" id="freight_amount" value="0">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Final Amount</label>
+          <input class="form-control bg-light" id="final_amount" readonly value="0.00">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Avg. Amount</label>
+          <input class="form-control bg-light" id="avg_amount" readonly value="0.00">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Profit Amount</label>
+          <input class="form-control bg-light" id="profit_amount" readonly value="0.00">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <label class="form-label">Remarks</label>
+      <textarea class="form-control" id="remarks" rows="3"></textarea>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">{% if chick_sale_id %}Update{% else %}Save{% endif %}</button>
+    <a href="{% url 'chick_sale_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+  <input type="hidden" id="delivery_challan" value="">
+</form>
+
+<div class="modal fade" id="shippingAddressModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form class="modal-content" id="shipping-address-form"><div class="modal-header"><h5 class="modal-title" id="shipping_address_modal_title">Add Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label class="form-label">Street Address <span class="text-danger">*</span></label><textarea class="form-control" id="shipping_street" rows="3" required></textarea></div><div class="row g-3"><div class="col-md-6"><label class="form-label">State</label><select class="form-select" id="shipping_state"><option value="">Enter State</option>{% for st in states_and_union_territories %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select></div><div class="col-md-6"><label class="form-label">Pincode</label><input class="form-control" id="shipping_pincode" maxlength="10"></div></div><div class="mb-3 mt-3"><label class="form-label">City</label><input class="form-control" id="shipping_city"></div><div class="row g-3"><div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" id="shipping_contact_person"></div><div class="col-md-6"><label class="form-label">Mobile</label><input class="form-control" id="shipping_mobile"></div></div><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="shipping_is_default"><label class="form-check-label" for="shipping_is_default">Set as default shipping address</label></div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Address</button></div></form></div></div>
+<div class="modal fade" id="changeShippingAddressModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Change Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="d-flex justify-content-between align-items-center mb-2"><div class="form-text mb-0">New shipping addresses added here are saved directly in Customer Master.</div><button type="button" class="btn btn-sm btn-success text-nowrap ms-2" id="open_add_shipping_address"><i class="fas fa-plus"></i> Add New Address</button></div><table class="table align-middle mb-0"><thead><tr><th>Address</th><th class="text-center" style="width:70px">Edit</th><th class="text-center" style="width:70px">Select</th></tr></thead><tbody id="shipping_address_list"><tr><td colspan="3" class="text-center text-muted">Select a customer first.</td></tr></tbody></table></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-primary" id="confirm_shipping_address">Done</button></div></div></div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+const editId = {{ chick_sale_id|default:'null' }};
+const fromChallan = {{ from_challan|safe }};
+const itemOptions = `{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const get = id => document.getElementById(id); const value = id => get(id).value;
+function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+
+/* ------------------- item lines ------------------- */
+function itemRow(row={}) {
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td class="sr text-center"></td>
+    <td><select class="form-select item" required><option value="">select</option>${itemOptions}</select></td>
+    <td><input class="form-control total-qty" type="number" min="0" step=".01" value="${row.total_qty||0}"></td>
+    <td><input class="form-control mortality" type="number" min="0" step=".01" value="${row.mortality||0}"></td>
+    <td><input class="form-control culls" type="number" min="0" step=".01" value="${row.culls||0}"></td>
+    <td><input class="form-control bg-light sale-qty" readonly value="0.00"></td>
+    <td><input class="form-control disc-percent" type="number" min="0" step=".01" value="${row.discount_percent||0}"></td>
+    <td><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount||0}"></td>
+    <td><input class="form-control free-qty" type="number" min="0" step=".01" value="${row.free_qty||0}"></td>
+    <td><input class="form-control bg-light net-qty" readonly value="0.00"></td>
+    <td><input class="form-control sale-rate" type="number" min="0" step=".01" value="${row.sale_rate||0}"></td>
+    <td class="amount text-end align-middle">0.00</td>
+    <td><input class="form-control farm" value="${row.farm||''}"></td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`;
+  get('item-table').tBodies[0].append(tr);
+  if(row.item) tr.querySelector('.item').value=row.item;
+  calcRow(tr); renumberRows();
+}
+function calcRow(tr){
+  const num=s=>Number(tr.querySelector(s).value)||0;
+  const saleQty=Math.max(0, num('.total-qty')-num('.mortality')-num('.culls'));
+  tr.querySelector('.sale-qty').value=Math.round(saleQty);
+  const disc=num('.disc-percent');
+  let billed;
+  if(disc>0){
+    billed=Math.round(saleQty/(1+disc/100));
+    tr.querySelector('.free-qty').value=Math.round(saleQty)-billed;
+  } else {
+    billed=Math.max(0, Math.round(saleQty)-num('.free-qty'));
+  }
+  tr.querySelector('.net-qty').value=billed;
+  tr.querySelector('.amount').textContent=(billed*num('.sale-rate')-num('.disc-amount')).toFixed(2);
+  totals();
+}
+function renumberRows(){ document.querySelectorAll('#item-table tbody tr').forEach((tr,i)=>{tr.querySelector('.sr').textContent=i+1;}); }
+function totals(){
+  let birds=0, sale=0, free=0, net=0, amount=0;
+  document.querySelectorAll('#item-table tbody tr').forEach(tr=>{
+    const num=s=>Number(tr.querySelector(s).value)||0;
+    birds+=num('.total-qty'); sale+=num('.sale-qty'); free+=num('.free-qty'); net+=num('.net-qty');
+    amount+=Number(tr.querySelector('.amount').textContent)||0;
+  });
+  get('total_birds').textContent=Math.round(birds); get('total_sale').textContent=Math.round(sale);
+  get('total_free').textContent=Math.round(free);
+  get('total_net').textContent=Math.round(net); get('total_amount').textContent=amount.toFixed(2);
+  const freight = get('freight_type').value==='Include in Bill' ? (Number(value('freight_amount'))||0) : 0;
+  const finalAmount = amount + freight;
+  get('final_amount').value = finalAmount.toFixed(2);
+  get('avg_amount').value = (net ? finalAmount/net : 0).toFixed(2);
+}
+get('add-row').onclick=()=>itemRow();
+get('item-table').addEventListener('input', e=>{
+  const tr=e.target.closest('tr'); if(!tr) return;
+  calcRow(tr);
+});
+get('item-table').addEventListener('click', e=>{ if(e.target.closest('.remove')){ e.target.closest('tr').remove(); renumberRows(); totals(); } });
+get('freight_type').addEventListener('change', totals);
+get('freight_amount').addEventListener('input', totals);
+
+/* ------------- billing / shipping (same pattern as Delivery Challan) ------------- */
+let selectedShippingAddressId = null;
+let pendingShippingAddressId = null;
+let shippingAddresses = [];
+const shippingAddressModal = new bootstrap.Modal(get('shippingAddressModal'));
+const changeShippingAddressModal = new bootstrap.Modal(get('changeShippingAddressModal'));
+function selectedCustomer(){ return get('customer').value; }
+function composeAddress(street, city, state, pincode){ return [street, city, state, pincode].map(s=>(s||'').trim()).filter(Boolean).join(', '); }
+function parseComposedAddress(current){ const parts=(current||'').split(',').map(s=>s.trim()).filter(Boolean); if(parts.length===4){ return {street:parts[0], city:parts[1], state:parts[2], pincode:parts[3]}; } return {street:current||'', city:'', state:'', pincode:''}; }
+function composeShippingAddress(){ return composeAddress(get('shipping_street').value, get('shipping_city').value, get('shipping_state').value, get('shipping_pincode').value); }
+function fillShippingAddressFields(composed){ const p=parseComposedAddress(composed||''); get('shipping_street').value=p.street; get('shipping_city').value=p.city; get('shipping_state').value=p.state; get('shipping_pincode').value=p.pincode; }
+function addressCard(a){ const p=parseComposedAddress(a.address); const heading=p.city||p.state||p.street.slice(0,40)||'Shipping Address'; return `<b>${heading}</b><br>${a.address.replace(/\n/g, '<br>')}${a.contact_person ? `<br>${a.contact_person}${a.mobile ? ' - ' + a.mobile : ''}` : ''}`; }
+function billingAsShippingFallback(){ const billing=get('billing_address').textContent.trim(); return billing ? {label:'Billing Address', address:billing, is_default:true} : null; }
+function showShippingAddress(address){
+  const shown = address || billingAsShippingFallback();
+  get('shipping_address').value = shown ? shown.address : '';
+  get('shipping_address_summary').innerHTML = shown ? addressCard(shown) : 'No shipping address selected.';
+}
+function renderShippingAddressList(){
+  const tbody = get('shipping_address_list');
+  if(!shippingAddresses.length){ tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No saved shipping address. Click "Add New Address" to create one.</td></tr>'; return; }
+  tbody.innerHTML = shippingAddresses.map(a=>`<tr><td>${addressCard(a)}</td><td class="text-center"><button type="button" class="btn btn-sm btn-outline-secondary edit-address" data-id="${a.id}"><i class="fas fa-pen"></i></button></td><td class="text-center"><input type="radio" class="form-check-input select-address" name="shipping_address_radio" value="${a.id}" ${String(a.id)===String(pendingShippingAddressId)?'checked':''}></td></tr>`).join('');
+}
+async function loadShippingAddresses(preferredId=null){
+  const customerId = selectedCustomer();
+  if(!customerId){ shippingAddresses=[]; selectedShippingAddressId=null; get('change_shipping_address').disabled=true; get('shipping_address').value=''; get('shipping_address_summary').textContent='Select a customer first.'; return; }
+  const response = await fetch(`/customer/${customerId}/shipping-addresses/`); shippingAddresses = response.ok ? await response.json() : [];
+  get('change_shipping_address').disabled=false;
+  const existingText = value('shipping_address');
+  const address = shippingAddresses.find(a=>String(a.id)===String(preferredId)) || shippingAddresses.find(a=>a.address===existingText) || shippingAddresses.find(a=>a.is_default) || shippingAddresses[0];
+  selectedShippingAddressId = address?.id || null; showShippingAddress(address);
+}
+get('customer').onchange=async()=>{const o=get('customer').selectedOptions[0]; get('billing_address').textContent=o?.dataset.address||''; selectedShippingAddressId=null; get('shipping_address').value=''; await loadShippingAddresses();};
+get('change_shipping_address').onclick=()=>{ if(!selectedCustomer()) return; pendingShippingAddressId=selectedShippingAddressId; renderShippingAddressList(); changeShippingAddressModal.show(); };
+get('shipping_address_list').addEventListener('change', e=>{ if(e.target.classList.contains('select-address')) pendingShippingAddressId=e.target.value; });
+get('shipping_address_list').addEventListener('click', e=>{ const btn=e.target.closest('.edit-address'); if(!btn) return; const address=shippingAddresses.find(a=>String(a.id)===String(btn.dataset.id)); if(!address) return; get('shipping_address_modal_title').textContent='Edit Shipping Address'; fillShippingAddressFields(address.address); get('shipping_contact_person').value=address.contact_person||''; get('shipping_mobile').value=address.mobile||''; get('shipping_is_default').checked=address.is_default; selectedShippingAddressId=address.id; changeShippingAddressModal.hide(); shippingAddressModal.show(); });
+get('open_add_shipping_address').onclick=()=>{ get('shipping_address_modal_title').textContent='Add Shipping Address'; get('shipping-address-form').reset(); fillShippingAddressFields(get('billing_address').textContent); get('shipping_mobile').value=get('customer').selectedOptions[0]?.dataset.mobile||''; selectedShippingAddressId=null; changeShippingAddressModal.hide(); shippingAddressModal.show(); };
+get('shippingAddressModal').addEventListener('hidden.bs.modal', ()=>{ if(selectedCustomer()) changeShippingAddressModal.show(); });
+get('shipping-address-form').onsubmit=async event=>{event.preventDefault(); const customerId=selectedCustomer(); const composedAddress=composeShippingAddress(); const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:value('shipping_contact_person'),mobile:value('shipping_mobile'),is_default:get('shipping_is_default').checked}; const id=selectedShippingAddressId; const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)}); if(!response.ok){const err=await response.json();return alert(err.error||'Unable to save shipping address.')} const result=await response.json(); const savedId=id||result.id; await loadShippingAddresses(savedId); pendingShippingAddressId=savedId; renderShippingAddressList(); shippingAddressModal.hide();};
+get('confirm_shipping_address').onclick=()=>{ selectedShippingAddressId=pendingShippingAddressId; showShippingAddress(shippingAddresses.find(a=>String(a.id)===String(selectedShippingAddressId))); changeShippingAddressModal.hide(); };
+
+/* ------------------- save ------------------- */
+function payload(){
+  return {
+    date: value('date'), customer: value('customer'), warehouse: value('warehouse'),
+    delivery_challan: value('delivery_challan'), shipping_address: value('shipping_address'),
+    vehicle: value('vehicle'), driver: value('driver'),
+    freight_type: value('freight_type'),
+    payment_mode: document.querySelector('input[name="payment_mode"]:checked').value,
+    pay_account: value('pay_account'), freight_account: value('freight_account'),
+    freight_amount: value('freight_amount'), remarks: value('remarks'),
+    items: [...document.querySelectorAll('#item-table tbody tr')].map(tr=>({
+      item: tr.querySelector('.item').value, farm: tr.querySelector('.farm').value,
+      total_qty: tr.querySelector('.total-qty').value, mortality: tr.querySelector('.mortality').value,
+      culls: tr.querySelector('.culls').value, sale_qty: tr.querySelector('.sale-qty').value,
+      discount_percent: tr.querySelector('.disc-percent').value, discount_amount: tr.querySelector('.disc-amount').value,
+      free_qty: tr.querySelector('.free-qty').value,
+      net_qty: tr.querySelector('.net-qty').value, sale_rate: tr.querySelector('.sale-rate').value,
+    })),
+  };
+}
+get('chick-sale-form').onsubmit=async e=>{
+  e.preventDefault();
+  const data=payload();
+  if(!data.items.length||data.items.some(x=>!x.item)) return alert('Add at least one item line.');
+  const url=editId?`/chick_sale_api/${editId}/`:'{% url "chick_sale_api_list" %}';
+  const res=await fetch(url,{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
+  if(!res.ok){const err=await res.json();return alert(err.error||'Unable to save chick sale.')}
+  location.href='{% url "chick_sale_list" %}';
+};
+
+(async()=>{
+  get('date').value=new Date().toISOString().slice(0,10);
+  if(editId){
+    const data=await fetch(`/chick_sale_api/${editId}/`).then(r=>r.json());
+    get('bill_no').value=data.bill_no;
+    get('date').value=data.date;
+    get('customer').value=data.customer;
+    get('warehouse').value=data.warehouse;
+    get('vehicle').value=data.vehicle||'';
+    get('driver').value=data.driver||'';
+    get('freight_type').value=data.freight_type;
+    document.querySelector(`input[name="payment_mode"][value="${data.payment_mode}"]`).checked=true;
+    get('pay_account').value=data.pay_account||'';
+    get('freight_account').value=data.freight_account||'';
+    get('freight_amount').value=data.freight_amount;
+    get('remarks').value=data.remarks||'';
+    get('delivery_challan').value=data.delivery_challan||'';
+    if(data.dc_no){ get('dc_badge').textContent=`From ${data.dc_no}`; get('dc_badge').classList.remove('d-none'); }
+    const customerOption=get('customer').selectedOptions[0];
+    get('billing_address').textContent=customerOption?.dataset.address||'';
+    get('shipping_address').value=data.shipping_address;
+    await loadShippingAddresses();
+    data.items.forEach(itemRow);
+    get('profit_amount').value=Number(data.profit_amount).toFixed(2);
+  } else if(fromChallan){
+    get('delivery_challan').value=fromChallan.id;
+    get('dc_badge').textContent=`Converted from ${fromChallan.challan_no}`;
+    get('dc_badge').classList.remove('d-none');
+    get('customer').value=fromChallan.customer;
+    get('vehicle').value=fromChallan.vehicle||'';
+    get('driver').value=fromChallan.driver||'';
+    const customerOption=get('customer').selectedOptions[0];
+    get('billing_address').textContent=customerOption?.dataset.address||'';
+    get('shipping_address').value=fromChallan.shipping_address||'';
+    await loadShippingAddresses();
+    (fromChallan.items.length?fromChallan.items:[{}]).forEach(itemRow);
+  } else {
+    itemRow();
+  }
+})();
+</script>
+{% endblock %}

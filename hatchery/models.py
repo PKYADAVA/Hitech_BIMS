@@ -562,3 +562,273 @@ class DeliveryChallanItem(models.Model):
         subtotal = self.quantity * self.price * (1 - self.discount_percent / 100)
         self.amount = subtotal * (1 + self.tax_percent / 100)
         super().save(*args, **kwargs)
+
+
+class TraySetting(models.Model):
+    """Tray-set transaction: graded eggs loaded into setter machines for incubation."""
+    setting_no = models.CharField(max_length=30, unique=True, editable=False, blank=True)
+    hatchery = models.ForeignKey('hatchery_master.Hatchery', on_delete=models.PROTECT, related_name='tray_settings')
+    setting_date = models.DateField()
+    transfer_date = models.DateField(null=True, blank=True, help_text=_("Hatcher transfer date, typically setting date + 18 days"))
+    hatch_date = models.DateField(help_text=_("Expected hatch date, typically setting date + 21 days"))
+    setting_time = models.TimeField(null=True, blank=True)
+    loaded_by = models.CharField(max_length=100, blank=True, default='', help_text=_("Who loaded the trays; pick an employee or type any name"))
+    grading = models.ForeignKey(EggGrading, on_delete=models.PROTECT, related_name='tray_settings')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-setting_date', '-id']
+
+    def __str__(self):
+        return self.setting_no
+
+    @classmethod
+    def next_setting_no(cls):
+        max_num = 0
+        for existing in cls.objects.values_list('setting_no', flat=True):
+            match = re.match(r'TS-(\d+)$', existing or '')
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"TS-{max_num + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.setting_no:
+            self.setting_no = self.next_setting_no()
+        super().save(*args, **kwargs)
+
+    def total_eggs_set(self):
+        return self.lines.aggregate(total=models.Sum('eggs_set'))['total'] or 0
+
+    def total_eggs(self):
+        return self.lines.aggregate(total=models.Sum('total_eggs'))['total'] or 0
+
+    def total_broken(self):
+        return self.lines.aggregate(total=models.Sum('broken'))['total'] or 0
+
+    def total_damaged(self):
+        return self.lines.aggregate(total=models.Sum('damaged'))['total'] or 0
+
+    def total_expected_chicks(self):
+        return self.lines.aggregate(total=models.Sum('expected_chicks'))['total'] or 0
+
+    def supplier_names(self):
+        return ", ".join(sorted({line.supplier.name for line in self.lines.all() if line.supplier}))
+
+
+class TraySettingLine(models.Model):
+    """One setter-machine load within a tray setting."""
+    tray_setting = models.ForeignKey(TraySetting, on_delete=models.CASCADE, related_name='lines')
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True, related_name='tray_setting_lines')
+    setter = models.ForeignKey('hatchery_master.Setter', on_delete=models.PROTECT, related_name='tray_setting_lines')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, null=True, blank=True, related_name='tray_setting_lines')
+    total_eggs = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    broken = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    damaged = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    eggs_set = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    avg_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text=_("Average egg weight"))
+    expected_chicks = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['id']
+
+    def save(self, *args, **kwargs):
+        if not self.eggs_set:
+            self.eggs_set = (self.total_eggs or 0) - (self.broken or 0) - (self.damaged or 0)
+        super().save(*args, **kwargs)
+
+
+class HatchEntry(models.Model):
+    """Hatch outcome recorded against a tray setting: chicks hatched, egg cost and vaccine consumption."""
+    transaction_no = models.CharField(max_length=30, unique=True, editable=False, blank=True)
+    tray_setting = models.OneToOneField(TraySetting, on_delete=models.PROTECT, related_name='hatch_entry')
+    hatch_date = models.DateField(null=True, blank=True, help_text=_("Actual hatch date; may differ from the tray setting's expected date"))
+    eggs_total = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text=_("No. of eggs set (snapshot from tray setting)"))
+    egg_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    eggs_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    chicks_total = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text=_("Saleable chicks hatched"))
+    chick_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    chicks_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    net_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text=_("Net cost per chick"))
+    net_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text=_("Eggs amount + vaccine consumption"))
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-id']
+        verbose_name_plural = _("Hatch entries")
+
+    def __str__(self):
+        return self.transaction_no
+
+    @classmethod
+    def next_transaction_no(cls):
+        max_num = 0
+        for existing in cls.objects.values_list('transaction_no', flat=True):
+            match = re.match(r'HE-(\d+)$', existing or '')
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"HE-{max_num + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.transaction_no:
+            self.transaction_no = self.next_transaction_no()
+        super().save(*args, **kwargs)
+
+    def apply_purchase_snapshot(self):
+        """Fill the eggs row from the egg purchase behind this entry's grading (procurement cost)."""
+        purchase = self.tray_setting.grading.purchase_invoice
+        self.eggs_total = purchase.net_quantity()
+        self.egg_rate = purchase.net_rate()
+        self.eggs_amount = purchase.net_amount()
+
+    def vaccine_total(self):
+        return self.vaccines.aggregate(total=models.Sum('amount'))['total'] or 0
+
+    def recalculate_net(self):
+        """Net cost = egg procurement + vaccine expenses; per-chick rate = net / saleable chicks.
+        The chicks row carries the same computed rate/amount."""
+        self.net_amount = (self.eggs_amount or 0) + self.vaccine_total()
+        self.net_rate = round(self.net_amount / self.chicks_total, 2) if self.chicks_total else 0
+        self.chick_rate = self.net_rate
+        self.chicks_amount = self.net_amount
+        super(HatchEntry, self).save(update_fields=['net_amount', 'net_rate', 'chick_rate', 'chicks_amount'])
+
+
+class HatchEntryVaccine(models.Model):
+    """One vaccine/medicine consumption line within a hatch entry."""
+    hatch_entry = models.ForeignKey(HatchEntry, on_delete=models.CASCADE, related_name='vaccines')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='hatch_entry_vaccines')
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+    def save(self, *args, **kwargs):
+        self.amount = (self.quantity or 0) * (self.rate or 0)
+        super().save(*args, **kwargs)
+
+
+class ChickSale(models.Model):
+    """Chick sale invoice; can be created fresh or converted from a delivery challan."""
+    FREIGHT_TYPE_CHOICES = [
+        ('Paid by Customer', _('Paid by Customer')),
+        ('Include in Bill', _('Include in Bill')),
+    ]
+    PAYMENT_MODE_CHOICES = [
+        ('pay_later', _('Pay Later')),
+        ('pay_in_bill', _('Pay In Bill')),
+    ]
+
+    bill_no = models.CharField(max_length=30, unique=True, editable=False, blank=True)
+    date = models.DateField()
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='chick_sales')
+    warehouse = models.ForeignKey(Warehouse, on_delete=models.PROTECT, related_name='chick_sales',
+                                  help_text=_("Stock point / feed mill the chicks are sold from"))
+    delivery_challan = models.ForeignKey(DeliveryChallan, on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name='chick_sales',
+                                         help_text=_("Delivery challan this sale was converted from"))
+    shipping_address = models.TextField(blank=True)
+    vehicle = models.CharField(max_length=50, blank=True)
+    driver = models.CharField(max_length=100, blank=True)
+    freight_type = models.CharField(max_length=20, choices=FREIGHT_TYPE_CHOICES, default='Paid by Customer')
+    payment_mode = models.CharField(max_length=15, choices=PAYMENT_MODE_CHOICES, default='pay_later')
+    pay_account = models.ForeignKey(ChartOfAccount, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='chick_sale_pay_accounts')
+    freight_account = models.ForeignKey(ChartOfAccount, on_delete=models.PROTECT, null=True, blank=True,
+                                        related_name='chick_sale_freight_accounts')
+    freight_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    final_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    avg_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                     help_text=_("Average realised rate per bird"))
+    profit_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+                                        help_text=_("Sale value minus chick cost (latest hatch entry net rate)"))
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return self.bill_no
+
+    @classmethod
+    def next_bill_no(cls):
+        max_num = 0
+        for existing in cls.objects.values_list('bill_no', flat=True):
+            match = re.match(r'CS-(\d+)$', existing or '')
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"CS-{max_num + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.bill_no:
+            self.bill_no = self.next_bill_no()
+        super().save(*args, **kwargs)
+
+    def total_birds(self):
+        return self.items.aggregate(total=models.Sum('total_qty'))['total'] or 0
+
+    def total_net_qty(self):
+        return self.items.aggregate(total=models.Sum('net_qty'))['total'] or 0
+
+    def total_free_qty(self):
+        return self.items.aggregate(total=models.Sum('free_qty'))['total'] or 0
+
+    def items_amount(self):
+        return self.items.aggregate(total=models.Sum('amount'))['total'] or 0
+
+    def item_names(self):
+        return ", ".join(sorted({row.item.item_code for row in self.items.all()}))
+
+    def recalculate(self):
+        """final = items + freight (when billed); avg = final / net qty;
+        profit = items amount - chick cost at the latest hatch entry's net rate."""
+        items_amount = self.items_amount()
+        net_qty = self.total_net_qty()
+        self.final_amount = items_amount + (self.freight_amount if self.freight_type == 'Include in Bill' else 0)
+        self.avg_amount = round(self.final_amount / net_qty, 2) if net_qty else 0
+        latest_entry = HatchEntry.objects.order_by('-id').first()
+        cost_rate = latest_entry.net_rate if latest_entry else 0
+        self.profit_amount = items_amount - (net_qty * cost_rate)
+        super(ChickSale, self).save(update_fields=['final_amount', 'avg_amount', 'profit_amount'])
+
+
+class ChickSaleItem(models.Model):
+    """One item line within a chick sale.
+
+    Sale Qty = Total - Mortality - Culls (inclusive of free chicks).
+    With a discount %, Billed Qty = Sale Qty / (1 + disc%/100) and the
+    balance becomes Free Qty; Amount = Billed Qty x Rate - Disc Amount.
+    """
+    sale = models.ForeignKey(ChickSale, on_delete=models.CASCADE, related_name='items')
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='chick_sale_items')
+    farm = models.CharField(max_length=150, blank=True)
+    total_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    mortality = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    culls = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sale_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    free_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    net_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text=_("Billed quantity"))
+    sale_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+    def save(self, *args, **kwargs):
+        if not self.sale_qty:
+            self.sale_qty = max((self.total_qty or 0) - (self.mortality or 0) - (self.culls or 0), 0)
+        if self.discount_percent:
+            self.net_qty = round(self.sale_qty / (1 + self.discount_percent / 100))
+            self.free_qty = self.sale_qty - self.net_qty
+        elif not self.net_qty:
+            self.net_qty = max(self.sale_qty - (self.free_qty or 0), 0)
+        self.amount = (self.net_qty or 0) * (self.sale_rate or 0) - (self.discount_amount or 0)
+        super().save(*args, **kwargs)

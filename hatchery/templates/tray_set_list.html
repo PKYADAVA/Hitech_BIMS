@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Tray Set - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='tray_set' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-table-cells"></i> Tray Set</div>
+  <div class="page-header-right"><div class="page-header-subtitle">Eggs loaded into setter machines for incubation</div>{% if page_perms.add %}<a class="btn btn-primary" href="{% url 'tray_set_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}</div>
+</div>
+
+<!-- Date Filter -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="from-date" class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-3">
+        <label for="to-date" class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-list"></i> Tray Set Register</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="tray-set-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Setting Date</th>
+            <th>Hatchery</th>
+            <th>Hatch Date</th>
+            <th>Supplier</th>
+            <th>Grading No</th>
+            <th>Setting No</th>
+            <th>Egg Set</th>
+            <th>Broken</th>
+            <th>Damage</th>
+            <th>Total Eggs</th>
+            <th>Loaded Time</th>
+            <th>Loaded by</th>
+            <th>Expected Chicks</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let table = null;
+  let allRows = [];
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function renderRows(rows) {
+    if (table) { table.destroy(); }
+    const tbody = $("#tray-set-table tbody");
+    tbody.empty();
+    rows.forEach(function (row) {
+      tbody.append(`<tr>
+        <td>${escapeHtml(row.setting_date)}</td>
+        <td>${escapeHtml(row.hatchery_name)}</td>
+        <td>${escapeHtml(row.hatch_date)}</td>
+        <td>${escapeHtml(row.supplier_names) || "-"}</td>
+        <td>${escapeHtml(row.grading_no)}</td>
+        <td>${escapeHtml(row.setting_no)}</td>
+        <td>${escapeHtml(row.total_eggs_set)}</td>
+        <td>${escapeHtml(row.total_broken)}</td>
+        <td>${escapeHtml(row.total_damaged)}</td>
+        <td>${escapeHtml(row.total_eggs)}</td>
+        <td>${escapeHtml(row.setting_time) || "-"}</td>
+        <td>${escapeHtml(row.loaded_by_name) || "-"}</td>
+        <td>${escapeHtml(row.total_expected_chicks)}</td>
+        <td>
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/tray-set/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+    table = $('#tray-set-table').DataTable({ responsive: true, order: [[0, 'desc']], language: { emptyTable: "No data available in table" } });
+  }
+
+  function applyDateFilter() {
+    const from = $("#from-date").val();
+    const to = $("#to-date").val();
+    const filtered = allRows.filter(function (row) {
+      if (!row.setting_date) return true;
+      if (from && row.setting_date < from) return false;
+      if (to && row.setting_date > to) return false;
+      return true;
+    });
+    renderRows(filtered);
+  }
+
+  function loadTraySetList() {
+    $.getJSON('{% url "tray_set_api_list" %}', function (rows) {
+      allRows = rows;
+      applyDateFilter();
+    });
+  }
+
+  $("#filter-submit").on("click", applyDateFilter);
+
+  $(document).on("click", ".delete-button", function () {
+    const id = $(this).data("id");
+    if (!confirm("Are you sure you want to delete this tray setting?")) return;
+    $.ajax({
+      url: `/tray_set_api/${id}/`,
+      type: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () { loadTraySetList(); },
+      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to delete tray setting."); },
+    });
+  });
+
+  loadTraySetList();
+});
+</script>
+{% endblock %}

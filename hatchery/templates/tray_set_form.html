@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}{% if tray_setting_id %}Edit{% else %}Add{% endif %} Tray Setting - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='tray_set' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-table-cells"></i> {% if tray_setting_id %}Edit{% else %}Add{% endif %} Tray Setting</div>
+  <div class="page-header-right"><a href="{% url 'tray_set_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+<form id="tray-set-form">
+  <div class="card mb-3">
+    <div class="card-header">Setting Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Hatchery <span class="text-danger">*</span></label>
+          <select class="form-select" id="hatchery" required>
+            <option value="">select</option>
+            {% for h in hatcheries %}<option value="{{ h.id }}">{{ h.hatchery_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Setting Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="setting_date" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Transfer Date</label>
+          <input type="date" class="form-control" id="transfer_date">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Hatch Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="hatch_date">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Setting No.</label>
+          <input class="form-control" id="setting_no" readonly value="{{ next_setting_no|default:'' }}">
+        </div>
+        <div class="col-md-1">
+          <label class="form-label">Setting Time</label>
+          <input type="time" class="form-control" id="setting_time">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Loaded By</label>
+          <input class="form-control" id="loaded_by" list="loaded_by_options" placeholder="Pick or type a name" maxlength="100" autocomplete="off">
+          <datalist id="loaded_by_options">
+            {% for e in employees %}<option value="{{ e.full_name }}"></option>{% endfor %}
+          </datalist>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Grading No. <span class="text-danger">*</span></label>
+          <select class="form-select" id="grading" required>
+            <option value="">select</option>
+            {% for g in gradings %}<option value="{{ g.id }}">{{ g.transaction_no }} - {{ g.supplier.name }} ({{ g.date }})</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-start">
+      <div>
+        <div><i class="fas fa-egg me-1"></i><strong>Setter Lines</strong></div>
+        <div class="form-text mb-0">No. of Eggs Set is auto-calculated as Total Eggs &minus; Broken &minus; Damaged, but can be overridden</div>
+      </div>
+      <button class="btn btn-sm btn-primary" type="button" id="add-row"><i class="fas fa-plus"></i> Add Row</button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="line-table">
+          <thead class="table-light">
+            <tr>
+              <th>Sr.</th><th>Supplier/Batch</th><th>Setter No <span class="text-danger">*</span></th><th>Item</th>
+              <th>Total Eggs</th><th>Broken</th><th>Broken %</th><th>Damaged</th><th>Damage %</th><th>No. of Eggs Set</th><th>Avg. Wt.</th><th>Expected Chicks</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><th colspan="9" class="text-end">Total No. of Eggs Set</th><th id="total_eggs_set">0</th><th></th><th id="total_expected_chicks">0</th><th></th></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">{% if tray_setting_id %}Update{% else %}Save{% endif %}</button>
+    <a href="{% url 'tray_set_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const editId = {{ tray_setting_id|default:'null' }};
+const supplierOptions = `{% for s in suppliers %}<option value="{{ s.id }}">{{ s.name|escapejs }}</option>{% endfor %}`;
+const itemOptions = `{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const setters = [{% for s in setters %}{id: {{ s.id }}, hatchery: {{ s.hatchery_id }}, label: "{{ s.setter_no|escapejs }}"},{% endfor %}];
+const get = id => document.getElementById(id); const value = id => get(id).value;
+
+function setterOptionsFor(hatcheryId) {
+  return setters.filter(s => !hatcheryId || String(s.hatchery) === String(hatcheryId))
+    .map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+}
+
+function lineRow(row = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="sr text-center"></td>
+    <td><select class="form-select supplier"><option value="">select</option>${supplierOptions}</select></td>
+    <td><select class="form-select setter" required><option value="">select</option>${setterOptionsFor(value('hatchery'))}</select></td>
+    <td><select class="form-select item"><option value="">select</option>${itemOptions}</select></td>
+    <td><input class="form-control total-eggs" type="number" min="0" step=".01" value="${row.total_eggs || 0}"></td>
+    <td><input class="form-control broken" type="number" min="0" step=".01" value="${row.broken || 0}"></td>
+    <td class="broken-pct text-end align-middle">0%</td>
+    <td><input class="form-control damaged" type="number" min="0" step=".01" value="${row.damaged || 0}"></td>
+    <td class="damaged-pct text-end align-middle">0%</td>
+    <td><input class="form-control eggs-set" type="number" min="0" step=".01" value="${row.eggs_set || 0}"></td>
+    <td><input class="form-control avg-weight" type="number" min="0" step=".01" value="${row.avg_weight || 0}"></td>
+    <td><input class="form-control expected-chicks" type="number" min="0" step="1" value="${row.expected_chicks || 0}"></td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`;
+  get('line-table').tBodies[0].append(tr);
+  if (row.supplier) tr.querySelector('.supplier').value = row.supplier;
+  if (row.setter) tr.querySelector('.setter').value = row.setter;
+  if (row.item) tr.querySelector('.item').value = row.item;
+  tr.dataset.eggsSetOverridden = row.eggs_set ? 'true' : 'false';
+  if (!row.eggs_set) recalcEggsSet(tr);
+  recalcPcts(tr);
+  renumberRows(); totals();
+}
+
+function recalcEggsSet(tr) {
+  const num = s => Number(tr.querySelector(s).value) || 0;
+  tr.querySelector('.eggs-set').value = Math.max(0, num('.total-eggs') - num('.broken') - num('.damaged'));
+}
+
+function recalcPcts(tr) {
+  const num = s => Number(tr.querySelector(s).value) || 0;
+  const total = num('.total-eggs');
+  tr.querySelector('.broken-pct').textContent = (total ? (num('.broken') / total * 100) : 0).toFixed(2) + '%';
+  tr.querySelector('.damaged-pct').textContent = (total ? (num('.damaged') / total * 100) : 0).toFixed(2) + '%';
+}
+
+function totals() {
+  let eggsSet = 0, chicks = 0;
+  document.querySelectorAll('#line-table tbody tr').forEach(tr => {
+    eggsSet += Number(tr.querySelector('.eggs-set').value) || 0;
+    chicks += Number(tr.querySelector('.expected-chicks').value) || 0;
+  });
+  get('total_eggs_set').textContent = eggsSet.toFixed(2);
+  get('total_expected_chicks').textContent = chicks;
+}
+
+function renumberRows() {
+  document.querySelectorAll('#line-table tbody tr').forEach((tr, i) => { tr.querySelector('.sr').textContent = i + 1; });
+}
+
+get('add-row').onclick = () => lineRow();
+get('line-table').addEventListener('input', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  if (e.target.classList.contains('eggs-set')) {
+    tr.dataset.eggsSetOverridden = e.target.value.trim() === '' ? 'false' : 'true';
+    if (tr.dataset.eggsSetOverridden === 'false') recalcEggsSet(tr);
+  } else if (['total-eggs', 'broken', 'damaged'].some(cls => e.target.classList.contains(cls))) {
+    if (tr.dataset.eggsSetOverridden !== 'true') recalcEggsSet(tr);
+  }
+  recalcPcts(tr);
+  totals();
+});
+get('line-table').addEventListener('click', e => {
+  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); totals(); }
+});
+
+/* Transfer Date / Hatch Date default to Setting Date + 18 / + 21 days
+   (same behavior as Hatch Register), but stay editable once overridden. */
+let lastAutoTransferDate = '';
+let lastAutoHatchDate = '';
+function addDays(dateStr, days) {
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return '';
+  const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  d.setUTCDate(d.getUTCDate() + days);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+get('setting_date').addEventListener('change', () => {
+  const settingDate = value('setting_date');
+  if (!settingDate) return;
+  const currentTransfer = value('transfer_date');
+  if (!currentTransfer || currentTransfer === lastAutoTransferDate) {
+    lastAutoTransferDate = addDays(settingDate, 18);
+    get('transfer_date').value = lastAutoTransferDate;
+  }
+  const currentHatch = value('hatch_date');
+  if (!currentHatch || currentHatch === lastAutoHatchDate) {
+    lastAutoHatchDate = addDays(settingDate, 21);
+    get('hatch_date').value = lastAutoHatchDate;
+  }
+});
+
+get('hatchery').addEventListener('change', () => {
+  document.querySelectorAll('#line-table tbody tr .setter').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = `<option value="">select</option>${setterOptionsFor(value('hatchery'))}`;
+    if ([...sel.options].some(o => o.value === current)) sel.value = current;
+  });
+});
+
+function payload() {
+  return {
+    hatchery: value('hatchery'), setting_date: value('setting_date'), transfer_date: value('transfer_date'), hatch_date: value('hatch_date'),
+    setting_time: value('setting_time'), loaded_by: value('loaded_by'), grading: value('grading'),
+    lines: [...document.querySelectorAll('#line-table tbody tr')].map(tr => ({
+      supplier: tr.querySelector('.supplier').value, setter: tr.querySelector('.setter').value,
+      item: tr.querySelector('.item').value, total_eggs: tr.querySelector('.total-eggs').value,
+      broken: tr.querySelector('.broken').value, damaged: tr.querySelector('.damaged').value,
+      eggs_set: tr.querySelector('.eggs-set').value, avg_weight: tr.querySelector('.avg-weight').value,
+      expected_chicks: tr.querySelector('.expected-chicks').value,
+    })),
+  };
+}
+function csrf() { return document.cookie.split('; ').find(v => v.startsWith('csrftoken='))?.split('=')[1] || '{{ csrf_token }}'; }
+
+get('tray-set-form').onsubmit = async e => {
+  e.preventDefault();
+  const data = payload();
+  if (!data.lines.length || data.lines.some(x => !x.setter)) return alert('Add at least one setter line and select a Setter No for each.');
+  const url = editId ? `/tray_set_api/${editId}/` : '{% url "tray_set_api_list" %}';
+  const res = await fetch(url, { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(data) });
+  if (!res.ok) { const err = await res.json(); return alert(err.error || 'Unable to save tray setting.'); }
+  location.href = '{% url "tray_set_list" %}';
+};
+
+(async () => {
+  get('setting_date').value = new Date().toISOString().slice(0, 10);
+  get('setting_date').dispatchEvent(new Event('change'));
+  if (editId) {
+    const data = await fetch(`/tray_set_api/${editId}/`).then(r => r.json());
+    get('setting_no').value = data.setting_no;
+    get('hatchery').value = data.hatchery;
+    get('setting_date').value = data.setting_date;
+    get('transfer_date').value = data.transfer_date || '';
+    get('hatch_date').value = data.hatch_date;
+    get('setting_time').value = data.setting_time || '';
+    get('loaded_by').value = data.loaded_by || '';
+    get('grading').value = data.grading;
+    data.lines.forEach(lineRow);
+  } else {
+    lineRow();
+  }
+})();
+</script>
+{% endblock %}
