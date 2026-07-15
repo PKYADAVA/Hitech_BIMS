@@ -211,7 +211,9 @@ $(function () {
             {% if page_perms.view %}<button class="btn btn-outline-info btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>{% endif %}
             {% if page_perms.print %}<button class="btn btn-outline-secondary btn-sm print-button" data-id="${row.id}" title="Print"><i class="fas fa-print"></i></button>{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/delivery-challan/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
-            <a class="btn btn-outline-success btn-sm" href="/chick-sale/add/?from_challan=${row.id}" title="Convert to Chick Sale"><i class="fas fa-file-invoice-dollar"></i></a>
+            ${row.converted_bill_no
+              ? `<button class="btn btn-outline-secondary btn-sm" disabled title="Already converted (${escapeHtml(row.converted_bill_no)})"><i class="fas fa-lock"></i></button>`
+              : `<a class="btn btn-outline-success btn-sm" href="/chick-sale/add/?from_challan=${row.id}" title="Convert to Chick Sale"><i class="fas fa-file-invoice-dollar"></i></a>`}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
           </div>
         </td>

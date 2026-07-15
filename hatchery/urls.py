@@ -26,6 +26,10 @@ from .views import (
     ChickSaleListTemplateView,
     ChickSaleFormTemplateView,
     ChickSaleAPI,
+    EggPurchaseReportView,
+    IncubationReportView,
+    DeliveryChallanReportView,
+    ChickSaleReportView,
 )
 
 urlpatterns = [
@@ -55,6 +59,10 @@ urlpatterns = [
     path('egg_grading_api/<int:id>/', EggGradingAPI.as_view(), name='egg_grading_api_detail'),
 
     path('hatchery/report/', HatchReportView.as_view(), name='hatchery_report'),
+    path('hatchery/report/egg-purchase/', EggPurchaseReportView.as_view(), name='egg_purchase_report'),
+    path('hatchery/report/incubation/', IncubationReportView.as_view(), name='incubation_report'),
+    path('hatchery/report/delivery-challan/', DeliveryChallanReportView.as_view(), name='delivery_challan_report'),
+    path('hatchery/report/chick-sale/', ChickSaleReportView.as_view(), name='chick_sale_report'),
 
     path('tray-set/', TraySetListTemplateView.as_view(), name='tray_set_list'),
     path('tray-set/add/', TraySetFormTemplateView.as_view(), name='tray_set_add'),

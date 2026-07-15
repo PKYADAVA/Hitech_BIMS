@@ -85,7 +85,11 @@ MODULE_REGISTRY = [
             {
                 "label": "Reports",
                 "tabs": [
+                    ("egg_purchase_report", "Egg Purchase Report"),
+                    ("incubation_report", "Incubation Report"),
                     ("hatchery_report", "Hatch Register Report"),
+                    ("delivery_challan_report", "Delivery Challan Report"),
+                    ("chick_sale_report", "Chick Sale Report"),
                 ],
             },
         ],

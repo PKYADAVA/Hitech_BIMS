@@ -17,7 +17,7 @@ from inventory.models import Item, Warehouse
 from purchase.models import Supplier
 from hatchery_master.models import Hatchery, Setter, Hatcher, STATES_AND_TERRITORIES
 from hr.models import Employee
-from sales.models import Customer
+from sales.models import Customer, CustomerShippingAddress
 
 from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
@@ -702,11 +702,12 @@ class DeliveryChallanAPI(BaseAPIView):
         try:
             if id:
                 return JsonResponse(_delivery_challan_to_dict(get_object_or_404(DeliveryChallan.objects.select_related("customer"), id=id)))
-            challans = DeliveryChallan.objects.select_related("customer").prefetch_related("items").all()
+            challans = DeliveryChallan.objects.select_related("customer").prefetch_related("items", "chick_sales").all()
             return JsonResponse([{
                 "id": c.id, "challan_no": c.challan_no, "date": c.date.isoformat(),
                 "customer_name": c.customer.name, "vehicle_no": c.vehicle_no,
                 "total_quantity": str(c.total_quantity()), "total_amount": str(c.total_amount()),
+                "converted_bill_no": next((cs.bill_no for cs in c.chick_sales.all()), ""),
             } for c in challans], safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -1364,6 +1365,8 @@ class ChickSaleFormTemplateView(View):
         challan_id = request.GET.get("from_challan")
         if id is None and challan_id:
             challan = DeliveryChallan.objects.filter(id=challan_id).select_related("customer").first()
+            if challan and challan.chick_sales.exists():
+                challan = None  # already converted; conversion re-opens only if that sale is deleted
             if challan:
                 from_challan = {
                     "id": challan.id, "challan_no": challan.challan_no,
@@ -1454,11 +1457,14 @@ class ChickSaleAPI(BaseAPIView):
             return self.handle_exception(e)
 
     def _save(self, data, chick_sale_id=None):
+        challan = DeliveryChallan.objects.filter(id=data.get("delivery_challan") or 0).first()
+        if challan and challan.chick_sales.exclude(id=chick_sale_id or 0).exists():
+            raise ValidationError(f"Challan {challan.challan_no} has already been converted to a chick sale.")
         values = {
             "date": data["date"],
             "customer": get_object_or_404(Customer, id=data["customer"]),
             "warehouse": get_object_or_404(Warehouse, id=data["warehouse"]),
-            "delivery_challan": DeliveryChallan.objects.filter(id=data.get("delivery_challan") or 0).first(),
+            "delivery_challan": challan,
             "shipping_address": data.get("shipping_address") or "",
             "vehicle": data.get("vehicle") or "",
             "driver": data.get("driver") or "",
@@ -1500,3 +1506,306 @@ class ChickSaleAPI(BaseAPIView):
             raise ValidationError("Add at least one item line.")
         cs.recalculate()
         return cs
+
+
+# --------------------------------------------------------------------------
+# Hatchery reports (shared engine in hatchery/reports.py)
+# --------------------------------------------------------------------------
+from .reports import respond_report  # noqa: E402
+
+EGG_PURCHASE_REPORT_COLUMNS = [
+    ("transaction_no", "Trnum", "text"),
+    ("date", "Date", "text"),
+    ("dc_no", "DC No", "text"),
+    ("supplier", "Supplier", "text"),
+    ("warehouse", "Farm/Warehouse", "text"),
+    ("items", "Items", "text"),
+    ("sent_qty", "Sent Qty", "num"),
+    ("rcv_qty", "Rcv Qty", "num"),
+    ("net_rate", "Rate", "money"),
+    ("gross_amount", "Gross Amount", "money"),
+    ("freight_amount", "Freight", "money"),
+    ("tcs_amount", "TCS", "money"),
+    ("net_amount", "Net Amount", "money"),
+    ("payment_mode", "Payment", "text"),
+]
+
+
+@method_decorator(login_required, name="dispatch")
+class EggPurchaseReportView(View):
+    def get(self, request):
+        from_date = request.GET.get("from_date", "").strip()
+        to_date = request.GET.get("to_date", "").strip()
+        supplier = request.GET.get("supplier", "").strip()
+
+        qs = EggPurchase.objects.select_related("supplier", "warehouse").prefetch_related("items__item")
+        if from_date:
+            qs = qs.filter(date__gte=from_date)
+        if to_date:
+            qs = qs.filter(date__lte=to_date)
+        if supplier:
+            qs = qs.filter(supplier_id=supplier)
+        qs = qs.order_by("date", "id")
+
+        rows = []
+        for ep in qs:
+            items = list(ep.items.all())
+            rows.append({
+                "transaction_no": ep.transaction_no,
+                "date": ep.date.isoformat(),
+                "dc_no": ep.dc_no or "",
+                "supplier": ep.supplier.name,
+                "warehouse": ep.warehouse.name,
+                "items": ", ".join(sorted({r.item.item_code for r in items})),
+                "sent_qty": sum((r.sent_qty for r in items), Decimal("0")),
+                "rcv_qty": sum((r.rcv_qty for r in items), Decimal("0")),
+                "net_rate": ep.net_rate(),
+                "gross_amount": ep.gross_amount(),
+                "freight_amount": ep.freight_amount,
+                "tcs_amount": ep.tcs_amount(),
+                "net_amount": ep.net_amount(),
+                "payment_mode": ep.get_payment_mode_display(),
+            })
+
+        return respond_report(
+            request, title="Egg Purchase Report", icon="fas fa-shopping-basket",
+            subtitle="Egg purchases with quantities, freight, TCS and net amounts",
+            active_tab="egg_purchase_report", slug="egg_purchase_report",
+            columns=EGG_PURCHASE_REPORT_COLUMNS, rows=rows,
+            filters={"from_date": from_date, "to_date": to_date},
+            extra_filters=[{
+                "name": "supplier", "label": "Supplier", "selected": supplier,
+                "options": [(s.id, s.name) for s in Supplier.objects.order_by("name")],
+            }],
+        )
+
+
+INCUBATION_REPORT_COLUMNS = [
+    ("grading_no", "Grading No", "text"),
+    ("grading_date", "Grading Date", "text"),
+    ("supplier", "Supplier", "text"),
+    ("item", "Item", "text"),
+    ("graded_qty", "Graded Qty", "num"),
+    ("rejected_qty", "Rejected", "num"),
+    ("setting_no", "Setting No", "text"),
+    ("setting_date", "Setting Date", "text"),
+    ("hatchery", "Hatchery", "text"),
+    ("eggs_set", "Eggs Set", "num"),
+    ("transfer_date", "Transfer Date", "text"),
+    ("hatch_trnum", "Hatch Trnum", "text"),
+    ("hatch_date", "Hatch Date", "text"),
+    ("saleable_chicks", "Saleable Chicks", "num"),
+    ("hatch_pct", "Hatch %", "pct"),
+    ("egg_cost", "Egg Cost", "money"),
+    ("vaccine_cost", "Vaccine Cost", "money"),
+    ("net_cost", "Net Cost", "money"),
+    ("net_rate", "Net Rate/Chick", "money"),
+]
+
+
+@method_decorator(login_required, name="dispatch")
+class IncubationReportView(View):
+    """Egg Grading + Tray Set + Hatch Entry in one report, one row per tray
+    setting, shared columns (supplier, item, dates) shown once."""
+
+    def get(self, request):
+        from_date = request.GET.get("from_date", "").strip()
+        to_date = request.GET.get("to_date", "").strip()
+        hatchery = request.GET.get("hatchery", "").strip()
+
+        qs = TraySetting.objects.select_related(
+            "hatchery", "grading__supplier", "grading__item").prefetch_related("lines", "hatch_entry__vaccines")
+        if from_date:
+            qs = qs.filter(setting_date__gte=from_date)
+        if to_date:
+            qs = qs.filter(setting_date__lte=to_date)
+        if hatchery:
+            qs = qs.filter(hatchery_id=hatchery)
+        qs = qs.order_by("setting_date", "id")
+
+        rows = []
+        for ts in qs:
+            g = ts.grading
+            try:
+                he = ts.hatch_entry
+            except HatchEntry.DoesNotExist:
+                he = None
+            eggs_set = ts.total_eggs_set()
+            saleable = he.chicks_total if he else 0
+            rejected = (g.broken_eggs or 0) + (g.damage_eggs or 0) + (g.misshapped_eggs or 0) + (g.dirty_eggs or 0)
+            rows.append({
+                "grading_no": g.transaction_no,
+                "grading_date": g.date.isoformat(),
+                "supplier": g.supplier.name,
+                "item": g.item.item_code,
+                "graded_qty": g.quantity,
+                "rejected_qty": rejected,
+                "setting_no": ts.setting_no,
+                "setting_date": ts.setting_date.isoformat(),
+                "hatchery": ts.hatchery.hatchery_name,
+                "eggs_set": eggs_set,
+                "transfer_date": ts.transfer_date.isoformat() if ts.transfer_date else "",
+                "hatch_trnum": he.transaction_no if he else "",
+                "hatch_date": (he.hatch_date or ts.hatch_date).isoformat() if he else ts.hatch_date.isoformat(),
+                "saleable_chicks": saleable,
+                "hatch_pct": _pct(saleable, eggs_set),
+                "egg_cost": he.eggs_amount if he else 0,
+                "vaccine_cost": he.vaccine_total() if he else 0,
+                "net_cost": he.net_amount if he else 0,
+                "net_rate": he.net_rate if he else 0,
+            })
+
+        return respond_report(
+            request, title="Incubation Report", icon="fas fa-egg",
+            subtitle="Egg grading, tray settings and hatch outcome in one sheet",
+            active_tab="incubation_report", slug="incubation_report",
+            columns=INCUBATION_REPORT_COLUMNS, rows=rows,
+            filters={"from_date": from_date, "to_date": to_date},
+            extra_filters=[{
+                "name": "hatchery", "label": "Hatchery", "selected": hatchery,
+                "options": [(h.id, h.hatchery_name) for h in Hatchery.objects.order_by("hatchery_name")],
+            }],
+        )
+
+
+DELIVERY_CHALLAN_REPORT_COLUMNS = [
+    ("challan_no", "Challan No", "text"),
+    ("date", "Date", "text"),
+    ("customer", "Customer", "text"),
+    ("shipped_to", "Shipped To", "text"),
+    ("place_of_supply", "Place of Supply", "text"),
+    ("transporter", "Transporter", "text"),
+    ("vehicle_no", "Vehicle", "text"),
+    ("items", "Items", "text"),
+    ("packing_size", "Packing Size", "text"),
+    ("units", "No. of Units", "num"),
+    ("quantity", "Quantity", "num"),
+    ("tax", "Tax", "money"),
+    ("discount", "Discount", "money"),
+    ("amount", "Amount", "money"),
+    ("status", "Status", "text"),
+]
+
+
+@method_decorator(login_required, name="dispatch")
+class DeliveryChallanReportView(View):
+    @staticmethod
+    def _shipped_to_name(dc):
+        """Ship-to party: the contact person on the customer's saved shipping
+        address matching this challan, falling back to the customer name."""
+        match = CustomerShippingAddress.objects.filter(
+            customer_id=dc.customer_id, address=dc.shipping_address).first()
+        if match and match.contact_person:
+            return match.contact_person
+        return dc.customer.name
+
+    def get(self, request):
+        from_date = request.GET.get("from_date", "").strip()
+        to_date = request.GET.get("to_date", "").strip()
+        customer = request.GET.get("customer", "").strip()
+
+        qs = DeliveryChallan.objects.select_related("customer").prefetch_related("items__item", "chick_sales")
+        if from_date:
+            qs = qs.filter(date__gte=from_date)
+        if to_date:
+            qs = qs.filter(date__lte=to_date)
+        if customer:
+            qs = qs.filter(customer_id=customer)
+        qs = qs.order_by("date", "id")
+
+        rows = []
+        for dc in qs:
+            items = list(dc.items.all())
+            sale = dc.chick_sales.first()
+            rows.append({
+                "challan_no": dc.challan_no,
+                "date": dc.date.isoformat(),
+                "customer": dc.customer.name,
+                "shipped_to": self._shipped_to_name(dc),
+                "place_of_supply": dc.place_of_supply or "",
+                "transporter": dc.transporter_name or "",
+                "vehicle_no": dc.vehicle_no or "",
+                "items": ", ".join(sorted({r.item.item_code for r in items})),
+                "packing_size": ", ".join(sorted({"%g" % r.packing_size for r in items}, key=float)),
+                "units": sum((r.units for r in items), Decimal("0")),
+                "quantity": dc.total_quantity(),
+                "tax": dc.total_tax(),
+                "discount": dc.overall_discount or 0,
+                "amount": dc.grand_total(),
+                "status": f"Converted ({sale.bill_no})" if sale else "Pending",
+            })
+
+        return respond_report(
+            request, title="Delivery Challan Report", icon="fas fa-truck",
+            subtitle="Dispatch challans with quantities, amounts and conversion status",
+            active_tab="delivery_challan_report", slug="delivery_challan_report",
+            columns=DELIVERY_CHALLAN_REPORT_COLUMNS, rows=rows,
+            filters={"from_date": from_date, "to_date": to_date},
+            extra_filters=[{
+                "name": "customer", "label": "Customer", "selected": customer,
+                "options": [(c.id, c.name) for c in Customer.objects.order_by("name")],
+            }],
+        )
+
+
+CHICK_SALE_REPORT_COLUMNS = [
+    ("bill_no", "Bill No", "text"),
+    ("date", "Date", "text"),
+    ("dc_no", "DC No", "text"),
+    ("customer", "Customer", "text"),
+    ("warehouse", "Farm/Warehouse", "text"),
+    ("items", "Items", "text"),
+    ("birds", "Sale Qty", "num"),
+    ("free_qty", "Free Qty", "num"),
+    ("billed_qty", "Billed Qty", "num"),
+    ("avg_rate", "Avg Rate", "money"),
+    ("freight", "Freight", "money"),
+    ("final_amount", "Final Amount", "money"),
+]
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleReportView(View):
+    def get(self, request):
+        from_date = request.GET.get("from_date", "").strip()
+        to_date = request.GET.get("to_date", "").strip()
+        customer = request.GET.get("customer", "").strip()
+
+        qs = ChickSale.objects.select_related("customer", "warehouse", "delivery_challan").prefetch_related("items__item")
+        if from_date:
+            qs = qs.filter(date__gte=from_date)
+        if to_date:
+            qs = qs.filter(date__lte=to_date)
+        if customer:
+            qs = qs.filter(customer_id=customer)
+        qs = qs.order_by("date", "id")
+
+        rows = []
+        for cs in qs:
+            items = list(cs.items.all())
+            rows.append({
+                "bill_no": cs.bill_no,
+                "date": cs.date.isoformat(),
+                "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
+                "customer": cs.customer.name,
+                "warehouse": cs.warehouse.name,
+                "items": ", ".join(sorted({r.item.item_code for r in items})),
+                "birds": sum((r.sale_qty for r in items), Decimal("0")),
+                "free_qty": cs.total_free_qty(),
+                "billed_qty": cs.total_net_qty(),
+                "avg_rate": cs.avg_amount,
+                "freight": cs.freight_amount,
+                "final_amount": cs.final_amount,
+            })
+
+        return respond_report(
+            request, title="Chick Sale Report", icon="fas fa-cash-register",
+            subtitle="Chick sale invoices with quantities, rates, freight and profit",
+            active_tab="chick_sale_report", slug="chick_sale_report",
+            columns=CHICK_SALE_REPORT_COLUMNS, rows=rows,
+            filters={"from_date": from_date, "to_date": to_date},
+            extra_filters=[{
+                "name": "customer", "label": "Customer", "selected": customer,
+                "options": [(c.id, c.name) for c in Customer.objects.order_by("name")],
+            }],
+        )
