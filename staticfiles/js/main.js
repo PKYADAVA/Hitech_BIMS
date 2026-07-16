@@ -15,23 +15,93 @@ $.extend(true, $.fn.dataTable.defaults, {
   ],
 });
 
+// ---------------------------------------------------------------------------
+// Global searchable dropdowns: every select.form-select on the site becomes a
+// searchable Select2 (Bootstrap 5 theme), including selects added to the DOM
+// later (dynamic table rows, generated modals). Opt out with data-no-search.
+// ---------------------------------------------------------------------------
+(function ($) {
+  function searchableSelect(el) {
+    const $el = $(el);
+    if (!$el.is('select.form-select') || el.multiple || el.size > 1) return;
+    if ($el.is('[data-no-search]') || $el.hasClass('select2-hidden-accessible')) return;
+    if ($el.closest('.dataTables_length').length) return; // keep DataTables' page-size menu native
+    const small = $el.hasClass('form-select-sm');
+    const $modal = $el.closest('.modal');
+    $el.select2({
+      theme: 'bootstrap-5',
+      width: el.style.width ? 'style' : '100%',
+      selectionCssClass: small ? 'select2--small' : '',
+      dropdownCssClass: small ? 'select2--small' : '',
+      dropdownParent: $modal.length ? $modal : $(document.body),
+    });
+    // Select2 raises only jQuery events; re-dispatch native input/change so
+    // vanilla listeners (onchange=..., addEventListener) keep working.
+    $el.on('select2:select select2:unselect select2:clear', function () {
+      this.dispatchEvent(new Event('input', { bubbles: true }));
+      this.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+  window.searchableSelect = searchableSelect;
+
+  // Keep the rendered Select2 in sync when code assigns values directly —
+  // el.value = x, $el.val(x), form.reset() — none of which fire 'change'.
+  // 'change.select2' updates Select2's display without running app handlers.
+  const nativeValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  Object.defineProperty(HTMLSelectElement.prototype, 'value', {
+    configurable: true,
+    get: nativeValue.get,
+    set: function (v) {
+      nativeValue.set.call(this, v);
+      if (this.classList.contains('select2-hidden-accessible')) $(this).trigger('change.select2');
+    },
+  });
+  const jqueryVal = $.fn.val;
+  $.fn.val = function () {
+    const result = jqueryVal.apply(this, arguments);
+    if (arguments.length) this.filter('select.select2-hidden-accessible').trigger('change.select2');
+    return result;
+  };
+  const nativeReset = HTMLFormElement.prototype.reset;
+  HTMLFormElement.prototype.reset = function () {
+    nativeReset.apply(this, arguments);
+    $(this).find('select.select2-hidden-accessible').trigger('change.select2');
+  };
+  $(document).on('reset', 'form', function (e) {
+    setTimeout(function () {
+      $(e.target).find('select.select2-hidden-accessible').trigger('change.select2');
+    });
+  });
+
+  $(function () {
+    $('select.form-select').each(function () { searchableSelect(this); });
+    new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        m.addedNodes.forEach(function (node) {
+          if (node.nodeType !== 1) return;
+          if (node.matches('select.form-select')) searchableSelect(node);
+          node.querySelectorAll('select.form-select').forEach(searchableSelect);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+})(jQuery);
+
 $(document).ready(function () {
   $('#example').DataTable();
 
-  $('.dropdown-toggle').each(function () {
+  // Initialise Bootstrap dropdowns, but NOT the nested submenu toggles —
+  // those are driven manually (hover + tap) in main_top_navbar.html, and a
+  // Bootstrap instance on them would fight that handler on touch devices.
+  $('.dropdown-toggle').not('.dropdown-submenu > .dropdown-toggle').each(function () {
     new bootstrap.Dropdown(this);
   });
 
-  $('.dropdown-submenu').on('mouseenter', function () {
-    $(this).find('.dropdown-menu').addClass('show');
-  });
-
-  $('.dropdown-submenu').on('mouseleave', function () {
-    $(this).find('.dropdown-menu').removeClass('show');
-  });
-
+  // Close any open menu when tapping/clicking outside a dropdown.
+  // Dropdowns live either in a .dropdown wrapper (navbar) or a .btn-group
+  // (split/toolbar buttons) — treat both as "inside".
   $(document).on('click', function (e) {
-    if (!$(e.target).closest('.dropdown').length) {
+    if (!$(e.target).closest('.dropdown, .btn-group').length) {
       $('.dropdown-menu').removeClass('show');
     }
   });
