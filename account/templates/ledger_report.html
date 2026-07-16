@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block title %}Account Ledger{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_account_report_subnavbar.html' with active_tab='ledger_report' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-book-open"></i>Account Ledger</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Statement of any postable account — opening, entries with running balance, closing</div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" id="ledger-print" disabled><i class="fas fa-print"></i> Print</button>
+        <button class="btn btn-outline-secondary" id="ledger-csv" disabled><i class="fas fa-file-download"></i> CSV</button>
+      </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label">Account<span class="text-danger">*</span></label>
+        <select id="ledger-account" class="form-select">
+          <option value="">Select account...</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" id="ledger-from" class="form-control" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" id="ledger-to" class="form-control" />
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary" id="ledger-load"><i class="fas fa-search"></i> View Ledger</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="ledger-card" style="display:none">
+  <div class="card-header" id="ledger-heading"><i class="fas fa-table"></i> Ledger</div>
+  <div class="card-body p-0">
+    <div class="table-responsive" id="ledger-print-area">
+      <table class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Date</th><th>Voucher</th><th>Type</th><th>Narration</th>
+            <th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th>
+          </tr>
+        </thead>
+        <tbody id="ledger-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+$(document).ready(function () {
+    let currentRows = null;
+    let currentAccountLabel = '';
+
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
+                   style: { background: colors[type] || colors.success } }).showToast();
+    }
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // Populate the account picker with postable accounts.
+    $.get("{% url 'api_coa_list' %}?postable=1&page_size=500", function (response) {
+        const select = $('#ledger-account');
+        response.results.filter(a => a.status === 'Active').forEach(a => {
+            select.append(`<option value="${a.id}">${escapeHtml(a.code)} - ${escapeHtml(a.description)}</option>`);
+        });
+        // Deep link: /reports/ledger/?account=<id>
+        const param = new URLSearchParams(window.location.search).get('account');
+        if (param) {
+            select.val(param).trigger('change');
+            loadLedger();
+        }
+    });
+
+    function loadLedger() {
+        const accountId = $('#ledger-account').val();
+        if (!accountId) { showToast('danger', 'Select an account first.'); return; }
+        const params = new URLSearchParams();
+        if ($('#ledger-from').val()) params.set('from', $('#ledger-from').val());
+        if ($('#ledger-to').val()) params.set('to', $('#ledger-to').val());
+        $.get(`/api/chart-of-accounts/${accountId}/ledger/?${params}`, function (response) {
+            currentRows = response;
+            currentAccountLabel = `${response.account.code} - ${response.account.description}`;
+            $('#ledger-heading').html(`<i class="fas fa-table"></i> ${escapeHtml(currentAccountLabel)}` +
+                ($('#ledger-from').val() || $('#ledger-to').val()
+                    ? ` <small class="text-muted">(${$('#ledger-from').val() || 'start'} → ${$('#ledger-to').val() || 'today'})</small>` : ''));
+            const body = $('#ledger-body').empty();
+            body.append(`<tr class="table-light fw-bold"><td colspan="6">Opening Balance</td>
+                <td class="text-end">${response.opening.amount} ${response.opening.side}</td></tr>`);
+            if (!response.rows.length) {
+                body.append('<tr><td colspan="7" class="text-center text-muted p-3">No posted entries in this period.</td></tr>');
+            }
+            response.rows.forEach(row => {
+                body.append(`<tr>
+                    <td>${escapeHtml(row.date)}</td>
+                    <td>${escapeHtml(row.voucher_no)}</td>
+                    <td>${escapeHtml(row.voucher_type)}</td>
+                    <td>${escapeHtml(row.narration)}</td>
+                    <td class="text-end">${row.debit != '0.00' ? row.debit : ''}</td>
+                    <td class="text-end">${row.credit != '0.00' ? row.credit : ''}</td>
+                    <td class="text-end">${row.balance} ${row.balance_side}</td></tr>`);
+            });
+            body.append(`<tr class="table-light fw-bold"><td colspan="6">Closing Balance</td>
+                <td class="text-end">${response.closing.amount} ${response.closing.side}</td></tr>`);
+            $('#ledger-card').show();
+            $('#ledger-print, #ledger-csv').prop('disabled', false);
+        }).fail((xhr) => showToast('danger', xhr.responseJSON?.error || 'Failed to load ledger.'));
+    }
+    $('#ledger-load').on('click', loadLedger);
+    $('#ledger-account').on('change', function () { if ($(this).val()) loadLedger(); });
+
+    $('#ledger-print').on('click', function () {
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><title>Ledger - ${escapeHtml(currentAccountLabel)}</title>
+            <style>
+              body { font-family: sans-serif; padding: 24px; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #999; padding: 4px 8px; font-size: 12px; }
+              th { background: #eee; } td.num { text-align: right; }
+            </style></head><body>
+            <h3>Account Ledger — ${escapeHtml(currentAccountLabel)}</h3>
+            ${document.getElementById('ledger-print-area').innerHTML}
+            </body></html>`);
+        win.document.close();
+        win.print();
+    });
+
+    $('#ledger-csv').on('click', function () {
+        if (!currentRows) return;
+        const lines = [['Date', 'Voucher', 'Type', 'Narration', 'Debit', 'Credit', 'Balance', 'Side']];
+        lines.push(['', '', '', 'Opening Balance', '', '', currentRows.opening.amount, currentRows.opening.side]);
+        currentRows.rows.forEach(r => lines.push([r.date, r.voucher_no, r.voucher_type, r.narration, r.debit, r.credit, r.balance, r.balance_side]));
+        lines.push(['', '', '', 'Closing Balance', '', '', currentRows.closing.amount, currentRows.closing.side]);
+        const csv = lines.map(row => row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+        link.download = `ledger_${currentRows.account.code}.csv`;
+        link.click();
+    });
+});
+</script>
+{% endblock %}

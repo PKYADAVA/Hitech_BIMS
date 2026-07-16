@@ -775,6 +775,13 @@ class Voucher(models.Model):
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+', editable=False)
     cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
     cancel_reason = models.CharField(max_length=255, blank=True)
+    # Auto-posting link back to the source document (egg purchase, chick sale, ...)
+    source_content_type = models.ForeignKey(
+        ContentType, on_delete=models.SET_NULL, null=True, blank=True, editable=False,
+        related_name='vouchers',
+    )
+    source_object_id = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
 
     def __str__(self):
         return self.voucher_no or f"DRAFT-{self.pk}"
@@ -793,6 +800,7 @@ class Voucher(models.Model):
             models.Index(fields=['company', 'date']),
             models.Index(fields=['company', 'voucher_type', 'status']),
             models.Index(fields=['company', 'status', 'date']),
+            models.Index(fields=['source_content_type', 'source_object_id']),
         ]
 
 

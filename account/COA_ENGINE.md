@@ -183,6 +183,28 @@ Vouchers** tab (Account ▸ Transactions). All posting goes through this service
 * Other modules (sales/purchase/hatchery) should call
   `journal.create_voucher(..., manual=False, post=True)` to post documents.
 
+## Automatic document posting
+
+`account/services/auto_posting.py` — hatchery documents post vouchers
+automatically through the journal service (called from the hatchery views
+after save; `post_delete` signals cancel on delete):
+
+* **EggPurchase → Purchase voucher**: Dr Egg Purchases (gross) + freight
+  account + TCS Receivable; Cr supplier AP ledger (*pay_later*) or pay
+  account (*pay_in_bill*); `freight_type='Exclude'` credits the pay account
+  separately for freight. **ChickSale → Sales voucher**: Dr customer AR
+  ledger / pay account (final amount); Cr Chick Sales + freight recovery
+  when billed.
+* One Posted voucher per document (generic FK `Voucher.source`). Edits with
+  changed amounts cancel + re-post; unchanged saves are no-ops; document
+  delete cancels the voucher. `sector` = the document's warehouse.
+* Role accounts (`EGG_PURCHASES`, `CHICK_SALES`, `FREIGHT_INWARD`,
+  `FREIGHT_RECOVERED`, `TCS_RECEIVABLE`) are created on demand under their
+  anchors, so this works with any generated template.
+* Posting failures never block the document save — they're logged; run
+  `python manage.py repost_documents` (add `--all` to re-check documents
+  that already have vouchers) to backfill.
+
 ## Roadmap (not yet implemented)
 
 * **Year-end closing** – close a year by generating next-year opening entries
@@ -191,8 +213,9 @@ Vouchers** tab (Account ▸ Transactions). All posting goes through this service
   (trial balance + ledger exist; these are groupings of the same data).
 * **Bank reconciliation**, **budgets**, **cost-center reporting**
   (`cost_center` is already accepted on voucher lines via API).
-* **Module integration** – wire sales/purchase/hatchery documents to post
-  vouchers automatically through the journal service.
+* **More document types** – purchase invoices/GRNs and sales invoices post
+  nothing yet because those models don't exist (POs are commitments, not
+  accounting events); when built, add a builder to `auto_posting.BUILDERS`.
 * **Tree UI extras** – drag-drop move/merge; move works via `PUT {parent: …}`.
 * **Per-company scoping of master records** – customers/suppliers/etc. have no
   company FK yet; auto-ledgers default to company 1 until they do.

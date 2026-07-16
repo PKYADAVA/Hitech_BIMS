@@ -135,10 +135,10 @@
           {% if 'account_master' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.account_master }}">
             <i class="fas fa-sliders-h"></i>Master
           </a></li>{% endif %}
-          {% if 'account_transactions' in allowed_sections %}<li><a class="dropdown-item" href="#">
+          {% if 'account_transactions' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.account_transactions }}">
             <i class="fas fa-exchange-alt"></i>Transactions
           </a></li>{% endif %}
-          {% if 'account_reports' in allowed_sections %}<li><a class="dropdown-item" href="#">
+          {% if 'account_reports' in allowed_sections %}<li><a class="dropdown-item" href="{{ section_url.account_reports }}">
             <i class="fas fa-chart-bar"></i>Reports
           </a></li>{% endif %}
         </ul>

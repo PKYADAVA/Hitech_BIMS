@@ -359,6 +359,129 @@ class JournalTests(EngineTestCase):
         self.assertEqual(tb["totals"]["debit"], tb["totals"]["credit"])
 
 
+class AutoPostingTests(EngineTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        import datetime
+        from inventory.models import Item, ItemCategory, Warehouse
+
+        cls.fy = FinancialYear.objects.create(
+            start_date=datetime.date(2026, 4, 1),
+            end_date=datetime.date(2027, 3, 31),
+            is_active=True,
+        )
+        cls.warehouse = Warehouse.objects.create(name="Main Hatchery")
+        category = ItemCategory.objects.create(name="Eggs")
+        cls.item = Item.objects.create(
+            item_code="HE-001", description="Hatching Eggs", category=category,
+            warehouse=cls.warehouse, valuation_method="Weighted Average",
+            standard_cost_per_unit=5, storage_uom="Nos", consumption_uom="Nos",
+            usage="Produced", source="Purchased", type="Raw Material", item_account="Expense",
+        )
+
+    def setUp(self):
+        self.generate()
+        from hatchery.models import EggPurchase, EggPurchaseItem
+        from purchase.models import Supplier
+        from account.services.auto_posting import post_document
+
+        self.post_document = post_document
+        self.bank = ChartOfAccount.objects.filter(
+            company=self.company, parent__system_role="BANK_ACCOUNTS", is_postable=True
+        ).first() or ChartOfAccount.objects.get(company=self.company, system_role="PETTY_CASH")
+        self.supplier = Supplier.objects.create(name="XYZ Feed")
+        self.EggPurchase, self.EggPurchaseItem = EggPurchase, EggPurchaseItem
+
+    def make_purchase(self, payment_mode="pay_later", freight="0", freight_type="Exclude", amount="10000"):
+        import datetime
+        doc = self.EggPurchase.objects.create(
+            date=datetime.date(2026, 5, 10), supplier=self.supplier, warehouse=self.warehouse,
+            payment_mode=payment_mode, pay_account=self.bank,
+            freight_type=freight_type, freight_amount=Decimal(freight),
+        )
+        self.EggPurchaseItem.objects.create(egg_purchase=doc, item=self.item,
+                                            rcv_qty=2000, amount=Decimal(amount))
+        return doc
+
+    def test_credit_purchase_posts_to_supplier_ledger(self):
+        from account.models import Voucher
+        from account.services import journal
+
+        doc = self.make_purchase()
+        voucher = self.post_document(doc)
+        self.assertIsNotNone(voucher)
+        self.assertEqual(voucher.status, "Posted")
+        self.assertEqual(voucher.voucher_type, "Purchase")
+        self.assertEqual(voucher.sector, self.warehouse)
+        self.assertEqual(voucher.total_debit, Decimal("10000.00"))
+        # Supplier sub-ledger was auto-created and credited.
+        supplier_ledger = ChartOfAccount.objects.get(
+            company=self.company, parent__system_role="ACCOUNTS_PAYABLE", description="XYZ Feed"
+        )
+        self.assertEqual(journal.account_balance(supplier_ledger), Decimal("-10000.00"))
+        # Egg Purchases role account created on demand under COGS.
+        eggs = ChartOfAccount.objects.get(company=self.company, system_role="EGG_PURCHASES")
+        self.assertEqual(journal.account_balance(eggs), Decimal("10000.00"))
+        self.assertEqual(Voucher.objects.filter(status="Posted").count(), 1)
+
+    def test_pay_in_bill_with_separate_freight(self):
+        from account.services import journal
+
+        doc = self.make_purchase(payment_mode="pay_in_bill", freight="1500", freight_type="Exclude")
+        voucher = self.post_document(doc)
+        self.assertEqual(voucher.total_debit, Decimal("11500.00"))
+        # Whole outflow hits the pay account: bill 10000 + freight 1500.
+        self.assertEqual(journal.account_balance(self.bank), Decimal("-11500.00"))
+
+    def test_edit_replaces_voucher_and_delete_cancels(self):
+        from account.models import Voucher
+
+        doc = self.make_purchase()
+        first = self.post_document(doc)
+        # Same amounts -> no new voucher.
+        again = self.post_document(doc)
+        self.assertEqual(first.id, again.id)
+        # Changed amounts -> old voucher cancelled, new one posted.
+        doc.items.all().update(amount=Decimal("12000"))
+        doc.items.first().save()
+        second = self.post_document(doc)
+        first.refresh_from_db()
+        self.assertEqual(first.status, "Cancelled")
+        self.assertEqual(second.status, "Posted")
+        self.assertEqual(second.total_debit, Decimal("12000.00"))
+        # Deleting the document cancels its voucher via signal.
+        doc.delete()
+        second.refresh_from_db()
+        self.assertEqual(second.status, "Cancelled")
+        self.assertIn("deleted", second.cancel_reason)
+        self.assertEqual(Voucher.objects.filter(status="Posted").count(), 0)
+
+    def test_chick_sale_posts_to_customer_and_income(self):
+        import datetime
+        from hatchery.models import ChickSale, ChickSaleItem
+        from sales.models import Customer
+        from account.services import journal
+
+        customer = Customer.objects.create(name="ABC Poultry", address="x", mobile="9955501112")
+        sale = ChickSale.objects.create(
+            date=datetime.date(2026, 6, 1), customer=customer, warehouse=self.warehouse,
+            freight_type="Include in Bill", freight_amount=Decimal("500"),
+        )
+        ChickSaleItem.objects.create(sale=sale, item=self.item, total_qty=1000,
+                                     net_qty=1000, sale_rate=Decimal("42"))
+        sale.recalculate()
+        voucher = self.post_document(sale)
+        self.assertEqual(voucher.voucher_type, "Sales")
+        self.assertEqual(voucher.total_debit, Decimal("42500.00"))
+        ar_ledger = ChartOfAccount.objects.get(
+            company=self.company, parent__system_role="ACCOUNTS_RECEIVABLE", description="ABC Poultry"
+        )
+        self.assertEqual(journal.account_balance(ar_ledger), Decimal("42500.00"))
+        chick_sales = ChartOfAccount.objects.get(company=self.company, system_role="CHICK_SALES")
+        self.assertEqual(journal.account_balance(chick_sales), Decimal("-42000.00"))
+
+
 class ApiTests(EngineTestCase):
     def setUp(self):
         self.client.login(username="tester", password="secret123")

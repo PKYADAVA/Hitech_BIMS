@@ -23,24 +23,10 @@
         <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#coaImportModal">
           <i class="fas fa-file-upload"></i> Import
         </button>
-        <div class="btn-group">
-          <button class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" title="Sample file showing the import columns">
-            <i class="fas fa-file-alt"></i> Template
-          </button>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{% url 'api_coa_import_template' %}?format=xlsx">Excel (with instructions)</a></li>
-            <li><a class="dropdown-item" href="{% url 'api_coa_import_template' %}?format=csv">CSV</a></li>
-          </ul>
-        </div>
-        <div class="btn-group">
-          <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-            <i class="fas fa-file-download"></i> Export
-          </button>
-          <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{% url 'api_coa_export' %}?format=csv">CSV</a></li>
-            <li><a class="dropdown-item" href="{% url 'api_coa_export' %}?format=xlsx">Excel</a></li>
-          </ul>
-        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'api_coa_export' %}?format=xlsx"
+           title="Download the full chart of accounts as Excel">
+          <i class="fas fa-file-download"></i> Export
+        </a>
         <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#coaOpeningModal">
           <i class="fas fa-balance-scale"></i> Opening Balances
         </button>
@@ -76,6 +62,12 @@
 .coa-caret { width: 1.1rem; text-align: center; cursor: pointer; color: #6c5ce7; }
 .coa-caret.invisible-caret { visibility: hidden; }
 .coa-code { font-family: monospace; font-weight: 600; }
+.coa-outline {
+  font-family: monospace; font-size: .8rem; font-weight: 700;
+  color: #6c5ce7; background: rgba(108, 92, 231, 0.10);
+  padding: 1px 7px; border-radius: 10px;
+  min-width: 3rem; text-align: center; white-space: nowrap;
+}
 .coa-context { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
 .coa-node-group > .coa-node-row .coa-name { font-weight: 600; }
 .coa-hidden { display: none !important; }
@@ -348,7 +340,7 @@ $(document).ready(function () {
         return text;
     }
 
-    function nodeHtml(node) {
+    function nodeHtml(node, outline) {
         const hasChildren = (node.children || []).length > 0;
         const badges = [
             node.is_group ? '<span class="badge bg-secondary">Group</span>' : '',
@@ -365,18 +357,19 @@ $(document).ready(function () {
           <li class="coa-node ${node.is_group ? 'coa-node-group' : ''}" data-id="${node.id}">
             <div class="coa-node-row" title="${escapeHtml(nodeContext(node))}">
               <span class="coa-caret ${hasChildren ? '' : 'invisible-caret'}"><i class="fas fa-caret-down"></i></span>
+              <span class="coa-outline">${outline}</span>
               <span class="coa-code">${escapeHtml(node.code)}</span>
               <span class="coa-name">${escapeHtml(node.description)}</span>
               ${badges}
               <span class="coa-actions">
                 <span class="text-muted small me-2 coa-context" title="${escapeHtml(nodeContext(node))}">${escapeHtml(typeInfo)}</span>
                 ${addBtn}
-                ${node.is_postable ? `<a class="btn btn-outline-info btn-sm" href="/vouchers/?ledger=${node.id}" target="_blank" rel="noopener" title="View ledger (opens in new tab)"><i class="fas fa-book-open"></i></a>` : ''}
+                ${node.is_postable ? `<a class="btn btn-outline-info btn-sm" href="/reports/ledger/?account=${node.id}" target="_blank" rel="noopener" title="View ledger (opens in new tab)"><i class="fas fa-book-open"></i></a>` : ''}
                 <button class="btn btn-outline-warning btn-sm coa-edit" data-id="${node.id}" title="Edit"><i class="fas fa-pen"></i></button>
                 ${delBtn}
               </span>
             </div>
-            ${hasChildren ? `<ul>${node.children.map(nodeHtml).join('')}</ul>` : ''}
+            ${hasChildren ? `<ul>${node.children.map((child, index) => nodeHtml(child, `${outline}.${index + 1}`)).join('')}</ul>` : ''}
           </li>`;
     }
 
@@ -387,7 +380,7 @@ $(document).ready(function () {
                 'Click <strong>Generate CoA</strong> to build your chart of accounts from an industry template.</div>');
             return;
         }
-        $("#coa-tree").html(`<ul>${treeData.map(nodeHtml).join('')}</ul>`);
+        $("#coa-tree").html(`<ul>${treeData.map((root, index) => nodeHtml(root, `${index + 1}`)).join('')}</ul>`);
     }
 
     $(document).on('click', '.coa-caret:not(.invisible-caret)', function () {

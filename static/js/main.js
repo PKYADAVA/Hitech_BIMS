@@ -98,8 +98,10 @@ $(document).ready(function () {
   });
 
   // Close any open menu when tapping/clicking outside a dropdown.
+  // Dropdowns live either in a .dropdown wrapper (navbar) or a .btn-group
+  // (split/toolbar buttons) — treat both as "inside".
   $(document).on('click', function (e) {
-    if (!$(e.target).closest('.dropdown').length) {
+    if (!$(e.target).closest('.dropdown, .btn-group').length) {
       $('.dropdown-menu').removeClass('show');
     }
   });

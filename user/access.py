@@ -153,7 +153,15 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("vouchers", "Journal Vouchers", (
                         "api_voucher_list", "api_voucher_detail", "api_voucher_post",
-                        "api_voucher_cancel", "api_coa_ledger", "api_trial_balance",
+                        "api_voucher_cancel", "api_trial_balance",
+                    )),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("ledger_report", "Account Ledger", (
+                        "api_coa_ledger",
                     )),
                 ],
             },

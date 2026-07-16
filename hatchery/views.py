@@ -408,6 +408,8 @@ class EggPurchaseAPI(BaseAPIView):
         try:
             data = json.loads(request.body.decode("utf-8"))
             ep = self._save_egg_purchase(data)
+            from account.services.auto_posting import post_document
+            post_document(ep, user=request.user)
             return JsonResponse({"message": "Egg purchase created", "id": ep.id}, status=201)
         except Exception as e:
             return self.handle_exception(e)
@@ -417,6 +419,8 @@ class EggPurchaseAPI(BaseAPIView):
         try:
             data = json.loads(request.body.decode("utf-8"))
             ep = self._save_egg_purchase(data, egg_purchase_id=id)
+            from account.services.auto_posting import post_document
+            post_document(ep, user=request.user)
             return JsonResponse({"message": "Egg purchase updated", "id": ep.id})
         except Exception as e:
             return self.handle_exception(e)
@@ -1445,14 +1449,20 @@ class ChickSaleAPI(BaseAPIView):
     @transaction.atomic
     def post(self, request):
         try:
-            return JsonResponse({"id": self._save(json.loads(request.body)).id}, status=201)
+            cs = self._save(json.loads(request.body))
+            from account.services.auto_posting import post_document
+            post_document(cs, user=request.user)
+            return JsonResponse({"id": cs.id}, status=201)
         except Exception as e:
             return self.handle_exception(e)
 
     @transaction.atomic
     def put(self, request, id):
         try:
-            return JsonResponse({"id": self._save(json.loads(request.body), id).id})
+            cs = self._save(json.loads(request.body), id)
+            from account.services.auto_posting import post_document
+            post_document(cs, user=request.user)
+            return JsonResponse({"id": cs.id})
         except Exception as e:
             return self.handle_exception(e)
 
