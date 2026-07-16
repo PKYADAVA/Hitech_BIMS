@@ -5,7 +5,23 @@ from import_export.fields import Field
 from import_export.widgets import ForeignKeyWidget
 from django.utils.translation import gettext_lazy as _
 from inventory.models import Warehouse
-from .models import FinancialYear, Schedule, ChartOfAccount, BankCode, CoACategory, TermsConditions
+from .models import (
+    AccountAuditLog,
+    AccountGroup,
+    AccountType,
+    BankCode,
+    ChartOfAccount,
+    CoACategory,
+    CoAGenerationLog,
+    CoATemplate,
+    CoATemplateAccount,
+    CostCenter,
+    FinancialYear,
+    Schedule,
+    TermsConditions,
+    Voucher,
+    VoucherLine,
+)
 
 
 class ChartOfAccountResource(resources.ModelResource):
@@ -165,3 +181,100 @@ class TermsConditionsAdmin(ImportExportModelAdmin):
     list_display = ('type', 'party_type', 'condition')
     list_filter = ('party_type',)
     search_fields = ('type',)
+
+
+@admin.register(AccountType)
+class AccountTypeAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'normal_balance', 'report', 'code_range_start', 'code_range_end', 'is_system')
+    ordering = ('sort_order',)
+
+    def get_readonly_fields(self, request, obj=None):
+        # System types keep their identity; only ranges/order are tunable.
+        if obj and obj.is_system:
+            return ('code', 'name', 'is_system')
+        return ()
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.is_system:
+            return False
+        return super().has_delete_permission(request, obj)
+
+
+@admin.register(AccountGroup)
+class AccountGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'account_type', 'is_system', 'is_active')
+    list_filter = ('account_type', 'is_system', 'is_active')
+    search_fields = ('name',)
+
+
+class CoATemplateAccountInline(admin.TabularInline):
+    model = CoATemplateAccount
+    fields = ('account_code', 'account_name', 'account_type', 'account_group', 'parent', 'is_group', 'system_role', 'sort_order')
+    extra = 0
+    show_change_link = True
+
+
+@admin.register(CoATemplate)
+class CoATemplateAdmin(admin.ModelAdmin):
+    list_display = ('template_name', 'industry', 'country', 'currency', 'status', 'created_date')
+    list_filter = ('industry', 'country', 'status')
+    search_fields = ('template_name', 'description')
+    inlines = [CoATemplateAccountInline]
+
+
+@admin.register(CoAGenerationLog)
+class CoAGenerationLogAdmin(admin.ModelAdmin):
+    list_display = ('company', 'template', 'status', 'started_at', 'finished_at', 'created_by')
+    list_filter = ('status',)
+    readonly_fields = ('company', 'template', 'status', 'summary', 'error', 'started_at', 'finished_at', 'created_by')
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(AccountAuditLog)
+class AccountAuditLogAdmin(admin.ModelAdmin):
+    list_display = ('timestamp', 'action', 'account', 'user', 'ip_address')
+    list_filter = ('action',)
+    search_fields = ('account__code', 'account__description', 'reason')
+    readonly_fields = ('company', 'account', 'action', 'old_values', 'new_values', 'reason', 'ip_address', 'user', 'timestamp')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # audit trail is immutable
+
+
+@admin.register(CostCenter)
+class CostCenterAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'kind', 'company', 'parent', 'is_active')
+    list_filter = ('kind', 'is_active')
+    search_fields = ('code', 'name')
+
+
+class VoucherLineInline(admin.TabularInline):
+    model = VoucherLine
+    fields = ('line_no', 'account', 'cost_center', 'debit', 'credit', 'narration')
+    extra = 0
+
+    def has_change_permission(self, request, obj=None):
+        # Lines follow the voucher lifecycle: editable only while Draft.
+        return obj is None or obj.status == 'Draft'
+
+    has_add_permission = has_change_permission
+    has_delete_permission = has_change_permission
+
+
+@admin.register(Voucher)
+class VoucherAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'voucher_type', 'date', 'company', 'total_debit', 'status', 'posted_at')
+    list_filter = ('voucher_type', 'status', 'financial_year')
+    search_fields = ('voucher_no', 'narration', 'reference')
+    readonly_fields = ('voucher_no', 'status', 'total_debit', 'total_credit',
+                       'posted_by', 'posted_at', 'cancelled_by', 'cancelled_at')
+    inlines = [VoucherLineInline]
+
+    def has_delete_permission(self, request, obj=None):
+        # Posted/cancelled vouchers are part of the books; never hard-delete.
+        return obj is not None and obj.status == 'Draft'

@@ -1,15 +1,31 @@
 from django.urls import path
 from . import views
+from . import api_views
+from . import journal_api
 
 urlpatterns = [
+    # Chart of Accounts engine APIs
+    path('api/chart-of-accounts/', api_views.CoAListCreateAPI.as_view(), name='api_coa_list'),
+    path('api/chart-of-accounts/tree/', api_views.CoATreeAPI.as_view(), name='api_coa_tree'),
+    path('api/chart-of-accounts/search/', api_views.CoASearchAPI.as_view(), name='api_coa_search'),
+    path('api/chart-of-accounts/templates/', api_views.CoATemplatesAPI.as_view(), name='api_coa_templates'),
+    path('api/chart-of-accounts/generate/', api_views.CoAGenerateAPI.as_view(), name='api_coa_generate'),
+    path('api/chart-of-accounts/import/', api_views.CoAImportAPI.as_view(), name='api_coa_import'),
+    path('api/chart-of-accounts/import/template/', api_views.CoAImportTemplateAPI.as_view(), name='api_coa_import_template'),
+    path('api/chart-of-accounts/export/', api_views.CoAExportAPI.as_view(), name='api_coa_export'),
+    path('api/chart-of-accounts/opening-balance/', api_views.CoAOpeningBalanceAPI.as_view(), name='api_coa_opening_balance'),
+    path('api/chart-of-accounts/audit/', api_views.CoAAuditLogAPI.as_view(), name='api_coa_audit'),
+    path('api/chart-of-accounts/<int:id>/', api_views.CoADetailAPI.as_view(), name='api_coa_detail'),
+    # Journal engine APIs
+    path('vouchers/', views.vouchers, name='vouchers'),
+    path('api/vouchers/', journal_api.VoucherListCreateAPI.as_view(), name='api_voucher_list'),
+    path('api/vouchers/<int:id>/', journal_api.VoucherDetailAPI.as_view(), name='api_voucher_detail'),
+    path('api/vouchers/<int:id>/post/', journal_api.VoucherPostAPI.as_view(), name='api_voucher_post'),
+    path('api/vouchers/<int:id>/cancel/', journal_api.VoucherCancelAPI.as_view(), name='api_voucher_cancel'),
+    path('api/chart-of-accounts/<int:id>/ledger/', journal_api.AccountLedgerAPI.as_view(), name='api_coa_ledger'),
+    path('api/reports/trial-balance/', journal_api.TrialBalanceAPI.as_view(), name='api_trial_balance'),
+    path('reports/ledger/', views.ledger_report, name='ledger_report'),
     path('coa/', views.coa, name='coa'),
-    path('coa-category/', views.coa_category, name='coa_category'),
-    path('coa_category_list/', views.CoACategoryAPI.as_view(), name='coa_category_list'),
-    path('coa_category/<int:id>/', views.CoACategoryAPI.as_view(), name='coa_category_detail'),
-    path('coa_category/<int:id>/delete/', views.CoACategoryAPI.as_view(), name='coa_category_delete'),
-    path('coa_category/<int:id>/toggle-active/', views.toggle_coa_category_active, name='coa_category_toggle_active'),
-    path('coa_category/<int:id>/toggle-lock/', views.toggle_coa_category_lock, name='coa_category_toggle_lock'),
-    path('coa_category/bulk-upload/', views.coa_category_bulk_upload, name='coa_category_bulk_upload'),
     path('chart-of-accounts/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_list'),
     path('chart-of-accounts/create/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_create'),
     path('chart-of-accounts/<int:id>/', views.ChartOfAccountsAPI.as_view(), name='chart-of-accounts_update'),
@@ -20,11 +36,6 @@ urlpatterns = [
     path('financial-year/<int:id>/', views.FinancialYearAPI.as_view(), name='financial_year_update'),
     path('financial-year/<int:id>/delete/', views.FinancialYearAPI.as_view(), name='financial_year_delete'),
     path('bank_cash/', views.bank_cash, name='bank_cash'),
-    path('schedule/', views.schedule, name='schedule'),
-    path('schedule_list/', views.ScheduleAPI.as_view(), name='schedule_list'),
-    path('schedule/create/', views.ScheduleAPI.as_view(), name='schedule_create'),
-    path('schedule/<int:id>/', views.ScheduleAPI.as_view(), name='schedule_update'),
-    path('schedule/<int:id>/delete/', views.ScheduleAPI.as_view(), name='schedule_delete'),
     path('company-profile/', views.company_profile, name='company_profile'),
     path('terms/', views.terms, name='terms'),
     path('terms_conditions/', views.TermsConditionsAPI.as_view(), name='terms_conditions_list'),

@@ -1,326 +1,673 @@
 {% extends 'base.html' %}
 
-{% block title %}Manage Chart Of Accounts{% endblock %}
+{% block title %}Chart of Accounts{% endblock %}
 
 {% block nav %}
  {% include 'main_top_navbar.html' with active_tab='account' %}
 {% endblock %}
 
 {% block content %}
- <!-- Toggle Navbar -->
  {% include '_account_subnavbar.html' with active_tab='coa' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Chart of Accounts</div>
-    <div class="page-header-subtitle">Add and manage chart of accounts</div>
-</div>
-
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        <button
-            id="add-account-btn"
-            class="btn btn-primary"
-            data-bs-toggle="modal"
-            data-bs-target="#chartOfAccountFormModal"
-        >
-            <i class="fas fa-plus"></i> Add New Account
+    <div class="page-header-title"><i class="fas fa-sitemap"></i>Chart of Accounts</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Generated per company from an industry template; fully editable</div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#coaGenerateModal">
+          <i class="fas fa-magic"></i> Generate CoA
         </button>
-    </div>
-
-    <!-- Modal Structure -->
-    <div class="modal fade" id="chartOfAccountFormModal" tabindex="-1" aria-labelledby="chartOfAccountFormModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="chartOfAccountFormModalLabel">Add New Account</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Form Section -->
-                    <form id="chart-of-account-form">
-                        {% csrf_token %}
-                        <input type="hidden" id="account-id" />
-                        <div class="mb-3">
-                            <label for="code" class="form-label">Code</label>
-                            <input
-                                type="text"
-                                id="code"
-                                class="form-control"
-                                placeholder="Enter account code"
-                                required
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="description" class="form-label">Description</label>
-                            <input
-                                type="text"
-                                id="description"
-                                class="form-control"
-                                placeholder="Enter account description"
-                                required
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="type" class="form-label">Type</label>
-                            <select id="type" class="form-control" required>
-                                <option value="" selected disabled>Select account type</option>
-                                {% for type, type_name in  account_types %}
-                                <option value="{{ type }}">{{ type_name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="control_type" class="form-label">Control Type</label>
-                            <input
-                                type="text"
-                                id="control_type"
-                                class="form-control"
-                                placeholder="Enter control type"
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="schedule" class="form-label">Schedule</label>
-                            <select id="schedule" class="form-control">
-                                <option value="" selected disabled>Select schedule</option>
-                                {% for schedule in schedules %}
-                                <option value="{{ schedule.id }}">{{ schedule.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="status" class="form-label">Status</label>
-                            <select id="status" class="form-control" required>
-                                <option value="Active" selected>Active</option>
-                                <option value="Inactive">Inactive</option>
-                            </select>
-                        </div>
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" id="coa-submit-btn" class="btn btn-primary">Save</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+        <button class="btn btn-primary" id="add-root-account-btn">
+          <i class="fas fa-plus"></i> Add Account
+        </button>
+        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#coaImportModal">
+          <i class="fas fa-file-upload"></i> Import
+        </button>
+        <div class="btn-group">
+          <button class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" title="Sample file showing the import columns">
+            <i class="fas fa-file-alt"></i> Template
+          </button>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{% url 'api_coa_import_template' %}?format=xlsx">Excel (with instructions)</a></li>
+            <li><a class="dropdown-item" href="{% url 'api_coa_import_template' %}?format=csv">CSV</a></li>
+          </ul>
         </div>
-    </div>
-
-    <!-- List Section -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Chart of Accounts</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table
-                        class="table table-hover table-bordered mb-0"
-                        id="chart-of-accounts-table"
-                    >
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Code</th>
-                                <th>Description</th>
-                                <th>Type</th>
-                                <th>Control Type</th>
-                                <th>Schedule</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="chart-of-accounts-table-body">
-                            <!-- AJAX content will load here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="btn-group">
+          <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+            <i class="fas fa-file-download"></i> Export
+          </button>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{% url 'api_coa_export' %}?format=csv">CSV</a></li>
+            <li><a class="dropdown-item" href="{% url 'api_coa_export' %}?format=xlsx">Excel</a></li>
+          </ul>
         </div>
+        <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#coaOpeningModal">
+          <i class="fas fa-balance-scale"></i> Opening Balances
+        </button>
+      </div>
     </div>
 </div>
 
-    <script>
-    $(document).ready(function () {
-        // Function to load chart of accounts
-        function loadChartOfAccounts() {
-            $.ajax({
-                url: "{% url 'chart_of_accounts_list' %}", // Replace with the actual endpoint
-                type: "GET",
-                success: function (response) {
-                    const table = $("#chart-of-accounts-table");
-                    const tableBody = $("#chart-of-accounts-table-body");
+<div class="card">
+  <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+    <span><i class="fas fa-table"></i> Account Tree</span>
+    <div class="d-flex gap-2 align-items-center">
+      <input type="search" id="coa-tree-search" class="form-control form-control-sm" style="min-width:240px"
+             placeholder="Search code or name..." />
+      <button class="btn btn-sm btn-outline-secondary" id="coa-expand-all" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
+      <button class="btn btn-sm btn-outline-secondary" id="coa-collapse-all" title="Collapse all"><i class="fas fa-angle-double-up"></i></button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div id="coa-tree" class="coa-tree"><div class="text-muted p-3">Loading chart of accounts...</div></div>
+  </div>
+</div>
 
-                    // Clear the current table body and destroy the DataTable if initialized
-                    if ($.fn.DataTable.isDataTable(table)) {
-                        table.DataTable().clear().destroy();
-                    }
-                    tableBody.empty();
+<style>
+.coa-tree ul { list-style: none; padding-left: 1.4rem; margin-bottom: 0; }
+.coa-tree > ul { padding-left: 0; }
+.coa-node-row {
+  display: flex; align-items: center; gap: .5rem; padding: .3rem .5rem;
+  border-radius: .35rem; cursor: default;
+}
+.coa-node-row:hover { background: rgba(108, 92, 231, 0.08); }
+.coa-node-row .coa-actions { visibility: hidden; margin-left: auto; white-space: nowrap; }
+.coa-node-row:hover .coa-actions { visibility: visible; }
+.coa-caret { width: 1.1rem; text-align: center; cursor: pointer; color: #6c5ce7; }
+.coa-caret.invisible-caret { visibility: hidden; }
+.coa-code { font-family: monospace; font-weight: 600; }
+.coa-context { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+.coa-node-group > .coa-node-row .coa-name { font-weight: 600; }
+.coa-hidden { display: none !important; }
+.badge-sys { background: #6c5ce7; }
+</style>
 
-                    // Populate the table dynamically
-                    response.forEach((account) => {
-                        const tableRow = `
-                            <tr>
-                                <td>${account.code}</td>
-                                <td>${account.description}</td>
-                                <td>${account.type}</td>
-                                <td>${account.control_type || "N/A"}</td>
-                                <td>${account.schedule__name || "N/A"}</td>
-                                <td>${account.status}</td>
-                                <td>
-                                    <div class="d-flex gap-1">
-                                    <button
-                                        class="btn btn-outline-warning btn-sm edit-button"
-                                        data-id="${account.id}"
-                                        data-code="${account.code}"
-                                        data-description="${account.description}"
-                                        data-type="${account.type}"
-                                        data-control-type="${account.control_type}"
-                                        data-schedule="${account.schedule}"
-                                        data-status="${account.status}"
-                                    >
-                                        <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button
-                                        class="btn btn-outline-danger btn-sm delete-button"
-                                        data-id="${account.id}"
-                                    >
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                        tableBody.append(tableRow);
-                    });
+<!-- ============ Add / Edit account modal ============ -->
+<div class="modal fade" id="coaFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="coaFormModalLabel">Add Account</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="coa-form">
+          {% csrf_token %}
+          <input type="hidden" id="coa-form-id" />
+          <input type="hidden" id="coa-form-parent" />
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Parent</label>
+              <input type="text" id="coa-form-parent-label" class="form-control" disabled placeholder="None (root account)" />
+              <div class="form-text" id="coa-form-context" style="white-space: pre-line;"></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Code</label>
+              <input type="text" id="coa-form-code" class="form-control" disabled placeholder="Auto-generated" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Name<span class="text-danger">*</span></label>
+              <input type="text" id="coa-form-name" class="form-control" required placeholder="Account name..." />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Account Type<span class="text-danger">*</span></label>
+              <select id="coa-form-type" class="form-select">
+                <option value="">Inherit from parent</option>
+                {% for t in account_types %}
+                <option value="{{ t.code }}">{{ t.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Account Group</label>
+              <select id="coa-form-group" class="form-select">
+                <option value="">Inherit from parent</option>
+                {% for g in account_groups %}
+                <option value="{{ g.name }}">{{ g.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Status</label>
+              <select id="coa-form-status" class="form-select">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+            <div class="col-md-6 form-check ms-2 mt-4">
+              <input type="checkbox" class="form-check-input" id="coa-form-isgroup" />
+              <label class="form-check-label" for="coa-form-isgroup">Group account (holds sub-accounts, cannot be posted to)</label>
+            </div>
+            <div class="col-md-5 form-check ms-2 mt-4">
+              <input type="checkbox" class="form-check-input" id="coa-form-manual" checked />
+              <label class="form-check-label" for="coa-form-manual">Allow manual journal entry</label>
+            </div>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i> Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 
-                    // Reinitialize DataTable
-                    table.DataTable();
-                },
-                error: function (xhr, status, error) {
-                    console.error(`Failed to load accounts: ${error}`);
-                },
-            });
+<!-- ============ Generate wizard modal ============ -->
+<div class="modal fade" id="coaGenerateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-magic me-2"></i>Generate Chart of Accounts</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">
+          Pick your industry template - the full account hierarchy, GST/tax ledgers, inventory,
+          cash, bank and fixed-asset accounts are generated automatically in one transaction.
+          Existing accounts are never duplicated; re-running only adds what is missing.
+        </p>
+        <div class="mb-3">
+          <label class="form-label fw-bold">1. Industry template<span class="text-danger">*</span></label>
+          <div id="coa-template-list" class="list-group" style="max-height: 260px; overflow-y: auto;">
+            <div class="text-muted p-2">Loading templates...</div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">2. System accounts to generate</label>
+          <div class="row">
+            <div class="col-md-4 form-check ms-3"><input class="form-check-input coa-gen-opt" type="checkbox" id="gen-tax" checked /><label class="form-check-label" for="gen-tax">GST / Tax accounts</label></div>
+            <div class="col-md-4 form-check ms-3"><input class="form-check-input coa-gen-opt" type="checkbox" id="gen-inventory" checked /><label class="form-check-label" for="gen-inventory">Inventory accounts</label></div>
+            <div class="col-md-3 form-check ms-3"><input class="form-check-input coa-gen-opt" type="checkbox" id="gen-cash" checked /><label class="form-check-label" for="gen-cash">Cash accounts</label></div>
+            <div class="col-md-4 form-check ms-3"><input class="form-check-input coa-gen-opt" type="checkbox" id="gen-banks" checked /><label class="form-check-label" for="gen-banks">Bank ledgers (from Bank Masters)</label></div>
+            <div class="col-md-4 form-check ms-3"><input class="form-check-input coa-gen-opt" type="checkbox" id="gen-fixed" checked /><label class="form-check-label" for="gen-fixed">Fixed assets + depreciation</label></div>
+          </div>
+        </div>
+        <div id="coa-generate-result" class="small"></div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i> Close</button>
+          <button type="button" class="btn btn-success" id="coa-generate-btn" disabled><i class="fas fa-magic"></i> Generate</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Import modal ============ -->
+<div class="modal fade" id="coaImportModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-file-upload me-2"></i>Import Accounts</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">CSV or Excel file<span class="text-danger">*</span></label>
+          <input type="file" id="coa-import-file" class="form-control" accept=".csv,.xlsx,.xls" />
+          <div class="form-text">
+            Columns: <code>Code</code> (optional, auto if blank), <code>Name</code>, <code>Type</code>,
+            <code>Group</code>, <code>Parent Code</code>, <code>Is Group</code>,
+            <code>Opening Balance</code>, <code>Opening Type</code>.
+            Parents must appear before children. The file is fully validated first;
+            a failed import changes nothing.
+            <br>Not sure about the format? Download a ready-made template:
+            <a href="{% url 'api_coa_import_template' %}?format=xlsx">Excel (with instructions sheet)</a> ·
+            <a href="{% url 'api_coa_import_template' %}?format=csv">CSV</a>
+          </div>
+        </div>
+        <div id="coa-import-result" class="small mb-2"></div>
+        <div class="d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i> Cancel</button>
+          <button type="button" class="btn btn-outline-primary" id="coa-import-validate"><i class="fas fa-check"></i> Validate</button>
+          <button type="button" class="btn btn-primary" id="coa-import-run" disabled><i class="fas fa-file-import"></i> Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Opening balances modal ============ -->
+<div class="modal fade" id="coaOpeningModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-balance-scale me-2"></i>Opening Balances</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">
+          Enter opening balances against postable accounts. Any difference between total debits and
+          credits is posted automatically to <strong>Opening Balance Equity</strong>.
+        </p>
+        <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+          <table class="table table-sm table-bordered align-middle mb-2">
+            <thead class="table-dark" style="position: sticky; top: 0;">
+              <tr><th>Code</th><th>Account</th><th style="width:180px">Amount</th><th style="width:130px">Side</th></tr>
+            </thead>
+            <tbody id="coa-opening-body"></tbody>
+          </table>
+        </div>
+        <div class="d-flex gap-4 fw-bold">
+          <span>Total Debit: <span id="coa-opening-debit">0.00</span></span>
+          <span>Total Credit: <span id="coa-opening-credit">0.00</span></span>
+          <span id="coa-opening-diff" class="text-danger"></span>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i> Cancel</button>
+          <button type="button" class="btn btn-primary" id="coa-opening-save"><i class="fas fa-save"></i> Save Balances</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+$(document).ready(function () {
+    const csrfToken = "{{ csrf_token }}";
+    const API = {
+        tree: "{% url 'api_coa_tree' %}",
+        list: "{% url 'api_coa_list' %}",
+        templates: "{% url 'api_coa_templates' %}",
+        generate: "{% url 'api_coa_generate' %}",
+        importUrl: "{% url 'api_coa_import' %}",
+        opening: "{% url 'api_coa_opening_balance' %}",
+        detail: (id) => `/api/chart-of-accounts/${id}/`,
+    };
+    let treeData = [];
+    let nodeIndex = {};
+
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
+                   style: { background: colors[type] || colors.success } }).showToast();
+    }
+
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // ---------------------------------------------------------------- tree
+
+    function loadTree() {
+        $.get(API.tree, function (roots) {
+            treeData = roots;
+            nodeIndex = {};
+            const indexAll = (nodes) => nodes.forEach(n => { nodeIndex[n.id] = n; indexAll(n.children || []); });
+            indexAll(roots);
+            renderTree();
+        }).fail(() => showToast('danger', 'Failed to load chart of accounts.'));
+    }
+
+    // Human-readable ancestry, e.g. "Assets › Current Assets › Cash".
+    function nodePath(node) {
+        const parts = [];
+        let current = node;
+        while (current) {
+            parts.unshift(current.description);
+            current = nodeIndex[current.parent];
         }
+        return parts.join(' › ');
+    }
 
-        // Load chart of accounts on page load
-        loadChartOfAccounts();
+    function ancestorPath(node) {
+        const parent = nodeIndex[node.parent];
+        return parent ? nodePath(parent) : '';
+    }
 
-        // Handle form submission to add a new account (POST)
-        function bindAccountAddMode() {
-            $("#chartOfAccountFormModalLabel").text("Add New Account");
-            $("#coa-submit-btn").text("Save");
-            $("#chart-of-account-form")[0].reset();
-            $("#chart-of-account-form").off("submit").on("submit", function (event) {
-                event.preventDefault();
-
-                const data = {
-                    code: $("#code").val(),
-                    description: $("#description").val(),
-                    type: $("#type").val(),
-                    control_type: $("#control_type").val(),
-                    schedule: $("#schedule").val(),
-                    status: $("#status").val(),
-                };
-
-                $.ajax({
-                    url: "/chart-of-accounts/create/", // Replace with the actual POST endpoint
-                    method: "POST",
-                    headers: {
-                        "X-CSRFToken": "{{ csrf_token }}",
-                        "Content-Type": "application/json",
-                    },
-                    data: JSON.stringify(data),
-                    success: function () {
-                        $("#chartOfAccountFormModal").modal("hide");
-                        $("#chart-of-account-form")[0].reset();
-                        loadChartOfAccounts();
-                        alert("Account added successfully!");
-                    },
-                    error: function (xhr, status, error) {
-                        console.error(`Failed to add account: ${error}`);
-                        alert("An error occurred while adding the account.");
-                    },
-                });
-            });
-        }
-        bindAccountAddMode();
-        $("#add-account-btn").on("click", bindAccountAddMode);
-
-        // Handle form submission to update an existing account (PUT)
-        function updateAccount(id) {
-            const data = {
-                code: $("#code").val(),
-                description: $("#description").val(),
-                type: $("#type").val(),
-                control_type: $("#control_type").val(),
-                schedule: $("#schedule").val(),
-                status: $("#status").val(),
-            };
-
-            $.ajax({
-                url: `/chart-of-accounts/${id}/`,
-                method: "PUT",
-                headers: {
-                    "X-CSRFToken": "{{ csrf_token }}",
-                    "Content-Type": "application/json",
-                },
-                data: JSON.stringify(data),
-                success: function () {
-                    $("#chartOfAccountFormModal").modal("hide");
-                    $("#chart-of-account-form")[0].reset();
-                    loadChartOfAccounts();
-                    alert("Account updated successfully!");
-                },
-                error: function (xhr, status, error) {
-                    console.error(`Failed to update account: ${error}`);
-                    alert("An error occurred while updating the account.");
-                },
-            });
-        }
-
-        // Edit button click handler
-        $(document).on("click", ".edit-button", function () {
-            const id = $(this).data("id");
-
-            // Populate the form fields with the data attributes from the button
-            $("#account-id").val(id);
-            $("#code").val($(this).data("code"));
-            $("#description").val($(this).data("description"));
-            $("#type").val($(this).data("type"));
-            $("#control_type").val($(this).data("control-type"));
-            $("#schedule").val($(this).data("schedule"));
-            $("#status").val($(this).data("status"));
-
-            // Open the modal for editing
-            $("#chartOfAccountFormModalLabel").text("Edit Account");
-            $("#coa-submit-btn").text("Update");
-            $("#chartOfAccountFormModal").modal("show");
-
-            // Submit form with PUT method
-            $("#chart-of-account-form").off("submit").on("submit", function (event) {
-                event.preventDefault();
-                updateAccount(id);
-            });
+    // Indented preview of the sub-groups and their subs (two levels).
+    function childrenPreview(node, depth) {
+        depth = depth || 0;
+        const children = node.children || [];
+        if (!children.length || depth >= 2) return [];
+        const lines = [];
+        children.slice(0, 12).forEach(child => {
+            lines.push('  '.repeat(depth + 1) + (child.is_group ? '▸ ' : '• ') +
+                       `${child.code}  ${child.description}`);
+            lines.push(...childrenPreview(child, depth + 1));
         });
+        if (children.length > 12) {
+            lines.push('  '.repeat(depth + 1) + `... +${children.length - 12} more`);
+        }
+        return lines;
+    }
 
-        // Delete button click handler
-        $(document).on("click", ".delete-button", function () {
-            const id = $(this).data("id");
+    function nodeContext(node) {
+        let text = `${nodePath(node)}\nType: ${node.account_type || '-'}` +
+               `${node.account_group ? '\nGroup: ' + node.account_group : ''}` +
+               `\n${node.is_group ? 'Group account (holds sub-accounts)' : 'Postable ledger account'}`;
+        const preview = childrenPreview(node);
+        if (preview.length) {
+            text += `\nContains:\n${preview.join('\n')}`;
+        }
+        return text;
+    }
 
-            if (confirm("Are you sure you want to delete this account?")) {
-                $.ajax({
-                    url: `/chart-of-accounts/${id}/delete/`,
-                    method: "DELETE",
-                    headers: { "X-CSRFToken": "{{ csrf_token }}" },
-                    success: function () {
-                        loadChartOfAccounts();
-                        alert("Account deleted successfully!");
-                    },
-                    error: function () {
-                        alert("An error occurred while deleting the account.");
-                    },
-                });
-            }
+    function nodeHtml(node) {
+        const hasChildren = (node.children || []).length > 0;
+        const badges = [
+            node.is_group ? '<span class="badge bg-secondary">Group</span>' : '',
+            node.system_role ? '<span class="badge badge-sys" title="System account">SYS</span>' : '',
+            node.status === 'Inactive' ? '<span class="badge bg-warning text-dark">Inactive</span>' : '',
+        ].join(' ');
+        const addBtn = `<button class="btn btn-outline-primary btn-sm coa-add-child" data-id="${node.id}"
+            title="${node.is_group ? 'Add sub-account' : 'Convert to group and add sub-account'}"><i class="fas fa-plus"></i></button>`;
+        const delBtn = node.system_role
+            ? '' : `<button class="btn btn-outline-danger btn-sm coa-delete" data-id="${node.id}" title="Delete"><i class="fas fa-trash"></i></button>`;
+        const typeInfo = [ancestorPath(node), node.account_type, node.account_group]
+            .filter(Boolean).join(' · ');
+        return `
+          <li class="coa-node ${node.is_group ? 'coa-node-group' : ''}" data-id="${node.id}">
+            <div class="coa-node-row" title="${escapeHtml(nodeContext(node))}">
+              <span class="coa-caret ${hasChildren ? '' : 'invisible-caret'}"><i class="fas fa-caret-down"></i></span>
+              <span class="coa-code">${escapeHtml(node.code)}</span>
+              <span class="coa-name">${escapeHtml(node.description)}</span>
+              ${badges}
+              <span class="coa-actions">
+                <span class="text-muted small me-2 coa-context" title="${escapeHtml(nodeContext(node))}">${escapeHtml(typeInfo)}</span>
+                ${addBtn}
+                ${node.is_postable ? `<a class="btn btn-outline-info btn-sm" href="/vouchers/?ledger=${node.id}" target="_blank" rel="noopener" title="View ledger (opens in new tab)"><i class="fas fa-book-open"></i></a>` : ''}
+                <button class="btn btn-outline-warning btn-sm coa-edit" data-id="${node.id}" title="Edit"><i class="fas fa-pen"></i></button>
+                ${delBtn}
+              </span>
+            </div>
+            ${hasChildren ? `<ul>${node.children.map(nodeHtml).join('')}</ul>` : ''}
+          </li>`;
+    }
+
+    function renderTree() {
+        if (!treeData.length) {
+            $("#coa-tree").html(
+                '<div class="text-center text-muted p-4">No accounts yet. ' +
+                'Click <strong>Generate CoA</strong> to build your chart of accounts from an industry template.</div>');
+            return;
+        }
+        $("#coa-tree").html(`<ul>${treeData.map(nodeHtml).join('')}</ul>`);
+    }
+
+    $(document).on('click', '.coa-caret:not(.invisible-caret)', function () {
+        const li = $(this).closest('li.coa-node');
+        li.children('ul').toggle();
+        $(this).find('i').toggleClass('fa-caret-down fa-caret-right');
+    });
+    $('#coa-expand-all').on('click', () => {
+        $('#coa-tree ul ul').show();
+        $('.coa-caret i').removeClass('fa-caret-right').addClass('fa-caret-down');
+    });
+    $('#coa-collapse-all').on('click', () => {
+        $('#coa-tree ul ul').hide();
+        $('.coa-caret i').removeClass('fa-caret-down').addClass('fa-caret-right');
+    });
+
+    // Search: hide non-matching branches, keep matching nodes' ancestors visible.
+    $('#coa-tree-search').on('input', function () {
+        const q = $(this).val().trim().toLowerCase();
+        $('#coa-tree li.coa-node').removeClass('coa-hidden');
+        if (!q) return;
+        $('#coa-tree li.coa-node').each(function () {
+            const row = $(this).children('.coa-node-row');
+            const text = (row.find('.coa-code').text() + ' ' + row.find('.coa-name').text()).toLowerCase();
+            $(this).toggleClass('coa-hidden', !text.includes(q));
+        });
+        // Un-hide ancestors and descendants of visible nodes.
+        $('#coa-tree li.coa-node').not('.coa-hidden').each(function () {
+            $(this).parents('li.coa-node').removeClass('coa-hidden');
+            $(this).find('li.coa-node').removeClass('coa-hidden');
+        });
+        $('#coa-tree ul ul').show();
+    });
+
+    // ---------------------------------------------------------- add / edit
+
+    function openForm({ id = null, parent = null }) {
+        $('#coa-form')[0].reset();
+        $('#coa-form-id').val(id || '');
+        $('#coa-form-parent').val(parent ? parent.id : '');
+        $('#coa-form-parent-label').val(parent ? `${parent.code} - ${parent.description}` : '');
+        const contextNode = parent || (id ? nodeIndex[nodeIndex[id]?.parent] : null);
+        $('#coa-form-context').text(contextNode
+            ? `${nodePath(contextNode)}\nInherits - Type: ${contextNode.account_type || '-'}` +
+              `${contextNode.account_group ? ' · Group: ' + contextNode.account_group : ''}`
+            : '');
+        $('#coa-form-code').val('');
+        $('#coa-form-type').prop('disabled', !!id);
+        if (id) {
+            const node = nodeIndex[id];
+            $('#coaFormModalLabel').text('Edit Account');
+            $('#coa-form-code').val(node.code);
+            $('#coa-form-name').val(node.description);
+            $('#coa-form-status').val(node.status);
+            $('#coa-form-group').val(node.account_group || '');
+            $('#coa-form-isgroup').prop('checked', node.is_group);
+            $('#coa-form-manual').prop('checked', node.allow_manual_entry);
+        } else {
+            $('#coaFormModalLabel').text(parent ? `Add Sub-account under ${parent.code}` : 'Add Root Account');
+        }
+        $('#coaFormModal').modal('show');
+    }
+
+    $('#add-root-account-btn').on('click', () => openForm({}));
+    $(document).on('click', '.coa-add-child', function () {
+        const node = nodeIndex[$(this).data('id')];
+        if (node.is_group) { openForm({ parent: node }); return; }
+        // Postable leaf: offer to convert it into a group first.
+        if (!confirm(`${node.code} - ${node.description} is a postable account. ` +
+                     `Convert it to a group so sub-accounts can be created under it?`)) return;
+        $.ajax({
+            url: API.detail(node.id), method: 'PUT',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify({ is_group: true }),
+            success: function (updated) {
+                nodeIndex[node.id] = Object.assign(node, updated);
+                loadTree();
+                showToast('success', `${node.code} is now a group.`);
+                openForm({ parent: node });
+            },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Conversion failed.'),
         });
     });
-    </script>
+    $(document).on('click', '.coa-edit', function () { openForm({ id: $(this).data('id') }); });
+
+    $('#coa-form').on('submit', function (event) {
+        event.preventDefault();
+        const id = $('#coa-form-id').val();
+        const payload = {
+            description: $('#coa-form-name').val(),
+            account_group: $('#coa-form-group').val(),
+            status: $('#coa-form-status').val(),
+            allow_manual_entry: $('#coa-form-manual').is(':checked'),
+            is_group: $('#coa-form-isgroup').is(':checked'),
+        };
+        if (!id) {
+            payload.parent = $('#coa-form-parent').val() || null;
+            payload.account_type = $('#coa-form-type').val() || null;
+        }
+        $.ajax({
+            url: id ? API.detail(id) : API.list,
+            method: id ? 'PUT' : 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify(payload),
+            success: function () {
+                $('#coaFormModal').modal('hide');
+                loadTree();
+                showToast('success', id ? 'Account updated.' : 'Account created with auto-generated code.');
+            },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Save failed.'),
+        });
+    });
+
+    $(document).on('click', '.coa-delete', function () {
+        const id = $(this).data('id');
+        const node = nodeIndex[id];
+        if (!confirm(`Delete ${node.code} - ${node.description}? It can be restored from the audit trail.`)) return;
+        $.ajax({
+            url: API.detail(id) , method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken },
+            success: function () { loadTree(); showToast('success', 'Account deleted.'); },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Delete failed.'),
+        });
+    });
+
+    // ------------------------------------------------------------ generate
+
+    let selectedTemplate = null;
+    $('#coaGenerateModal').on('show.bs.modal', function () {
+        $('#coa-generate-result').empty();
+        $.get(API.templates, function (templates) {
+            const list = $('#coa-template-list').empty();
+            templates.forEach(t => {
+                list.append(`
+                  <label class="list-group-item list-group-item-action d-flex gap-2 align-items-start">
+                    <input class="form-check-input mt-1 coa-template-radio" type="radio" name="coa-template" value="${t.id}">
+                    <span>
+                      <strong>${escapeHtml(t.industry)}</strong> - ${escapeHtml(t.template_name)}
+                      <span class="badge bg-light text-dark">${t.account_count} accounts</span><br>
+                      <small class="text-muted">${escapeHtml(t.description)} (${escapeHtml(t.country)}/${escapeHtml(t.currency)})</small>
+                    </span>
+                  </label>`);
+            });
+        });
+    });
+    $(document).on('change', '.coa-template-radio', function () {
+        selectedTemplate = $(this).val();
+        $('#coa-generate-btn').prop('disabled', false);
+    });
+    $('#coa-generate-btn').on('click', function () {
+        const btn = $(this).prop('disabled', true);
+        $('#coa-generate-result').html('<span class="text-muted">Generating...</span>');
+        $.ajax({
+            url: API.generate, method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify({
+                template: selectedTemplate,
+                with_tax: $('#gen-tax').is(':checked'),
+                with_inventory: $('#gen-inventory').is(':checked'),
+                with_cash: $('#gen-cash').is(':checked'),
+                with_banks: $('#gen-banks').is(':checked'),
+                with_fixed_assets: $('#gen-fixed').is(':checked'),
+            }),
+            success: function (response) {
+                const rows = Object.entries(response.summary).map(([step, counts]) =>
+                    `<tr><td>${escapeHtml(step.replaceAll('_', ' '))}</td><td>${counts.created}</td><td>${counts.skipped}</td></tr>`).join('');
+                $('#coa-generate-result').html(
+                    `<div class="text-success mb-1">${escapeHtml(response.message)}</div>
+                     <table class="table table-sm table-bordered w-auto">
+                       <thead><tr><th>Step</th><th>Created</th><th>Skipped (already present)</th></tr></thead>
+                       <tbody>${rows}</tbody></table>`);
+                loadTree();
+                showToast('success', 'Chart of accounts generated.');
+                btn.prop('disabled', false);
+            },
+            error: function (xhr) {
+                $('#coa-generate-result').html(`<span class="text-danger">${escapeHtml(xhr.responseJSON?.error || 'Generation failed.')}</span>`);
+                btn.prop('disabled', false);
+            },
+        });
+    });
+
+    // -------------------------------------------------------------- import
+
+    function importRequest(dryRun) {
+        const fileInput = $('#coa-import-file')[0];
+        if (!fileInput.files.length) { showToast('danger', 'Choose a file first.'); return; }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        $('#coa-import-result').html('<span class="text-muted">Processing...</span>');
+        $.ajax({
+            url: API.importUrl + (dryRun ? '?dry_run=1' : ''),
+            method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+            data: formData, processData: false, contentType: false,
+            success: function (response) {
+                if (dryRun) {
+                    $('#coa-import-result').html(`<div class="text-success">File valid: ${response.rows} rows ready to import.</div>`);
+                    $('#coa-import-run').prop('disabled', false);
+                } else {
+                    $('#coa-import-result').html(`<div class="text-success">${escapeHtml(response.message)}</div>`);
+                    $('#coa-import-run').prop('disabled', true);
+                    loadTree();
+                    showToast('success', response.message);
+                }
+            },
+            error: function (xhr) {
+                const body = xhr.responseJSON || {};
+                if (body.errors && body.errors.length) {
+                    const items = body.errors.map(e => `<li>Row ${e.row}: ${escapeHtml(e.error)}</li>`).join('');
+                    $('#coa-import-result').html(`<div class="text-danger">Validation failed - nothing was imported:</div><ul>${items}</ul>`);
+                } else {
+                    $('#coa-import-result').html(`<span class="text-danger">${escapeHtml(body.error || 'Import failed.')}</span>`);
+                }
+                $('#coa-import-run').prop('disabled', true);
+            },
+        });
+    }
+    $('#coa-import-validate').on('click', () => importRequest(true));
+    $('#coa-import-run').on('click', () => importRequest(false));
+    $('#coa-import-file').on('change', () => { $('#coa-import-run').prop('disabled', true); $('#coa-import-result').empty(); });
+
+    // ------------------------------------------------------ opening balance
+
+    function refreshOpeningTotals() {
+        let debit = 0, credit = 0;
+        $('#coa-opening-body tr').each(function () {
+            const amount = parseFloat($(this).find('.ob-amount').val()) || 0;
+            if ($(this).find('.ob-side').val() === 'Debit') debit += amount; else credit += amount;
+        });
+        $('#coa-opening-debit').text(debit.toFixed(2));
+        $('#coa-opening-credit').text(credit.toFixed(2));
+        const diff = debit - credit;
+        $('#coa-opening-diff').text(diff ? `Difference ${Math.abs(diff).toFixed(2)} will post to Opening Balance Equity` : '');
+    }
+
+    $('#coaOpeningModal').on('show.bs.modal', function () {
+        $('#coa-opening-body').html('<tr><td colspan="4" class="text-muted">Loading...</td></tr>');
+        $.get(API.opening, function (response) {
+            const body = $('#coa-opening-body').empty();
+            response.results.forEach(a => {
+                body.append(`
+                  <tr data-id="${a.id}">
+                    <td class="coa-code">${escapeHtml(a.code)}</td>
+                    <td>${escapeHtml(a.description)}</td>
+                    <td><input type="number" step="0.01" min="0" class="form-control form-control-sm ob-amount" value="${a.opening_balance}"></td>
+                    <td><select class="form-select form-select-sm ob-side">
+                        <option value="Debit" ${a.opening_type === 'Debit' ? 'selected' : ''}>Debit</option>
+                        <option value="Credit" ${a.opening_type === 'Credit' ? 'selected' : ''}>Credit</option>
+                    </select></td>
+                  </tr>`);
+            });
+            refreshOpeningTotals();
+        });
+    });
+    $(document).on('input change', '.ob-amount, .ob-side', refreshOpeningTotals);
+    $('#coa-opening-save').on('click', function () {
+        const entries = [];
+        $('#coa-opening-body tr[data-id]').each(function () {
+            entries.push({
+                account: $(this).data('id'),
+                opening_balance: $(this).find('.ob-amount').val() || '0',
+                opening_type: $(this).find('.ob-side').val(),
+            });
+        });
+        $.ajax({
+            url: API.opening, method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify({ entries }),
+            success: function (response) {
+                $('#coaOpeningModal').modal('hide');
+                showToast('success', response.message +
+                    (response.balancing_account ? ` Balanced via ${response.balancing_account} (${response.balancing_side} ${response.balancing_amount}).` : ''));
+                loadTree();
+            },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Failed to save opening balances.'),
+        });
+    });
+
+    // Initialize
+    loadTree();
+});
+</script>
 {% endblock %}

@@ -136,12 +136,25 @@ MODULE_REGISTRY = [
                 "label": "Master",
                 "tabs": [
                     ("fin_year", "Financial Year"),
-                    ("schedule", "Schedule"),
-                    ("coa_category", "CoA Category"),
-                    ("coa", "Chart of Accounts"),
+                    ("coa", "Chart of Accounts", (
+                        "api_coa_list", "api_coa_tree", "api_coa_search",
+                        "api_coa_templates", "api_coa_generate", "api_coa_import",
+                        "api_coa_import_template",
+                        "api_coa_export", "api_coa_opening_balance", "api_coa_audit",
+                        "api_coa_detail", "chart_of_accounts_list",
+                    )),
                     ("bank_cash", "Bank / Cash Masters"),
                     ("company_profile", "Company Profile"),
                     ("terms", "Terms & Conditions"),
+                ],
+            },
+            {
+                "label": "Transactions",
+                "tabs": [
+                    ("vouchers", "Journal Vouchers", (
+                        "api_voucher_list", "api_voucher_detail", "api_voucher_post",
+                        "api_voucher_cancel", "api_coa_ledger", "api_trial_balance",
+                    )),
                 ],
             },
         ],
@@ -349,9 +362,7 @@ _ACTION_BASE_TO_TAB = {
     "sales_price": "sales_price_master",
     # Account
     "chart_of_accounts": "coa",
-    "coa_category": "coa_category",
     "financial_year": "fin_year",
-    "schedule": "schedule",
     "terms_conditions": "terms",
     # Inventory
     "category": "item_category",

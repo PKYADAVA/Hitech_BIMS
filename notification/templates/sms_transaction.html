@@ -176,20 +176,48 @@ $(function () {
     return $("#template option:selected").data("body") || "";
   }
 
+  // Successful sends of the CURRENTLY selected template for this document.
+  function sentForSelectedTemplate(r) {
+    const sel = $("#template").val();
+    if (!sel) return [];
+    return (r.sent_history || []).filter(h => String(h.template_id) === String(sel));
+  }
+
+  // Status badge that answers "do I need to send this again?": green when this
+  // exact template already went out (with when/where), info when only other
+  // templates did, grey when nothing was ever sent for the document.
+  function smsStatusCell(r) {
+    const hist = r.sent_history || [];
+    const tip = hist.map(h =>
+      `${h.template_name || "SMS"} → ${h.mobile} on ${h.sent_at}`).join("\n");
+    const mine = sentForSelectedTemplate(r);
+    if (mine.length) {
+      return `<span class="badge bg-success" title="${escapeHtml(tip)}">` +
+             `<i class="fas fa-check me-1"></i>Sent${mine.length > 1 ? " ×" + mine.length : ""}</span>` +
+             `<div class="small text-muted">${escapeHtml(mine[0].sent_at)}</div>`;
+    }
+    if (hist.length) {
+      const label = $("#template").val() ? "Sent (other template)" : "Sent";
+      return `<span class="badge bg-info text-dark" title="${escapeHtml(tip)}">${label}</span>`;
+    }
+    return '<span class="badge bg-secondary">Not Sent</span>';
+  }
+
   function renderRows() {
+    const checked = new Set(selectedIndexes());
     if (table) { table.destroy(); }
     const tbody = $("#sms-doc-table tbody");
     tbody.empty();
     rows.forEach(function (r, i) {
       tbody.append(`<tr>
-        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"}></td>
+        <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
         <td>${escapeHtml(r.date)}</td>
         <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
         <td>${escapeHtml(r.party_name)}</td>
         <td>${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
         <td>${escapeHtml(r.doc_no)}</td>
         <td class="text-end">${Number(r.amount).toFixed(2)}</td>
-        <td>${r.already_sent ? '<span class="badge bg-success">Sent</span>' : '<span class="badge bg-secondary">Pending</span>'}</td>
+        <td>${smsStatusCell(r)}</td>
         <td class="text-center"><button class="btn btn-outline-info btn-sm row-preview" data-index="${i}"><i class="fas fa-eye"></i></button></td>
       </tr>`);
     });
@@ -215,6 +243,12 @@ $(function () {
   }
 
   $("#search-btn").on("click", loadRows);
+
+  // Re-evaluate the status column when the template changes: "Sent" is
+  // relative to the template about to be sent.
+  $("#template").on("change", function () {
+    if (rows.length) renderRows();
+  });
   $("#clear-btn").on("click", function () {
     $("#from-date").val(today); $("#to-date").val(today);
     $("#party-customer").val(""); $("#party-supplier").val("");
@@ -277,8 +311,18 @@ $(function () {
   }
 
   async function sendSelected() {
-    const idx = requireSelection();
+    let idx = requireSelection();
     if (!idx) return;
+    // Upfront duplicate awareness: warn once if any selected document already
+    // received THIS template successfully, and let the sender exclude them.
+    const already = idx.filter(i => sentForSelectedTemplate(rows[i]).length);
+    if (already.length) {
+      const names = already.slice(0, 5).map(i => rows[i].doc_no).join(", ");
+      if (!confirm(`${already.length} of the selected document(s) already received this template successfully (${names}${already.length > 5 ? ", …" : ""}).\n\nOK = send to them AGAIN.\nCancel = skip them and send only to the rest.`)) {
+        idx = idx.filter(i => !sentForSelectedTemplate(rows[i]).length);
+        if (!idx.length) { alert("Nothing left to send — all selected documents already received this SMS."); return; }
+      }
+    }
     $("#send-btn, #preview-send-btn").prop("disabled", true);
     $("#progress-wrap").removeClass("d-none");
     let ok = 0, failed = 0, skipped = 0;

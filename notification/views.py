@@ -279,16 +279,27 @@ def sms_transaction_source(request):
         (request.GET.get("to_date") or "").strip() or None,
         (request.GET.get("party") or "").strip() or None,
     )
-    # Stamp each row with whether an SMS was already sent for the document,
-    # so the grid can show it without another round trip.
+    # Stamp each row with its successful-send history (per template), so the
+    # grid can tell the sender exactly what already went out — and for which
+    # template — before they send again.
     doc_nos = [r["doc_no"] for r in rows]
-    sent = set(
-        SmsMessage.objects.filter(module=module, document_no__in=doc_nos,
-                                  status__in=["sent", "delivered", "mocked"])
-        .values_list("document_no", flat=True)
-    )
+    sent_map = {}
+    successful = (SmsMessage.objects
+                  .filter(module=module, document_no__in=doc_nos,
+                          status__in=["sent", "delivered", "mocked"])
+                  .order_by("-created_at")
+                  .values("document_no", "template_id", "template_name",
+                          "mobile", "created_at"))
+    for m in successful:
+        sent_map.setdefault(m["document_no"], []).append({
+            "template_id": m["template_id"],
+            "template_name": m["template_name"],
+            "mobile": m["mobile"],
+            "sent_at": timezone.localtime(m["created_at"]).strftime("%d-%m-%Y %H:%M"),
+        })
     for r in rows:
-        r["already_sent"] = r["doc_no"] in sent
+        r["sent_history"] = sent_map.get(r["doc_no"], [])
+        r["already_sent"] = bool(r["sent_history"])
     return JsonResponse({"rows": rows, "party_type": source["party_type"]})
 
 

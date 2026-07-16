@@ -159,18 +159,18 @@ def _egg_purchase_rows(from_date, to_date, party_id):
 # (generic ones — CompanyName/CurrentDate/CurrentTime/UserName — are implied).
 # The template editor uses this to grey out variables that would render blank.
 DOC_SOURCES = {
-    "sales": {"label": "Sales (Chick Sale)", "party_type": "customer",
+    "sales": {"label": "Chick Sale", "party_type": "customer",
               "model": ChickSale, "rows": _chick_sale_rows,
               "transaction": "chick_sale",
               "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                             "Quantity", "Rate", "VehicleNo", "DriverName", "Warehouse")},
-    "dispatch": {"label": "Dispatch (Delivery Challan)", "party_type": "customer",
+    "dispatch": {"label": "Delivery Challan", "party_type": "customer",
                  "model": DeliveryChallan, "rows": _delivery_challan_rows,
                  "transaction": "delivery_challan",
                  "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "Place", "VehicleNo", "DriverName",
                                "LRNo")},
-    "purchase": {"label": "Purchase (Egg Purchase)", "party_type": "supplier",
+    "purchase": {"label": "Egg Purchase", "party_type": "supplier",
                  "model": EggPurchase, "rows": _egg_purchase_rows,
                  "transaction": "egg_purchase",
                  "variables": ("SupplierName", "InvoiceNo", "InvoiceDate", "Amount",

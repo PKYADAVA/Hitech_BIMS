@@ -1,0 +1,728 @@
+{% extends 'base.html' %}
+
+{% block title %}Journal Vouchers{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_account_subnavbar.html' with active_tab='vouchers' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-book"></i>Journal Vouchers</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Double-entry vouchers; only postable ledger accounts accept lines</div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary" id="new-voucher-btn"><i class="fas fa-plus"></i> New Voucher</button>
+        <button class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#trialBalanceModal">
+          <i class="fas fa-balance-scale"></i> Trial Balance
+        </button>
+      </div>
+    </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex flex-wrap gap-2 align-items-center justify-content-between">
+    <span><i class="fas fa-table"></i> Vouchers</span>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <select id="filter-type" class="form-select form-select-sm" style="width:auto">
+        <option value="">All types</option>
+        {% for value, label in voucher_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <select id="filter-status" class="form-select form-select-sm" style="width:auto">
+        <option value="">All statuses</option>
+        <option>Draft</option><option>Posted</option><option>Cancelled</option>
+      </select>
+      <select id="filter-sector" class="form-select form-select-sm" style="width:auto">
+        <option value="">All sectors</option>
+        {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+      <input type="search" id="filter-q" class="form-control form-control-sm" style="min-width:200px"
+             placeholder="Voucher no / narration..." />
+      <button class="btn btn-sm btn-outline-secondary" id="filter-apply"><i class="fas fa-search"></i></button>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Voucher No</th><th>Date</th><th>Type</th><th>Sector</th><th>Narration</th>
+            <th class="text-end">Amount</th><th>Status</th><th class="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="voucher-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Voucher form modal ============ -->
+<div class="modal fade" id="voucherFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="voucherFormTitle">New Voucher</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="voucher-id" />
+        <div class="row g-3 mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Date<span class="text-danger">*</span></label>
+            <input type="date" id="voucher-date" class="form-control" required />
+          </div>
+          <div class="col-md-3" id="voucher-type-wrap">
+            <label class="form-label">Type</label>
+            <select id="voucher-type" class="form-select">
+              {% for value, label in voucher_types %}
+              {% if value != 'Opening' and value != 'Closing' %}<option value="{{ value }}">{{ label }}</option>{% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3" id="voucher-sector-wrap">
+            <label class="form-label">Sector (Office / Branch)</label>
+            <select id="voucher-sector" class="form-select">
+              <option value="">Select sector...</option>
+              {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Reference</label>
+            <input type="text" id="voucher-reference" class="form-control" placeholder="Bill / doc no..." />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Narration</label>
+            <input type="text" id="voucher-narration" class="form-control" placeholder="Narration..." />
+          </div>
+        </div>
+        <div class="btn-group btn-group-sm mb-3" role="group" id="entry-mode-toggle">
+          <input type="radio" class="btn-check" name="entry-mode" id="mode-simple" checked>
+          <label class="btn btn-outline-primary" for="mode-simple"><i class="fas fa-exchange-alt"></i> Simple (From &rarr; To)</label>
+          <input type="radio" class="btn-check" name="entry-mode" id="mode-advanced">
+          <label class="btn btn-outline-primary" for="mode-advanced"><i class="fas fa-list"></i> Advanced (Debit / Credit lines)</label>
+        </div>
+
+        <!-- Simple mode: one amount, direction handled automatically -->
+        <div id="simple-panel">
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle">
+              <thead class="table-dark">
+                <tr>
+                  <th style="min-width:220px">From CoA <small class="fw-normal">(money out · credit)</small></th>
+                  <th style="min-width:220px">To CoA <small class="fw-normal">(money in · debit)</small></th>
+                  <th style="min-width:160px">Sector</th>
+                  <th style="width:140px" class="text-end">Amount</th>
+                  <th>Remarks</th>
+                  <th style="width:84px"></th>
+                </tr>
+              </thead>
+              <tbody id="simple-rows-body"></tbody>
+              <tfoot>
+                <tr class="fw-bold">
+                  <td colspan="3" class="text-end">Total Vouchers: <span id="simple-count">1</span> &nbsp;·&nbsp; Voucher Amount</td>
+                  <td class="text-end" id="simple-total">0.00</td>
+                  <td colspan="2" class="text-muted small fw-normal">Each row becomes one balanced voucher — no debit/credit to think about.</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <!-- Advanced mode: full multi-line debit/credit editor -->
+        <div id="advanced-panel" style="display:none">
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle" id="voucher-lines-table">
+              <thead class="table-dark">
+                <tr>
+                  <th style="min-width:280px">Account</th>
+                  <th style="width:190px">Money In / Out</th>
+                  <th style="width:150px" class="text-end">Amount</th>
+                  <th>Line Narration</th>
+                  <th style="width:84px"></th>
+                </tr>
+              </thead>
+              <tbody id="voucher-lines-body"></tbody>
+              <tfoot>
+                <tr class="fw-bold">
+                  <td colspan="2" class="text-end">Totals</td>
+                  <td class="text-end text-nowrap">In (Dr) <span id="lines-total-debit">0.00</span> · Out (Cr) <span id="lines-total-credit">0.00</span></td>
+                  <td colspan="2" id="lines-balance-hint" class="text-danger"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i> Cancel</button>
+          <button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-save"></i> Save Draft</button>
+          <button type="button" class="btn btn-success" id="save-post-btn"><i class="fas fa-check"></i> Save &amp; Post</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Voucher view modal ============ -->
+<div class="modal fade" id="voucherViewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="voucher-view-title">Voucher</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="voucher-view-body"></div>
+      <div class="modal-footer" id="voucher-view-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Ledger modal ============ -->
+<div class="modal fade" id="ledgerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ledger-title"><i class="fas fa-book-open me-2"></i>Ledger</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-2 mb-3 align-items-end flex-wrap">
+          <div><label class="form-label mb-0 small">From</label><input type="date" id="ledger-from" class="form-control form-control-sm"></div>
+          <div><label class="form-label mb-0 small">To</label><input type="date" id="ledger-to" class="form-control form-control-sm"></div>
+          <button class="btn btn-sm btn-primary" id="ledger-refresh"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
+        <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+          <table class="table table-sm table-bordered mb-0">
+            <thead class="table-dark" style="position:sticky;top:0;">
+              <tr><th>Date</th><th>Voucher</th><th>Narration</th>
+                  <th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr>
+            </thead>
+            <tbody id="ledger-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Trial balance modal ============ -->
+<div class="modal fade" id="trialBalanceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-balance-scale me-2"></i>Trial Balance</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-2 mb-3 align-items-end flex-wrap">
+          <div><label class="form-label mb-0 small">From</label><input type="date" id="tb-from" class="form-control form-control-sm"></div>
+          <div><label class="form-label mb-0 small">To</label><input type="date" id="tb-to" class="form-control form-control-sm"></div>
+          <button class="btn btn-sm btn-primary" id="tb-refresh"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
+        <div class="table-responsive" style="max-height:460px; overflow-y:auto;">
+          <table class="table table-sm table-bordered mb-0">
+            <thead class="table-dark" style="position:sticky;top:0;">
+              <tr>
+                <th>Code</th><th>Account</th><th>Type</th>
+                <th class="text-end">Opening Dr</th><th class="text-end">Opening Cr</th>
+                <th class="text-end">Debit</th><th class="text-end">Credit</th>
+                <th class="text-end">Closing Dr</th><th class="text-end">Closing Cr</th>
+              </tr>
+            </thead>
+            <tbody id="tb-body"></tbody>
+            <tfoot id="tb-foot" class="fw-bold"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+$(document).ready(function () {
+    const csrfToken = "{{ csrf_token }}";
+    let accounts = [];   // postable accounts for line selects
+    let ledgerAccountId = null;
+
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
+                   style: { background: colors[type] || colors.success } }).showToast();
+    }
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    const statusBadge = (s) => ({
+        Draft: '<span class="badge bg-secondary">Draft</span>',
+        Posted: '<span class="badge bg-success">Posted</span>',
+        Cancelled: '<span class="badge bg-danger">Cancelled</span>',
+    }[s] || s);
+
+    // ------------------------------------------------------------ vouchers
+
+    function loadVouchers() {
+        const params = new URLSearchParams({ page_size: 100 });
+        if ($('#filter-type').val()) params.set('type', $('#filter-type').val());
+        if ($('#filter-status').val()) params.set('status', $('#filter-status').val());
+        if ($('#filter-sector').val()) params.set('sector', $('#filter-sector').val());
+        if ($('#filter-q').val()) params.set('q', $('#filter-q').val());
+        $.get(`{% url 'api_voucher_list' %}?${params}`, function (response) {
+            const body = $('#voucher-table-body').empty();
+            if (!response.results.length) {
+                body.append('<tr><td colspan="8" class="text-center text-muted p-3">No vouchers yet. Click <strong>New Voucher</strong> to record your first entry.</td></tr>');
+                return;
+            }
+            response.results.forEach(v => {
+                body.append(`
+                  <tr>
+                    <td class="fw-bold">${escapeHtml(v.voucher_no)}${v.system_generated ? ' <span class="badge bg-info text-dark">Auto</span>' : ''}</td>
+                    <td>${escapeHtml(v.date)}</td>
+                    <td>${escapeHtml(v.voucher_type)}</td>
+                    <td>${escapeHtml(v.sector_name || '')}</td>
+                    <td>${escapeHtml(v.narration)}</td>
+                    <td class="text-end">${escapeHtml(v.total_debit)}</td>
+                    <td>${statusBadge(v.status)}</td>
+                    <td class="text-center">
+                      <div class="d-flex gap-1 justify-content-center">
+                        <button class="btn btn-outline-primary btn-sm view-voucher" data-id="${v.id}" title="View"><i class="fas fa-eye"></i></button>
+                        ${v.status === 'Draft' ? `
+                          <button class="btn btn-outline-warning btn-sm edit-voucher" data-id="${v.id}" title="Edit"><i class="fas fa-pen"></i></button>
+                          <button class="btn btn-outline-success btn-sm post-voucher" data-id="${v.id}" title="Post"><i class="fas fa-check"></i></button>
+                          <button class="btn btn-outline-danger btn-sm delete-voucher" data-id="${v.id}" title="Delete draft"><i class="fas fa-trash"></i></button>` : ''}
+                        ${v.status === 'Posted' && !v.system_generated ? `
+                          <button class="btn btn-outline-warning btn-sm revise-voucher" data-id="${v.id}" title="Revise (cancel &amp; re-enter corrected copy)"><i class="fas fa-pen"></i></button>
+                          <button class="btn btn-outline-danger btn-sm cancel-voucher" data-id="${v.id}" title="Cancel"><i class="fas fa-ban"></i></button>` : ''}
+                      </div>
+                    </td>
+                  </tr>`);
+            });
+        }).fail(() => showToast('danger', 'Failed to load vouchers.'));
+    }
+    $('#filter-apply').on('click', loadVouchers);
+    $('#filter-q').on('keydown', e => { if (e.key === 'Enter') loadVouchers(); });
+
+    // -------------------------------------------------------- line editor
+
+    function accountOptions(selected) {
+        return '<option value="">Select account...</option>' + accounts.map(a =>
+            `<option value="${a.id}" ${a.id == selected ? 'selected' : ''}>${escapeHtml(a.code)} - ${escapeHtml(a.description)}</option>`
+        ).join('');
+    }
+
+    const sectorOptions = `<option value="">Sector...</option>{% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}`;
+    const rowButtons = (addClass, removeClass) =>
+        `<div class="d-flex gap-1 justify-content-center">
+           <button class="btn btn-sm btn-outline-primary ${addClass}" title="Add row"><i class="fas fa-plus"></i></button>
+           <button class="btn btn-sm btn-outline-danger ${removeClass}" title="Remove row"><i class="fas fa-times"></i></button>
+         </div>`;
+
+    // Advanced lines use plain language: "Money In (Debit)" adds to the account,
+    // "Money Out (Credit)" takes from it - so non-accountants can enter lines too.
+    function addLine(line) {
+        line = line || {};
+        const credit = parseFloat(line.credit) || 0;
+        const out = credit > 0 || line.direction === 'out';
+        const amount = credit || parseFloat(line.debit) || 0;
+        $('#voucher-lines-body').append(`
+          <tr>
+            <td><select class="form-select form-select-sm line-account">${accountOptions(line.account)}</select></td>
+            <td><select class="form-select form-select-sm line-direction">
+                  <option value="in" ${out ? '' : 'selected'}>Money In (Debit)</option>
+                  <option value="out" ${out ? 'selected' : ''}>Money Out (Credit)</option>
+                </select></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end line-amount" value="${amount || ''}"></td>
+            <td><input type="text" class="form-control form-control-sm line-narration" value="${escapeHtml(line.narration || '')}"></td>
+            <td class="text-center">${rowButtons('add-line-inline', 'remove-line')}</td>
+          </tr>`);
+    }
+    $(document).on('click', '.add-line-inline', function () {
+        // Balance-friendly default: new line takes the opposite side of the current one.
+        addLine({ direction: $(this).closest('tr').find('.line-direction').val() === 'out' ? 'in' : 'out' });
+    });
+    $(document).on('click', '.remove-line', function () {
+        if ($('#voucher-lines-body tr').length > 1) $(this).closest('tr').remove();
+        refreshTotals();
+    });
+    $(document).on('input', '.line-amount', refreshTotals);
+    $(document).on('change', '.line-direction', refreshTotals);
+
+    function refreshTotals() {
+        let debit = 0, credit = 0;
+        $('#voucher-lines-body tr').each(function () {
+            const amount = parseFloat($(this).find('.line-amount').val()) || 0;
+            if ($(this).find('.line-direction').val() === 'out') credit += amount; else debit += amount;
+        });
+        $('#lines-total-debit').text(debit.toFixed(2));
+        $('#lines-total-credit').text(credit.toFixed(2));
+        const diff = debit - credit;
+        $('#lines-balance-hint').text(diff ? `Out of balance by ${Math.abs(diff).toFixed(2)}` : '');
+    }
+
+    // -------------------------------------------------- simple (From -> To)
+
+    function addSimpleRow() {
+        $('#simple-rows-body').append(`
+          <tr>
+            <td><select class="form-select form-select-sm simple-from">${accountOptions()}</select></td>
+            <td><select class="form-select form-select-sm simple-to">${accountOptions()}</select></td>
+            <td><select class="form-select form-select-sm simple-sector">${sectorOptions}</select></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end simple-amount" placeholder="0.00"></td>
+            <td><input type="text" class="form-control form-control-sm simple-remarks" placeholder="Remarks..."></td>
+            <td class="text-center">${rowButtons('add-simple-inline', 'remove-simple-row')}</td>
+          </tr>`);
+        refreshSimpleTotals();
+    }
+    $(document).on('click', '.add-simple-inline', function () {
+        // New row starts with the same sector - batches are usually one branch.
+        const sector = $(this).closest('tr').find('.simple-sector').val();
+        addSimpleRow();
+        if (sector) $('#simple-rows-body tr:last .simple-sector').val(sector).trigger('change');
+    });
+    $(document).on('click', '.remove-simple-row', function () {
+        if ($('#simple-rows-body tr').length > 1) $(this).closest('tr').remove();
+        refreshSimpleTotals();
+    });
+    $(document).on('input', '.simple-amount', refreshSimpleTotals);
+
+    function refreshSimpleTotals() {
+        let total = 0;
+        $('#simple-rows-body tr').each(function () {
+            total += parseFloat($(this).find('.simple-amount').val()) || 0;
+        });
+        $('#simple-count').text($('#simple-rows-body tr').length);
+        $('#simple-total').text(total.toFixed(2));
+    }
+
+    function isSimpleMode() { return $('#mode-simple').is(':checked'); }
+    function setMode(simple) {
+        $('#mode-simple').prop('checked', simple);
+        $('#mode-advanced').prop('checked', !simple);
+        $('#simple-panel').toggle(simple);
+        $('#advanced-panel').toggle(!simple);
+        // Simple rows carry their own sector; the header sector is for advanced mode.
+        $('#voucher-sector-wrap').toggle(!simple);
+    }
+    $('#mode-simple').on('change', () => setMode(true));
+    $('#mode-advanced').on('change', () => setMode(false));
+
+    function collectSimpleRows() {
+        const rows = [];
+        let error = null;
+        $('#simple-rows-body tr').each(function (index) {
+            const from = $(this).find('.simple-from').val();
+            const to = $(this).find('.simple-to').val();
+            const sector = $(this).find('.simple-sector').val();
+            const amount = parseFloat($(this).find('.simple-amount').val()) || 0;
+            const remarks = $(this).find('.simple-remarks').val();
+            if (!from && !to && !amount) return; // blank row, skip
+            if (!from || !to) { error = `Row ${index + 1}: choose both From and To accounts.`; return false; }
+            if (from === to) { error = `Row ${index + 1}: From and To cannot be the same account.`; return false; }
+            if (!amount) { error = `Row ${index + 1}: enter an amount.`; return false; }
+            rows.push({ from, to, sector, amount: amount.toFixed(2), remarks });
+        });
+        return { rows, error };
+    }
+
+    // Each simple row becomes one balanced voucher: To is debited, From is credited.
+    function saveSimpleVouchers(post) {
+        const { rows, error } = collectSimpleRows();
+        if (error) { showToast('danger', error); return; }
+        if (!rows.length) { showToast('danger', 'Add at least one row.'); return; }
+        const base = {
+            date: $('#voucher-date').val(),
+            voucher_type: $('#voucher-type').val(),
+            reference: $('#voucher-reference').val(),
+            narration: $('#voucher-narration').val(),
+            post,
+        };
+        let saved = 0, failed = 0;
+        const requests = rows.map(row => $.ajax({
+            url: "{% url 'api_voucher_list' %}",
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify({
+                ...base,
+                narration: row.remarks || base.narration,
+                sector: row.sector || null,
+                lines: [
+                    { account: row.to, debit: row.amount, credit: 0, narration: row.remarks },
+                    { account: row.from, debit: 0, credit: row.amount, narration: row.remarks },
+                ],
+            }),
+        }).then(() => { saved++; }, (xhr) => { failed++; showToast('danger', xhr.responseJSON?.error || 'Save failed.'); }));
+        Promise.allSettled(requests).then(() => {
+            if (saved) {
+                showToast('success', `${saved} voucher${saved > 1 ? 's' : ''} ${post ? 'posted' : 'saved as draft'}.`);
+                $('#voucherFormModal').modal('hide');
+                loadVouchers();
+            }
+        });
+    }
+
+    function collectPayload() {
+        const lines = [];
+        $('#voucher-lines-body tr').each(function () {
+            const account = $(this).find('.line-account').val();
+            const amount = parseFloat($(this).find('.line-amount').val()) || 0;
+            const out = $(this).find('.line-direction').val() === 'out';
+            if (account && amount) {
+                lines.push({
+                    account,
+                    debit: out ? 0 : amount.toFixed(2),
+                    credit: out ? amount.toFixed(2) : 0,
+                    narration: $(this).find('.line-narration').val(),
+                });
+            }
+        });
+        return {
+            date: $('#voucher-date').val(),
+            voucher_type: $('#voucher-type').val(),
+            reference: $('#voucher-reference').val(),
+            narration: $('#voucher-narration').val(),
+            sector: $('#voucher-sector').val() || null,
+            lines,
+        };
+    }
+
+    function openVoucherForm(voucher, revise) {
+        $('#voucher-id').val(voucher && !revise ? voucher.id : '');
+        $('#voucherFormTitle').text(
+            revise ? `Revise ${voucher.voucher_no} — corrected copy`
+                   : (voucher ? `Edit ${voucher.voucher_no}` : 'New Voucher'));
+        $('#voucher-date').val(voucher ? voucher.date : new Date().toISOString().slice(0, 10));
+        $('#voucher-type').val(voucher ? voucher.voucher_type : 'Payment');
+        $('#voucher-reference').val(voucher ? voucher.reference : '');
+        $('#voucher-narration').val(voucher ? voucher.narration : '');
+        $('#voucher-sector').val(voucher && voucher.sector ? voucher.sector : '').trigger('change');
+        $('#voucher-lines-body').empty();
+        // Fresh vouchers seed one In and one Out line, ready to balance.
+        (voucher ? voucher.lines : [{ direction: 'in' }, { direction: 'out' }]).forEach(line => addLine(line || {}));
+        refreshTotals();
+        $('#simple-rows-body').empty();
+        if (voucher) {
+            // Existing drafts open in the full editor; their lines may not fit From->To.
+            setMode(false);
+            $('#entry-mode-toggle').hide();
+        } else {
+            $('#entry-mode-toggle').show();
+            setMode(true);
+            addSimpleRow();
+        }
+        $('#voucherFormModal').modal('show');
+    }
+
+    $('#new-voucher-btn').on('click', () => openVoucherForm(null));
+    $(document).on('click', '.edit-voucher', function () {
+        $.get(`/api/vouchers/${$(this).data('id')}/`, (v) => openVoucherForm(v));
+    });
+
+    // Revise a posted voucher: cancel it (audit trail intact), then open a
+    // pre-filled copy to correct and re-post under a new voucher number.
+    $(document).on('click', '.revise-voucher', function () {
+        const id = $(this).data('id');
+        const reason = prompt('Revising cancels this voucher (kept in the books with your reason) ' +
+                              'and opens a corrected copy to re-post.\n\nReason for revision:');
+        if (reason === null) return;
+        $.get(`/api/vouchers/${id}/`, function (voucher) {
+            $.ajax({
+                url: `/api/vouchers/${id}/cancel/`, method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                data: JSON.stringify({ reason: reason || 'Revised' }),
+                success: function () {
+                    loadVouchers();
+                    showToast('success', `${voucher.voucher_no} cancelled — correct the copy and Save & Post.`);
+                    openVoucherForm(voucher, true);
+                },
+                error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Could not cancel the voucher.'),
+            });
+        });
+    });
+
+    function saveVoucher(post) {
+        const id = $('#voucher-id').val();
+        const payload = collectPayload();
+        if (!id) payload.post = post;
+        $.ajax({
+            url: id ? `/api/vouchers/${id}/` : "{% url 'api_voucher_list' %}",
+            method: id ? 'PUT' : 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify(payload),
+            success: function (voucher) {
+                if (id && post) {
+                    $.ajax({ url: `/api/vouchers/${id}/post/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+                        success: function () { finishSave(true); },
+                        error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Posting failed.') });
+                } else {
+                    finishSave(post);
+                }
+                function finishSave(posted) {
+                    $('#voucherFormModal').modal('hide');
+                    loadVouchers();
+                    showToast('success', posted ? 'Voucher posted.' : 'Draft saved.');
+                }
+            },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Save failed.'),
+        });
+    }
+    $('#save-draft-btn').on('click', function () {
+        if (!$('#voucher-id').val() && isSimpleMode()) saveSimpleVouchers(false); else saveVoucher(false);
+    });
+    $('#save-post-btn').on('click', function () {
+        if (!$('#voucher-id').val() && isSimpleMode()) saveSimpleVouchers(true); else saveVoucher(true);
+    });
+
+    // ------------------------------------------------------- view/post/cancel
+
+    $(document).on('click', '.view-voucher', function () {
+        $.get(`/api/vouchers/${$(this).data('id')}/`, function (v) {
+            $('#voucher-view-title').html(`${escapeHtml(v.voucher_no)} ${statusBadge(v.status)}`);
+            const lines = v.lines.map(l => `
+                <tr><td>${escapeHtml(l.account_code)} - ${escapeHtml(l.account_name)}</td>
+                    <td class="text-end">${l.debit != '0.00' ? l.debit : ''}</td>
+                    <td class="text-end">${l.credit != '0.00' ? l.credit : ''}</td>
+                    <td>${escapeHtml(l.narration)}</td></tr>`).join('');
+            $('#voucher-view-body').html(`
+                <div class="mb-2 small text-muted">
+                  ${escapeHtml(v.voucher_type)} · ${escapeHtml(v.date)} · FY ${escapeHtml(v.financial_year)}
+                  ${v.sector_name ? ' · Sector: ' + escapeHtml(v.sector_name) : ''}
+                  ${v.reference ? ' · Ref: ' + escapeHtml(v.reference) : ''}
+                  ${v.created_by ? ' · By: ' + escapeHtml(v.created_by) : ''}
+                  ${v.cancelled_at ? `<br><span class="text-danger">Cancelled ${escapeHtml(v.cancelled_at)} — ${escapeHtml(v.cancel_reason)}</span>` : ''}
+                </div>
+                ${v.narration ? `<p>${escapeHtml(v.narration)}</p>` : ''}
+                <table class="table table-sm table-bordered">
+                  <thead class="table-dark"><tr><th>Account</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Narration</th></tr></thead>
+                  <tbody>${lines}</tbody>
+                  <tfoot><tr class="fw-bold"><td class="text-end">Total</td>
+                    <td class="text-end">${v.total_debit}</td><td class="text-end">${v.total_credit}</td><td></td></tr></tfoot>
+                </table>`);
+            const actions = [];
+            if (v.status === 'Draft') actions.push(`<button class="btn btn-success post-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-check"></i> Post</button>`);
+            if (v.status === 'Posted' && !v.system_generated) {
+                actions.push(`<button class="btn btn-warning revise-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-pen"></i> Revise</button>`);
+                actions.push(`<button class="btn btn-outline-danger cancel-voucher" data-id="${v.id}" data-bs-dismiss="modal"><i class="fas fa-ban"></i> Cancel Voucher</button>`);
+            }
+            $('#voucher-view-actions').html(actions.join(' ') || '<button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>');
+            $('#voucherViewModal').modal('show');
+        });
+    });
+
+    $(document).on('click', '.post-voucher', function () {
+        const id = $(this).data('id');
+        if (!confirm('Post this voucher? Posted vouchers cannot be edited.')) return;
+        $.ajax({ url: `/api/vouchers/${id}/post/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+            success: function (v) { loadVouchers(); showToast('success', `Posted as ${v.voucher_no}.`); },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Posting failed.') });
+    });
+
+    $(document).on('click', '.cancel-voucher', function () {
+        const id = $(this).data('id');
+        const reason = prompt('Reason for cancelling this voucher:');
+        if (reason === null) return;
+        $.ajax({ url: `/api/vouchers/${id}/cancel/`, method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            data: JSON.stringify({ reason }),
+            success: function () { loadVouchers(); showToast('success', 'Voucher cancelled.'); },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Cancel failed.') });
+    });
+
+    $(document).on('click', '.delete-voucher', function () {
+        const id = $(this).data('id');
+        if (!confirm('Delete this draft voucher?')) return;
+        $.ajax({ url: `/api/vouchers/${id}/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
+            success: function () { loadVouchers(); showToast('success', 'Draft deleted.'); },
+            error: (xhr) => showToast('danger', xhr.responseJSON?.error || 'Delete failed.') });
+    });
+
+    // -------------------------------------------------------------- ledger
+
+    window.openLedger = function (accountId, label) {
+        ledgerAccountId = accountId;
+        $('#ledger-title').html(`<i class="fas fa-book-open me-2"></i>Ledger — ${escapeHtml(label)}`);
+        $('#ledgerModal').modal('show');
+        loadLedger();
+    };
+    function loadLedger() {
+        if (!ledgerAccountId) return;
+        const params = new URLSearchParams();
+        if ($('#ledger-from').val()) params.set('from', $('#ledger-from').val());
+        if ($('#ledger-to').val()) params.set('to', $('#ledger-to').val());
+        $.get(`/api/chart-of-accounts/${ledgerAccountId}/ledger/?${params}`, function (response) {
+            const body = $('#ledger-body').empty();
+            body.append(`<tr class="table-light fw-bold"><td colspan="5">Opening Balance</td>
+                <td class="text-end">${response.opening.amount} ${response.opening.side}</td></tr>`);
+            response.rows.forEach(row => {
+                body.append(`<tr>
+                    <td>${escapeHtml(row.date)}</td>
+                    <td>${escapeHtml(row.voucher_no)} <span class="text-muted small">${escapeHtml(row.voucher_type)}</span></td>
+                    <td>${escapeHtml(row.narration)}</td>
+                    <td class="text-end">${row.debit != '0.00' ? row.debit : ''}</td>
+                    <td class="text-end">${row.credit != '0.00' ? row.credit : ''}</td>
+                    <td class="text-end">${row.balance} ${row.balance_side}</td></tr>`);
+            });
+            body.append(`<tr class="table-light fw-bold"><td colspan="5">Closing Balance</td>
+                <td class="text-end">${response.closing.amount} ${response.closing.side}</td></tr>`);
+        });
+    }
+    $('#ledger-refresh').on('click', loadLedger);
+
+    // -------------------------------------------------------- trial balance
+
+    function loadTrialBalance() {
+        const params = new URLSearchParams();
+        if ($('#tb-from').val()) params.set('from', $('#tb-from').val());
+        if ($('#tb-to').val()) params.set('to', $('#tb-to').val());
+        $.get(`{% url 'api_trial_balance' %}?${params}`, function (response) {
+            const body = $('#tb-body').empty();
+            if (!response.rows.length) {
+                body.append('<tr><td colspan="9" class="text-center text-muted p-3">No posted vouchers in this range.</td></tr>');
+                $('#tb-foot').empty();
+                return;
+            }
+            response.rows.forEach(row => {
+                body.append(`<tr>
+                    <td><a href="#" class="tb-ledger" data-id="${row.account_id}" data-label="${escapeHtml(row.code)} - ${escapeHtml(row.description)}">${escapeHtml(row.code)}</a></td>
+                    <td>${escapeHtml(row.description)}</td>
+                    <td>${escapeHtml(row.account_type || '')}</td>
+                    <td class="text-end">${row.opening_debit}</td><td class="text-end">${row.opening_credit}</td>
+                    <td class="text-end">${row.debit}</td><td class="text-end">${row.credit}</td>
+                    <td class="text-end">${row.closing_debit}</td><td class="text-end">${row.closing_credit}</td></tr>`);
+            });
+            const t = response.totals;
+            $('#tb-foot').html(`<tr>
+                <td colspan="3" class="text-end">Totals</td>
+                <td class="text-end">${t.opening_debit}</td><td class="text-end">${t.opening_credit}</td>
+                <td class="text-end">${t.debit}</td><td class="text-end">${t.credit}</td>
+                <td class="text-end">${t.closing_debit}</td><td class="text-end">${t.closing_credit}</td></tr>`);
+        });
+    }
+    $('#trialBalanceModal').on('show.bs.modal', loadTrialBalance);
+    $('#tb-refresh').on('click', loadTrialBalance);
+    $(document).on('click', '.tb-ledger', function (e) {
+        e.preventDefault();
+        openLedger($(this).data('id'), $(this).data('label'));
+    });
+
+    // -------------------------------------------------------------- init
+
+    $.get("{% url 'api_coa_list' %}?postable=1&page_size=500", function (response) {
+        accounts = response.results.filter(a => a.status === 'Active');
+    });
+    loadVouchers();
+
+    // Deep link from the Chart of Accounts tree: /vouchers/?ledger=<account id>
+    const ledgerParam = new URLSearchParams(window.location.search).get('ledger');
+    if (ledgerParam) {
+        $.get(`/api/chart-of-accounts/${ledgerParam}/`, function (account) {
+            openLedger(account.id, `${account.code} - ${account.description}`);
+        });
+    }
+});
+</script>
+{% endblock %}
