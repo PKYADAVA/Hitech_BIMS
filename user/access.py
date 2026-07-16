@@ -205,6 +205,36 @@ MODULE_REGISTRY = [
                     ("payroll", "Payroll"),
                 ],
             },
+            {
+                "label": "Employee Tracking",
+                "tabs": [
+                    ("tracking_dashboard", "Live Dashboard", (
+                        "api_tracking_live", "api_tracking_sync_now",
+                    )),
+                    ("tracking_attendance", "Attendance Map", (
+                        "api_tracking_attendance", "api_tracking_attendance_approve",
+                    )),
+                    ("tracking_visits", "Customer Visits", (
+                        "api_tracking_visits", "api_tracking_visit_link",
+                    )),
+                    ("tracking_routes", "Route History", (
+                        "api_tracking_route",
+                    )),
+                    ("tracking_reports", "Tracking Reports", (
+                        "api_tracking_reports",
+                    )),
+                    ("tracking_geofences", "Geofences", (
+                        "api_tracking_geofences",
+                    )),
+                    ("tracking_alerts", "Tracking Alerts", (
+                        "api_tracking_alerts",
+                    )),
+                    ("tracking_settings", "Tracking Settings", (
+                        "api_tracking_settings", "api_tracking_providers",
+                        "api_tracking_provider_test", "api_tracking_mappings",
+                    )),
+                ],
+            },
         ],
     },
     {

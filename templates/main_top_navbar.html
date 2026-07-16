@@ -216,6 +216,41 @@
           {% if 'hr_payroll' in allowed_sections %}<li><a class="dropdown-item" href="{% url 'payroll' %}">
             <i class="fas fa-money-bill-wave"></i>Payroll
           </a></li>{% endif %}
+
+          <!-- Employee Tracking Submenu -->
+          {% if 'hr_employee_tracking' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="trackDd">
+              <i class="fas fa-location-dot"></i>Employee Tracking
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'tracking_dashboard' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_dashboard' %}">
+                <i class="fas fa-map-location-dot"></i>Live Dashboard
+              </a></li>{% endif %}
+              {% if 'tracking_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_attendance' %}">
+                <i class="fas fa-user-check"></i>Attendance Map
+              </a></li>{% endif %}
+              {% if 'tracking_visits' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_visits' %}">
+                <i class="fas fa-handshake"></i>Customer Visits
+              </a></li>{% endif %}
+              {% if 'tracking_routes' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_routes' %}">
+                <i class="fas fa-route"></i>Route History
+              </a></li>{% endif %}
+              {% if 'tracking_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_reports' %}">
+                <i class="fas fa-chart-column"></i>Reports
+              </a></li>{% endif %}
+              {% if 'tracking_geofences' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_geofences' %}">
+                <i class="fas fa-draw-polygon"></i>Geofences
+              </a></li>{% endif %}
+              {% if 'tracking_alerts' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_alerts' %}">
+                <i class="fas fa-bell"></i>Alerts
+              </a></li>{% endif %}
+              {% if 'tracking_settings' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_settings' %}">
+                <i class="fas fa-gear"></i>Tracking Settings
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
         </ul>
       </li>
       {% endif %}

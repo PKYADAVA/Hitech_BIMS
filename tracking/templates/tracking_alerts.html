@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Alerts{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  .trk-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:.6rem; }
+  .trk-tile { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+              padding:.55rem .75rem; background:var(--bs-body-bg, #fff); }
+  .trk-tile .trk-num { font-size:1.3rem; font-weight:600; }
+  .trk-tile .trk-lbl { font-size:.72rem; text-transform:uppercase; opacity:.7; }
+  tr.alert-unread { font-weight:600; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_alerts' %}
+ {% csrf_token %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-bell"></i>Tracking Alerts</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Offline, GPS disabled, geofence, late check-in and visit alerts</div>
+    <button class="btn btn-outline-secondary" id="al-read-all">
+      <i class="fas fa-check-double"></i> Mark All Read
+    </button>
+  </div>
+</div>
+
+<div class="trk-tiles mb-3">
+  <div class="trk-tile"><div class="trk-num text-primary" data-tile="unread">–</div><div class="trk-lbl">Unread</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="today">–</div><div class="trk-lbl">Today</div></div>
+  <div class="trk-tile"><div class="trk-num text-warning" data-tile="warnings">–</div><div class="trk-lbl">Unread Warnings</div></div>
+  <div class="trk-tile"><div class="trk-num text-danger" data-tile="errors">–</div><div class="trk-lbl">Unread Errors</div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label mb-0">Event</label>
+        <select id="al-event" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for value, label in alert_events %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Severity</label>
+        <select id="al-severity" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-0">Employee</label>
+        <select id="al-employee" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} (#{{ e.employee_id }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Unread Only</label>
+        <select id="al-unread" class="form-select form-select-sm">
+          <option value="">No</option>
+          <option value="1">Yes</option>
+        </select>
+      </div>
+      <div class="col-md-2 text-end">
+        <button class="btn btn-sm btn-outline-primary" id="al-read-selected">
+          <i class="fas fa-check"></i> Mark Selected Read
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-inbox"></i> Alert Inbox <span class="badge bg-secondary" id="al-count">0</span></span>
+    <span id="al-pager" class="small"></span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th><input type="checkbox" id="al-check-all" /></th>
+            <th>When</th><th>Event</th><th>Severity</th><th>Employee</th>
+            <th>Geofence</th><th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="al-rows">
+          <tr><td colspan="7" class="text-center py-4 text-muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  "use strict";
+  const API = "{% url 'api_tracking_alerts' %}";
+  const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
+  const SEVERITY_BADGE = { info:"secondary", warning:"warning", error:"danger", critical:"danger" };
+  let page = 1;
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function toast(message, ok) {
+    Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
+               style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
+  }
+
+  function load() {
+    const params = new URLSearchParams({ page });
+    [["al-event","event"],["al-severity","severity"],["al-employee","employee"],
+     ["al-unread","unread"]].forEach(([id, key]) => {
+      const value = document.getElementById(id).value;
+      if (value) params.set(key, value);
+    });
+    fetch(API + "?" + params, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        Object.entries(data.tiles).forEach(([key, value]) => {
+          const el = document.querySelector('[data-tile="' + key + '"]');
+          if (el) el.textContent = value;
+        });
+        document.getElementById("al-count").textContent = data.total;
+        const pages = Math.max(Math.ceil(data.total / data.page_size), 1);
+        document.getElementById("al-pager").innerHTML =
+          '<button class="btn btn-sm btn-outline-secondary" id="al-prev" ' + (data.page <= 1 ? "disabled" : "") + ">&laquo;</button> " +
+          " page " + data.page + " / " + pages + " " +
+          '<button class="btn btn-sm btn-outline-secondary" id="al-next" ' + (data.page >= pages ? "disabled" : "") + ">&raquo;</button>";
+        document.getElementById("al-prev").onclick = () => { page = Math.max(page - 1, 1); load(); };
+        document.getElementById("al-next").onclick = () => { page += 1; load(); };
+
+        document.getElementById("al-rows").innerHTML = data.alerts.length
+          ? data.alerts.map(alert =>
+              "<tr class='" + (alert.is_read ? "" : "alert-unread") + "'>" +
+              '<td><input type="checkbox" class="al-check" value="' + alert.id + '"' + (alert.is_read ? " disabled" : "") + "></td>" +
+              "<td><small>" + new Date(alert.when).toLocaleString() + "</small></td>" +
+              "<td>" + esc(alert.event_label) + "</td>" +
+              "<td><span class='badge bg-" + (SEVERITY_BADGE[alert.severity] || "secondary") + "'>" + esc(alert.severity) + "</span></td>" +
+              "<td>" + esc(alert.employee || "–") + "</td>" +
+              "<td>" + esc(alert.geofence || "–") + "</td>" +
+              "<td><small>" + esc(alert.message) + "</small></td></tr>").join("")
+          : '<tr><td colspan="7" class="text-center py-4 text-muted">No alerts.</td></tr>';
+      });
+  }
+
+  function markRead(payload) {
+    fetch(API, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify(payload),
+    }).then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        toast(ok ? "Marked " + data.updated + " alert(s) read." : (data.error || "Failed."), ok);
+        load();
+      });
+  }
+
+  document.getElementById("al-read-all").addEventListener("click", () =>
+    markRead({ action: "mark_all_read" }));
+  document.getElementById("al-read-selected").addEventListener("click", () => {
+    const ids = Array.from(document.querySelectorAll(".al-check:checked"))
+      .map(el => Number(el.value));
+    if (!ids.length) { toast("Select unread alerts first.", false); return; }
+    markRead({ action: "mark_read", ids });
+  });
+  document.getElementById("al-check-all").addEventListener("change", event => {
+    document.querySelectorAll(".al-check:not(:disabled)").forEach(el => {
+      el.checked = event.target.checked;
+    });
+  });
+  ["al-event","al-severity","al-employee","al-unread"].forEach(id =>
+    document.getElementById(id).addEventListener("change", () => { page = 1; load(); }));
+
+  load();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Live Dashboard{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+  .trk-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:.6rem; }
+  .trk-tile { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+              padding:.55rem .75rem; background:var(--bs-body-bg, #fff); }
+  .trk-tile .trk-num { font-size:1.35rem; font-weight:600; line-height:1.2; }
+  .trk-tile .trk-lbl { font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; opacity:.7; }
+  .trk-tile.t-online .trk-num { color:#198754; } .trk-tile.t-offline .trk-num { color:#dc3545; }
+  .trk-tile.t-idle .trk-num { color:#fd7e14; }  .trk-tile.t-moving .trk-num { color:#0d6efd; }
+  #trk-map { height: 420px; border-radius:.5rem; z-index: 0; }
+  .trk-status-badge { text-transform:capitalize; }
+  .trk-photo { width:32px; height:32px; border-radius:50%; object-fit:cover; }
+  .trk-photo-fallback { width:32px; height:32px; border-radius:50%; background:#6c757d; color:#fff;
+                        display:inline-flex; align-items:center; justify-content:center; font-size:.8rem; }
+  #trk-updated { font-size:.8rem; opacity:.75; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_dashboard' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-map-location-dot"></i>Live Tracking Dashboard</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Field team status, positions and today's activity</div>
+    <div class="d-flex gap-2 align-items-center">
+      <span id="trk-updated"></span>
+      <button class="btn btn-outline-secondary" id="trk-refresh"><i class="fas fa-rotate"></i> Refresh</button>
+    </div>
+  </div>
+</div>
+
+{% if not tracking_enabled %}
+<div class="alert alert-warning">
+  <i class="fas fa-triangle-exclamation me-1"></i>
+  Employee tracking is currently <strong>disabled</strong>.
+  {% if 'tracking_settings' in allowed_tabs %}
+    Enable it in <a href="{% url 'tracking_settings' %}">Tracking Settings</a>.
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Status tiles -->
+<div class="trk-tiles mb-3" id="trk-tiles">
+  <div class="trk-tile t-online"><div class="trk-num" data-tile="online">–</div><div class="trk-lbl">Online</div></div>
+  <div class="trk-tile t-moving"><div class="trk-num" data-tile="moving">–</div><div class="trk-lbl">Moving</div></div>
+  <div class="trk-tile t-idle"><div class="trk-num" data-tile="idle">–</div><div class="trk-lbl">Idle</div></div>
+  <div class="trk-tile t-offline"><div class="trk-num" data-tile="offline">–</div><div class="trk-lbl">Offline</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="not_tracked">–</div><div class="trk-lbl">Not Tracked</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="checked_in">–</div><div class="trk-lbl">Checked In</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="on_leave">–</div><div class="trk-lbl">On Leave</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="distance_today_km">–</div><div class="trk-lbl">Distance Today (km)</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="visits_today">–</div><div class="trk-lbl">Visits Today</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="late_check_ins">–</div><div class="trk-lbl">Late Check-Ins</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="gps_disabled">–</div><div class="trk-lbl">GPS Off</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="unread_alerts">–</div><div class="trk-lbl">Alerts</div></div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label mb-0">Search Employee</label>
+        <input type="text" id="trk-q" class="form-control form-control-sm" placeholder="Name or employee ID…" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Branch / Warehouse</label>
+        <select id="trk-warehouse" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Department / Group</label>
+        <select id="trk-group" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Designation</label>
+        <select id="trk-designation" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for d in designations %}<option value="{{ d.id }}">{{ d.title }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Status</label>
+        <select id="trk-status" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="online">Online</option>
+          <option value="moving">Moving</option>
+          <option value="idle">Idle</option>
+          <option value="offline">Offline</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <button class="btn btn-sm btn-outline-secondary w-100" id="trk-clear">Clear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Map -->
+<div class="card mb-3">
+  <div class="card-body p-2"><div id="trk-map"></div></div>
+</div>
+
+<!-- Live grid -->
+<div class="card">
+  <div class="card-header"><i class="fas fa-people-group"></i> Field Team <span class="badge bg-secondary" id="trk-count">0</span></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th></th><th>Employee</th><th>Designation</th><th>Branch</th><th>Status</th>
+            <th>Speed</th><th>Battery</th><th>Network</th><th>Customer</th>
+            <th class="text-end">Km Today</th><th class="text-end">Visits</th>
+            <th>Address</th><th>Last Update</th>
+          </tr>
+        </thead>
+        <tbody id="trk-rows">
+          <tr><td colspan="13" class="text-center py-4 text-muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+(function () {
+  "use strict";
+  const API_URL = "{% url 'api_tracking_live' %}";
+  const REFRESH_MS = Math.max({{ refresh_seconds }}, 10) * 1000;
+  const STATUS_BADGE = { online:"success", moving:"primary", idle:"warning", offline:"danger", unknown:"secondary" };
+
+  const map = L.map("trk-map").setView([22.9734, 78.6569], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
+  map.addLayer(cluster);
+  let fitted = false;
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function agoLabel(iso) {
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + " min ago";
+    const hours = Math.floor(mins / 60);
+    return hours < 24 ? hours + " h ago" : Math.floor(hours / 24) + " d ago";
+  }
+  function statusBadge(status) {
+    return '<span class="badge trk-status-badge bg-' + (STATUS_BADGE[status] || "secondary") + '">' + esc(status) + "</span>";
+  }
+
+  function filters() {
+    const params = new URLSearchParams();
+    const q = document.getElementById("trk-q").value.trim();
+    if (q) params.set("q", q);
+    [["trk-warehouse","warehouse"],["trk-group","group"],
+     ["trk-designation","designation"],["trk-status","status"]].forEach(([id, key]) => {
+      const value = document.getElementById(id).value;
+      if (value) params.set(key, value);
+    });
+    return params.toString();
+  }
+
+  function render(data) {
+    Object.entries(data.tiles).forEach(([key, value]) => {
+      const el = document.querySelector('[data-tile="' + key + '"]');
+      if (el) el.textContent = value;
+    });
+    document.getElementById("trk-updated").textContent =
+      "Updated " + new Date(data.generated_at).toLocaleTimeString();
+    document.getElementById("trk-count").textContent = data.employees.length;
+
+    cluster.clearLayers();
+    const bounds = [];
+    const rows = data.employees.map(e => {
+      bounds.push([e.latitude, e.longitude]);
+      const marker = L.marker([e.latitude, e.longitude]);
+      marker.bindPopup(
+        "<strong>" + esc(e.name) + "</strong> " + statusBadge(e.status) +
+        "<br><small>" + esc(e.designation) + (e.warehouse ? " · " + esc(e.warehouse) : "") + "</small>" +
+        (e.address ? "<br><small>" + esc(e.address) + "</small>" : "") +
+        "<br><small>Updated " + esc(agoLabel(e.recorded_at)) + "</small>" +
+        (e.current_customer ? "<br><small>At: " + esc(e.current_customer) + "</small>" : "")
+      );
+      cluster.addLayer(marker);
+
+      const photo = e.photo
+        ? '<img class="trk-photo" src="' + esc(e.photo) + '" alt="">'
+        : '<span class="trk-photo-fallback">' + esc((e.name || "?").charAt(0).toUpperCase()) + "</span>";
+      return "<tr>" +
+        "<td>" + photo + "</td>" +
+        "<td><strong>" + esc(e.name) + "</strong><br><small class='text-muted'>#" + esc(e.employee_code) + "</small></td>" +
+        "<td>" + esc(e.designation) + "</td>" +
+        "<td>" + esc(e.warehouse) + "</td>" +
+        "<td>" + statusBadge(e.status) + (e.gps_enabled ? "" : ' <i class="fas fa-location-crosshairs text-danger" title="GPS disabled"></i>') + "</td>" +
+        "<td>" + (e.speed_kmh != null ? e.speed_kmh.toFixed(0) + " km/h" : "–") + "</td>" +
+        "<td>" + (e.battery_pct != null ? e.battery_pct + "%" : "–") + "</td>" +
+        "<td>" + esc(e.network || "–") + "</td>" +
+        "<td>" + esc(e.current_customer || "–") + "</td>" +
+        "<td class='text-end'>" + e.today_distance_km.toFixed(1) + "</td>" +
+        "<td class='text-end'>" + e.today_visits + "</td>" +
+        "<td><small>" + esc(e.address || "–") + "</small></td>" +
+        "<td><small>" + esc(agoLabel(e.recorded_at)) + "</small></td>" +
+        "</tr>";
+    });
+    document.getElementById("trk-rows").innerHTML = rows.length
+      ? rows.join("")
+      : '<tr><td colspan="13" class="text-center py-4 text-muted">No live locations match the current filters.</td></tr>';
+
+    if (!fitted && bounds.length) {
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+      fitted = true;
+    }
+  }
+
+  let timer = null;
+  function load() {
+    fetch(API_URL + "?" + filters(), { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(render)
+      .catch(() => { /* transient poll failure; next tick retries */ });
+  }
+  function schedule() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(load, REFRESH_MS);
+  }
+
+  document.getElementById("trk-refresh").addEventListener("click", load);
+  document.getElementById("trk-q").addEventListener("input", () => {
+    clearTimeout(window.__trkDebounce);
+    window.__trkDebounce = setTimeout(load, 400);
+  });
+  ["trk-warehouse","trk-group","trk-designation","trk-status"].forEach(id =>
+    document.getElementById(id).addEventListener("change", load));
+  document.getElementById("trk-clear").addEventListener("click", () => {
+    document.getElementById("trk-q").value = "";
+    ["trk-warehouse","trk-group","trk-designation","trk-status"].forEach(id => {
+      const el = document.getElementById(id);
+      el.value = "";
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    load();
+  });
+
+  load();
+  schedule();
+})();
+</script>
+{% endblock %}

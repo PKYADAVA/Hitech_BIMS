@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     "account",
     "notification",
     "environmental_monitoring",
+    "tracking",
 ]
 
 MIDDLEWARE = [
@@ -265,6 +266,16 @@ SMS_GATEWAYHUB_DCS = os.getenv("SMS_GATEWAYHUB_DCS", "0")
 # DLT registration fields (required for Indian traffic when provisioned).
 SMS_GATEWAYHUB_ENTITY_ID = os.getenv("SMS_GATEWAYHUB_ENTITY_ID", "")
 SMS_GATEWAYHUB_DLT_TEMPLATE_ID = os.getenv("SMS_GATEWAYHUB_DLT_TEMPLATE_ID", "")
+
+# Employee Tracking configuration.
+# Provider credentials (TrackWick/TrackoLap API keys etc.) are DB-backed
+# master records encrypted at rest (see tracking/crypto.py) and edited from
+# the Tracking Settings page — never environment variables. This key is the
+# only tracking-related env var: a urlsafe-base64 32-byte Fernet key.
+# Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# When unset, a key derived from SECRET_KEY is used (fine for development;
+# production should set it so credentials survive a SECRET_KEY rotation).
+TRACKING_ENCRYPTION_KEY = os.getenv("TRACKING_ENCRYPTION_KEY", "")
 
 # Environmental Monitoring (Tapo H100 / T310) configuration.
 # Operational tuning is read here (see environmental_monitoring/conf.py); the

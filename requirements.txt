@@ -21,3 +21,4 @@ django-import-export==4.4.1
 tablib==3.9.0
 diff-match-patch==20241021
 python-kasa==0.10.2
+cryptography==49.0.0

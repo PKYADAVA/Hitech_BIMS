@@ -1,0 +1,259 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Attendance Map{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+  .trk-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:.6rem; }
+  .trk-tile { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+              padding:.55rem .75rem; background:var(--bs-body-bg, #fff); }
+  .trk-tile .trk-num { font-size:1.3rem; font-weight:600; }
+  .trk-tile .trk-lbl { font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; opacity:.7; }
+  #att-map { height: 380px; border-radius:.5rem; z-index:0; }
+  .att-fence-ok { color:#198754; } .att-fence-bad { color:#dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_attendance' %}
+ {% csrf_token %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-user-check"></i>GPS Attendance Map</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">
+      Geofence-verified check-ins/outs, late arrivals and approval
+      {% if auto_approve %}<span class="badge bg-info">auto-approve on</span>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if not tracking_enabled %}
+<div class="alert alert-warning"><i class="fas fa-triangle-exclamation me-1"></i>
+  Employee tracking is currently <strong>disabled</strong>; records shown are historical.
+</div>
+{% endif %}
+
+<div class="trk-tiles mb-3">
+  <div class="trk-tile"><div class="trk-num" data-tile="checked_in">–</div><div class="trk-lbl">Checked In</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="checked_out">–</div><div class="trk-lbl">Checked Out</div></div>
+  <div class="trk-tile"><div class="trk-num text-warning" data-tile="late">–</div><div class="trk-lbl">Late</div></div>
+  <div class="trk-tile"><div class="trk-num text-warning" data-tile="early_exits">–</div><div class="trk-lbl">Early Exits</div></div>
+  <div class="trk-tile"><div class="trk-num text-danger" data-tile="outside_fence">–</div><div class="trk-lbl">Outside Fence</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="pending">–</div><div class="trk-lbl">Pending</div></div>
+  <div class="trk-tile"><div class="trk-num text-success" data-tile="approved">–</div><div class="trk-lbl">Approved</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="rejected">–</div><div class="trk-lbl">Rejected</div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label mb-0">Date</label>
+        <input type="date" id="att-date" class="form-control form-control-sm" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-0">Search Employee</label>
+        <input type="text" id="att-q" class="form-control form-control-sm" placeholder="Name…" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Status</label>
+        <select id="att-status" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Only Late</label>
+        <select id="att-late" class="form-select form-select-sm">
+          <option value="">No</option>
+          <option value="1">Yes</option>
+        </select>
+      </div>
+      <div class="col-md-3 text-end">
+        {% if page_perms.update or page_perms.save %}
+        <button class="btn btn-sm btn-success" id="att-approve"><i class="fas fa-check"></i> Approve Selected</button>
+        <button class="btn btn-sm btn-outline-danger" id="att-reject"><i class="fas fa-xmark"></i> Reject</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3"><div class="card-body p-2"><div id="att-map"></div></div></div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-clipboard-check"></i> Attendance Records <span class="badge bg-secondary" id="att-count">0</span></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th><input type="checkbox" id="att-check-all" /></th>
+            <th>Employee</th><th>Branch</th><th>Check In</th><th>Check Out</th>
+            <th>Fence</th><th>Late</th><th>Early Exit</th><th>Photos</th>
+            <th>Status</th><th>HR</th>
+          </tr>
+        </thead>
+        <tbody id="att-rows">
+          <tr><td colspan="11" class="text-center py-4 text-muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+(function () {
+  "use strict";
+  const API = "{% url 'api_tracking_attendance' %}";
+  const APPROVE_API = "{% url 'api_tracking_attendance_approve' %}";
+  const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
+  const STATUS_BADGE = { pending: "warning", approved: "success", rejected: "danger" };
+
+  const map = L.map("att-map").setView([22.9734, 78.6569], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
+  map.addLayer(cluster);
+  let fitted = false;
+
+  const inIcon = L.divIcon({ className: "", html: '<i class="fas fa-circle-arrow-down fa-lg att-fence-ok"></i>' });
+  const outIcon = L.divIcon({ className: "", html: '<i class="fas fa-circle-arrow-down fa-lg att-fence-bad"></i>' });
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function toast(message, ok) {
+    Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
+               style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
+  }
+  function hhmm(iso) {
+    return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "–";
+  }
+  function fenceIconHtml(inside) {
+    if (inside === null || inside === undefined) return '<span class="text-muted">n/a</span>';
+    return inside ? '<i class="fas fa-circle-check att-fence-ok" title="Inside fence"></i>'
+                  : '<i class="fas fa-circle-xmark att-fence-bad" title="Outside fence"></i>';
+  }
+
+  function load() {
+    const params = new URLSearchParams();
+    params.set("date", document.getElementById("att-date").value);
+    const q = document.getElementById("att-q").value.trim();
+    if (q) params.set("q", q);
+    const status = document.getElementById("att-status").value;
+    if (status) params.set("status", status);
+    if (document.getElementById("att-late").value === "1") params.set("late", "1");
+
+    fetch(API + "?" + params, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        Object.entries(data.tiles).forEach(([key, value]) => {
+          const el = document.querySelector('[data-tile="' + key + '"]');
+          if (el) el.textContent = value;
+        });
+        document.getElementById("att-count").textContent = data.records.length;
+
+        cluster.clearLayers();
+        const bounds = [];
+        const rows = data.records.map(record => {
+          if (record.check_in_latitude != null) {
+            bounds.push([record.check_in_latitude, record.check_in_longitude]);
+            const marker = L.marker([record.check_in_latitude, record.check_in_longitude],
+              { icon: record.check_in_inside_fence === false ? outIcon : inIcon });
+            marker.bindPopup(
+              "<strong>" + esc(record.name) + "</strong>" +
+              "<br><small>In: " + hhmm(record.check_in_at) +
+              (record.geofence ? " · " + esc(record.geofence) : "") + "</small>" +
+              (record.check_in_address ? "<br><small>" + esc(record.check_in_address) + "</small>" : "")
+            );
+            cluster.addLayer(marker);
+          }
+          const photos =
+            (record.check_in_photo_url ? '<a href="' + esc(record.check_in_photo_url) + '" target="_blank" rel="noopener" title="Check-in photo"><i class="fas fa-camera"></i></a> ' : "") +
+            (record.check_out_photo_url ? '<a href="' + esc(record.check_out_photo_url) + '" target="_blank" rel="noopener" title="Check-out photo"><i class="fas fa-camera-rotate"></i></a>' : "");
+          return "<tr>" +
+            '<td><input type="checkbox" class="att-check" value="' + record.id + '"' +
+              (record.status === "pending" ? "" : " disabled") + "></td>" +
+            "<td><strong>" + esc(record.name) + "</strong><br><small class='text-muted'>#" + esc(record.employee_code) + " " + esc(record.designation) + "</small></td>" +
+            "<td>" + esc(record.warehouse) + "</td>" +
+            "<td>" + hhmm(record.check_in_at) + "<br><small class='text-muted'>" + esc(record.check_in_address || "") + "</small></td>" +
+            "<td>" + hhmm(record.check_out_at) + "</td>" +
+            "<td>" + fenceIconHtml(record.check_in_inside_fence) +
+              (record.geofence ? " <small>" + esc(record.geofence) + "</small>" : "") + "</td>" +
+            "<td>" + (record.is_late ? '<span class="badge bg-warning text-dark">+' + record.late_by_minutes + " min</span>" : "–") + "</td>" +
+            "<td>" + (record.is_early_exit ? '<span class="badge bg-warning text-dark">-' + record.early_by_minutes + " min</span>" : "–") + "</td>" +
+            "<td>" + (photos || "–") + "</td>" +
+            "<td><span class='badge bg-" + (STATUS_BADGE[record.status] || "secondary") + "'>" + esc(record.status) + "</span>" +
+              (record.rejection_reason ? "<br><small>" + esc(record.rejection_reason) + "</small>" : "") + "</td>" +
+            "<td>" + (record.hr_mirrored ? '<i class="fas fa-circle-check att-fence-ok" title="Mirrored to HR attendance"></i>' : "–") + "</td>" +
+            "</tr>";
+        });
+        document.getElementById("att-rows").innerHTML = rows.length
+          ? rows.join("")
+          : '<tr><td colspan="11" class="text-center py-4 text-muted">No GPS attendance for this day.</td></tr>';
+        if (!fitted && bounds.length) {
+          map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+          fitted = true;
+        }
+      });
+  }
+
+  function selectedIds() {
+    return Array.from(document.querySelectorAll(".att-check:checked")).map(el => Number(el.value));
+  }
+  function decide(action) {
+    const ids = selectedIds();
+    if (!ids.length) { toast("Select pending records first.", false); return; }
+    const payload = { action, ids };
+    if (action === "reject") {
+      const reason = prompt("Rejection reason (optional):") || "";
+      payload.reason = reason;
+    }
+    fetch(APPROVE_API, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify(payload),
+    }).then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        toast(ok ? action + "d " + data.processed.length + " record(s)." : (data.error || "Failed."), ok);
+        load();
+      });
+  }
+
+  document.getElementById("att-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("att-date").addEventListener("change", () => { load(); });
+  document.getElementById("att-q").addEventListener("input", () => {
+    clearTimeout(window.__attDebounce);
+    window.__attDebounce = setTimeout(load, 400);
+  });
+  ["att-status", "att-late"].forEach(id =>
+    document.getElementById(id).addEventListener("change", load));
+  document.getElementById("att-check-all").addEventListener("change", event => {
+    document.querySelectorAll(".att-check:not(:disabled)").forEach(el => { el.checked = event.target.checked; });
+  });
+  const approveButton = document.getElementById("att-approve");
+  if (approveButton) approveButton.addEventListener("click", () => decide("approve"));
+  const rejectButton = document.getElementById("att-reject");
+  if (rejectButton) rejectButton.addEventListener("click", () => decide("reject"));
+
+  load();
+})();
+</script>
+{% endblock %}

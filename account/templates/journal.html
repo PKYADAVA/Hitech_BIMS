@@ -462,6 +462,10 @@ $(document).ready(function () {
     }
 
     function openVoucherForm(voucher, revise) {
+        // Wait for the account list so the line dropdowns are never empty.
+        accountsReady.always(() => reallyOpenVoucherForm(voucher, revise));
+    }
+    function reallyOpenVoucherForm(voucher, revise) {
         $('#voucher-id').val(voucher && !revise ? voucher.id : '');
         $('#voucherFormTitle').text(
             revise ? `Revise ${voucher.voucher_no} — corrected copy`
@@ -518,6 +522,16 @@ $(document).ready(function () {
     function saveVoucher(post) {
         const id = $('#voucher-id').val();
         const payload = collectPayload();
+        if (payload.lines.length < 2) {
+            showToast('danger', 'Add at least two lines — one Money In and one Money Out.');
+            return;
+        }
+        const debit = payload.lines.reduce((sum, l) => sum + (parseFloat(l.debit) || 0), 0);
+        const credit = payload.lines.reduce((sum, l) => sum + (parseFloat(l.credit) || 0), 0);
+        if (Math.abs(debit - credit) > 0.005) {
+            showToast('danger', `Out of balance by ${Math.abs(debit - credit).toFixed(2)} — Money In and Money Out totals must match.`);
+            return;
+        }
         if (!id) payload.post = post;
         $.ajax({
             url: id ? `/api/vouchers/${id}/` : "{% url 'api_voucher_list' %}",
@@ -646,7 +660,7 @@ $(document).ready(function () {
 
     // -------------------------------------------------------------- init
 
-    $.get("{% url 'api_coa_list' %}?postable=1&page_size=500", function (response) {
+    const accountsReady = $.get("{% url 'api_coa_list' %}?postable=1&page_size=500", function (response) {
         accounts = response.results.filter(a => a.status === 'Active');
     });
     loadVouchers();

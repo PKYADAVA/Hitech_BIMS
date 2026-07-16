@@ -41,6 +41,16 @@ $.extend(true, $.fn.dataTable.defaults, {
       this.dispatchEvent(new Event('input', { bubbles: true }));
       this.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    // Pages show/hide the native select (d-none, .hide()); the rendered
+    // Select2 box must follow, or hidden selects appear as duplicate boxes.
+    const container = $el.next('.select2-container');
+    const syncVisibility = function () {
+      container.toggleClass('d-none',
+        el.classList.contains('d-none') || el.style.display === 'none');
+    };
+    syncVisibility();
+    new MutationObserver(syncVisibility)
+      .observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
   }
   window.searchableSelect = searchableSelect;
 

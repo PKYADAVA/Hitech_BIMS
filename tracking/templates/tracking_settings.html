@@ -1,0 +1,534 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Settings{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  .trk-secret-hint { font-size:.75rem; opacity:.7; }
+  #trk-map-table td, #trk-map-table th { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_settings' %}
+ {% csrf_token %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-gear"></i>Tracking Settings</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Runtime configuration, GPS providers and employee mapping — no deploy needed</div>
+  </div>
+</div>
+
+<!-- ============================ General settings ============================ -->
+<div class="card mb-3">
+  <div class="card-header"><i class="fas fa-sliders"></i> General</div>
+  <div class="card-body">
+    <form id="trk-settings-form" onsubmit="return false;">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Module Enabled</label>
+          <select class="form-select" name="enabled">
+            <option value="false">Disabled</option>
+            <option value="true">Enabled</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Map Provider</label>
+          <select class="form-select" name="map_provider">
+            <option value="leaflet_osm">OpenStreetMap</option>
+            <option value="google">Google Maps</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Google Maps API Key</label>
+          <input type="password" class="form-control" name="google_maps_api_key" autocomplete="new-password" />
+          <div class="trk-secret-hint" id="trk-google-key-hint"></div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Dashboard Refresh (s)</label>
+          <input type="number" min="10" class="form-control" name="dashboard_refresh_seconds" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Distance Unit</label>
+          <select class="form-select" name="distance_unit">
+            <option value="km">Kilometres</option>
+            <option value="mi">Miles</option>
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Offline After (min)</label>
+          <input type="number" min="1" class="form-control" name="offline_after_minutes" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Idle After (min)</label>
+          <input type="number" min="1" class="form-control" name="idle_after_minutes" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Late Check-In After</label>
+          <input type="time" class="form-control" name="late_check_in_time" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Early Exit Before</label>
+          <input type="time" class="form-control" name="early_check_out_time" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Working Start</label>
+          <input type="time" class="form-control" name="working_start" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Working End</label>
+          <input type="time" class="form-control" name="working_end" />
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Default Fence Radius (m)</label>
+          <input type="number" min="20" class="form-control" name="default_geofence_radius_m" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">History Retention (days)</label>
+          <input type="number" min="0" class="form-control" name="history_retention_days" />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Alerts</label>
+          <select class="form-select" name="alerts_enabled">
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">SMS Alerts</label>
+          <select class="form-select" name="sms_alerts_enabled">
+            <option value="false">Disabled</option>
+            <option value="true">Enabled</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">GPS Attendance</label>
+          <select class="form-select" name="attendance_sync_enabled">
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Auto-Approve Attendance</label>
+          <select class="form-select" name="attendance_auto_approve">
+            <option value="false">Manual Approval</option>
+            <option value="true">Auto-Approve</option>
+          </select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end justify-content-end">
+          {% if page_perms.save or page_perms.edit %}
+          <button class="btn btn-primary" id="trk-settings-save"><i class="fas fa-save"></i> Save Settings</button>
+          {% endif %}
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================== Providers =============================== -->
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-satellite-dish"></i> GPS Providers</span>
+    <span>
+      <button class="btn btn-sm btn-outline-secondary" id="trk-sync-now"><i class="fas fa-rotate"></i> Sync Now</button>
+      {% if page_perms.add %}
+      <button class="btn btn-sm btn-primary" id="trk-provider-add"><i class="fas fa-plus"></i> Add Provider</button>
+      {% endif %}
+    </span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Name</th><th>Type</th><th>API URL</th><th>Priority</th>
+            <th>Refresh (s)</th><th>Status</th><th>Last Sync</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="trk-provider-rows">
+          <tr><td colspan="8" class="text-center py-3 text-muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========================== Employee mapping ============================ -->
+<div class="card mb-3">
+  <div class="card-header"><i class="fas fa-people-arrows"></i> Employee Mapping</div>
+  <div class="card-body">
+    <div class="row g-2 align-items-end mb-2">
+      <div class="col-md-4">
+        <label class="form-label mb-0">Provider</label>
+        <select id="trk-map-provider" class="form-select form-select-sm"></select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-sm btn-outline-primary" id="trk-map-load">
+          <i class="fas fa-download"></i> Load Vendor Directory
+        </button>
+      </div>
+      <div class="col-md-5 text-muted small">
+        Fetches the provider's employee list live and shows the current ERP match for each identity.
+      </div>
+    </div>
+    <div class="table-responsive" id="trk-map-wrap" style="display:none;">
+      <table class="table table-sm align-middle" id="trk-map-table">
+        <thead class="table-dark">
+          <tr><th>Vendor ID</th><th>Vendor Name</th><th>Phone</th><th>ERP Employee</th><th></th></tr>
+        </thead>
+        <tbody id="trk-map-rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- =========================== Provider modal ============================ -->
+<div class="modal fade" id="trk-provider-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="trk-provider-modal-title">Provider</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="trk-provider-form" onsubmit="return false;">
+          <input type="hidden" name="id" />
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Name<span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Type</label>
+              <select class="form-select" name="provider_type">
+                {% for value, label in provider_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">API Base URL<span class="text-danger">*</span></label>
+              <input type="url" class="form-control" name="api_url" placeholder="https://app.trackolap.com" />
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Customer ID (tlp-cid)</label>
+              <input type="text" class="form-control" name="customer_id" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">API Key</label>
+              <input type="password" class="form-control" name="api_key" autocomplete="new-password" />
+              <div class="trk-secret-hint" data-secret-hint="api_key"></div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Username</label>
+              <input type="text" class="form-control" name="username" />
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Password</label>
+              <input type="password" class="form-control" name="password" autocomplete="new-password" />
+              <div class="trk-secret-hint" data-secret-hint="password"></div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Access Token</label>
+              <input type="password" class="form-control" name="access_token" autocomplete="new-password" />
+              <div class="trk-secret-hint" data-secret-hint="access_token"></div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Webhook Secret</label>
+              <input type="password" class="form-control" name="webhook_secret" autocomplete="new-password" />
+              <div class="trk-secret-hint" data-secret-hint="webhook_secret"></div>
+            </div>
+
+            <div class="col-md-5">
+              <label class="form-label">Webhook URL</label>
+              <input type="url" class="form-control" name="webhook_url" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Priority</label>
+              <input type="number" min="1" class="form-control" name="priority" value="1" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Refresh (s)</label>
+              <input type="number" min="15" class="form-control" name="refresh_interval_seconds" value="60" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Active</label>
+              <select class="form-select" name="is_active">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Endpoint Overrides (advanced, JSON)</label>
+              <textarea class="form-control font-monospace" rows="3" name="endpoints"
+                placeholder='e.g. {"live": "employee/live/location", "history": {"path": "v2/history", "method": "POST"}}'></textarea>
+              <div class="trk-secret-hint">
+                Leave empty to use the built-in defaults. Align with the vendor's API document; blank secrets keep their stored values.
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" id="trk-provider-test"><i class="fas fa-plug"></i> Test Connection</button>
+        <button class="btn btn-primary" id="trk-provider-save"><i class="fas fa-save"></i> Save Provider</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+{{ employees|json_script:"trk-employees-data" }}
+<script>
+(function () {
+  "use strict";
+  const URLS = {
+    settings: "{% url 'api_tracking_settings' %}",
+    providers: "{% url 'api_tracking_providers' %}",
+    test: "{% url 'api_tracking_provider_test' %}",
+    mappings: "{% url 'api_tracking_mappings' %}",
+    syncNow: "{% url 'api_tracking_sync_now' %}",
+  };
+  const EMPLOYEES = JSON.parse(document.getElementById("trk-employees-data").textContent);
+  const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  let providers = [];
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function toast(message, ok) {
+    Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
+               style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
+  }
+  function post(url, payload, method) {
+    return fetch(url, {
+      method: method || "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    }).then(response => response.json().then(data => ({ ok: response.ok, data })));
+  }
+  function setSelect(form, name, boolValue) {
+    form.querySelector('[name="' + name + '"]').value = boolValue ? "true" : "false";
+  }
+
+  /* ------------------------------ settings ------------------------------ */
+  const settingsForm = document.getElementById("trk-settings-form");
+
+  function fillSettings(data) {
+    ["map_provider","dashboard_refresh_seconds","offline_after_minutes","idle_after_minutes",
+     "late_check_in_time","early_check_out_time","working_start","working_end",
+     "default_geofence_radius_m","distance_unit","history_retention_days"].forEach(name => {
+      const input = settingsForm.querySelector('[name="' + name + '"]');
+      if (input) input.value = data[name] == null ? "" : data[name];
+    });
+    setSelect(settingsForm, "enabled", data.enabled);
+    setSelect(settingsForm, "alerts_enabled", data.alerts_enabled);
+    setSelect(settingsForm, "sms_alerts_enabled", data.sms_alerts_enabled);
+    setSelect(settingsForm, "attendance_sync_enabled", data.attendance_sync_enabled);
+    setSelect(settingsForm, "attendance_auto_approve", data.attendance_auto_approve);
+    document.getElementById("trk-google-key-hint").textContent =
+      data.has_google_maps_api_key ? "A key is stored — leave blank to keep it." : "";
+    ["map_provider","enabled","alerts_enabled","sms_alerts_enabled","distance_unit",
+     "attendance_sync_enabled","attendance_auto_approve"].forEach(name => {
+      const el = settingsForm.querySelector('[name="' + name + '"]');
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+
+  fetch(URLS.settings, { credentials: "same-origin" })
+    .then(response => response.json()).then(fillSettings);
+
+  const saveButton = document.getElementById("trk-settings-save");
+  if (saveButton) saveButton.addEventListener("click", () => {
+    const payload = {};
+    settingsForm.querySelectorAll("[name]").forEach(input => {
+      let value = input.value;
+      if (["enabled","alerts_enabled","sms_alerts_enabled",
+           "attendance_sync_enabled","attendance_auto_approve"].includes(input.name)) value = value === "true";
+      payload[input.name] = value;
+    });
+    post(URLS.settings, payload).then(({ ok, data }) => {
+      if (ok) { toast("Settings saved.", true); fillSettings(data); }
+      else toast(data.error || "Save failed.", false);
+    });
+  });
+
+  /* ------------------------------ providers ----------------------------- */
+  const STATUS_BADGE = { ok: "success", error: "danger", never: "secondary" };
+  const modal = new bootstrap.Modal(document.getElementById("trk-provider-modal"));
+  const providerForm = document.getElementById("trk-provider-form");
+
+  function renderProviders() {
+    const rows = providers.map(p =>
+      "<tr>" +
+      "<td><strong>" + esc(p.name) + "</strong>" + (p.is_active ? "" : ' <span class="badge bg-secondary">inactive</span>') + "</td>" +
+      "<td>" + esc(p.provider_type) + "</td>" +
+      "<td><small>" + esc(p.api_url) + "</small></td>" +
+      "<td>" + p.priority + "</td>" +
+      "<td>" + p.refresh_interval_seconds + "</td>" +
+      "<td><span class='badge bg-" + (STATUS_BADGE[p.last_sync_status] || "secondary") + "'>" + esc(p.last_sync_status) + "</span>" +
+        (p.last_error ? "<br><small class='text-danger'>" + esc(p.last_error.slice(0, 80)) + "</small>" : "") + "</td>" +
+      "<td><small>" + (p.last_synced_at ? new Date(p.last_synced_at).toLocaleString() : "never") + "</small></td>" +
+      "<td class='text-end'>" +
+        '<button class="btn btn-sm btn-outline-primary" data-edit="' + p.id + '"><i class="fas fa-pen"></i></button> ' +
+        '<button class="btn btn-sm btn-outline-danger" data-deactivate="' + p.id + '" ' + (p.is_active ? "" : "disabled") + '><i class="fas fa-ban"></i></button>' +
+      "</td></tr>"
+    );
+    document.getElementById("trk-provider-rows").innerHTML = rows.length
+      ? rows.join("") : '<tr><td colspan="8" class="text-center py-3 text-muted">No providers configured yet.</td></tr>';
+
+    const select = document.getElementById("trk-map-provider");
+    select.innerHTML = providers.filter(p => p.is_active)
+      .map(p => '<option value="' + p.id + '">' + esc(p.name) + "</option>").join("");
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function loadProviders() {
+    fetch(URLS.providers, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => { providers = data.providers; renderProviders(); });
+  }
+  loadProviders();
+
+  function openModal(provider) {
+    providerForm.reset();
+    providerForm.querySelector('[name=id]').value = provider ? provider.id : "";
+    document.getElementById("trk-provider-modal-title").textContent =
+      provider ? "Edit Provider — " + provider.name : "Add Provider";
+    if (provider) {
+      ["name","provider_type","api_url","username","customer_id","webhook_url",
+       "priority","refresh_interval_seconds"].forEach(name => {
+        providerForm.querySelector('[name="' + name + '"]').value = provider[name] == null ? "" : provider[name];
+      });
+      setSelect(providerForm, "is_active", provider.is_active);
+      providerForm.querySelector('[name=endpoints]').value =
+        Object.keys(provider.endpoints || {}).length ? JSON.stringify(provider.endpoints, null, 2) : "";
+      ["api_key","password","access_token","webhook_secret"].forEach(secret => {
+        providerForm.querySelector('[data-secret-hint="' + secret + '"]').textContent =
+          provider["has_" + secret] ? "Stored — leave blank to keep." : "";
+      });
+    } else {
+      ["api_key","password","access_token","webhook_secret"].forEach(secret => {
+        providerForm.querySelector('[data-secret-hint="' + secret + '"]').textContent = "";
+      });
+      setSelect(providerForm, "is_active", true);
+    }
+    ["provider_type","is_active"].forEach(name =>
+      providerForm.querySelector('[name="' + name + '"]').dispatchEvent(new Event("change", { bubbles: true })));
+    modal.show();
+  }
+
+  const addButton = document.getElementById("trk-provider-add");
+  if (addButton) addButton.addEventListener("click", () => openModal(null));
+
+  document.getElementById("trk-provider-rows").addEventListener("click", event => {
+    const editButton = event.target.closest("[data-edit]");
+    const deactivateButton = event.target.closest("[data-deactivate]");
+    if (editButton) openModal(providers.find(p => p.id === Number(editButton.dataset.edit)));
+    if (deactivateButton && confirm("Deactivate this provider? Sync will skip it.")) {
+      post(URLS.providers + "?id=" + deactivateButton.dataset.deactivate, undefined, "DELETE")
+        .then(({ ok, data }) => {
+          toast(ok ? "Provider deactivated." : (data.error || "Failed."), ok);
+          loadProviders();
+        });
+    }
+  });
+
+  function providerPayload() {
+    const payload = {};
+    providerForm.querySelectorAll("[name]").forEach(input => {
+      if (input.name === "endpoints") return;
+      payload[input.name] = input.name === "is_active" ? input.value === "true"
+        : input.name === "priority" || input.name === "refresh_interval_seconds" ? Number(input.value)
+        : input.value;
+    });
+    if (!payload.id) delete payload.id;
+    const endpointsRaw = providerForm.querySelector("[name=endpoints]").value.trim();
+    if (endpointsRaw) {
+      try { payload.endpoints = JSON.parse(endpointsRaw); }
+      catch (error) { toast("Endpoint overrides must be valid JSON.", false); return null; }
+    }
+    return payload;
+  }
+
+  document.getElementById("trk-provider-save").addEventListener("click", () => {
+    const payload = providerPayload();
+    if (!payload) return;
+    post(URLS.providers, payload).then(({ ok, data }) => {
+      if (ok) { toast("Provider saved.", true); modal.hide(); loadProviders(); }
+      else toast(data.error || "Save failed.", false);
+    });
+  });
+
+  document.getElementById("trk-provider-test").addEventListener("click", () => {
+    const id = providerForm.querySelector("[name=id]").value;
+    if (!id) { toast("Save the provider first, then test.", false); return; }
+    post(URLS.test, { id: Number(id) }).then(({ data }) =>
+      toast(data.message || data.error || "No response.", Boolean(data.success)));
+  });
+
+  document.getElementById("trk-sync-now").addEventListener("click", () => {
+    toast("Sync started…", true);
+    post(URLS.syncNow, {}).then(({ ok, data }) => {
+      if (!ok) { toast(data.error || "Sync failed.", false); return; }
+      const failed = data.runs.filter(run => run.status === "failed").length;
+      toast("Sync finished: " + data.runs.length + " run(s), " + failed + " failed.", failed === 0);
+      loadProviders();
+    });
+  });
+
+  /* ------------------------------ mappings ------------------------------ */
+  document.getElementById("trk-map-load").addEventListener("click", () => {
+    const providerId = document.getElementById("trk-map-provider").value;
+    if (!providerId) { toast("Configure a provider first.", false); return; }
+    fetch(URLS.mappings + "?provider=" + providerId, { credentials: "same-origin" })
+      .then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) { toast(data.error || "Could not load directory.", false); return; }
+        const options = '<option value="">— unmapped —</option>' + EMPLOYEES.map(e =>
+          '<option value="' + e.id + '">' + esc(e.full_name) + " (#" + e.employee_id + ")</option>").join("");
+        document.getElementById("trk-map-rows").innerHTML = data.people.map(person =>
+          "<tr data-external-id='" + esc(person.external_id) + "' data-external-name='" + esc(person.external_name) + "'>" +
+          "<td>" + esc(person.external_id) + "</td>" +
+          "<td>" + esc(person.external_name) + (person.is_active ? "" : ' <span class="badge bg-secondary">inactive</span>') + "</td>" +
+          "<td>" + esc(person.phone || "–") + "</td>" +
+          "<td><select class='form-select form-select-sm' data-map-select>" + options + "</select></td>" +
+          "<td><button class='btn btn-sm btn-outline-primary' data-map-save><i class='fas fa-save'></i></button></td>" +
+          "</tr>").join("") || '<tr><td colspan="5" class="text-muted">Vendor directory is empty.</td></tr>';
+        document.getElementById("trk-map-wrap").style.display = "";
+        data.people.forEach((person, index) => {
+          const row = document.getElementById("trk-map-rows").children[index];
+          if (row && person.employee_id) {
+            const select = row.querySelector("[data-map-select]");
+            select.value = String(person.employee_id);
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+      });
+  });
+
+  document.getElementById("trk-map-rows").addEventListener("click", event => {
+    const button = event.target.closest("[data-map-save]");
+    if (!button) return;
+    const row = button.closest("tr");
+    post(URLS.mappings, {
+      provider: Number(document.getElementById("trk-map-provider").value),
+      external_id: row.dataset.externalId,
+      external_name: row.dataset.externalName,
+      employee_id: row.querySelector("[data-map-select]").value || null,
+    }).then(({ ok, data }) =>
+      toast(ok ? (data.mapped ? "Mapping saved." : "Unmapped.") : (data.error || "Failed."), ok));
+  });
+})();
+</script>
+{% endblock %}

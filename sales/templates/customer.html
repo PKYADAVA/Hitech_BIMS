@@ -87,6 +87,9 @@ Manage Customers
                                 {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-customer" data-id="{{ cust.id }}" title="Delete">
                                     <i class="fas fa-trash"></i>
                                 </button>{% endif %}
+                                {% if 'tracking_visits' in allowed_tabs %}<button class="btn btn-outline-info btn-sm view-visit-history" data-id="{{ cust.id }}" data-name="{{ cust.name }}" title="Field Visit History">
+                                    <i class="fas fa-route"></i>
+                                </button>{% endif %}
                                 {% if not page_perms.edit and not page_perms.delete %}<span class="text-muted small">—</span>{% endif %}
                             </div>
                         </td>
@@ -98,6 +101,37 @@ Manage Customers
     </div>
 </div>
 
+{% if 'tracking_visits' in allowed_tabs %}
+<!-- Field-visit history (Employee Tracking module) -->
+<div class="modal fade" id="visitHistoryModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-route me-2"></i>Field Visits — <span id="visit-history-customer"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr><th>Date</th><th>Employee</th><th>Check In</th><th>Check Out</th>
+                  <th>Duration</th><th>Follow-Up</th><th>Remarks</th></tr>
+            </thead>
+            <tbody id="visit-history-rows">
+              <tr><td colspan="7" class="text-center py-3 text-muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer py-1">
+        <a href="{% url 'tracking_visits' %}" class="btn btn-sm btn-outline-primary">
+          <i class="fas fa-arrow-up-right-from-square me-1"></i>Open Visit Register
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block js %}
@@ -117,6 +151,36 @@ Manage Customers
       $("#confirmDeleteForm").attr("action", `/customer/${id}/delete/`);
       $("#deleteConfirmationModal").modal("show");
     });
+
+    {% if 'tracking_visits' in allowed_tabs %}
+    // Field-visit history embed (Employee Tracking module).
+    $(document).on("click", ".view-visit-history", function () {
+      const name = $(this).data("name");
+      $("#visit-history-customer").text(name);
+      $("#visit-history-rows").html(
+        '<tr><td colspan="7" class="text-center py-3 text-muted">Loading…</td></tr>');
+      $("#visitHistoryModal").modal("show");
+      const esc = t => $("<span>").text(t == null ? "" : t).html();
+      const hhmm = iso => iso ? new Date(iso).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}) : "–";
+      fetch("{% url 'api_tracking_visits' %}?page_size=100&customer=" + $(this).data("id"),
+            { credentials: "same-origin" })
+        .then(r => r.json())
+        .then(data => {
+          const rows = data.visits.map(v =>
+            "<tr><td>" + esc(v.visit_date) + "</td>" +
+            "<td>" + esc(v.employee) + "</td>" +
+            "<td>" + hhmm(v.check_in_at) + "</td>" +
+            "<td>" + hhmm(v.check_out_at) + "</td>" +
+            "<td>" + (v.duration_min != null ? v.duration_min + " min" : "–") + "</td>" +
+            "<td>" + esc(v.next_follow_up || "–") + "</td>" +
+            "<td><small>" + esc(v.remarks || "–") + "</small></td></tr>");
+          $("#visit-history-rows").html(rows.length ? rows.join("")
+            : '<tr><td colspan="7" class="text-center py-3 text-muted">No field visits recorded yet.</td></tr>');
+        })
+        .catch(() => $("#visit-history-rows").html(
+          '<tr><td colspan="7" class="text-center py-3 text-danger">Could not load visits.</td></tr>'));
+    });
+    {% endif %}
   });
 </script>
 <script>

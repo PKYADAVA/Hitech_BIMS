@@ -1,0 +1,297 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Geofences{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  #geo-map { height: 420px; border-radius:.5rem; z-index:0; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_geofences' %}
+ {% csrf_token %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-draw-polygon"></i>Geofences</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Office, warehouse, farm and customer fences with entry/exit alerts</div>
+    {% if page_perms.add %}
+    <button class="btn btn-primary" id="geo-add"><i class="fas fa-plus"></i> Add Geofence</button>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card"><div class="card-body p-2"><div id="geo-map"></div></div></div>
+    <div class="text-muted small mt-1">
+      <i class="fas fa-circle-info me-1"></i>With the editor open, click the map to set the fence centre.
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="fas fa-table"></i> Fences <span class="badge bg-secondary" id="geo-count">0</span></div>
+      <div class="card-body p-0" style="max-height:440px; overflow-y:auto;">
+        <table class="table table-hover table-sm align-middle mb-0">
+          <thead class="table-dark">
+            <tr><th>Name</th><th>Type</th><th>Radius</th><th>Alerts</th><th></th></tr>
+          </thead>
+          <tbody id="geo-rows">
+            <tr><td colspan="5" class="text-center py-3 text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Fence editor modal -->
+<div class="modal fade" id="geo-modal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="geo-modal-title">Geofence</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="geo-form" onsubmit="return false;">
+          <input type="hidden" name="id" />
+          <div class="row g-2">
+            <div class="col-md-7">
+              <label class="form-label">Name<span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="name" />
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Type</label>
+              <select class="form-select" name="geofence_type">
+                {% for value, label in geofence_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Latitude<span class="text-danger">*</span></label>
+              <input type="number" step="0.000001" class="form-control" name="center_latitude" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Longitude<span class="text-danger">*</span></label>
+              <input type="number" step="0.000001" class="form-control" name="center_longitude" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Radius (m)</label>
+              <input type="number" min="20" class="form-control" name="radius_m" value="{{ default_radius }}" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Linked Warehouse</label>
+              <select class="form-select" name="warehouse_id">
+                <option value="">None</option>
+                {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Linked Customer</label>
+              <select class="form-select" name="customer_id">
+                <option value="">None</option>
+                {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Address</label>
+              <input type="text" class="form-control" name="address" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Alert Entry</label>
+              <select class="form-select" name="alert_on_entry">
+                <option value="false">No</option><option value="true">Yes</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Alert Exit</label>
+              <select class="form-select" name="alert_on_exit">
+                <option value="false">No</option><option value="true">Yes</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Expected From</label>
+              <input type="time" class="form-control" name="working_start" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Expected To</label>
+              <input type="time" class="form-control" name="working_end" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Active</label>
+              <select class="form-select" name="is_active">
+                <option value="true">Yes</option><option value="false">No</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="geo-save"><i class="fas fa-save"></i> Save Geofence</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  "use strict";
+  const API = "{% url 'api_tracking_geofences' %}";
+  const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
+  const TYPE_COLOR = { office:"#0d6efd", warehouse:"#6f42c1", farm:"#198754",
+                       customer:"#fd7e14", dealer:"#20c997", other:"#6c757d" };
+  let fences = [], editorOpen = false, previewCircle = null;
+
+  const map = L.map("geo-map").setView([22.9734, 78.6569], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  const modalEl = document.getElementById("geo-modal");
+  const modal = new bootstrap.Modal(modalEl);
+  const form = document.getElementById("geo-form");
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function toast(message, ok) {
+    Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
+               style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
+  }
+
+  function draw() {
+    layer.clearLayers();
+    const bounds = [];
+    fences.forEach(fence => {
+      if (!fence.is_active) return;
+      bounds.push([fence.center_latitude, fence.center_longitude]);
+      L.circle([fence.center_latitude, fence.center_longitude], {
+        radius: fence.radius_m, color: TYPE_COLOR[fence.geofence_type] || "#6c757d",
+        weight: 2, fillOpacity: 0.12,
+      }).bindPopup("<strong>" + esc(fence.name) + "</strong><br><small>" +
+                   esc(fence.geofence_type) + " · " + fence.radius_m + " m</small>")
+        .addTo(layer);
+    });
+    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+  }
+
+  function render() {
+    document.getElementById("geo-count").textContent = fences.length;
+    document.getElementById("geo-rows").innerHTML = fences.map(fence =>
+      "<tr" + (fence.is_active ? "" : " class='opacity-50'") + ">" +
+      "<td><strong>" + esc(fence.name) + "</strong>" +
+        (fence.vendor_synced ? ' <span class="badge bg-info" title="Synced from provider">vendor</span>' : "") +
+        (fence.warehouse ? "<br><small class='text-muted'>WH: " + esc(fence.warehouse) + "</small>" : "") +
+        (fence.customer ? "<br><small class='text-muted'>Cust: " + esc(fence.customer) + "</small>" : "") + "</td>" +
+      "<td>" + esc(fence.geofence_type) + "</td>" +
+      "<td>" + fence.radius_m + " m</td>" +
+      "<td>" + (fence.alert_on_entry ? '<i class="fas fa-right-to-bracket text-success" title="Entry alert"></i> ' : "") +
+               (fence.alert_on_exit ? '<i class="fas fa-right-from-bracket text-danger" title="Exit alert"></i>' : "") +
+               (!fence.alert_on_entry && !fence.alert_on_exit ? "–" : "") + "</td>" +
+      "<td class='text-end'>" +
+        '<button class="btn btn-sm btn-outline-primary" data-edit="' + fence.id + '"><i class="fas fa-pen"></i></button> ' +
+        '<button class="btn btn-sm btn-outline-danger" data-off="' + fence.id + '" ' + (fence.is_active ? "" : "disabled") + '><i class="fas fa-ban"></i></button>' +
+      "</td></tr>").join("") ||
+      '<tr><td colspan="5" class="text-center py-3 text-muted">No geofences yet.</td></tr>';
+    draw();
+  }
+
+  function load() {
+    fetch(API, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => { fences = data.geofences; render(); });
+  }
+
+  function openEditor(fence) {
+    form.reset();
+    form.querySelector("[name=id]").value = fence ? fence.id : "";
+    document.getElementById("geo-modal-title").textContent =
+      fence ? "Edit Geofence — " + fence.name : "Add Geofence";
+    if (fence) {
+      ["name","geofence_type","center_latitude","center_longitude","radius_m",
+       "address","working_start","working_end"].forEach(name => {
+        form.querySelector('[name="' + name + '"]').value = fence[name] == null ? "" : fence[name];
+      });
+      form.querySelector("[name=warehouse_id]").value = fence.warehouse_id || "";
+      form.querySelector("[name=customer_id]").value = fence.customer_id || "";
+      form.querySelector("[name=alert_on_entry]").value = String(fence.alert_on_entry);
+      form.querySelector("[name=alert_on_exit]").value = String(fence.alert_on_exit);
+      form.querySelector("[name=is_active]").value = String(fence.is_active);
+    }
+    form.querySelectorAll("select").forEach(el =>
+      el.dispatchEvent(new Event("change", { bubbles: true })));
+    editorOpen = true;
+    modal.show();
+  }
+  modalEl.addEventListener("hidden.bs.modal", () => {
+    editorOpen = false;
+    if (previewCircle) { map.removeLayer(previewCircle); previewCircle = null; }
+  });
+
+  // Click the map (while the editor is open) to set the centre.
+  map.on("click", event => {
+    if (!editorOpen) return;
+    form.querySelector("[name=center_latitude]").value = event.latlng.lat.toFixed(6);
+    form.querySelector("[name=center_longitude]").value = event.latlng.lng.toFixed(6);
+    if (previewCircle) map.removeLayer(previewCircle);
+    previewCircle = L.circle(event.latlng, {
+      radius: Number(form.querySelector("[name=radius_m]").value || 200),
+      color: "#dc3545", dashArray: "6", fillOpacity: 0.08,
+    }).addTo(map);
+  });
+
+  const addButton = document.getElementById("geo-add");
+  if (addButton) addButton.addEventListener("click", () => openEditor(null));
+
+  document.getElementById("geo-rows").addEventListener("click", event => {
+    const edit = event.target.closest("[data-edit]");
+    const off = event.target.closest("[data-off]");
+    if (edit) openEditor(fences.find(fence => fence.id === Number(edit.dataset.edit)));
+    if (off && confirm("Deactivate this geofence?")) {
+      fetch(API + "?id=" + off.dataset.off, {
+        method: "DELETE", credentials: "same-origin",
+        headers: { "X-CSRFToken": CSRF },
+      }).then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => { toast(ok ? "Deactivated." : data.error, ok); load(); });
+    }
+  });
+
+  document.getElementById("geo-save").addEventListener("click", () => {
+    const payload = {};
+    form.querySelectorAll("[name]").forEach(input => {
+      let value = input.value;
+      if (["alert_on_entry","alert_on_exit","is_active"].includes(input.name)) value = value === "true";
+      if (["warehouse_id","customer_id"].includes(input.name)) value = value ? Number(value) : null;
+      if (input.name === "radius_m") value = Number(value);
+      payload[input.name] = value;
+    });
+    if (!payload.id) delete payload.id;
+    if (!payload.name || !payload.center_latitude || !payload.center_longitude) {
+      toast("Name and centre coordinates are required (click the map to set them).", false);
+      return;
+    }
+    fetch(API, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify(payload),
+    }).then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        toast(ok ? "Geofence saved." : (data.error || "Save failed."), ok);
+        if (ok) { modal.hide(); load(); }
+      });
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

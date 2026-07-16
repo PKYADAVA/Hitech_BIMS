@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Customer Visits{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+  .trk-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:.6rem; }
+  .trk-tile { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+              padding:.55rem .75rem; background:var(--bs-body-bg, #fff); }
+  .trk-tile .trk-num { font-size:1.3rem; font-weight:600; }
+  .trk-tile .trk-lbl { font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; opacity:.7; }
+  #vis-map { height: 340px; border-radius:.5rem; z-index:0; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_visits' %}
+ {% csrf_token %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-handshake"></i>Customer Visits</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Field visits with GPS evidence, follow-ups and CRM matching</div>
+  </div>
+</div>
+
+<div class="trk-tiles mb-3">
+  <div class="trk-tile"><div class="trk-num" data-tile="total">–</div><div class="trk-lbl">Visits</div></div>
+  <div class="trk-tile"><div class="trk-num text-success" data-tile="completed">–</div><div class="trk-lbl">Completed</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="in_progress">–</div><div class="trk-lbl">In Progress</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="unique_customers">–</div><div class="trk-lbl">Customers</div></div>
+  <div class="trk-tile"><div class="trk-num" data-tile="avg_duration_min">–</div><div class="trk-lbl">Avg Duration (min)</div></div>
+  <div class="trk-tile"><div class="trk-num text-warning" data-tile="follow_ups_due">–</div><div class="trk-lbl">Follow-Ups Due</div></div>
+  <div class="trk-tile"><div class="trk-num text-danger" data-tile="unmatched">–</div><div class="trk-lbl">Unmatched</div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label mb-0">From</label>
+        <input type="date" id="vis-from" class="form-control form-control-sm" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">To</label>
+        <input type="date" id="vis-to" class="form-control form-control-sm" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Employee</label>
+        <select id="vis-employee" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} (#{{ e.employee_id }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Status</label>
+        <select id="vis-status" class="form-select form-select-sm">
+          <option value="">All</option>
+          <option value="completed">Completed</option>
+          <option value="in_progress">In Progress</option>
+          <option value="planned">Planned</option>
+          <option value="missed">Missed</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Unmatched Only</label>
+        <select id="vis-unmatched" class="form-select form-select-sm">
+          <option value="">No</option>
+          <option value="1">Yes</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Search</label>
+        <input type="text" id="vis-q" class="form-control form-control-sm" placeholder="Employee / customer…" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3"><div class="card-body p-2"><div id="vis-map"></div></div></div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-list-check"></i> Visit Register <span class="badge bg-secondary" id="vis-count">0</span></span>
+    <span id="vis-pager" class="small"></span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Date</th><th>Employee</th><th>Customer</th><th>Check In</th><th>Check Out</th>
+            <th>Duration</th><th>Follow-Up</th><th>Photo</th><th>Remarks</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="vis-rows">
+          <tr><td colspan="11" class="text-center py-4 text-muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Link-to-customer modal -->
+<div class="modal fade" id="vis-link-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Link Visit to CRM Customer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">
+          Vendor reported: <strong id="vis-link-vendor-name"></strong>
+        </p>
+        <label class="form-label">CRM Customer</label>
+        <select id="vis-link-customer" class="form-select">
+          <option value="">Select customer…</option>
+          {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" id="vis-link-all" checked>
+          <label class="form-check-label" for="vis-link-all">
+            Also link every other unmatched visit with the same vendor name
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="vis-link-save"><i class="fas fa-link"></i> Link</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+(function () {
+  "use strict";
+  const API = "{% url 'api_tracking_visits' %}";
+  const LINK_API = "{% url 'api_tracking_visit_link' %}";
+  const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
+  const STATUS_BADGE = { completed:"success", in_progress:"primary", planned:"secondary", missed:"danger" };
+  let page = 1, linkTarget = null;
+
+  const map = L.map("vis-map").setView([22.9734, 78.6569], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
+  map.addLayer(cluster);
+  let fitted = false;
+  const linkModal = new bootstrap.Modal(document.getElementById("vis-link-modal"));
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function toast(message, ok) {
+    Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
+               style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
+  }
+  function hhmm(iso) {
+    return iso ? new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }) : "–";
+  }
+
+  function params() {
+    const search = new URLSearchParams();
+    search.set("page", page);
+    const fields = [["vis-from","from"],["vis-to","to"],["vis-employee","employee"],
+                    ["vis-status","status"],["vis-unmatched","unmatched"],["vis-q","q"]];
+    fields.forEach(([id, key]) => {
+      const value = document.getElementById(id).value.trim();
+      if (value) search.set(key, value);
+    });
+    return search;
+  }
+
+  function load() {
+    fetch(API + "?" + params(), { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        Object.entries(data.tiles).forEach(([key, value]) => {
+          const el = document.querySelector('[data-tile="' + key + '"]');
+          if (el) el.textContent = value;
+        });
+        document.getElementById("vis-count").textContent = data.total;
+        const pages = Math.max(Math.ceil(data.total / data.page_size), 1);
+        document.getElementById("vis-pager").innerHTML =
+          '<button class="btn btn-sm btn-outline-secondary" id="vis-prev" ' + (data.page <= 1 ? "disabled" : "") + ">&laquo;</button> " +
+          " page " + data.page + " / " + pages + " " +
+          '<button class="btn btn-sm btn-outline-secondary" id="vis-next" ' + (data.page >= pages ? "disabled" : "") + ">&raquo;</button>";
+        document.getElementById("vis-prev").onclick = () => { page = Math.max(page - 1, 1); load(); };
+        document.getElementById("vis-next").onclick = () => { page += 1; load(); };
+
+        cluster.clearLayers();
+        const bounds = [];
+        const rows = data.visits.map(visit => {
+          if (visit.latitude != null) {
+            bounds.push([visit.latitude, visit.longitude]);
+            const marker = L.marker([visit.latitude, visit.longitude]);
+            marker.bindPopup(
+              "<strong>" + esc(visit.customer || visit.external_customer_name) + "</strong>" +
+              "<br><small>" + esc(visit.employee) + " · " + esc(visit.visit_date) + "</small>" +
+              "<br><small>In " + hhmm(visit.check_in_at) + (visit.check_out_at ? " · Out " + hhmm(visit.check_out_at) : "") + "</small>"
+            );
+            cluster.addLayer(marker);
+          }
+          const customerCell = visit.matched
+            ? esc(visit.customer)
+            : '<span class="text-danger" title="No CRM match">' + esc(visit.external_customer_name || "?") +
+              ' <i class="fas fa-triangle-exclamation"></i></span>';
+          return "<tr>" +
+            "<td>" + esc(visit.visit_date) + "</td>" +
+            "<td>" + esc(visit.employee) + "<br><small class='text-muted'>#" + esc(visit.employee_code) + "</small></td>" +
+            "<td>" + customerCell + "</td>" +
+            "<td>" + hhmm(visit.check_in_at) + "</td>" +
+            "<td>" + hhmm(visit.check_out_at) + "</td>" +
+            "<td>" + (visit.duration_min != null ? visit.duration_min + " min" : "–") + "</td>" +
+            "<td>" + (visit.next_follow_up ? esc(visit.next_follow_up) : "–") + "</td>" +
+            "<td>" + (visit.photo_url ? '<a href="' + esc(visit.photo_url) + '" target="_blank" rel="noopener"><i class="fas fa-camera"></i></a>' : "–") + "</td>" +
+            "<td><small>" + esc(visit.remarks || "–") + "</small></td>" +
+            "<td><span class='badge bg-" + (STATUS_BADGE[visit.status] || "secondary") + "'>" + esc(visit.status) + "</span></td>" +
+            "<td>" + (visit.matched ? "" :
+              '<button class="btn btn-sm btn-outline-primary" data-link="' + visit.id +
+              '" data-vendor-name="' + esc(visit.external_customer_name) + '" title="Link to CRM customer"><i class="fas fa-link"></i></button>') + "</td>" +
+            "</tr>";
+        });
+        document.getElementById("vis-rows").innerHTML = rows.length
+          ? rows.join("")
+          : '<tr><td colspan="11" class="text-center py-4 text-muted">No visits match the filters.</td></tr>';
+        if (!fitted && bounds.length) {
+          map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+          fitted = true;
+        }
+      });
+  }
+
+  document.getElementById("vis-rows").addEventListener("click", event => {
+    const button = event.target.closest("[data-link]");
+    if (!button) return;
+    linkTarget = { id: Number(button.dataset.link), vendorName: button.dataset.vendorName };
+    document.getElementById("vis-link-vendor-name").textContent = linkTarget.vendorName || "(blank)";
+    linkModal.show();
+  });
+
+  document.getElementById("vis-link-save").addEventListener("click", () => {
+    const customerId = document.getElementById("vis-link-customer").value;
+    if (!customerId || !linkTarget) { toast("Pick a customer.", false); return; }
+    const applyAll = document.getElementById("vis-link-all").checked && linkTarget.vendorName;
+    const payload = applyAll
+      ? { customer_id: Number(customerId), external_customer_name: linkTarget.vendorName }
+      : { customer_id: Number(customerId), visit_ids: [linkTarget.id] };
+    fetch(LINK_API, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify(payload),
+    }).then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        toast(ok ? "Linked " + data.updated + " visit(s)." : (data.error || "Failed."), ok);
+        linkModal.hide();
+        load();
+      });
+  });
+
+  // Default range: last 30 days.
+  const today = new Date();
+  const monthAgo = new Date(today.getTime() - 29 * 86400000);
+  document.getElementById("vis-to").value = today.toISOString().slice(0, 10);
+  document.getElementById("vis-from").value = monthAgo.toISOString().slice(0, 10);
+
+  ["vis-from","vis-to","vis-employee","vis-status","vis-unmatched"].forEach(id =>
+    document.getElementById(id).addEventListener("change", () => { page = 1; load(); }));
+  document.getElementById("vis-q").addEventListener("input", () => {
+    clearTimeout(window.__visDebounce);
+    window.__visDebounce = setTimeout(() => { page = 1; load(); }, 400);
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

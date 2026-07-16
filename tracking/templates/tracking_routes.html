@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+
+{% block title %}Employee Tracking — Route History{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  .trk-chips { display:flex; flex-wrap:wrap; gap:.6rem; }
+  .trk-chip { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+              padding:.45rem .8rem; background:var(--bs-body-bg, #fff); min-width:110px; }
+  .trk-chip .trk-num { font-size:1.15rem; font-weight:600; }
+  .trk-chip .trk-lbl { font-size:.7rem; text-transform:uppercase; opacity:.7; }
+  #route-map { height: 440px; border-radius:.5rem; z-index:0; }
+  .timeline { list-style:none; margin:0; padding:0 0 0 1.4rem; position:relative; max-height:440px; overflow-y:auto; }
+  .timeline::before { content:""; position:absolute; left:.45rem; top:0; bottom:0;
+                      width:2px; background:var(--bs-border-color, #dee2e6); }
+  .timeline li { position:relative; padding:.35rem 0 .35rem .6rem; }
+  .timeline li::before { content:""; position:absolute; left:-1.08rem; top:.85rem;
+                         width:.7rem; height:.7rem; border-radius:50%; background:#6c757d; }
+  .timeline li.t-check_in::before { background:#198754; }
+  .timeline li.t-check_out::before { background:#dc3545; }
+  .timeline li.t-visit::before { background:#0d6efd; }
+  .timeline li.t-stop::before, .timeline li.t-idle::before { background:#fd7e14; }
+  .timeline .t-time { font-weight:600; font-size:.85rem; }
+  .timeline .t-label { font-size:.9rem; }
+  .timeline small { opacity:.75; }
+</style>
+{% endblock %}
+
+{% block content %}
+ {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_routes' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-route"></i>Route History &amp; Daily Timeline</div>
+  <div class="page-header-right">
+    <div class="page-header-subtitle">Replay any employee's day: route, stops, visits, check-in/out</div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-0">Employee</label>
+        <select id="route-employee" class="form-select form-select-sm">
+          <option value="">Select employee…</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} (#{{ e.employee_id }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-0">Date</label>
+        <input type="date" id="route-date" class="form-control form-control-sm" />
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-sm btn-primary" id="route-load"><i class="fas fa-play"></i> Load Route</button>
+      </div>
+      <div class="col-md-4"><div class="trk-chips" id="route-chips"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card"><div class="card-body p-2"><div id="route-map"></div></div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header"><i class="fas fa-timeline"></i> Daily Timeline</div>
+      <div class="card-body">
+        <ul class="timeline" id="route-timeline">
+          <li class="text-muted">Pick an employee and date, then Load Route.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  "use strict";
+  const API = "{% url 'api_tracking_route' %}";
+
+  const map = L.map("route-map").setView([22.9734, 78.6569], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function hhmm(iso) {
+    return iso ? new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }) : "–";
+  }
+  function hm(minutes) {
+    if (minutes == null) return "–";
+    return Math.floor(minutes / 60) + "h " + String(minutes % 60).padStart(2, "0") + "m";
+  }
+
+  // Google encoded-polyline decoder (matches tracking.services.geo.encode_polyline).
+  function decodePolyline(encoded, precision) {
+    const factor = Math.pow(10, precision || 5);
+    let index = 0, lat = 0, lng = 0;
+    const points = [];
+    while (index < encoded.length) {
+      for (const which of ["lat", "lng"]) {
+        let result = 0, shift = 0, byte;
+        do {
+          byte = encoded.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20);
+        const delta = (result & 1) ? ~(result >> 1) : (result >> 1);
+        if (which === "lat") lat += delta; else lng += delta;
+      }
+      points.push([lat / factor, lng / factor]);
+    }
+    return points;
+  }
+
+  function chips(route) {
+    const container = document.getElementById("route-chips");
+    if (!route) { container.innerHTML = '<span class="text-muted small">No route data for this day.</span>'; return; }
+    const items = [
+      [route.distance_km.toFixed(1) + " km", "Distance"],
+      [hm(route.travel_time_min), "Travel"],
+      [hm(route.idle_time_min), "Idle"],
+      [route.average_speed_kmh != null ? route.average_speed_kmh + " km/h" : "–", "Avg Speed"],
+      [route.max_speed_kmh != null ? route.max_speed_kmh.toFixed(0) + " km/h" : "–", "Max Speed"],
+      [route.stops_count, "Stops"],
+    ];
+    container.innerHTML = items.map(([num, label]) =>
+      '<div class="trk-chip"><div class="trk-num">' + num + '</div><div class="trk-lbl">' + label + "</div></div>").join("");
+  }
+
+  const TYPE_ICON = { check_in:"fa-right-to-bracket", check_out:"fa-right-from-bracket",
+                      visit:"fa-handshake", stop:"fa-circle-stop", idle:"fa-hourglass-half",
+                      travel:"fa-car-side" };
+
+  function timeline(entries) {
+    const list = document.getElementById("route-timeline");
+    if (!entries.length) {
+      list.innerHTML = '<li class="text-muted">No activity recorded for this day.</li>';
+      return;
+    }
+    list.innerHTML = entries.map(entry =>
+      '<li class="t-' + esc(entry.type) + '">' +
+      '<div class="t-time">' + hhmm(entry.time) +
+      ' <i class="fas ' + (TYPE_ICON[entry.type] || "fa-circle") + ' ms-1"></i></div>' +
+      '<div class="t-label">' + esc(entry.label) +
+      (entry.duration_min != null ? ' <span class="badge bg-light text-dark">' + hm(entry.duration_min) + "</span>" : "") +
+      (entry.distance_km != null ? ' <small>(' + entry.distance_km.toFixed(1) + " km leg)</small>" : "") + "</div>" +
+      (entry.address ? "<small>" + esc(entry.address) + "</small>" : "") +
+      "</li>").join("");
+  }
+
+  function drawMap(data) {
+    layer.clearLayers();
+    let bounds = [];
+    if (data.route && data.route.polyline) {
+      const path = decodePolyline(data.route.polyline);
+      bounds = path.slice();
+      L.polyline(path, { weight: 4, opacity: 0.8 }).addTo(layer);
+      if (path.length) {
+        L.circleMarker(path[0], { radius: 7, color: "#198754", fillOpacity: 0.9 })
+          .bindPopup("Start" + (data.route.start_address ? "<br><small>" + esc(data.route.start_address) + "</small>" : ""))
+          .addTo(layer);
+        L.circleMarker(path[path.length - 1], { radius: 7, color: "#dc3545", fillOpacity: 0.9 })
+          .bindPopup("End" + (data.route.end_address ? "<br><small>" + esc(data.route.end_address) + "</small>" : ""))
+          .addTo(layer);
+      }
+    }
+    data.timeline.forEach(entry => {
+      if (entry.latitude == null || entry.type === "travel") return;
+      bounds.push([entry.latitude, entry.longitude]);
+      L.marker([entry.latitude, entry.longitude])
+        .bindPopup("<strong>" + hhmm(entry.time) + "</strong> " + esc(entry.label) +
+                   (entry.address ? "<br><small>" + esc(entry.address) + "</small>" : ""))
+        .addTo(layer);
+    });
+    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+  }
+
+  function load() {
+    const employee = document.getElementById("route-employee").value;
+    if (!employee) return;
+    const params = new URLSearchParams({
+      employee, date: document.getElementById("route-date").value,
+    });
+    fetch(API + "?" + params, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        chips(data.route);
+        timeline(data.timeline);
+        drawMap(data);
+      });
+  }
+
+  document.getElementById("route-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("route-load").addEventListener("click", load);
+  document.getElementById("route-employee").addEventListener("change", load);
+  document.getElementById("route-date").addEventListener("change", load);
+})();
+</script>
+{% endblock %}
