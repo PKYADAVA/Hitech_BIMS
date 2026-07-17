@@ -10,9 +10,11 @@
  {% include '_account_subnavbar.html' with active_tab='coa' %}
 
 <div class="page-header">
-    <div class="page-header-title"><i class="fas fa-sitemap"></i>Chart of Accounts</div>
-    <div class="page-header-right">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-sitemap"></i>Chart of Accounts</div>
       <div class="page-header-subtitle">Generated per company from an industry template; fully editable</div>
+    </div>
+    <div class="page-header-right">
       <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#coaGenerateModal">
           <i class="fas fa-magic"></i> Generate CoA
@@ -234,7 +236,7 @@
         </p>
         <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
           <table class="table table-sm table-bordered align-middle mb-2">
-            <thead class="table-dark" style="position: sticky; top: 0;">
+            <thead style="position: sticky; top: 0;">
               <tr><th>Code</th><th>Account</th><th style="width:180px">Amount</th><th style="width:130px">Side</th></tr>
             </thead>
             <tbody id="coa-opening-body"></tbody>
@@ -269,20 +271,9 @@ $(document).ready(function () {
     let treeData = [];
     let nodeIndex = {};
 
-    function showToast(type, message) {
-        const colors = {
-            success: "linear-gradient(135deg, #065f46, #059669)",
-            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
-        };
-        Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
-                   style: { background: colors[type] || colors.success } }).showToast();
-    }
+    // showToast() provided globally by main.js
 
-    function escapeHtml(unsafe) {
-        return (unsafe ?? "").toString()
-            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    }
+    // escapeHtml() provided globally by main.js
 
     // ---------------------------------------------------------------- tree
 
@@ -445,12 +436,12 @@ $(document).ready(function () {
     }
 
     $('#add-root-account-btn').on('click', () => openForm({}));
-    $(document).on('click', '.coa-add-child', function () {
+    $(document).on('click', '.coa-add-child', async function () {
         const node = nodeIndex[$(this).data('id')];
         if (node.is_group) { openForm({ parent: node }); return; }
         // Postable leaf: offer to convert it into a group first.
-        if (!confirm(`${node.code} - ${node.description} is a postable account. ` +
-                     `Convert it to a group so sub-accounts can be created under it?`)) return;
+        if (!(await window.bimsConfirm(`${node.code} - ${node.description} is a postable account. ` +
+                     `Convert it to a group so sub-accounts can be created under it?`))) return;
         $.ajax({
             url: API.detail(node.id), method: 'PUT',
             headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
@@ -494,10 +485,10 @@ $(document).ready(function () {
         });
     });
 
-    $(document).on('click', '.coa-delete', function () {
+    $(document).on('click', '.coa-delete', async function () {
         const id = $(this).data('id');
         const node = nodeIndex[id];
-        if (!confirm(`Delete ${node.code} - ${node.description}? It can be restored from the audit trail.`)) return;
+        if (!(await window.bimsConfirm(`Delete ${node.code} - ${node.description}? It can be restored from the audit trail.`))) return;
         $.ajax({
             url: API.detail(id) , method: 'DELETE',
             headers: { 'X-CSRFToken': csrfToken },

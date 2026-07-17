@@ -10,13 +10,15 @@
 {% include '_account_subnavbar.html' with active_tab='terms' %}
 
 <div class="page-header">
-    <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
             <i class="fas fa-file-contract"></i>
             Terms &amp; Conditions
         </div>
-    <div class="page-header-right">
       <div class="page-header-subtitle">Manage terms and conditions for suppliers and customers</div>
-          {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#termsConditionsFormModal">
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#termsConditionsFormModal">
         <i class="fas fa-plus"></i>
         Add New Term
     </button>{% endif %}
@@ -87,7 +89,7 @@
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover table-bordered mb-0" id="terms-conditions-table">
-                <thead class="table-dark">
+                <thead>
                     <tr>
                         <th>Type</th>
                         <th>For</th>
@@ -210,7 +212,7 @@
                                 },
                                 data: JSON.stringify(jsonData),
                                 success: function () {
-                                    alert("Term or Condition updated successfully.");
+                                    window.showToast('success', "Term or Condition updated successfully.");
                                     loadTermsConditionsList();
                                     $(`#${modalId}`).modal("hide");
                                 },
@@ -253,7 +255,7 @@
                 }),
                 success: function () {
                     $("#termsConditionsFormModal").modal("hide");
-                    alert("Term or Condition created successfully.");
+                    window.showToast('success', "Term or Condition created successfully.");
                     loadTermsConditionsList();
                     $("#terms-conditions-form").trigger("reset");
                 },
@@ -272,7 +274,7 @@
                 type: "DELETE",
                 headers: { "X-CSRFToken": "{{ csrf_token }}" },
                 success: function () {
-                    alert("Term or Condition deleted successfully.");
+                    window.showToast('success', "Term or Condition deleted successfully.");
                     loadTermsConditionsList();
                 },
                 error: function (xhr, status, error) {

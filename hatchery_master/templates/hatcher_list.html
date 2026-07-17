@@ -38,13 +38,15 @@
 
 <!-- Page Header -->
 <div class="page-header">
-    <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
       <i class="fas fa-temperature-high"></i>
       Hatcher
     </div>
-    <div class="page-header-right">
       <div class="page-header-subtitle">Add and manage hatcher machines for each hatchery</div>
-        {% if page_perms.add %}<a href="{% url 'hatcher_create' %}" class="btn btn-primary">
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<a href="{% url 'hatcher_create' %}" class="btn btn-primary">
     <i class="fas fa-plus"></i>
     Add
   </a>{% endif %}
@@ -60,7 +62,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table id="hatcherTable" class="table table-hover table-bordered mb-0">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Hatchery</th>
             <th>Hatcher No</th>

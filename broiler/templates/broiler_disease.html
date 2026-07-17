@@ -7,22 +7,19 @@
 {% include '_broiler_subnavbar.html' with active_tab='broiler_disease' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Broiler Disease</div>
-    <div class="page-header-subtitle">Add and manage broiler diseases</div>
-</div>
-
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        {% if page_perms.add %}<button
-            id="add-disease-btn"
-            class="btn btn-primary"
-            data-bs-toggle="modal"
-            data-bs-target="#diseaseFormModal"
-            >
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-virus"></i>Manage Broiler Disease</div>
+      <div class="page-header-subtitle">Add and manage broiler diseases</div>
+    </div>
+    <div class="page-header-right">
+        {% if page_perms.add %}<button id="add-disease-btn" class="btn btn-primary"
+            data-bs-toggle="modal" data-bs-target="#diseaseFormModal">
         <i class="fas fa-plus"></i> Add New Disease
         </button>{% endif %}
     </div>
+</div>
+
+<div class="row g-4">
     <!-- Modal Structure -->
     <div class="modal fade" id="diseaseFormModal" tabindex="-1" aria-labelledby="diseaseFormModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -103,7 +100,7 @@
                         class="table table-hover table-bordered mb-0"
                         id="disease-table"
                     >
-                        <thead class="table-dark">
+                        <thead>
                             <tr>
                                 <th>Disease Code</th>
                                 <th>Disease Name</th>
@@ -179,7 +176,7 @@
                     });
                 },
                 error: function (xhr) {
-                    alert("Error loading disease list. Please try again.");
+                    window.showToast('danger', "Error loading disease list. Please try again.");
                 }
             });
         }
@@ -213,7 +210,7 @@
                         loadDiseaseList();
                     },
                     error: function () {
-                        alert("An error occurred while adding the disease.");
+                        window.showToast('danger', "An error occurred while adding the disease.");
                     },
                 });
             });
@@ -256,7 +253,7 @@
                         loadDiseaseList();
                     },
                     error: function () {
-                        alert("An error occurred while updating the disease.");
+                        window.showToast('danger', "An error occurred while updating the disease.");
                     },
                 });
             });
@@ -267,20 +264,23 @@
             const id = $(this).data("id");
             const csrfToken = "{{ csrf_token }}";
 
-            if (confirm("Are you sure you want to delete this disease?")) {
+            window.bimsConfirm("Are you sure you want to delete this disease?", {
+                title: "Delete disease", confirmText: "Delete"
+            }).then(function (ok) {
+                if (!ok) return;
                 $.ajax({
                     url: `/broiler_disease/${id}/delete/`,
                     type: "DELETE",
                     headers: { "X-CSRFToken": csrfToken },
                     success: function () {
-                        alert("Disease deleted successfully!");
+                        window.showToast("success", "Disease deleted successfully!");
                         loadDiseaseList();
                     },
                     error: function () {
-                        alert("An error occurred while deleting the disease.");
+                        window.showToast("danger", "An error occurred while deleting the disease.");
                     },
                 });
-            }
+            });
         });
     });
 </script>

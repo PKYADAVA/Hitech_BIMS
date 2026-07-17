@@ -12,13 +12,15 @@
 
 <!-- Page Header -->
 <div class="page-header">
-  <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
     <i class="{{ icon }}"></i>
     {{ title }}
   </div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">{{ subtitle }}</div>
-    <div class="d-flex gap-2">
+      <div class="page-header-subtitle">{{ subtitle }}</div>
+    </div>
+    <div class="page-header-right">
+      <div class="d-flex gap-2">
       <button type="button" class="btn btn-outline-secondary" id="report-print-btn">
         <i class="fas fa-print"></i> Print
       </button>
@@ -29,7 +31,7 @@
         <i class="fas fa-file-csv"></i> CSV
       </button>
     </div>
-  </div>
+    </div>
 </div>
 
 <!-- Filter Bar -->
@@ -84,7 +86,7 @@
 
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0 report-table" id="generic-report-table">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>#</th>
             {% for key, label, kind in columns %}

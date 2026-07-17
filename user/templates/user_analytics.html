@@ -8,9 +8,11 @@
     {% include '_user_management_subnavbar.html' with active_tab='user_analytics' %}
 
     <div class="page-header">
-        <div class="page-header-title">User Analytics</div>
-        <div class="page-header-subtitle">Overview of user activity and distribution</div>
+    <div class="page-header-main">
+      <div class="page-header-title">User Analytics</div>
+      <div class="page-header-subtitle">Overview of user activity and distribution</div>
     </div>
+</div>
 
     <div class="row g-4">
         <div class="col-12">
@@ -21,7 +23,7 @@
                 <div class="card-body p-0">
                 <div class="table-responsive">
                     <table id="userTable" class="table table-hover table-bordered mb-0">
-                        <thead class="table-dark">
+                        <thead>
                             <tr>
                                 <th>ID</th>
                                 <th>Username</th>
@@ -165,7 +167,7 @@
 
                 },
                 error: function () {
-                    alert("Error loading analytics data.");
+                    window.showToast('danger', "Error loading analytics data.");
                 }
             });
         });

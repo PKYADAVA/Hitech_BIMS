@@ -11,8 +11,10 @@
 {% include '_user_management_subnavbar.html' with active_tab='assign_groups' %}
 
 <div class="page-header">
-    <div class="page-header-title">Assign User Groups</div>
-    <div class="page-header-subtitle">Manage group assignments for users</div>
+    <div class="page-header-main">
+      <div class="page-header-title">Assign User Groups</div>
+      <div class="page-header-subtitle">Manage group assignments for users</div>
+    </div>
 </div>
 
 <div class="row g-4">
@@ -24,7 +26,7 @@
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered mb-0 align-middle">
-                        <thead class="table-dark">
+                        <thead>
                             <tr class="text-center">
                                     <th>User</th>
                                     <th>Assigned Groups</th>
@@ -111,7 +113,7 @@
                 $('#groupModal').modal('show');
             },
             error: function() {
-                alert("Error fetching groups.");
+                window.showToast('danger', "Error fetching groups.");
             }
         });
     }
@@ -134,7 +136,7 @@
                 $('#groupModal').modal('hide');
             },
             error: function() {
-                alert("Error updating groups.");
+                window.showToast('danger', "Error updating groups.");
             }
         });
     });

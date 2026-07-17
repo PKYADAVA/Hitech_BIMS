@@ -11,18 +11,18 @@
 {% include '_user_management_subnavbar.html' with active_tab='create_user' %}
 
 <div class="page-header">
-    <div class="page-header-title">Users</div>
-    <div class="page-header-subtitle">Manage ERP user accounts (employee link optional)</div>
-</div>
-
-<div class="row g-4">
-    <div class="text-end mb-3">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
+    <div class="page-header-main">
+      <div class="page-header-title">Users</div>
+      <div class="page-header-subtitle">Manage ERP user accounts (employee link optional)</div>
+    </div>
+    <div class="page-header-right">
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
             <i class="fas fa-plus"></i> Create User
         </button>
     </div>
+</div>
 
-    <div class="col-12">
+<div class="row g-4">    <div class="col-12">
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>All Users</h5>
@@ -30,7 +30,7 @@
             <div class="card-body p-0">
     <div class="table-responsive">
         <table class="table table-hover table-bordered mb-0 text-center align-middle">
-            <thead class="table-dark">
+            <thead>
                 <tr>
                     <th>Employee Name</th>
                     <th>Designation</th>
@@ -184,11 +184,11 @@
                 method: 'POST',
                 data: formData,
                 success: function (response) {
-                    alert('User created successfully!');
+                    window.showToast('success', 'User created successfully!');
                     location.reload();
                 },
                 error: function (xhr, status, error) {
-                    alert('An error occurred: ' + error);
+                    window.showToast('danger', 'An error occurred: ' + error);
                 }
             });
         });
@@ -221,12 +221,12 @@
                 method: 'POST',
                 data: formData,
                 success: function (response) {
-                    alert('User updated successfully!');
+                    window.showToast('success', 'User updated successfully!');
                     location.reload();
                 },
                 error: function (xhr) {
                     var message = (xhr.responseJSON && xhr.responseJSON.error) || 'An error occurred while updating the user.';
-                    alert(message);
+                    window.showToast('danger', message);
                 }
             });
         });

@@ -11,11 +11,11 @@
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='egg_purchase' %}
 
 <div class="page-header">
-    <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
       <i class="fas fa-shopping-basket"></i>
       {% if egg_purchase_id %}Edit{% else %}Add{% endif %} Egg Purchase
     </div>
-    <div class="page-header-right">
       <div class="page-header-subtitle">Record an egg purchase from a supplier</div>
     </div>
 </div>
@@ -195,15 +195,7 @@ $(document).ready(function () {
     ];
     let rowCounter = 0;
 
-    function showToast(type, message) {
-        Toastify({
-            text: message,
-            duration: 3000,
-            gravity: "top",
-            position: "right",
-            backgroundColor: type === 'success' ? '#28a745' : '#dc3545',
-        }).showToast();
-    }
+    // showToast() provided globally by main.js
 
     function itemOptionsHtml(selectedId) {
         let html = '<option value="">select</option>';
@@ -395,7 +387,7 @@ $(document).ready(function () {
             headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
             data: JSON.stringify({ module: 'egg_purchase', object_id: eggPurchaseId, action: 'edit', payload: payload, note: note }),
             success: function () {
-                alert('Change request submitted for approval.');
+                window.showToast('danger', 'Change request submitted for approval.');
                 window.location.href = "{% url 'egg_purchase_list' %}";
             },
             error: function (xhr, status, error) {

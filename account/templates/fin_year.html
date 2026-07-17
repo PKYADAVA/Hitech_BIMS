@@ -11,14 +11,12 @@
  {% include '_account_subnavbar.html' with active_tab='fin_year' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Financial Years</div>
-    <div class="page-header-subtitle">Add and manage financial year records</div>
-</div>
-
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        <button
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Financial Years</div>
+      <div class="page-header-subtitle">Add and manage financial year records</div>
+    </div>
+    <div class="page-header-right">
+      <button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#financialYearFormModal"
@@ -26,8 +24,9 @@
             <i class="fas fa-plus"></i> Add New Financial Year
         </button>
     </div>
+</div>
 
-        <!-- Modal Structure -->
+<div class="row g-4">        <!-- Modal Structure -->
         <div class="modal fade" id="financialYearFormModal" tabindex="-1" aria-labelledby="financialYearFormModalLabel" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -88,7 +87,7 @@
                         class="table table-hover table-bordered mb-0"
                         id="financial-year-table"
                     >
-                        <thead class="table-dark">
+                        <thead>
                             <tr>
                                 <th>Start Date</th>
                                 <th>End Date</th>
@@ -188,11 +187,11 @@
                     $("#financialYearFormModal").modal("hide");
                     $("#financial-year-form")[0].reset();
                     loadFinancialYears();
-                    alert("Financial year added successfully!");
+                    window.showToast('success', "Financial year added successfully!");
                 },
                 error: function (xhr, status, error) {
                     console.error("Failed to add financial year:", error);
-                    alert("An error occurred while adding the financial year.");
+                    window.showToast('danger', "An error occurred while adding the financial year.");
                 },
             });
         });
@@ -283,11 +282,11 @@
                     success: function () {
                         $(`#${modalId}`).modal("hide").remove();
                         loadFinancialYears();
-                        alert("Financial year updated successfully!");
+                        window.showToast('success', "Financial year updated successfully!");
                     },
                     error: function (xhr, status, error) {
                         console.error("Failed to update financial year:", error);
-                        alert("An error occurred while updating the financial year.");
+                        window.showToast('danger', "An error occurred while updating the financial year.");
                     },
                 });
             });
@@ -299,20 +298,20 @@
         });
     
         // Handle delete button click
-        $(document).on("click", ".delete-financial-year", function () {
+        $(document).on("click", ".delete-financial-year", async function () {
             const id = $(this).data("id");
     
-            if (confirm("Are you sure you want to delete this financial year?")) {
+            if ((await window.bimsConfirm("Are you sure you want to delete this financial year?"))) {
                 $.ajax({
                     url: `/financial-year/${id}/delete/`, // Replace with the actual DELETE endpoint
                     method: "DELETE",
                     headers: { "X-CSRFToken": "{{ csrf_token }}" },
                     success: function () {
                         loadFinancialYears();
-                        alert("Financial year deleted successfully!");
+                        window.showToast('success', "Financial year deleted successfully!");
                     },
                     error: function () {
-                        alert("An error occurred while deleting the financial year.");
+                        window.showToast('danger', "An error occurred while deleting the financial year.");
                     },
                 });
             }

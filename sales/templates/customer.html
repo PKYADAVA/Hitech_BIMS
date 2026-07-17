@@ -39,9 +39,11 @@ Manage Customers
 </div>
 
 <div class="page-header">
-    <div class="page-header-title">Manage Customers</div>
-    <div class="page-header-right">
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Customers</div>
       <div class="page-header-subtitle">Add and manage customer records</div>
+    </div>
+    <div class="page-header-right">
       {% if page_perms.add %}<a href="{% url 'customer_add' %}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Add New Customer
       </a>{% endif %}
@@ -55,7 +57,7 @@ Manage Customers
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover table-bordered mb-0" id="customer-table">
-                <thead class="table-dark">
+                <thead>
                     <tr>
                         <th>Code</th>
                         <th>Name</th>
@@ -113,7 +115,7 @@ Manage Customers
       <div class="modal-body p-0">
         <div class="table-responsive">
           <table class="table table-sm table-hover align-middle mb-0">
-            <thead class="table-dark">
+            <thead>
               <tr><th>Date</th><th>Employee</th><th>Check In</th><th>Check Out</th>
                   <th>Duration</th><th>Follow-Up</th><th>Remarks</th></tr>
             </thead>

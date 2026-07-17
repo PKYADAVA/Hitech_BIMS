@@ -26,13 +26,13 @@
  {% csrf_token %}
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-user-check"></i>GPS Attendance Map</div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-user-check"></i>GPS Attendance Map</div>
+      <div class="page-header-subtitle">
       Geofence-verified check-ins/outs, late arrivals and approval
       {% if auto_approve %}<span class="badge bg-info">auto-approve on</span>{% endif %}
     </div>
-  </div>
+    </div>
 </div>
 
 {% if not tracking_enabled %}
@@ -96,7 +96,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-sm align-middle mb-0">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th><input type="checkbox" id="att-check-all" /></th>
             <th>Employee</th><th>Branch</th><th>Check In</th><th>Check Out</th>

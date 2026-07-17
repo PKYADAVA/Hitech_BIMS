@@ -11,17 +11,19 @@
 {% include '_subnav.html' with module='environmental_monitoring' active_tab='hubs' %}
 
 <div class="page-header">
-  <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
     <i class="fas fa-hub"></i>
     {% if hub %}Edit Hub{% else %}Add Hub{% endif %}
   </div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">Register a Tapo H100 hub by its LAN IP address</div>
-    <a href="{% url 'env_hub_list' %}" class="btn btn-secondary">
+      <div class="page-header-subtitle">Register a Tapo H100 hub by its LAN IP address</div>
+    </div>
+    <div class="page-header-right">
+      <a href="{% url 'env_hub_list' %}" class="btn btn-secondary">
       <i class="fas fa-arrow-left"></i>
       Back to list
     </a>
-  </div>
+    </div>
 </div>
 
 <div class="card">

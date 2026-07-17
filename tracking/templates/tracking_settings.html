@@ -18,10 +18,10 @@
  {% csrf_token %}
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-gear"></i>Tracking Settings</div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">Runtime configuration, GPS providers and employee mapping — no deploy needed</div>
-  </div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-gear"></i>Tracking Settings</div>
+      <div class="page-header-subtitle">Runtime configuration, GPS providers and employee mapping — no deploy needed</div>
+    </div>
 </div>
 
 <!-- ============================ General settings ============================ -->
@@ -146,7 +146,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-sm align-middle mb-0">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Name</th><th>Type</th><th>API URL</th><th>Priority</th>
             <th>Refresh (s)</th><th>Status</th><th>Last Sync</th><th class="text-end">Actions</th>
@@ -180,7 +180,7 @@
     </div>
     <div class="table-responsive" id="trk-map-wrap" style="display:none;">
       <table class="table table-sm align-middle" id="trk-map-table">
-        <thead class="table-dark">
+        <thead>
           <tr><th>Vendor ID</th><th>Vendor Name</th><th>Phone</th><th>ERP Employee</th><th></th></tr>
         </thead>
         <tbody id="trk-map-rows"></tbody>
@@ -431,11 +431,11 @@
   const addButton = document.getElementById("trk-provider-add");
   if (addButton) addButton.addEventListener("click", () => openModal(null));
 
-  document.getElementById("trk-provider-rows").addEventListener("click", event => {
+  document.getElementById("trk-provider-rows").addEventListener("click", async event => {
     const editButton = event.target.closest("[data-edit]");
     const deactivateButton = event.target.closest("[data-deactivate]");
     if (editButton) openModal(providers.find(p => p.id === Number(editButton.dataset.edit)));
-    if (deactivateButton && confirm("Deactivate this provider? Sync will skip it.")) {
+    if (deactivateButton && (await window.bimsConfirm("Deactivate this provider? Sync will skip it."))) {
       post(URLS.providers + "?id=" + deactivateButton.dataset.deactivate, undefined, "DELETE")
         .then(({ ok, data }) => {
           toast(ok ? "Provider deactivated." : (data.error || "Failed."), ok);

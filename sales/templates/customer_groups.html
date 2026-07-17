@@ -13,22 +13,22 @@
  {% include '_sales_subnavbar.html' with active_tab='customer_groups' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Customer Groups</div>
-    <div class="page-header-subtitle">Add and manage customer group records</div>
-</div>
-
-<div class="row g-4">
-  <!-- Button to Open the Modal -->
-  <div class="text-end mb-3">
-    {% if page_perms.add %}<button
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Customer Groups</div>
+      <div class="page-header-subtitle">Add and manage customer group records</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button
       class="btn btn-primary"
       data-bs-toggle="modal"
       data-bs-target="#customerGroupFormModal"
     >
       <i class="fas fa-plus"></i> Add New Customer Group
     </button>{% endif %}
-  </div>
-  <!-- Modal Structure -->
+    </div>
+</div>
+
+<div class="row g-4">  <!-- Modal Structure -->
   <div class="modal fade" id="customerGroupFormModal" tabindex="-1" aria-labelledby="customerGroupFormModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -109,7 +109,7 @@
             class="table table-hover table-bordered mb-0"
             id="customer-group-table"
           >
-            <thead class="table-dark">
+            <thead>
               <tr>
                 <th>Code</th>
                 <th>Description</th>
@@ -256,7 +256,7 @@
                               },
                               data: JSON.stringify(formData),
                               success: function () {
-                                  alert("Customer Group updated successfully.");
+                                  window.showToast('success', "Customer Group updated successfully.");
                                   loadCustomerGroupsList();
                                   $(`#${modalId}`).modal("hide");
                               },
@@ -303,7 +303,7 @@
               contentType: "application/json",
               success: function () {
                   $("#customerGroupFormModal").modal("hide");
-                  alert("Customer Group created successfully.");
+                  window.showToast('success', "Customer Group created successfully.");
                   loadCustomerGroupsList();
                   $("#customer-group-form").trigger("reset");
               },
@@ -322,7 +322,7 @@
               type: "DELETE",
               headers: { "X-CSRFToken": "{{ csrf_token }}" },
               success: function () {
-                  alert("Customer Group deleted successfully.");
+                  window.showToast('success', "Customer Group deleted successfully.");
                   loadCustomerGroupsList();
               },
               error: function (xhr, status, error) {

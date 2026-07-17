@@ -4,8 +4,10 @@
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='change_requests' %}{% endblock %}
 {% block content %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-clipboard-check"></i> Change Requests</div>
-  <div class="page-header-right"><div class="page-header-subtitle">Modification/deletion requests awaiting review by permitted users</div></div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-clipboard-check"></i> Change Requests</div>
+      <div class="page-header-subtitle">Modification/deletion requests awaiting review by permitted users</div>
+    </div>
 </div>
 
 <div class="card">
@@ -21,7 +23,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="change-request-table">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Requested At</th>
             <th>Requested By</th>
@@ -89,12 +91,7 @@ $(function () {
   let statusFilter = "pending";
   let modalRowId = null;
 
-  function escapeHtml(str) {
-    if (str === null || str === undefined) return "";
-    return String(str)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-  }
+  // escapeHtml() provided globally by main.js
 
   const statusBadge = {
     pending: '<span class="badge bg-warning text-dark">Pending</span>',
@@ -302,12 +299,12 @@ $(function () {
         if (modal) modal.hide();
         loadRequests();
       },
-      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to review request."); },
+      error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to review request."); },
     });
   }
 
-  $(document).on("click", ".approve-button", function () {
-    if (!confirm("Approve and apply this change?")) return;
+  $(document).on("click", ".approve-button", async function () {
+    if (!(await window.bimsConfirm("Approve and apply this change?"))) return;
     review($(this).data("id"), "approve", "");
   });
 
@@ -316,8 +313,8 @@ $(function () {
     review($(this).data("id"), "reject", note);
   });
 
-  $("#modal-approve").on("click", function () {
-    if (!confirm("Approve and apply this change?")) return;
+  $("#modal-approve").on("click", async function () {
+    if (!(await window.bimsConfirm("Approve and apply this change?"))) return;
     review(modalRowId, "approve", "");
   });
 

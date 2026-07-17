@@ -10,13 +10,15 @@
 {% block content %}
 
 <div class="page-header">
-    <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
       <i class="fa-solid fa-egg"></i>
       {% if hatch_setting_id %}Edit{% else %}New{% endif %} Hatch Register &amp; Sales Sheet
     </div>
-    <div class="page-header-right">
       <div class="page-header-subtitle">Record egg intake, hatch output grading and chick sales for one batch (Setting No)</div>
-        <a class="btn btn-secondary" href="{% url 'hatchery_list' %}">
+    </div>
+    <div class="page-header-right">
+      <a class="btn btn-secondary" href="{% url 'hatchery_list' %}">
     <i class="fas fa-arrow-left"></i>
     Back to List
   </a>
@@ -626,11 +628,11 @@ $(document).ready(function () {
       data: JSON.stringify({ module: 'hatchery', object_id: hatchSettingId, action: 'edit', payload: payload, note: note }),
       headers: { "X-CSRFToken": "{{ csrf_token }}" },
       success: function () {
-        alert('Change request submitted for approval.');
+        window.showToast('danger', 'Change request submitted for approval.');
         window.location.href = "{% url 'hatchery_list' %}";
       },
       error: function (xhr) {
-        alert(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : "Failed to submit change request.");
+        window.showToast('danger', xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : "Failed to submit change request.");
       },
     });
     return;
@@ -647,7 +649,7 @@ $(document).ready(function () {
       },
       error: function (xhr) {
         const msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : "Failed to save hatch register.";
-        alert(msg);
+        window.showToast('danger', msg);
       },
     });
   });
@@ -703,7 +705,7 @@ $(document).ready(function () {
         recalcEggSection();
       },
       error: function () {
-        alert("Error loading hatch register for editing.");
+        window.showToast('danger', "Error loading hatch register for editing.");
       },
     });
   }

@@ -11,14 +11,12 @@
  {% include '_purchase_subnavbar.html' with active_tab='vendor_groups' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Vendor Groups</div>
-    <div class="page-header-subtitle">Add and manage vendor group records</div>
-</div>
-
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        {% if page_perms.add %}<button
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Vendor Groups</div>
+      <div class="page-header-subtitle">Add and manage vendor group records</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#vendorGroupFormModal"
@@ -26,7 +24,9 @@
             <i class="fas fa-plus"></i> Add New Vendor Group
         </button>{% endif %}
     </div>
-    <!-- Modal Structure -->
+</div>
+
+<div class="row g-4">    <!-- Modal Structure -->
     <div class="modal fade" id="vendorGroupFormModal" tabindex="-1" aria-labelledby="vendorGroupFormModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -107,7 +107,7 @@
                         class="table table-hover table-bordered mb-0"
                         id="vendor-group-table"
                     >
-                        <thead class="table-dark">
+                        <thead>
                             <tr>
                                 <th>Code</th>
                                 <th>Description</th>
@@ -254,7 +254,7 @@
                                 },
                                 data: JSON.stringify(formData),
                                 success: function () {
-                                    alert("Vendor Group updated successfully.");
+                                    window.showToast('success', "Vendor Group updated successfully.");
                                     loadVendorGroupsList();
                                     $(`#${modalId}`).modal("hide");
                                 },
@@ -301,7 +301,7 @@
                 contentType: "application/json",  // Specify content type as JSON
                 success: function () {
                     $("#vendorGroupFormModal").modal("hide");
-                    alert("Vendor Group created successfully.");
+                    window.showToast('success', "Vendor Group created successfully.");
                     loadVendorGroupsList();
                     $("#vendor-group-form").trigger("reset");
                 },
@@ -320,7 +320,7 @@
                 type: "DELETE",
                 headers: { "X-CSRFToken": "{{ csrf_token }}" },
                 success: function () {
-                    alert("Vendor Group deleted successfully.");
+                    window.showToast('success', "Vendor Group deleted successfully.");
                     loadVendorGroupsList();
                 },
                 error: function (xhr, status, error) {
