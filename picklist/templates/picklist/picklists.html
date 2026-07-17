@@ -56,6 +56,20 @@
               {% endfor %}
             </select>
           </div>
+          <div class="mb-3" id="scope_wrap" style="display:none;">
+            <label for="model_scope" class="form-label">Include</label>
+            <select id="model_scope" class="form-select">
+              <option value="ALL">All rows from this source</option>
+              <option value="LIMITED">Limited to selected rows</option>
+            </select>
+          </div>
+          <div class="mb-3" id="limited_values_wrap" style="display:none;">
+            <label class="form-label">Select which rows to include</label>
+            <input type="text" id="limited_values_search" class="form-control form-control-sm mb-2" placeholder="Search…" autocomplete="off">
+            <div id="limited_values_list" class="border rounded p-2" style="max-height:220px; overflow-y:auto;">
+              <div class="text-muted small">Choose a source master first.</div>
+            </div>
+          </div>
           <div class="d-flex justify-content-end gap-2 mt-3">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="submit" class="btn btn-primary">Save</button>
@@ -76,6 +90,7 @@
       </div>
       <div class="modal-body">
         <form id="value-add-form" class="row g-2 align-items-end mb-3">
+          <input type="hidden" id="editing_value_id" />
           <div class="col-md-4">
             <label class="form-label">Value</label>
             <input type="text" id="new_value" class="form-control" required>
@@ -88,8 +103,9 @@
             <label class="form-label">Sort</label>
             <input type="number" id="new_sort_order" class="form-control" value="0">
           </div>
-          <div class="col-md-2">
-            <button type="submit" class="btn btn-success w-100"><i class="fas fa-plus"></i> Add</button>
+          <div class="col-md-2 d-flex gap-1">
+            <button type="submit" id="value_form_submit" class="btn btn-success flex-fill"><i class="fas fa-plus"></i> Add</button>
+            <button type="button" id="value_form_cancel" class="btn btn-outline-secondary" style="display:none;" title="Cancel edit"><i class="fas fa-xmark"></i></button>
           </div>
         </form>
         <div class="table-responsive">
@@ -129,15 +145,51 @@ $(document).ready(function () {
   const sourceLabels = JSON.parse(document.getElementById('source-model-choices').textContent)
     .reduce((acc, pair) => { acc[pair[0]] = pair[1]; return acc; }, {});
 
-  $('#source_type').on('change', function () {
-    $('#source_model_wrap').toggle($(this).val() === 'MODEL');
+  let editingPicklistId = null;
+
+  function loadLimitedValues(checkedValues) {
+    const sourceKey = $('#source_model_key').val();
+    $('#limited_values_search').val('');
+    if (!sourceKey) { $('#limited_values_list').html('<div class="text-muted small">Choose a source master first.</div>'); return; }
+    const checked = checkedValues || null;
+    const params = new URLSearchParams({ source_model_key: sourceKey });
+    if (editingPicklistId && !checkedValues) params.set('picklist_id', editingPicklistId);
+    $('#limited_values_list').html('<div class="text-muted small">Loading…</div>');
+    $.get(`{% url 'picklist_source_options' %}?${params}`, function (rows) {
+      if (!rows.length) { $('#limited_values_list').html('<div class="text-muted small">No rows available from this source.</div>'); return; }
+      $('#limited_values_list').html(rows.map(r => {
+        const isChecked = checked ? checked.includes(r.value) : r.included;
+        const searchText = `${r.value} ${r.label}`.toLowerCase();
+        return `<div class="form-check" data-search="${searchText}"><input type="checkbox" class="form-check-input limited-value-cb" value="${r.value}" id="lv_${r.value}" ${isChecked ? 'checked' : ''}><label class="form-check-label" for="lv_${r.value}">${r.label}</label></div>`;
+      }).join(''));
+    });
+  }
+  $('#limited_values_search').on('input', function () {
+    const term = $(this).val().trim().toLowerCase();
+    $('#limited_values_list .form-check').each(function () {
+      $(this).toggle(!term || $(this).data('search').includes(term));
+    });
   });
+
+  function toggleSourceFields() {
+    const isModel = $('#source_type').val() === 'MODEL';
+    $('#source_model_wrap').toggle(isModel);
+    $('#scope_wrap').toggle(isModel);
+    const isLimited = isModel && $('#model_scope').val() === 'LIMITED';
+    $('#limited_values_wrap').toggle(isLimited);
+    if (isLimited) loadLimitedValues();
+  }
+  $('#source_type').on('change', toggleSourceFields);
+  $('#model_scope').on('change', toggleSourceFields);
+  $('#source_model_key').on('change', function () { if ($('#model_scope').val() === 'LIMITED') loadLimitedValues(); });
 
   function resetForm() {
     $('#picklist-form')[0].reset();
     $('#picklist-id').val('');
     $('#key').prop('readonly', false);
-    $('#source_model_wrap').hide();
+    editingPicklistId = null;
+    $('#model_scope').val('ALL');
+    $('#source_model_wrap, #scope_wrap, #limited_values_wrap').hide();
     $('#picklistFormModalLabel').text('Add New Picklist');
   }
   $('#picklistFormModal').on('hidden.bs.modal', resetForm);
@@ -148,9 +200,15 @@ $(document).ready(function () {
       if ($.fn.DataTable.isDataTable(table)) table.DataTable().clear().destroy();
       const body = $('#picklist-table-body').empty();
       rows.forEach(pl => {
-        const sourceText = pl.source_type === 'STATIC'
-          ? `Static (${pl.value_count ?? 0} values)`
-          : `Live: ${sourceLabels[pl.source_model_key] || pl.source_label || pl.source_model_key}`;
+        let sourceText;
+        if (pl.source_type === 'STATIC') {
+          sourceText = `Static (${pl.value_count ?? 0} values)`;
+        } else {
+          const label = sourceLabels[pl.source_model_key] || pl.source_label || pl.source_model_key;
+          sourceText = pl.model_scope === 'LIMITED'
+            ? `Live: ${label} (Limited — ${pl.source_included_count} of ${pl.source_total_count})`
+            : `Live: ${label} (All — ${pl.source_total_count})`;
+        }
         body.append(`<tr>
           <td>${pl.key}</td>
           <td>${pl.name}</td>
@@ -159,7 +217,7 @@ $(document).ready(function () {
           <td>
             <div class="d-flex gap-1 justify-content-center">
               ${pl.source_type === 'STATIC' ? `<button class="btn btn-outline-primary btn-sm manage-values" data-id="${pl.id}" data-name="${pl.name}" title="Manage Values"><i class="fas fa-list"></i></button>` : ''}
-              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-picklist" data-id="${pl.id}" data-key="${pl.key}" data-name="${pl.name}" data-source_type="${pl.source_type}" data-source_model_key="${pl.source_model_key}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-picklist" data-id="${pl.id}" data-key="${pl.key}" data-name="${pl.name}" data-source_type="${pl.source_type}" data-source_model_key="${pl.source_model_key}" data-model_scope="${pl.model_scope}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
               {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-picklist" data-id="${pl.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             </div>
           </td>
@@ -176,7 +234,11 @@ $(document).ready(function () {
     const payload = {
       key: $('#key').val(), name: $('#name').val(),
       source_type: $('#source_type').val(), source_model_key: $('#source_model_key').val(),
+      model_scope: $('#source_type').val() === 'MODEL' ? $('#model_scope').val() : 'ALL',
     };
+    if (payload.model_scope === 'LIMITED') {
+      payload.included_values = $('.limited-value-cb:checked').map(function () { return this.value; }).get();
+    }
     $.ajax({
       url: id ? `/picklists/api/${id}/` : "{% url 'picklist_create' %}",
       type: id ? 'PUT' : 'POST',
@@ -193,11 +255,14 @@ $(document).ready(function () {
 
   $(document).on('click', '.edit-picklist', function () {
     const d = $(this).data();
+    editingPicklistId = d.id;
     $('#picklist-id').val(d.id);
     $('#key').val(d.key).prop('readonly', true);
     $('#name').val(d.name);
-    $('#source_type').val(d.source_type).trigger('change');
+    $('#source_type').val(d.source_type);
     $('#source_model_key').val(d.source_model_key);
+    $('#model_scope').val(d.model_scope || 'ALL');
+    toggleSourceFields();
     $('#picklistFormModalLabel').text('Edit Picklist');
     $('#picklistFormModal').modal('show');
   });
@@ -216,26 +281,70 @@ $(document).ready(function () {
       rows.forEach(v => {
         body.append(`<tr>
           <td>${v.value}</td><td>${v.label}</td><td>${v.sort_order}</td>
-          <td>${v.is_active ? 'Yes' : 'No'}</td>
-          <td class="text-center"><button class="btn btn-outline-danger btn-sm delete-value" data-id="${v.id}"><i class="fas fa-trash"></i></button></td>
+          <td>
+            <div class="form-check form-switch mb-0">
+              <input type="checkbox" class="form-check-input toggle-active" role="switch" data-id="${v.id}" ${v.is_active ? 'checked' : ''}>
+            </div>
+          </td>
+          <td class="text-center">
+            <div class="d-flex gap-1 justify-content-center">
+              <button class="btn btn-outline-warning btn-sm edit-value" data-id="${v.id}" data-value="${v.value}" data-label="${v.label}" data-sort_order="${v.sort_order}" title="Edit"><i class="fas fa-pen"></i></button>
+              <button class="btn btn-outline-danger btn-sm delete-value" data-id="${v.id}" title="Delete"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
         </tr>`);
       });
     });
   }
+  function resetValueForm() {
+    $('#value-add-form')[0].reset();
+    $('#editing_value_id').val('');
+    $('#value_form_submit').html('<i class="fas fa-plus"></i> Add');
+    $('#value_form_cancel').hide();
+  }
+  $('#value_form_cancel').on('click', resetValueForm);
   $(document).on('click', '.manage-values', function () {
     currentPicklistId = $(this).data('id');
     $('#values_picklist_name').text($(this).data('name'));
+    resetValueForm();
     loadValues();
     $('#valuesModal').modal('show');
   });
+  $('#valuesModal').on('hidden.bs.modal', resetValueForm);
   $('#value-add-form').on('submit', function (e) {
     e.preventDefault();
+    const editingId = $('#editing_value_id').val();
+    const payload = { value: $('#new_value').val(), label: $('#new_label').val(), sort_order: $('#new_sort_order').val() || 0 };
     $.ajax({
-      url: `/picklists/${currentPicklistId}/values/create/`, type: 'POST', contentType: 'application/json',
+      url: editingId ? `/picklists/${currentPicklistId}/values/${editingId}/` : `/picklists/${currentPicklistId}/values/create/`,
+      type: editingId ? 'PUT' : 'POST',
+      contentType: 'application/json',
       headers: { 'X-CSRFToken': csrf() },
-      data: JSON.stringify({ value: $('#new_value').val(), label: $('#new_label').val(), sort_order: $('#new_sort_order').val() || 0 }),
-      success: function () { $('#value-add-form')[0].reset(); loadValues(); },
-      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to add value.'); },
+      data: JSON.stringify(payload),
+      success: function () { resetValueForm(); loadValues(); },
+      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save value.'); },
+    });
+  });
+  $(document).on('click', '.edit-value', function () {
+    const d = $(this).data();
+    $('#editing_value_id').val(d.id);
+    $('#new_value').val(d.value);
+    $('#new_label').val(d.label);
+    $('#new_sort_order').val(d.sort_order);
+    $('#value_form_submit').html('<i class="fas fa-save"></i> Update');
+    $('#value_form_cancel').show();
+    $('#new_value').trigger('focus');
+  });
+  $(document).on('change', '.toggle-active', function () {
+    const cb = $(this);
+    $.ajax({
+      url: `/picklists/${currentPicklistId}/values/${cb.data('id')}/`, type: 'PUT', contentType: 'application/json',
+      headers: { 'X-CSRFToken': csrf() },
+      data: JSON.stringify({ is_active: cb.is(':checked') }),
+      error: function (xhr) {
+        alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to update status.');
+        cb.prop('checked', !cb.is(':checked'));
+      },
     });
   });
   $(document).on('click', '.delete-value', function () {

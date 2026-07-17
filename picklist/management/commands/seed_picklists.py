@@ -1,7 +1,8 @@
 """
-Seeds the 3 pilot Picklists + Field Bindings: Indian States, Party Type,
-Party Category (all STATIC), and Supplier Group (MODEL, sourced from
-VendorGroup). Idempotent — safe to run repeatedly (get_or_create throughout).
+Seeds the pilot Picklists + Field Bindings: Indian States, Party Type,
+Party Category (all STATIC), Supplier Group (MODEL, sourced from
+VendorGroup), and Purchase Order Calculation Basis (STATIC, the transaction
+pilot). Idempotent — safe to run repeatedly (get_or_create throughout).
 """
 
 from django.core.management.base import BaseCommand
@@ -9,11 +10,12 @@ from django.db import transaction
 
 from hatchery_master.models import STATES_AND_TERRITORIES
 from picklist.models import FieldPicklistBinding, Picklist, PicklistValue
+from purchase.models import PurchaseOrder
 from sales.models import Customer
 
 
 class Command(BaseCommand):
-    help = "Seed the pilot Picklists and Field Bindings (states, party type/category, supplier group)."
+    help = "Seed the pilot Picklists and Field Bindings (states, party type/category, supplier group, PO calc basis)."
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -26,6 +28,10 @@ class Command(BaseCommand):
             defaults={"name": "Vendor Group", "source_type": Picklist.SourceType.MODEL,
                       "source_model_key": "vendor_group"},
         )
+        calc_basis_field = PurchaseOrder._meta.get_field("calculation_based_on")
+        calc_basis_pl = self._seed_static(
+            "po_calculation_basis", "Purchase Order Calculation Basis", calc_basis_field.choices,
+        )
 
         bindings = [
             ("purchase", "Supplier", "state", state_pl),
@@ -35,6 +41,7 @@ class Command(BaseCommand):
             ("purchase", "Supplier", "party_category", party_category_pl),
             ("sales", "Customer", "party_category", party_category_pl),
             ("purchase", "Supplier", "supplier_group", vendor_group_pl),
+            ("purchase", "PurchaseOrder", "calculation_based_on", calc_basis_pl),
         ]
         for app_label, model_name, field_name, picklist in bindings:
             FieldPicklistBinding.objects.get_or_create(
@@ -43,7 +50,7 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS(
-            f"Seeded 4 picklists and {len(bindings)} field bindings."
+            f"Seeded 5 picklists and {len(bindings)} field bindings."
         ))
 
     def _seed_static(self, key, name, value_label_pairs):

@@ -1,7 +1,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
-from .bindable_fields import BINDABLE_FIELD_LOOKUP
+from .bindable_fields import BINDABLE_FIELD_INDEX, BINDABLE_FIELD_LOOKUP
 from .sources import PICKLIST_SOURCE_MODELS
 
 
@@ -12,12 +12,20 @@ class Picklist(models.Model):
         STATIC = "STATIC", "Static List"
         MODEL = "MODEL", "From Another Master"
 
+    class ModelScope(models.TextChoices):
+        ALL = "ALL", "All"
+        LIMITED = "LIMITED", "Limited to Selected"
+
     key = models.SlugField(max_length=50, unique=True, help_text="Stable identifier used by field bindings")
     name = models.CharField(max_length=150, help_text="Display name, e.g. 'Party Category'")
     source_type = models.CharField(max_length=10, choices=SourceType.choices, default=SourceType.STATIC)
     source_model_key = models.CharField(
         max_length=50, blank=True,
         help_text="Key into PICKLIST_SOURCE_MODELS; required when source_type=MODEL",
+    )
+    model_scope = models.CharField(
+        max_length=10, choices=ModelScope.choices, default=ModelScope.ALL,
+        help_text="Only meaningful when source_type=MODEL: use every source row, or a hand-picked subset",
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -37,12 +45,30 @@ class Picklist(models.Model):
                 raise ValidationError("Unknown source master.")
         else:
             self.source_model_key = ""
+            self.model_scope = self.ModelScope.ALL
 
     @property
     def source_label(self):
         if self.source_type == self.SourceType.MODEL and self.source_model_key in PICKLIST_SOURCE_MODELS:
             return PICKLIST_SOURCE_MODELS[self.source_model_key]["label"]
         return ""
+
+
+class PicklistSourceItem(models.Model):
+    """One row this Picklist includes from its MODEL source, when
+    model_scope=LIMITED. Stores the same value the bound text column would
+    hold (e.g. a ChartOfAccount.code)."""
+
+    picklist = models.ForeignKey(Picklist, on_delete=models.CASCADE, related_name="source_items")
+    source_value = models.CharField(max_length=100)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["picklist", "source_value"], name="uniq_picklist_source_item"),
+        ]
+
+    def __str__(self):
+        return f"{self.picklist} - {self.source_value}"
 
 
 class PicklistValue(models.Model):
@@ -101,6 +127,16 @@ class FieldPicklistBinding(models.Model):
     @property
     def human_label(self):
         return BINDABLE_FIELD_LOOKUP.get((self.app_label, self.model_name, self.field_name), str(self))
+
+    @property
+    def module(self):
+        entry = BINDABLE_FIELD_INDEX.get((self.app_label, self.model_name, self.field_name))
+        return entry["module"] if entry else ""
+
+    @property
+    def category(self):
+        entry = BINDABLE_FIELD_INDEX.get((self.app_label, self.model_name, self.field_name))
+        return entry["category"] if entry else ""
 
     def clean(self):
         key = (self.app_label, self.model_name, self.field_name)

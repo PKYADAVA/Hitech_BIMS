@@ -4,13 +4,15 @@ import json
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils.decorators import method_decorator
 from django.views import View
 
 from .bindable_fields import BINDABLE_FIELDS
-from .models import FieldPicklistBinding, Picklist, PicklistValue
+from .models import FieldPicklistBinding, Picklist, PicklistSourceItem, PicklistValue
+from .services import resolve_source_options
 from .sources import SOURCE_MODEL_CHOICES
 
 
@@ -33,21 +35,47 @@ def _error(e):
     return JsonResponse({"error": " ".join(e.messages) if hasattr(e, "messages") else str(e)}, status=400)
 
 
+@login_required
+def source_options(request):
+    """Raw live options for a PICKLIST_SOURCE_MODELS source, marked with
+    whether each is currently included on the given (optional) picklist.
+    Powers the 'Limited to Selected' checkbox list in the Picklists UI."""
+    source_model_key = request.GET.get("source_model_key", "")
+    picklist_id = request.GET.get("picklist_id")
+    options = resolve_source_options(source_model_key)
+    included = set()
+    if picklist_id:
+        included = set(
+            PicklistSourceItem.objects.filter(picklist_id=picklist_id).values_list("source_value", flat=True)
+        )
+    return JsonResponse(
+        [{"value": value, "label": label, "included": value in included} for value, label in options],
+        safe=False,
+    )
+
+
 @method_decorator(login_required, name="dispatch")
 class PicklistAPI(View):
 
     @staticmethod
     def _serialize(pl):
-        return {
+        data = {
             "id": pl.id,
             "key": pl.key,
             "name": pl.name,
             "source_type": pl.source_type,
             "source_model_key": pl.source_model_key,
             "source_label": pl.source_label,
+            "model_scope": pl.model_scope,
             "is_active": pl.is_active,
             "value_count": pl.values.count() if pl.source_type == Picklist.SourceType.STATIC else None,
         }
+        if pl.source_type == Picklist.SourceType.MODEL:
+            total = len(resolve_source_options(pl.source_model_key))
+            included = pl.source_items.count()
+            data["source_total_count"] = total
+            data["source_included_count"] = included if pl.model_scope == Picklist.ModelScope.LIMITED else total
+        return data
 
     def get(self, request, id=None):
         if id:
@@ -57,6 +85,14 @@ class PicklistAPI(View):
                 raise Http404("Picklist not found")
             return JsonResponse(self._serialize(pl))
         return JsonResponse([self._serialize(pl) for pl in Picklist.objects.all()], safe=False)
+
+    @staticmethod
+    def _sync_source_items(pl, included_values):
+        pl.source_items.all().delete()
+        if pl.model_scope == Picklist.ModelScope.LIMITED and included_values:
+            PicklistSourceItem.objects.bulk_create([
+                PicklistSourceItem(picklist=pl, source_value=value) for value in included_values
+            ])
 
     def post(self, request):
         try:
@@ -68,10 +104,13 @@ class PicklistAPI(View):
             name=(data.get("name") or "").strip(),
             source_type=data.get("source_type") or Picklist.SourceType.STATIC,
             source_model_key=data.get("source_model_key") or "",
+            model_scope=data.get("model_scope") or Picklist.ModelScope.ALL,
         )
         try:
-            pl.full_clean()
-            pl.save()
+            with transaction.atomic():
+                pl.full_clean()
+                pl.save()
+                self._sync_source_items(pl, data.get("included_values") or [])
         except ValidationError as e:
             return _error(e)
         return JsonResponse({"id": pl.id, "message": "Picklist created"}, status=201)
@@ -85,14 +124,17 @@ class PicklistAPI(View):
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
-        for field in ("key", "name", "source_type", "source_model_key"):
+        for field in ("key", "name", "source_type", "source_model_key", "model_scope"):
             if field in data:
                 setattr(pl, field, data[field] or "")
         if "is_active" in data:
             pl.is_active = bool(data["is_active"])
         try:
-            pl.full_clean()
-            pl.save()
+            with transaction.atomic():
+                pl.full_clean()
+                pl.save()
+                if "included_values" in data:
+                    self._sync_source_items(pl, data.get("included_values") or [])
         except ValidationError as e:
             return _error(e)
         return JsonResponse({"message": "Picklist updated"})
@@ -191,6 +233,8 @@ class FieldPicklistBindingAPI(View):
             "field_name": b.field_name,
             "field_path": f"{b.app_label}.{b.model_name}.{b.field_name}",
             "human_label": b.human_label,
+            "module": b.module,
+            "category": b.category,
             "mode": b.mode,
             "picklist": b.picklist_id,
             "picklist_name": str(b.picklist) if b.picklist_id else "",

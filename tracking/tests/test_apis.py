@@ -79,6 +79,18 @@ class LiveDashboardAPITests(ApiTestCase):
         self.assertEqual(tiles["total_employees"], 2)
         self.assertEqual(tiles["not_tracked"], 0)
 
+    def test_fresh_heartbeat_overrides_stale_gps_fix(self):
+        row = EmployeeLiveLocation.objects.get(employee=self.stale_employee)
+        row.heartbeat_at = timezone.now()
+        row.save(update_fields=["heartbeat_at"])
+        _response, data = self.get_json(reverse("api_tracking_live"))
+        by_name = {e["name"]: e for e in data["employees"]}
+        self.assertEqual(by_name["Stale Fielder"]["status"], "online")
+        self.assertEqual(data["tiles"]["offline"], 0)
+        # last_seen reflects the heartbeat, not the old fix.
+        self.assertGreater(by_name["Stale Fielder"]["last_seen"],
+                           by_name["Stale Fielder"]["recorded_at"])
+
     def test_filters(self):
         _response, data = self.get_json(
             reverse("api_tracking_live"), warehouse=self.warehouse.pk

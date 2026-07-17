@@ -36,8 +36,10 @@ class Command(BaseCommand):
         parser.add_argument("--provider", default=None,
                             help="Provider id or name (default: first active).")
         parser.add_argument("--kind", default="employees", choices=KINDS)
-        parser.add_argument("--hours", type=int, default=24,
-                            help="Window size for history/visits/attendance (default 24).")
+        parser.add_argument("--hours", type=float, default=23.9,
+                            help="Window size for history/visits/attendance "
+                                 "(default 23.9 — TrackWick's asset/history "
+                                 "endpoint rejects windows of 24h or more).")
         parser.add_argument("--limit", type=int, default=5,
                             help="Raw records to print (default 5).")
 
@@ -62,9 +64,23 @@ class Command(BaseCommand):
         # Raw view first (TrackWick only — mock has no wire format).
         if isinstance(adapter, TrackWickProviderAdapter):
             params = None
-            if kind in WINDOWED:
-                params = {adapter._params["from"]: int(window_start.timestamp() * 1000),
-                          adapter._params["to"]: int(window_end.timestamp() * 1000)}
+            if kind == "history":
+                # asset_id is mandatory on this endpoint; probe the first
+                # known asset so the raw preview is a valid request.
+                employees = adapter.fetch_employees()
+                if not employees:
+                    raise CommandError("No employees in the vendor directory to probe history for.")
+                object_id = adapter._asset_object_id(employees[0].external_id)  # pylint: disable=protected-access
+                if not object_id:
+                    raise CommandError(f"Could not resolve an asset id for '{employees[0].external_id}'.")
+                self.stdout.write(f"Probing history for employee '{employees[0].external_id}' "
+                                 f"(asset_id={object_id})\n")
+                params = {"start_time": int(window_start.timestamp() * 1000),
+                         "end_time": int(window_end.timestamp() * 1000),
+                         "asset_id": object_id}
+            elif kind in WINDOWED:
+                params = {adapter._generic_params["from"]: int(window_start.timestamp() * 1000),  # pylint: disable=protected-access
+                         adapter._generic_params["to"]: int(window_end.timestamp() * 1000)}  # pylint: disable=protected-access
             try:
                 raw = adapter._request(kind, params)  # pylint: disable=protected-access
             except TrackingError as exc:

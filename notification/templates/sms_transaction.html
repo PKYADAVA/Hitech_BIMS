@@ -24,8 +24,8 @@
       <div class="col-md-2">
         <label class="form-label">Module</label>
         <select class="form-select" id="module">
-          {% for key, label, ptype, txn in doc_sources %}
-          <option value="{{ key }}" data-party-type="{{ ptype }}" data-transaction="{{ txn }}">{{ label }}</option>
+          {% for key, label, ptype, txn, mod in doc_sources %}
+          <option value="{{ key }}" data-party-type="{{ ptype }}" data-transaction="{{ txn }}" data-module="{{ mod }}">{{ label }}</option>
           {% endfor %}
         </select>
       </div>
@@ -115,6 +115,7 @@ $(function () {
   const csrfToken = "{{ csrf_token }}";
   const COMPANY_NAME = "{{ company_name|escapejs }}";
   const USER_NAME = "{{ request.user.username|escapejs }}";
+  const ALL_TEMPLATES = {{ templates_json|safe }};
   let table = null;
   let rows = [];
 
@@ -137,21 +138,37 @@ $(function () {
     return partyType() === "supplier" ? $("#party-supplier").val() : $("#party-customer").val();
   }
 
+  // Rebuild the Template <select>'s actual <option> elements for the chosen
+  // module (rather than hiding/disabling options) — Select2 reads the DOM
+  // options fresh each time it opens, so hiding via CSS/disabled left stale
+  // items visible in the rendered dropdown; only replacing the options works.
+  function refreshTemplateOptions() {
+    const opt = $("#module option:selected");
+    const txn = opt.data("transaction") || "";
+    const mod = opt.data("module") || "";
+    const sel = $("#template");
+    const current = sel.val();
+    const matches = t => (!mod || t.module === mod) && (!txn || !t.transaction || t.transaction === txn);
+    const list = ALL_TEMPLATES.filter(matches);
+
+    sel.empty().append('<option value="">select template</option>');
+    list.forEach(function (t) {
+      sel.append(
+        `<option value="${t.id}" data-body="${escapeHtml(t.body)}" data-transaction="${escapeHtml(t.transaction)}">` +
+        `${escapeHtml(t.name)} (${escapeHtml(t.module_display)})</option>`
+      );
+    });
+    const stillValid = list.some(t => String(t.id) === String(current));
+    sel.val(stillValid ? current : "");
+    if (rows.length) renderRows();
+  }
+
   $("#module").on("change", function () {
     const supplier = partyType() === "supplier";
     $("#party-label").text(supplier ? "Supplier" : "Customer");
     $("#party-supplier").toggleClass("d-none", !supplier);
     $("#party-customer").toggleClass("d-none", supplier);
-
-    // Offer only templates tagged for this module's transaction (or generic ones).
-    const txn = $("#module option:selected").data("transaction") || "";
-    $("#template option").each(function () {
-      if (!this.value) return; // keep the "select template" placeholder
-      const tplTxn = $(this).data("transaction") || "";
-      $(this).toggleClass("d-none", !!(tplTxn && txn && tplTxn !== txn)).prop(
-        "disabled", !!(tplTxn && txn && tplTxn !== txn));
-    });
-    if ($("#template option:selected").prop("disabled")) $("#template").val("");
+    refreshTemplateOptions();
   });
 
   function smsMetrics(text) {

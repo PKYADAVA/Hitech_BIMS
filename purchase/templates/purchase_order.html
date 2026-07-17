@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load picklist_tags %}
 
 {% block title %}Manage Purchase{% endblock %}
 
@@ -97,10 +98,7 @@
         </div>
         <div class="mb-3">
           <label for="calculation_based_on" class="form-label">Calculation Based On</label>
-          <select class="form-select" id="calculation_based_on" name="calculation_based_on" required>
-            <option value="Sent Quantity">Sent Quantity</option>
-            <option value="Received Quantity">Received Quantity</option>
-          </select>
+          {% render_picklist_field "purchase.PurchaseOrder.calculation_based_on" field_id="calculation_based_on" field_name="calculation_based_on" required=True %}
         </div>
       </div>
     </div>

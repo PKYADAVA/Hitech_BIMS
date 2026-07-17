@@ -52,18 +52,42 @@ Rules the module never breaks:
      `integration/api/...` prefixes), plus the Customer ID (`tlp-cid`) and
      API key from TrackWick → Manager → Account Setting → API Config. Then
      **Test Connection**.
-   * Confirmed endpoints (from the account's API document, paths verified
-     against the live server): employees `cust/1/api/asset/list`, live
-     `integration/api/get`, history `cust/1/api/asset/history`, visits
-     `cust/1/api/task/list`, attendance `cust/1/api/punch/in/out` (POST).
-     No vendor geofence endpoint exists — geofences are managed locally in
-     the ERP. Any path can still be overridden per provider via the
-     *Endpoint Overrides* JSON (defaults:
-     `tracking/providers/trackwick.py::DEFAULT_ENDPOINTS`).
+   * Confirmed against the account's official API document: employees/live
+     both read `cust/1/api/asset/list` (paginated; each record embeds
+     latitude/longitude/lastGPS/lastHeartbeat, so no separate live endpoint
+     is needed), history reads `cust/1/api/asset/history` (params
+     `start_time`/`end_time` epoch ms + the **raw asset id**, capped at
+     <24h per request — the adapter resolves the raw id from the empId code
+     and chunks longer windows automatically).
+   * **Visits and attendance are not auto-synced.** The document defines no
+     bulk, dated fetch for either: `cust/1/api/task/list` needs a
+     separately licensed module; `cust/1/api/punch/in/out` *records* a punch
+     (pushes into TrackoLap, e.g. from a biometric device) rather than
+     listing history, and `integration/api/get?type=punchin/punchout` only
+     answers "is this one employee punched in right now" with no
+     timestamp/coordinates/date range. No vendor geofence endpoint exists —
+     geofences are managed locally in the ERP.
+   * Any path/param can still be overridden per provider via the *Endpoint
+     Overrides* JSON (defaults: `tracking/providers/trackwick.py::DEFAULT_ENDPOINTS`).
+     An empty path disables a kind — how visits/attendance/geofences are
+     switched off today, and how a future real endpoint would be enabled.
    * Employee Mapping: load the vendor directory and map any identities the
      phone/name auto-match could not resolve.
 5. **Schedule the sync** (OS scheduler — cron/systemd timer/Windows Task
-   Scheduler; there is deliberately no in-process scheduler):
+   Scheduler; there is deliberately no in-process scheduler). On this
+   Windows dev box, two tasks are already registered (Task Scheduler →
+   Task Scheduler Library):
+   * **BIMS Tracking Live Sync** — every 2 min, `sync_tracking --kinds live`
+   * **BIMS Tracking Full Sync** — every 15 min, `sync_tracking` (all kinds)
+
+   Both run as the logged-in user against `.venv\Scripts\python.exe manage.py`
+   with working directory `F:\Hitech_BIMS`. Manage them from Task Scheduler
+   (disable/delete/change interval) or via PowerShell:
+   ```
+   Get-ScheduledTask -TaskName "BIMS Tracking*" | Get-ScheduledTaskInfo
+   Disable-ScheduledTask -TaskName "BIMS Tracking Live Sync"
+   ```
+   Equivalent cron/systemd-timer form for a Linux deployment:
    ```
    */2 * * * *   python manage.py sync_tracking --kinds live
    */15 * * * *  python manage.py sync_tracking

@@ -15,7 +15,7 @@ from hr.models import Employee
 from user.models import GroupTabPermission
 
 from tracking.dtos import LivePosition
-from tracking.models import (
+from tracking.models import (  # noqa: F401 — EmployeeLiveLocation used in tests
     EmployeeGeofence,
     EmployeeLiveLocation,
     EmployeeProviderMapping,
@@ -173,6 +173,29 @@ class LiveTransitionAlertTests(TestCase):
                                  [self._position("26.90", "80.90", status="offline",
                                                  gps=False)])
         self.assertEqual(TrackingLog.objects.filter(event="gps_disabled").count(), 1)
+
+    def test_fresh_heartbeat_keeps_stationary_employee_online(self):
+        """Vendors refresh the GPS fix only on movement: an old fix with a
+        current heartbeat (device connected, person stationary) is online."""
+        stale_fix = timezone.now() - timedelta(hours=2)
+        position = LivePosition(
+            external_employee_id="EXT-1", latitude=Decimal("26.85"),
+            longitude=Decimal("80.95"), recorded_at=stale_fix,
+            heartbeat_at=timezone.now(), status="unknown",
+        )
+        self.service._write_live(self.provider, [position])
+        row = EmployeeLiveLocation.objects.get(employee=self.employee)
+        self.assertEqual(row.status, "online")
+        self.assertIsNotNone(row.heartbeat_at)
+
+        # Without the heartbeat the same fix is offline.
+        stale_only = LivePosition(
+            external_employee_id="EXT-1", latitude=Decimal("26.85"),
+            longitude=Decimal("80.95"), recorded_at=stale_fix, status="unknown",
+        )
+        self.service._write_live(self.provider, [stale_only])
+        row.refresh_from_db()
+        self.assertEqual(row.status, "offline")
 
     def test_alerts_disabled_suppresses_everything(self):
         settings_row = TrackingSettings.get_solo()

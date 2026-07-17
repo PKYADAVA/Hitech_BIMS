@@ -247,10 +247,19 @@ class SmsTransactionPageView(View):
         from sales.models import Customer
         from purchase.models import Supplier
         from account.models import CompanyProfile
+
+        templates_qs = SmsTemplate.objects.filter(is_active=True).order_by("name")
         return render(request, "sms_transaction.html", {
-            "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""))
+            "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""),
+                             v.get("module", ""))
                             for k, v in DOC_SOURCES.items()],
-            "templates": SmsTemplate.objects.filter(is_active=True).order_by("name"),
+            "templates": templates_qs,
+            "templates_json": json.dumps([
+                {"id": t.id, "name": t.name, "body": t.body,
+                 "transaction": t.transaction, "module": t.module,
+                 "module_display": t.get_module_display()}
+                for t in templates_qs
+            ]),
             "customers": Customer.objects.order_by("name"),
             "suppliers": Supplier.objects.order_by("name"),
             "company_name": CompanyProfile.get_solo().name,

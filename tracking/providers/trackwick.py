@@ -30,7 +30,7 @@ differences are absorbed here rather than crashing the sync.
 
 import logging
 import time
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 
@@ -63,37 +63,68 @@ _AUTH_HTTP_STATUSES = frozenset({401, 403})
 #: prefix because the vendor exposes two roots: ``cust/1/api/...`` for
 #: resource APIs and ``integration/api/...`` for the integration feed.
 #:
-#: Confirmed against the account's API document + live server (paths resolve;
-#: "asset" is TrackoLap's term for a tracked employee/device):
-#:   employees   cust/1/api/asset/list      (records embed latitude/longitude/
-#:                                           lastGPS, so it doubles as the
-#:                                           live-location source)
-#:   live        cust/1/api/asset/list      (integration/api/get exists but
-#:                                           answers a bare {"s":true} without
-#:                                           documented parameters)
-#:   history     cust/1/api/asset/history   (requires start/end params whose
-#:                                           names/format the doc must supply;
-#:                                           set param_names override then)
-#:   visits      cust/1/api/task/list       (requires the Tasks module licence)
-#:   attendance  cust/1/api/punch/in/out    (POST; employeeId = the empId code
-#:                                           + a "date" param, format TBD)
-#:   reports     cust/1/api/report/get      (exists; unused — the ERP builds
-#:                                           its own reports from raw data)
-#: No geofence endpoint could be located. An endpoint override with an empty
-#: path disables that kind (the adapter drops the capability), which is how
-#: unlicensed vendor modules are switched off per provider.
+#: Confirmed from the account's official API document (2026-07-17):
+#:   employees   cust/1/api/asset/list      GET, paginated (pt/pn/q); each
+#:                                          record embeds latitude/longitude/
+#:                                          lastGPS/lastHeartbeat, so it
+#:                                          doubles as the live-location feed
+#:                                          — no separate "live" endpoint
+#:                                          exists or is needed.
+#:   history     cust/1/api/asset/history   GET; params start_time/end_time
+#:                                          (epoch ms) + asset_id (**the raw
+#:                                          Mongo id from asset/list's "id"
+#:                                          field, NOT the empId code**).
+#:                                          Vendor caps end-start at < 24h,
+#:                                          so the adapter chunks longer
+#:                                          windows and loops one call per
+#:                                          asset (asset_id is mandatory —
+#:                                          there is no bulk/all-employees
+#:                                          history call).
+#: Deliberately NOT wired up as auto-sync kinds — the document defines no
+#: bulk, dated, GPS-tagged fetch for either:
+#:   * visits/tasks   no endpoint at all in the document (cust/1/api/task/list
+#:                    exists but 403s — a separately licensed module the
+#:                    account doesn't have).
+#:   * attendance     cust/1/api/punch/in/out is a POST that RECORDS a punch
+#:                    (pushes an event INTO TrackoLap — e.g. from a
+#:                    biometric device — and returns a bare success/failure,
+#:                    not history); integration/api/get?type=punchin/punchout
+#:                    only answers "is this one employee punched in/out
+#:                    right now", with no timestamp, coordinates, or
+#:                    date-range support. Neither fits a pull-sync of dated
+#:                    GPS attendance events.
+#: An empty path disables a kind (the adapter drops the capability), which is
+#: how both the above and any future unlicensed module are switched off per
+#: provider — flip it back on via the endpoint-overrides box once a real
+#: bulk endpoint is confirmed.
 DEFAULT_ENDPOINTS = {
     "employees": {"path": "cust/1/api/asset/list", "method": "GET"},
     "live": {"path": "cust/1/api/asset/list", "method": "GET"},
     "history": {"path": "cust/1/api/asset/history", "method": "GET"},
-    "visits": {"path": "cust/1/api/task/list", "method": "GET"},
-    "attendance": {"path": "cust/1/api/punch/in/out", "method": "POST"},
-    "geofences": {"path": "", "method": "GET"},  # none known — see above
+    "visits": {"path": "", "method": "GET"},       # no bulk endpoint — see above
+    "attendance": {"path": "", "method": "GET"},   # no bulk endpoint — see above
+    "geofences": {"path": "", "method": "GET"},    # none known
 }
 
-#: Request-parameter names for time windows / employee filters; also
-#: overridable (``extra_config["param_names"]``) without touching code.
-DEFAULT_PARAM_NAMES = {"from": "from", "to": "to", "employee": "eid"}
+#: Confirmed history query params (start_time/end_time epoch ms, asset_id).
+#: Overridable via ``extra_config["param_names"]`` for the rare case the
+#: vendor changes these.
+HISTORY_PARAM_NAMES = {"from": "start_time", "to": "end_time", "employee": "asset_id"}
+
+#: Placeholder param names for the still-unconfirmed windowed kinds
+#: (visits/attendance) — only relevant if a future endpoint override enables
+#: one of them; deliberately kept separate from HISTORY_PARAM_NAMES so
+#: enabling, say, visits doesn't silently inherit history's field names.
+GENERIC_PARAM_NAMES = {"from": "from", "to": "to", "employee": "eid"}
+
+#: TrackoLap's own hard cap: end_time − start_time must be < 24h.
+#: Kept at 23h55m so a same-day request never lands exactly on the boundary.
+MAX_HISTORY_WINDOW = timedelta(hours=23, minutes=55)
+
+#: asset/list page size (params: pt = page size, pn = zero-based page number).
+ASSET_LIST_PAGE_SIZE = 200
+#: Safety cap on pages fetched, so a pagination bug can't loop forever.
+ASSET_LIST_MAX_PAGES = 100
 
 
 def _ms(dt: datetime) -> int:
@@ -165,7 +196,13 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
         self._customer_id = str(config.get("customer_id", "") or "").strip()
         self._timeout = int(config.get("timeout", 15))
         self._endpoints = self._merge_endpoints(config.get("endpoints") or {})
-        self._params = {**DEFAULT_PARAM_NAMES, **(config.get("param_names") or {})}
+        overrides = config.get("param_names") or {}
+        self._params = {**HISTORY_PARAM_NAMES, **overrides}
+        self._generic_params = {**GENERIC_PARAM_NAMES, **overrides}
+        # asset/list is fetched once per adapter instance (i.e. once per sync
+        # cycle — see SyncService.sync_provider) and reused by employees/live/
+        # history, since all three read from the same directory.
+        self._asset_cache = None
         # Kinds without a usable path are dropped from capabilities so the
         # sync engine skips them instead of calling a known-missing endpoint.
         self.capabilities = frozenset(
@@ -347,10 +384,42 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
             details={"employee_count": len(employees)},
         )
 
+    def _load_assets(self) -> List[dict]:
+        """The asset/list directory, fetched once (paginated) and cached.
+
+        Both the employee directory and live positions are read off this one
+        cached list — TrackoLap has no separate live-location endpoint;
+        asset/list's own records carry latitude/longitude/lastGPS/
+        lastHeartbeat. ``asset/history`` also needs this list to translate a
+        mapping's stable ``empId`` into the raw asset id it requires.
+        """
+        if self._asset_cache is not None:
+            return self._asset_cache
+        records: List[dict] = []
+        for page in range(ASSET_LIST_MAX_PAGES):
+            params = {"pt": ASSET_LIST_PAGE_SIZE, "pn": page, "q": ""}
+            page_records = self._as_records(self._request("employees", params))
+            records.extend(page_records)
+            if len(page_records) < ASSET_LIST_PAGE_SIZE:
+                break
+        self._asset_cache = records
+        return records
+
+    def _asset_object_id(self, external_employee_id: str) -> Optional[str]:
+        """Raw Mongo id for an employee, keyed by their stable empId code.
+
+        ``asset/history`` requires this raw id as ``asset_id`` — a different
+        identifier from the ``empId`` used everywhere else (mappings, punch
+        endpoints), so the translation happens here, internal to the adapter.
+        """
+        for record in self._load_assets():
+            if self._external_employee_id(record) == external_employee_id:
+                return str(record.get("id") or record.get("_id") or "") or None
+        return None
+
     def fetch_employees(self) -> List[ProviderEmployee]:
-        records = self._as_records(self._request("employees"))
         employees = []
-        for record in records:
+        for record in self._load_assets():
             external_id = self._external_employee_id(record)
             if not external_id:
                 continue
@@ -365,9 +434,8 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
         return employees
 
     def fetch_live_locations(self) -> List[LivePosition]:
-        records = self._as_records(self._request("live"))
         positions = []
-        for record in records:
+        for record in self._load_assets():
             position = self._parse_live(record)
             if position is not None:
                 positions.append(position)
@@ -425,39 +493,64 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
         window_end: datetime,
         external_employee_id: Optional[str] = None,
     ) -> List[HistoryPoint]:
-        params = {
-            self._params["from"]: _ms(window_start),
-            self._params["to"]: _ms(window_end),
-        }
+        """GPS history — one call per employee, chunked under the vendor's
+        24h-per-request cap. ``asset_id`` is mandatory on this endpoint, so
+        with no employee given every mapped-and-known asset is walked."""
         if external_employee_id:
-            params[self._params["employee"]] = external_employee_id
-        records = self._as_records(self._request("history", params))
+            target_ids = [external_employee_id]
+        else:
+            target_ids = [
+                eid for eid in (self._external_employee_id(r) for r in self._load_assets())
+                if eid
+            ]
 
-        points = []
-        for record in records:
-            eid = self._external_employee_id(record) or (external_employee_id or "")
-            latitude = _to_decimal(_first(record, "lat", "latitude"))
-            longitude = _to_decimal(_first(record, "lng", "lon", "longitude"))
-            recorded_at = _to_datetime(
-                _first(record, "time", "timestamp", "gpsTime", "recordedAt")
-            )
-            if not eid or latitude is None or longitude is None or recorded_at is None:
+        points: List[HistoryPoint] = []
+        for eid in target_ids:
+            object_id = self._asset_object_id(eid)
+            if not object_id:
+                logger.warning("No asset id found for employee '%s'; skipping history.", eid)
                 continue
-            points.append(HistoryPoint(
-                external_employee_id=eid,
-                latitude=latitude,
-                longitude=longitude,
-                recorded_at=recorded_at,
-                accuracy_m=_to_float(_first(record, "accuracy", "gpsAccuracy")),
-                speed_kmh=_to_float(_first(record, "speed", "speedKmh")),
-                heading=_to_float(_first(record, "heading", "bearing")),
-                altitude_m=_to_float(_first(record, "altitude", "alt")),
-                battery_pct=_to_int(_first(record, "battery", "batteryLevel")),
-                event_type=self._map_event(_first(record, "type", "eventType", default="")),
-                external_id=str(_first(record, "id", "pointId", default="")),
-                address=str(_first(record, "address", default="")),
-                raw=record,
-            ))
+            points.extend(self._fetch_history_for_asset(eid, object_id, window_start, window_end))
+        return points
+
+    def _fetch_history_for_asset(
+        self, external_employee_id: str, object_id: str,
+        window_start: datetime, window_end: datetime,
+    ) -> List[HistoryPoint]:
+        points = []
+        chunk_start = window_start
+        while chunk_start < window_end:
+            chunk_end = min(chunk_start + MAX_HISTORY_WINDOW, window_end)
+            params = {
+                self._params["from"]: _ms(chunk_start),
+                self._params["to"]: _ms(chunk_end),
+                self._params["employee"]: object_id,
+            }
+            records = self._as_records(self._request("history", params))
+            for record in records:
+                latitude = _to_decimal(_first(record, "lat", "latitude"))
+                longitude = _to_decimal(_first(record, "lng", "lon", "longitude"))
+                recorded_at = _to_datetime(
+                    _first(record, "time", "timestamp", "gpsTime", "recordedAt")
+                )
+                if latitude is None or longitude is None or recorded_at is None:
+                    continue
+                points.append(HistoryPoint(
+                    external_employee_id=external_employee_id,
+                    latitude=latitude,
+                    longitude=longitude,
+                    recorded_at=recorded_at,
+                    accuracy_m=_to_float(_first(record, "accuracy", "gpsAccuracy")),
+                    speed_kmh=_to_float(_first(record, "speed", "speedKmh")),
+                    heading=_to_float(_first(record, "heading", "bearing")),
+                    altitude_m=_to_float(_first(record, "altitude", "alt")),
+                    battery_pct=_to_int(_first(record, "battery", "batteryLevel")),
+                    event_type=self._map_event(_first(record, "type", "eventType", default="")),
+                    external_id=str(_first(record, "id", "pointId", default="")),
+                    address=str(_first(record, "address", default="")),
+                    raw=record,
+                ))
+            chunk_start = chunk_end
         return points
 
     @staticmethod
@@ -474,9 +567,12 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
         return "ping"
 
     def fetch_visits(self, window_start: datetime, window_end: datetime) -> List[VisitRecord]:
+        """Not part of any confirmed endpoint (see DEFAULT_ENDPOINTS); kept
+        implemented so an operator who enables it via an endpoint override
+        gets tolerant parsing rather than a NotImplementedError."""
         params = {
-            self._params["from"]: _ms(window_start),
-            self._params["to"]: _ms(window_end),
+            self._generic_params["from"]: _ms(window_start),
+            self._generic_params["to"]: _ms(window_end),
         }
         records = self._as_records(self._request("visits", params))
         visits = []
@@ -510,9 +606,14 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
     def fetch_attendance_events(
         self, window_start: datetime, window_end: datetime
     ) -> List[AttendanceEvent]:
+        """Not part of any confirmed bulk endpoint — TrackoLap's punch APIs
+        are push-only (record a punch) or single-employee status checks, not
+        a dated/paginated fetch (see DEFAULT_ENDPOINTS). Kept implemented
+        for tolerant parsing if an operator wires up an override once a real
+        endpoint is confirmed."""
         params = {
-            self._params["from"]: _ms(window_start),
-            self._params["to"]: _ms(window_end),
+            self._generic_params["from"]: _ms(window_start),
+            self._generic_params["to"]: _ms(window_end),
         }
         records = self._as_records(self._request("attendance", params))
         events = []

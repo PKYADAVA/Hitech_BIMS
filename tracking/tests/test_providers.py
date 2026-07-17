@@ -101,11 +101,32 @@ class TrackWickAuthHeaderTests(TestCase):
         self.assertEqual(session.get.call_args.args[0],
                          "https://api.trackwick.com/v1/cust/1/api/asset/list")
 
-    def test_attendance_endpoint_uses_post(self):
-        adapter, session = self._adapter_with_session(name="PostCheck")
+    def test_unconfirmed_kinds_dropped_by_default(self):
+        """visits/attendance/geofences have no confirmed bulk endpoint in the
+        account's API document, so they must not be attempted automatically."""
+        adapter, _session = self._adapter_with_session(name="NoExtras")
+        self.assertFalse(adapter.supports("visits"))
+        self.assertFalse(adapter.supports("attendance"))
+        self.assertFalse(adapter.supports("geofences"))
+        self.assertTrue(adapter.supports("employees"))
+        self.assertTrue(adapter.supports("live"))
+        self.assertTrue(adapter.supports("history"))
+
+    def test_attendance_can_be_enabled_via_override(self):
+        # Confirms the override mechanism itself; punch/in/out is a push
+        # (record-a-punch) endpoint, not a real fetch source — see
+        # DEFAULT_ENDPOINTS — so this only proves the plumbing works.
+        adapter, session = self._adapter_with_session(
+            name="AttendanceOverride",
+            extra_config={"customer_id": "CID-9",
+                          "endpoints": {"attendance": {"path": "cust/1/api/punch/in/out",
+                                                       "method": "POST"}}},
+        )
+        self.assertTrue(adapter.supports("attendance"))
         session.post.return_value = FakeResponse()
-        start = datetime.now(timezone.utc) - timedelta(hours=4)
-        adapter.fetch_attendance_events(start, datetime.now(timezone.utc))
+        adapter.fetch_attendance_events(
+            datetime.now(timezone.utc) - timedelta(hours=4), datetime.now(timezone.utc)
+        )
         self.assertTrue(session.post.called)
         self.assertIn("cust/1/api/punch/in/out", session.post.call_args.args[0])
 
@@ -221,17 +242,83 @@ class TrackWickParsingTests(TestCase):
         self.assertEqual(second.status, "offline")
         self.assertEqual(second.recorded_at.tzinfo, timezone.utc)
 
-    def test_history_window_params_sent_in_epoch_ms(self):
+    @staticmethod
+    def _asset_and_history_session(asset_records, history_body=None):
+        """A session whose GET returns the asset directory for asset/list
+        and a (possibly empty) history body for asset/history — the two
+        endpoints TrackWick's history flow needs, with different bodies."""
         session = mock.Mock()
-        session.get.return_value = FakeResponse()
+
+        def fake_get(url, params=None, headers=None, timeout=None):  # noqa: ARG001
+            if url.endswith("asset/list"):
+                return FakeResponse(body={"s": True, "d": asset_records})
+            return FakeResponse(body=history_body or {"s": True, "data": []})
+
+        session.get.side_effect = fake_get
+        return session
+
+    def _history_calls(self, session):
+        return [call for call in session.get.call_args_list
+                if call.args[0].endswith("asset/history")]
+
+    def test_history_uses_confirmed_params_and_resolves_raw_asset_id(self):
+        # asset/history needs the raw Mongo "id", not the empId code used
+        # for the mapping's external_id — the adapter must translate.
+        session = self._asset_and_history_session(
+            [{"empId": "101", "id": "mongo-abc-123", "name": "Field Person"}]
+        )
         adapter = TrackWickProviderAdapter(make_provider(), session=session)
         start = datetime(2026, 7, 16, 4, 0, tzinfo=timezone.utc)
         end = start + timedelta(hours=8)
         adapter.fetch_location_history(start, end, external_employee_id="101")
-        params = session.get.call_args.kwargs["params"]
-        self.assertEqual(params["from"], int(start.timestamp() * 1000))
-        self.assertEqual(params["to"], int(end.timestamp() * 1000))
-        self.assertEqual(params["eid"], "101")
+
+        history_calls = self._history_calls(session)
+        self.assertEqual(len(history_calls), 1)
+        params = history_calls[0].kwargs["params"]
+        self.assertEqual(params["start_time"], int(start.timestamp() * 1000))
+        self.assertEqual(params["end_time"], int(end.timestamp() * 1000))
+        self.assertEqual(params["asset_id"], "mongo-abc-123")
+
+    def test_history_chunks_windows_over_the_24h_vendor_cap(self):
+        session = self._asset_and_history_session(
+            [{"empId": "101", "id": "mongo-abc-123"}]
+        )
+        adapter = TrackWickProviderAdapter(make_provider(), session=session)
+        start = datetime(2026, 7, 1, 0, 0, tzinfo=timezone.utc)
+        end = start + timedelta(hours=50)  # forces multiple <24h chunks
+        adapter.fetch_location_history(start, end, external_employee_id="101")
+
+        history_calls = self._history_calls(session)
+        self.assertEqual(len(history_calls), 3)  # ceil(50h / 23h55m)
+        for call in history_calls:
+            params = call.kwargs["params"]
+            self.assertLess(params["end_time"] - params["start_time"],
+                            24 * 3600 * 1000)
+        self.assertEqual(history_calls[0].kwargs["params"]["start_time"],
+                         int(start.timestamp() * 1000))
+        self.assertEqual(history_calls[-1].kwargs["params"]["end_time"],
+                         int(end.timestamp() * 1000))
+
+    def test_history_without_employee_walks_every_known_asset(self):
+        session = self._asset_and_history_session([
+            {"empId": "101", "id": "mongo-1"},
+            {"empId": "102", "id": "mongo-2"},
+        ])
+        adapter = TrackWickProviderAdapter(make_provider(), session=session)
+        now = datetime.now(timezone.utc)
+        adapter.fetch_location_history(now - timedelta(hours=1), now)
+        asset_ids_queried = {call.kwargs["params"]["asset_id"]
+                             for call in self._history_calls(session)}
+        self.assertEqual(asset_ids_queried, {"mongo-1", "mongo-2"})
+
+    def test_history_skips_employee_with_no_matching_asset(self):
+        session = self._asset_and_history_session([])  # empty directory
+        adapter = TrackWickProviderAdapter(make_provider(), session=session)
+        now = datetime.now(timezone.utc)
+        points = adapter.fetch_location_history(
+            now - timedelta(hours=1), now, external_employee_id="ghost")
+        self.assertEqual(points, [])
+        self.assertEqual(self._history_calls(session), [])
 
     def test_visits_parsed(self):
         body = [{"visitId": "V1", "eid": 101, "customerName": "ACME",

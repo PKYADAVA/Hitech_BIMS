@@ -30,13 +30,26 @@
         <form id="binding-form">
           {% csrf_token %}
           <input type="hidden" id="binding-id" />
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label for="module_filter" class="form-label">Module</label>
+              <select id="module_filter" class="form-select">
+                <option value="">All modules</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="category_filter" class="form-label">Master / Transaction</label>
+              <select id="category_filter" class="form-select">
+                <option value="">All</option>
+                <option value="Master">Master</option>
+                <option value="Transaction">Transaction</option>
+              </select>
+            </div>
+          </div>
           <div class="mb-3">
             <label for="field_path" class="form-label">Field<span class="text-danger">*</span></label>
             <select id="field_path" class="form-select" required>
               <option value="">select field</option>
-              {% for app_label, model_name, field_name, human_label in bindable_fields %}
-              <option value="{{ app_label }}.{{ model_name }}.{{ field_name }}">{{ human_label }}</option>
-              {% endfor %}
             </select>
           </div>
           <div class="mb-3">
@@ -75,7 +88,7 @@
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="binding-table">
         <thead class="table-dark">
-          <tr><th>Field</th><th>Mode</th><th>Picklist</th><th>Required</th><th class="text-center">Actions</th></tr>
+          <tr><th>Module</th><th>Category</th><th>Field</th><th>Mode</th><th>Picklist</th><th>Required</th><th class="text-center">Actions</th></tr>
         </thead>
         <tbody id="binding-table-body"></tbody>
       </table>
@@ -85,9 +98,29 @@
 {% endblock %}
 
 {% block js %}
+{{ bindable_fields|json_script:"bindable-fields-data" }}
 <script>
 $(document).ready(function () {
   function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+
+  const bindableFields = JSON.parse(document.getElementById('bindable-fields-data').textContent);
+  const modules = [...new Set(bindableFields.map(f => f.module))].sort();
+  modules.forEach(m => $('#module_filter').append(`<option value="${m}">${m}</option>`));
+
+  function fieldPathOf(f) { return `${f.app_label}.${f.model_name}.${f.field_name}`; }
+
+  function rebuildFieldOptions(selectedPath) {
+    const module = $('#module_filter').val();
+    const category = $('#category_filter').val();
+    const matches = bindableFields.filter(f =>
+      (!module || f.module === module) && (!category || f.category === category));
+    const select = $('#field_path').empty().append('<option value="">select field</option>');
+    matches.forEach(f => select.append(`<option value="${fieldPathOf(f)}">${f.label}</option>`));
+    if (selectedPath) select.val(selectedPath);
+    select.trigger('change');
+  }
+  $('#module_filter, #category_filter').on('change', () => rebuildFieldOptions());
+  rebuildFieldOptions();
 
   function toggleModeFields() {
     const isPicklist = $('#mode').val() === 'PICKLIST';
@@ -99,7 +132,10 @@ $(document).ready(function () {
   function resetForm() {
     $('#binding-form')[0].reset();
     $('#binding-id').val('');
+    $('#module_filter').val('');
+    $('#category_filter').val('');
     $('#field_path').prop('disabled', false);
+    rebuildFieldOptions();
     toggleModeFields();
     $('#bindingFormModalLabel').text('Add Binding');
   }
@@ -112,13 +148,15 @@ $(document).ready(function () {
       const body = $('#binding-table-body').empty();
       rows.forEach(b => {
         body.append(`<tr>
+          <td>${b.module}</td>
+          <td>${b.category}</td>
           <td>${b.human_label}</td>
           <td>${b.mode === 'PICKLIST' ? '<span class="badge bg-info">Picklist</span>' : '<span class="badge bg-secondary">Free Text</span>'}</td>
           <td>${b.picklist_name || '—'}</td>
           <td>${b.is_required ? 'Yes' : 'No'}</td>
           <td>
             <div class="d-flex gap-1 justify-content-center">
-              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-binding" data-id="${b.id}" data-field_path="${b.field_path}" data-mode="${b.mode}" data-picklist="${b.picklist || ''}" data-is_required="${b.is_required}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-binding" data-id="${b.id}" data-field_path="${b.field_path}" data-mode="${b.mode}" data-picklist="${b.picklist || ''}" data-is_required="${b.is_required}" data-module="${b.module}" data-category="${b.category}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
               {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-binding" data-id="${b.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
             </div>
           </td>
@@ -150,7 +188,10 @@ $(document).ready(function () {
   $(document).on('click', '.edit-binding', function () {
     const d = $(this).data();
     $('#binding-id').val(d.id);
-    $('#field_path').val(d.field_path).prop('disabled', true);
+    $('#module_filter').val(d.module);
+    $('#category_filter').val(d.category);
+    rebuildFieldOptions(d.field_path);
+    $('#field_path').prop('disabled', true);
     $('#mode').val(d.mode);
     toggleModeFields();
     $('#picklist').val(d.picklist);

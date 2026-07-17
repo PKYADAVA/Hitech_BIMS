@@ -153,26 +153,30 @@ def _egg_purchase_rows(from_date, to_date, party_id):
 
 
 # Module key -> grid source. Party type drives which party filter applies;
-# ``transaction`` is the SMS_MODULE_TRANSACTIONS code used to offer only
-# templates tagged for that transaction (or generic/untagged ones).
+# ``module``/``transaction`` are the SmsTemplate.module / SMS_MODULE_TRANSACTIONS
+# codes used to offer only templates registered for this exact transaction (or
+# generic/untagged-transaction templates within the same module) — NOTE the
+# dict key here (e.g. "sales") is just this registry's own key and is
+# unrelated to the SMS module code; all three sources below are hatchery
+# transactions, so their SMS module is "hatchery".
 # ``variables``: which SMS_VARIABLES this source actually fills with real data
 # (generic ones — CompanyName/CurrentDate/CurrentTime/UserName — are implied).
 # The template editor uses this to grey out variables that would render blank.
 DOC_SOURCES = {
     "sales": {"label": "Chick Sale", "party_type": "customer",
               "model": ChickSale, "rows": _chick_sale_rows,
-              "transaction": "chick_sale",
+              "module": "hatchery", "transaction": "chick_sale",
               "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                             "Quantity", "Rate", "VehicleNo", "DriverName", "Warehouse")},
     "dispatch": {"label": "Delivery Challan", "party_type": "customer",
                  "model": DeliveryChallan, "rows": _delivery_challan_rows,
-                 "transaction": "delivery_challan",
+                 "module": "hatchery", "transaction": "delivery_challan",
                  "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "Place", "VehicleNo", "DriverName",
                                "LRNo")},
     "purchase": {"label": "Egg Purchase", "party_type": "supplier",
                  "model": EggPurchase, "rows": _egg_purchase_rows,
-                 "transaction": "egg_purchase",
+                 "module": "hatchery", "transaction": "egg_purchase",
                  "variables": ("SupplierName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "VehicleNo", "DriverName", "LRNo",
                                "Warehouse")},

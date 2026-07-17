@@ -7,6 +7,18 @@ from .models import FieldPicklistBinding, Picklist
 from .sources import PICKLIST_SOURCE_MODELS
 
 
+def resolve_source_options(source_model_key):
+    """Return [(value, label), ...] for a PICKLIST_SOURCE_MODELS entry,
+    ignoring any Picklist's scope — the raw, live source list."""
+    config = PICKLIST_SOURCE_MODELS.get(source_model_key)
+    if not config:
+        return []
+    queryset = config["queryset_fn"]()
+    value_field = config["value_field"]
+    label_fn = config["label_fn"]
+    return [(getattr(obj, value_field), label_fn(obj)) for obj in queryset]
+
+
 def resolve_options(picklist):
     """Return [(value, label), ...] for a Picklist, always live-queried."""
     if picklist is None:
@@ -16,13 +28,11 @@ def resolve_options(picklist):
             (v.value, v.label)
             for v in picklist.values.filter(is_active=True).order_by("sort_order", "label", "id")
         ]
-    config = PICKLIST_SOURCE_MODELS.get(picklist.source_model_key)
-    if not config:
-        return []
-    queryset = config["queryset_fn"]()
-    value_field = config["value_field"]
-    label_fn = config["label_fn"]
-    return [(getattr(obj, value_field), label_fn(obj)) for obj in queryset]
+    options = resolve_source_options(picklist.source_model_key)
+    if picklist.model_scope == Picklist.ModelScope.LIMITED:
+        allowed = set(picklist.source_items.values_list("source_value", flat=True))
+        options = [(value, label) for value, label in options if value in allowed]
+    return options
 
 
 def get_binding(app_label, model_name, field_name):
