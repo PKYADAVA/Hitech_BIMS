@@ -212,6 +212,42 @@ dashboard queries on `/`), point the App Platform **Health Check Path**
 setting at a cheap endpoint instead — not currently needed at this app's
 scale, noting it here for when it becomes relevant.
 
+## A7b. Scheduled Jobs — Employee Tracking Sync
+
+The Employee Tracking module (`tracking` app) pulls GPS data from the
+configured provider via `python manage.py sync_tracking` (see
+`EMPLOYEE_TRACKING.md`). This **must run on a schedule against the
+production database** — it does not run itself, and a schedule set up on a
+developer's local machine (e.g. Windows Task Scheduler) only syncs that
+machine's local database, never production. On App Platform, the schedule
+lives in the app itself as one or two **Scheduled Job** components (App →
+**Create/Edit Component → Job**, trigger type **Scheduled**), which share
+this app's repo, build, and environment variables automatically:
+
+| Job name | Run Command | Suggested schedule |
+|---|---|---|
+| `tracking-live-sync` | `python manage.py sync_tracking --kinds live` | every 5 min (or the shortest interval the Scheduled Job UI offers) |
+| `tracking-full-sync` | `python manage.py sync_tracking` | every 15–30 min |
+
+Notes:
+- Jobs run in the same container image as the web component — no separate
+  build/deploy config needed, just the Run Command and cron schedule.
+- The sync is lock-guarded (`SyncLock`, in Postgres) so overlapping runs
+  between the two jobs — or a slow run bumping into the next tick — can't
+  corrupt data; the second run simply skips with "already in progress".
+- **First-time backfill**: once the jobs exist, also run once, manually,
+  from the App Platform **Console** tab (or trigger a one-off Job run):
+  ```
+  python manage.py sync_tracking --trigger manual --lookback-hours 48
+  ```
+  Without this, the dashboard stays empty until the first scheduled tick
+  naturally catches up (which it will, just later).
+- **Provider credentials and the Employee↔vendor mapping are per-database.**
+  Entering a provider or mapping employees locally has no effect on
+  production — repeat that setup in production's own Tracking Settings page
+  the first time (Test Connection there only proves TrackoLap reachability,
+  not that any data has synced).
+
 ## A8. Deployment Flow
 
 1. Push to `main` (or merge a PR into it).

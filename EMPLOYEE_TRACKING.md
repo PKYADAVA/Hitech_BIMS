@@ -72,7 +72,16 @@ Rules the module never breaks:
      An empty path disables a kind — how visits/attendance/geofences are
      switched off today, and how a future real endpoint would be enabled.
    * Employee Mapping: load the vendor directory and map any identities the
-     phone/name auto-match could not resolve.
+     phone/name auto-match could not resolve. If HR has no employee records
+     for these people yet (a fresh deployment, or a different vendor-tracked
+     workforce than HR currently holds), preview and create them first:
+     ```
+     python manage.py seed_employees_from_provider          # preview, creates nothing
+     python manage.py seed_employees_from_provider --apply  # commit
+     ```
+     Safe to re-run — it skips anyone already matching an existing employee
+     by name. Run this per-database (local, staging, production each have
+     their own HR data) via that environment's shell/Console.
 5. **Schedule the sync** (OS scheduler — cron/systemd timer/Windows Task
    Scheduler; there is deliberately no in-process scheduler). On this
    Windows dev box, two tasks are already registered (Task Scheduler →
