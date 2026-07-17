@@ -111,19 +111,33 @@ class SyncService:
             self._log(provider, None, "sync_failed", "error", str(exc))
             return []
 
-        runs, failed = [], False
+        runs, aborted = [], False
         for kind in (kinds or DEFAULT_KINDS):
             if kind not in DEFAULT_KINDS or not adapter.supports(kind):
                 continue
             try:
                 run = self._sync_kind(provider, adapter, kind, trigger)
             except _AbortProvider:
-                failed = True
+                aborted = True
                 break
             runs.append(run)
-            failed = failed or run.status == "failed"
-        if not failed:
-            self._mark_provider(provider, ok=True)
+
+        if aborted:
+            return runs  # provider already flagged by the aborting kind
+
+        # Vendors gate endpoints per licensed module, so one kind failing
+        # (even with "not authorized") must not poison the provider: the row
+        # is OK if anything succeeded, with the failing kinds noted.
+        failed_runs = [run for run in runs if run.status == "failed"]
+        succeeded = any(run.status in ("success", "partial") for run in runs)
+        if runs and not succeeded:
+            self._mark_provider(provider, ok=False,
+                                error=failed_runs[0].error_message[:500])
+        else:
+            summary = "; ".join(
+                f"{run.sync_type}: {run.error_message[:80]}" for run in failed_runs
+            )
+            self._mark_provider(provider, ok=True, error=summary[:500])
         return runs
 
     # ------------------------------------------------------------- one run
@@ -154,8 +168,14 @@ class SyncService:
             run.status = "partial" if all_skipped else "success"
         except TrackingAuthError as exc:
             self._fail_run(run, provider, exc)
-            self._mark_provider(provider, ok=False, error=str(exc))
-            raise _AbortProvider() from exc
+            # Only a directory-sync rejection means the credentials themselves
+            # are bad; on any other kind it's a per-module permission gap
+            # (e.g. Tasks not licensed) and the cycle continues.
+            if kind == "employees":
+                self._mark_provider(provider, ok=False, error=str(exc))
+                run.finished_at = timezone.now()
+                run.save()
+                raise _AbortProvider() from exc
         except (TrackingProviderError, TrackingConfigurationError) as exc:
             self._fail_run(run, provider, exc)
         except Exception as exc:  # noqa: BLE001 — a writer bug must not kill the cycle
@@ -304,9 +324,19 @@ class SyncService:
             if employee_id is None:
                 skipped += 1
                 continue
+            # Online-ness is judged by the freshest signal: vendors update
+            # the GPS fix only on movement, but heartbeats keep flowing from
+            # a stationary-yet-connected device.
+            last_seen = max(
+                value for value in (position.recorded_at, position.heartbeat_at)
+                if value is not None
+            )
             status = position.status
-            if now - position.recorded_at > offline_after:
+            if now - last_seen > offline_after:
                 status = "offline"
+            elif status == "unknown":
+                # Fresh signal without an explicit vendor state: online.
+                status = "online"
             if self._settings.alerts_enabled:
                 self._live_transition_alerts(
                     provider, employee_id, previous.get(employee_id),
@@ -328,6 +358,7 @@ class SyncService:
                     "gps_enabled": position.gps_enabled,
                     "status": status,
                     "recorded_at": position.recorded_at,
+                    "heartbeat_at": position.heartbeat_at,
                 },
             )
             created += 1 if was_created else 0

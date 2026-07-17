@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "notification",
     "environmental_monitoring",
     "tracking",
+    "picklist",
 ]
 
 MIDDLEWARE = [

@@ -13,46 +13,14 @@ from django.utils import timezone
 import json
 
 from inventory.models import Item, ItemCategory
+from account.models import ChartOfAccount
+from hatchery_master.models import STATES_AND_TERRITORIES
+from picklist.services import validate_value
 from sales.models import Customer, CustomerGroup, CustomerShippingAddress, SalesPriceMaster
 
-states_and_union_territories = [
-            "Andhra Pradesh",
-            "Arunachal Pradesh",
-            "Assam",
-            "Bihar",
-            "Chhattisgarh",
-            "Goa",
-            "Gujarat",
-            "Haryana",
-            "Himachal Pradesh",
-            "Jharkhand",
-            "Karnataka",
-            "Kerala",
-            "Madhya Pradesh",
-            "Maharashtra",
-            "Manipur",
-            "Meghalaya",
-            "Mizoram",
-            "Nagaland",
-            "Odisha",
-            "Punjab",
-            "Rajasthan",
-            "Sikkim",
-            "Tamil Nadu",
-            "Telangana",
-            "Tripura",
-            "Uttar Pradesh",
-            "Uttarakhand",
-            "West Bengal",
-            "Andaman and Nicobar Islands",
-            "Chandigarh",
-            "Dadra and Nagar Haveli and Daman and Diu",
-            "Delhi",
-            "Jammu and Kashmir",
-            "Ladakh",
-            "Lakshadweep",
-            "Puducherry",
-        ]
+# Used only by the billing/shipping address modals (state field itself is
+# picklist-bound, see picklist.bindable_fields.BINDABLE_FIELDS).
+states_and_union_territories = STATES_AND_TERRITORIES
 
 @login_required
 def customer(request):
@@ -64,8 +32,6 @@ def _customer_form_context(customer=None):
         "customer": customer,
         "next_code": Customer.next_code() if not customer else None,
         "states_and_union_territories": states_and_union_territories,
-        "contact_types": Customer.ContactType.choices,
-        "party_categories": Customer.PartyCategory.choices,
         "to_pay_to_receive_choices": Customer.ToPayToReceive.choices,
         "today": timezone.localdate().isoformat(),
     }
@@ -101,6 +67,8 @@ def _apply_posted_customer_fields(instance, request):
         instance.agreement_copy = request.FILES["agreement_copy"]
     if request.FILES.get("other_documents"):
         instance.other_documents = request.FILES["other_documents"]
+    for field in ("state", "contact_type", "party_category"):
+        validate_value("sales", "Customer", field, getattr(instance, field))
 
 
 @login_required(login_url="login")
@@ -108,8 +76,8 @@ def create_customer(request):
     """Add a new customer master record."""
     if request.method == "POST":
         instance = Customer()
-        _apply_posted_customer_fields(instance, request)
         try:
+            _apply_posted_customer_fields(instance, request)
             instance.full_clean()
             instance.save()
             _create_posted_shipping_addresses(instance, request)
@@ -150,8 +118,8 @@ def edit_customer(request, id):
     instance = get_object_or_404(Customer, id=id)
 
     if request.method == "POST":
-        _apply_posted_customer_fields(instance, request)
         try:
+            _apply_posted_customer_fields(instance, request)
             instance.full_clean()
             instance.save()
             messages.success(request, "Customer updated successfully.")
@@ -174,7 +142,9 @@ def delete_customer(request, id):
 
 @login_required
 def customer_groups(request):
-    return render(request, "customer_groups.html")
+    return render(request, "customer_groups.html", {
+        "coa_accounts": ChartOfAccount.objects.filter(status="Active").order_by("code"),
+    })
 
 
 @login_required
@@ -248,27 +218,34 @@ class CustomerShippingAddressAPI(View):
 @method_decorator(login_required, name="dispatch")
 class CustomerGroupAPI(View):
 
+    @staticmethod
+    def _serialize(group):
+        return {
+            "id": group.id,
+            "code": group.code,
+            "description": group.description,
+            "currency": group.currency,
+            "control_account": group.control_account_id,
+            "control_account_display": str(group.control_account) if group.control_account else "",
+            "advance_account": group.advance_account_id,
+            "advance_account_display": str(group.advance_account) if group.advance_account else "",
+        }
+
     def get(self, request, id=None):
         """
         Handle GET requests to retrieve either a list of customer groups or a specific customer group.
         """
         if id:
             try:
-                customer_group = CustomerGroup.objects.get(id=id)
-                return JsonResponse({
-                    "id": customer_group.id,
-                    "code": customer_group.code,
-                    "description": customer_group.description,
-                    "currency": customer_group.currency,
-                    "control_account": customer_group.control_account,
-                    "advance_account": customer_group.advance_account,
-                })
+                customer_group = CustomerGroup.objects.select_related("control_account", "advance_account").get(id=id)
+                return JsonResponse(self._serialize(customer_group))
             except CustomerGroup.DoesNotExist:
                 raise Http404("Customer group not found")
         else:
-            customer_groups = list(CustomerGroup.objects.values(
-                "id", "code", "description", "currency", "control_account", "advance_account"
-            ))
+            customer_groups = [
+                self._serialize(group)
+                for group in CustomerGroup.objects.select_related("control_account", "advance_account")
+            ]
             return JsonResponse(customer_groups, safe=False)
 
     def post(self, request):
@@ -289,8 +266,8 @@ class CustomerGroupAPI(View):
             code=data["code"],
             description=data["description"],
             currency=data["currency"],
-            control_account=data["control_account"],
-            advance_account=data["advance_account"]
+            control_account_id=data["control_account"],
+            advance_account_id=data["advance_account"]
         )
         return JsonResponse({"message": "Customer group created successfully"}, status=201)
 
@@ -308,9 +285,12 @@ class CustomerGroupAPI(View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format"}, status=400)
 
-        fields_to_update = ["code", "description", "currency", "control_account", "advance_account"]
-        for field in fields_to_update:
+        for field in ["code", "description", "currency"]:
             setattr(customer_group, field, data.get(field, getattr(customer_group, field)))
+        if "control_account" in data:
+            customer_group.control_account_id = data["control_account"] or None
+        if "advance_account" in data:
+            customer_group.advance_account_id = data["advance_account"] or None
 
         customer_group.save()
         return JsonResponse({"message": "Customer group updated successfully"})

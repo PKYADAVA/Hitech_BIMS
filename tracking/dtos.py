@@ -35,6 +35,7 @@ class LivePosition:
     latitude: Decimal
     longitude: Decimal
     recorded_at: datetime
+    heartbeat_at: Optional[datetime] = None  # device alive-ness, ≥ recorded_at
     accuracy_m: Optional[float] = None
     speed_kmh: Optional[float] = None
     heading: Optional[float] = None

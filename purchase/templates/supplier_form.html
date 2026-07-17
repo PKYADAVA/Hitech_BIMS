@@ -1,25 +1,25 @@
 {% extends 'base.html' %}
 {% load picklist_tags %}
 
-{% block title %}{% if customer %}Edit{% else %}Add{% endif %} Customer — BIMS{% endblock %}
+{% block title %}{% if supplier %}Edit{% else %}Add{% endif %} Supplier — BIMS{% endblock %}
 
 {% block nav %}
-  {% include 'main_top_navbar.html' with active_tab='sales' %}
+  {% include 'main_top_navbar.html' with active_tab='purchase' %}
 {% endblock %}
 
 {% block content %}
-{% include '_sales_subnavbar.html' with active_tab='customer' %}
+{% include '_purchase_subnavbar.html' with active_tab='supplier' %}
 
 <div class="page-header">
     <div class="page-header-title">
-      <i class="fas fa-user"></i>
-      {% if customer %}Edit Customer{% else %}Add Customer{% endif %}
+      <i class="fas fa-truck"></i>
+      {% if supplier %}Edit Supplier{% else %}Add Supplier{% endif %}
     </div>
     <div class="page-header-right">
       <div class="page-header-subtitle">
-        {% if customer %}Update this customer's details{% else %}Register a new customer/party record{% endif %}
+        {% if supplier %}Update this supplier's details{% else %}Register a new supplier/party record{% endif %}
       </div>
-      <a href="{% url 'customer' %}" class="btn btn-secondary">
+      <a href="{% url 'supplier' %}" class="btn btn-secondary">
         <i class="fas fa-arrow-left"></i> Back to list
       </a>
     </div>
@@ -27,61 +27,69 @@
 
 <div class="card">
   <div class="card-body">
-    <form method="post" enctype="multipart/form-data" id="customer-form">
+    <form method="post" enctype="multipart/form-data" id="supplier-form">
       {% csrf_token %}
       <div class="row g-3">
         <div class="col-md-3">
           <label for="code" class="form-label">Code</label>
-          <input type="text" id="code" class="form-control" readonly value="{{ customer.code|default:next_code }}">
+          <input type="text" id="code" class="form-control" readonly value="{{ supplier.code|default:next_code }}">
         </div>
         <div class="col-md-3">
           <label for="name" class="form-label">Name<span class="text-danger">*</span></label>
-          <input type="text" id="name" name="name" class="form-control" placeholder="Enter Name..." value="{{ customer.name|default:'' }}" required>
+          <input type="text" id="name" name="name" class="form-control" placeholder="Enter Name..." value="{{ supplier.name|default:'' }}" required>
         </div>
         <div class="col-md-3">
           <label for="mobile" class="form-label">SMS/WhatsApp No<span class="text-danger">*</span></label>
-          <input type="text" id="mobile" name="mobile" class="form-control" placeholder="Enter Mobile..." value="{{ customer.mobile|default:'' }}" required>
+          <input type="text" id="mobile" name="mobile" class="form-control" placeholder="Enter Mobile..." value="{{ supplier.mobile|default:'' }}" required>
         </div>
         <div class="col-md-3">
           <label for="mobile_2" class="form-label">Mobile No 2</label>
-          <input type="text" id="mobile_2" name="mobile_2" class="form-control" placeholder="Enter Mobile2..." value="{{ customer.mobile_2|default:'' }}">
+          <input type="text" id="mobile_2" name="mobile_2" class="form-control" placeholder="Enter Mobile2..." value="{{ supplier.mobile_2|default:'' }}">
         </div>
         <div class="col-md-3">
           <label for="email" class="form-label">Email</label>
-          <input type="email" id="email" name="email" class="form-control" placeholder="Enter E-mail..." value="{{ customer.email|default:'' }}">
+          <input type="email" id="email" name="email" class="form-control" placeholder="Enter E-mail..." value="{{ supplier.email|default:'' }}">
         </div>
         <div class="col-md-3">
-          <label for="pan_tin" class="form-label">PAN</label>
-          <input type="text" id="pan_tin" name="pan_tin" class="form-control" placeholder="Enter PAN..." value="{{ customer.pan_tin|default:'' }}">
+          <label for="pan" class="form-label">PAN</label>
+          <input type="text" id="pan" name="pan" class="form-control" placeholder="Enter PAN..." value="{{ supplier.pan|default:'' }}">
         </div>
         <div class="col-md-3">
           <label for="aadhar" class="form-label">Aadhar</label>
-          <input type="text" id="aadhar" name="aadhar" class="form-control" placeholder="Enter Aadhar..." value="{{ customer.aadhar|default:'' }}">
+          <input type="text" id="aadhar" name="aadhar" class="form-control" placeholder="Enter Aadhar..." value="{{ supplier.aadhar|default:'' }}">
         </div>
 
         <div class="col-md-3">
           <label for="contact_type" class="form-label">Party Type<span class="text-danger">*</span></label>
-          {% render_picklist_field "sales.Customer.contact_type" current_value=customer.contact_type field_id="contact_type" field_name="contact_type" required=True %}
+          {% render_picklist_field "purchase.Supplier.contact_type" current_value=supplier.contact_type field_id="contact_type" field_name="contact_type" required=True %}
         </div>
         <div class="col-md-3">
           <label for="party_category" class="form-label">Party Category<span class="text-danger">*</span></label>
-          {% render_picklist_field "sales.Customer.party_category" current_value=customer.party_category field_id="party_category" field_name="party_category" required=True %}
+          {% render_picklist_field "purchase.Supplier.party_category" current_value=supplier.party_category field_id="party_category" field_name="party_category" required=True %}
+        </div>
+        <div class="col-md-3">
+          <label for="supplier_group" class="form-label">Supplier Group</label>
+          {% render_picklist_field "purchase.Supplier.supplier_group" current_value=supplier.supplier_group field_id="supplier_group" field_name="supplier_group" placeholder="Enter Supplier Group..." %}
         </div>
         <div class="col-md-3">
           <label for="gstin" class="form-label">GSTIN</label>
-          <input type="text" id="gstin" name="gstin" class="form-control" placeholder="Enter GSTIN..." value="{{ customer.gstin|default:'' }}">
+          <input type="text" id="gstin" name="gstin" class="form-control" placeholder="Enter GSTIN..." value="{{ supplier.gstin|default:'' }}">
         </div>
         <div class="col-md-3">
           <label for="state" class="form-label">State of Supply</label>
-          {% render_picklist_field "sales.Customer.state" current_value=customer.state field_id="state" field_name="state" %}
+          {% render_picklist_field "purchase.Supplier.state" current_value=supplier.state field_id="state" field_name="state" %}
+        </div>
+        <div class="col-md-3">
+          <label for="place" class="form-label">Place</label>
+          <input type="text" id="place" name="place" class="form-control" placeholder="Enter Place..." value="{{ supplier.place|default:'' }}">
         </div>
 
         <div class="col-md-6">
           <label class="form-label">Billing Address<span class="text-danger">*</span></label>
           <div class="border rounded p-2 bg-light" id="billing_address_preview" role="button" style="cursor:pointer;">
-            <div id="billing_address_summary">{{ customer.address|default:'No billing address added.' }}</div>
+            <div id="billing_address_summary">{{ supplier.address|default:'No billing address added.' }}</div>
           </div>
-          <textarea id="address" name="address" class="d-none">{{ customer.address|default:'' }}</textarea>
+          <textarea id="address" name="address" class="d-none">{{ supplier.address|default:'' }}</textarea>
         </div>
         <div class="col-md-6">
           <label class="form-label">Shipping Address</label>
@@ -89,7 +97,7 @@
             <div id="shipping_address_summary" class="flex-grow-1">No shipping address selected.</div>
             <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address">Change Shipping Address</button>
           </div>
-          {% if not customer %}
+          {% if not supplier %}
           <input type="hidden" id="shipping_addresses_json" name="shipping_addresses_json" value="[]">
           {% endif %}
         </div>
@@ -98,87 +106,87 @@
       <div class="row g-3 mt-0">
         <div class="col-md-2">
           <label for="opening_balance" class="form-label">Opening Balance</label>
-          <input type="number" step="0.01" id="opening_balance" name="opening_balance" class="form-control" placeholder="Enter Amount" value="{{ customer.opening_balance|default:'' }}">
+          <input type="number" step="0.01" id="opening_balance" name="opening_balance" class="form-control" placeholder="Enter Amount" value="{{ supplier.opening_balance|default:'' }}">
         </div>
         <div class="col-md-2">
           <label for="to_pay_to_receive" class="form-label">To Pay /To Receive</label>
           <select id="to_pay_to_receive" name="to_pay_to_receive" class="form-select">
-            <option value="" {% if not customer.to_pay_to_receive %}selected{% endif %}>select</option>
+            <option value="" {% if not supplier.to_pay_to_receive %}selected{% endif %}>select</option>
             {% for value, label in to_pay_to_receive_choices %}
-            <option value="{{ value }}" {% if customer.to_pay_to_receive == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if supplier.to_pay_to_receive == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="col-md-2">
           <label for="as_on_date" class="form-label">As on Date</label>
-          <input type="date" id="as_on_date" name="as_on_date" class="form-control" value="{{ customer.as_on_date|date:'Y-m-d'|default:today }}">
+          <input type="date" id="as_on_date" name="as_on_date" class="form-control" value="{{ supplier.as_on_date|date:'Y-m-d'|default:today }}">
         </div>
         <div class="col-md-2">
           <label for="note" class="form-label">Remarks</label>
-          <textarea id="note" name="note" class="form-control" rows="1">{{ customer.note|default:'' }}</textarea>
+          <textarea id="note" name="note" class="form-control" rows="1">{{ supplier.note|default:'' }}</textarea>
         </div>
         <div class="col-md-2">
-          <label for="credit_period" class="form-label">Credit Period</label>
-          <input type="number" id="credit_period" name="credit_period" class="form-control" placeholder="0" value="{{ customer.credit_period|default:'' }}">
+          <label for="credit_term" class="form-label">Credit Period</label>
+          <input type="number" id="credit_term" name="credit_term" class="form-control" placeholder="0" value="{{ supplier.credit_term|default:'' }}">
         </div>
         <div class="col-md-2">
           <label for="credit_limit" class="form-label">Credit Limit</label>
-          <input type="number" step="0.01" id="credit_limit" name="credit_limit" class="form-control" placeholder="0" value="{{ customer.credit_limit|default:'0' }}">
+          <input type="number" step="0.01" id="credit_limit" name="credit_limit" class="form-control" placeholder="0" value="{{ supplier.credit_limit|default:'0' }}">
         </div>
 
         <div class="col-md-2">
           <label for="country" class="form-label">Country</label>
-          <input type="text" id="country" name="country" class="form-control" value="{{ customer.country|default:'India' }}">
+          <input type="text" id="country" name="country" class="form-control" value="{{ supplier.country|default:'India' }}">
         </div>
         <div class="col-md-2">
           <label for="currency" class="form-label">Currency</label>
-          <input type="text" id="currency" name="currency" class="form-control" value="{{ customer.currency|default:'INR' }}">
+          <input type="text" id="currency" name="currency" class="form-control" value="{{ supplier.currency|default:'INR' }}">
         </div>
         <div class="col-md-2">
           <label for="account_no" class="form-label">Account No</label>
-          <input type="text" id="account_no" name="account_no" class="form-control" value="{{ customer.account_no|default:'' }}">
+          <input type="text" id="account_no" name="account_no" class="form-control" value="{{ supplier.account_no|default:'' }}">
         </div>
         <div class="col-md-2">
           <label for="ifsc_code" class="form-label">IFSC Code</label>
-          <input type="text" id="ifsc_code" name="ifsc_code" class="form-control" value="{{ customer.ifsc_code|default:'' }}">
+          <input type="text" id="ifsc_code" name="ifsc_code" class="form-control" value="{{ supplier.ifsc_code|default:'' }}">
         </div>
         <div class="col-md-4">
           <label for="bank_details" class="form-label">Bank Details</label>
-          <textarea id="bank_details" name="bank_details" class="form-control" rows="1">{{ customer.bank_details|default:'' }}</textarea>
+          <textarea id="bank_details" name="bank_details" class="form-control" rows="1">{{ supplier.bank_details|default:'' }}</textarea>
         </div>
 
         <div class="col-md-12">
           <label for="terms" class="form-label">Terms</label>
-          <textarea id="terms" name="terms" class="form-control" rows="2">{{ customer.terms|default:'' }}</textarea>
+          <textarea id="terms" name="terms" class="form-control" rows="2">{{ supplier.terms|default:'' }}</textarea>
         </div>
 
         <div class="col-md-3">
           <label for="agreement_start_date" class="form-label">Agreement Start Date</label>
-          <input type="date" id="agreement_start_date" name="agreement_start_date" class="form-control" value="{{ customer.agreement_start_date|date:'Y-m-d'|default:today }}">
+          <input type="date" id="agreement_start_date" name="agreement_start_date" class="form-control" value="{{ supplier.agreement_start_date|date:'Y-m-d'|default:today }}">
         </div>
         <div class="col-md-3">
           <label for="agreement_months" class="form-label">Agreement Months</label>
-          <input type="number" id="agreement_months" name="agreement_months" class="form-control" min="0" value="{{ customer.agreement_months|default:'' }}">
+          <input type="number" id="agreement_months" name="agreement_months" class="form-control" min="0" value="{{ supplier.agreement_months|default:'' }}">
         </div>
         <div class="col-md-3">
           <label for="agreement_copy" class="form-label">Agreement Copy</label>
           <input type="file" id="agreement_copy" name="agreement_copy" class="form-control">
-          {% if customer.agreement_copy %}
-          <div class="form-text">Current: <a href="{{ customer.agreement_copy.url }}" target="_blank">{{ customer.agreement_copy.name }}</a></div>
+          {% if supplier.agreement_copy %}
+          <div class="form-text">Current: <a href="{{ supplier.agreement_copy.url }}" target="_blank">{{ supplier.agreement_copy.name }}</a></div>
           {% endif %}
         </div>
         <div class="col-md-3">
           <label for="other_documents" class="form-label">Other Documents</label>
           <input type="file" id="other_documents" name="other_documents" class="form-control">
-          {% if customer.other_documents %}
-          <div class="form-text">Current: <a href="{{ customer.other_documents.url }}" target="_blank">{{ customer.other_documents.name }}</a></div>
+          {% if supplier.other_documents %}
+          <div class="form-text">Current: <a href="{{ supplier.other_documents.url }}" target="_blank">{{ supplier.other_documents.name }}</a></div>
           {% endif %}
         </div>
       </div>
 
       <div class="d-flex justify-content-end gap-2 mt-4">
-        <a href="{% url 'customer' %}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
-        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {% if customer %}Update{% else %}Save{% endif %}</button>
+        <a href="{% url 'supplier' %}" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> {% if supplier %}Update{% else %}Save{% endif %}</button>
       </div>
     </form>
   </div>
@@ -340,7 +348,7 @@ get('save_billing_address').onclick=()=>{
   if(!selectedShippingAddressId) showShippingAddress(null);
   billingAddressModal.hide();
 };
-get('customer-form').addEventListener('submit', e=>{
+get('supplier-form').addEventListener('submit', e=>{
   if(!get('address').value.trim()){
     e.preventDefault();
     alert('Billing address is required.');
@@ -382,10 +390,10 @@ get('shipping_address_list').addEventListener('change', e=>{ if(e.target.classLi
 get('open_add_shipping_address').onclick=()=>{ get('shipping_address_modal_title').textContent='Add Shipping Address'; get('shipping-address-form').reset(); fillShippingAddressFields(get('address').value); editingShippingAddressId=null; changeShippingAddressModal.hide(); shippingAddressModal.show(); };
 get('shippingAddressModal').addEventListener('hidden.bs.modal', ()=>{ changeShippingAddressModal.show(); });
 
-{% if customer %}
-const customerId = {{ customer.id }};
+{% if supplier %}
+const supplierId = {{ supplier.id }};
 async function loadShippingAddresses(){
-  const response = await fetch(`/customer/${customerId}/shipping-addresses/`);
+  const response = await fetch(`/supplier/${supplierId}/shipping-addresses/`);
   shippingAddresses = response.ok ? await response.json() : [];
   const def = shippingAddresses.find(a=>a.is_default) || shippingAddresses[0];
   selectedShippingAddressId = def?.id || null;
@@ -395,7 +403,7 @@ get('shipping_address_list').addEventListener('click', async e=>{
   const editBtn = e.target.closest('.edit-address');
   const deleteBtn = e.target.closest('.delete-address');
   if(editBtn){
-    const response = await fetch(`/customer/${customerId}/shipping-addresses/${editBtn.dataset.id}/`);
+    const response = await fetch(`/supplier/${supplierId}/shipping-addresses/${editBtn.dataset.id}/`);
     if(!response.ok) return;
     const address = await response.json();
     get('shipping_address_modal_title').textContent='Edit Shipping Address';
@@ -409,7 +417,7 @@ get('shipping_address_list').addEventListener('click', async e=>{
   }
   if(deleteBtn){
     if(!confirm('Delete this shipping address?')) return;
-    await fetch(`/customer/${customerId}/shipping-addresses/${deleteBtn.dataset.id}/`, {method:'DELETE', headers:{'X-CSRFToken':csrf()}});
+    await fetch(`/supplier/${supplierId}/shipping-addresses/${deleteBtn.dataset.id}/`, {method:'DELETE', headers:{'X-CSRFToken':csrf()}});
     await loadShippingAddresses();
     pendingShippingAddressId = selectedShippingAddressId;
     renderShippingAddressList();
@@ -420,7 +428,7 @@ get('shipping-address-form').onsubmit=async event=>{
   const composedAddress=composeShippingAddress();
   const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:get('shipping_contact_person').value,mobile:get('shipping_mobile').value,is_default:get('shipping_is_default').checked};
   const id=editingShippingAddressId;
-  const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
+  const response=await fetch(`/supplier/${supplierId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
   if(!response.ok){const err=await response.json();return alert(err.error||'Unable to save shipping address.')}
   const result=await response.json();
   const savedId=id||result.id;
@@ -431,7 +439,7 @@ get('shipping-address-form').onsubmit=async event=>{
 };
 get('confirm_shipping_address').onclick=async()=>{
   if(pendingShippingAddressId && String(pendingShippingAddressId)!==String(selectedShippingAddressId)){
-    await fetch(`/customer/${customerId}/shipping-addresses/${pendingShippingAddressId}/`,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify({is_default:true})});
+    await fetch(`/supplier/${supplierId}/shipping-addresses/${pendingShippingAddressId}/`,{method:'PUT',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify({is_default:true})});
     await loadShippingAddresses();
   }
   changeShippingAddressModal.hide();

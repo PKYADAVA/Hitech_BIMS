@@ -26,9 +26,9 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'expense_type_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'expense_type' %}active{% endif %} activate" href="{% url 'expense_type_list' %}"><i class="fas fa-tags me-1"></i>Expense Type</a></li>{% endif %}
         {% if 'hatchery_expense_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'hatchery_expense' %}active{% endif %} activate" href="{% url 'hatchery_expense_list' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Hatchery Expense</a></li>{% endif %}
       {% elif module == 'purchase' %}
-        {% if 'supplier' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'supplier' %}active{% endif %} activate" href="{% url 'supplier' %}"><i class="fas fa-truck me-1"></i>Supplier</a></li>{% endif %}
         {% if 'vendor_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'vendor_groups' %}active{% endif %} activate" href="{% url 'vendor_groups' %}"><i class="fas fa-users me-1"></i>Vendor Groups</a></li>{% endif %}
         {% if 'tax_master' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'tax_master' %}active{% endif %} activate" href="{% url 'tax_master' %}"><i class="fas fa-percentage me-1"></i>Tax Master</a></li>{% endif %}
+        {% if 'supplier' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'supplier' %}active{% endif %} activate" href="{% url 'supplier' %}"><i class="fas fa-truck me-1"></i>Supplier</a></li>{% endif %}
       {% elif module == 'purchase_transaction' %}
         {% if 'purchase_order' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'purchase_order' %}active{% endif %} activate" href="{% url 'purchase_order' %}"><i class="fas fa-file-invoice me-1"></i>Create Purchase Order</a></li>{% endif %}
       {% elif module == 'hatchery_transaction' %}
@@ -91,6 +91,8 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'assign_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'assign_groups' %}active{% endif %} activate" href="{% url 'assign_groups' %}"><i class="fas fa-users-cog me-1"></i>Assign Groups</a></li>{% endif %}
         {% if 'user_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'user_groups' %}active{% endif %} activate" href="{% url 'user_groups' %}"><i class="fas fa-layer-group me-1"></i>Manage User Groups</a></li>{% endif %}
         {% if 'user_analytics' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'user_analytics' %}active{% endif %} activate" href="{% url 'user_analytics' %}"><i class="fas fa-chart-line me-1"></i>User Analytics</a></li>{% endif %}
+        {% if 'picklists' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'picklists' %}active{% endif %} activate" href="{% url 'picklists' %}"><i class="fas fa-list-check me-1"></i>Picklists</a></li>{% endif %}
+        {% if 'field_bindings' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'field_bindings' %}active{% endif %} activate" href="{% url 'field_bindings' %}"><i class="fas fa-link me-1"></i>Field Bindings</a></li>{% endif %}
       {% endif %}
     </ul>
   </div>

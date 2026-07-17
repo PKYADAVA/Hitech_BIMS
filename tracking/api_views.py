@@ -160,8 +160,12 @@ class LiveDashboardAPI(View):
 
         employees, status_filter = [], (request.GET.get("status") or "").strip()
         for row in rows:
+            # Same freshest-signal rule as the sync engine: a stationary but
+            # connected device (fresh heartbeat, old GPS fix) is online.
+            last_seen = max(value for value in (row.recorded_at, row.heartbeat_at)
+                            if value is not None)
             status = row.status
-            if now - row.recorded_at > offline_after:
+            if now - last_seen > offline_after:
                 status = "offline"
             if status_filter and status != status_filter:
                 continue
@@ -186,6 +190,7 @@ class LiveDashboardAPI(View):
                 "address": row.address,
                 "current_customer": row.current_customer.name if row.current_customer else "",
                 "recorded_at": row.recorded_at.isoformat(),
+                "last_seen": last_seen.isoformat(),
                 "today_distance_km": float(distance_by_employee.get(employee.pk, 0)),
                 "today_visits": visits_by_employee.get(employee.pk, 0),
             })
@@ -219,7 +224,9 @@ class LiveDashboardAPI(View):
         total_employees = Employee.objects.exclude(relieve=True).count()
         live = EmployeeLiveLocation.objects.exclude(employee__relieve=True)
         stale_cutoff = now - offline_after
-        fresh = live.filter(recorded_at__gte=stale_cutoff)
+        fresh = live.filter(
+            Q(recorded_at__gte=stale_cutoff) | Q(heartbeat_at__gte=stale_cutoff)
+        )
 
         online = fresh.exclude(status="offline").count()
         tracked = live.count()

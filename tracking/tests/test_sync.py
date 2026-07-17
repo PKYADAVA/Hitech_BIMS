@@ -152,7 +152,7 @@ class SyncFailureTests(TestCase):
         self.assertEqual(runs[0].status, "success")
         self.assertEqual(runs[0].retry_count, 1)
 
-    def test_auth_error_aborts_provider_and_flags_row(self):
+    def test_auth_error_on_directory_aborts_provider(self):
         class RejectedAdapter(MockProviderAdapter):
             def fetch_employees(self):
                 raise TrackingAuthError("bad key")
@@ -165,6 +165,23 @@ class SyncFailureTests(TestCase):
         self.provider.refresh_from_db()
         self.assertEqual(self.provider.last_sync_status, "error")
         self.assertIn("bad key", self.provider.last_error)
+
+    def test_auth_error_on_other_kind_is_a_module_gap_not_an_abort(self):
+        """Per-module licence rejections must not poison the provider."""
+        class UnlicensedVisitsAdapter(MockProviderAdapter):
+            def fetch_visits(self, window_start, window_end):
+                raise TrackingAuthError("You are not authorized to perform this!")
+
+        service = SyncService(adapter_factory=lambda p: UnlicensedVisitsAdapter(p),
+                              sleep=lambda seconds: None)
+        runs = service.sync_provider(self.provider)
+        by_kind = {run.sync_type: run.status for run in runs}
+        self.assertEqual(by_kind["visits"], "failed")
+        self.assertEqual(by_kind["live"], "success")
+        self.assertEqual(by_kind["geofences"], "success")  # ran after visits
+        self.provider.refresh_from_db()
+        self.assertEqual(self.provider.last_sync_status, "ok")
+        self.assertIn("visits", self.provider.last_error)  # gap noted, not fatal
 
     def test_permanent_error_fails_run_but_continues_other_kinds(self):
         class BrokenVisitsAdapter(MockProviderAdapter):

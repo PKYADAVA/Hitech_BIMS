@@ -1,6 +1,8 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Manage Purchase{% endblock %}
+{% block title %}
+Manage Suppliers
+  {% endblock %}
 
 {% block nav %}
  {% include 'main_top_navbar.html' with active_tab='purchase' %}
@@ -8,425 +10,133 @@
 
 {% block content %}
  <!-- Toggle Navbar -->
- {% include '_purchase_subnavbar.html' with active_tab='supplier' %}
+{% include '_purchase_subnavbar.html' with active_tab='supplier' %}
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header danger-header">
+        <h5 class="modal-title"><i class="fas fa-trash me-2"></i>Confirm Deletion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this supplier?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Cancel
+        </button>
+        <form id="confirmDeleteForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash me-1"></i>Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="page-header">
-    <div class="page-header-title"><i class="fas fa-truck"></i>Manage Suppliers</div>
+    <div class="page-header-title">Manage Suppliers</div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Add and manage supplier records</div>
-        {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#supplierFormModal">
-    <i class="fas fa-plus"></i>Add New Supplier
-  </button>{% endif %}
+      {% if page_perms.add %}<a href="{% url 'supplier_add' %}" class="btn btn-primary">
+        <i class="fas fa-plus"></i> Add New Supplier
+      </a>{% endif %}
     </div>
 </div>
 
-<div>
-    <div>
-        <!-- Modal Structure -->
-        <div class="modal fade" id="supplierFormModal" tabindex="-1" aria-labelledby="supplierFormModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="supplierFormModalLabel"><i class="fas fa-plus me-2"></i>Add New Supplier</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <!-- Form Section -->
-                        <form id="supplier-form">
-                            {% csrf_token %}
-                            <input type="hidden" id="supplier-id" />
-                            <div class="mb-3">
-                                <label for="name" class="form-label">Name</label>
-                                <input
-                                    type="text"
-                                    id="name"
-                                    class="form-control"
-                                    placeholder="Enter supplier name"
-                                    required
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="address" class="form-label">Address</label>
-                                <textarea
-                                    id="address"
-                                    class="form-control"
-                                    placeholder="Enter address"
-                                    rows="3"
-                                ></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label for="place" class="form-label">Place</label>
-                                <input
-                                    type="text"
-                                    id="place"
-                                    class="form-control"
-                                    placeholder="Enter place"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="mobile" class="form-label">Mobile</label>
-                                <input
-                                    type="text"
-                                    id="mobile"
-                                    class="form-control"
-                                    placeholder="Enter mobile number"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="contact_type" class="form-label">Contact Type</label>
-                                <input
-                                    type="text"
-                                    id="contact_type"
-                                    class="form-control"
-                                    placeholder="Enter contact type"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="pan" class="form-label">PAN</label>
-                                <input
-                                    type="text"
-                                    id="pan"
-                                    class="form-control"
-                                    placeholder="Enter PAN"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="supplier_group" class="form-label">Supplier Group</label>
-                                <input
-                                    type="text"
-                                    id="supplier_group"
-                                    class="form-control"
-                                    placeholder="Enter supplier group"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="gstin" class="form-label">GSTIN</label>
-                                <input
-                                    type="text"
-                                    id="gstin"
-                                    class="form-control"
-                                    placeholder="Enter GSTIN"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="state" class="form-label">State</label>
-                                <select id="state" class="form-control">
-                                    <option value="" selected disabled>Select a state</option>
-                                    {% for state in states_and_union_territories %}
-                                    <option value="{{ state }}">{{ state }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="credit_term" class="form-label">Credit Term (Days)</label>
-                                <input
-                                    type="number"
-                                    id="credit_term"
-                                    class="form-control"
-                                    placeholder="Enter credit term"
-                                />
-                            </div>
-                            <div class="mb-3">
-                                <label for="note" class="form-label">Note</label>
-                                <textarea
-                                    id="note"
-                                    class="form-control"
-                                    placeholder="Enter notes"
-                                    rows="3"
-                                ></textarea>
-                            </div>
-                            <div class="text-end">
-                                <button type="submit" class="btn btn-primary">Save</button>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <!-- List Section -->
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header"><i class="fas fa-table"></i>Supplier List</div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                    <table
-                        class="table table-hover table-bordered mb-0"
-                        id="supplier-table"
-                    >
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Name</th>
-                                <th>Address</th>
-                                <th>Place</th>
-                                <th>Mobile</th>
-                                <th>Contact Type</th>
-                                <th>PAN</th>
-                                <th>Group</th>
-                                <th>GSTIN</th>
-                                <th>State</th>
-                                <th>Credit Term</th>
-                                <th>Notes</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="supplier-table-body">
-                            <!-- AJAX content will load here -->
-                        </tbody>
-                    </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-table me-2"></i>Supplier List</h5>
     </div>
-</div>
-<script>
-$(document).ready(function () {
-    // Function to Load Supplier List
-    function loadSupplierList() {
-        $.ajax({
-            url: "{% url 'supplier_list' %}",
-            type: "GET",
-            success: function (response) {
-                const table = $("#supplier-table");
-                const tableBody = $("#supplier-table-body");
-
-                // Clear the current table body and destroy the DataTable if initialized
-                if ($.fn.DataTable.isDataTable(table)) {
-                    table.DataTable().clear().destroy();
-                }
-                tableBody.empty();
-
-                // Populate the table dynamically
-                response.forEach((item) => {
-                    const modalId = `editSupplierModal-${item.id}`;
-                    const formId = `edit-supplier-form-${item.id}`;
-                    console.log(item, "item");
-
-                    const tableRow = `
-                        <tr>
-                            <td>${item.name}</td>
-                            <td>${item.address}</td>
-                            <td>${item.place}</td>
-                            <td>${item.mobile}</td>
-                            <td>${item.contact_type}</td>
-                            <td>${item.pan}</td>
-                            <td>${item.supplier_group}</td>
-                            <td>${item.gstin}</td>
-                            <td>${item.state}</td>
-                            <td>${item.credit_term}</td>
-                            <td>${item.note}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#${modalId}"
-                                    data-id="${item.id}"
-                                    data-name="${item.name}"
-                                    data-address="${item.address}"
-                                    data-place="${item.place}"
-                                    data-mobile="${item.mobile}"
-                                    data-contact_type="${item.contact_type}"
-                                    data-pan="${item.pan}"
-                                    data-supplier_group="${item.supplier_group}"
-                                    data-gstin="${item.gstin}"
-                                    data-state="${item.state}"
-                                    data-credit_term="${item.credit_term}"
-                                    data-note="${item.note}">
-                                    <i class="fas fa-pen"></i>
-                                </button>{% endif %}
-                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-supplier"
-                                    data-id="${item.id}">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0" id="supplier-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>SMS/WhatsApp No</th>
+                        <th>Party Type</th>
+                        <th>Party Category</th>
+                        <th>Credit Limit</th>
+                        <th>State of Supply</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sup in suppliers %}
+                    <tr>
+                        <td>{{ sup.code|default:"—" }}</td>
+                        <td>{{ sup.name }}</td>
+                        <td>{{ sup.mobile|default:"—" }}</td>
+                        <td>{{ sup.contact_type|default:"—" }}</td>
+                        <td>{{ sup.get_party_category_display|default:"—" }}</td>
+                        <td>{{ sup.credit_limit }}</td>
+                        <td>{{ sup.state|default:"—" }}</td>
+                        <td>
+                            <div class="d-flex gap-1 justify-content-center">
+                                {% if page_perms.edit %}<a href="{% url 'supplier_edit' sup.id %}">
+                                    <button class="btn btn-outline-warning btn-sm" title="Edit">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                </a>{% endif %}
+                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-supplier" data-id="{{ sup.id }}" title="Delete">
                                     <i class="fas fa-trash"></i>
                                 </button>{% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-
-                    const modal = `
-                        <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content">
-                                    <div class="modal-header bg-success text-white">
-                                        <h5 class="modal-title">Edit Supplier</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <form id="${formId}">
-                                        <div class="modal-body">
-                                            <input type="hidden" name="supplier-id" value="${item.id}">
-                                            <div class="mb-3">
-                                                <label class="form-label">Name</label>
-                                                <input type="text" class="form-control" name="name" value="${item.name}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Address</label>
-                                                <textarea class="form-control" name="address" required>${item.address}</textarea>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Place</label>
-                                                <input type="text" class="form-control" name="place" value="${item.place}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Mobile</label>
-                                                <input type="text" class="form-control" name="mobile" value="${item.mobile}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Contact Type</label>
-                                                <input type="text" class="form-control" name="contact_type" value="${item.contact_type}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">PAN</label>
-                                                <input type="text" class="form-control" name="pan" value="${item.pan}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Supplier Group</label>
-                                                <input type="text" class="form-control" name="supplier_group" value="${item.supplier_group}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">GSTIN</label>
-                                                <input type="text" class="form-control" name="gstin" value="${item.gstin}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">State</label>
-                                                <select name="state" class="form-control">
-                                                    <option value="" disabled>Select a state</option>
-                                                    {% for state in states_and_union_territories %}
-                                                    <option value="{{ state }}" ${item.state == state ? 'selected' : ''}>{{ state }}</option>
-                                                    {% endfor %}
-                                                </select>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Credit Term (Days)</label>
-                                                <input type="number" class="form-control" name="credit_term" value="${item.credit_term}" required>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Note</label>
-                                                <textarea class="form-control" name="note">${item.note}</textarea>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Update</button>
-                                        </div>
-                                    </form>
-                                </div>
+                                {% if not page_perms.edit and not page_perms.delete %}<span class="text-muted small">—</span>{% endif %}
                             </div>
-                        </div>
-                    `;
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-                    tableBody.append(tableRow);
-                    $("body").append(modal);
-
-                    // Add event listener for the form inside modal
-                    $(`#${formId}`).off("submit").on("submit", function (e) {
-                        e.preventDefault();
-
-                        const jsonData = {
-                            supplier_id: $(`#${formId} [name="supplier-id"]`).val(),
-                            name: $(`#${formId} [name="name"]`).val(),
-                            address: $(`#${formId} [name="address"]`).val(),
-                            place: $(`#${formId} [name="place"]`).val(),
-                            mobile: $(`#${formId} [name="mobile"]`).val(),
-                            contact_type: $(`#${formId} [name="contact_type"]`).val(),
-                            pan: $(`#${formId} [name="pan"]`).val(),
-                            supplier_group: $(`#${formId} [name="supplier_group"]`).val(),
-                            gstin: $(`#${formId} [name="gstin"]`).val(),
-                            state: $(`#${formId} [name="state"]`).val(),
-                            credit_term: $(`#${formId} [name="credit_term"]`).val(),
-                            note: $(`#${formId} [name="note"]`).val(),
-                        };
-
-                        console.log(jsonData, "jsonData");
-
-                        $.ajax({
-                            url: `/supplier/${item.id}/`,
-                            type: "PUT",
-                            headers: {
-                                "X-CSRFToken": "{{ csrf_token }}",
-                                "Content-Type": "application/json",
-                            },
-                            data: JSON.stringify(jsonData),
-                            success: function () {
-                                alert("Supplier updated successfully.");
-                                loadSupplierList();
-                                $(`#${modalId}`).modal("hide");
-                            },
-                            error: function (xhr, status, error) {
-                                console.error(`Update error: ${error}`);
-                            },
-                        });
-                    });
-                });
-
-                // Reinitialize DataTable
-                table.DataTable();
-            },
-            error: function (xhr, status, error) {
-                console.error(`Failed to load suppliers: ${error}`);
-            },
-        });
-    }
-
-    // Load supplier list on page load
-    loadSupplierList();
-
-    // Add Supplier
-    $("#supplier-form").submit(function (e) {
-        e.preventDefault();
-
-        const supplierData = {
-            name: $("#name").val(),
-            address: $("#address").val(),
-            place: $("#place").val(),
-            mobile: $("#mobile").val(),
-            contact_type: $("#contact_type").val(),
-            pan: $("#pan").val(),
-            supplier_group: $("#supplier_group").val(),
-            gstin: $("#gstin").val(),
-            state: $("#state").val(),
-            credit_term: $("#credit_term").val(),
-            note: $("#note").val(),
-        };
-    
-        $.ajax({
-            url: "{% url 'supplier_create' %}",
-            type: "POST",
-            headers: {
-                "X-CSRFToken": "{{ csrf_token }}",
-            },
-            data: JSON.stringify(supplierData),  // Send the data as JSON
-            contentType: "application/json",  // Specify content type as JSON
-            success: function () {
-                $("#supplierFormModal").modal("hide");
-                alert("Supplier created successfully.");
-                loadSupplierList();
-                $("#supplier-form").trigger("reset");
-            },
-            error: function (xhr, status, error) {
-                console.error(`Create error: ${error}`);
-            },
-        });
+{% block js %}
+<script>
+  $(document).ready(function () {
+    $('#supplier-table').DataTable({
+      paging: true,
+      searching: true,
+      ordering: true,
+      info: true,
+      responsive: true,
+      language: { emptyTable: "No suppliers found" },
     });
 
-    // Delete Supplier
     $(document).on("click", ".delete-supplier", function () {
-        const supplierId = $(this).data("id");
-
-        $.ajax({
-            url: `/supplier/${supplierId}/delete/`,
-            type: "DELETE",
-            headers: { "X-CSRFToken": "{{ csrf_token }}" },
-            success: function () {
-                alert("Supplier deleted successfully.");
-                loadSupplierList();
-            },
-            error: function (xhr, status, error) {
-                console.error(`Delete error: ${error}`);
-            },
-        });
+      const id = $(this).data("id");
+      $("#confirmDeleteForm").attr("action", `/supplier/${id}/delete/`);
+      $("#deleteConfirmationModal").modal("show");
     });
-});
+  });
 </script>
-
+<script>
+{% for message in messages %}
+  {% if message.tags == "error" %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 4000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #991b1b, #dc2626)" }
+    }).showToast();
+  {% else %}
+    Toastify({
+      text: "{{ message }}",
+      duration: 3000,
+      gravity: "top",
+      position: "right",
+      style: { background: "linear-gradient(135deg, #065f46, #059669)" }
+    }).showToast();
+  {% endif %}
+{% endfor %}
+</script>
 {% endblock %}

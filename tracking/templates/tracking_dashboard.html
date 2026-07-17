@@ -204,7 +204,8 @@
         "<strong>" + esc(e.name) + "</strong> " + statusBadge(e.status) +
         "<br><small>" + esc(e.designation) + (e.warehouse ? " · " + esc(e.warehouse) : "") + "</small>" +
         (e.address ? "<br><small>" + esc(e.address) + "</small>" : "") +
-        "<br><small>Updated " + esc(agoLabel(e.recorded_at)) + "</small>" +
+        "<br><small>Seen " + esc(agoLabel(e.last_seen || e.recorded_at)) +
+        " · GPS fix " + esc(agoLabel(e.recorded_at)) + "</small>" +
         (e.current_customer ? "<br><small>At: " + esc(e.current_customer) + "</small>" : "")
       );
       cluster.addLayer(marker);
@@ -225,7 +226,9 @@
         "<td class='text-end'>" + e.today_distance_km.toFixed(1) + "</td>" +
         "<td class='text-end'>" + e.today_visits + "</td>" +
         "<td><small>" + esc(e.address || "–") + "</small></td>" +
-        "<td><small>" + esc(agoLabel(e.recorded_at)) + "</small></td>" +
+        "<td><small>" + esc(agoLabel(e.last_seen || e.recorded_at)) +
+          (e.last_seen && e.last_seen !== e.recorded_at
+            ? "<br>GPS fix " + esc(agoLabel(e.recorded_at)) : "") + "</small></td>" +
         "</tr>";
     });
     document.getElementById("trk-rows").innerHTML = rows.length

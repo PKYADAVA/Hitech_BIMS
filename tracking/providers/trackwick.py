@@ -65,19 +65,26 @@ _AUTH_HTTP_STATUSES = frozenset({401, 403})
 #:
 #: Confirmed against the account's API document + live server (paths resolve;
 #: "asset" is TrackoLap's term for a tracked employee/device):
-#:   employees   cust/1/api/asset/list
-#:   live        integration/api/get        (current data feed)
-#:   history     cust/1/api/asset/history
-#:   visits      cust/1/api/task/list       (cust/1/api/task/get also exists)
-#:   attendance  cust/1/api/punch/in/out    (POST — GET returns 405)
+#:   employees   cust/1/api/asset/list      (records embed latitude/longitude/
+#:                                           lastGPS, so it doubles as the
+#:                                           live-location source)
+#:   live        cust/1/api/asset/list      (integration/api/get exists but
+#:                                           answers a bare {"s":true} without
+#:                                           documented parameters)
+#:   history     cust/1/api/asset/history   (requires start/end params whose
+#:                                           names/format the doc must supply;
+#:                                           set param_names override then)
+#:   visits      cust/1/api/task/list       (requires the Tasks module licence)
+#:   attendance  cust/1/api/punch/in/out    (POST; employeeId = the empId code
+#:                                           + a "date" param, format TBD)
 #:   reports     cust/1/api/report/get      (exists; unused — the ERP builds
 #:                                           its own reports from raw data)
-#: No geofence endpoint could be located; the adapter drops the "geofences"
-#: capability unless an override supplies a path. Every entry is overridable
-#: per provider row from the Settings page (``extra_config["endpoints"]``).
+#: No geofence endpoint could be located. An endpoint override with an empty
+#: path disables that kind (the adapter drops the capability), which is how
+#: unlicensed vendor modules are switched off per provider.
 DEFAULT_ENDPOINTS = {
     "employees": {"path": "cust/1/api/asset/list", "method": "GET"},
-    "live": {"path": "integration/api/get", "method": "GET"},
+    "live": {"path": "cust/1/api/asset/list", "method": "GET"},
     "history": {"path": "cust/1/api/asset/history", "method": "GET"},
     "visits": {"path": "cust/1/api/task/list", "method": "GET"},
     "attendance": {"path": "cust/1/api/punch/in/out", "method": "POST"},
@@ -371,16 +378,20 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
         latitude = _to_decimal(_first(record, "lat", "latitude"))
         longitude = _to_decimal(_first(record, "lng", "lon", "longitude"))
         recorded_at = _to_datetime(
-            _first(record, "time", "timestamp", "lastUpdated", "recordedAt", "gpsTime")
+            _first(record, "time", "timestamp", "lastGPS", "lastUpdated",
+                   "recordedAt", "gpsTime")
         )
         if not external_id or latitude is None or longitude is None or recorded_at is None:
-            logger.warning("Skipping unparseable live-location record (eid=%s).", external_id or "?")
+            # Routine for assets that never sent a fix (e.g. admin accounts).
+            logger.debug("Skipping live record without a GPS fix (eid=%s).",
+                         external_id or "?")
             return None
         return LivePosition(
             external_employee_id=external_id,
             latitude=latitude,
             longitude=longitude,
             recorded_at=recorded_at,
+            heartbeat_at=_to_datetime(_first(record, "lastHeartbeat", "heartbeat")),
             accuracy_m=_to_float(_first(record, "accuracy", "gpsAccuracy")),
             speed_kmh=_to_float(_first(record, "speed", "speedKmh")),
             heading=_to_float(_first(record, "heading", "bearing")),

@@ -101,9 +101,9 @@ MODULE_REGISTRY = [
             {
                 "label": "Master",
                 "tabs": [
-                    ("supplier", "Supplier"),
                     ("vendor_groups", "Vendor Groups"),
                     ("tax_master", "Tax Master"),
+                    ("supplier", "Supplier"),
                 ],
             },
             {
@@ -260,6 +260,8 @@ MODULE_REGISTRY = [
                     ("assign_groups", "Assign Groups"),
                     ("user_groups", "Manage User Groups"),
                     ("user_analytics", "User Analytics"),
+                    ("picklists", "Picklists"),
+                    ("field_bindings", "Field Bindings"),
                 ],
             },
         ],
@@ -406,6 +408,10 @@ _ACTION_BASE_TO_TAB = {
     "category": "item_category",
     "item": "items",
     "warehouse": "warehouse",
+    # Picklist Master
+    "picklist": "picklists",
+    "picklist_value": "picklists",
+    "field_binding": "field_bindings",
 }
 
 

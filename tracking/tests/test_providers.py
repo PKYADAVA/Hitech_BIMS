@@ -96,8 +96,10 @@ class TrackWickAuthHeaderTests(TestCase):
         self.assertEqual(session.get.call_args.args[0],
                          "https://api.trackwick.com/v1/cust/1/api/asset/list")
         adapter.fetch_live_locations()
+        # Live positions come from the asset list itself (records embed
+        # latitude/longitude/lastGPS) — integration/api/get is undocumented.
         self.assertEqual(session.get.call_args.args[0],
-                         "https://api.trackwick.com/v1/integration/api/get")
+                         "https://api.trackwick.com/v1/cust/1/api/asset/list")
 
     def test_attendance_endpoint_uses_post(self):
         adapter, session = self._adapter_with_session(name="PostCheck")

@@ -309,7 +309,13 @@ class EmployeeLiveLocation(models.Model):
         help_text="Customer whose geofence/visit the employee is currently inside.",
     )
     recorded_at = models.DateTimeField(
-        db_index=True, help_text="Device-side timestamp of this position."
+        db_index=True, help_text="Device-side timestamp of this position (GPS fix)."
+    )
+    heartbeat_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Last device heartbeat. Vendors refresh the GPS fix only on "
+                  "movement, so online/offline is judged by the freshest of "
+                  "fix and heartbeat.",
     )
     synced_at = models.DateTimeField(auto_now=True, help_text="When the ERP last updated this row.")
 

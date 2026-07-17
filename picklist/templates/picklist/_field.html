@@ -1,0 +1,6 @@
+{% if mode == "PICKLIST" %}<select id="{{ field_id }}" name="{{ field_name }}" class="form-select"{% if required %} required{% endif %}>
+  <option value=""{% if not current_value %} selected{% endif %}>select</option>
+  {% for value, label in options %}
+  <option value="{{ value }}"{% if current_value == value %} selected{% endif %}>{{ label }}</option>
+  {% endfor %}
+</select>{% else %}<input type="text" id="{{ field_id }}" name="{{ field_name }}" class="form-control" placeholder="{{ placeholder }}" value="{{ current_value|default:'' }}"{% if required %} required{% endif %}>{% endif %}

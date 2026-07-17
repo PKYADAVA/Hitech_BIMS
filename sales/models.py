@@ -12,8 +12,16 @@ class CustomerGroup(models.Model):
     code = models.CharField(max_length=50, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     currency = models.CharField(max_length=50, null=True, blank=True)
-    control_account = models.CharField(max_length=100, null=True, blank=True)
-    advance_account = models.CharField(max_length=100, null=True, blank=True)
+    control_account = models.ForeignKey(
+        'account.ChartOfAccount', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='customer_group_control_accounts',
+        help_text="Control account from the chart of accounts",
+    )
+    advance_account = models.ForeignKey(
+        'account.ChartOfAccount', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='customer_group_advance_accounts',
+        help_text="Advance account from the chart of accounts",
+    )
 
 
 class SalesPriceMaster(models.Model):

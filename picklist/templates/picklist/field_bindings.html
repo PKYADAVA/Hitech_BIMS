@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Field Bindings{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_user_management_subnavbar.html' with active_tab='field_bindings' %}
+
+<div class="page-header">
+    <div class="page-header-title">Manage Field Bindings</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Choose whether each registered field is free text or a picklist</div>
+      {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bindingFormModal">
+        <i class="fas fa-plus"></i> Add Binding
+      </button>{% endif %}
+    </div>
+</div>
+
+<div class="modal fade" id="bindingFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bindingFormModalLabel">Add Binding</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="binding-form">
+          {% csrf_token %}
+          <input type="hidden" id="binding-id" />
+          <div class="mb-3">
+            <label for="field_path" class="form-label">Field<span class="text-danger">*</span></label>
+            <select id="field_path" class="form-select" required>
+              <option value="">select field</option>
+              {% for app_label, model_name, field_name, human_label in bindable_fields %}
+              <option value="{{ app_label }}.{{ model_name }}.{{ field_name }}">{{ human_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="mode" class="form-label">Mode</label>
+            <select id="mode" class="form-select">
+              <option value="FREE_TEXT">Free Text</option>
+              <option value="PICKLIST">Picklist</option>
+            </select>
+          </div>
+          <div class="mb-3" id="picklist_wrap" style="display:none;">
+            <label for="picklist" class="form-label">Picklist</label>
+            <select id="picklist" class="form-select">
+              <option value="">select picklist</option>
+              {% for pl in picklists %}
+              <option value="{{ pl.id }}">{{ pl.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-check mb-3" id="required_wrap" style="display:none;">
+            <input type="checkbox" class="form-check-input" id="is_required">
+            <label class="form-check-label" for="is_required">Required</label>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h5 class="mb-0"><i class="fas fa-table me-2"></i>Field Binding List</h5></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="binding-table">
+        <thead class="table-dark">
+          <tr><th>Field</th><th>Mode</th><th>Picklist</th><th>Required</th><th class="text-center">Actions</th></tr>
+        </thead>
+        <tbody id="binding-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(document).ready(function () {
+  function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+
+  function toggleModeFields() {
+    const isPicklist = $('#mode').val() === 'PICKLIST';
+    $('#picklist_wrap').toggle(isPicklist);
+    $('#required_wrap').toggle(isPicklist);
+  }
+  $('#mode').on('change', toggleModeFields);
+
+  function resetForm() {
+    $('#binding-form')[0].reset();
+    $('#binding-id').val('');
+    $('#field_path').prop('disabled', false);
+    toggleModeFields();
+    $('#bindingFormModalLabel').text('Add Binding');
+  }
+  $('#bindingFormModal').on('hidden.bs.modal', resetForm);
+
+  function loadBindings() {
+    $.get("{% url 'field_binding_list' %}", function (rows) {
+      const table = $('#binding-table');
+      if ($.fn.DataTable.isDataTable(table)) table.DataTable().clear().destroy();
+      const body = $('#binding-table-body').empty();
+      rows.forEach(b => {
+        body.append(`<tr>
+          <td>${b.human_label}</td>
+          <td>${b.mode === 'PICKLIST' ? '<span class="badge bg-info">Picklist</span>' : '<span class="badge bg-secondary">Free Text</span>'}</td>
+          <td>${b.picklist_name || '—'}</td>
+          <td>${b.is_required ? 'Yes' : 'No'}</td>
+          <td>
+            <div class="d-flex gap-1 justify-content-center">
+              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-binding" data-id="${b.id}" data-field_path="${b.field_path}" data-mode="${b.mode}" data-picklist="${b.picklist || ''}" data-is_required="${b.is_required}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+              {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-binding" data-id="${b.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+            </div>
+          </td>
+        </tr>`);
+      });
+      table.DataTable({ language: { emptyTable: 'No field bindings found' } });
+    });
+  }
+  loadBindings();
+
+  $('#binding-form').on('submit', function (e) {
+    e.preventDefault();
+    const id = $('#binding-id').val();
+    const payload = {
+      field_path: $('#field_path').val(), mode: $('#mode').val(),
+      picklist: $('#picklist').val() || null, is_required: $('#is_required').is(':checked'),
+    };
+    $.ajax({
+      url: id ? `/field_bindings/api/${id}/` : "{% url 'field_binding_create' %}",
+      type: id ? 'PUT' : 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': csrf() },
+      data: JSON.stringify(payload),
+      success: function () { $('#bindingFormModal').modal('hide'); loadBindings(); },
+      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save binding.'); },
+    });
+  });
+
+  $(document).on('click', '.edit-binding', function () {
+    const d = $(this).data();
+    $('#binding-id').val(d.id);
+    $('#field_path').val(d.field_path).prop('disabled', true);
+    $('#mode').val(d.mode);
+    toggleModeFields();
+    $('#picklist').val(d.picklist);
+    $('#is_required').prop('checked', d.is_required === true || d.is_required === 'true');
+    $('#bindingFormModalLabel').text('Edit Binding');
+    $('#bindingFormModal').modal('show');
+  });
+
+  $(document).on('click', '.delete-binding', function () {
+    if (!confirm('Delete this binding? The field will fall back to free text.')) return;
+    $.ajax({ url: `/field_bindings/api/${$(this).data('id')}/delete/`, type: 'DELETE', headers: { 'X-CSRFToken': csrf() }, success: loadBindings });
+  });
+});
+</script>
+{% endblock %}

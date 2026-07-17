@@ -42,8 +42,6 @@ class Command(BaseCommand):
             defaults={
                 "description": "Sample vendor group",
                 "currency": "INR",
-                "control_account": "Purchase Control",
-                "prepayment_account": "Prepayment",
             },
         )
         purchase_order, _ = PurchaseOrder.objects.get_or_create(
@@ -87,8 +85,6 @@ class Command(BaseCommand):
             defaults={
                 "description": "Sample customer group",
                 "currency": "INR",
-                "control_account": "Sales Control",
-                "advance_account": "Advance",
             },
         )
         Customer.objects.get_or_create(

@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Picklists{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_user_management_subnavbar.html' with active_tab='picklists' %}
+
+<div class="page-header">
+    <div class="page-header-title">Manage Picklists</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Define named lists of values that fields across the ERP can be bound to</div>
+      {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#picklistFormModal">
+        <i class="fas fa-plus"></i> Add New Picklist
+      </button>{% endif %}
+    </div>
+</div>
+
+<!-- Add/Edit Picklist Modal -->
+<div class="modal fade" id="picklistFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="picklistFormModalLabel">Add New Picklist</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="picklist-form">
+          {% csrf_token %}
+          <input type="hidden" id="picklist-id" />
+          <div class="mb-3">
+            <label for="key" class="form-label">Key<span class="text-danger">*</span></label>
+            <input type="text" id="key" class="form-control" placeholder="e.g. party_category" required>
+            <div class="form-text">Stable identifier used by field bindings. Lowercase, no spaces.</div>
+          </div>
+          <div class="mb-3">
+            <label for="name" class="form-label">Name<span class="text-danger">*</span></label>
+            <input type="text" id="name" class="form-control" placeholder="e.g. Party Category" required>
+          </div>
+          <div class="mb-3">
+            <label for="source_type" class="form-label">Source</label>
+            <select id="source_type" class="form-select">
+              <option value="STATIC">Static List (values entered here)</option>
+              <option value="MODEL">From Another Master (live-fetched)</option>
+            </select>
+          </div>
+          <div class="mb-3" id="source_model_wrap" style="display:none;">
+            <label for="source_model_key" class="form-label">Source Master</label>
+            <select id="source_model_key" class="form-select">
+              <option value="">select source</option>
+              {% for key, label in source_model_choices %}
+              <option value="{{ key }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Values Modal -->
+<div class="modal fade" id="valuesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Manage Values — <span id="values_picklist_name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="value-add-form" class="row g-2 align-items-end mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Value</label>
+            <input type="text" id="new_value" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Label</label>
+            <input type="text" id="new_label" class="form-control" placeholder="defaults to value">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Sort</label>
+            <input type="number" id="new_sort_order" class="form-control" value="0">
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-success w-100"><i class="fas fa-plus"></i> Add</button>
+          </div>
+        </form>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-dark"><tr><th>Value</th><th>Label</th><th>Sort</th><th>Active</th><th class="text-center">Actions</th></tr></thead>
+            <tbody id="values_table_body"><tr><td colspan="5" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h5 class="mb-0"><i class="fas fa-table me-2"></i>Picklist List</h5></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="picklist-table">
+        <thead class="table-dark">
+          <tr><th>Key</th><th>Name</th><th>Source</th><th>Active</th><th class="text-center">Actions</th></tr>
+        </thead>
+        <tbody id="picklist-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+{{ source_model_choices|json_script:"source-model-choices" }}
+<script>
+$(document).ready(function () {
+  function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+  const sourceLabels = JSON.parse(document.getElementById('source-model-choices').textContent)
+    .reduce((acc, pair) => { acc[pair[0]] = pair[1]; return acc; }, {});
+
+  $('#source_type').on('change', function () {
+    $('#source_model_wrap').toggle($(this).val() === 'MODEL');
+  });
+
+  function resetForm() {
+    $('#picklist-form')[0].reset();
+    $('#picklist-id').val('');
+    $('#key').prop('readonly', false);
+    $('#source_model_wrap').hide();
+    $('#picklistFormModalLabel').text('Add New Picklist');
+  }
+  $('#picklistFormModal').on('hidden.bs.modal', resetForm);
+
+  function loadPicklists() {
+    $.get("{% url 'picklist_list' %}", function (rows) {
+      const table = $('#picklist-table');
+      if ($.fn.DataTable.isDataTable(table)) table.DataTable().clear().destroy();
+      const body = $('#picklist-table-body').empty();
+      rows.forEach(pl => {
+        const sourceText = pl.source_type === 'STATIC'
+          ? `Static (${pl.value_count ?? 0} values)`
+          : `Live: ${sourceLabels[pl.source_model_key] || pl.source_label || pl.source_model_key}`;
+        body.append(`<tr>
+          <td>${pl.key}</td>
+          <td>${pl.name}</td>
+          <td>${sourceText}</td>
+          <td>${pl.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+          <td>
+            <div class="d-flex gap-1 justify-content-center">
+              ${pl.source_type === 'STATIC' ? `<button class="btn btn-outline-primary btn-sm manage-values" data-id="${pl.id}" data-name="${pl.name}" title="Manage Values"><i class="fas fa-list"></i></button>` : ''}
+              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-picklist" data-id="${pl.id}" data-key="${pl.key}" data-name="${pl.name}" data-source_type="${pl.source_type}" data-source_model_key="${pl.source_model_key}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+              {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-picklist" data-id="${pl.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+            </div>
+          </td>
+        </tr>`);
+      });
+      table.DataTable({ language: { emptyTable: 'No picklists found' } });
+    });
+  }
+  loadPicklists();
+
+  $('#picklist-form').on('submit', function (e) {
+    e.preventDefault();
+    const id = $('#picklist-id').val();
+    const payload = {
+      key: $('#key').val(), name: $('#name').val(),
+      source_type: $('#source_type').val(), source_model_key: $('#source_model_key').val(),
+    };
+    $.ajax({
+      url: id ? `/picklists/api/${id}/` : "{% url 'picklist_create' %}",
+      type: id ? 'PUT' : 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': csrf() },
+      data: JSON.stringify(payload),
+      success: function () {
+        $('#picklistFormModal').modal('hide');
+        loadPicklists();
+      },
+      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save picklist.'); },
+    });
+  });
+
+  $(document).on('click', '.edit-picklist', function () {
+    const d = $(this).data();
+    $('#picklist-id').val(d.id);
+    $('#key').val(d.key).prop('readonly', true);
+    $('#name').val(d.name);
+    $('#source_type').val(d.source_type).trigger('change');
+    $('#source_model_key').val(d.source_model_key);
+    $('#picklistFormModalLabel').text('Edit Picklist');
+    $('#picklistFormModal').modal('show');
+  });
+
+  $(document).on('click', '.delete-picklist', function () {
+    if (!confirm('Delete this picklist? Any fields bound to it will fall back to free text.')) return;
+    $.ajax({ url: `/picklists/api/${$(this).data('id')}/delete/`, type: 'DELETE', headers: { 'X-CSRFToken': csrf() }, success: loadPicklists });
+  });
+
+  // Manage Values
+  let currentPicklistId = null;
+  function loadValues() {
+    $.get(`/picklists/${currentPicklistId}/values/`, function (rows) {
+      const body = $('#values_table_body').empty();
+      if (!rows.length) { body.append('<tr><td colspan="5" class="text-center text-muted py-3">No values yet.</td></tr>'); return; }
+      rows.forEach(v => {
+        body.append(`<tr>
+          <td>${v.value}</td><td>${v.label}</td><td>${v.sort_order}</td>
+          <td>${v.is_active ? 'Yes' : 'No'}</td>
+          <td class="text-center"><button class="btn btn-outline-danger btn-sm delete-value" data-id="${v.id}"><i class="fas fa-trash"></i></button></td>
+        </tr>`);
+      });
+    });
+  }
+  $(document).on('click', '.manage-values', function () {
+    currentPicklistId = $(this).data('id');
+    $('#values_picklist_name').text($(this).data('name'));
+    loadValues();
+    $('#valuesModal').modal('show');
+  });
+  $('#value-add-form').on('submit', function (e) {
+    e.preventDefault();
+    $.ajax({
+      url: `/picklists/${currentPicklistId}/values/create/`, type: 'POST', contentType: 'application/json',
+      headers: { 'X-CSRFToken': csrf() },
+      data: JSON.stringify({ value: $('#new_value').val(), label: $('#new_label').val(), sort_order: $('#new_sort_order').val() || 0 }),
+      success: function () { $('#value-add-form')[0].reset(); loadValues(); },
+      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to add value.'); },
+    });
+  });
+  $(document).on('click', '.delete-value', function () {
+    if (!confirm('Delete this value?')) return;
+    $.ajax({ url: `/picklists/${currentPicklistId}/values/${$(this).data('id')}/delete/`, type: 'DELETE', headers: { 'X-CSRFToken': csrf() }, success: loadValues });
+  });
+});
+</script>
+{% endblock %}
