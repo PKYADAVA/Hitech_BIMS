@@ -12,9 +12,18 @@ Examples:
     python manage.py sync_tracking --kinds live           # fast live-only tick
     python manage.py sync_tracking --provider "TrackWick" --kinds history,visits
     python manage.py sync_tracking --lookback-hours 72    # first-run backfill
+    python manage.py sync_tracking --kinds history --lookback-hours 48 --reset-cursor
 
 A sensible production schedule is two entries: ``--kinds live`` every 1–2
 minutes, and a full run (all kinds) every 15–30 minutes.
+
+Cursor gotcha: ``--lookback-hours`` only takes effect on a sync type's very
+first-ever run — once any run (even the recurring scheduled one) has
+succeeded for that provider/kind, its ``window_end`` becomes the resume
+point and the flag is silently ignored on later invocations. To force a
+genuinely wider backfill (e.g. a newly-deployed environment whose scheduled
+job already ticked a few times before you got to it), add ``--reset-cursor``
+to discard prior sync-run history for the kinds being run first.
 """
 
 import logging
@@ -24,7 +33,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from tracking.models import SyncLock, TrackingSettings
+from tracking.models import SyncLock, TrackingSettings, TrackingSync
 from tracking.services.sync_service import DEFAULT_KINDS, SyncService
 
 logger = logging.getLogger("tracking.sync")
@@ -54,6 +63,14 @@ class Command(BaseCommand):
             "--trigger", default="scheduler", choices=["scheduler", "manual"],
             help="Recorded on the sync runs (default: scheduler).",
         )
+        parser.add_argument(
+            "--reset-cursor", action="store_true",
+            help="Discard prior TrackingSync history for the kind(s)/provider(s) "
+                 "about to run, so --lookback-hours actually takes effect instead "
+                 "of resuming from an already-advanced cursor. Use when a "
+                 "scheduled job already ticked before you got to run a wider "
+                 "manual backfill.",
+        )
 
     def handle(self, *args, **options):
         settings_row = TrackingSettings.get_solo()
@@ -68,6 +85,9 @@ class Command(BaseCommand):
             timedelta(hours=options["lookback_hours"])
             if options["lookback_hours"] else None
         )
+
+        if options["reset_cursor"]:
+            self._reset_cursor(kinds, options["provider"])
 
         if not self._acquire_lock():
             self.stdout.write("Tracking sync already in progress; skipping.")
@@ -91,6 +111,24 @@ class Command(BaseCommand):
             self.stdout.write(style(summary))
         finally:
             self._release_lock()
+
+    def _reset_cursor(self, kinds, provider_identifier):
+        from tracking.models import TrackingProvider
+
+        queryset = TrackingSync.objects.filter(
+            sync_type__in=(kinds or DEFAULT_KINDS)
+        )
+        if provider_identifier:
+            providers = TrackingProvider.objects.filter(is_active=True)
+            providers = (providers.filter(pk=int(provider_identifier))
+                        if str(provider_identifier).isdigit()
+                        else providers.filter(name__iexact=provider_identifier))
+            queryset = queryset.filter(provider__in=providers)
+        deleted, _ = queryset.delete()
+        self.stdout.write(
+            f"--reset-cursor: discarded {deleted} prior sync run(s) for "
+            f"{', '.join(kinds or DEFAULT_KINDS)}; the next run starts fresh."
+        )
 
     @staticmethod
     def _parse_kinds(raw):

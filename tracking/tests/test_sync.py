@@ -245,3 +245,52 @@ class SyncCommandTests(TestCase):
         self.assertIn("Completed", output)
         lock = SyncLock.objects.get(pk=1)
         self.assertFalse(lock.is_running)
+
+    def test_lookback_hours_ignored_after_a_prior_run_without_reset_cursor(self):
+        """Reproduces the exact bug hit in production: a narrow first run
+        advances the cursor, so a later wider --lookback-hours is silently
+        ignored unless --reset-cursor clears prior history first."""
+        settings_row = TrackingSettings.get_solo()
+        settings_row.enabled = True
+        settings_row.save()
+
+        self._call("--kinds", "history", "--lookback-hours", "1")
+        first_window_start = TrackingSync.objects.get(sync_type="history").window_start
+
+        self._call("--kinds", "history", "--lookback-hours", "48")
+        second_window_start = (
+            TrackingSync.objects.filter(sync_type="history")
+            .order_by("-started_at").first().window_start
+        )
+        # Without --reset-cursor, the wider lookback made no difference —
+        # it resumed near the first run's end, not 48h back from now.
+        self.assertGreater(second_window_start, first_window_start)
+        self.assertEqual(TrackingSync.objects.filter(sync_type="history").count(), 2)
+
+    def test_reset_cursor_makes_lookback_hours_take_effect(self):
+        settings_row = TrackingSettings.get_solo()
+        settings_row.enabled = True
+        settings_row.save()
+
+        self._call("--kinds", "history", "--lookback-hours", "1")
+        before_reset = timezone.now()
+
+        output = self._call(
+            "--kinds", "history", "--lookback-hours", "48", "--reset-cursor")
+        self.assertIn("discarded 1 prior sync run(s)", output)
+
+        run = TrackingSync.objects.filter(sync_type="history").latest("started_at")
+        self.assertLess(run.window_start, before_reset - timedelta(hours=47))
+        # The reset deleted the old row before creating the new one.
+        self.assertEqual(TrackingSync.objects.filter(sync_type="history").count(), 1)
+
+    def test_reset_cursor_scopes_to_requested_kinds_only(self):
+        settings_row = TrackingSettings.get_solo()
+        settings_row.enabled = True
+        settings_row.save()
+        self._call("--kinds", "employees,live")
+
+        output = self._call("--kinds", "employees", "--reset-cursor")
+        self.assertIn("discarded 0 prior sync run(s)", output)  # employees isn't windowed
+        # The unrelated "live" sync run from the first call must survive.
+        self.assertTrue(TrackingSync.objects.filter(sync_type="live").exists())

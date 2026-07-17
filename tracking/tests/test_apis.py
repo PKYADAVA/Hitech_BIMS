@@ -91,6 +91,21 @@ class LiveDashboardAPITests(ApiTestCase):
         self.assertGreater(by_name["Stale Fielder"]["last_seen"],
                            by_name["Stale Fielder"]["recorded_at"])
 
+    def test_today_distance_and_stops_exposed_per_employee(self):
+        from tracking.models import EmployeeRoute
+
+        EmployeeRoute.objects.create(
+            employee=self.fresh_employee, date=timezone.localdate(),
+            total_distance_km="12.30", stops_count=3,
+        )
+        _response, data = self.get_json(reverse("api_tracking_live"))
+        by_name = {e["name"]: e for e in data["employees"]}
+        self.assertEqual(by_name["Fresh Fielder"]["today_distance_km"], 12.3)
+        self.assertEqual(by_name["Fresh Fielder"]["today_stops"], 3)
+        # No route row today for this one -> zeroed, not missing/erroring.
+        self.assertEqual(by_name["Stale Fielder"]["today_distance_km"], 0)
+        self.assertEqual(by_name["Stale Fielder"]["today_stops"], 0)
+
     def test_filters(self):
         _response, data = self.get_json(
             reverse("api_tracking_live"), warehouse=self.warehouse.pk

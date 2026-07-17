@@ -148,10 +148,12 @@ class LiveDashboardAPI(View):
         )
         rows = self._apply_filters(rows, request)[:MAX_LIVE_ROWS]
 
-        distance_by_employee = dict(
+        today_routes = list(
             EmployeeRoute.objects.filter(date=today)
-            .values_list("employee_id", "total_distance_km")
+            .values("employee_id", "total_distance_km", "stops_count")
         )
+        distance_by_employee = {r["employee_id"]: r["total_distance_km"] for r in today_routes}
+        stops_by_employee = {r["employee_id"]: r["stops_count"] for r in today_routes}
         visits_by_employee = dict(
             EmployeeCustomerVisit.objects.filter(visit_date=today)
             .values("employee_id").annotate(n=Count("id"))
@@ -192,6 +194,7 @@ class LiveDashboardAPI(View):
                 "recorded_at": row.recorded_at.isoformat(),
                 "last_seen": last_seen.isoformat(),
                 "today_distance_km": float(distance_by_employee.get(employee.pk, 0)),
+                "today_stops": stops_by_employee.get(employee.pk, 0),
                 "today_visits": visits_by_employee.get(employee.pk, 0),
             })
 

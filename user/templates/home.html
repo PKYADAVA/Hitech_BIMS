@@ -7,6 +7,37 @@
   {% include 'main_top_navbar.html' with active_tab='home' %}
 {% endblock %}
 
+{% block css %}
+{% if 'tracking_dashboard' in allowed_tabs %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+  .home-trk-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:.5rem; }
+  .home-trk-tile { border:1px solid var(--bs-border-color, #dee2e6); border-radius:.5rem;
+                   padding:.4rem .65rem; background:var(--bs-body-bg, #fff); }
+  .home-trk-tile .trk-num { font-size:1.1rem; font-weight:600; line-height:1.2; }
+  .home-trk-tile .trk-lbl { font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; opacity:.7; }
+  #home-trk-map { height: 300px; border-radius:.5rem; z-index:0; }
+  .home-trk-list { max-height: 300px; overflow-y: auto; }
+  .home-trk-row { display:flex; align-items:center; gap:.6rem; padding:.5rem .25rem;
+                  border-bottom:1px solid var(--bs-border-color, #eee); }
+  .home-trk-row:last-child { border-bottom:none; }
+  .home-trk-list.has-routes .home-trk-row { cursor:pointer; }
+  .home-trk-list.has-routes .home-trk-row:hover { background: rgba(13,110,253,.06); }
+  .home-trk-list.has-routes .home-trk-row.active { background: rgba(13,110,253,.12); border-radius:.4rem; }
+  .home-trk-route-bar { display:none; align-items:center; justify-content:space-between;
+                        gap:.5rem; padding:.5rem .6rem; margin-bottom:.5rem;
+                        background: rgba(13,110,253,.08); border-radius:.4rem; font-size:.85rem; }
+  .home-trk-route-bar.show { display:flex; }
+  .home-trk-avatar { width:32px; height:32px; border-radius:50%; background:#6c757d; color:#fff;
+                     display:flex; align-items:center; justify-content:center; font-size:.8rem; flex-shrink:0; }
+  .home-trk-name { font-weight:600; font-size:.88rem; }
+  .home-trk-meta { font-size:.75rem; opacity:.7; }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-0">
 
@@ -58,6 +89,99 @@
         <div class="quick-label">Hatchery</div>
       </a>
     </div>
+
+    {% if 'tracking_dashboard' in allowed_tabs %}
+    {% csrf_token %}
+    <!-- Field Team — Live (Employee Tracking) -->
+    <div class="card mb-4">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="fas fa-location-dot"></i> Field Team — Live</span>
+        <span class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="home-trk-sync">
+            <i class="fas fa-rotate"></i> Sync Now
+          </button>
+          {% if 'tracking_routes' in allowed_tabs %}
+          <a href="{% url 'tracking_routes' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-route"></i> Route History
+          </a>
+          {% endif %}
+          <a href="{% url 'tracking_dashboard' %}" class="btn btn-sm btn-primary">
+            <i class="fas fa-map-location-dot"></i> Full Dashboard
+          </a>
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-md-3">
+            <label class="form-label mb-0 small">Search Employee</label>
+            <input type="text" id="home-trk-q" class="form-control form-control-sm" placeholder="Name or employee ID…" />
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-0 small">Branch / Warehouse</label>
+            <select id="home-trk-warehouse" class="form-select form-select-sm">
+              <option value="">All</option>
+              {% for w in trk_warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-0 small">Department / Group</label>
+            <select id="home-trk-group" class="form-select form-select-sm">
+              <option value="">All</option>
+              {% for g in trk_groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-0 small">Designation</label>
+            <select id="home-trk-designation" class="form-select form-select-sm">
+              <option value="">All</option>
+              {% for d in trk_designations %}<option value="{{ d.id }}">{{ d.title }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-0 small">Status</label>
+            <select id="home-trk-status" class="form-select form-select-sm">
+              <option value="">All</option>
+              <option value="online">Online</option>
+              <option value="moving">Moving</option>
+              <option value="idle">Idle</option>
+              <option value="offline">Offline</option>
+            </select>
+          </div>
+          <div class="col-md-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="home-trk-clear">Clear</button>
+          </div>
+        </div>
+
+        <div class="home-trk-tiles mb-3" id="home-trk-tiles">
+          <div class="home-trk-tile"><div class="trk-num" data-home-tile="online">–</div><div class="trk-lbl">Online</div></div>
+          <div class="home-trk-tile"><div class="trk-num" data-home-tile="moving">–</div><div class="trk-lbl">Moving</div></div>
+          <div class="home-trk-tile"><div class="trk-num" data-home-tile="offline">–</div><div class="trk-lbl">Offline</div></div>
+          <div class="home-trk-tile"><div class="trk-num" data-home-tile="not_tracked">–</div><div class="trk-lbl">Not Tracked</div></div>
+        </div>
+        <div class="row g-3">
+          <div class="col-lg-8">
+            <div id="home-trk-map"></div>
+          </div>
+          <div class="col-lg-4">
+            {% if 'tracking_routes' in allowed_tabs %}
+            <div class="home-trk-route-bar" id="home-trk-route-bar">
+              <div>
+                <strong id="home-trk-route-name"></strong>
+                <div class="text-muted" id="home-trk-route-stats"></div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="home-trk-route-back">
+                <i class="fas fa-arrow-left"></i> Back to Live
+              </button>
+            </div>
+            {% endif %}
+            <div class="home-trk-list{% if 'tracking_routes' in allowed_tabs %} has-routes{% endif %}" id="home-trk-list">
+              <div class="text-center text-muted py-4">Loading…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Features Section -->
     <div class="d-flex align-items-center justify-content-between mb-3">
@@ -137,4 +261,258 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block js %}
+{% if 'tracking_dashboard' in allowed_tabs %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+(function () {
+  "use strict";
+  const API_URL = "{% url 'api_tracking_live' %}";
+  const SYNC_URL = "{% url 'api_tracking_sync_now' %}";
+  const ROUTE_URL = "{% url 'api_tracking_route' %}";
+  const REFRESH_MS = 30000;
+  const STATUS_BADGE = { online:"success", moving:"primary", idle:"warning", offline:"danger", unknown:"secondary" };
+
+  const map = L.map("home-trk-map").setView([22.9734, 78.6569], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const cluster = L.markerClusterGroup({ maxClusterRadius: 45 });
+  map.addLayer(cluster);
+  const routeLayer = L.layerGroup();
+  let fitted = false;
+  let routeMode = null; // {employeeId} while viewing a route instead of live positions
+
+  // Google encoded-polyline decoder (matches tracking.services.geo.encode_polyline).
+  function decodePolyline(encoded, precision) {
+    const factor = Math.pow(10, precision || 5);
+    let index = 0, lat = 0, lng = 0;
+    const points = [];
+    while (index < encoded.length) {
+      for (const which of ["lat", "lng"]) {
+        let result = 0, shift = 0, byte;
+        do {
+          byte = encoded.charCodeAt(index++) - 63;
+          result |= (byte & 0x1f) << shift;
+          shift += 5;
+        } while (byte >= 0x20);
+        const delta = (result & 1) ? ~(result >> 1) : (result >> 1);
+        if (which === "lat") lat += delta; else lng += delta;
+      }
+      points.push([lat / factor, lng / factor]);
+    }
+    return points;
+  }
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"']/g,
+      ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+  }
+  function agoLabel(iso) {
+    const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + " min ago";
+    const hours = Math.floor(mins / 60);
+    return hours < 24 ? hours + " h ago" : Math.floor(hours / 24) + " d ago";
+  }
+
+  function render(data) {
+    Object.entries(data.tiles).forEach(([key, value]) => {
+      const el = document.querySelector('[data-home-tile="' + key + '"]');
+      if (el) el.textContent = value;
+    });
+
+    cluster.clearLayers();
+    const bounds = [];
+    const rows = data.employees.map(e => {
+      bounds.push([e.latitude, e.longitude]);
+      const marker = L.marker([e.latitude, e.longitude]);
+      marker.bindPopup(
+        "<strong>" + esc(e.name) + "</strong><br><small>" + esc(e.designation) +
+        (e.warehouse ? " · " + esc(e.warehouse) : "") + "</small>" +
+        "<br><small>Updated " + esc(agoLabel(e.last_seen || e.recorded_at)) + "</small>"
+      );
+      cluster.addLayer(marker);
+
+      const initial = esc((e.name || "?").charAt(0).toUpperCase());
+      const isActive = routeMode && routeMode.employeeId === e.employee_id;
+      return '<div class="home-trk-row' + (isActive ? " active" : "") +
+        '" data-employee-id="' + e.employee_id + '" data-employee-name="' + esc(e.name) + '">' +
+        (e.photo
+          ? '<img class="home-trk-avatar" src="' + esc(e.photo) + '" alt="" style="object-fit:cover;">'
+          : '<div class="home-trk-avatar">' + initial + "</div>") +
+        '<div class="flex-grow-1">' +
+          '<div class="home-trk-name">' + esc(e.name) + "</div>" +
+          '<div class="home-trk-meta">' + esc(e.designation || "") +
+          (e.warehouse ? " · " + esc(e.warehouse) : "") + "</div>" +
+        "</div>" +
+        '<div class="text-end">' +
+          '<span class="badge bg-' + (STATUS_BADGE[e.status] || "secondary") + ' text-capitalize">' + esc(e.status) + "</span>" +
+          '<div class="home-trk-meta mt-1">' + e.today_distance_km.toFixed(1) + " km · " +
+          e.today_stops + " stop" + (e.today_stops === 1 ? "" : "s") + "</div>" +
+        "</div>" +
+      "</div>";
+    });
+    document.getElementById("home-trk-list").innerHTML = rows.length
+      ? rows.join("")
+      : '<div class="text-center text-muted py-4">No live locations yet.</div>';
+
+    // Skip re-fitting/showing the live cluster while a route is on screen —
+    // the background poll must not yank the map away from what's selected.
+    if (!routeMode && !fitted && bounds.length) {
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+      fitted = true;
+    }
+  }
+
+  const canViewRoutes = Boolean(document.getElementById("home-trk-route-bar"));
+
+  function showRoute(employeeId, employeeName) {
+    if (!canViewRoutes) return;
+    routeMode = { employeeId };
+    map.removeLayer(cluster);
+    routeLayer.clearLayers();
+    routeLayer.addTo(map);
+    document.getElementById("home-trk-route-name").textContent = employeeName;
+    document.getElementById("home-trk-route-stats").textContent = "Loading…";
+    document.getElementById("home-trk-route-bar").classList.add("show");
+    document.querySelectorAll(".home-trk-row").forEach(row => {
+      row.classList.toggle("active", row.dataset.employeeId === String(employeeId));
+    });
+
+    fetch(ROUTE_URL + "?employee=" + employeeId, { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(data => {
+        const statsEl = document.getElementById("home-trk-route-stats");
+        if (!data.route) {
+          statsEl.textContent = "No route recorded today yet.";
+          return;
+        }
+        statsEl.textContent = data.route.distance_km.toFixed(1) + " km · " +
+          data.route.stops_count + " stop(s)";
+        const bounds = [];
+        if (data.route.polyline) {
+          const path = decodePolyline(data.route.polyline);
+          bounds.push(...path);
+          L.polyline(path, { weight: 4, opacity: 0.8, color: "#0d6efd" }).addTo(routeLayer);
+        }
+        data.timeline.forEach(entry => {
+          if (entry.latitude == null || entry.type === "travel") return;
+          bounds.push([entry.latitude, entry.longitude]);
+          L.circleMarker([entry.latitude, entry.longitude], {
+            radius: 6, color: entry.type === "check_in" ? "#198754"
+              : entry.type === "check_out" ? "#dc3545" : "#fd7e14",
+            fillOpacity: 0.9,
+          }).bindPopup(esc(entry.label)).addTo(routeLayer);
+        });
+        if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+      })
+      .catch(() => {
+        document.getElementById("home-trk-route-stats").textContent = "Could not load route.";
+      });
+  }
+
+  function backToLive() {
+    routeMode = null;
+    map.removeLayer(routeLayer);
+    map.addLayer(cluster);
+    fitted = false;
+    document.getElementById("home-trk-route-bar").classList.remove("show");
+    document.querySelectorAll(".home-trk-row.active").forEach(row => row.classList.remove("active"));
+    load();
+  }
+
+  if (canViewRoutes) {
+    document.getElementById("home-trk-route-back").addEventListener("click", backToLive);
+    document.getElementById("home-trk-list").addEventListener("click", event => {
+      const row = event.target.closest(".home-trk-row");
+      if (!row) return;
+      showRoute(Number(row.dataset.employeeId), row.dataset.employeeName);
+    });
+  }
+
+  function filterParams() {
+    const params = new URLSearchParams();
+    const q = document.getElementById("home-trk-q").value.trim();
+    if (q) params.set("q", q);
+    [["home-trk-warehouse","warehouse"],["home-trk-group","group"],
+     ["home-trk-designation","designation"],["home-trk-status","status"]].forEach(([id, key]) => {
+      const value = document.getElementById(id).value;
+      if (value) params.set(key, value);
+    });
+    return params.toString();
+  }
+
+  function load() {
+    fetch(API_URL + "?" + filterParams(), { credentials: "same-origin" })
+      .then(response => response.json())
+      .then(render)
+      .catch(() => { /* transient poll failure; next tick retries */ });
+  }
+
+  function reloadWithNewFilters() {
+    fitted = false; // let the map re-fit to the newly filtered set
+    load();
+  }
+
+  document.getElementById("home-trk-q").addEventListener("input", () => {
+    clearTimeout(window.__homeTrkDebounce);
+    window.__homeTrkDebounce = setTimeout(reloadWithNewFilters, 400);
+  });
+  ["home-trk-warehouse","home-trk-group","home-trk-designation","home-trk-status"].forEach(id =>
+    document.getElementById(id).addEventListener("change", reloadWithNewFilters));
+  document.getElementById("home-trk-clear").addEventListener("click", () => {
+    document.getElementById("home-trk-q").value = "";
+    ["home-trk-warehouse","home-trk-group","home-trk-designation","home-trk-status"]
+      .forEach(id => { document.getElementById(id).value = ""; });
+    reloadWithNewFilters();
+  });
+
+  const syncButton = document.getElementById("home-trk-sync");
+  if (syncButton) {
+    syncButton.addEventListener("click", () => {
+      const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
+      syncButton.disabled = true;
+      const originalHtml = syncButton.innerHTML;
+      syncButton.innerHTML = '<i class="fas fa-rotate fa-spin"></i> Syncing…';
+      fetch(SYNC_URL, {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+        body: JSON.stringify({}),
+      })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (window.Toastify) {
+            const failed = ok ? data.runs.filter(run => run.status === "failed").length : 0;
+            Toastify({
+              text: ok
+                ? "Sync finished: " + data.runs.length + " run(s), " + failed + " failed."
+                : (data.error || "Sync failed."),
+              duration: 4000, gravity: "top", position: "right",
+              style: { background: ok && !failed ? "#198754" : "#dc3545" },
+            }).showToast();
+          }
+          if (ok) load();
+        })
+        .catch(() => {
+          if (window.Toastify) {
+            Toastify({ text: "Sync request failed.", duration: 4000, gravity: "top",
+                      position: "right", style: { background: "#dc3545" } }).showToast();
+          }
+        })
+        .finally(() => {
+          syncButton.disabled = false;
+          syncButton.innerHTML = originalHtml;
+        });
+    });
+  }
+
+  load();
+  setInterval(load, REFRESH_MS);
+})();
+</script>
+{% endif %}
 {% endblock %}

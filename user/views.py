@@ -14,7 +14,9 @@ from django.contrib.auth.models import Group, Permission
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
-from hr.models import Employee
+from hr.models import Designation, Employee
+from hr.models import Group as HrGroup
+from inventory.models import Warehouse
 from .models import UserProfile, GroupTabPermission, GroupAccessProfile
 from .access import MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES
 
@@ -44,12 +46,23 @@ def logout(request):
     return redirect("login")
 
 
+def _home_context():
+    """Filter-option lists for the Field Team widget (cheap; harmless to
+    compute even for users without tracking access — the widget itself is
+    permission-gated in the template)."""
+    return {
+        "trk_warehouses": Warehouse.objects.all().order_by("name"),
+        "trk_groups": HrGroup.objects.all().order_by("name"),
+        "trk_designations": Designation.objects.all().order_by("title"),
+    }
+
+
 def dashboard(request):
-    return render(request, "home.html")
+    return render(request, "home.html", _home_context())
 
 
 def home(request):
-    return render(request, "home.html")
+    return render(request, "home.html", _home_context())
 
 
 def forgot_password_view(request):
