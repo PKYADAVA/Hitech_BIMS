@@ -746,6 +746,7 @@ class ChickSale(models.Model):
                                      help_text=_("Average realised rate per bird"))
     profit_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0,
                                         help_text=_("Sale value minus chick cost (latest hatch entry net rate)"))
+    terms = models.TextField(blank=True)
     remarks = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

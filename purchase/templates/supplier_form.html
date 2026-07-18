@@ -79,19 +79,19 @@
           <label for="state" class="form-label">State of Supply</label>
           {% render_picklist_field "purchase.Supplier.state" current_value=supplier.state field_id="state" field_name="state" %}
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label for="place" class="form-label">Place</label>
           <input type="text" id="place" name="place" class="form-control" placeholder="Enter Place..." value="{{ supplier.place|default:'' }}">
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-5">
           <label class="form-label">Billing Address<span class="text-danger">*</span></label>
           <div class="border rounded p-2 bg-light" id="billing_address_preview" role="button" style="cursor:pointer;">
             <div id="billing_address_summary">{{ supplier.address|default:'No billing address added.' }}</div>
           </div>
           <textarea id="address" name="address" class="d-none">{{ supplier.address|default:'' }}</textarea>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-5">
           <label class="form-label">Shipping Address</label>
           <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" id="shipping_address_preview">
             <div id="shipping_address_summary" class="flex-grow-1">No shipping address selected.</div>

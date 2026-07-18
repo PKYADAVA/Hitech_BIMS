@@ -562,6 +562,39 @@ class CompanyProfile(models.Model):
         return obj
 
 
+class NarrationSettings(models.Model):
+    """Single record of switches for the Auto Narration Engine (Journal Vouchers).
+
+    Generation itself runs client-side; these toggles just control what the
+    engine is allowed to weave into the sentence it builds.
+    """
+    enabled = models.BooleanField(default=True, help_text=_("Master on/off switch for auto narration"))
+    include_amount = models.BooleanField(default=True, help_text=_("Mention the amount in generated narration"))
+    include_reference = models.BooleanField(default=True, help_text=_("Mention the reference/bill number when present"))
+    include_party = models.BooleanField(default=True, help_text=_("Mention the customer/supplier/party ledger name"))
+    modified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Narration Settings")
+        verbose_name_plural = _("Narration Settings")
+
+    def __str__(self):
+        return "Narration Settings"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.pk is None and not NarrationSettings.objects.exists():
+            self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class CoATemplate(models.Model):
     """Master COA blueprint per industry/country, copied per company at setup."""
     INDUSTRY_CHOICES = [
@@ -762,6 +795,24 @@ class Voucher(models.Model):
     )
     date = models.DateField()
     narration = models.TextField(blank=True)
+    NARRATION_SOURCE_CHOICES = [
+        ('AUTO', _('Auto-generated')),
+        ('MANUAL', _('Manually edited')),
+    ]
+    auto_narration = models.TextField(
+        blank=True,
+        help_text=_("Last narration the auto-narration engine computed, kept even after manual edits"),
+    )
+    narration_source = models.CharField(
+        max_length=10, choices=NARRATION_SOURCE_CHOICES, default='MANUAL',
+        help_text=_("Whether the saved narration is the engine's text as-is or was hand-edited"),
+    )
+    narration_edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', editable=False,
+        help_text=_("User who last overrode the auto-generated narration"),
+    )
+    narration_edited_at = models.DateTimeField(null=True, blank=True, editable=False)
     reference = models.CharField(max_length=100, blank=True, help_text=_("External document/bill reference"))
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Draft')
     system_generated = models.BooleanField(default=False, editable=False)

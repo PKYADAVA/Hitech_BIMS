@@ -1,7 +1,7 @@
 """
 Seeds the pilot Picklists + Field Bindings: Indian States, Party Type,
 Party Category (all STATIC), Supplier Group (MODEL, sourced from
-VendorGroup), and Purchase Order Calculation Basis (STATIC, the transaction
+VendorGroup), and General Purchase Calculation Basis (STATIC, the transaction
 pilot). Idempotent — safe to run repeatedly (get_or_create throughout).
 """
 
@@ -10,7 +10,7 @@ from django.db import transaction
 
 from hatchery_master.models import STATES_AND_TERRITORIES
 from picklist.models import FieldPicklistBinding, Picklist, PicklistValue
-from purchase.models import PurchaseOrder
+from purchase.models import GeneralPurchase
 from sales.models import Customer
 
 
@@ -28,9 +28,9 @@ class Command(BaseCommand):
             defaults={"name": "Vendor Group", "source_type": Picklist.SourceType.MODEL,
                       "source_model_key": "vendor_group"},
         )
-        calc_basis_field = PurchaseOrder._meta.get_field("calculation_based_on")
+        calc_basis_field = GeneralPurchase._meta.get_field("calculation_based_on")
         calc_basis_pl = self._seed_static(
-            "po_calculation_basis", "Purchase Order Calculation Basis", calc_basis_field.choices,
+            "po_calculation_basis", "General Purchase Calculation Basis", calc_basis_field.choices,
         )
 
         bindings = [
@@ -41,7 +41,7 @@ class Command(BaseCommand):
             ("purchase", "Supplier", "party_category", party_category_pl),
             ("sales", "Customer", "party_category", party_category_pl),
             ("purchase", "Supplier", "supplier_group", vendor_group_pl),
-            ("purchase", "PurchaseOrder", "calculation_based_on", calc_basis_pl),
+            ("purchase", "GeneralPurchase", "calculation_based_on", calc_basis_pl),
         ]
         for app_label, model_name, field_name, picklist in bindings:
             FieldPicklistBinding.objects.get_or_create(

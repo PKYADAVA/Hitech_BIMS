@@ -17,6 +17,7 @@ from .models import (
     CoATemplateAccount,
     CostCenter,
     FinancialYear,
+    NarrationSettings,
     Schedule,
     TermsConditions,
     Voucher,
@@ -269,12 +270,30 @@ class VoucherLineInline(admin.TabularInline):
 @admin.register(Voucher)
 class VoucherAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'voucher_type', 'date', 'company', 'total_debit', 'status', 'posted_at')
-    list_filter = ('voucher_type', 'status', 'financial_year')
+    list_filter = ('voucher_type', 'status', 'financial_year', 'narration_source')
     search_fields = ('voucher_no', 'narration', 'reference')
     readonly_fields = ('voucher_no', 'status', 'total_debit', 'total_credit',
-                       'posted_by', 'posted_at', 'cancelled_by', 'cancelled_at')
+                       'posted_by', 'posted_at', 'cancelled_by', 'cancelled_at',
+                       'auto_narration', 'narration_source', 'narration_edited_by', 'narration_edited_at')
     inlines = [VoucherLineInline]
 
     def has_delete_permission(self, request, obj=None):
         # Posted/cancelled vouchers are part of the books; never hard-delete.
         return obj is not None and obj.status == 'Draft'
+
+
+@admin.register(NarrationSettings)
+class NarrationSettingsAdmin(admin.ModelAdmin):
+    list_display = ('enabled', 'include_amount', 'include_reference', 'include_party', 'modified_by', 'modified_at')
+    readonly_fields = ('modified_by', 'modified_at')
+
+    def has_add_permission(self, request):
+        # Singleton (pk=1, see NarrationSettings.get_solo()): only one row ever.
+        return not NarrationSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        obj.modified_by = request.user
+        super().save_model(request, obj, form, change)

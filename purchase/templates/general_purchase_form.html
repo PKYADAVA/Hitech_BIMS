@@ -1,0 +1,416 @@
+{% extends 'base.html' %}
+{% load picklist_tags %}
+
+{% block title %}{% if general_purchase %}Edit{% else %}Add{% endif %} General Purchase — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='purchase' %}
+{% endblock %}
+
+{% block content %}
+{% include '_purchase_transaction_subnavbar.html' with active_tab='general_purchase' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-file-invoice"></i> {% if general_purchase %}Edit{% else %}Add{% endif %} General Purchase</div>
+  <div class="page-header-right"><a href="{% url 'general_purchase_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+{% if messages %}
+<div class="mx-auto mb-3" style="max-width:1100px">
+  {% for message in messages %}
+  <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" id="general-purchase-form">
+  {% csrf_token %}
+
+  <div class="card mb-3">
+    <div class="card-header">Purchase Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" name="date" id="date" value="{{ general_purchase.date|date:'Y-m-d'|default:today }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Supplier <span class="text-danger">*</span></label>
+          <select class="form-select" name="supplier" id="supplier" required>
+            <option value="">select</option>
+            {% for s in suppliers %}<option value="{{ s.id }}" {% if general_purchase.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Bill No.</label>
+          <input type="text" class="form-control" name="bill_no" value="{{ general_purchase.bill_no|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Purchase No.</label>
+          <input type="text" class="form-control bg-light" readonly value="{{ general_purchase.purchase_no|default:next_purchase_no }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">DC No.</label>
+          <input type="text" class="form-control" name="dc_no" value="{{ general_purchase.dc_no|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Vehicle</label>
+          <input type="text" class="form-control" name="vehicle_no" value="{{ general_purchase.vehicle_no|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Driver</label>
+          <input type="text" class="form-control" name="driver_name" value="{{ general_purchase.driver_name|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Driver Mobile</label>
+          <input type="text" class="form-control" name="driver_mobile" value="{{ general_purchase.driver_mobile|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">Calculation Based On</label>
+          <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="radio" name="calculation_based_on" id="calc_sent" value="Sent Quantity" {% if general_purchase.calculation_based_on != "Received Quantity" %}checked{% endif %}>
+            <label class="form-check-label" for="calc_sent">Sent Qty</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="calculation_based_on" id="calc_rcv" value="Received Quantity" {% if general_purchase.calculation_based_on == "Received Quantity" %}checked{% endif %}>
+            <label class="form-check-label" for="calc_rcv">Received Qty</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Mode / Terms of Payment</label>
+          <select class="form-select" name="payment_terms">
+            {% for value, label in payment_terms_choices %}
+            <option value="{{ value }}" {% if general_purchase.payment_terms == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">
+      <i class="fas fa-boxes-stacked me-1"></i><strong>Items</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="item-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:40px">Sr.</th>
+              <th style="min-width:200px">Item <span class="text-danger">*</span></th>
+              <th style="min-width:80px">UOM</th>
+              <th style="min-width:100px">Sent Qty</th>
+              <th style="min-width:100px">Rcv Qty <span class="text-danger">*</span></th>
+              <th style="min-width:100px">Free Qty</th>
+              <th style="min-width:100px">Rate <span class="text-danger">*</span></th>
+              <th style="min-width:90px">Disc %</th>
+              <th style="min-width:90px">Disc ₹</th>
+              <th style="min-width:90px">GST</th>
+              <th style="min-width:120px">Amount</th>
+              <th style="min-width:160px">Sector/Farm <span class="text-danger">*</span></th>
+              <th style="min-width:50px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><th colspan="10" class="text-end">Total</th><th id="total_amount">0.00</th><th></th><th></th></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Freight &amp; Payment</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Freight Type</label>
+          <select class="form-select" name="freight_type" id="freight_type">
+            {% for value, label in freight_type_choices %}
+            <option value="{{ value }}" {% if general_purchase.freight_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label d-block">Payment</label>
+          <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" {% if general_purchase.payment_mode != "pay_in_bill" %}checked{% endif %}>
+            <label class="form-check-label" for="pay_later">Pay Later</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_in_bill" value="pay_in_bill" {% if general_purchase.payment_mode == "pay_in_bill" %}checked{% endif %}>
+            <label class="form-check-label" for="pay_in_bill">Pay In Bill</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Pay Account</label>
+          <select class="form-select" name="pay_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}" {% if general_purchase.pay_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Freight Account</label>
+          <select class="form-select" name="freight_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}" {% if general_purchase.freight_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Freight Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" name="freight_amount" id="freight_amount" value="{{ general_purchase.freight_amount|default:'0' }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Bag / Batch Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Bag Type</label>
+          <select class="form-select" name="bag_type">
+            <option value="">select</option>
+            {% for value, label in bag_type_choices %}
+            <option value="{{ value }}" {% if general_purchase.bag_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">No. of Bags</label>
+          <input type="number" min="0" step=".01" class="form-control" name="no_of_bags" value="{{ general_purchase.no_of_bags|default:'0' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Batch No.</label>
+          <input type="text" class="form-control" name="batch_no" value="{{ general_purchase.batch_no|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Expiry Date</label>
+          <input type="date" class="form-control" name="expiry_date" value="{{ general_purchase.expiry_date|date:'Y-m-d'|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">TDS Code</label>
+          <input type="text" class="form-control" name="tds_code" value="{{ general_purchase.tds_code|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">TDS Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" name="tds_amount" id="tds_amount" value="{{ general_purchase.tds_amount|default:'0' }}">
+        </div>
+        <div class="col-md-2">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" name="tds_applicable" id="tds_applicable" {% if general_purchase.tds_applicable %}checked{% endif %}>
+            <label class="form-check-label" for="tds_applicable">TDS Applicable</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Other Charges &amp; Round Off</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Other Charges Account</label>
+          <select class="form-select" name="other_charges_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}" {% if general_purchase.other_charges_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Type</label>
+          <select class="form-select" name="other_charges_type" id="other_charges_type">
+            {% for value, label in other_charges_type_choices %}
+            <option value="{{ value }}" {% if general_purchase.other_charges_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" name="other_charges_amount" id="other_charges_amount" value="{{ general_purchase.other_charges_amount|default:'0' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Round Off (auto)</label>
+          <input type="text" class="form-control bg-light" id="round_off_preview" readonly value="{{ general_purchase.round_off_type|default:'Add' }} {{ general_purchase.round_off|default:'0.00' }}">
+        </div>
+      </div>
+      <div class="row g-3 mt-0">
+        <div class="col-md-3 offset-md-9 text-end">
+          <label class="form-label">Net Amount (preview)</label>
+          <input type="text" class="form-control bg-light text-end fw-bold" id="net_amount_preview" readonly value="{{ general_purchase.net_amount|default:'0.00' }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <label class="form-label">Remarks</label>
+      <textarea class="form-control" name="remarks" rows="2">{{ general_purchase.remarks|default:'' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Reference Documents</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Reference Document-1</label>
+          <input type="file" class="form-control" name="reference_document_1">
+          {% if general_purchase.reference_document_1 %}<div class="form-text"><a href="{{ general_purchase.reference_document_1.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Reference Document-2</label>
+          <input type="file" class="form-control" name="reference_document_2">
+          {% if general_purchase.reference_document_2 %}<div class="form-text"><a href="{{ general_purchase.reference_document_2.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Reference Document-3</label>
+          <input type="file" class="form-control" name="reference_document_3">
+          {% if general_purchase.reference_document_3 %}<div class="form-text"><a href="{{ general_purchase.reference_document_3.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="hidden" name="items_json" id="items_json">
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">{% if general_purchase %}Update{% else %}Save{% endif %}</button>
+    <a href="{% url 'general_purchase_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const existingItems = {{ existing_items_json|safe }};
+const taxOptions = `<option value="0">select</option>{% for t in tax_masters %}<option value="{{ t.tax_percentage }}">{{ t.tax_code }} ({{ t.tax_percentage }}%)</option>{% endfor %}`;
+const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
+const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{{ item.storage_uom|escapejs }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const get = id => document.getElementById(id);
+const value = id => get(id).value;
+
+function calcBasis() {
+  const el = document.querySelector('input[name="calculation_based_on"]:checked');
+  return el ? el.value : 'Sent Quantity';
+}
+
+function itemRow(row = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="sr text-center"></td>
+    <td><select class="form-select item" required>${itemOptions}</select></td>
+    <td><input class="form-control bg-light uom" readonly value="${row.unit || ''}"></td>
+    <td><input class="form-control sent-qty" type="number" min="0" step=".01" value="${row.sent_qty || 0}"></td>
+    <td><input class="form-control rcv-qty" type="number" min="0" step=".01" value="${row.rcv_qty || 0}"></td>
+    <td><input class="form-control free-qty" type="number" min="0" step=".01" value="${row.free_qty || 0}"></td>
+    <td><input class="form-control rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
+    <td><input class="form-control disc-percent" type="number" min="0" step=".01" value="${row.discount_percent || 0}"></td>
+    <td><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount || 0}"></td>
+    <td><select class="form-select gst">${taxOptions}</select></td>
+    <td class="amount text-end align-middle">0.00</td>
+    <td><select class="form-select farm-warehouse" required>${warehouseOptions}</select></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('item-table').tBodies[0].append(tr);
+  if (row.item) tr.querySelector('.item').value = row.item;
+  if (row.farm_warehouse) tr.querySelector('.farm-warehouse').value = row.farm_warehouse;
+  if (row.gst_percent) tr.querySelector('.gst').value = row.gst_percent;
+  tr.querySelector('.item').addEventListener('change', e => {
+    const opt = e.target.selectedOptions[0];
+    tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
+  });
+  calcRow(tr);
+  renumberRows();
+  refreshRowAddButtons();
+}
+
+function calcRow(tr) {
+  const num = s => Number(tr.querySelector(s).value) || 0;
+  const qty = calcBasis() === 'Received Quantity' ? num('.rcv-qty') : num('.sent-qty');
+  const subtotal = (qty * num('.rate')) * (1 - num('.disc-percent') / 100) - num('.disc-amount');
+  const amount = subtotal * (1 + num('.gst') / 100);
+  tr.querySelector('.amount').textContent = amount.toFixed(2);
+  totals();
+}
+
+function renumberRows() {
+  document.querySelectorAll('#item-table tbody tr').forEach((tr, i) => { tr.querySelector('.sr').textContent = i + 1; });
+}
+
+// Only the last row offers "+" (add another row); earlier rows just delete.
+// With no header Add button, the sole remaining row can't be deleted either
+// — there'd be no "+" left anywhere to add one back.
+function refreshRowAddButtons() {
+  const rows = document.querySelectorAll('#item-table tbody tr');
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = rows.length === 1;
+  });
+}
+
+function grossAmount() {
+  let amount = 0;
+  document.querySelectorAll('#item-table tbody tr').forEach(tr => { amount += Number(tr.querySelector('.amount').textContent) || 0; });
+  return amount;
+}
+
+function totals() {
+  const gross = grossAmount();
+  get('total_amount').textContent = gross.toFixed(2);
+
+  const freight = value('freight_type') === 'Included in Bill' ? (Number(value('freight_amount')) || 0) : 0;
+  const otherRaw = Number(value('other_charges_amount')) || 0;
+  const other = value('other_charges_type') === 'Deduct' ? -otherRaw : otherRaw;
+  const tds = get('tds_applicable').checked ? (Number(value('tds_amount')) || 0) : 0;
+  const preRound = gross + freight + other - tds;
+  const rounded = Math.round(preRound);
+  const diff = rounded - preRound;
+  get('round_off_preview').value = (diff < 0 ? 'Deduct ' : 'Add ') + Math.abs(diff).toFixed(2);
+  get('net_amount_preview').value = rounded.toFixed(2);
+}
+
+get('item-table').addEventListener('input', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  calcRow(tr);
+});
+get('item-table').addEventListener('change', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  calcRow(tr);
+});
+get('item-table').addEventListener('click', e => {
+  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); totals(); }
+  if (e.target.closest('.add-row-inline')) { itemRow(); }
+});
+document.querySelectorAll('input[name="calculation_based_on"]').forEach(el => el.addEventListener('change', () => {
+  document.querySelectorAll('#item-table tbody tr').forEach(calcRow);
+}));
+['freight_type', 'freight_amount', 'other_charges_type', 'other_charges_amount', 'tds_amount', 'tds_applicable'].forEach(id => {
+  get(id).addEventListener('input', totals);
+  get(id).addEventListener('change', totals);
+});
+
+get('general-purchase-form').addEventListener('submit', function (e) {
+  const rows = [...document.querySelectorAll('#item-table tbody tr')].map(tr => ({
+    item: tr.querySelector('.item').value, unit: tr.querySelector('.uom').value,
+    sent_qty: tr.querySelector('.sent-qty').value, rcv_qty: tr.querySelector('.rcv-qty').value,
+    free_qty: tr.querySelector('.free-qty').value, rate: tr.querySelector('.rate').value,
+    discount_percent: tr.querySelector('.disc-percent').value, discount_amount: tr.querySelector('.disc-amount').value,
+    gst_percent: tr.querySelector('.gst').value, farm_warehouse: tr.querySelector('.farm-warehouse').value,
+  }));
+  if (!rows.length || rows.some(r => !r.item || !r.farm_warehouse)) {
+    e.preventDefault();
+    alert('Add at least one item row with Item and Sector/Farm selected.');
+    return;
+  }
+  get('items_json').value = JSON.stringify(rows);
+});
+
+(existingItems.length ? existingItems : [{}]).forEach(itemRow);
+totals();
+</script>
+{% endblock %}

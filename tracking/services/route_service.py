@@ -138,18 +138,36 @@ class RouteBuilder:
 
     @staticmethod
     def _write_points(route, pings, stops):
-        """Simplified leg sequence: start, each stop, end."""
-        points = []
-        sequence = 1
-        first, last = pings[0], pings[-1]
+        """Alternating leg sequence: a travel leg for every gap, then each stop.
 
-        points.append(EmployeeRoutePoint(
-            route=route, sequence=sequence, point_type="travel",
-            latitude=first.latitude, longitude=first.longitude,
-            address=first.address, started_at=first.recorded_at,
-        ))
+        Unlike the day's two bookend pings (which have no duration of their
+        own), every travel leg between two stops gets its own started_at/
+        ended_at/duration/distance so the timeline can render it as a
+        distinct "Travelled X km, HH:MM:SS-HH:MM:SS" row, matching how the
+        stop rows already carry a start/end/duration/address.
+        """
+        points = []
+        sequence = 0
+        first, last = pings[0], pings[-1]
         previous_ping = first
+
+        def add_travel_leg(start_ping, end_ping):
+            nonlocal sequence
+            if end_ping.recorded_at <= start_ping.recorded_at:
+                return
+            sequence += 1
+            points.append(EmployeeRoutePoint(
+                route=route, sequence=sequence, point_type="travel",
+                latitude=end_ping.latitude, longitude=end_ping.longitude,
+                started_at=start_ping.recorded_at, ended_at=end_ping.recorded_at,
+                duration=end_ping.recorded_at - start_ping.recorded_at,
+                distance_from_previous_km=round(haversine_km(
+                    start_ping.latitude, start_ping.longitude,
+                    end_ping.latitude, end_ping.longitude), 2),
+            ))
+
         for stop_start, stop_end in stops:
+            add_travel_leg(previous_ping, stop_start)
             sequence += 1
             points.append(EmployeeRoutePoint(
                 route=route, sequence=sequence, point_type="stop",
@@ -157,19 +175,9 @@ class RouteBuilder:
                 address=stop_start.address,
                 started_at=stop_start.recorded_at, ended_at=stop_end.recorded_at,
                 duration=stop_end.recorded_at - stop_start.recorded_at,
-                distance_from_previous_km=round(haversine_km(
-                    previous_ping.latitude, previous_ping.longitude,
-                    stop_start.latitude, stop_start.longitude), 2),
             ))
             previous_ping = stop_end
-        if last is not first:
-            sequence += 1
-            points.append(EmployeeRoutePoint(
-                route=route, sequence=sequence, point_type="travel",
-                latitude=last.latitude, longitude=last.longitude,
-                address=last.address, started_at=last.recorded_at,
-                distance_from_previous_km=round(haversine_km(
-                    previous_ping.latitude, previous_ping.longitude,
-                    last.latitude, last.longitude), 2),
-            ))
+
+        if last is not previous_ping:
+            add_travel_leg(previous_ping, last)
         EmployeeRoutePoint.objects.bulk_create(points)

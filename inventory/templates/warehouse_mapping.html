@@ -1,0 +1,225 @@
+{% extends 'base.html' %}
+
+{% block title %}Warehouse Mapping{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_subnavbar.html' with active_tab='warehouse_mapping' %}
+
+<div class="page-header">
+    <div class="page-header-title">Warehouse Mapping</div>
+    <div class="page-header-right"><div class="page-header-subtitle">Map each Sector (warehouse) to its Broiler Branch, and each Hatchery to its Warehouse</div>{% if page_perms.add %}<button class="btn btn-primary" id="add-mapping-btn"><i class="fas fa-plus"></i> Add Mapping</button>{% endif %}</div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="fas fa-diagram-project me-2"></i>Mapping List</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0" id="mapping-table">
+                <thead class="table-dark">
+                    <tr><th>Type</th><th>Name</th><th>Mapped To</th><th class="text-center">Action</th></tr>
+                </thead>
+                <tbody id="mapping-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Mapping modal -->
+<div class="modal fade" id="mappingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Mapping</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Type <span class="text-danger">*</span></label>
+          <select class="form-select" id="mapping-type">
+            <option value="sector">Sector → Branch</option>
+            <option value="hatchery">Hatchery → Warehouse</option>
+          </select>
+        </div>
+        <div class="mb-3" id="sector-fields">
+          <label class="form-label">Sector (Warehouse) <span class="text-danger">*</span></label>
+          <select class="form-select mb-3" id="mapping-office"></select>
+          <label class="form-label">Branch <span class="text-danger">*</span></label>
+          <select class="form-select" id="mapping-branch"></select>
+        </div>
+        <div class="mb-3 d-none" id="hatchery-fields">
+          <label class="form-label">Hatchery <span class="text-danger">*</span></label>
+          <select class="form-select mb-3" id="mapping-hatchery"></select>
+          <label class="form-label">Warehouse <span class="text-danger">*</span></label>
+          <select class="form-select" id="mapping-warehouse"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="save-mapping-btn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let offices = [], branches = [], hatcheries = [];
+  let table = null;
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function loadData() {
+    $.getJSON("{% url 'warehouse_mapping_data' %}", function (data) {
+      offices = data.offices;
+      branches = data.branches;
+      hatcheries = data.hatcheries;
+      renderTable();
+    });
+  }
+
+  function renderTable() {
+    if (table) { table.destroy(); }
+    const body = $("#mapping-body").empty();
+
+    offices.forEach(o => {
+      body.append(`<tr>
+        <td><span class="badge bg-info text-dark">Sector</span></td>
+        <td>${escapeHtml(o.name)}</td>
+        <td>${o.branch_id ? escapeHtml(o.branch_name) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-sector-mapping" data-id="${o.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+            {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-sector-mapping" data-id="${o.id}" ${o.branch_id ? "" : "disabled"} title="Clear mapping"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+
+    hatcheries.forEach(h => {
+      body.append(`<tr>
+        <td><span class="badge bg-success">Hatchery</span></td>
+        <td>${escapeHtml(h.hatchery_name)}</td>
+        <td>${h.warehouse_id ? escapeHtml(h.warehouse_name) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-hatchery-mapping" data-id="${h.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+            {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-hatchery-mapping" data-id="${h.id}" ${h.warehouse_id ? "" : "disabled"} title="Clear mapping"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+
+    table = $("#mapping-table").DataTable({ responsive: true, language: { emptyTable: "No mappings found" } });
+  }
+
+  function toggleFields(type) {
+    $("#sector-fields").toggleClass("d-none", type !== "sector");
+    $("#hatchery-fields").toggleClass("d-none", type !== "hatchery");
+  }
+
+  $("#mapping-type").on("change", function () { toggleFields($(this).val()); });
+
+  function openModal(type, presetId) {
+    $("#mapping-type").val(type);
+    toggleFields(type);
+
+    $("#mapping-office").html(offices.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join(""));
+    $("#mapping-branch").html('<option value="">select</option>' + branches.map(b => `<option value="${b.id}">${escapeHtml(b.branch_name)}</option>`).join(""));
+    $("#mapping-hatchery").html(hatcheries.map(h => `<option value="${h.id}">${escapeHtml(h.hatchery_name)}</option>`).join(""));
+    $("#mapping-warehouse").html('<option value="">select</option>' + offices.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join(""));
+
+    if (type === "sector" && presetId) {
+      const o = offices.find(x => x.id === presetId);
+      $("#mapping-office").val(o.id).trigger("change.select2");
+      $("#mapping-branch").val(o.branch_id || "").trigger("change.select2");
+    } else if (type === "hatchery" && presetId) {
+      const h = hatcheries.find(x => x.id === presetId);
+      $("#mapping-hatchery").val(h.id).trigger("change.select2");
+      $("#mapping-warehouse").val(h.warehouse_id || "").trigger("change.select2");
+    }
+    $("#mapping-type").prop("disabled", !!presetId);
+    new bootstrap.Modal(document.getElementById("mappingModal")).show();
+  }
+
+  $("#add-mapping-btn").on("click", function () { openModal("sector", null); });
+  $(document).on("click", ".edit-sector-mapping", function () { openModal("sector", Number($(this).data("id"))); });
+  $(document).on("click", ".edit-hatchery-mapping", function () { openModal("hatchery", Number($(this).data("id"))); });
+
+  $("#save-mapping-btn").on("click", function () {
+    const type = $("#mapping-type").val();
+    if (type === "sector") {
+      const officeId = $("#mapping-office").val();
+      const branchId = $("#mapping-branch").val();
+      if (!officeId || !branchId) { alert("Select both Sector and Branch."); return; }
+      $.ajax({
+        url: "{% url 'warehouse_mapping_save_branch' %}",
+        type: "POST",
+        headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+        data: JSON.stringify({ warehouse: officeId, branch: branchId }),
+        success: onSaved, error: onError,
+      });
+    } else {
+      const hatcheryId = $("#mapping-hatchery").val();
+      const officeId = $("#mapping-warehouse").val();
+      if (!hatcheryId || !officeId) { alert("Select both Hatchery and Warehouse."); return; }
+      $.ajax({
+        url: "{% url 'warehouse_mapping_save_hatchery' %}",
+        type: "POST",
+        headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+        data: JSON.stringify({ hatchery: hatcheryId, warehouse: officeId }),
+        success: onSaved, error: onError,
+      });
+    }
+  });
+
+  function onSaved() {
+    bootstrap.Modal.getInstance(document.getElementById("mappingModal")).hide();
+    Toastify({ text: "Mapping saved.", backgroundColor: "#28a745", duration: 2500 }).showToast();
+    loadData();
+  }
+  function onError(xhr) {
+    alert(xhr.responseJSON?.error || "Failed to save mapping.");
+  }
+
+  $(document).on("click", ".delete-sector-mapping", function () {
+    const id = $(this).data("id");
+    if (!confirm("Clear this sector's branch mapping?")) return;
+    $.ajax({
+      url: "{% url 'warehouse_mapping_save_branch' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify({ warehouse: id, branch: null }),
+      success: loadData,
+      error: onError,
+    });
+  });
+
+  $(document).on("click", ".delete-hatchery-mapping", function () {
+    const id = $(this).data("id");
+    if (!confirm("Clear this hatchery's warehouse mapping?")) return;
+    $.ajax({
+      url: "{% url 'warehouse_mapping_save_hatchery' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify({ hatchery: id, warehouse: null }),
+      success: loadData,
+      error: onError,
+    });
+  });
+
+  loadData();
+});
+</script>
+{% endblock %}

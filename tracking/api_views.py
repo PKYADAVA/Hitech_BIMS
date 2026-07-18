@@ -518,6 +518,7 @@ class RouteAPI(View):
             "date": day.isoformat(),
             "route": None,
             "timeline": self._timeline(employee, day, route),
+            "last_location": self._last_location(route),
         }
         if route:
             payload["route"] = {
@@ -538,6 +539,27 @@ class RouteAPI(View):
                 "is_finalized": route.is_finalized,
             }
         return JsonResponse(payload)
+
+    @staticmethod
+    def _last_location(route):
+        """Most recent known place for the day, for the 'Nearest Location' panel.
+
+        Falls back to the route's own end_address, since travel-leg points
+        don't carry an address of their own (only stops are reverse-geocoded
+        as a distinct place).
+        """
+        if not route:
+            return None
+        points = sorted(route.points.all(), key=lambda point: point.sequence)
+        if not points:
+            return None
+        last_point = points[-1]
+        return {
+            "latitude": float(last_point.latitude),
+            "longitude": float(last_point.longitude),
+            "address": last_point.address or route.end_address,
+            "time": (last_point.ended_at or last_point.started_at).isoformat(),
+        }
 
     @staticmethod
     def _timeline(employee, day, route):
@@ -567,7 +589,9 @@ class RouteAPI(View):
                 if point.customer:
                     label = f"At {point.customer.name}"
                 entries.append({
-                    "time": point.started_at.isoformat(), "type": point.point_type,
+                    "time": point.started_at.isoformat(),
+                    "end_time": point.ended_at.isoformat() if point.ended_at else None,
+                    "type": point.point_type,
                     "label": label, "address": point.address,
                     "latitude": float(point.latitude), "longitude": float(point.longitude),
                     "duration_min": int(point.duration.total_seconds() // 60)

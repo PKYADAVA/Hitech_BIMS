@@ -1,0 +1,416 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if chicks_purchase %}Edit{% else %}Add{% endif %} Chicks Purchase — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='purchase' %}
+{% endblock %}
+
+{% block content %}
+{% include '_purchase_transaction_subnavbar.html' with active_tab='chicks_purchase' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fa-solid fa-kiwi-bird"></i> {% if chicks_purchase %}Edit{% else %}Add{% endif %} Chicks Purchase</div>
+  <div class="page-header-right"><a href="{% url 'chicks_purchase_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+{% if messages %}
+<div class="mx-auto mb-3" style="max-width:1100px">
+  {% for message in messages %}
+  <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" id="chicks-purchase-form">
+  {% csrf_token %}
+
+  <div class="card mb-3">
+    <div class="card-header">Purchase Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" name="date" value="{{ chicks_purchase.date|date:'Y-m-d'|default:today }}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Supplier <span class="text-danger">*</span></label>
+          <select class="form-select" name="supplier" required>
+            <option value="">select</option>
+            {% for s in suppliers %}<option value="{{ s.id }}" {% if chicks_purchase.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Hatchery</label>
+          <select class="form-select" name="hatchery">
+            <option value="">select</option>
+            {% for h in hatcheries %}<option value="{{ h.id }}" {% if chicks_purchase.hatchery_id == h.id %}selected{% endif %}>{{ h.hatchery_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Bill No.</label>
+          <input type="text" class="form-control" name="bill_no" value="{{ chicks_purchase.bill_no|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Purchase No.</label>
+          <input type="text" class="form-control bg-light" readonly value="{{ chicks_purchase.purchase_no|default:next_purchase_no }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Item <span class="text-danger">*</span></label>
+          <select class="form-select" name="item" required>
+            <option value="">select</option>
+            {% for item in items %}<option value="{{ item.id }}" {% if chicks_purchase.item_id == item.id %}selected{% endif %}>{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">DC No.</label>
+          <input type="text" class="form-control" name="dc_no" value="{{ chicks_purchase.dc_no|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Vehicle</label>
+          <input type="text" class="form-control" name="vehicle_no" value="{{ chicks_purchase.vehicle_no|default:'' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Driver</label>
+          <input type="text" class="form-control" name="driver_name" value="{{ chicks_purchase.driver_name|default:'' }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">
+      <i class="fa-solid fa-kiwi-bird me-1"></i><strong>Batches</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="item-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:40px">Sr.</th>
+              <th style="min-width:110px">Sent Qty <span class="text-danger">*</span></th>
+              <th style="min-width:90px">Sent Free %</th>
+              <th style="min-width:100px">Mortality</th>
+              <th style="min-width:100px">Shortage</th>
+              <th style="min-width:90px">Weaks</th>
+              <th style="min-width:100px">Excess Qty</th>
+              <th style="min-width:110px">Rcv Qty</th>
+              <th style="min-width:90px">Rcv Free %</th>
+              <th style="min-width:100px">Free Qty</th>
+              <th style="min-width:110px">Total Qty</th>
+              <th style="min-width:100px">Rate <span class="text-danger">*</span></th>
+              <th style="min-width:120px">Amount</th>
+              <th style="min-width:160px">Sector/Farm <span class="text-danger">*</span></th>
+              <th style="min-width:100px">Batch</th>
+              <th style="min-width:50px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr><th colspan="10" class="text-end">Total</th><th id="total_qty">0.00</th><th></th><th id="total_amount">0.00</th><th colspan="3"></th></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Freight &amp; Payment</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Freight Type</label>
+          <select class="form-select" name="freight_type" id="freight_type">
+            {% for value, label in freight_type_choices %}
+            <option value="{{ value }}" {% if chicks_purchase.freight_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label d-block">Payment</label>
+          <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" {% if chicks_purchase.payment_mode != "pay_in_bill" %}checked{% endif %}>
+            <label class="form-check-label" for="pay_later">Pay Later</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="payment_mode" id="pay_in_bill" value="pay_in_bill" {% if chicks_purchase.payment_mode == "pay_in_bill" %}checked{% endif %}>
+            <label class="form-check-label" for="pay_in_bill">Pay In Bill</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Pay Account</label>
+          <select class="form-select" name="pay_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}" {% if chicks_purchase.pay_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Freight Account</label>
+          <select class="form-select" name="freight_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}" {% if chicks_purchase.freight_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Freight Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" name="freight_amount" id="freight_amount" value="{{ chicks_purchase.freight_amount|default:'0' }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Bag / Batch Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Bag Type</label>
+          <select class="form-select" name="bag_type">
+            <option value="">select</option>
+            {% for value, label in bag_type_choices %}
+            <option value="{{ value }}" {% if chicks_purchase.bag_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">No. of Bags</label>
+          <input type="number" min="0" step=".01" class="form-control" name="no_of_bags" value="{{ chicks_purchase.no_of_bags|default:'0' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Batch No.</label>
+          <input type="text" class="form-control" name="batch_no" value="{{ chicks_purchase.batch_no|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Expiry Date</label>
+          <input type="date" class="form-control" name="expiry_date" value="{{ chicks_purchase.expiry_date|date:'Y-m-d'|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">TDS Code</label>
+          <input type="text" class="form-control" name="tds_code" value="{{ chicks_purchase.tds_code|default:'' }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">TDS Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" name="tds_amount" id="tds_amount" value="{{ chicks_purchase.tds_amount|default:'0' }}">
+        </div>
+        <div class="col-md-2">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" name="tds_applicable" id="tds_applicable" {% if chicks_purchase.tds_applicable %}checked{% endif %}>
+            <label class="form-check-label" for="tds_applicable">TDS Applicable</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Other Charges &amp; Round Off</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Other Charges Account</label>
+          <select class="form-select" name="other_charges_account">
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}" {% if chicks_purchase.other_charges_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Type</label>
+          <select class="form-select" name="other_charges_type" id="other_charges_type">
+            {% for value, label in other_charges_type_choices %}
+            <option value="{{ value }}" {% if chicks_purchase.other_charges_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Amount</label>
+          <input type="number" min="0" step=".01" class="form-control" name="other_charges_amount" id="other_charges_amount" value="{{ chicks_purchase.other_charges_amount|default:'0' }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Round Off (auto)</label>
+          <input type="text" class="form-control bg-light" id="round_off_preview" readonly value="{{ chicks_purchase.round_off_type|default:'Add' }} {{ chicks_purchase.round_off|default:'0.00' }}">
+        </div>
+      </div>
+      <div class="row g-3 mt-0">
+        <div class="col-md-3 offset-md-9 text-end">
+          <label class="form-label">Net Amount (preview)</label>
+          <input type="text" class="form-control bg-light text-end fw-bold" id="net_amount_preview" readonly value="{{ chicks_purchase.net_amount|default:'0.00' }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <label class="form-label">Remarks</label>
+      <textarea class="form-control" name="remarks" rows="2">{{ chicks_purchase.remarks|default:'' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Reference Documents</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Reference Document-1</label>
+          <input type="file" class="form-control" name="reference_document_1">
+          {% if chicks_purchase.reference_document_1 %}<div class="form-text"><a href="{{ chicks_purchase.reference_document_1.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Reference Document-2</label>
+          <input type="file" class="form-control" name="reference_document_2">
+          {% if chicks_purchase.reference_document_2 %}<div class="form-text"><a href="{{ chicks_purchase.reference_document_2.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Reference Document-3</label>
+          <input type="file" class="form-control" name="reference_document_3">
+          {% if chicks_purchase.reference_document_3 %}<div class="form-text"><a href="{{ chicks_purchase.reference_document_3.url }}" target="_blank">Current file</a> (choose a new file to replace)</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="hidden" name="items_json" id="items_json">
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">{% if chicks_purchase %}Update{% else %}Save{% endif %}</button>
+    <a href="{% url 'chicks_purchase_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const existingItems = {{ existing_items_json|safe }};
+const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
+const get = id => document.getElementById(id);
+const value = id => get(id).value;
+
+function itemRow(row = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="sr text-center"></td>
+    <td><input class="form-control sent-qty" type="number" min="0" step=".01" value="${row.sent_qty || 0}"></td>
+    <td><input class="form-control sent-free-percent" type="number" min="0" step=".01" value="${row.sent_free_percent || 0}"></td>
+    <td><input class="form-control mortality" type="number" min="0" step=".01" value="${row.mortality || 0}"></td>
+    <td><input class="form-control shortage" type="number" min="0" step=".01" value="${row.shortage || 0}"></td>
+    <td><input class="form-control weaks" type="number" min="0" step=".01" value="${row.weaks || 0}"></td>
+    <td><input class="form-control excess-qty" type="number" min="0" step=".01" value="${row.excess_qty || 0}"></td>
+    <td><input class="form-control bg-light rcv-qty" readonly value="0.00"></td>
+    <td><input class="form-control rcv-free-percent" type="number" min="0" step=".01" value="${row.rcv_free_percent || 0}"></td>
+    <td><input class="form-control bg-light free-qty" readonly value="0.00"></td>
+    <td><input class="form-control bg-light total-qty" readonly value="0.00"></td>
+    <td><input class="form-control rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
+    <td class="amount text-end align-middle">0.00</td>
+    <td><select class="form-select farm-warehouse" required>${warehouseOptions}</select></td>
+    <td><input class="form-control batch" value="${row.batch || ''}"></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('item-table').tBodies[0].append(tr);
+  if (row.farm_warehouse) tr.querySelector('.farm-warehouse').value = row.farm_warehouse;
+  calcRow(tr);
+  renumberRows();
+  refreshRowAddButtons();
+}
+
+// Mirrors ChicksPurchaseItem.save(): Rcv Qty is the physically-received
+// count (sent + its Sent Free% - losses + excess), already inclusive of the
+// free chicks; Total Qty backs the Rcv Free% back out of Rcv Qty to get the
+// chargeable quantity Amount is based on, and Free Qty is the remainder.
+// Sent Free% and Rcv Free% are independent fields — typing into Sent Free%
+// defaults Rcv Free% to match (see the sent-free-percent input listener
+// below), but Rcv Free% stays a normal editable field either way.
+function calcRow(tr) {
+  const num = s => Number(tr.querySelector(s).value) || 0;
+  const sent = num('.sent-qty'), sentFreePercent = num('.sent-free-percent'), rcvFreePercent = num('.rcv-free-percent');
+  const freeFromSent = Math.round(sent * sentFreePercent / 100);
+  const rcvQty = sent + freeFromSent - num('.mortality') - num('.shortage') - num('.weaks') + num('.excess-qty');
+  const totalQty = rcvFreePercent ? Math.round(rcvQty / (1 + rcvFreePercent / 100)) : rcvQty;
+  const freeQty = rcvQty - totalQty;
+  const amount = totalQty * num('.rate');
+  tr.querySelector('.rcv-qty').value = rcvQty.toFixed(2);
+  tr.querySelector('.free-qty').value = freeQty.toFixed(2);
+  tr.querySelector('.total-qty').value = totalQty.toFixed(2);
+  tr.querySelector('.amount').textContent = amount.toFixed(2);
+  totals();
+}
+
+function renumberRows() {
+  document.querySelectorAll('#item-table tbody tr').forEach((tr, i) => { tr.querySelector('.sr').textContent = i + 1; });
+}
+
+// Only the last row offers "+" (add another row); earlier rows just delete.
+// With no header Add button, the sole remaining row can't be deleted either
+// — there'd be no "+" left anywhere to add one back.
+function refreshRowAddButtons() {
+  const rows = document.querySelectorAll('#item-table tbody tr');
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = rows.length === 1;
+  });
+}
+
+function gridTotals() {
+  let qty = 0, amount = 0;
+  document.querySelectorAll('#item-table tbody tr').forEach(tr => {
+    qty += Number(tr.querySelector('.total-qty').value) || 0;
+    amount += Number(tr.querySelector('.amount').textContent) || 0;
+  });
+  return { qty, amount };
+}
+
+function totals() {
+  const { qty, amount: gross } = gridTotals();
+  get('total_qty').textContent = qty.toFixed(2);
+  get('total_amount').textContent = gross.toFixed(2);
+
+  const freight = value('freight_type') === 'Included in Bill' ? (Number(value('freight_amount')) || 0) : 0;
+  const otherRaw = Number(value('other_charges_amount')) || 0;
+  const other = value('other_charges_type') === 'Deduct' ? -otherRaw : otherRaw;
+  const tds = get('tds_applicable').checked ? (Number(value('tds_amount')) || 0) : 0;
+  const preRound = gross + freight + other - tds;
+  const rounded = Math.round(preRound);
+  const diff = rounded - preRound;
+  get('round_off_preview').value = (diff < 0 ? 'Deduct ' : 'Add ') + Math.abs(diff).toFixed(2);
+  get('net_amount_preview').value = rounded.toFixed(2);
+}
+
+get('item-table').addEventListener('input', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  // Typing into Sent Free % defaults Rcv Free % to match; Rcv Free % stays
+  // freely editable afterward — this only overwrites it while Sent Free %
+  // itself is the field being edited.
+  if (e.target.classList.contains('sent-free-percent')) {
+    tr.querySelector('.rcv-free-percent').value = e.target.value;
+  }
+  calcRow(tr);
+});
+get('item-table').addEventListener('click', e => {
+  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); totals(); }
+  if (e.target.closest('.add-row-inline')) { itemRow(); }
+});
+['freight_type', 'freight_amount', 'other_charges_type', 'other_charges_amount', 'tds_amount', 'tds_applicable'].forEach(id => {
+  get(id).addEventListener('input', totals);
+  get(id).addEventListener('change', totals);
+});
+
+get('chicks-purchase-form').addEventListener('submit', function (e) {
+  const rows = [...document.querySelectorAll('#item-table tbody tr')].map(tr => ({
+    sent_qty: tr.querySelector('.sent-qty').value, sent_free_percent: tr.querySelector('.sent-free-percent').value,
+    rcv_free_percent: tr.querySelector('.rcv-free-percent').value,
+    mortality: tr.querySelector('.mortality').value, shortage: tr.querySelector('.shortage').value,
+    weaks: tr.querySelector('.weaks').value, excess_qty: tr.querySelector('.excess-qty').value,
+    rate: tr.querySelector('.rate').value,
+    farm_warehouse: tr.querySelector('.farm-warehouse').value, batch: tr.querySelector('.batch').value,
+  }));
+  if (!rows.length || rows.some(r => !r.farm_warehouse)) {
+    e.preventDefault();
+    alert('Add at least one batch row with Sector/Farm selected.');
+    return;
+  }
+  get('items_json').value = JSON.stringify(rows);
+});
+
+(existingItems.length ? existingItems : [{}]).forEach(itemRow);
+totals();
+</script>
+{% endblock %}

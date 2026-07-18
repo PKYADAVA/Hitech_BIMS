@@ -33,6 +33,16 @@ def ledger_report(request):
 
 
 @login_required
+def profit_loss_report(request):
+    return render(request, "profit_loss_report.html")
+
+
+@login_required
+def balance_sheet_report(request):
+    return render(request, "balance_sheet_report.html")
+
+
+@login_required
 def vouchers(request):
     from account.models import Voucher
     from inventory.models import Warehouse

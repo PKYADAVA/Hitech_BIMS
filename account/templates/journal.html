@@ -93,8 +93,11 @@
             <input type="text" id="voucher-reference" class="form-control" placeholder="Bill / doc no..." />
           </div>
           <div class="col-md-3">
-            <label class="form-label">Narration</label>
-            <input type="text" id="voucher-narration" class="form-control" placeholder="Narration..." />
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Narration</span>
+              <a href="#" id="narration-revert-link" class="small" style="display:none">&#8634; Use auto</a>
+            </label>
+            <input type="text" id="voucher-narration" class="form-control" placeholder="Narration..." autocomplete="off" />
           </div>
         </div>
         <div class="btn-group btn-group-sm mb-3" role="group" id="entry-mode-toggle">
@@ -215,6 +218,7 @@
 $(document).ready(function () {
     const csrfToken = "{{ csrf_token }}";
     let accounts = [];   // postable accounts for line selects
+    let accountsById = {};   // full map (incl. group/anchor accounts) for the narration engine
 
     function showToast(type, message) {
         const colors = {
@@ -234,6 +238,201 @@ $(document).ready(function () {
         Posted: '<span class="badge bg-success">Posted</span>',
         Cancelled: '<span class="badge bg-danger">Cancelled</span>',
     }[s] || s);
+    const narrationSourceBadge = (v) => v.narration
+        ? ` <span class="badge bg-light text-dark border">${v.narration_source === 'MANUAL' ? 'manual' : 'auto'}</span>` : '';
+
+    // ---------------------------------------------------- auto narration engine
+    //
+    // Pure client-side, rule-based generation (<100ms, no round trip). Ledger
+    // context comes from ChartOfAccount.system_role anchors already present on
+    // every account the page loads - never from name/keyword matching, which
+    // breaks the moment someone renames or translates a ledger.
+    const ROLE_PHRASES = {
+        RENT_EXPENSE: 'rent',
+        ELECTRICITY_EXPENSE: 'electricity charges',
+        FUEL_EXPENSE: 'fuel expenses',
+        FREIGHT_INWARD_EXPENSE: 'freight charges',
+        FREIGHT_OUTWARD_EXPENSE: 'freight charges',
+        SALARY_EXPENSE: 'salary',
+        SALARY_PAYABLE: 'salary',
+        INTEREST_EXPENSE: 'interest',
+        INTEREST_INCOME: 'interest',
+        GST_PAYABLE: 'GST liability',
+        GST_RECEIVABLE: 'GST input',
+        TDS_PAYABLE: 'TDS',
+        TDS_RECEIVABLE: 'TDS',
+        DEPRECIATION_EXPENSE: 'depreciation',
+    };
+    const PARTY_ROLES = ['ACCOUNTS_RECEIVABLE', 'ACCOUNTS_PAYABLE'];
+    const CASH_ROLES = ['CASH_IN_HAND', 'PETTY_CASH'];
+
+    // Sub-ledgers (a customer, a bank, ...) don't carry a system_role of their
+    // own - only the anchor group they live under does - so role lookup walks
+    // up to the parent when the account itself has none.
+    function effectiveRole(account) {
+        if (!account) return null;
+        if (account.system_role) return account.system_role;
+        const parent = account.parent && accountsById[account.parent];
+        return (parent && parent.system_role) || null;
+    }
+    function isPartyAccount(account) { return PARTY_ROLES.includes(effectiveRole(account)); }
+    function isCashAccount(account) { return CASH_ROLES.includes(effectiveRole(account)); }
+    function isBankAccount(account) { return effectiveRole(account) === 'BANK_ACCOUNTS'; }
+    function moneyModeLabel(account) {
+        if (isCashAccount(account)) return 'Cash';
+        if (isBankAccount(account)) return `Bank (${account.description})`;
+        return account.description;
+    }
+    function ledgerPhrase(account) { return ROLE_PHRASES[effectiveRole(account)] || null; }
+    function suggestLineNarration(account) {
+        if (!account) return '';
+        const phrase = ledgerPhrase(account);
+        if (phrase) return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+        if (isPartyAccount(account)) return account.description;
+        return '';
+    }
+    function formatINR(amount) {
+        const n = parseFloat(amount) || 0;
+        return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function monthYear(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr + 'T00:00:00');
+        if (isNaN(d)) return '';
+        return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    }
+
+    // Reads whichever entry mode is active and resolves each row to a real
+    // account object (so the engine can reason about ledgers, not raw inputs).
+    function collectNarrationLines() {
+        const rows = [];
+        if (isSimpleMode()) {
+            $('#simple-rows-body tr').each(function () {
+                const fromId = $(this).find('.simple-from').val();
+                const toId = $(this).find('.simple-to').val();
+                const amount = parseFloat($(this).find('.simple-amount').val()) || 0;
+                if (!fromId || !toId || !amount) return;
+                rows.push({ account: accountsById[toId], debit: amount, credit: 0 });
+                rows.push({ account: accountsById[fromId], debit: 0, credit: amount });
+            });
+        } else {
+            $('#voucher-lines-body tr').each(function () {
+                const id = $(this).find('.line-account').val();
+                const amount = parseFloat($(this).find('.line-amount').val()) || 0;
+                if (!id || !amount) return;
+                const out = $(this).find('.line-direction').val() === 'out';
+                rows.push({ account: accountsById[id], debit: out ? 0 : amount, credit: out ? amount : 0 });
+            });
+        }
+        return rows.filter(r => r.account);
+    }
+
+    function buildAutoNarration() {
+        const voucherType = $('#voucher-type').val();
+        const date = $('#voucher-date').val();
+        const reference = ($('#voucher-reference').val() || '').trim();
+        const refSuffix = reference ? ` Ref: ${reference}.` : '';
+        const lines = collectNarrationLines();
+        if (!lines.length) return '';
+
+        const debitLine = lines.find(l => l.debit > 0);
+        const creditLine = lines.find(l => l.credit > 0);
+        const amount = lines.reduce((sum, l) => sum + l.debit, 0);
+        const amt = formatINR(amount);
+
+        // Party ledgers (customer/supplier) speak for themselves; expense/tax
+        // ledgers get "toward <phrase>" so "paid to toward rent" never happens.
+        function partyOrPhrase(line) {
+            if (!line) return null;
+            if (isPartyAccount(line.account)) return { text: line.account.description, toward: false };
+            const phrase = ledgerPhrase(line.account);
+            if (phrase) return { text: phrase, toward: true };
+            return { text: line.account.description, toward: false };
+        }
+
+        if (voucherType === 'Payment') {
+            const mode = creditLine ? moneyModeLabel(creditLine.account) : '';
+            const who = partyOrPhrase(debitLine);
+            const whoText = who ? (who.toward ? `toward ${who.text}` : `to ${who.text}`) : '';
+            return `Being payment of ${amt} made ${whoText} through ${mode}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+        }
+        if (voucherType === 'Receipt') {
+            const mode = debitLine ? moneyModeLabel(debitLine.account) : '';
+            const who = partyOrPhrase(creditLine);
+            const whoText = who ? (who.toward ? `against ${who.text}` : `from ${who.text}`) : '';
+            return `Being receipt of ${amt} received ${whoText} through ${mode}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+        }
+        if (voucherType === 'Contra') {
+            const debitIsCash = debitLine && isCashAccount(debitLine.account);
+            const creditIsCash = creditLine && isCashAccount(creditLine.account);
+            const debitIsBank = debitLine && isBankAccount(debitLine.account);
+            const creditIsBank = creditLine && isBankAccount(creditLine.account);
+            if (debitIsBank && creditIsCash) return `Being cash deposited into ${debitLine.account.description} amounting to ${amt}.${refSuffix}`.trim();
+            if (debitIsCash && creditIsBank) return `Being cash withdrawn from ${creditLine.account.description} amounting to ${amt}.${refSuffix}`.trim();
+            if (debitIsBank && creditIsBank) return `Being fund transferred from ${creditLine.account.description} to ${debitLine.account.description} amounting to ${amt}.${refSuffix}`.trim();
+            const a = creditLine ? creditLine.account.description : '';
+            const b = debitLine ? debitLine.account.description : '';
+            return `Being contra entry of ${amt} between ${a} and ${b}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+        }
+        if (voucherType === 'Sales') {
+            const party = (creditLine && isPartyAccount(creditLine.account) && creditLine.account.description)
+                || (debitLine && isPartyAccount(debitLine.account) && debitLine.account.description) || null;
+            return `Being sale of goods${party ? ` to ${party}` : ''} amounting to ${amt}.${refSuffix}`.trim();
+        }
+        if (voucherType === 'Purchase') {
+            const party = (creditLine && isPartyAccount(creditLine.account) && creditLine.account.description)
+                || (debitLine && isPartyAccount(debitLine.account) && debitLine.account.description) || null;
+            return `Being purchase of goods${party ? ` from ${party}` : ''} amounting to ${amt}.${refSuffix}`.trim();
+        }
+
+        // Journal (and anything else): lead with whichever ledger carries a
+        // recognized context phrase (Rent, Electricity, GST, ...); fall back to
+        // a plain description of the two ledgers involved so it's never blank.
+        const phraseLine = lines.find(l => ledgerPhrase(l.account));
+        if (phraseLine) {
+            const phrase = ledgerPhrase(phraseLine.account);
+            const role = effectiveRole(phraseLine.account);
+            const period = monthYear(date);
+            let verb = period ? `booked for ${period}` : 'booked';
+            if (role === 'DEPRECIATION_EXPENSE') verb = period ? `provided for ${period}` : 'provided';
+            else if (role === 'GST_PAYABLE' || role === 'GST_RECEIVABLE') verb = 'adjusted';
+            else if (role === 'TDS_PAYABLE' || role === 'TDS_RECEIVABLE') verb = 'deducted';
+            else if (role === 'INTEREST_INCOME') verb = 'received';
+            else if (role === 'INTEREST_EXPENSE') verb = 'paid';
+            return `Being ${phrase} ${verb}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+        }
+        const debitName = debitLine ? debitLine.account.description : '';
+        const creditName = creditLine ? creditLine.account.description : '';
+        return `Being journal entry of ${amt} between ${debitName} and ${creditName}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+    }
+
+    // Stays live until the user types into the narration box; freezing (rather
+    // than fighting the user on every keystroke) plus a one-click "use auto"
+    // link is the practical equivalent of the spec's Keep-Manual/Revert choice.
+    let narrationTouched = false;
+    let lastAutoNarration = '';
+    function scheduleNarrationRefresh() {
+        if (narrationTouched) return;
+        window.requestAnimationFrame(() => {
+            if (narrationTouched) return;
+            lastAutoNarration = buildAutoNarration();
+            $('#voucher-narration').val(lastAutoNarration);
+        });
+    }
+    $('#voucher-narration').on('input', function () {
+        if (!narrationTouched) {
+            narrationTouched = true;
+            $('#narration-revert-link').show();
+        }
+    });
+    $('#narration-revert-link').on('click', function (e) {
+        e.preventDefault();
+        narrationTouched = false;
+        $(this).hide();
+        scheduleNarrationRefresh();
+    });
+    $('#voucher-type, #voucher-date').on('change', scheduleNarrationRefresh);
+    $('#voucher-reference').on('input', scheduleNarrationRefresh);
 
     // ------------------------------------------------------------ vouchers
 
@@ -256,7 +455,7 @@ $(document).ready(function () {
                     <td>${escapeHtml(v.date)}</td>
                     <td>${escapeHtml(v.voucher_type)}</td>
                     <td>${escapeHtml(v.sector_name || '')}</td>
-                    <td>${escapeHtml(v.narration)}</td>
+                    <td>${escapeHtml(v.narration)}${narrationSourceBadge(v)}</td>
                     <td class="text-end">${escapeHtml(v.total_debit)}</td>
                     <td>${statusBadge(v.status)}</td>
                     <td class="text-center">
@@ -322,6 +521,14 @@ $(document).ready(function () {
     });
     $(document).on('input', '.line-amount', refreshTotals);
     $(document).on('change', '.line-direction', refreshTotals);
+    $(document).on('change', '.line-account', function () {
+        const $narr = $(this).closest('tr').find('.line-narration');
+        if (!$narr.val()) {
+            const suggestion = suggestLineNarration(accountsById[$(this).val()]);
+            if (suggestion) $narr.val(suggestion);
+        }
+        refreshTotals();
+    });
 
     function refreshTotals() {
         let debit = 0, credit = 0;
@@ -333,6 +540,7 @@ $(document).ready(function () {
         $('#lines-total-credit').text(credit.toFixed(2));
         const diff = debit - credit;
         $('#lines-balance-hint').text(diff ? `Out of balance by ${Math.abs(diff).toFixed(2)}` : '');
+        scheduleNarrationRefresh();
     }
 
     // -------------------------------------------------- simple (From -> To)
@@ -360,6 +568,15 @@ $(document).ready(function () {
         refreshSimpleTotals();
     });
     $(document).on('input', '.simple-amount', refreshSimpleTotals);
+    $(document).on('change', '.simple-from, .simple-sector', refreshSimpleTotals);
+    $(document).on('change', '.simple-to', function () {
+        const $remarks = $(this).closest('tr').find('.simple-remarks');
+        if (!$remarks.val()) {
+            const suggestion = suggestLineNarration(accountsById[$(this).val()]);
+            if (suggestion) $remarks.val(suggestion);
+        }
+        refreshSimpleTotals();
+    });
 
     function refreshSimpleTotals() {
         let total = 0;
@@ -368,6 +585,7 @@ $(document).ready(function () {
         });
         $('#simple-count').text($('#simple-rows-body tr').length);
         $('#simple-total').text(total.toFixed(2));
+        scheduleNarrationRefresh();
     }
 
     function isSimpleMode() { return $('#mode-simple').is(':checked'); }
@@ -410,6 +628,8 @@ $(document).ready(function () {
             voucher_type: $('#voucher-type').val(),
             reference: $('#voucher-reference').val(),
             narration: $('#voucher-narration').val(),
+            auto_narration: lastAutoNarration,
+            narration_source: narrationTouched ? 'MANUAL' : 'AUTO',
             post,
         };
         let saved = 0, failed = 0;
@@ -419,7 +639,9 @@ $(document).ready(function () {
             headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
             data: JSON.stringify({
                 ...base,
+                // A row's own Remarks is a deliberate per-voucher override of the header narration.
                 narration: row.remarks || base.narration,
+                narration_source: row.remarks ? 'MANUAL' : base.narration_source,
                 sector: row.sector || null,
                 lines: [
                     { account: row.to, debit: row.amount, credit: 0, narration: row.remarks },
@@ -456,6 +678,8 @@ $(document).ready(function () {
             voucher_type: $('#voucher-type').val(),
             reference: $('#voucher-reference').val(),
             narration: $('#voucher-narration').val(),
+            auto_narration: lastAutoNarration,
+            narration_source: narrationTouched ? 'MANUAL' : 'AUTO',
             sector: $('#voucher-sector').val() || null,
             lines,
         };
@@ -474,6 +698,10 @@ $(document).ready(function () {
         $('#voucher-type').val(voucher ? voucher.voucher_type : 'Payment');
         $('#voucher-reference').val(voucher ? voucher.reference : '');
         $('#voucher-narration').val(voucher ? voucher.narration : '');
+        // Existing MANUAL narration stays frozen; AUTO (or brand new) keeps live-updating.
+        narrationTouched = !!(voucher && voucher.narration_source === 'MANUAL');
+        lastAutoNarration = (voucher && voucher.auto_narration) || '';
+        $('#narration-revert-link').toggle(narrationTouched);
         $('#voucher-sector').val(voucher && voucher.sector ? voucher.sector : '').trigger('change');
         $('#voucher-lines-body').empty();
         // Fresh vouchers seed one In and one Out line, ready to balance.
@@ -489,6 +717,7 @@ $(document).ready(function () {
             setMode(true);
             addSimpleRow();
         }
+        scheduleNarrationRefresh();
         $('#voucherFormModal').modal('show');
     }
 
@@ -580,7 +809,7 @@ $(document).ready(function () {
                   ${v.created_by ? ' · By: ' + escapeHtml(v.created_by) : ''}
                   ${v.cancelled_at ? `<br><span class="text-danger">Cancelled ${escapeHtml(v.cancelled_at)} — ${escapeHtml(v.cancel_reason)}</span>` : ''}
                 </div>
-                ${v.narration ? `<p>${escapeHtml(v.narration)}</p>` : ''}
+                ${v.narration ? `<p>${escapeHtml(v.narration)}${narrationSourceBadge(v)}</p>` : ''}
                 <table class="table table-sm table-bordered">
                   <thead class="table-dark"><tr><th>Account</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Narration</th></tr></thead>
                   <tbody>${lines}</tbody>
@@ -660,8 +889,12 @@ $(document).ready(function () {
 
     // -------------------------------------------------------------- init
 
-    const accountsReady = $.get("{% url 'api_coa_list' %}?postable=1&page_size=500", function (response) {
-        accounts = response.results.filter(a => a.status === 'Active');
+    const accountsReady = $.get("{% url 'api_coa_list' %}?page_size=500", function (response) {
+        // Full set (incl. non-postable group/anchor accounts) so the narration
+        // engine can resolve a sub-ledger's parent system_role; dropdowns still
+        // only offer postable, active leaves.
+        response.results.forEach(a => { accountsById[a.id] = a; });
+        accounts = response.results.filter(a => a.status === 'Active' && a.is_postable);
     });
     loadVouchers();
 });

@@ -1,9 +1,13 @@
 #pylint: disable=no-member
 
+from decimal import Decimal
+from typing import Optional
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -11,18 +15,17 @@ from django.http import Http404, JsonResponse
 from django.db.models import F
 from django.core.files.storage import default_storage
 from django.utils import timezone
-from hatchery_master.models import STATES_AND_TERRITORIES
+from hatchery_master.models import STATES_AND_TERRITORIES, Hatchery
+from account.models import ChartOfAccount
+from inventory.models import Item, ItemCategory, Warehouse
 from picklist.services import validate_value
-from .models import Supplier, SupplierShippingAddress, TaxMaster
+from .models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase, GeneralPurchaseItem,
+                     Supplier, SupplierPayment, SupplierPaymentLine, SupplierShippingAddress, TaxMaster)
 import json
 
 # Used only by the billing/shipping address modals (state field itself is
 # picklist-bound, see picklist.bindable_fields.BINDABLE_FIELDS).
 states_and_union_territories = STATES_AND_TERRITORIES
-
-@login_required
-def purchase_order(request):
-    return render(request, "purchase_order.html")
 
 @login_required()
 def supplier(request):
@@ -373,3 +376,513 @@ class TaxMasterAPI(View):
         return JsonResponse({"message": "TaxMaster deleted"})
 
 
+
+
+# ---------------------------------------------------------------------------
+# General Purchase (Purchase > Transactions)
+# ---------------------------------------------------------------------------
+
+def _general_purchase_to_item_dict(row):
+    return {
+        "item": row.item_id, "item_code": row.item.item_code,
+        "item_description": row.item.description, "unit": row.unit,
+        "sent_qty": str(row.sent_qty), "rcv_qty": str(row.rcv_qty), "free_qty": str(row.free_qty),
+        "rate": str(row.rate), "discount_percent": str(row.discount_percent),
+        "discount_amount": str(row.discount_amount), "gst_percent": str(row.gst_percent),
+        "amount": str(row.amount), "farm_warehouse": row.farm_warehouse_id,
+        "farm_warehouse_name": row.farm_warehouse.name,
+    }
+
+
+def _general_purchase_list_dict(gp):
+    warehouses = ", ".join(dict.fromkeys(
+        n for n in gp.items.values_list("farm_warehouse__name", flat=True) if n
+    ))
+    return {
+        "id": gp.id, "date": gp.date.isoformat(), "bill_no": gp.bill_no, "dc_no": gp.dc_no,
+        "supplier_name": gp.supplier.name, "item_names": gp.item_names(),
+        "quantity": str(gp.total_quantity()), "no_of_bags": str(gp.no_of_bags),
+        "avg_rate": str(gp.avg_rate()), "net_amount": str(gp.net_amount),
+        "farm_warehouse_names": warehouses, "batch_no": gp.batch_no,
+        "vehicle_no": gp.vehicle_no, "driver_name": gp.driver_name,
+    }
+
+
+def _general_purchase_form_context(gp=None):
+    return {
+        "general_purchase": gp,
+        "next_purchase_no": GeneralPurchase._next_purchase_no() if not gp else None,
+        "suppliers": Supplier.objects.order_by("name"),
+        "items": Item.objects.order_by("item_code"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "accounts": ChartOfAccount.objects.order_by("code"),
+        "tax_masters": TaxMaster.objects.exclude(tax_percentage__isnull=True).order_by("tax_code"),
+        "today": timezone.localdate().isoformat(),
+        "existing_items_json": json.dumps(
+            [_general_purchase_to_item_dict(row) for row in gp.items.select_related("item", "farm_warehouse")]
+        ) if gp else "[]",
+        "payment_terms_choices": GeneralPurchase.PAYMENT_TERMS_CHOICES,
+        "freight_type_choices": GeneralPurchase.FREIGHT_TYPE_CHOICES,
+        "bag_type_choices": GeneralPurchase.BAG_TYPE_CHOICES,
+        "other_charges_type_choices": GeneralPurchase.OTHER_CHARGES_TYPE_CHOICES,
+        "round_off_type_choices": GeneralPurchase.ROUND_OFF_TYPE_CHOICES,
+    }
+
+
+def _apply_posted_general_purchase_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.supplier_id = request.POST.get("supplier") or None
+    instance.bill_no = request.POST.get("bill_no", "").strip()
+    instance.dc_no = request.POST.get("dc_no", "").strip()
+    instance.vehicle_no = request.POST.get("vehicle_no", "").strip()
+    instance.driver_name = request.POST.get("driver_name", "").strip()
+    instance.driver_mobile = request.POST.get("driver_mobile", "").strip()
+    instance.calculation_based_on = request.POST.get("calculation_based_on") or "Sent Quantity"
+    instance.payment_terms = request.POST.get("payment_terms") or "Cash"
+    instance.freight_type = request.POST.get("freight_type") or "Extra"
+    instance.payment_mode = request.POST.get("payment_mode") or "pay_later"
+    instance.pay_account_id = request.POST.get("pay_account") or None
+    instance.freight_account_id = request.POST.get("freight_account") or None
+    instance.freight_amount = request.POST.get("freight_amount") or 0
+    instance.bag_type = request.POST.get("bag_type", "").strip()
+    instance.no_of_bags = request.POST.get("no_of_bags") or 0
+    instance.batch_no = request.POST.get("batch_no", "").strip()
+    instance.expiry_date = request.POST.get("expiry_date") or None
+    instance.tds_code = request.POST.get("tds_code", "").strip()
+    instance.tds_applicable = request.POST.get("tds_applicable") == "on"
+    instance.tds_amount = request.POST.get("tds_amount") or 0
+    instance.other_charges_account_id = request.POST.get("other_charges_account") or None
+    instance.other_charges_type = request.POST.get("other_charges_type") or "Add"
+    instance.other_charges_amount = request.POST.get("other_charges_amount") or 0
+    # round_off / round_off_type are auto-derived in compute_net_amount(),
+    # never taken from the posted form.
+    instance.remarks = request.POST.get("remarks", "").strip()
+    if request.FILES.get("reference_document_1"):
+        instance.reference_document_1 = request.FILES["reference_document_1"]
+    if request.FILES.get("reference_document_2"):
+        instance.reference_document_2 = request.FILES["reference_document_2"]
+    if request.FILES.get("reference_document_3"):
+        instance.reference_document_3 = request.FILES["reference_document_3"]
+    validate_value("purchase", "GeneralPurchase", "calculation_based_on", instance.calculation_based_on)
+
+
+def _save_general_purchase_items(instance, request):
+    try:
+        rows = json.loads(request.POST.get("items_json") or "[]")
+    except json.JSONDecodeError:
+        rows = []
+    instance.items.all().delete()
+    for row in rows:
+        if not row.get("item") or not row.get("farm_warehouse"):
+            continue
+        GeneralPurchaseItem.objects.create(
+            purchase=instance, item_id=row["item"], unit=row.get("unit") or "",
+            sent_qty=Decimal(str(row.get("sent_qty") or 0)),
+            rcv_qty=Decimal(str(row.get("rcv_qty") or 0)),
+            free_qty=Decimal(str(row.get("free_qty") or 0)),
+            rate=Decimal(str(row.get("rate") or 0)),
+            discount_percent=Decimal(str(row.get("discount_percent") or 0)),
+            discount_amount=Decimal(str(row.get("discount_amount") or 0)),
+            gst_percent=Decimal(str(row.get("gst_percent") or 0)),
+            farm_warehouse_id=row["farm_warehouse"],
+        )
+    instance.net_amount = instance.compute_net_amount()
+    instance.save(update_fields=["net_amount", "round_off", "round_off_type"])
+
+
+@login_required(login_url="login")
+def general_purchase_list(request):
+    return render(request, "general_purchase_list.html", {
+        "categories": ItemCategory.objects.order_by("name"),
+        "warehouses": Warehouse.objects.order_by("name"),
+    })
+
+
+@login_required(login_url="login")
+def create_general_purchase(request):
+    """Add a new General Purchase transaction."""
+    if request.method == "POST":
+        instance = GeneralPurchase()
+        try:
+            _apply_posted_general_purchase_fields(instance, request)
+            instance.full_clean(exclude=["purchase_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_general_purchase_items(instance, request)
+            messages.success(request, "General purchase added successfully.")
+            return redirect("general_purchase_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "general_purchase_form.html", _general_purchase_form_context())
+
+
+@login_required(login_url="login")
+def edit_general_purchase(request, id):
+    """Edit an existing General Purchase transaction."""
+    instance = get_object_or_404(GeneralPurchase, id=id)
+
+    if request.method == "POST":
+        try:
+            _apply_posted_general_purchase_fields(instance, request)
+            instance.full_clean(exclude=["purchase_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_general_purchase_items(instance, request)
+            messages.success(request, "General purchase updated successfully.")
+            return redirect("general_purchase_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "general_purchase_form.html", _general_purchase_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_general_purchase(request, id):
+    """Delete a General Purchase transaction."""
+    instance = get_object_or_404(GeneralPurchase, id=id)
+    instance.delete()
+    messages.success(request, "General purchase deleted successfully.")
+    return redirect("general_purchase_list")
+
+
+@login_required
+def general_purchase_api_list(request):
+    """JSON rows for the General Purchase register's DataTable + filter bar."""
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    category = (request.GET.get("category") or "").strip()
+    warehouse = (request.GET.get("warehouse") or "").strip()
+
+    qs = GeneralPurchase.objects.select_related("supplier").prefetch_related(
+        "items__item", "items__farm_warehouse")
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    if category:
+        qs = qs.filter(items__item__category_id=category)
+    if warehouse:
+        qs = qs.filter(items__farm_warehouse_id=warehouse)
+    qs = qs.distinct().order_by("-date", "-id")
+    return JsonResponse([_general_purchase_list_dict(gp) for gp in qs], safe=False)
+
+
+
+# ---------------------------------------------------------------------------
+# Chicks Purchase (Purchase > Transactions)
+# ---------------------------------------------------------------------------
+
+def _chicks_purchase_to_item_dict(row):
+    return {
+        "sent_qty": str(row.sent_qty), "sent_free_percent": str(row.sent_free_percent),
+        "rcv_free_percent": str(row.rcv_free_percent),
+        "mortality": str(row.mortality), "shortage": str(row.shortage), "weaks": str(row.weaks),
+        "excess_qty": str(row.excess_qty), "rcv_qty": str(row.rcv_qty),
+        "free_qty": str(row.free_qty), "total_qty": str(row.total_qty),
+        "rate": str(row.rate), "amount": str(row.amount),
+        "farm_warehouse": row.farm_warehouse_id, "farm_warehouse_name": row.farm_warehouse.name,
+        "batch": row.batch,
+    }
+
+
+def _chicks_purchase_list_dict(cp):
+    warehouses = ", ".join(dict.fromkeys(
+        n for n in cp.items.values_list("farm_warehouse__name", flat=True) if n
+    ))
+    return {
+        "id": cp.id, "date": cp.date.isoformat(), "bill_no": cp.bill_no, "dc_no": cp.dc_no,
+        "supplier_name": cp.supplier.name,
+        "hatchery_name": cp.hatchery.hatchery_name if cp.hatchery_id else "",
+        "item_code": cp.item.item_code,
+        "quantity": str(cp.total_quantity()), "avg_rate": str(cp.avg_rate()),
+        "net_amount": str(cp.net_amount), "farm_warehouse_names": warehouses,
+    }
+
+
+def _chicks_purchase_form_context(cp=None):
+    return {
+        "chicks_purchase": cp,
+        "next_purchase_no": ChicksPurchase._next_purchase_no() if not cp else None,
+        "suppliers": Supplier.objects.order_by("name"),
+        "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+        "items": Item.objects.order_by("item_code"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "accounts": ChartOfAccount.objects.order_by("code"),
+        "today": timezone.localdate().isoformat(),
+        "existing_items_json": json.dumps(
+            [_chicks_purchase_to_item_dict(row) for row in cp.items.select_related("farm_warehouse")]
+        ) if cp else "[]",
+        "freight_type_choices": ChicksPurchase.FREIGHT_TYPE_CHOICES,
+        "bag_type_choices": ChicksPurchase.BAG_TYPE_CHOICES,
+        "other_charges_type_choices": ChicksPurchase.OTHER_CHARGES_TYPE_CHOICES,
+        "round_off_type_choices": ChicksPurchase.ROUND_OFF_TYPE_CHOICES,
+    }
+
+
+def _apply_posted_chicks_purchase_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.supplier_id = request.POST.get("supplier") or None
+    instance.hatchery_id = request.POST.get("hatchery") or None
+    instance.item_id = request.POST.get("item") or None
+    instance.bill_no = request.POST.get("bill_no", "").strip()
+    instance.dc_no = request.POST.get("dc_no", "").strip()
+    instance.vehicle_no = request.POST.get("vehicle_no", "").strip()
+    instance.driver_name = request.POST.get("driver_name", "").strip()
+    instance.freight_type = request.POST.get("freight_type") or "Extra"
+    instance.payment_mode = request.POST.get("payment_mode") or "pay_later"
+    instance.pay_account_id = request.POST.get("pay_account") or None
+    instance.freight_account_id = request.POST.get("freight_account") or None
+    instance.freight_amount = request.POST.get("freight_amount") or 0
+    instance.bag_type = request.POST.get("bag_type", "").strip()
+    instance.no_of_bags = request.POST.get("no_of_bags") or 0
+    instance.batch_no = request.POST.get("batch_no", "").strip()
+    instance.expiry_date = request.POST.get("expiry_date") or None
+    instance.tds_code = request.POST.get("tds_code", "").strip()
+    instance.tds_applicable = request.POST.get("tds_applicable") == "on"
+    instance.tds_amount = request.POST.get("tds_amount") or 0
+    instance.other_charges_account_id = request.POST.get("other_charges_account") or None
+    instance.other_charges_type = request.POST.get("other_charges_type") or "Add"
+    instance.other_charges_amount = request.POST.get("other_charges_amount") or 0
+    # round_off / round_off_type are auto-derived in compute_net_amount(),
+    # never taken from the posted form.
+    instance.remarks = request.POST.get("remarks", "").strip()
+    if request.FILES.get("reference_document_1"):
+        instance.reference_document_1 = request.FILES["reference_document_1"]
+    if request.FILES.get("reference_document_2"):
+        instance.reference_document_2 = request.FILES["reference_document_2"]
+    if request.FILES.get("reference_document_3"):
+        instance.reference_document_3 = request.FILES["reference_document_3"]
+
+
+def _save_chicks_purchase_items(instance, request):
+    try:
+        rows = json.loads(request.POST.get("items_json") or "[]")
+    except json.JSONDecodeError:
+        rows = []
+    instance.items.all().delete()
+    for row in rows:
+        if not row.get("farm_warehouse"):
+            continue
+        ChicksPurchaseItem.objects.create(
+            purchase=instance,
+            sent_qty=Decimal(str(row.get("sent_qty") or 0)),
+            sent_free_percent=Decimal(str(row.get("sent_free_percent") or 0)),
+            rcv_free_percent=Decimal(str(row.get("rcv_free_percent") or 0)),
+            mortality=Decimal(str(row.get("mortality") or 0)),
+            shortage=Decimal(str(row.get("shortage") or 0)),
+            weaks=Decimal(str(row.get("weaks") or 0)),
+            excess_qty=Decimal(str(row.get("excess_qty") or 0)),
+            rate=Decimal(str(row.get("rate") or 0)),
+            farm_warehouse_id=row["farm_warehouse"],
+            batch=row.get("batch") or "",
+        )
+    instance.net_amount = instance.compute_net_amount()
+    instance.save(update_fields=["net_amount", "round_off", "round_off_type"])
+
+
+@login_required(login_url="login")
+def chicks_purchase_list(request):
+    return render(request, "chicks_purchase_list.html", {
+        "warehouses": Warehouse.objects.order_by("name"),
+    })
+
+
+@login_required(login_url="login")
+def create_chicks_purchase(request):
+    """Add a new Chicks Purchase transaction."""
+    if request.method == "POST":
+        instance = ChicksPurchase()
+        try:
+            _apply_posted_chicks_purchase_fields(instance, request)
+            instance.full_clean(exclude=["purchase_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_chicks_purchase_items(instance, request)
+            messages.success(request, "Chicks purchase added successfully.")
+            return redirect("chicks_purchase_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context())
+
+
+@login_required(login_url="login")
+def edit_chicks_purchase(request, id):
+    """Edit an existing Chicks Purchase transaction."""
+    instance = get_object_or_404(ChicksPurchase, id=id)
+
+    if request.method == "POST":
+        try:
+            _apply_posted_chicks_purchase_fields(instance, request)
+            instance.full_clean(exclude=["purchase_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_chicks_purchase_items(instance, request)
+            messages.success(request, "Chicks purchase updated successfully.")
+            return redirect("chicks_purchase_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_chicks_purchase(request, id):
+    """Delete a Chicks Purchase transaction."""
+    instance = get_object_or_404(ChicksPurchase, id=id)
+    instance.delete()
+    messages.success(request, "Chicks purchase deleted successfully.")
+    return redirect("chicks_purchase_list")
+
+
+@login_required
+def chicks_purchase_api_list(request):
+    """JSON rows for the Chicks Purchase register's DataTable + filter bar."""
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+
+    qs = ChicksPurchase.objects.select_related("supplier", "hatchery", "item").prefetch_related(
+        "items__farm_warehouse")
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    qs = qs.order_by("-date", "-id")
+    return JsonResponse([_chicks_purchase_list_dict(cp) for cp in qs], safe=False)
+
+
+
+# ---------------------------------------------------------------------------
+# Supplier Payment (Purchase > Transactions)
+# ---------------------------------------------------------------------------
+
+def _payment_to_line_dict(row):
+    return {
+        "supplier": row.supplier_id, "mode": row.mode, "pay_account": row.pay_account_id,
+        "pay_account_name": f"{row.pay_account.code} - {row.pay_account.description}",
+        "amount": str(row.amount), "bank_charges": str(row.bank_charges),
+        "reference_no": row.reference_no, "remarks": row.remarks,
+    }
+
+
+def _payment_list_dict(p):
+    return {
+        "id": p.id, "date": p.date.isoformat(), "payment_no": p.payment_no,
+        "supplier_name": p.supplier_summary(), "mode": p.mode_summary(),
+        "method": p.method_summary(), "amount": str(p.total_amount()),
+    }
+
+
+def _payment_form_context(p=None):
+    return {
+        "payment": p,
+        "next_payment_no": SupplierPayment._next_payment_no() if not p else None,
+        "suppliers": Supplier.objects.order_by("name"),
+        "locations": Warehouse.objects.order_by("name"),
+        "accounts": ChartOfAccount.objects.order_by("code"),
+        "today": timezone.localdate().isoformat(),
+        "mode_choices": SupplierPaymentLine.MODE_CHOICES,
+        "existing_lines_json": json.dumps(
+            [_payment_to_line_dict(row) for row in p.lines.select_related("pay_account", "supplier")]
+        ) if p else "[]",
+    }
+
+
+def _apply_posted_payment_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.location_id = request.POST.get("location") or None
+
+
+def _save_payment_lines(instance, request):
+    try:
+        rows = json.loads(request.POST.get("lines_json") or "[]")
+    except json.JSONDecodeError:
+        rows = []
+    instance.lines.all().delete()
+    for row in rows:
+        if not row.get("supplier") or not row.get("pay_account") or not row.get("amount"):
+            continue
+        SupplierPaymentLine.objects.create(
+            payment=instance, supplier_id=row["supplier"], mode=row.get("mode") or "Cash",
+            pay_account_id=row["pay_account"],
+            amount=Decimal(str(row.get("amount") or 0)),
+            bank_charges=Decimal(str(row.get("bank_charges") or 0)),
+            reference_no=row.get("reference_no") or "",
+            remarks=row.get("remarks") or "",
+        )
+
+
+@login_required(login_url="login")
+def payment_list(request):
+    return render(request, "payment_list.html")
+
+
+@login_required(login_url="login")
+def create_payment(request):
+    """Add a new Supplier Payment voucher."""
+    if request.method == "POST":
+        instance = SupplierPayment()
+        try:
+            _apply_posted_payment_fields(instance, request)
+            instance.full_clean(exclude=["payment_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_payment_lines(instance, request)
+                if not instance.lines.exists():
+                    raise ValidationError("Add at least one payment line.")
+            messages.success(request, "Payment added successfully.")
+            return redirect("payment_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "payment_form.html", _payment_form_context())
+
+
+@login_required(login_url="login")
+def edit_payment(request, id):
+    """Edit an existing Supplier Payment voucher."""
+    instance = get_object_or_404(SupplierPayment, id=id)
+
+    if request.method == "POST":
+        try:
+            _apply_posted_payment_fields(instance, request)
+            instance.full_clean(exclude=["payment_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_payment_lines(instance, request)
+                if not instance.lines.exists():
+                    raise ValidationError("Add at least one payment line.")
+            messages.success(request, "Payment updated successfully.")
+            return redirect("payment_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+
+    return render(request, "payment_form.html", _payment_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_payment(request, id):
+    """Delete a Supplier Payment voucher."""
+    instance = get_object_or_404(SupplierPayment, id=id)
+    instance.delete()
+    messages.success(request, "Payment deleted successfully.")
+    return redirect("payment_list")
+
+
+@login_required
+def payment_api_list(request):
+    """JSON rows for the Payment register's DataTable + filter bar."""
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+
+    qs = SupplierPayment.objects.prefetch_related("lines__pay_account", "lines__supplier")
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    qs = qs.order_by("-date", "-id")
+    return JsonResponse([_payment_list_dict(p) for p in qs], safe=False)

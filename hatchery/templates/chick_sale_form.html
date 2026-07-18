@@ -128,12 +128,16 @@
           <input class="form-control bg-light" id="final_amount" readonly value="0.00">
         </div>
         <div class="col-md-3">
-          <label class="form-label">Avg. Amount</label>
+          <label class="form-label">Avg Rate</label>
           <input class="form-control bg-light" id="avg_amount" readonly value="0.00">
         </div>
         <div class="col-md-3">
           <label class="form-label">Profit Amount</label>
           <input class="form-control bg-light" id="profit_amount" readonly value="0.00">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Remarks</label>
+          <textarea class="form-control" id="remarks" rows="1"></textarea>
         </div>
       </div>
     </div>
@@ -141,8 +145,14 @@
 
   <div class="card mb-3">
     <div class="card-body">
-      <label class="form-label">Remarks</label>
-      <textarea class="form-control" id="remarks" rows="3"></textarea>
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <label class="form-label mb-0">Terms and Conditions</label>
+        <select class="form-select form-select-sm" id="terms_template" style="max-width:260px">
+          <option value="">Select from master...</option>
+          {% for tc in terms_conditions %}<option value="{{ forloop.counter0 }}" data-condition="{{ tc.condition|escapejs }}">{{ tc.type|default:"Unnamed" }}</option>{% endfor %}
+        </select>
+      </div>
+      <textarea class="form-control" id="terms" rows="3"></textarea>
     </div>
   </div>
 
@@ -236,6 +246,7 @@ get('item-table').addEventListener('input', e=>{
 get('item-table').addEventListener('click', e=>{ if(e.target.closest('.remove')){ e.target.closest('tr').remove(); renumberRows(); totals(); } });
 get('freight_type').addEventListener('change', totals);
 get('freight_amount').addEventListener('input', totals);
+get('terms_template').onchange = e => { const opt = e.target.selectedOptions[0]; if (opt && opt.dataset.condition) get('terms').value = opt.dataset.condition; e.target.value = ''; };
 
 /* ------------- billing / shipping (same pattern as Delivery Challan) ------------- */
 let selectedShippingAddressId = null;
@@ -287,7 +298,7 @@ function payload(){
     freight_type: value('freight_type'),
     payment_mode: document.querySelector('input[name="payment_mode"]:checked').value,
     pay_account: value('pay_account'), freight_account: value('freight_account'),
-    freight_amount: value('freight_amount'), remarks: value('remarks'),
+    freight_amount: value('freight_amount'), terms: value('terms'), remarks: value('remarks'),
     items: [...document.querySelectorAll('#item-table tbody tr')].map(tr=>({
       item: tr.querySelector('.item').value, farm: tr.querySelector('.farm').value,
       total_qty: tr.querySelector('.total-qty').value, mortality: tr.querySelector('.mortality').value,
@@ -324,6 +335,7 @@ get('chick-sale-form').onsubmit=async e=>{
     get('pay_account').value=data.pay_account||'';
     get('freight_account').value=data.freight_account||'';
     get('freight_amount').value=data.freight_amount;
+    get('terms').value=data.terms||'';
     get('remarks').value=data.remarks||'';
     get('delivery_challan').value=data.delivery_challan||'';
     if(data.dc_no){ get('dc_badge').textContent=`From ${data.dc_no}`; get('dc_badge').classList.remove('d-none'); }
@@ -340,6 +352,7 @@ get('chick-sale-form').onsubmit=async e=>{
     get('customer').value=fromChallan.customer;
     get('vehicle').value=fromChallan.vehicle||'';
     get('driver').value=fromChallan.driver||'';
+    get('terms').value=fromChallan.terms||'';
     const customerOption=get('customer').selectedOptions[0];
     get('billing_address').textContent=customerOption?.dataset.address||'';
     get('shipping_address').value=fromChallan.shipping_address||'';

@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 
 from account.models import BankCode, ChartOfAccount, CoACategory, FinancialYear, Schedule
 from inventory.models import Item, ItemCategory, Warehouse
-from purchase.models import CreditTerm, PurchaseOrder, PurchaseOrderLineItem, VendorGroup
+from purchase.models import CreditTerm, GeneralPurchase, GeneralPurchaseItem, Supplier, VendorGroup
 from sales.models import Customer, CustomerGroup, SalesPriceMaster
 
 
@@ -44,38 +44,30 @@ class Command(BaseCommand):
                 "currency": "INR",
             },
         )
-        purchase_order, _ = PurchaseOrder.objects.get_or_create(
-            invoice="PO-1001",
+        supplier, _ = Supplier.objects.get_or_create(
+            code="SUPP-001",
+            defaults={"name": "Sample Feed Supplier", "mobile": "9876500000",
+                     "contact_type": Supplier.ContactType.SUPPLIER},
+        )
+        general_purchase, _ = GeneralPurchase.objects.get_or_create(
+            bill_no="PO-1001",
             defaults={
                 "date": date.today(),
-                "vendor": vendor_group,
-                "credit_term": credit_term,
-                "pay_later_via": "Cash",
-                "tcs": "No",
-                "basic_amount": Decimal("1200.00"),
-                "total_amount": Decimal("1200.00"),
-                "grand_total": Decimal("1200.00"),
-                "net_total": Decimal("1200.00"),
+                "supplier": supplier,
+                "payment_terms": "Cash",
             },
         )
-        PurchaseOrderLineItem.objects.get_or_create(
-            purchase_order=purchase_order,
+        GeneralPurchaseItem.objects.get_or_create(
+            purchase=general_purchase,
+            item=item,
             defaults={
-                "item_category": category,
-                "item": item,
-                "units": "Bag",
-                "price_per_unit": Decimal("120.00"),
-                "qty_sent": Decimal("10.00"),
-                "qty_received": Decimal("10.00"),
-                "qty_free": Decimal("0.00"),
-                "type": "Regular",
-                "bags_or_boxes": "10",
-                "weight": Decimal("500.00"),
-                "vat": Decimal("0.00"),
-                "warehouse": warehouse.name,
-                "flock": "F1",
-                "sqft": Decimal("1000.00"),
-                "sqft_per_chick": Decimal("1.00"),
+                "unit": "Bag",
+                "rate": Decimal("120.00"),
+                "sent_qty": Decimal("10.00"),
+                "rcv_qty": Decimal("10.00"),
+                "free_qty": Decimal("0.00"),
+                "gst_percent": Decimal("0.00"),
+                "farm_warehouse": warehouse,
             },
         )
 

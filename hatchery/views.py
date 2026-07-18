@@ -1382,6 +1382,7 @@ class ChickSaleFormTemplateView(View):
                     "id": challan.id, "challan_no": challan.challan_no,
                     "customer": challan.customer_id, "shipping_address": challan.shipping_address,
                     "vehicle": challan.vehicle_no, "driver": challan.driver_name,
+                    "terms": challan.terms,
                     "items": [{
                         "item": row.item_id, "total_qty": str(row.quantity),
                         "sale_rate": str(row.price),
@@ -1397,14 +1398,17 @@ class ChickSaleFormTemplateView(View):
             "states_and_union_territories": STATES_AND_TERRITORIES,
             "next_bill_no": ChickSale.next_bill_no() if id is None else None,
             "from_challan": json.dumps(from_challan),
+            "terms_conditions": TermsConditions.objects.filter(party_type=TermsConditions.PartyType.CUSTOMER).exclude(condition__isnull=True).exclude(condition__exact="").order_by("type"),
         })
 
 
 def _chick_sale_to_dict(cs):
+    company = CompanyProfile.get_solo()
     return {
         "id": cs.id, "bill_no": cs.bill_no, "date": cs.date.isoformat(),
         "customer": cs.customer_id, "customer_name": cs.customer.name,
         "customer_address": cs.customer.address, "customer_mobile": cs.customer.mobile,
+        "customer_gstin": cs.customer.gstin or "", "customer_email": cs.customer.email or "",
         "warehouse": cs.warehouse_id, "warehouse_name": cs.warehouse.name,
         "delivery_challan": cs.delivery_challan_id,
         "dc_no": cs.delivery_challan.challan_no if cs.delivery_challan else "",
@@ -1413,9 +1417,16 @@ def _chick_sale_to_dict(cs):
         "pay_account": cs.pay_account_id, "freight_account": cs.freight_account_id,
         "freight_amount": str(cs.freight_amount), "final_amount": str(cs.final_amount),
         "avg_amount": str(cs.avg_amount), "profit_amount": str(cs.profit_amount),
-        "remarks": cs.remarks,
+        "terms": cs.terms, "remarks": cs.remarks,
+        "company": {
+            "name": company.name, "address": company.address, "state": company.state,
+            "mobile": company.mobile, "email": company.email, "gstin": company.gstin, "pan": company.pan,
+            "bank_name": company.bank_name, "bank_account_no": company.bank_account_no,
+            "ifsc_code": company.ifsc_code, "bank_branch": company.bank_branch,
+        },
         "items": [{
-            "id": row.id, "item": row.item_id, "farm": row.farm,
+            "id": row.id, "item": row.item_id, "item_code": row.item.item_code,
+            "item_description": row.item.description, "farm": row.farm,
             "total_qty": str(row.total_qty), "mortality": str(row.mortality),
             "culls": str(row.culls), "sale_qty": str(row.sale_qty),
             "discount_percent": str(row.discount_percent), "discount_amount": str(row.discount_amount),
@@ -1490,6 +1501,7 @@ class ChickSaleAPI(BaseAPIView):
             "pay_account": ChartOfAccount.objects.filter(id=data.get("pay_account") or 0).first(),
             "freight_account": ChartOfAccount.objects.filter(id=data.get("freight_account") or 0).first(),
             "freight_amount": Decimal(str(data.get("freight_amount") or 0)),
+            "terms": data.get("terms") or "",
             "remarks": data.get("remarks") or "",
         }
         if chick_sale_id:

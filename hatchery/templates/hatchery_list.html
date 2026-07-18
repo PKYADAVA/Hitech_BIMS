@@ -25,6 +25,25 @@
     </div>
 </div>
 
+<!-- Date Filter -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="from-date" class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-3">
+        <label for="to-date" class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Hatch Setting List Card -->
 <div class="card">
   <div class="card-header">
@@ -327,19 +346,48 @@
 
 <script>
 $(document).ready(function () {
+  let allHatchRows = [];
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  function applyHatchDateFilter() {
+    const from = $("#from-date").val();
+    const to = $("#to-date").val();
+    const filtered = allHatchRows.filter(function (hs) {
+      if (!hs.setting_date) return true;
+      if (from && hs.setting_date < from) return false;
+      if (to && hs.setting_date > to) return false;
+      return true;
+    });
+    renderHatchRows(filtered);
+  }
+  $("#filter-submit").on("click", applyHatchDateFilter);
+
   function loadHatchSettingList() {
     $.ajax({
       url: "{% url 'hatchery_api_list' %}",
       type: "GET",
       success: function (response) {
-        const table = $("#hatchery-table");
-        if ($.fn.DataTable.isDataTable(table)) {
-          table.DataTable().clear().destroy();
-        }
-        const tbody = table.find("tbody");
-        tbody.empty();
+        allHatchRows = response;
+        applyHatchDateFilter();
+      },
+      error: function () {
+        alert("Error loading hatch setting list. Please try again.");
+      },
+    });
+  }
 
-        response.forEach((hs) => {
+  function renderHatchRows(response) {
+    const table = $("#hatchery-table");
+    if ($.fn.DataTable.isDataTable(table)) {
+      table.DataTable().clear().destroy();
+    }
+    const tbody = table.find("tbody");
+    tbody.empty();
+
+    response.forEach((hs) => {
           tbody.append(`
             <tr>
               <td><strong>${hs.setting_no}</strong></td>
@@ -377,18 +425,13 @@ $(document).ready(function () {
             </tr>`);
         });
 
-        table.DataTable({
-          responsive: true,
-          paging: true,
-          searching: true,
-          info: true,
-          lengthChange: true,
-          columnDefs: [{ orderable: false, targets: -1 }],
-        });
-      },
-      error: function () {
-        alert("Error loading hatch setting list. Please try again.");
-      },
+    table.DataTable({
+      responsive: true,
+      paging: true,
+      searching: true,
+      info: true,
+      lengthChange: true,
+      columnDefs: [{ orderable: false, targets: -1 }],
     });
   }
 

@@ -30,6 +30,9 @@ def _serialize_voucher(voucher, with_lines=False):
         "date": voucher.date.strftime("%Y-%m-%d"),
         "financial_year": journal.fy_label(voucher.financial_year),
         "narration": voucher.narration,
+        "auto_narration": voucher.auto_narration,
+        "narration_source": voucher.narration_source,
+        "narration_edited_at": voucher.narration_edited_at and voucher.narration_edited_at.strftime("%d-%b-%Y %H:%M"),
         "reference": voucher.reference,
         "sector": voucher.sector_id,
         "sector_name": voucher.sector.name if voucher.sector_id else None,
@@ -113,6 +116,8 @@ class VoucherListCreateAPI(View):
                 reference=data.get("reference", ""),
                 sector=data.get("sector"),
                 post=bool(data.get("post")),
+                auto_narration=data.get("auto_narration"),
+                narration_source=data.get("narration_source"),
             )
         except ValidationError as exc:
             return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
@@ -143,6 +148,8 @@ class VoucherDetailAPI(View):
                 narration=data.get("narration"),
                 reference=data.get("reference"),
                 sector=data["sector"] if "sector" in data else Ellipsis,
+                auto_narration=data.get("auto_narration"),
+                narration_source=data.get("narration_source"),
             )
         except ValidationError as exc:
             return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
@@ -236,4 +243,51 @@ class TrialBalanceAPI(View):
                 for row in report["rows"]
             ],
             "totals": {key: str(value) for key, value in report["totals"].items()},
+        })
+
+
+def _serialize_pl_rows(rows):
+    return [
+        {key: (str(value) if key == "amount" else value) for key, value in row.items()}
+        for row in rows
+    ]
+
+
+@method_decorator(login_required, name="dispatch")
+class ProfitAndLossAPI(View):
+    def get(self, request):
+        company = _company(request)
+        report = journal.profit_and_loss(
+            company,
+            date_from=request.GET.get("from") or None,
+            date_to=request.GET.get("to") or None,
+        )
+        return JsonResponse({
+            "income": _serialize_pl_rows(report["income"]),
+            "cogs": _serialize_pl_rows(report["cogs"]),
+            "expense": _serialize_pl_rows(report["expense"]),
+            "total_income": str(report["total_income"]),
+            "total_cogs": str(report["total_cogs"]),
+            "gross_profit": str(report["gross_profit"]),
+            "total_expense": str(report["total_expense"]),
+            "net_profit": str(report["net_profit"]),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class BalanceSheetAPI(View):
+    def get(self, request):
+        company = _company(request)
+        report = journal.balance_sheet(company, date_upto=request.GET.get("to") or None)
+        return JsonResponse({
+            "assets": _serialize_pl_rows(report["assets"]),
+            "liabilities": _serialize_pl_rows(report["liabilities"]),
+            "equity": _serialize_pl_rows(report["equity"]),
+            "total_assets": str(report["total_assets"]),
+            "total_liabilities": str(report["total_liabilities"]),
+            "total_equity_recorded": str(report["total_equity_recorded"]),
+            "current_earnings": str(report["current_earnings"]),
+            "total_equity": str(report["total_equity"]),
+            "total_liabilities_and_equity": str(report["total_liabilities_and_equity"]),
+            "balanced": report["balanced"],
         })

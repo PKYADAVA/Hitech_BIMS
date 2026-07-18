@@ -8,12 +8,30 @@ class ItemCategory(models.Model):
         return self.name
     
 
-class Warehouse(models.Model):
+class Sector(models.Model):
     name = models.CharField(max_length=255, unique=True)
 
     def __str__(self):
-        return self.name 
-    
+        return self.name
+
+
+class Warehouse(models.Model):
+    """A physical location (branch office, feedmill, hatchery, warehouse,
+    etc.) — labelled "Office" in the UI. ``name`` doubles as the "Sector
+    Description" shown on the Office form."""
+    name = models.CharField(max_length=255, unique=True)
+    sector = models.ForeignKey(Sector, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="offices")
+    address = models.TextField(blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    # Sector Mapping: many warehouses can map to the same broiler Branch
+    # (e.g. "Akbarpur Warehouse" and "Cost Centre Akbarpur" both -> "Akbarpur Branch").
+    branch = models.ForeignKey("broiler.Branch", on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="warehouses")
+
+    def __str__(self):
+        return self.name
+
 
 class Item(models.Model):
     VALUATION_METHODS = [

@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}Balance Sheet{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_account_report_subnavbar.html' with active_tab='balance_sheet_report' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-scale-balanced"></i>Balance Sheet</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Assets, liabilities and equity as of a date, from posted vouchers</div>
+      <button class="btn btn-outline-secondary" id="bs-print" disabled><i class="fas fa-print"></i> Print</button>
+    </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">As Of<span class="text-danger">*</span></label>
+        <input type="date" id="bs-to" class="form-control" />
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary" id="bs-load"><i class="fas fa-search"></i> View Report</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="bs-print-area">
+<div class="row g-3" id="bs-card" style="display:none">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="fas fa-table"></i> Assets</div>
+      <div class="card-body p-0">
+        <table class="table table-bordered mb-0">
+          <tbody id="bs-assets-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="fas fa-table"></i> Liabilities &amp; Equity</div>
+      <div class="card-body p-0">
+        <table class="table table-bordered mb-0">
+          <tbody id="bs-liab-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div id="bs-balance-check" class="alert mt-2"></div>
+  </div>
+</div>
+</div>
+
+<script>
+$(document).ready(function () {
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
+                   style: { background: colors[type] || colors.success } }).showToast();
+    }
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    function fmt(n) {
+        const v = parseFloat(n) || 0;
+        return v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function sectionRows(rows) {
+        if (!rows.length) return `<tr><td colspan="2" class="text-muted ps-4">No entries</td></tr>`;
+        return rows.map(r => `
+            <tr>
+              <td class="ps-4">${escapeHtml(r.code)} - ${escapeHtml(r.description)}</td>
+              <td class="text-end">${fmt(r.amount)}</td>
+            </tr>`).join('');
+    }
+
+    function loadReport() {
+        const to = $('#bs-to').val();
+        if (!to) { showToast('danger', 'Select an "As Of" date.'); return; }
+        $.get(`{% url 'api_balance_sheet' %}?to=${to}`, function (response) {
+            const assetsBody = $('#bs-assets-body').empty();
+            assetsBody.append('<tr class="table-light fw-bold"><td>Assets</td><td></td></tr>');
+            assetsBody.append(sectionRows(response.assets));
+            assetsBody.append(`<tr class="fw-bold fs-6"><td>Total Assets</td><td class="text-end">${fmt(response.total_assets)}</td></tr>`);
+
+            const liabBody = $('#bs-liab-body').empty();
+            liabBody.append('<tr class="table-light fw-bold"><td>Liabilities</td><td></td></tr>');
+            liabBody.append(sectionRows(response.liabilities));
+            liabBody.append(`<tr class="fw-bold"><td class="ps-3">Total Liabilities</td><td class="text-end">${fmt(response.total_liabilities)}</td></tr>`);
+
+            liabBody.append('<tr class="table-light fw-bold"><td>Equity</td><td></td></tr>');
+            liabBody.append(sectionRows(response.equity));
+            liabBody.append(`<tr><td class="ps-4">Current Earnings (Profit &amp; Loss)</td><td class="text-end">${fmt(response.current_earnings)}</td></tr>`);
+            liabBody.append(`<tr class="fw-bold"><td class="ps-3">Total Equity</td><td class="text-end">${fmt(response.total_equity)}</td></tr>`);
+            liabBody.append(`<tr class="fw-bold fs-6"><td>Total Liabilities &amp; Equity</td><td class="text-end">${fmt(response.total_liabilities_and_equity)}</td></tr>`);
+
+            const check = $('#bs-balance-check');
+            if (response.balanced) {
+                check.attr('class', 'alert alert-success mt-2').html(`<i class="fas fa-check-circle"></i> Balanced — Total Assets (${fmt(response.total_assets)}) = Total Liabilities &amp; Equity (${fmt(response.total_liabilities_and_equity)})`);
+            } else {
+                check.attr('class', 'alert alert-danger mt-2').html(`<i class="fas fa-exclamation-triangle"></i> Out of balance — check for un-posted or unbalanced entries.`);
+            }
+
+            $('#bs-card').show();
+            $('#bs-print').prop('disabled', false);
+        }).fail((xhr) => showToast('danger', xhr.responseJSON?.error || 'Failed to load report.'));
+    }
+    $('#bs-load').on('click', loadReport);
+
+    $('#bs-print').on('click', function () {
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><title>Balance Sheet</title>
+            <style>
+              body { font-family: sans-serif; padding: 24px; }
+              table { border-collapse: collapse; width: 48%; display: inline-block; vertical-align: top; margin-right: 2%; }
+              th, td { border: 1px solid #999; padding: 4px 8px; font-size: 12px; }
+            </style></head><body>
+            <h3>Balance Sheet</h3>
+            ${document.getElementById('bs-print-area').innerHTML}
+            </body></html>`);
+        win.document.close();
+        win.print();
+    });
+
+    $('#bs-to').val(new Date().toISOString().slice(0, 10));
+});
+</script>
+{% endblock %}

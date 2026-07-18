@@ -109,7 +109,9 @@ MODULE_REGISTRY = [
             {
                 "label": "Transactions",
                 "tabs": [
-                    ("purchase_order", "Create Purchase Order"),
+                    ("general_purchase_list", "General Purchase"),
+                    ("chicks_purchase_list", "Chicks Purchase"),
+                    ("payment_list", "Payment"),
                 ],
             },
         ],
@@ -163,6 +165,12 @@ MODULE_REGISTRY = [
                     ("ledger_report", "Account Ledger", (
                         "api_coa_ledger",
                     )),
+                    ("profit_loss_report", "Profit & Loss", (
+                        "api_profit_loss",
+                    )),
+                    ("balance_sheet_report", "Balance Sheet", (
+                        "api_balance_sheet",
+                    )),
                 ],
             },
         ],
@@ -176,7 +184,9 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("item_category", "Item Category"),
                     ("items", "Items"),
+                    ("sector", "Sector"),
                     ("warehouse", "Warehouse"),
+                    ("warehouse_mapping", "Warehouse Mapping"),
                 ],
             },
         ],
@@ -256,9 +266,9 @@ MODULE_REGISTRY = [
             {
                 "label": "User Management",
                 "tabs": [
+                    ("user_groups", "User Access Groups"),
                     ("create_user", "Create User"),
                     ("assign_groups", "Assign Groups"),
-                    ("user_groups", "Manage User Groups"),
                     ("user_analytics", "User Analytics"),
                     ("picklists", "Picklists"),
                     ("field_bindings", "Field Bindings"),
@@ -268,7 +278,7 @@ MODULE_REGISTRY = [
     },
     {
         "nav": "notifications",
-        "label": "Notifications",
+        "label": "SMS Management",
         "sections": [
             {
                 "label": "Master",
@@ -389,6 +399,9 @@ _ACTION_BASE_TO_TAB = {
     "hatch_entry": "hatch_entry_list",
     "chick_sale": "chick_sale_list",
     "delivery_challan": "delivery_challan_list",
+    "general_purchase": "general_purchase_list",
+    "chicks_purchase": "chicks_purchase_list",
+    "payment": "payment_list",
     # Environmental monitoring
     "env_hub": "env_hub_list",
     "env_sensor": "env_sensor_list",
@@ -408,6 +421,7 @@ _ACTION_BASE_TO_TAB = {
     "category": "item_category",
     "item": "items",
     "warehouse": "warehouse",
+    "sector": "sector",
     # Picklist Master
     "picklist": "picklists",
     "picklist_value": "picklists",
@@ -415,9 +429,25 @@ _ACTION_BASE_TO_TAB = {
 }
 
 
+# Explicit overrides for url-names that don't follow the "<base>_<verb>" shape
+# (e.g. HR pages are verb-first: ``delete_employee``, ``edit_employee``). Maps a
+# url-name directly to (tab_code, action). ``edit_employee`` doubles as the
+# read-only detail page, so it is guarded as "view".
+_ACTION_URL_OVERRIDES = {
+    "create_new_employee": ("employee_list", "add"),
+    "edit_employee": ("employee_list", "view"),
+    "delete_employee": ("employee_list", "delete"),
+    "relieve_employee": ("employee_list", "edit"),
+}
+
+
 def resolve_action(url_name):
     """Return ``(tab_code, action)`` for a create/edit/delete url-name, else None."""
-    if not url_name or "_" not in url_name:
+    if not url_name:
+        return None
+    if url_name in _ACTION_URL_OVERRIDES:
+        return _ACTION_URL_OVERRIDES[url_name]
+    if "_" not in url_name:
         return None
     base, suffix = url_name.rsplit("_", 1)
     action = _ACTION_SUFFIX.get(suffix)

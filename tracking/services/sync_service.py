@@ -313,7 +313,8 @@ class SyncService:
             row["employee_id"]: row
             for row in EmployeeLiveLocation.objects
             .filter(employee_id__in=mappings.values())
-            .values("employee_id", "latitude", "longitude", "status", "gps_enabled")
+            .values("employee_id", "latitude", "longitude", "status", "gps_enabled",
+                     "address", "speed_kmh", "battery_pct", "network")
         }
         alert_fences = list(EmployeeGeofence.objects.filter(
             is_active=True).filter(
@@ -337,9 +338,10 @@ class SyncService:
             elif status == "unknown":
                 # Fresh signal without an explicit vendor state: online.
                 status = "online"
+            prior = previous.get(employee_id)
             if self._settings.alerts_enabled:
                 self._live_transition_alerts(
-                    provider, employee_id, previous.get(employee_id),
+                    provider, employee_id, prior,
                     position, status, alert_fences,
                 )
             _obj, was_created = EmployeeLiveLocation.objects.update_or_create(
@@ -349,12 +351,12 @@ class SyncService:
                     "latitude": position.latitude,
                     "longitude": position.longitude,
                     "accuracy_m": position.accuracy_m,
-                    "speed_kmh": position.speed_kmh,
+                    "speed_kmh": self._carry_forward(position.speed_kmh, prior, "speed_kmh"),
                     "heading": position.heading,
                     "altitude_m": position.altitude_m,
-                    "address": position.address,
-                    "battery_pct": position.battery_pct,
-                    "network": position.network,
+                    "address": self._carry_forward(position.address, prior, "address"),
+                    "battery_pct": self._carry_forward(position.battery_pct, prior, "battery_pct"),
+                    "network": self._carry_forward(position.network, prior, "network"),
                     "gps_enabled": position.gps_enabled,
                     "status": status,
                     "recorded_at": position.recorded_at,
@@ -364,6 +366,18 @@ class SyncService:
             created += 1 if was_created else 0
             updated += 0 if was_created else 1
         return {"created": created, "updated": updated, "skipped": skipped}
+
+    @staticmethod
+    def _carry_forward(new_value, prior, field):
+        """Keep the last known value when this ping's vendor payload omits it.
+
+        Not every device reports address/speed/battery/network on every fix
+        (e.g. a stationary device may send a heartbeat with no reverse-geocoded
+        address); overwriting with a blank would erase a value we already know.
+        """
+        if new_value not in (None, ""):
+            return new_value
+        return prior[field] if prior else new_value
 
     def _live_transition_alerts(self, provider, employee_id, previous,
                                 position, new_status, alert_fences):

@@ -36,6 +36,10 @@ class Hatchery(models.Model):
         unique=True,
         help_text=_("Name of the hatchery")
     )
+    warehouse = models.ForeignKey(
+        "inventory.Warehouse", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="hatcheries", help_text=_("Office/warehouse this hatchery is mapped to")
+    )
     operation_type = models.CharField(
         max_length=20,
         choices=OPERATION_TYPES,

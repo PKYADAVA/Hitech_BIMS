@@ -29,6 +29,7 @@
 
 {% block content %}
  {% include '_hr_tracking_subnavbar.html' with active_tab='tracking_dashboard' %}
+ {% csrf_token %}
 
 <div class="page-header">
   <div class="page-header-title"><i class="fas fa-map-location-dot"></i>Live Tracking Dashboard</div>
@@ -71,7 +72,7 @@
 <div class="card mb-3">
   <div class="card-body py-2">
     <div class="row g-2 align-items-end">
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label mb-0">Search Employee</label>
         <input type="text" id="trk-q" class="form-control form-control-sm" placeholder="Name or employee ID…" />
       </div>
@@ -106,8 +107,9 @@
           <option value="offline">Offline</option>
         </select>
       </div>
-      <div class="col-md-1">
-        <button class="btn btn-sm btn-outline-secondary w-100" id="trk-clear">Clear</button>
+      <div class="col-md-2 d-flex gap-2 justify-content-end">
+        <button class="btn btn-sm btn-outline-primary" id="trk-sync-now"><i class="fas fa-cloud-arrow-down"></i> Sync Now</button>
+        <button class="btn btn-sm btn-outline-secondary" id="trk-clear">Clear</button>
       </div>
     </div>
   </div>
@@ -148,8 +150,15 @@
 (function () {
   "use strict";
   const API_URL = "{% url 'api_tracking_live' %}";
+  const SYNC_URL = "{% url 'api_tracking_sync_now' %}";
+  const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
   const REFRESH_MS = Math.max({{ refresh_seconds }}, 10) * 1000;
   const STATUS_BADGE = { online:"success", moving:"primary", idle:"warning", offline:"danger", unknown:"secondary" };
+
+  function toast(message, ok) {
+    Toastify({ text: message, duration: 4000, gravity: "top", position: "right",
+               style: { background: ok ? "#198754" : "#dc3545" } }).showToast();
+  }
 
   const map = L.map("trk-map").setView([22.9734, 78.6569], 5);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -254,6 +263,25 @@
   }
 
   document.getElementById("trk-refresh").addEventListener("click", load);
+  document.getElementById("trk-sync-now").addEventListener("click", () => {
+    const btn = document.getElementById("trk-sync-now");
+    btn.disabled = true;
+    toast("Sync started…", true);
+    fetch(SYNC_URL, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+      body: JSON.stringify({}),
+    })
+      .then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) { toast(data.error || "Sync failed.", false); return; }
+        const failed = data.runs.filter(run => run.status === "failed").length;
+        toast("Sync finished: " + data.runs.length + " run(s), " + failed + " failed.", failed === 0);
+        load();
+      })
+      .catch(() => toast("Sync request failed.", false))
+      .finally(() => { btn.disabled = false; });
+  });
   document.getElementById("trk-q").addEventListener("input", () => {
     clearTimeout(window.__trkDebounce);
     window.__trkDebounce = setTimeout(load, 400);

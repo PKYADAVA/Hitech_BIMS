@@ -50,18 +50,8 @@ BINDABLE_FIELDS = [
      "label": "Customer - Party Category", "module": "Sales", "category": "Master"},
 
     # --- Purchase / Transaction ---
-    {"app_label": "purchase", "model_name": "PurchaseOrder", "field_name": "calculation_based_on",
-     "label": "Purchase Order - Calculation Based On", "module": "Purchase", "category": "Transaction"},
-    {"app_label": "purchase", "model_name": "PurchaseOrder", "field_name": "pay_later_via",
-     "label": "Purchase Order - Pay Later Via", "module": "Purchase", "category": "Transaction"},
-    {"app_label": "purchase", "model_name": "PurchaseOrderLineItem", "field_name": "units",
-     "label": "Purchase Order Line - Units", "module": "Purchase", "category": "Transaction"},
-    {"app_label": "purchase", "model_name": "PurchaseOrderLineItem", "field_name": "type",
-     "label": "Purchase Order Line - Type", "module": "Purchase", "category": "Transaction"},
-    {"app_label": "purchase", "model_name": "PurchaseOrderLineItem", "field_name": "bags_or_boxes",
-     "label": "Purchase Order Line - Bags / Boxes", "module": "Purchase", "category": "Transaction"},
-    {"app_label": "purchase", "model_name": "PurchaseOrderLineItem", "field_name": "warehouse",
-     "label": "Purchase Order Line - Warehouse", "module": "Purchase", "category": "Transaction"},
+    {"app_label": "purchase", "model_name": "GeneralPurchase", "field_name": "calculation_based_on",
+     "label": "General Purchase - Calculation Based On", "module": "Purchase", "category": "Transaction"},
 
     # --- Hatchery / Transaction ---
     {"app_label": "hatchery", "model_name": "EggPurchase", "field_name": "freight_type",

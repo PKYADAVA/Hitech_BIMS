@@ -3,40 +3,36 @@ from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from import_export.fields import Field
 from import_export.widgets import ForeignKeyWidget
-from inventory.models import Item, ItemCategory
-from .models import Supplier, TaxMaster, VendorGroup, CreditTerm, PurchaseOrder,PurchaseOrderLineItem
+from inventory.models import Item, Warehouse
+from .models import Supplier, TaxMaster, VendorGroup, CreditTerm, GeneralPurchase, GeneralPurchaseItem
 
 
-class PurchaseOrderResource(resources.ModelResource):
-    vendor = Field(
-        attribute='vendor', column_name='vendor',
-        widget=ForeignKeyWidget(VendorGroup, field='code'),
-    )
-    credit_term = Field(
-        attribute='credit_term', column_name='credit_term',
-        widget=ForeignKeyWidget(CreditTerm, field='term'),
+class GeneralPurchaseResource(resources.ModelResource):
+    supplier = Field(
+        attribute='supplier', column_name='supplier',
+        widget=ForeignKeyWidget(Supplier, field='name'),
     )
 
     class Meta:
-        model = PurchaseOrder
+        model = GeneralPurchase
 
 
-class PurchaseOrderLineItemResource(resources.ModelResource):
-    purchase_order = Field(
-        attribute='purchase_order', column_name='purchase_order',
-        widget=ForeignKeyWidget(PurchaseOrder, field='invoice'),
-    )
-    item_category = Field(
-        attribute='item_category', column_name='item_category',
-        widget=ForeignKeyWidget(ItemCategory, field='name'),
+class GeneralPurchaseItemResource(resources.ModelResource):
+    purchase = Field(
+        attribute='purchase', column_name='purchase',
+        widget=ForeignKeyWidget(GeneralPurchase, field='purchase_no'),
     )
     item = Field(
         attribute='item', column_name='item',
         widget=ForeignKeyWidget(Item, field='item_code'),
     )
+    farm_warehouse = Field(
+        attribute='farm_warehouse', column_name='farm_warehouse',
+        widget=ForeignKeyWidget(Warehouse, field='name'),
+    )
 
     class Meta:
-        model = PurchaseOrderLineItem
+        model = GeneralPurchaseItem
 
 
 @admin.register(Supplier)
@@ -64,20 +60,20 @@ class CreditTermAdmin(ImportExportModelAdmin):
     search_fields = ('term',)  # Add search field for credit term
 
 
-# Register the PurchaseOrder model
-@admin.register(PurchaseOrder)
-class PurchaseOrderAdmin(ImportExportModelAdmin):
-    resource_classes = [PurchaseOrderResource]
-    list_display = [field.name for field in PurchaseOrder._meta.fields]
-    list_filter = ('date', 'vendor', 'credit_term')
-    search_fields = ('invoice', 'vendor__code')
+# Register the GeneralPurchase model
+@admin.register(GeneralPurchase)
+class GeneralPurchaseAdmin(ImportExportModelAdmin):
+    resource_classes = [GeneralPurchaseResource]
+    list_display = [field.name for field in GeneralPurchase._meta.fields]
+    list_filter = ('date', 'supplier')
+    search_fields = ('purchase_no', 'bill_no', 'supplier__name')
     date_hierarchy = 'date'
-    autocomplete_fields = ['vendor', 'credit_term']
+    autocomplete_fields = ['supplier']
 
-@admin.register(PurchaseOrderLineItem)
-class PurchaseOrderLineItemAdmin(ImportExportModelAdmin):
-    resource_classes = [PurchaseOrderLineItemResource]
-    list_display = ['id', 'purchase_order', 'qty_sent', 'qty_received', 'price_per_unit']
-    list_filter = ('purchase_order', 'warehouse')
-    search_fields = ('code', 'purchase_order__invoice', 'category')
-    autocomplete_fields = ['purchase_order']
+@admin.register(GeneralPurchaseItem)
+class GeneralPurchaseItemAdmin(ImportExportModelAdmin):
+    resource_classes = [GeneralPurchaseItemResource]
+    list_display = ['id', 'purchase', 'item', 'sent_qty', 'rcv_qty', 'rate', 'amount']
+    list_filter = ('farm_warehouse',)
+    search_fields = ('purchase__purchase_no', 'item__item_code')
+    autocomplete_fields = ['purchase', 'item']

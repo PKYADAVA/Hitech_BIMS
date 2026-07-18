@@ -4,6 +4,17 @@ from . import views
 
 urlpatterns = [
     path('warehouse/', views.warehouse, name='warehouse'),
+    path('warehouse/add/', views.warehouse_add, name='warehouse_add'),
+    path('warehouse/<int:id>/edit/', views.warehouse_edit, name='warehouse_edit'),
+    path('sector/', views.sector, name='sector'),
+    path('sectors/', views.SectorAPI.as_view(), name='sector_list'),
+    path('create-sector/', views.SectorAPI.as_view(), name='sector_create'),
+    path('sector/<int:id>/', views.SectorAPI.as_view(), name='sector_update'),
+    path('sector/<int:id>/delete/', views.SectorAPI.as_view(), name='sector_delete'),
+    path('warehouse-mapping/', views.warehouse_mapping, name='warehouse_mapping'),
+    path('warehouse-mapping/data/', views.warehouse_mapping_data, name='warehouse_mapping_data'),
+    path('warehouse-mapping/save-branch/', views.warehouse_mapping_save_branch, name='warehouse_mapping_save_branch'),
+    path('warehouse-mapping/save-hatchery/', views.warehouse_mapping_save_hatchery, name='warehouse_mapping_save_hatchery'),
     path('items/', views.items, name='items'),
     path('item_category/', views.item_category, name='item_category'),
     path('categories/', views.CategoryAPI.as_view(), name='category_list'),

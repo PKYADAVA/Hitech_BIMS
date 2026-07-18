@@ -55,6 +55,78 @@
   </div>
 </div>
 
+<!-- View Employee Modal (read-only) -->
+<div class="modal fade" id="viewEmployeeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content" id="employee-view-print-area">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Employee Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-none d-print-block mb-3">
+          <h4 class="mb-1">Hi Tech Farms — Employee Details</h4>
+        </div>
+        <div class="row g-3 align-items-start mb-2">
+          <div class="col-md-3 text-center">
+            <img id="ve-image" src="" alt="Photo"
+                 style="height:120px;width:120px;border-radius:10px;object-fit:cover;background:#f1f5f9;">
+          </div>
+          <div class="col-md-9">
+            <h4 class="mb-0" id="ve-name">—</h4>
+            <div class="text-muted"><span id="ve-designation">—</span></div>
+            <div class="mt-1">ID: <span class="fw-semibold" id="ve-empid">—</span>
+              &nbsp;·&nbsp; Status: <span class="fw-semibold" id="ve-status">—</span></div>
+          </div>
+        </div>
+
+        <h6 class="text-uppercase text-muted mt-3 mb-2" style="font-size:.72rem;letter-spacing:.05em;">Personal</h6>
+        <div class="row g-2">
+          <div class="col-sm-4"><small class="text-muted">Title</small><div id="ve-title">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Father's Name</small><div id="ve-father">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Marital Status</small><div id="ve-marital">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Gender</small><div id="ve-gender">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Date of Birth</small><div id="ve-dob">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Blood Group</small><div id="ve-blood">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Driving License</small><div id="ve-license">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Qualification</small><div id="ve-qualification">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">PAN</small><div id="ve-pan">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Aadhar</small><div id="ve-aadhar">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Personal Contact</small><div id="ve-personal">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Emergency Contact</small><div id="ve-emergency">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Country</small><div id="ve-country">—</div></div>
+          <div class="col-12"><small class="text-muted">Correspondence Address</small><div id="ve-address">—</div></div>
+        </div>
+
+        <h6 class="text-uppercase text-muted mt-3 mb-2" style="font-size:.72rem;letter-spacing:.05em;">Job</h6>
+        <div class="row g-2">
+          <div class="col-sm-4"><small class="text-muted">Designation</small><div id="ve-designation2">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Warehouse</small><div id="ve-warehouse">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Group</small><div id="ve-group">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Date of Joining</small><div id="ve-doj">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Reports To</small><div id="ve-reportto">—</div></div>
+        </div>
+
+        <h6 class="text-uppercase text-muted mt-3 mb-2" style="font-size:.72rem;letter-spacing:.05em;">Payroll &amp; Bank</h6>
+        <div class="row g-2">
+          <div class="col-sm-4"><small class="text-muted">Salary</small><div id="ve-salary">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Salary Type</small><div id="ve-salarytype">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Advance</small><div id="ve-advance">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Savings</small><div id="ve-savings">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Salary Account</small><div id="ve-account">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Bank Name</small><div id="ve-bank">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">IFSC Code</small><div id="ve-ifsc">—</div></div>
+          <div class="col-sm-4"><small class="text-muted">Bank Branch</small><div id="ve-branch">—</div></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="employee-view-print-btn"><i class="fas fa-print"></i> Print</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Page Header -->
 <div class="page-header">
     <div class="page-header-title">
@@ -128,11 +200,43 @@
             </td>
             <td>
               <div class="d-flex gap-1 flex-wrap">
-                <a href="{% url 'edit_employee' employee.id %}">
-                  {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm" title="Edit">
-                    <i class="fas fa-pen"></i>
-                  </button>{% endif %}
-                </a>
+                {% if page_perms.view %}<button type="button" class="btn btn-outline-info btn-sm view-employee" title="View"
+                  data-empid="{{ employee.employee_id }}"
+                  data-name="{{ employee.full_name|default:'' }}"
+                  data-title="{{ employee.title|default:'' }}"
+                  data-father="{{ employee.father_name|default:'' }}"
+                  data-marital="{{ employee.marital_status|default:'' }}"
+                  data-gender="{{ employee.gender|default:'' }}"
+                  data-dob="{{ employee.date_of_birth|date:'Y-m-d'|default:'' }}"
+                  data-blood="{{ employee.blood_group|default:'' }}"
+                  data-license="{{ employee.driving_license|yesno:'Yes,No' }}"
+                  data-qualification="{{ employee.qualification|default:'' }}"
+                  data-pan="{{ employee.pan_card|default:'' }}"
+                  data-aadhar="{{ employee.aadhar_number|default:'' }}"
+                  data-personal="{{ employee.personal_contact|default:'' }}"
+                  data-emergency="{{ employee.emergency_contact|default:'' }}"
+                  data-country="{{ employee.country|default:'' }}"
+                  data-address="{{ employee.correspondence_address|default:'' }}"
+                  data-designation="{{ employee.designation.title|default:'' }}"
+                  data-warehouse="{{ employee.warehouse|default:'' }}"
+                  data-group="{{ employee.group|default:'' }}"
+                  data-doj="{{ employee.date_of_joining|date:'Y-m-d'|default:'' }}"
+                  data-reportto="{{ employee.report_to|default:'' }}"
+                  data-status="{% if employee.relieve %}Relieved{% else %}Active{% endif %}"
+                  data-salary="{{ employee.salary|default:'' }}"
+                  data-salarytype="{{ employee.salary_type|default:'' }}"
+                  data-advance="{{ employee.advance|default:'' }}"
+                  data-savings="{{ employee.savings|default:'' }}"
+                  data-account="{{ employee.salary_account|default:'' }}"
+                  data-bank="{{ employee.bank_name|default:'' }}"
+                  data-ifsc="{{ employee.ifsc_code|default:'' }}"
+                  data-branch="{{ employee.branch_name|default:'' }}"
+                  data-image="{% if employee.image %}{{ employee.image.url }}{% endif %}">
+                  <i class="fas fa-eye"></i>
+                </button>{% endif %}
+                {% if page_perms.edit %}<a href="{% url 'edit_employee' employee.id %}" class="btn btn-outline-warning btn-sm" title="Edit">
+                  <i class="fas fa-pen"></i>
+                </a>{% endif %}
                 {% if not employee.relieve %}
                   <button id="relieveEmployee-{{ employee.id }}"
                           class="btn btn-outline-success btn-sm relieveEmployee"
@@ -144,6 +248,10 @@
                     <i class="fas fa-user-check"></i>
                   </button>
                 {% endif %}
+                {% if page_perms.delete %}<button id="deleteEmployee-{{ employee.id }}"
+                        class="btn btn-outline-danger btn-sm delete-btn" title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>{% endif %}
               </div>
             </td>
           </tr>
@@ -158,6 +266,46 @@
 
 {% block js %}
 <script src="{% static 'js/hr/employee_list.js' %}"></script>
+<script>
+  // Read-only "View" modal — populated from the row's data attributes.
+  $(document).on("click", ".view-employee", function () {
+    var d = $(this).data();
+    var set = function (id, val) {
+      $("#" + id).text((val !== undefined && val !== null && val !== "") ? val : "—");
+    };
+    // data-key -> element id (all Employee fields)
+    var map = {
+      empid:"ve-empid", name:"ve-name", title:"ve-title", father:"ve-father",
+      marital:"ve-marital", gender:"ve-gender", dob:"ve-dob", blood:"ve-blood",
+      license:"ve-license", qualification:"ve-qualification", pan:"ve-pan",
+      aadhar:"ve-aadhar", personal:"ve-personal", emergency:"ve-emergency",
+      country:"ve-country", address:"ve-address", warehouse:"ve-warehouse",
+      group:"ve-group", doj:"ve-doj", reportto:"ve-reportto", status:"ve-status",
+      salary:"ve-salary", salarytype:"ve-salarytype", advance:"ve-advance",
+      savings:"ve-savings", account:"ve-account", bank:"ve-bank", ifsc:"ve-ifsc",
+      branch:"ve-branch"
+    };
+    Object.keys(map).forEach(function (k) { set(map[k], d[k]); });
+    // Designation shows in both the header and the Job section.
+    set("ve-designation", d.designation);
+    set("ve-designation2", d.designation);
+    var img = document.getElementById("ve-image");
+    if (d.image) { img.src = d.image; img.style.display = ""; }
+    else { img.style.display = "none"; }
+    new bootstrap.Modal(document.getElementById("viewEmployeeModal")).show();
+  });
+
+  // Print just the employee view.
+  $("#employee-view-print-btn").on("click", function () {
+    var content = document.getElementById("employee-view-print-area").innerHTML;
+    var w = window.open("", "_blank");
+    w.document.write('<html><head><title>Employee Details</title>' +
+      '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"></head>' +
+      '<body class="p-4">' + content + '</body></html>');
+    w.document.close();
+    w.onload = function () { w.print(); w.close(); };
+  });
+</script>
 <script>
 {% for message in messages %}
   {% if message.tags == "error" %}

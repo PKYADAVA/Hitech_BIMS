@@ -137,14 +137,31 @@ def validate_lines(company, lines_data, manual=True):
     return cleaned
 
 
+def _apply_narration_fields(voucher, user, auto_narration, narration_source):
+    """Persist the auto-narration engine's audit trail (auto_narration/source/
+    who-when), called from both create and update. No-op for callers (e.g.
+    auto_posting.py) that don't pass these - they keep the model defaults."""
+    if auto_narration is not None:
+        voucher.auto_narration = auto_narration
+    if narration_source is not None:
+        voucher.narration_source = narration_source
+        if narration_source == 'MANUAL':
+            voucher.narration_edited_by = user
+            voucher.narration_edited_at = timezone.now()
+        else:
+            voucher.narration_edited_by = None
+            voucher.narration_edited_at = None
+
+
 @transaction.atomic
 def create_voucher(company, date, lines_data, user=None, voucher_type='Journal',
                    narration='', reference='', post=False, manual=True,
-                   system_generated=False, sector=None):
+                   system_generated=False, sector=None,
+                   auto_narration=None, narration_source=None):
     date = parse_date(date)
     fy = resolve_financial_year(date)
     cleaned = validate_lines(company, lines_data, manual=manual)
-    voucher = Voucher.objects.create(
+    voucher = Voucher(
         company=company,
         financial_year=fy,
         sector=_resolve_sector(sector),
@@ -157,6 +174,8 @@ def create_voucher(company, date, lines_data, user=None, voucher_type='Journal',
         total_debit=sum(l['debit'] for l in cleaned),
         total_credit=sum(l['credit'] for l in cleaned),
     )
+    _apply_narration_fields(voucher, user, auto_narration, narration_source)
+    voucher.save()
     _write_lines(voucher, cleaned)
     if post:
         post_voucher(voucher, user=user)
@@ -182,7 +201,7 @@ def _write_lines(voucher, cleaned):
 
 @transaction.atomic
 def update_draft(voucher, date, lines_data, user=None, narration=None, reference=None,
-                 sector=Ellipsis):
+                 sector=Ellipsis, auto_narration=None, narration_source=None):
     if voucher.status != 'Draft':
         raise ValidationError("Only draft vouchers can be edited. Cancel and re-enter a posted voucher.")
     date = parse_date(date)
@@ -198,6 +217,7 @@ def update_draft(voucher, date, lines_data, user=None, narration=None, reference
         voucher.sector = _resolve_sector(sector)
     voucher.total_debit = sum(l['debit'] for l in cleaned)
     voucher.total_credit = sum(l['credit'] for l in cleaned)
+    _apply_narration_fields(voucher, user, auto_narration, narration_source)
     voucher.save()
     _write_lines(voucher, cleaned)
     return voucher
@@ -381,3 +401,96 @@ def trial_balance(company, date_from=None, date_to=None):
         totals['closing_debit'] += rows[-1]['closing_debit']
         totals['closing_credit'] += rows[-1]['closing_credit']
     return {'rows': rows, 'totals': totals}
+
+
+# ------------------------------------------------------- P&L / balance sheet
+
+def _grouped_movement(company, date_from, date_to, report):
+    """Per-account net movement for accounts of the given statement
+    (``'PL'`` or ``'BS'``), signed positive on the account's normal-balance
+    side (e.g. an Asset with more debits, or Income with more credits, is
+    positive). Zero-movement accounts are omitted.
+    """
+    lines = _posted_lines(company).filter(account__account_type__report=report)
+    if date_from:
+        lines = lines.filter(date__gte=date_from)
+    if date_to:
+        lines = lines.filter(date__lte=date_to)
+
+    aggregated = lines.values(
+        'account_id', 'account__code', 'account__description',
+        'account__account_type__code', 'account__account_type__name',
+        'account__account_type__normal_balance', 'account__account_group__name',
+    ).annotate(debit=Sum('debit'), credit=Sum('credit')).order_by('account__code')
+
+    rows = []
+    for entry in aggregated:
+        debit = entry['debit'] or Decimal('0')
+        credit = entry['credit'] or Decimal('0')
+        if not (debit or credit):
+            continue
+        is_debit_normal = entry['account__account_type__normal_balance'] == 'Debit'
+        amount = (debit - credit) if is_debit_normal else (credit - debit)
+        rows.append({
+            'account_id': entry['account_id'],
+            'code': entry['account__code'],
+            'description': entry['account__description'],
+            'type_code': entry['account__account_type__code'],
+            'type_name': entry['account__account_type__name'],
+            'group': entry['account__account_group__name'],
+            'amount': amount,
+        })
+    return rows
+
+
+def profit_and_loss(company, date_from=None, date_to=None):
+    """Income/COGS/Expense movement for a period -> gross and net profit.
+
+    Cumulative since inception when ``date_from`` is omitted (no year-end
+    closing exists yet to reset P&L accounts to zero between years).
+    """
+    rows = _grouped_movement(company, date_from, date_to, report='PL')
+    income = [r for r in rows if r['type_code'] == 'INCOME']
+    cogs = [r for r in rows if r['type_code'] == 'COGS']
+    expense = [r for r in rows if r['type_code'] == 'EXPENSE']
+    total_income = sum((r['amount'] for r in income), Decimal('0'))
+    total_cogs = sum((r['amount'] for r in cogs), Decimal('0'))
+    total_expense = sum((r['amount'] for r in expense), Decimal('0'))
+    gross_profit = total_income - total_cogs
+    net_profit = gross_profit - total_expense
+    return {
+        'income': income, 'cogs': cogs, 'expense': expense,
+        'total_income': total_income, 'total_cogs': total_cogs,
+        'gross_profit': gross_profit, 'total_expense': total_expense,
+        'net_profit': net_profit,
+    }
+
+
+def balance_sheet(company, date_upto=None):
+    """Asset/Liability/Equity position as of a date, with current (unclosed)
+    P&L folded into Equity as 'Current Earnings' so it always balances -
+    by double-entry construction, Assets == Liabilities + Equity exactly.
+    """
+    rows = _grouped_movement(company, date_from=None, date_to=date_upto, report='BS')
+    assets = [r for r in rows if r['type_code'] == 'ASSET']
+    liabilities = [r for r in rows if r['type_code'] == 'LIABILITY']
+    equity = [r for r in rows if r['type_code'] == 'EQUITY']
+
+    total_assets = sum((r['amount'] for r in assets), Decimal('0'))
+    total_liabilities = sum((r['amount'] for r in liabilities), Decimal('0'))
+    total_equity_recorded = sum((r['amount'] for r in equity), Decimal('0'))
+
+    current_earnings = profit_and_loss(company, date_from=None, date_to=date_upto)['net_profit']
+    total_equity = total_equity_recorded + current_earnings
+    total_liabilities_and_equity = total_liabilities + total_equity
+
+    return {
+        'assets': assets, 'liabilities': liabilities, 'equity': equity,
+        'total_assets': total_assets,
+        'total_liabilities': total_liabilities,
+        'total_equity_recorded': total_equity_recorded,
+        'current_earnings': current_earnings,
+        'total_equity': total_equity,
+        'total_liabilities_and_equity': total_liabilities_and_equity,
+        'balanced': total_assets == total_liabilities_and_equity,
+    }

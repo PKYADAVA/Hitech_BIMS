@@ -53,12 +53,16 @@
       </div>
       <div class="col-md-2">
         <label class="form-label mb-0">Date</label>
-        <input type="date" id="route-date" class="form-control form-control-sm" />
+        <div class="d-flex gap-1">
+          <input type="date" id="route-date" class="form-control form-control-sm" />
+          <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" id="route-today">Today</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" id="route-yesterday">Yesterday</button>
+        </div>
       </div>
-      <div class="col-md-2">
-        <button class="btn btn-sm btn-primary" id="route-load"><i class="fas fa-play"></i> Load Route</button>
+      <div class="col-md-1">
+        <button class="btn btn-sm btn-primary" id="route-load"><i class="fas fa-play"></i> Load</button>
       </div>
-      <div class="col-md-4"><div class="trk-chips" id="route-chips"></div></div>
+      <div class="col-md-5"><div class="trk-chips" id="route-chips"></div></div>
     </div>
   </div>
 </div>
@@ -68,12 +72,29 @@
     <div class="card"><div class="card-body p-2"><div id="route-map"></div></div></div>
   </div>
   <div class="col-lg-4">
-    <div class="card">
+    <div class="card mb-3">
       <div class="card-header"><i class="fas fa-timeline"></i> Daily Timeline</div>
       <div class="card-body">
         <ul class="timeline" id="route-timeline">
           <li class="text-muted">Pick an employee and date, then Load Route.</li>
         </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-location-dot"></i> Nearest Location</span>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-link p-0" id="nearest-refresh" title="Refresh">
+            <i class="fas fa-rotate"></i>
+          </button>
+          <a class="btn btn-sm btn-link p-0" id="nearest-maps" href="#" target="_blank"
+             rel="noopener" title="Open in Google Maps" style="display:none">
+            <i class="fas fa-map-location-dot"></i>
+          </a>
+        </div>
+      </div>
+      <div class="card-body py-2" id="nearest-location">
+        <span class="text-muted small">No location for this day yet.</span>
       </div>
     </div>
   </div>
@@ -100,9 +121,17 @@
   function hhmm(iso) {
     return iso ? new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }) : "–";
   }
+  function hhmmss(iso) {
+    return iso ? new Date(iso).toLocaleTimeString([], { hour12:false }) : "–";
+  }
   function hm(minutes) {
     if (minutes == null) return "–";
     return Math.floor(minutes / 60) + "h " + String(minutes % 60).padStart(2, "0") + "m";
+  }
+  function durHHMM(minutes) {
+    if (minutes == null) return null;
+    return String(Math.floor(minutes / 60)).padStart(2, "0") + ":" +
+      String(minutes % 60).padStart(2, "0");
   }
 
   // Google encoded-polyline decoder (matches tracking.services.geo.encode_polyline).
@@ -151,15 +180,40 @@
       list.innerHTML = '<li class="text-muted">No activity recorded for this day.</li>';
       return;
     }
-    list.innerHTML = entries.map(entry =>
-      '<li class="t-' + esc(entry.type) + '">' +
-      '<div class="t-time">' + hhmm(entry.time) +
-      ' <i class="fas ' + (TYPE_ICON[entry.type] || "fa-circle") + ' ms-1"></i></div>' +
-      '<div class="t-label">' + esc(entry.label) +
-      (entry.duration_min != null ? ' <span class="badge bg-light text-dark">' + hm(entry.duration_min) + "</span>" : "") +
-      (entry.distance_km != null ? ' <small>(' + entry.distance_km.toFixed(1) + " km leg)</small>" : "") + "</div>" +
-      (entry.address ? "<small>" + esc(entry.address) + "</small>" : "") +
-      "</li>").join("");
+    list.innerHTML = entries.map(entry => {
+      if (entry.type === "travel") {
+        const dist = entry.distance_km != null ? entry.distance_km.toFixed(2) : "–";
+        const duration = durHHMM(entry.duration_min);
+        return '<li class="t-travel">' +
+          '<div class="t-label"><i class="fas fa-car-side me-1"></i>Travelled (' + dist + " km)</div>" +
+          "<small>" + hhmmss(entry.time) + (entry.end_time ? "–" + hhmmss(entry.end_time) : "") +
+          (duration ? ' <span class="badge bg-light text-dark">' + duration + "</span>" : "") +
+          "</small></li>";
+      }
+      const label = entry.type === "stop"
+        ? "Stoppage" + (entry.duration_min != null ? " of " + durHHMM(entry.duration_min) : "")
+        : esc(entry.label);
+      return '<li class="t-' + esc(entry.type) + '">' +
+        '<div class="t-time">' + hhmm(entry.time) +
+        ' <i class="fas ' + (TYPE_ICON[entry.type] || "fa-circle") + ' ms-1"></i></div>' +
+        '<div class="t-label">' + label + "</div>" +
+        (entry.address ? "<small>" + esc(entry.address) + "</small>" : "") +
+        "</li>";
+    }).join("");
+  }
+
+  function nearestLocation(loc) {
+    const container = document.getElementById("nearest-location");
+    const mapsLink = document.getElementById("nearest-maps");
+    if (!loc) {
+      container.innerHTML = '<span class="text-muted small">No location for this day yet.</span>';
+      mapsLink.style.display = "none";
+      return;
+    }
+    container.innerHTML = "<div>" + esc(loc.address || "Unknown address") + "</div>" +
+      '<small class="text-muted">as of ' + hhmm(loc.time) + "</small>";
+    mapsLink.href = "https://www.google.com/maps/search/?api=1&query=" + loc.latitude + "," + loc.longitude;
+    mapsLink.style.display = "";
   }
 
   function drawMap(data) {
@@ -201,13 +255,28 @@
         chips(data.route);
         timeline(data.timeline);
         drawMap(data);
+        nearestLocation(data.last_location);
       });
   }
 
-  document.getElementById("route-date").value = new Date().toISOString().slice(0, 10);
+  function localDateStr(date) {
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") +
+      "-" + String(date.getDate()).padStart(2, "0");
+  }
+  function setDate(daysAgo) {
+    const date = new Date();
+    date.setDate(date.getDate() - daysAgo);
+    document.getElementById("route-date").value = localDateStr(date);
+    load();
+  }
+
+  document.getElementById("route-date").value = localDateStr(new Date());
   document.getElementById("route-load").addEventListener("click", load);
   document.getElementById("route-employee").addEventListener("change", load);
   document.getElementById("route-date").addEventListener("change", load);
+  document.getElementById("route-today").addEventListener("click", () => setDate(0));
+  document.getElementById("route-yesterday").addEventListener("click", () => setDate(1));
+  document.getElementById("nearest-refresh").addEventListener("click", load);
 })();
 </script>
 {% endblock %}

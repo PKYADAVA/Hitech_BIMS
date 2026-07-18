@@ -205,12 +205,34 @@ after save; `post_delete` signals cancel on delete):
   `python manage.py repost_documents` (add `--all` to re-check documents
   that already have vouchers) to backfill.
 
+## Profit & Loss / Balance Sheet
+
+`journal.profit_and_loss(company, date_from=None, date_to=None)` and
+`journal.balance_sheet(company, date_upto=None)` group the same posted
+voucher lines as Trial Balance, by `AccountType.report` (`PL`/`BS`) and
+`normal_balance`, into per-account amounts signed positive on the normal
+side. Pages: Account ▸ Reports ▸ **Profit & Loss** / **Balance Sheet**
+(`/reports/profit-loss/`, `/reports/balance-sheet/`), APIs at
+`/api/reports/profit-loss/` and `/api/reports/balance-sheet/`.
+
+* P&L is period-scoped (`date_from`/`date_to`); with no `date_from` it's
+  cumulative since inception — there's no year-end closing yet to zero P&L
+  accounts between years, so a prior year's income/expense still shows
+  unless a date range excludes it.
+* Balance Sheet is always "as of" a single date (`date_upto`), cumulative
+  since inception. The current period's unclosed profit is folded into
+  Equity as a computed **Current Earnings** line
+  (`profit_and_loss(date_to=date_upto)['net_profit']`), which makes
+  `Assets == Liabilities + Equity` hold exactly by double-entry construction
+  (proven in `FinancialReportsTests.test_balance_sheet_always_balances`) -
+  the API also returns a `balanced` boolean the UI displays as a check.
+
 ## Roadmap (not yet implemented)
 
 * **Year-end closing** – close a year by generating next-year opening entries
-  from closing balances (Voucher type `Closing` is reserved for this).
-* **Financial reports** – P&L, Balance Sheet, Cash Flow, comparatives
-  (trial balance + ledger exist; these are groupings of the same data).
+  from closing balances (Voucher type `Closing` is reserved for this); once
+  built, P&L becomes truly period-scoped instead of cumulative-since-inception.
+* **Cash Flow statement**, comparatives (multi-period P&L/BS side by side).
 * **Bank reconciliation**, **budgets**, **cost-center reporting**
   (`cost_center` is already accepted on voucher lines via API).
 * **More document types** – purchase invoices/GRNs and sales invoices post

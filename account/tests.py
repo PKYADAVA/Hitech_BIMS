@@ -358,6 +358,67 @@ class JournalTests(EngineTestCase):
         tb = self.client.get(reverse("api_trial_balance")).json()
         self.assertEqual(tb["totals"]["debit"], tb["totals"]["credit"])
 
+    def test_narration_engine_fields_persist_and_track_manual_edit(self):
+        from account.services import journal
+
+        voucher = self.make_voucher(
+            post=False, auto_narration="Being rent paid.", narration_source="AUTO",
+        )
+        self.assertEqual(voucher.auto_narration, "Being rent paid.")
+        self.assertEqual(voucher.narration_source, "AUTO")
+        self.assertIsNone(voucher.narration_edited_by)
+        self.assertIsNone(voucher.narration_edited_at)
+
+        journal.update_draft(
+            voucher, date="2026-05-01", lines_data=[
+                {"account": self.cash.id, "debit": "1000", "credit": 0},
+                {"account": self.broiler_sales.id, "debit": 0, "credit": "1000"},
+            ],
+            user=self.user, narration="Rent for the Akbarpur office.",
+            narration_source="MANUAL",
+        )
+        voucher.refresh_from_db()
+        self.assertEqual(voucher.narration, "Rent for the Akbarpur office.")
+        self.assertEqual(voucher.narration_source, "MANUAL")
+        self.assertEqual(voucher.narration_edited_by, self.user)
+        self.assertIsNotNone(voucher.narration_edited_at)
+        # auto_narration is kept as the engine's own audit trail even after the override.
+        self.assertEqual(voucher.auto_narration, "Being rent paid.")
+
+    def test_narration_role_anchors_present_on_generated_coa(self):
+        # These roles are what the client-side narration engine keys off to
+        # recognize ledger context (Rent, Electricity, GST, ...) without
+        # fragile name/keyword matching.
+        for role, expected_name in [
+            ("RENT_EXPENSE", "Rent"),
+            ("ELECTRICITY_EXPENSE", "Electricity"),
+            ("FUEL_EXPENSE", "Fuel & Diesel"),
+            ("INTEREST_EXPENSE", "Interest Expense"),
+            ("INTEREST_INCOME", "Interest Income"),
+        ]:
+            account = ChartOfAccount.objects.get(company=self.company, system_role=role)
+            self.assertEqual(account.description, expected_name)
+        # Freight Inward (COGS) and Freight Outward (expense) are distinct
+        # ledgers and must keep distinct roles - sharing one would make the
+        # generator's role-first existing-account match silently dedupe the
+        # second one away during COA generation.
+        inward = ChartOfAccount.objects.get(company=self.company, system_role="FREIGHT_INWARD_EXPENSE")
+        outward = ChartOfAccount.objects.get(company=self.company, system_role="FREIGHT_OUTWARD_EXPENSE")
+        self.assertEqual(inward.description, "Freight Inward")
+        self.assertEqual(outward.description, "Freight Outward")
+
+
+class NarrationSettingsTests(TestCase):
+    def test_get_solo_is_a_true_singleton(self):
+        from account.models import NarrationSettings
+
+        first = NarrationSettings.get_solo()
+        self.assertEqual(first.pk, 1)
+        self.assertTrue(first.enabled)
+        second = NarrationSettings.get_solo()
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(NarrationSettings.objects.count(), 1)
+
 
 class AutoPostingTests(EngineTestCase):
     @classmethod
@@ -480,6 +541,101 @@ class AutoPostingTests(EngineTestCase):
         self.assertEqual(journal.account_balance(ar_ledger), Decimal("42500.00"))
         chick_sales = ChartOfAccount.objects.get(company=self.company, system_role="CHICK_SALES")
         self.assertEqual(journal.account_balance(chick_sales), Decimal("-42000.00"))
+
+
+class FinancialReportsTests(EngineTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        import datetime
+        cls.fy = FinancialYear.objects.create(
+            start_date=datetime.date(2026, 4, 1),
+            end_date=datetime.date(2027, 3, 31),
+            is_active=True,
+        )
+
+    def setUp(self):
+        self.generate()
+        self.cash = ChartOfAccount.objects.get(company=self.company, system_role="CASH_IN_HAND")
+        self.broiler_sales = ChartOfAccount.objects.get(company=self.company, description="Broiler Sales")
+        self.salary = ChartOfAccount.objects.get(company=self.company, system_role="SALARY_EXPENSE")
+        self.capital = ChartOfAccount.objects.get(company=self.company, system_role="CAPITAL")
+
+    def post(self, debit_acct, credit_acct, amount, date="2026-05-01", vtype="Journal"):
+        from account.services import journal
+        return journal.create_voucher(
+            company=self.company, date=date,
+            lines_data=[
+                {"account": debit_acct.id, "debit": amount, "credit": 0},
+                {"account": credit_acct.id, "debit": 0, "credit": amount},
+            ],
+            voucher_type=vtype, post=True,
+        )
+
+    def test_profit_and_loss_totals(self):
+        from account.services import journal
+
+        self.post(self.cash, self.broiler_sales, "50000", vtype="Receipt")
+        self.post(self.salary, self.cash, "20000", vtype="Payment")
+
+        report = journal.profit_and_loss(self.company, date_to="2026-12-31")
+        self.assertEqual(report["total_income"], Decimal("50000.00"))
+        self.assertEqual(report["total_expense"], Decimal("20000.00"))
+        self.assertEqual(report["gross_profit"], Decimal("50000.00"))
+        self.assertEqual(report["net_profit"], Decimal("30000.00"))
+
+    def test_profit_and_loss_respects_date_range(self):
+        from account.services import journal
+
+        self.post(self.cash, self.broiler_sales, "50000", date="2026-05-01", vtype="Receipt")
+        self.post(self.cash, self.broiler_sales, "10000", date="2026-08-01", vtype="Receipt")
+
+        full = journal.profit_and_loss(self.company, date_to="2026-12-31")
+        self.assertEqual(full["total_income"], Decimal("60000.00"))
+        scoped = journal.profit_and_loss(self.company, date_from="2026-06-01", date_to="2026-12-31")
+        self.assertEqual(scoped["total_income"], Decimal("10000.00"))
+
+    def test_balance_sheet_always_balances(self):
+        from account.services import journal
+
+        self.post(self.cash, self.capital, "100000", vtype="Receipt")
+        self.post(self.cash, self.broiler_sales, "50000", vtype="Receipt")
+        self.post(self.salary, self.cash, "20000", vtype="Payment")
+
+        bs = journal.balance_sheet(self.company, date_upto="2026-12-31")
+        self.assertTrue(bs["balanced"])
+        self.assertEqual(bs["total_assets"], bs["total_liabilities_and_equity"])
+        self.assertEqual(bs["current_earnings"], Decimal("30000.00"))
+
+        cash_row = next(r for r in bs["assets"] if r["account_id"] == self.cash.id)
+        self.assertEqual(cash_row["amount"], Decimal("130000.00"))
+
+    def test_balance_sheet_as_of_date_excludes_later_entries(self):
+        from account.services import journal
+
+        self.post(self.cash, self.capital, "100000", date="2026-05-01", vtype="Receipt")
+        self.post(self.cash, self.broiler_sales, "50000", date="2026-09-01", vtype="Receipt")
+
+        early = journal.balance_sheet(self.company, date_upto="2026-06-01")
+        self.assertEqual(early["total_assets"], Decimal("100000.00"))
+        self.assertTrue(early["balanced"])
+
+        later = journal.balance_sheet(self.company, date_upto="2026-12-31")
+        self.assertEqual(later["total_assets"], Decimal("150000.00"))
+        self.assertTrue(later["balanced"])
+
+    def test_report_apis(self):
+        self.client.login(username="tester", password="secret123")
+        self.post(self.cash, self.capital, "100000", vtype="Receipt")
+        self.post(self.cash, self.broiler_sales, "50000", vtype="Receipt")
+        self.post(self.salary, self.cash, "20000", vtype="Payment")
+
+        pl = self.client.get(reverse("api_profit_loss") + "?to=2026-12-31").json()
+        self.assertEqual(pl["net_profit"], "30000.00")
+
+        bs = self.client.get(reverse("api_balance_sheet") + "?to=2026-12-31").json()
+        self.assertTrue(bs["balanced"])
+        self.assertEqual(bs["total_assets"], bs["total_liabilities_and_equity"])
 
 
 class ApiTests(EngineTestCase):

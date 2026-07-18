@@ -2,7 +2,21 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("purchase_order/", views.purchase_order, name="purchase_order"),
+    path("general-purchase/", views.general_purchase_list, name="general_purchase_list"),
+    path("general-purchase/add/", views.create_general_purchase, name="general_purchase_add"),
+    path("general-purchase/<int:id>/edit/", views.edit_general_purchase, name="general_purchase_edit"),
+    path("general-purchase/<int:id>/delete/", views.delete_general_purchase, name="general_purchase_delete"),
+    path("general_purchase_api/", views.general_purchase_api_list, name="general_purchase_api_list"),
+    path("chicks-purchase/", views.chicks_purchase_list, name="chicks_purchase_list"),
+    path("chicks-purchase/add/", views.create_chicks_purchase, name="chicks_purchase_add"),
+    path("chicks-purchase/<int:id>/edit/", views.edit_chicks_purchase, name="chicks_purchase_edit"),
+    path("chicks-purchase/<int:id>/delete/", views.delete_chicks_purchase, name="chicks_purchase_delete"),
+    path("chicks_purchase_api/", views.chicks_purchase_api_list, name="chicks_purchase_api_list"),
+    path("payment/", views.payment_list, name="payment_list"),
+    path("payment/add/", views.create_payment, name="payment_add"),
+    path("payment/<int:id>/edit/", views.edit_payment, name="payment_edit"),
+    path("payment/<int:id>/delete/", views.delete_payment, name="payment_delete"),
+    path("payment_api/", views.payment_api_list, name="payment_api_list"),
     path("supplier/", views.supplier, name="supplier"),
     path('supplier/add/', views.create_supplier, name='supplier_add'),
     path('supplier/<int:id>/edit/', views.edit_supplier, name='supplier_edit'),

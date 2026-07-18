@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if office %}Edit{% else %}Add{% endif %} Warehouse{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_subnavbar.html' with active_tab='warehouse' %}
+
+<div class="page-header">
+    <div class="page-header-title">{% if office %}Edit{% else %}Add{% endif %} Warehouse</div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <form id="office-form" class="mx-auto" style="max-width:520px">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label for="name" class="form-label">Sector Description <span class="text-danger">*</span></label>
+        <input type="text" id="name" class="form-control" placeholder="Enter description..." value="{{ office.name|default:'' }}" required>
+      </div>
+      <div class="mb-3">
+        <label for="sector" class="form-label">Sector Type <span class="text-danger">*</span></label>
+        <div class="d-flex align-items-center gap-2">
+          <select id="sector" class="form-select" required>
+            <option value="">select</option>
+            {% for s in sectors %}<option value="{{ s.id }}" {% if office.sector_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+          </select>
+          {% if page_perms.add %}<button type="button" class="btn btn-link p-0 text-primary" id="quick-add-sector" title="Add new sector">
+            <i class="fas fa-plus fa-lg"></i>
+          </button>{% endif %}
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="address" class="form-label">Address <span class="text-danger">*</span></label>
+        <textarea id="address" class="form-control" rows="3" placeholder="Enter address..." required>{{ office.address|default:'' }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label for="location" class="form-label">Location <span class="text-danger">*</span></label>
+        <input type="text" id="location" class="form-control" placeholder="Enter Location..." value="{{ office.location|default:'' }}" required>
+      </div>
+      <div class="d-flex gap-2 justify-content-center mt-4">
+        <button type="submit" class="btn btn-primary">Submit</button>
+        <a href="{% url 'warehouse' %}" class="btn btn-danger">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Quick-add Sector modal -->
+<div class="modal fade" id="quickAddSectorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add New Sector</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="quick-add-sector-form">
+          <label class="form-label">Name</label>
+          <input type="text" id="quick-sector-name" class="form-control" placeholder="Enter sector name" required>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const officeId = {{ warehouse_id|default:'null' }};
+
+  $("#office-form").on("submit", function (e) {
+    e.preventDefault();
+    const payload = {
+      name: $("#name").val(), sector: $("#sector").val(),
+      address: $("#address").val(), location: $("#location").val(),
+    };
+    $.ajax({
+      url: officeId ? `/warehouse/${officeId}/` : "{% url 'warehouse_create' %}",
+      type: officeId ? "PUT" : "POST",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify(payload),
+      success: function () {
+        window.location.href = "{% url 'warehouse' %}";
+      },
+      error: function (xhr) {
+        alert(xhr.responseJSON?.error || "Failed to save warehouse.");
+      },
+    });
+  });
+
+  $("#quick-add-sector").on("click", function () {
+    $("#quick-sector-name").val("");
+    new bootstrap.Modal(document.getElementById("quickAddSectorModal")).show();
+  });
+
+  $("#quick-add-sector-form").on("submit", function (e) {
+    e.preventDefault();
+    $.ajax({
+      url: "{% url 'sector_create' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({ name: $("#quick-sector-name").val() }),
+      success: function (res) {
+        $.getJSON("{% url 'sector_list' %}", function (sectors) {
+          const added = sectors.find(s => s.name === $("#quick-sector-name").val());
+          $("#sector").append(`<option value="${added.id}">${added.name}</option>`);
+          $("#sector").val(added.id).trigger("change");
+          bootstrap.Modal.getInstance(document.getElementById("quickAddSectorModal")).hide();
+        });
+      },
+      error: function (xhr) {
+        alert(xhr.responseJSON?.error || "Failed to add sector.");
+      },
+    });
+  });
+});
+</script>
+{% endblock %}

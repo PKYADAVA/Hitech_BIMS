@@ -107,7 +107,7 @@ BASE_TREE = [
         ("410000", "Sales", "INCOME", "Sales", "SALES", []),
         ("420000", "Other Income", "INCOME", "Other Income", "OTHER_INCOME", [
             ("420001", "Discount Received", "INCOME", "Other Income", None, []),
-            ("420002", "Interest Income", "INCOME", "Other Income", None, []),
+            ("420002", "Interest Income", "INCOME", "Other Income", "INTEREST_INCOME", []),
             ("420003", "Scrap Sales", "INCOME", "Other Income", None, []),
         ]),
     ]),
@@ -115,14 +115,14 @@ BASE_TREE = [
         ("510000", "Direct Costs", "COGS", "Cost Of Goods Sold", "COGS_GROUP", [
             ("510001", "Purchases", "COGS", "Cost Of Goods Sold", "PURCHASES", []),
             ("510002", "Purchase Returns", "COGS", "Cost Of Goods Sold", "PURCHASE_RETURNS", []),
-            ("510003", "Freight Inward", "COGS", "Cost Of Goods Sold", None, []),
+            ("510003", "Freight Inward", "COGS", "Cost Of Goods Sold", "FREIGHT_INWARD_EXPENSE", []),
             ("510004", "Direct Wages", "COGS", "Cost Of Goods Sold", None, []),
         ]),
     ]),
     ("600000", "Expenses", "EXPENSE", None, "EXPENSES_ROOT", [
         ("610000", "Administrative Expenses", "EXPENSE", "Administrative Expense", "ADMIN_EXPENSES", [
             ("610001", "Salaries & Wages", "EXPENSE", "Administrative Expense", "SALARY_EXPENSE", []),
-            ("610002", "Rent", "EXPENSE", "Administrative Expense", None, []),
+            ("610002", "Rent", "EXPENSE", "Administrative Expense", "RENT_EXPENSE", []),
             ("610003", "Office Expenses", "EXPENSE", "Administrative Expense", None, []),
             ("610004", "Printing & Stationery", "EXPENSE", "Administrative Expense", None, []),
             ("610005", "Telephone & Internet", "EXPENSE", "Administrative Expense", None, []),
@@ -131,20 +131,20 @@ BASE_TREE = [
         ]),
         ("620000", "Selling & Distribution Expenses", "EXPENSE", "Selling & Distribution Expense", "SELLING_EXPENSES", [
             ("620001", "Advertisement", "EXPENSE", "Selling & Distribution Expense", None, []),
-            ("620002", "Freight Outward", "EXPENSE", "Selling & Distribution Expense", None, []),
+            ("620002", "Freight Outward", "EXPENSE", "Selling & Distribution Expense", "FREIGHT_OUTWARD_EXPENSE", []),
             ("620003", "Sales Commission", "EXPENSE", "Selling & Distribution Expense", None, []),
             ("620004", "Discount Allowed", "EXPENSE", "Selling & Distribution Expense", None, []),
         ]),
         ("630000", "Financial Expenses", "EXPENSE", "Financial Expense", "FINANCIAL_EXPENSES", [
             ("630001", "Bank Charges", "EXPENSE", "Financial Expense", None, []),
-            ("630002", "Interest Expense", "EXPENSE", "Financial Expense", None, []),
+            ("630002", "Interest Expense", "EXPENSE", "Financial Expense", "INTEREST_EXPENSE", []),
         ]),
         ("650000", "Depreciation", "EXPENSE", "Depreciation", "DEPRECIATION_EXPENSE", []),
         ("660000", "Miscellaneous Expenses", "EXPENSE", "Administrative Expense", "MISC_EXPENSES", []),
         ("670000", "Utilities", "EXPENSE", "Administrative Expense", "UTILITIES", [
-            ("670001", "Electricity", "EXPENSE", "Administrative Expense", None, []),
+            ("670001", "Electricity", "EXPENSE", "Administrative Expense", "ELECTRICITY_EXPENSE", []),
             ("670002", "Water", "EXPENSE", "Administrative Expense", None, []),
-            ("670003", "Fuel & Diesel", "EXPENSE", "Administrative Expense", None, []),
+            ("670003", "Fuel & Diesel", "EXPENSE", "Administrative Expense", "FUEL_EXPENSE", []),
         ]),
     ]),
 ]
