@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+
+{% block title %}Medicine Vaccine Transfer - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='inventory' %}{% endblock %}
+{% block content %}
+{% include '_inventory_transaction_subnavbar.html' with active_tab='medicine_transfer' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-syringe"></i> Medicine Vaccine Transfer</div>
+    <div class="page-header-subtitle">Medicine/vaccine dispatches between offices/warehouses and farms, with running stock balance</div>
+  </div>
+  <div class="page-header-right">
+    {% if page_perms.edit %}<button type="button" class="btn btn-danger" id="edit-multiple-btn"><i class="fas fa-list-ul"></i> Edit-Multiple</button>{% endif %}
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'medicine_transfer_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="transfer-table">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center"><input type="checkbox" id="select-all-rows"></th>
+            <th>Date</th><th>Trnum</th><th>Dc No.</th><th>From Location</th>
+            <th>Description</th><th>Quantity</th><th>To Location</th><th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit-Multiple Modal -->
+<div class="modal fade" id="bulkEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="bulk-edit-form">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit <span id="bulk-edit-count">0</span> Selected Transfers</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Tick a field to change it on every selected transfer. Untouched fields are left as-is.</p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-dc-no" data-target="dc-no">
+                <label class="form-check-label" for="bulk-apply-dc-no">Dc No.</label>
+              </div>
+              <input type="text" class="form-control" id="bulk-dc-no" disabled>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-from-location" data-target="from-location">
+                <label class="form-check-label" for="bulk-apply-from-location">From Location</label>
+              </div>
+              <select class="form-select" id="bulk-from-location" disabled>
+                <option value="">select</option>
+                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
+                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-to-location" data-target="to-location">
+                <label class="form-check-label" for="bulk-apply-to-location">To Location</label>
+              </div>
+              <select class="form-select" id="bulk-to-location" disabled>
+                <option value="">select</option>
+                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
+                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-vehicle-no" data-target="vehicle-no">
+                <label class="form-check-label" for="bulk-apply-vehicle-no">Vehicle</label>
+              </div>
+              <input type="text" class="form-control" id="bulk-vehicle-no" disabled>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-driver-name" data-target="driver-name">
+                <label class="form-check-label" for="bulk-apply-driver-name">Driver</label>
+              </div>
+              <input type="text" class="form-control" id="bulk-driver-name" disabled>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-transport-cost" data-target="transport-cost">
+                <label class="form-check-label" for="bulk-apply-transport-cost">Transport Cost</label>
+              </div>
+              <input type="number" min="0" step=".01" class="form-control" id="bulk-transport-cost" disabled>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check mb-1">
+                <input class="form-check-input bulk-toggle" type="checkbox" id="bulk-apply-paid-by" data-target="paid-by">
+                <label class="form-check-label" for="bulk-apply-paid-by">Paid By</label>
+              </div>
+              <select class="form-select" id="bulk-paid-by" disabled>
+                <option value="">select</option>
+                {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply to Selected</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this medicine transfer?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn"><i class="fas fa-trash me-1"></i>Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let table = null;
+  let pendingDeleteId = null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function renderRows(rows) {
+    if (table) { table.destroy(); }
+    const tbody = $("#transfer-table tbody");
+    tbody.empty();
+    rows.forEach(function (row) {
+      tbody.append(`<tr>
+        <td class="text-center"><input type="checkbox" class="row-select" value="${row.id}"></td>
+        <td>${escapeHtml(row.date)}</td>
+        <td>${escapeHtml(row.trnum)}</td>
+        <td>${escapeHtml(row.dc_no) || "-"}</td>
+        <td>${escapeHtml(row.from_location_name)}</td>
+        <td>${escapeHtml(row.description) || "-"}</td>
+        <td>${Number(row.quantity).toFixed(2)}</td>
+        <td>${escapeHtml(row.to_location_name)}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="{% url 'medicine_transfer_add' %}?id=${row.id}" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+    table = $("#transfer-table").DataTable({
+      responsive: true, order: [[1, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      columnDefs: [{ orderable: false, targets: [0, -1] }],
+      language: { emptyTable: "No data available in table" },
+    });
+    $("#select-all-rows").prop("checked", false);
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'medicine_transfer_api_list' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+    }, function (rows) {
+      renderRows(rows);
+    }).fail(function () {
+      alert("Failed to load medicine transfers.");
+    });
+  }
+
+  $("#filter-submit").on("click", loadRows);
+
+  $("#select-all-rows").on("change", function () {
+    $(".row-select").prop("checked", $(this).is(":checked"));
+  });
+
+  $(document).on("click", ".delete-button", function () {
+    pendingDeleteId = $(this).data("id");
+    $("#deleteConfirmationModal").modal("show");
+  });
+
+  $("#confirm-delete-btn").on("click", function () {
+    if (!pendingDeleteId) return;
+    $.ajax({
+      url: `/medicine_transfer_api/${pendingDeleteId}/`,
+      type: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        $("#deleteConfirmationModal").modal("hide");
+        loadRows();
+      },
+      error: function (xhr) {
+        $("#deleteConfirmationModal").modal("hide");
+        alert(xhr.responseJSON?.error || "Failed to delete medicine transfer.");
+      },
+    });
+  });
+
+  // Edit-Multiple: enabling a field's checkbox enables its input; the
+  // bulk-update payload only includes fields whose checkbox is ticked.
+  $(document).on("change", ".bulk-toggle", function () {
+    const target = $(this).data("target");
+    $(`#bulk-${target}`).prop("disabled", !$(this).is(":checked"));
+  });
+
+  $("#edit-multiple-btn").on("click", function () {
+    const ids = $(".row-select:checked").map(function () { return $(this).val(); }).get();
+    if (!ids.length) { alert("Select at least one transfer first."); return; }
+    $("#bulk-edit-count").text(ids.length);
+    $("#bulk-edit-form")[0].reset();
+    $(".bulk-toggle").prop("checked", false);
+    $("#bulk-edit-form select, #bulk-edit-form input[type=text], #bulk-edit-form input[type=number]").prop("disabled", true);
+    $("#bulkEditModal").data("ids", ids).modal("show");
+  });
+
+  $("#bulk-edit-form").on("submit", function (e) {
+    e.preventDefault();
+    const ids = $("#bulkEditModal").data("ids") || [];
+    const fields = {};
+    if ($("#bulk-apply-dc-no").is(":checked")) fields.dc_no = $("#bulk-dc-no").val();
+    if ($("#bulk-apply-from-location").is(":checked")) {
+      const val = $("#bulk-from-location").val();
+      if (!val) { alert("Pick a From Location."); return; }
+      const [type, id] = val.split(":");
+      fields.from_location_type = type; fields.from_location_id = id;
+    }
+    if ($("#bulk-apply-to-location").is(":checked")) {
+      const val = $("#bulk-to-location").val();
+      if (!val) { alert("Pick a To Location."); return; }
+      const [type, id] = val.split(":");
+      fields.to_location_type = type; fields.to_location_id = id;
+    }
+    if ($("#bulk-apply-vehicle-no").is(":checked")) fields.vehicle_no = $("#bulk-vehicle-no").val();
+    if ($("#bulk-apply-driver-name").is(":checked")) fields.driver_name = $("#bulk-driver-name").val();
+    if ($("#bulk-apply-transport-cost").is(":checked")) fields.transport_cost = $("#bulk-transport-cost").val();
+    if ($("#bulk-apply-paid-by").is(":checked")) fields.paid_by = $("#bulk-paid-by").val();
+
+    if (!Object.keys(fields).length) { alert("Tick at least one field to change."); return; }
+
+    $.ajax({
+      url: "{% url 'medicine_transfer_bulk_update' %}",
+      type: "POST",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({ ids: ids, fields: fields }),
+      success: function (resp) {
+        $("#bulkEditModal").modal("hide");
+        if (resp.warnings && resp.warnings.length) { alert(resp.warnings.join("\n")); }
+        loadRows();
+      },
+      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to update selected transfers."); },
+    });
+  });
+
+  loadRows();
+});
+</script>
+{% endblock %}

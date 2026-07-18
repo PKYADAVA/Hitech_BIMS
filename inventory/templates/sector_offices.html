@@ -11,267 +11,321 @@
 
 <div class="page-header">
     <div class="page-header-main">
-      <div class="page-header-title">Manage Warehouses</div>
-      <div class="page-header-subtitle">Add and manage warehouse locations</div>
+      <div class="page-header-title">Office</div>
+      <div class="page-header-subtitle">Add and manage office/location records</div>
     </div>
     <div class="page-header-right">
-      {% if page_perms.add %}<button
-            class="btn btn-primary"
-            data-bs-toggle="modal"
-            data-bs-target="#warehouseFormModal"
-        >
-            <i class="fas fa-plus"></i> Add New Warehouse
-        </button>{% endif %}
+      {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#officeFormModal"><i class="fas fa-plus"></i> Add</button>{% endif %}
     </div>
 </div>
 
-<div class="row g-4">    <!-- Modal Structure -->
-    <div
-        class="modal fade"
-        id="warehouseFormModal"
-        tabindex="-1"
-        aria-labelledby="warehouseFormModalLabel"
-        aria-hidden="true"
-    >
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="warehouseFormModalLabel">
-                        Add New Warehouse
-                    </h5>
-                    <button
-                        type="button"
-                        class="btn-close"
-                        data-bs-dismiss="modal"
-                        aria-label="Close"
-                    ></button>
-                </div>
-                <div class="modal-body">
-                    <!-- Form Section -->
-                    <form id="warehouse-form">
-                        {% csrf_token %}
-                        <input type="hidden" id="warehouse-id" />
-                        <div class="mb-3">
-                            <label for="warehouse-name" class="form-label">Name</label>
-                            <input
-                                type="text"
-                                id="warehouse-name"
-                                class="form-control"
-                                placeholder="Enter warehouse name"
-                                required
-                            />
-                        </div>
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button
-                                type="button"
-                                class="btn btn-secondary"
-                                data-bs-dismiss="modal"
-                            >
-                                Cancel
-                            </button>
-                            <button type="submit" class="btn btn-primary">Save</button>
-                        </div>
-                    </form>
-                </div>
+<!-- Add Modal -->
+<div class="modal fade" id="officeFormModal" tabindex="-1" aria-labelledby="officeFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="officeFormModalLabel">Add Office</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="office-form">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="office-name" class="form-label">Sector Description <span class="text-danger">*</span></label>
+            <input type="text" id="office-name" class="form-control" placeholder="Enter description..." required>
+          </div>
+          <div class="mb-3">
+            <label for="office-sector" class="form-label">Sector Type <span class="text-danger">*</span></label>
+            <div class="d-flex align-items-center gap-2">
+              <select id="office-sector" class="form-select" required>
+                <option value="">select</option>
+                {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+              </select>
+              {% if page_perms.add %}<button type="button" class="btn btn-link p-0 text-primary quick-add-sector" data-target="#office-sector" title="Add new sector"><i class="fas fa-plus fa-lg"></i></button>{% endif %}
             </div>
+          </div>
+          <div class="mb-3">
+            <label for="office-address" class="form-label">Address <span class="text-danger">*</span></label>
+            <textarea id="office-address" class="form-control" rows="3" placeholder="Enter address..." required></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="office-location" class="form-label">Location <span class="text-danger">*</span></label>
+            <input type="text" id="office-location" class="form-control" placeholder="Enter Location..." required>
+          </div>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick-add Sector modal -->
+<div class="modal fade" id="quickAddSectorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add New Sector</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="quick-add-sector-form">
+          <label class="form-label">Name</label>
+          <input type="text" id="quick-sector-name" class="form-control" placeholder="Enter sector name" required>
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-table me-2"></i>Office List</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0" id="warehouse-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Code</th>
+                        <th>Description</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="warehouse-table-body">
+                    <!-- AJAX content will load here -->
+                </tbody>
+            </table>
         </div>
     </div>
-    <!-- List Section -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Warehouse List</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table
-                        class="table table-hover table-bordered mb-0"
-                        id="warehouse-table"
-                    >
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="warehouse-table-body">
-                            <!-- AJAX content will load here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this office?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn"><i class="fas fa-trash me-1"></i>Delete</button>
+      </div>
     </div>
+  </div>
 </div>
 
 <script>
 $(document).ready(function () {
-    // Function to Load Warehouse List
+    const csrfToken = "{{ csrf_token }}";
+    let table = null;
+    let pendingDeleteId = null;
+    let quickAddTargetSelect = null;
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function sectorOptionsHtml(selectedId) {
+        let html = '<option value="">select</option>';
+        {% for s in sectors %}
+        html += `<option value="{{ s.id }}" ${selectedId === {{ s.id }} ? "selected" : ""}>{{ s.name|escapejs }}</option>`;
+        {% endfor %}
+        return html;
+    }
+
     function loadWarehouseList() {
         $.ajax({
-            url: "{% url 'warehouse_list' %}", // Replace with your actual endpoint
+            url: "{% url 'warehouse_list' %}",
             type: "GET",
             success: function (response) {
-                console.log(response, "response");
-                const table = $("#warehouse-table");
+                if (table) { table.destroy(); }
                 const tableBody = $("#warehouse-table-body");
-
-                // Clear the current table body and destroy the DataTable if initialized
-                if ($.fn.DataTable.isDataTable(table)) {
-                    table.DataTable().clear().destroy();
-                }
                 tableBody.empty();
+                $(".office-edit-modal").remove();
 
-                // Populate the table dynamically
-                response.forEach((warehouse) => {
-                    const modalId = `editwarehouseModal-${warehouse.id}`;
-                    const formId = `edit-warehouse-form-${warehouse.id}`;
-                    const tableRow = `
+                response.forEach((office) => {
+                    const modalId = `editOfficeModal-${office.id}`;
+                    const formId = `edit-office-form-${office.id}`;
+
+                    tableBody.append(`
                         <tr>
-                            <td>${warehouse.name}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-warehouse"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#${modalId}"
-                                    data-id="${warehouse.id}"
-                                    data-name="${warehouse.name}">
-                                    <i class="fas fa-pen"></i>
-                                </button>{% endif %}
-                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-warehouse"
-                                    data-id="${warehouse.id}">
-                                    <i class="fas fa-trash"></i>
-                                </button>{% endif %}
+                            <td>${escapeHtml(office.code)}</td>
+                            <td>${escapeHtml(office.name)}</td>
+                            <td>${escapeHtml(office.sector_name) || "-"}</td>
+                            <td>${escapeHtml(office.location) || "-"}</td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#${modalId}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-warehouse" data-id="${office.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
                                 </div>
                             </td>
                         </tr>
-                    `;
+                    `);
 
                     const modal = `
-                        <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
-                            <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Edit Warehouse</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <form id="${formId}">
-                                        <div class="modal-body">
-                                            <input type="hidden" name="warehouse-id" value="${warehouse.id}">
-                                            <div class="mb-3">
-                                                <label class="form-label">Warehouse</label>
-                                                <input type="text" class="form-control" name="warehouse-name" value="${warehouse.name}" required>
-                                            </div>
-                                        </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                <button type="submit" class="btn btn-primary">Update</button>
-                                            </div>
-                                    </form>
-                                </div>
+                        <div class="modal fade office-edit-modal" id="${modalId}" tabindex="-1" aria-hidden="true">
+                          <div class="modal-dialog">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <h5 class="modal-title">Edit Office</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                              </div>
+                              <div class="modal-body">
+                                <form id="${formId}">
+                                  <div class="mb-3">
+                                    <label class="form-label">Sector Description <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="name" value="${escapeHtml(office.name)}" required>
+                                  </div>
+                                  <div class="mb-3">
+                                    <label class="form-label">Sector Type <span class="text-danger">*</span></label>
+                                    <select class="form-select" name="sector" required>${sectorOptionsHtml(office.sector)}</select>
+                                  </div>
+                                  <div class="mb-3">
+                                    <label class="form-label">Address <span class="text-danger">*</span></label>
+                                    <textarea class="form-control" name="address" rows="3" required>${escapeHtml(office.address)}</textarea>
+                                  </div>
+                                  <div class="mb-3">
+                                    <label class="form-label">Location <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" name="location" value="${escapeHtml(office.location)}" required>
+                                  </div>
+                                  <div class="d-flex justify-content-end gap-2 mt-3">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="submit" class="btn btn-primary">Update</button>
+                                  </div>
+                                </form>
+                              </div>
                             </div>
+                          </div>
                         </div>
                     `;
-                tableBody.append(tableRow);
-                $("body").append(modal);
+                    $("body").append(modal);
 
-
-                // Add event listener for the form inside modal
-                $(`#${formId}`).off("submit").on("submit", function (e) {
-                    e.preventDefault();
-
-                    const jsonData = {
-                        name: $(`#${formId} [name="warehouse-name"]`).val(),
-                    };
-
-                    $.ajax({
-                        url: `/warehouse/${warehouse.id}/`, // Endpoint for updating branch details
-                        type: "PUT",
-                        headers: {
-                            "X-CSRFToken": "{{ csrf_token }}",
-                            "Content-Type": "application/json",
-                        },
-                        data: JSON.stringify(jsonData),
-                        success: function () {
-                            loadWarehouseList(); // Reload table after update
-                            $(`#${modalId}`).modal("hide"); // Hide modal after submission
-                        },
-                        error: function (xhr, status, error) {
-                            console.error(`Update error: ${error}`);
-                        },
+                    $(`#${formId}`).off("submit").on("submit", function (e) {
+                        e.preventDefault();
+                        const jsonData = {
+                            name: $(`#${formId} [name="name"]`).val(),
+                            sector: $(`#${formId} [name="sector"]`).val(),
+                            address: $(`#${formId} [name="address"]`).val(),
+                            location: $(`#${formId} [name="location"]`).val(),
+                        };
+                        $.ajax({
+                            url: `/warehouse/${office.id}/`,
+                            type: "PUT",
+                            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+                            data: JSON.stringify(jsonData),
+                            success: function () {
+                                loadWarehouseList();
+                                $(`#${modalId}`).modal("hide");
+                            },
+                            error: function (xhr) {
+                                alert(xhr.responseJSON?.error || "Failed to update office.");
+                            },
+                        });
                     });
                 });
-            });
 
-                // Reinitialize DataTable
-                table.DataTable();
+                table = $("#warehouse-table").DataTable({ responsive: true, language: { emptyTable: "No offices found" } });
             },
             error: function (xhr, status, error) {
-                console.error(`Failed to load warehouses: ${error}`);
+                console.error(`Failed to load offices: ${error}`);
             },
         });
     }
 
-    // Load warehouse list on page load
     loadWarehouseList();
 
-    // Add new warehouse
-    $("#warehouse-form").on("submit", function (event) {
+    $("#office-form").on("submit", function (event) {
         event.preventDefault();
-        const warehouse_name = $("#warehouse-name").val();
-        csrfToken = "{{ csrf_token }}";
-
         $.ajax({
-            url: "/create-warehouse/", // Replace with your backend endpoint for adding branches
+            url: "{% url 'warehouse_create' %}",
             method: "POST",
-            headers: {
-                "X-CSRFToken": csrfToken,
-            },
+            headers: { "X-CSRFToken": csrfToken },
             data: JSON.stringify({
-                name: warehouse_name,
+                name: $("#office-name").val(),
+                sector: $("#office-sector").val(),
+                address: $("#office-address").val(),
+                location: $("#office-location").val(),
             }),
             success: function () {
-                $("#warehouseFormModal").modal("hide");
-                $("#warehouse-form")[0].reset();
+                $("#officeFormModal").modal("hide");
+                $("#office-form")[0].reset();
                 loadWarehouseList();
-                window.showToast('success', "Warehouse added successfully!");
+                window.showToast ? window.showToast('success', "Office added successfully!") : null;
             },
-            error: function (xhr, status, error) {
-                console.error("Failed to add branch:", error);
-                window.showToast('danger', "An error occurred while adding the branch.");
+            error: function (xhr) {
+                alert(xhr.responseJSON?.error || "An error occurred while adding the office.");
             },
         });
     });
 
-
-    // Handle delete button click
-    $(document).on("click", ".delete-warehouse", async function () {
-        const id = $(this).data("id");
-        const csrfToken = "{{ csrf_token }}";
-
-        if ((await window.bimsConfirm("Are you sure you want to delete this warehouse?"))) {
-            $.ajax({
-                url: `/warehouse/${id}/delete/`, // Construct delete URL
-                method: "DELETE",
-                headers: { "X-CSRFToken": csrfToken },
-                success: function () {
-                    loadWarehouseList();
-                    window.showToast('success', "Warehouse deleted successfully!");
-                },
-                error: function () {
-                    window.showToast('danger', "An error occurred while deleting the warehouse.");
-                },
-            });
-        }
+    // Quick-add sector, usable from either the Add modal or any Edit modal.
+    $(document).on("click", ".quick-add-sector", function () {
+        quickAddTargetSelect = $(this).closest(".modal-body").find('select[id="office-sector"], select[name="sector"]');
+        $("#quick-sector-name").val("");
+        new bootstrap.Modal(document.getElementById("quickAddSectorModal")).show();
     });
 
-    // Handle edit button click
-    $(document).on("click", ".edit-warehouse", function () {
-        const id = $(this).data("id");
-        $(`#editModal-${id}`).modal("show");
+    $("#quick-add-sector-form").on("submit", function (e) {
+        e.preventDefault();
+        const name = $("#quick-sector-name").val();
+        $.ajax({
+            url: "{% url 'sector_create' %}",
+            type: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            data: JSON.stringify({ name: name }),
+            success: function () {
+                $.getJSON("{% url 'sector_list' %}", function (sectors) {
+                    const added = sectors.find(s => s.name === name);
+                    if (added && quickAddTargetSelect && quickAddTargetSelect.length) {
+                        quickAddTargetSelect.append(`<option value="${added.id}">${added.name}</option>`);
+                        quickAddTargetSelect.val(added.id).trigger("change.select2");
+                    }
+                    bootstrap.Modal.getInstance(document.getElementById("quickAddSectorModal")).hide();
+                });
+            },
+            error: function (xhr) {
+                alert(xhr.responseJSON?.error || "Failed to add sector.");
+            },
+        });
+    });
+
+    $(document).on("click", ".delete-warehouse", function () {
+        pendingDeleteId = $(this).data("id");
+        $("#deleteConfirmationModal").modal("show");
+    });
+
+    $("#confirm-delete-btn").on("click", function () {
+        if (!pendingDeleteId) return;
+        $.ajax({
+            url: `/warehouse/${pendingDeleteId}/delete/`,
+            method: "DELETE",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                $("#deleteConfirmationModal").modal("hide");
+                loadWarehouseList();
+                window.showToast ? window.showToast('success', "Office deleted successfully!") : null;
+            },
+            error: function () {
+                window.showToast ? window.showToast('danger', "An error occurred while deleting the office.") : alert("An error occurred while deleting the office.");
+            },
+        });
     });
 });
-
-
 </script>
 {% endblock %}

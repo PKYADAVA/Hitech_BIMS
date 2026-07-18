@@ -1,6 +1,9 @@
+import re
+
 from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.utils.translation import gettext_lazy as _
+from django.utils.timezone import now
 from django.core.exceptions import ValidationError
 import os
 
@@ -712,3 +715,174 @@ class BroilerDisease(models.Model):
         """Returns the filename of the uploaded image."""
         return os.path.basename(self.image.name) if self.image else None
 
+
+
+
+class DailyEntry(models.Model):
+    """A single day's record for one Farm/Batch — mortality, culls, feed
+    consumption (up to two feed items with a running stock balance) and
+    average bird weight (Broiler > Transactions > Daily Entry)."""
+
+    entry_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                                help_text="Auto-generated transaction number, e.g. DE-2627-0001")
+    date = models.DateField(default=now)
+    supervisor = models.ForeignKey(Supervisor, on_delete=models.PROTECT, related_name='daily_entries')
+    farm = models.ForeignKey(BroilerFarm, on_delete=models.PROTECT, related_name='daily_entries')
+    batch = models.ForeignKey(BroilerBatch, on_delete=models.PROTECT, null=True, blank=True,
+                              related_name='daily_entries',
+                              help_text="Auto-set to the farm's active batch at the time of entry")
+    age_days = models.PositiveIntegerField(default=0, editable=False,
+                                           help_text="Days since the batch's start date")
+    mortality = models.PositiveIntegerField(default=0)
+    culls = models.PositiveIntegerField(default=0)
+
+    feed_1 = models.ForeignKey('inventory.Item', on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='daily_entry_feed_1')
+    feed_1_qty = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Kgs fed")
+    feed_1_stock = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False,
+                                       help_text="Running closing stock after this entry")
+
+    feed_2 = models.ForeignKey('inventory.Item', on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='daily_entry_feed_2')
+    feed_2_qty = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Kgs fed")
+    feed_2_stock = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False,
+                                       help_text="Running closing stock after this entry")
+
+    avg_weight_gms = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    entry_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='broiler_daily_entries')
+    entry_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Daily Entry")
+        verbose_name_plural = _("Daily Entries")
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return f"{self.entry_no} ({self.farm.farm_name})"
+
+    @property
+    def is_batch_active(self):
+        return bool(self.batch and self.batch.end_date is None)
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.entry_no:
+            self.entry_no = self._next_entry_no(self.date)
+            super().save(update_fields=["entry_no"])
+
+    @classmethod
+    def _next_entry_no(cls, on_date=None):
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"DE-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(entry_no__startswith=prefix).values_list("entry_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    @staticmethod
+    def previous_stock(farm_id, item_id, before_date, before_id):
+        """Closing stock of the most recent prior entry for this farm+feed
+        item, ordered by date then id (0 if there's no earlier entry).
+
+        ``before_id`` is the row's own pk when editing an existing entry (so
+        same-date rows saved after it are correctly excluded); it's None for
+        a brand-new row, which has no id yet to compare against, so any
+        same-date row already saved earlier in the same submission still
+        counts as "previous" — restricting to date alone is correct there.
+        """
+        if not item_id:
+            return 0
+        if before_id:
+            date_filter = models.Q(date__lt=before_date) | (models.Q(date=before_date) & models.Q(id__lt=before_id))
+        else:
+            date_filter = models.Q(date__lte=before_date)
+        qs = DailyEntry.objects.filter(farm_id=farm_id).filter(date_filter).order_by('-date', '-id')
+        for row in qs:
+            if row.feed_1_id == item_id:
+                return row.feed_1_stock
+            if row.feed_2_id == item_id:
+                return row.feed_2_stock
+        return 0
+
+
+class MedicineVaccineEntry(models.Model):
+    """A medicine/vaccine issued to one Farm/Batch on a given day, with a
+    running closing-stock balance for that item at that farm (Broiler >
+    Transactions > Medicine Vaccine Consumption)."""
+
+    entry_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                                help_text="Auto-generated transaction number, e.g. MV-2627-0001")
+    date = models.DateField(default=now)
+    supervisor = models.ForeignKey(Supervisor, on_delete=models.PROTECT, related_name='medicine_entries')
+    farm = models.ForeignKey(BroilerFarm, on_delete=models.PROTECT, related_name='medicine_entries')
+    batch = models.ForeignKey(BroilerBatch, on_delete=models.PROTECT, null=True, blank=True,
+                              related_name='medicine_entries',
+                              help_text="Auto-set to the farm's active batch at the time of entry")
+    age_days = models.PositiveIntegerField(default=0, editable=False,
+                                           help_text="Days since the batch's start date")
+
+    item = models.ForeignKey('inventory.Item', on_delete=models.PROTECT, related_name='medicine_entries')
+    qty = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    stock = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False,
+                                help_text="Running closing stock after this entry")
+
+    remarks = models.CharField(max_length=255, blank=True)
+
+    entry_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='broiler_medicine_entries')
+    entry_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Medicine/Vaccine Entry")
+        verbose_name_plural = _("Medicine/Vaccine Entries")
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return f"{self.entry_no} ({self.farm.farm_name})"
+
+    @property
+    def is_batch_active(self):
+        return bool(self.batch and self.batch.end_date is None)
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.entry_no:
+            self.entry_no = self._next_entry_no(self.date)
+            super().save(update_fields=["entry_no"])
+
+    @classmethod
+    def _next_entry_no(cls, on_date=None):
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"MV-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(entry_no__startswith=prefix).values_list("entry_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    @staticmethod
+    def previous_stock(farm_id, item_id, before_date, before_id):
+        """Closing stock of the most recent prior entry for this farm+item,
+        ordered by date then id (0 if there's no earlier entry). See
+        DailyEntry.previous_stock for the before_id/date-filter rationale."""
+        if not item_id:
+            return 0
+        if before_id:
+            date_filter = models.Q(date__lt=before_date) | (models.Q(date=before_date) & models.Q(id__lt=before_id))
+        else:
+            date_filter = models.Q(date__lte=before_date)
+        row = (MedicineVaccineEntry.objects.filter(farm_id=farm_id, item_id=item_id)
+               .filter(date_filter).order_by('-date', '-id').first())
+        return row.stock if row else 0

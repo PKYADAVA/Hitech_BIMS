@@ -63,4 +63,23 @@ urlpatterns = [
     path('broiler_batch/<int:id>/delete/', BroilerBatchAPI.as_view(), name='broiler_batch_delete'), # For deleting broiler batch
     path('get-supervisors/', views.get_supervisors, name='get_supervisors'),
 
+    path('daily-entry/', views.DailyEntryListTemplateView.as_view(), name='daily_entry_list'),
+    path('daily-entry/add/', views.DailyEntryFormTemplateView.as_view(), name='daily_entry_add'),
+    path('daily_entry_api/', views.DailyEntryAPI.as_view(), name='daily_entry_api_list'),
+    path('daily_entry_api/group-delete/', views.daily_entry_group_delete, name='daily_entry_group_delete'),
+    path('daily_entry_api/<int:id>/', views.DailyEntryAPI.as_view(), name='daily_entry_api'),
+    path('daily-entry/farm-lookup/', views.daily_entry_farm_lookup, name='daily_entry_farm_lookup'),
+    path('daily-entry/stock-lookup/', views.daily_entry_stock_lookup, name='daily_entry_stock_lookup'),
+
+    path('daily-entry/single/', views.SingleBatchDailyEntryListTemplateView.as_view(), name='daily_entry_single_list'),
+    path('daily-entry/single/add/', views.SingleBatchDailyEntryFormTemplateView.as_view(), name='daily_entry_single_add'),
+
+    path('medicine-entry/', views.MedicineEntryListTemplateView.as_view(), name='medicine_entry_list'),
+    path('medicine-entry/add/', views.MedicineEntryFormTemplateView.as_view(), name='medicine_entry_add'),
+    path('medicine_entry_api/', views.MedicineEntryAPI.as_view(), name='medicine_entry_api_list'),
+    path('medicine_entry_api/group-delete/', views.medicine_entry_group_delete, name='medicine_entry_group_delete'),
+    path('medicine_entry_api/<int:id>/', views.MedicineEntryAPI.as_view(), name='medicine_entry_api'),
+    path('medicine-entry/farm-lookup/', views.medicine_entry_farm_lookup, name='medicine_entry_farm_lookup'),
+    path('medicine-entry/item-lookup/', views.medicine_entry_item_lookup, name='medicine_entry_item_lookup'),
+    path('medicine-entry/stock-lookup/', views.medicine_entry_stock_lookup, name='medicine_entry_stock_lookup'),
 ]

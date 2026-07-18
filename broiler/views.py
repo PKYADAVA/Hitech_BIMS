@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.http import Http404, JsonResponse
-from django.db.models import F, Prefetch
+from django.db.models import F, Prefetch, Q
 from django.core.files.storage import default_storage
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -14,9 +14,14 @@ from django.core.cache import cache
 from django.conf import settings
 from .models import (
     Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
-    BroilerFarmShed, BroilerLine, Farmer, FarmerGroup, Region, Supervisor,
+    BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup, MedicineVaccineEntry,
+    Region, Supervisor,
 )
 from account.models import ChartOfAccount
+from inventory.models import Item
+from decimal import Decimal
+from datetime import timedelta
+from django.utils import timezone
 import json
 import logging
 
@@ -1007,3 +1012,567 @@ def get_supervisors(request) -> JsonResponse:
         logger.error(f"Error in get_supervisors: {str(e)}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
 
+
+
+# ---------------------------------------------------------------------------
+# Daily Entry (Broiler > Transactions)
+# ---------------------------------------------------------------------------
+
+def _daily_entry_to_dict(row):
+    return {
+        "id": row.id, "date": row.date.isoformat(), "entry_no": row.entry_no,
+        "branch_name": row.farm.branch.branch_name, "farm": row.farm_id,
+        "farm_name": row.farm.farm_name,
+        "batch": row.batch_id, "batch_name": row.batch.batch_name if row.batch_id else "",
+        "age_days": row.age_days, "mortality": row.mortality, "culls": row.culls,
+        "feed_1": row.feed_1_id, "feed_1_name": row.feed_1.item_code if row.feed_1_id else "",
+        "feed_1_qty": str(row.feed_1_qty), "feed_1_stock": str(row.feed_1_stock),
+        "feed_2": row.feed_2_id, "feed_2_name": row.feed_2.item_code if row.feed_2_id else "",
+        "feed_2_qty": str(row.feed_2_qty), "feed_2_stock": str(row.feed_2_stock),
+        "avg_weight_gms": str(row.avg_weight_gms), "remarks": row.remarks,
+        "is_active": row.is_batch_active,
+        "entry_by": row.entry_by.username if row.entry_by_id else "",
+        "entry_time": timezone.localtime(row.entry_time).strftime("%Y-%m-%d %H:%M") if row.entry_time else "",
+    }
+
+
+def _active_batch_for_farm(farm_id):
+    return (BroilerBatch.objects.filter(broiler_farm_id=farm_id, end_date__isnull=True)
+            .order_by('-start_date', '-id').first()
+            or BroilerBatch.objects.filter(broiler_farm_id=farm_id).order_by('-start_date', '-id').first())
+
+
+def _apply_daily_entry_row(instance, row, entry_date, user, default_farm_id=None):
+    # Daily Entry sends farm per row; Single Batch Daily Entry fixes one farm
+    # for the whole submission and only varies date/mortality/etc per row —
+    # default_farm_id backs a row that omits its own "farm".
+    farm_id = row.get("farm") or default_farm_id
+    if row.get("date"):
+        entry_date = timezone.datetime.fromisoformat(row["date"]).date()
+    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    instance.date = entry_date
+    instance.farm_id = farm_id
+    instance.batch = batch
+    if batch and batch.start_date:
+        # Placement day is Age 0; the first entry day (the day after
+        # placement) is Age 1.
+        instance.age_days = max((entry_date - batch.start_date).days, 0)
+    else:
+        instance.age_days = 0
+    instance.mortality = int(row.get("mortality") or 0)
+    instance.culls = int(row.get("culls") or 0)
+    instance.feed_1_id = row.get("feed_1") or None
+    instance.feed_1_qty = Decimal(str(row.get("feed_1_qty") or 0))
+    instance.feed_2_id = row.get("feed_2") or None
+    instance.feed_2_qty = Decimal(str(row.get("feed_2_qty") or 0))
+    instance.avg_weight_gms = Decimal(str(row.get("avg_weight_gms") or 0))
+    instance.remarks = row.get("remarks") or ""
+    if not instance.pk:
+        instance.entry_by = user
+    prev1 = DailyEntry.previous_stock(farm_id, instance.feed_1_id, entry_date, instance.pk)
+    instance.feed_1_stock = Decimal(str(prev1)) - instance.feed_1_qty if instance.feed_1_id else 0
+    prev2 = DailyEntry.previous_stock(farm_id, instance.feed_2_id, entry_date, instance.pk)
+    instance.feed_2_stock = Decimal(str(prev2)) - instance.feed_2_qty if instance.feed_2_id else 0
+
+
+def _recompute_stock_chain(farm_id, item_id):
+    """Recomputes feed_1_stock/feed_2_stock for every entry of this farm
+    that touches item_id, walking chronologically from an opening balance of
+    0. Needed after an edit changes a row's date, Kgs, or feed item, since
+    every later row's opening balance is the previous row's closing balance
+    — without this, only the edited row itself would reflect the change and
+    every row after it would silently keep its stale, pre-edit stock."""
+    if not farm_id or not item_id:
+        return
+    qs = (DailyEntry.objects.filter(farm_id=farm_id)
+          .filter(Q(feed_1_id=item_id) | Q(feed_2_id=item_id))
+          .order_by('date', 'id'))
+    running = Decimal('0')
+    for r in qs:
+        changed = False
+        if r.feed_1_id == item_id:
+            running -= r.feed_1_qty
+            if r.feed_1_stock != running:
+                r.feed_1_stock = running
+                changed = True
+        if r.feed_2_id == item_id:
+            running -= r.feed_2_qty
+            if r.feed_2_stock != running:
+                r.feed_2_stock = running
+                changed = True
+        if changed:
+            r.save(update_fields=["feed_1_stock", "feed_2_stock"])
+
+
+@method_decorator(login_required, name="dispatch")
+class DailyEntryListTemplateView(View):
+    def get(self, request):
+        return render(request, "daily_entry_list.html", {
+            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "items": Item.objects.order_by("item_code"),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class SingleBatchDailyEntryListTemplateView(View):
+    def get(self, request):
+        return render(request, "daily_entry_single_list.html", {
+            "items": Item.objects.order_by("item_code"),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class SingleBatchDailyEntryFormTemplateView(View):
+    def get(self, request):
+        return render(request, "daily_entry_single_form.html", {
+            "supervisors": Supervisor.objects.order_by("name"),
+            "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+            "items": Item.objects.order_by("item_code"),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class DailyEntryFormTemplateView(View):
+    def get(self, request):
+        return render(request, "daily_entry_form.html", {
+            "supervisors": Supervisor.objects.order_by("name"),
+            "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+            "items": Item.objects.order_by("item_code"),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class DailyEntryAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                row = DailyEntry.objects.select_related("farm__branch", "batch", "feed_1", "feed_2").get(id=id)
+                return JsonResponse(_daily_entry_to_dict(row))
+
+            qs = DailyEntry.objects.select_related("farm__branch", "batch", "feed_1", "feed_2")
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            status = (request.GET.get("status") or "").strip()
+            farm_id = (request.GET.get("farm") or "").strip()
+            batch_id = (request.GET.get("batch") or "").strip()
+            nobatch_farm_id = (request.GET.get("nobatch_farm") or "").strip()
+            if from_date:
+                qs = qs.filter(date__gte=from_date)
+            if to_date:
+                qs = qs.filter(date__lte=to_date)
+            if farm_id:
+                qs = qs.filter(farm_id=farm_id)
+            if batch_id:
+                qs = qs.filter(batch_id=batch_id)
+            if nobatch_farm_id:
+                qs = qs.filter(farm_id=nobatch_farm_id, batch__isnull=True)
+            if status == "Active":
+                qs = qs.filter(batch__end_date__isnull=True)
+            elif status == "Inactive":
+                qs = qs.filter(batch__end_date__isnull=False)
+            return JsonResponse([_daily_entry_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request) -> JsonResponse:
+        try:
+            data = json.loads(request.body)
+            supervisor_id = data.get("supervisor")
+            default_farm_id = data.get("farm")  # Single Batch Daily Entry: one farm for the whole submission
+            rows = data.get("rows") or []
+            if not supervisor_id:
+                return JsonResponse({"error": "Supervisor is required"}, status=400)
+            if not rows:
+                return JsonResponse({"error": "Add at least one entry row"}, status=400)
+            entry_date = data.get("date") or timezone.localdate().isoformat()
+            created = []
+            for row in rows:
+                if not (row.get("farm") or default_farm_id):
+                    continue
+                instance = DailyEntry(supervisor_id=supervisor_id)
+                _apply_daily_entry_row(instance, row, timezone.datetime.fromisoformat(entry_date).date(),
+                                       request.user, default_farm_id=default_farm_id)
+                instance.full_clean(exclude=["entry_no", "batch"])
+                instance.save()
+                created.append(instance.id)
+                # A backdated row can land ahead of already-saved later rows
+                # in the chain; recompute so every row's stored stock reflects
+                # its true chronological position, not just the ones after it
+                # at the moment each was individually inserted.
+                _recompute_stock_chain(instance.farm_id, instance.feed_1_id)
+                _recompute_stock_chain(instance.farm_id, instance.feed_2_id)
+            if not created:
+                return JsonResponse({"error": "Add at least one entry row with a Farm selected"}, status=400)
+            return JsonResponse({"message": "Daily entries created", "ids": created}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            instance = DailyEntry.objects.get(id=id)
+            old_feed_ids = {instance.feed_1_id, instance.feed_2_id}
+            data = json.loads(request.body)
+            if data.get("supervisor"):
+                instance.supervisor_id = data["supervisor"]
+            entry_date = instance.date
+            if data.get("date"):
+                entry_date = timezone.datetime.fromisoformat(data["date"]).date()
+            # Farm isn't editable from the edit modal (it's the grouping key),
+            # so fall back to the row's existing farm rather than letting a
+            # payload without "farm" wipe it out.
+            _apply_daily_entry_row(instance, data, entry_date, request.user, default_farm_id=instance.farm_id)
+            instance.full_clean(exclude=["entry_no", "batch"])
+            instance.save()
+            # Editing this row's date/Kgs/feed item invalidates the stored
+            # closing stock of every later row chained after it — recompute
+            # both the old and new feed items' full chains, not just this row.
+            for item_id in old_feed_ids | {instance.feed_1_id, instance.feed_2_id}:
+                _recompute_stock_chain(instance.farm_id, item_id)
+            return JsonResponse({"message": "Daily entry updated"})
+        except DailyEntry.DoesNotExist:
+            raise Http404("Daily entry not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            instance = DailyEntry.objects.get(id=id)
+            # Deleting a middle entry would leave every later row's stored
+            # stock chained off a balance that no longer exists — restrict
+            # deletion to the most recent entry in the batch (or, for entries
+            # with no batch, the most recent for that farm) so entries can
+            # only be removed newest-first, back toward older ones.
+            group_filter = ({"batch_id": instance.batch_id} if instance.batch_id
+                             else {"farm_id": instance.farm_id, "batch_id": None})
+            newer_exists = (DailyEntry.objects.filter(**group_filter).exclude(id=instance.id)
+                             .filter(Q(date__gt=instance.date) | (Q(date=instance.date) & Q(id__gt=instance.id)))
+                             .exists())
+            if newer_exists:
+                return JsonResponse(
+                    {"error": "Only the most recent entry in this batch can be deleted. Delete newer entries first."},
+                    status=400)
+            instance.delete()
+            return JsonResponse({"message": "Daily entry deleted"})
+        except DailyEntry.DoesNotExist:
+            raise Http404("Daily entry not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def daily_entry_farm_lookup(request):
+    """Returns the active batch/age for a farm, for the Add form's
+    auto-filled Batch/Age fields as soon as a Farm is picked. ``next_date``
+    continues the day after this farm's most recently saved entry (so
+    backfilling picks up where it left off), falling back to today when
+    there's no prior entry."""
+    farm_id = request.GET.get("farm")
+    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    age_days = 0
+    if batch and batch.start_date:
+        # Placement day is Age 0; the first entry day (the day after
+        # placement) is Age 1.
+        age_days = max((timezone.localdate() - batch.start_date).days, 0)
+
+    last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by('-date', '-id').first()
+                 if farm_id else None)
+    next_date = (last_entry.date + timedelta(days=1)) if last_entry else timezone.localdate()
+
+    return JsonResponse({
+        "batch": batch.id if batch else None,
+        "batch_name": batch.batch_name if batch else "",
+        "age_days": age_days,
+        "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
+        "next_date": next_date.isoformat(),
+    })
+
+
+@login_required
+def daily_entry_stock_lookup(request):
+    """Opening stock for a farm+feed item as of a given date — i.e. the
+    closing balance of the most recent saved entry before that date (0 if
+    none). Used to seed the Add form's live running-stock preview; the grid
+    itself then subtracts each row's own Kgs client-side as you type."""
+    farm_id = request.GET.get("farm")
+    item_id = request.GET.get("item")
+    entry_date = request.GET.get("date")
+    if not farm_id or not item_id or not entry_date:
+        return JsonResponse({"stock": "0"})
+    d = timezone.datetime.fromisoformat(entry_date).date()
+    stock = DailyEntry.previous_stock(farm_id, int(item_id), d, None)
+    return JsonResponse({"stock": str(stock)})
+
+
+# ---------------------------------------------------------------------------
+# Medicine Vaccine Consumption (Broiler > Transactions)
+# ---------------------------------------------------------------------------
+
+def _medicine_entry_to_dict(row):
+    return {
+        "id": row.id, "date": row.date.isoformat(), "entry_no": row.entry_no,
+        "branch_name": row.farm.branch.branch_name, "farm": row.farm_id,
+        "farm_name": row.farm.farm_name,
+        "batch": row.batch_id, "batch_name": row.batch.batch_name if row.batch_id else "",
+        "age_days": row.age_days,
+        "item": row.item_id, "item_name": row.item.item_code if row.item_id else "",
+        "unit": row.item.consumption_uom if row.item_id else "",
+        "qty": str(row.qty), "stock": str(row.stock),
+        "remarks": row.remarks,
+        "is_active": row.is_batch_active,
+        "entry_by": row.entry_by.username if row.entry_by_id else "",
+        "entry_time": timezone.localtime(row.entry_time).strftime("%Y-%m-%d %H:%M") if row.entry_time else "",
+    }
+
+
+def _apply_medicine_entry_row(instance, row, entry_date, user):
+    farm_id = row.get("farm") or instance.farm_id
+    if row.get("date"):
+        entry_date = timezone.datetime.fromisoformat(row["date"]).date()
+    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    instance.date = entry_date
+    instance.farm_id = farm_id
+    instance.batch = batch
+    if batch and batch.start_date:
+        # Placement day is Age 0; the first entry day (the day after
+        # placement) is Age 1.
+        instance.age_days = max((entry_date - batch.start_date).days, 0)
+    else:
+        instance.age_days = 0
+    instance.item_id = row.get("item") or None
+    instance.qty = Decimal(str(row.get("qty") or 0))
+    instance.remarks = row.get("remarks") or ""
+    if not instance.pk:
+        instance.entry_by = user
+    prev = MedicineVaccineEntry.previous_stock(farm_id, instance.item_id, entry_date, instance.pk)
+    instance.stock = Decimal(str(prev)) - instance.qty if instance.item_id else 0
+
+
+def _recompute_medicine_stock_chain(farm_id, item_id):
+    """Recomputes stock for every medicine/vaccine entry of this farm that
+    touches item_id, walking chronologically from an opening balance of 0.
+    See _recompute_stock_chain (Daily Entry) for the full rationale."""
+    if not farm_id or not item_id:
+        return
+    qs = (MedicineVaccineEntry.objects.filter(farm_id=farm_id, item_id=item_id)
+          .order_by('date', 'id'))
+    running = Decimal('0')
+    for r in qs:
+        running -= r.qty
+        if r.stock != running:
+            r.stock = running
+            r.save(update_fields=["stock"])
+
+
+@method_decorator(login_required, name="dispatch")
+class MedicineEntryListTemplateView(View):
+    def get(self, request):
+        return render(request, "medicine_entry_list.html", {
+            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "items": Item.objects.order_by("item_code"),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class MedicineEntryFormTemplateView(View):
+    def get(self, request):
+        return render(request, "medicine_entry_form.html", {
+            "supervisors": Supervisor.objects.order_by("name"),
+            "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+            "items": Item.objects.order_by("item_code"),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class MedicineEntryAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                row = MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item").get(id=id)
+                return JsonResponse(_medicine_entry_to_dict(row))
+
+            qs = MedicineVaccineEntry.objects.select_related("farm__branch", "batch", "item")
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            status = (request.GET.get("status") or "").strip()
+            farm_id = (request.GET.get("farm") or "").strip()
+            batch_id = (request.GET.get("batch") or "").strip()
+            nobatch_farm_id = (request.GET.get("nobatch_farm") or "").strip()
+            if from_date:
+                qs = qs.filter(date__gte=from_date)
+            if to_date:
+                qs = qs.filter(date__lte=to_date)
+            if farm_id:
+                qs = qs.filter(farm_id=farm_id)
+            if batch_id:
+                qs = qs.filter(batch_id=batch_id)
+            if nobatch_farm_id:
+                qs = qs.filter(farm_id=nobatch_farm_id, batch__isnull=True)
+            if status == "Active":
+                qs = qs.filter(batch__end_date__isnull=True)
+            elif status == "Inactive":
+                qs = qs.filter(batch__end_date__isnull=False)
+            return JsonResponse([_medicine_entry_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request) -> JsonResponse:
+        try:
+            data = json.loads(request.body)
+            supervisor_id = data.get("supervisor")
+            rows = data.get("rows") or []
+            if not supervisor_id:
+                return JsonResponse({"error": "Supervisor is required"}, status=400)
+            if not rows:
+                return JsonResponse({"error": "Add at least one entry row"}, status=400)
+            entry_date = data.get("date") or timezone.localdate().isoformat()
+            created = []
+            for row in rows:
+                if not row.get("farm"):
+                    continue
+                instance = MedicineVaccineEntry(supervisor_id=supervisor_id)
+                _apply_medicine_entry_row(instance, row, timezone.datetime.fromisoformat(entry_date).date(), request.user)
+                instance.full_clean(exclude=["entry_no", "batch"])
+                instance.save()
+                created.append(instance.id)
+                _recompute_medicine_stock_chain(instance.farm_id, instance.item_id)
+            if not created:
+                return JsonResponse({"error": "Add at least one entry row with a Farm selected"}, status=400)
+            return JsonResponse({"message": "Medicine/Vaccine entries created", "ids": created}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            instance = MedicineVaccineEntry.objects.get(id=id)
+            old_item_id = instance.item_id
+            data = json.loads(request.body)
+            if data.get("supervisor"):
+                instance.supervisor_id = data["supervisor"]
+            entry_date = instance.date
+            if data.get("date"):
+                entry_date = timezone.datetime.fromisoformat(data["date"]).date()
+            _apply_medicine_entry_row(instance, data, entry_date, request.user)
+            instance.full_clean(exclude=["entry_no", "batch"])
+            instance.save()
+            for item_id in {old_item_id, instance.item_id}:
+                _recompute_medicine_stock_chain(instance.farm_id, item_id)
+            return JsonResponse({"message": "Medicine/Vaccine entry updated"})
+        except MedicineVaccineEntry.DoesNotExist:
+            raise Http404("Medicine/Vaccine entry not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            instance = MedicineVaccineEntry.objects.get(id=id)
+            # Same tail-only rule as Daily Entry: deleting a middle entry
+            # would leave every later row's stored stock chained off a
+            # balance that no longer exists.
+            group_filter = ({"batch_id": instance.batch_id} if instance.batch_id
+                             else {"farm_id": instance.farm_id, "batch_id": None})
+            newer_exists = (MedicineVaccineEntry.objects.filter(**group_filter).exclude(id=instance.id)
+                             .filter(Q(date__gt=instance.date) | (Q(date=instance.date) & Q(id__gt=instance.id)))
+                             .exists())
+            if newer_exists:
+                return JsonResponse(
+                    {"error": "Only the most recent entry in this batch can be deleted. Delete newer entries first."},
+                    status=400)
+            instance.delete()
+            return JsonResponse({"message": "Medicine/Vaccine entry deleted"})
+        except MedicineVaccineEntry.DoesNotExist:
+            raise Http404("Medicine/Vaccine entry not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def medicine_entry_farm_lookup(request):
+    """Returns the active batch/age for a farm, for the Add form's
+    auto-filled Batch/Age fields as soon as a Farm is picked."""
+    farm_id = request.GET.get("farm")
+    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    age_days = 0
+    if batch and batch.start_date:
+        age_days = max((timezone.localdate() - batch.start_date).days, 0)
+    return JsonResponse({
+        "batch": batch.id if batch else None,
+        "batch_name": batch.batch_name if batch else "",
+        "age_days": age_days,
+        "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
+    })
+
+
+@login_required
+def medicine_entry_item_lookup(request):
+    """Unit (consumption UOM) for a selected Medicine/Vaccine item, for the
+    Add form's auto-filled Unit field."""
+    item_id = request.GET.get("item")
+    item = Item.objects.filter(id=item_id).first() if item_id else None
+    return JsonResponse({"unit": item.consumption_uom if item else ""})
+
+
+@login_required
+def medicine_entry_stock_lookup(request):
+    """Opening stock for a farm+item as of a given date — the closing
+    balance of the most recent saved entry before that date (0 if none)."""
+    farm_id = request.GET.get("farm")
+    item_id = request.GET.get("item")
+    entry_date = request.GET.get("date")
+    if not farm_id or not item_id or not entry_date:
+        return JsonResponse({"stock": "0"})
+    d = timezone.datetime.fromisoformat(entry_date).date()
+    stock = MedicineVaccineEntry.previous_stock(farm_id, int(item_id), d, None)
+    return JsonResponse({"stock": str(stock)})
+
+
+@login_required
+def daily_entry_group_delete(request):
+    """Bulk-deletes every Daily Entry / Single Batch Daily Entry row for one
+    batch (or, for entries with no active batch, one farm) at once — the
+    register's group-level Delete action. Safe to do in one shot regardless
+    of the tail-only rule on individual deletes, since wiping the whole
+    group at once leaves no later row anywhere still chained to it."""
+    if request.method != "DELETE":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    batch_id = (request.GET.get("batch") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    if batch_id:
+        qs = DailyEntry.objects.filter(batch_id=batch_id)
+    elif farm_id:
+        qs = DailyEntry.objects.filter(farm_id=farm_id, batch__isnull=True)
+    else:
+        return JsonResponse({"error": "batch or farm is required"}, status=400)
+    count = qs.count()
+    if not count:
+        return JsonResponse({"error": "No entries found for this batch"}, status=404)
+    qs.delete()
+    return JsonResponse({"message": f"Deleted {count} entries"})
+
+
+@login_required
+def medicine_entry_group_delete(request):
+    """Bulk-deletes every Medicine Vaccine Consumption row for one batch (or,
+    for entries with no active batch, one farm) at once. See
+    daily_entry_group_delete for the rationale."""
+    if request.method != "DELETE":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    batch_id = (request.GET.get("batch") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    if batch_id:
+        qs = MedicineVaccineEntry.objects.filter(batch_id=batch_id)
+    elif farm_id:
+        qs = MedicineVaccineEntry.objects.filter(farm_id=farm_id, batch__isnull=True)
+    else:
+        return JsonResponse({"error": "batch or farm is required"}, status=400)
+    count = qs.count()
+    if not count:
+        return JsonResponse({"error": "No entries found for this batch"}, status=404)
+    qs.delete()
+    return JsonResponse({"message": f"Deleted {count} entries"})

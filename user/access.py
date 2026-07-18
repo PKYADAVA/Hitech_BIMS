@@ -43,6 +43,14 @@ MODULE_REGISTRY = [
                     ("broiler_disease", "Broiler Disease"),
                 ],
             },
+            {
+                "label": "Transactions",
+                "tabs": [
+                    ("daily_entry_list", "Daily Entry"),
+                    ("medicine_entry_list", "Medicine Vaccine Consumption"),
+                    ("daily_entry_single_list", "Single Batch Daily Entry"),
+                ],
+            },
         ],
     },
     {
@@ -185,8 +193,18 @@ MODULE_REGISTRY = [
                     ("item_category", "Item Category"),
                     ("items", "Items"),
                     ("sector", "Sector"),
-                    ("warehouse", "Warehouse"),
-                    ("warehouse_mapping", "Warehouse Mapping"),
+                    ("warehouse", "Office"),
+                    ("warehouse_mapping", "Office Mapping"),
+                ],
+            },
+            {
+                "label": "Transactions",
+                "tabs": [
+                    ("stock_transfer_list", "Stock Transfer"),
+                    ("medicine_transfer_list", "Medicine Vaccine Transfer"),
+                    ("inventory_adjustment_list", "Inventory Adjustment"),
+                    ("stock_issue_list", "Stock Issued"),
+                    ("stock_receive_list", "Stock Received"),
                 ],
             },
         ],
@@ -402,6 +420,9 @@ _ACTION_BASE_TO_TAB = {
     "general_purchase": "general_purchase_list",
     "chicks_purchase": "chicks_purchase_list",
     "payment": "payment_list",
+    "daily_entry": "daily_entry_list",
+    "medicine_entry": "medicine_entry_list",
+    "daily_entry_single": "daily_entry_single_list",
     # Environmental monitoring
     "env_hub": "env_hub_list",
     "env_sensor": "env_sensor_list",
@@ -422,6 +443,11 @@ _ACTION_BASE_TO_TAB = {
     "item": "items",
     "warehouse": "warehouse",
     "sector": "sector",
+    "stock_transfer": "stock_transfer_list",
+    "medicine_transfer": "medicine_transfer_list",
+    "inventory_adjustment": "inventory_adjustment_list",
+    "stock_issue": "stock_issue_list",
+    "stock_receive": "stock_receive_list",
     # Picklist Master
     "picklist": "picklists",
     "picklist_value": "picklists",

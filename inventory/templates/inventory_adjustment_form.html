@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Inventory Adjustment — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_transaction_subnavbar.html' with active_tab='inventory_adjustment' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-sliders-h"></i> <span id="page-title-text">Add Inventory Adjustment</span></div>
+  <div class="page-header-right"><a href="{% url 'inventory_adjustment_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+{% if messages %}
+<div class="mx-auto mb-3" style="max-width:1100px">
+  {% for message in messages %}
+  <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form id="inventory-adjustment-form">
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="date" value="{{ today }}" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Bill No.</label>
+          <input type="text" class="form-control" id="bill-no">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Location/Warehouse <span class="text-danger">*</span></label>
+          <select class="form-select" id="location" required>
+            <option value="">select</option>
+            <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
+            <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+          </select>
+        </div>
+        <div class="col-md-2 d-none" id="location-batch-wrap">
+          <label class="form-label">Batch</label>
+          <select class="form-select" id="location-batch">
+            <option value="">select</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Chart of Account <span class="text-danger">*</span></label>
+          <select class="form-select" id="chart-of-account" required>
+            <option value="">select</option>
+            {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">
+      <i class="fas fa-list-ol me-1"></i><strong>Items</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="row-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:220px">Item <span class="text-danger">*</span></th>
+              <th style="min-width:80px">Unit</th>
+              <th style="min-width:110px">Add/Deduct <span class="text-danger">*</span></th>
+              <th style="min-width:100px">Quantity <span class="text-danger">*</span></th>
+              <th style="min-width:90px">Rate <span class="text-danger">*</span></th>
+              <th style="min-width:100px">Amount</th>
+              <th style="min-width:160px">Remarks</th>
+              <th style="min-width:100px">Stock</th>
+              <th style="min-width:90px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit" id="submit-btn">Submit</button>
+    <a href="{% url 'inventory_adjustment_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{{ item.storage_uom|escapejs }}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const typeOptions = `<option value="">select</option><option value="Add">Add</option><option value="Deduct">Deduct</option>`;
+const get = id => document.getElementById(id);
+const editId = new URLSearchParams(window.location.search).get('id');
+
+function parseLocation(value) {
+  if (!value) return null;
+  const [type, id] = value.split(':');
+  return { type, id };
+}
+
+// The Batch box beside Location only applies when Location is a Farm — a
+// Warehouse has no batches.
+async function refreshLocationBatchBox(selected) {
+  const wrap = get('location-batch-wrap');
+  const batchSelect = get('location-batch');
+  const loc = parseLocation(get('location').value);
+  if (!loc || loc.type !== 'farm') {
+    wrap.classList.add('d-none');
+    batchSelect.innerHTML = '<option value="">select</option>';
+    return;
+  }
+  wrap.classList.remove('d-none');
+  batchSelect.innerHTML = '<option value="">loading…</option>';
+  const resp = await fetch(`{% url 'inventory_adjustment_farm_batches' %}?farm=${loc.id}`);
+  const batches = await resp.json();
+  batchSelect.innerHTML = '<option value="">select</option>' + batches.map(b =>
+    `<option value="${b.id}">${b.batch_name}${b.is_active ? ' (Active)' : ''}</option>`).join('');
+  if (selected) { batchSelect.value = selected; }
+}
+
+function row(data = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="form-select item" required>${itemOptions}</select></td>
+    <td><input class="form-control bg-light uom" readonly></td>
+    <td><select class="form-select adjustment-type" required>${typeOptions}</select></td>
+    <td><input class="form-control quantity" type="number" min="0" step=".01" value="${data.quantity || 0}"></td>
+    <td><input class="form-control rate" type="number" min="0" step=".01" value="${data.rate || 0}"></td>
+    <td><input class="form-control bg-light amount" readonly value="0.00"></td>
+    <td><input class="form-control remarks" value="${data.remarks || ''}"></td>
+    <td><input class="form-control bg-light stock" readonly placeholder="auto"></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('row-table').tBodies[0].append(tr);
+  if (data.item) {
+    tr.querySelector('.item').value = data.item;
+    const opt = tr.querySelector('.item').selectedOptions[0];
+    tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
+  }
+  if (data.adjustment_type) tr.querySelector('.adjustment-type').value = data.adjustment_type;
+  calcAmount(tr);
+  refreshRowAddButtons();
+  return tr;
+}
+
+function calcAmount(tr) {
+  const qty = Number(tr.querySelector('.quantity').value) || 0;
+  const rate = Number(tr.querySelector('.rate').value) || 0;
+  tr.querySelector('.amount').value = (qty * rate).toFixed(2);
+}
+
+// Only the last row offers "+" (add another row); earlier rows just delete.
+// The sole remaining row can't be deleted — no "+" would be left to add one back.
+function refreshRowAddButtons() {
+  const rows = document.querySelectorAll('#row-table tbody tr');
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = rows.length === 1;
+  });
+}
+
+// Live running-stock preview at the header's Location, chained per item —
+// mirrors the opening-balance lookup the server uses on save. Add rows the
+// quantity onto the running opening balance; Deduct subtracts it.
+let stockPreviewToken = 0;
+async function recomputeStockPreview() {
+  const myToken = ++stockPreviewToken;
+  const loc = parseLocation(get('location').value);
+  const dateVal = get('date').value;
+  const rows = [...document.querySelectorAll('#row-table tbody tr')];
+  const openingCache = {};
+  const running = {};
+  for (const tr of rows) {
+    const itemId = tr.querySelector('.item').value;
+    const stockInput = tr.querySelector('.stock');
+    if (!loc || !itemId) { stockInput.value = ''; continue; }
+    if (!(itemId in running)) {
+      if (!(itemId in openingCache)) {
+        const resp = await fetch(`{% url 'inventory_adjustment_stock_lookup' %}?location_type=${loc.type}&location_id=${loc.id}&item=${itemId}&date=${dateVal}`);
+        const data = await resp.json();
+        if (myToken !== stockPreviewToken) return;
+        openingCache[itemId] = Number(data.stock) || 0;
+      }
+      running[itemId] = openingCache[itemId];
+    }
+    const qty = Number(tr.querySelector('.quantity').value) || 0;
+    const type = tr.querySelector('.adjustment-type').value;
+    running[itemId] += (type === 'Deduct') ? -qty : qty;
+    stockInput.value = running[itemId].toFixed(2);
+  }
+}
+
+get('row-table').addEventListener('change', e => {
+  if (e.target.classList.contains('item')) {
+    const tr = e.target.closest('tr');
+    const opt = e.target.selectedOptions[0];
+    tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
+    if (!editId) { tr.querySelector('.rate').value = opt ? (opt.dataset.rate || '0') : '0'; calcAmount(tr); }
+    recomputeStockPreview();
+  }
+  if (e.target.classList.contains('adjustment-type')) {
+    recomputeStockPreview();
+  }
+});
+get('row-table').addEventListener('input', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  if (e.target.classList.contains('quantity') || e.target.classList.contains('rate')) {
+    calcAmount(tr);
+  }
+  if (e.target.classList.contains('quantity')) { recomputeStockPreview(); }
+});
+get('row-table').addEventListener('click', e => {
+  if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
+    e.target.closest('tr').remove(); refreshRowAddButtons(); recomputeStockPreview();
+  }
+  if (e.target.closest('.add-row-inline')) { row(); recomputeStockPreview(); }
+});
+get('location').addEventListener('change', () => { refreshLocationBatchBox(); recomputeStockPreview(); });
+get('date').addEventListener('change', recomputeStockPreview);
+
+get('inventory-adjustment-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  const loc = parseLocation(get('location').value);
+  const chartOfAccount = get('chart-of-account').value;
+  if (!loc || !chartOfAccount) { alert('Select Location/Warehouse and Chart of Account.'); return; }
+
+  const items = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
+    item: tr.querySelector('.item').value,
+    adjustment_type: tr.querySelector('.adjustment-type').value,
+    quantity: tr.querySelector('.quantity').value,
+    rate: tr.querySelector('.rate').value,
+    remarks: tr.querySelector('.remarks').value,
+  }));
+  if (!items.length || items.some(r => !r.item || !r.adjustment_type)) {
+    alert('Add at least one item line with an Item and Add/Deduct selected.');
+    return;
+  }
+
+  const payload = {
+    date: get('date').value,
+    bill_no: get('bill-no').value,
+    location_type: loc.type, location_id: loc.id,
+    batch: loc.type === 'farm' ? get('location-batch').value : '',
+    chart_of_account: chartOfAccount,
+    items: items,
+  };
+
+  const url = editId ? `/inventory_adjustment_api/${editId}/` : "{% url 'inventory_adjustment_api_list' %}";
+  fetch(url, {
+    method: editId ? 'PUT' : 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+    body: JSON.stringify(payload),
+  }).then(async r => {
+    if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
+    window.location.href = "{% url 'inventory_adjustment_list' %}";
+  }).catch(err => alert(err.message));
+});
+
+async function loadForEdit() {
+  const resp = await fetch(`/inventory_adjustment_api/${editId}/`);
+  if (!resp.ok) { alert('Failed to load adjustment.'); return; }
+  const data = await resp.json();
+  get('page-title-text').textContent = 'Edit Inventory Adjustment';
+  get('submit-btn').textContent = 'Update';
+  get('date').value = data.date;
+  get('bill-no').value = data.bill_no;
+  get('location').value = data.location_type ? `${data.location_type}:${data.location_id}` : '';
+  get('chart-of-account').value = data.chart_of_account || '';
+  get('row-table').tBodies[0].innerHTML = '';
+  (data.items.length ? data.items : [{}]).forEach(row);
+  if (data.location_type === 'farm') { await refreshLocationBatchBox(data.batch || ''); }
+  recomputeStockPreview();
+}
+
+if (editId) {
+  loadForEdit();
+} else {
+  row();
+}
+</script>
+{% endblock %}

@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Warehouse Mapping{% endblock %}
+{% block title %}Office Mapping{% endblock %}
 
 {% block nav %}
 {% include 'main_top_navbar.html' with active_tab='inventory' %}
@@ -10,8 +10,8 @@
 {% include '_inventory_subnavbar.html' with active_tab='warehouse_mapping' %}
 
 <div class="page-header">
-    <div class="page-header-title">Warehouse Mapping</div>
-    <div class="page-header-right"><div class="page-header-subtitle">Map each Sector (warehouse) to its Broiler Branch, and each Hatchery to its Warehouse</div>{% if page_perms.add %}<button class="btn btn-primary" id="add-mapping-btn"><i class="fas fa-plus"></i> Add Mapping</button>{% endif %}</div>
+    <div class="page-header-title">Office Mapping</div>
+    <div class="page-header-right"><div class="page-header-subtitle">Map each Sector (office) to its Broiler Branch, and each Hatchery to its Office</div>{% if page_perms.add %}<button class="btn btn-primary" id="add-mapping-btn"><i class="fas fa-plus"></i> Add Mapping</button>{% endif %}</div>
 </div>
 
 <div class="card">
@@ -41,11 +41,11 @@
           <label class="form-label">Type <span class="text-danger">*</span></label>
           <select class="form-select" id="mapping-type">
             <option value="sector">Sector → Branch</option>
-            <option value="hatchery">Hatchery → Warehouse</option>
+            <option value="hatchery">Hatchery → Office</option>
           </select>
         </div>
         <div class="mb-3" id="sector-fields">
-          <label class="form-label">Sector (Warehouse) <span class="text-danger">*</span></label>
+          <label class="form-label">Sector (Office) <span class="text-danger">*</span></label>
           <select class="form-select mb-3" id="mapping-office"></select>
           <label class="form-label">Branch <span class="text-danger">*</span></label>
           <select class="form-select" id="mapping-branch"></select>
@@ -53,7 +53,7 @@
         <div class="mb-3 d-none" id="hatchery-fields">
           <label class="form-label">Hatchery <span class="text-danger">*</span></label>
           <select class="form-select mb-3" id="mapping-hatchery"></select>
-          <label class="form-label">Warehouse <span class="text-danger">*</span></label>
+          <label class="form-label">Office <span class="text-danger">*</span></label>
           <select class="form-select" id="mapping-warehouse"></select>
         </div>
       </div>
@@ -173,7 +173,7 @@ $(function () {
     } else {
       const hatcheryId = $("#mapping-hatchery").val();
       const officeId = $("#mapping-warehouse").val();
-      if (!hatcheryId || !officeId) { alert("Select both Hatchery and Warehouse."); return; }
+      if (!hatcheryId || !officeId) { alert("Select both Hatchery and Office."); return; }
       $.ajax({
         url: "{% url 'warehouse_mapping_save_hatchery' %}",
         type: "POST",

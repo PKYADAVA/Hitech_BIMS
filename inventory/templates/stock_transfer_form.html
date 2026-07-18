@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Stock Transfer — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_transaction_subnavbar.html' with active_tab='stock_transfer' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-right-left"></i> Add Inventory Transfer</div>
+  <div class="page-header-right"><a href="{% url 'stock_transfer_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+{% if messages %}
+<div class="mx-auto mb-3" style="max-width:1100px">
+  {% for message in messages %}
+  <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form id="stock-transfer-form">
+  <div class="card mb-3">
+    <div class="card-header">
+      <i class="fas fa-list-ol me-1"></i><strong>Inventory Transfers</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="row-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:130px">Date <span class="text-danger">*</span></th>
+              <th style="min-width:110px">Dc No.</th>
+              <th style="min-width:220px">Item <span class="text-danger">*</span></th>
+              <th style="min-width:90px">UOM</th>
+              <th style="min-width:100px">Stock</th>
+              <th style="min-width:100px">Quantity <span class="text-danger">*</span></th>
+              <th style="min-width:110px">Purchase Rate</th>
+              <th style="min-width:90px">Rate</th>
+              <th style="min-width:190px">From Location <span class="text-danger">*</span></th>
+              <th style="min-width:150px">Batch</th>
+              <th style="min-width:190px">To Location <span class="text-danger">*</span></th>
+              <th style="min-width:150px">Batch</th>
+              <th style="min-width:100px">Vehicle</th>
+              <th style="min-width:100px">Driver</th>
+              <th style="min-width:140px">Remarks</th>
+              <th style="min-width:90px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">Submit</button>
+    <a href="{% url 'stock_transfer_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{{ item.storage_uom|escapejs }}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const locationOptions = `<option value="">select</option>
+  <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
+  <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>`;
+const TODAY = "{{ today }}";
+const get = id => document.getElementById(id);
+
+function parseLocation(value) {
+  if (!value) return null;
+  const [type, id] = value.split(':');
+  return { type, id };
+}
+
+function row() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="form-control date" type="date" value="${TODAY}" required></td>
+    <td><input class="form-control dc-no"></td>
+    <td><select class="form-select item" required>${itemOptions}</select></td>
+    <td><input class="form-control bg-light uom" readonly></td>
+    <td><input class="form-control bg-light stock" readonly placeholder="auto"></td>
+    <td><input class="form-control quantity" type="number" min="0" step=".01" value="0"></td>
+    <td><input class="form-control bg-light purchase-rate" readonly value="0"></td>
+    <td><input class="form-control rate" type="number" min="0" step=".01" value="0"></td>
+    <td><select class="form-select from-location" required>${locationOptions}</select></td>
+    <td><select class="form-select from-batch" disabled><option value="">N/A</option></select></td>
+    <td><select class="form-select to-location" required>${locationOptions}</select></td>
+    <td><select class="form-select to-batch" disabled><option value="">N/A</option></select></td>
+    <td><input class="form-control vehicle-no"></td>
+    <td><input class="form-control driver-name"></td>
+    <td><input class="form-control remarks"></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('row-table').tBodies[0].append(tr);
+  refreshRowAddButtons();
+  return tr;
+}
+
+// Only the last row offers "+" (add another row); earlier rows just delete.
+// The sole remaining row can't be deleted — no "+" would be left to add one back.
+function refreshRowAddButtons() {
+  const rows = document.querySelectorAll('#row-table tbody tr');
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = rows.length === 1;
+  });
+}
+
+// Each Batch box only applies when its own side's Location is a Farm — a
+// Warehouse has no batches. Re-enabling/populating it is keyed off that
+// side's Location select (side is 'from' or 'to').
+async function refreshBatchBox(tr, side) {
+  const batchSelect = tr.querySelector(`.${side}-batch`);
+  const loc = parseLocation(tr.querySelector(`.${side}-location`).value);
+  if (!loc || loc.type !== 'farm') {
+    batchSelect.innerHTML = '<option value="">N/A</option>';
+    batchSelect.disabled = true;
+    return;
+  }
+  batchSelect.disabled = false;
+  batchSelect.innerHTML = '<option value="">loading…</option>';
+  const resp = await fetch(`{% url 'stock_transfer_farm_batches' %}?farm=${loc.id}`);
+  const batches = await resp.json();
+  batchSelect.innerHTML = '<option value="">select</option>' + batches.map(b =>
+    `<option value="${b.id}">${b.batch_name}${b.is_active ? ' (Active)' : ''}</option>`).join('');
+}
+
+// Live running-stock preview at the source (From Location), chained per
+// location(type+id)+item — mirrors the opening-balance lookup the server
+// uses when it actually saves the rows.
+let stockPreviewToken = 0;
+async function recomputeStockPreview() {
+  const myToken = ++stockPreviewToken;
+  const rows = [...document.querySelectorAll('#row-table tbody tr')];
+  const openingCache = {};
+  const running = {};
+  for (const tr of rows) {
+    const from = parseLocation(tr.querySelector('.from-location').value);
+    const dateVal = tr.querySelector('.date').value;
+    const itemId = tr.querySelector('.item').value;
+    const stockInput = tr.querySelector('.stock');
+    if (!from || !itemId) { stockInput.value = ''; continue; }
+    const key = `${from.type}:${from.id}:${itemId}`;
+    if (!(key in running)) {
+      if (!(key in openingCache)) {
+        const resp = await fetch(`{% url 'stock_transfer_stock_lookup' %}?location_type=${from.type}&location_id=${from.id}&item=${itemId}&date=${dateVal}`);
+        const data = await resp.json();
+        if (myToken !== stockPreviewToken) return;
+        openingCache[key] = Number(data.stock) || 0;
+      }
+      running[key] = openingCache[key];
+    }
+    const qty = Number(tr.querySelector('.quantity').value) || 0;
+    running[key] -= qty;
+    stockInput.value = running[key].toFixed(2);
+  }
+}
+
+get('row-table').addEventListener('change', e => {
+  if (e.target.classList.contains('item')) {
+    const tr = e.target.closest('tr');
+    const opt = e.target.selectedOptions[0];
+    tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
+    tr.querySelector('.purchase-rate').value = opt ? (opt.dataset.rate || '0') : '0';
+    recomputeStockPreview();
+  }
+  if (e.target.classList.contains('from-location')) {
+    refreshBatchBox(e.target.closest('tr'), 'from');
+    recomputeStockPreview();
+  }
+  if (e.target.classList.contains('to-location')) {
+    refreshBatchBox(e.target.closest('tr'), 'to');
+  }
+  if (e.target.classList.contains('date')) {
+    recomputeStockPreview();
+  }
+});
+
+get('row-table').addEventListener('input', e => {
+  if (e.target.classList.contains('quantity')) { recomputeStockPreview(); }
+});
+
+get('row-table').addEventListener('click', e => {
+  if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
+    e.target.closest('tr').remove(); refreshRowAddButtons(); recomputeStockPreview();
+  }
+  if (e.target.closest('.add-row-inline')) { row(); recomputeStockPreview(); }
+});
+
+get('stock-transfer-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  const trs = [...document.querySelectorAll('#row-table tbody tr')];
+  const rows = trs.map(tr => {
+    const from = parseLocation(tr.querySelector('.from-location').value);
+    const to = parseLocation(tr.querySelector('.to-location').value);
+    return {
+      date: tr.querySelector('.date').value,
+      dc_no: tr.querySelector('.dc-no').value,
+      item: tr.querySelector('.item').value,
+      quantity: tr.querySelector('.quantity').value,
+      purchase_rate: tr.querySelector('.purchase-rate').value,
+      rate: tr.querySelector('.rate').value,
+      from_location_type: from ? from.type : '',
+      from_location_id: from ? from.id : '',
+      from_batch: from && from.type === 'farm' ? tr.querySelector('.from-batch').value : '',
+      to_location_type: to ? to.type : '',
+      to_location_id: to ? to.id : '',
+      to_batch: to && to.type === 'farm' ? tr.querySelector('.to-batch').value : '',
+      vehicle_no: tr.querySelector('.vehicle-no').value,
+      driver_name: tr.querySelector('.driver-name').value,
+      remarks: tr.querySelector('.remarks').value,
+    };
+  });
+  if (!rows.length || rows.some(r => !r.item || !r.from_location_id || !r.to_location_id)) {
+    alert('Add at least one row with Item, From Location and To Location selected.');
+    return;
+  }
+  if (rows.some(r => r.from_location_type === r.to_location_type && r.from_location_id === r.to_location_id)) {
+    alert('From Location and To Location must be different.');
+    return;
+  }
+  fetch("{% url 'stock_transfer_api_list' %}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+    body: JSON.stringify({ rows: rows }),
+  }).then(async r => {
+    if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
+    window.location.href = "{% url 'stock_transfer_list' %}";
+  }).catch(err => alert(err.message));
+});
+
+row();
+</script>
+{% endblock %}

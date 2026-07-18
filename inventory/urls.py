@@ -4,8 +4,6 @@ from . import views
 
 urlpatterns = [
     path('warehouse/', views.warehouse, name='warehouse'),
-    path('warehouse/add/', views.warehouse_add, name='warehouse_add'),
-    path('warehouse/<int:id>/edit/', views.warehouse_edit, name='warehouse_edit'),
     path('sector/', views.sector, name='sector'),
     path('sectors/', views.SectorAPI.as_view(), name='sector_list'),
     path('create-sector/', views.SectorAPI.as_view(), name='sector_create'),
@@ -30,5 +28,42 @@ urlpatterns = [
     path('item/<int:id>/', views.ItemAPI.as_view(), name='item_update'),
     path('item/<int:id>/delete/', views.ItemAPI.as_view(), name='item_delete'),
 
-  
+    path('stock-transfer/', views.StockTransferListTemplateView.as_view(), name='stock_transfer_list'),
+    path('stock-transfer/add/', views.StockTransferFormTemplateView.as_view(), name='stock_transfer_add'),
+    path('stock_transfer_api/', views.StockTransferAPI.as_view(), name='stock_transfer_api_list'),
+    path('stock_transfer_api/<int:id>/', views.StockTransferAPI.as_view(), name='stock_transfer_api'),
+    path('stock-transfer/item-lookup/', views.stock_transfer_item_lookup, name='stock_transfer_item_lookup'),
+    path('stock-transfer/stock-lookup/', views.stock_transfer_stock_lookup, name='stock_transfer_stock_lookup'),
+    path('stock-transfer/farm-batches/', views.stock_transfer_farm_batches, name='stock_transfer_farm_batches'),
+
+    path('medicine-transfer/', views.MedicineTransferListTemplateView.as_view(), name='medicine_transfer_list'),
+    path('medicine-transfer/add/', views.MedicineTransferFormTemplateView.as_view(), name='medicine_transfer_add'),
+    path('medicine_transfer_api/', views.MedicineTransferAPI.as_view(), name='medicine_transfer_api_list'),
+    path('medicine_transfer_api/<int:id>/', views.MedicineTransferAPI.as_view(), name='medicine_transfer_api'),
+    path('medicine_transfer_api/bulk-update/', views.medicine_transfer_bulk_update, name='medicine_transfer_bulk_update'),
+    path('medicine-transfer/item-lookup/', views.medicine_transfer_item_lookup, name='medicine_transfer_item_lookup'),
+    path('medicine-transfer/stock-lookup/', views.medicine_transfer_stock_lookup, name='medicine_transfer_stock_lookup'),
+    path('medicine-transfer/farm-batches/', views.medicine_transfer_farm_batches, name='medicine_transfer_farm_batches'),
+
+    path('inventory-adjustment/', views.InventoryAdjustmentListTemplateView.as_view(), name='inventory_adjustment_list'),
+    path('inventory-adjustment/add/', views.InventoryAdjustmentFormTemplateView.as_view(), name='inventory_adjustment_add'),
+    path('inventory_adjustment_api/', views.InventoryAdjustmentAPI.as_view(), name='inventory_adjustment_api_list'),
+    path('inventory_adjustment_api/<int:id>/', views.InventoryAdjustmentAPI.as_view(), name='inventory_adjustment_api'),
+    path('inventory-adjustment/item-lookup/', views.inventory_adjustment_item_lookup, name='inventory_adjustment_item_lookup'),
+    path('inventory-adjustment/stock-lookup/', views.inventory_adjustment_stock_lookup, name='inventory_adjustment_stock_lookup'),
+    path('inventory-adjustment/farm-batches/', views.inventory_adjustment_farm_batches, name='inventory_adjustment_farm_batches'),
+
+    path('stock-issued/', views.StockIssueListTemplateView.as_view(), name='stock_issue_list'),
+    path('stock-issued/add/', views.StockIssueFormTemplateView.as_view(), name='stock_issue_add'),
+    path('stock_issue_api/', views.StockIssueAPI.as_view(), name='stock_issue_api_list'),
+    path('stock_issue_api/<int:id>/', views.StockIssueAPI.as_view(), name='stock_issue_api'),
+    path('stock-issued/item-lookup/', views.stock_issue_item_lookup, name='stock_issue_item_lookup'),
+    path('stock-issued/farm-batches/', views.stock_issue_farm_batches, name='stock_issue_farm_batches'),
+
+    path('stock-received/', views.StockReceiveListTemplateView.as_view(), name='stock_receive_list'),
+    path('stock-received/add/', views.StockReceiveFormTemplateView.as_view(), name='stock_receive_add'),
+    path('stock_receive_api/', views.StockReceiveAPI.as_view(), name='stock_receive_api_list'),
+    path('stock_receive_api/<int:id>/', views.StockReceiveAPI.as_view(), name='stock_receive_api'),
+    path('stock-received/item-lookup/', views.stock_receive_item_lookup, name='stock_receive_item_lookup'),
+    path('stock-received/farm-batches/', views.stock_receive_farm_batches, name='stock_receive_farm_batches'),
 ]

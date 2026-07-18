@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}Single Batch Daily Entry - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_broiler_transaction_subnavbar.html' with active_tab='daily_entry_single' %}
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-layer-group"></i> Single Batch Daily Entry</div>
+    <div class="page-header-subtitle">Backfill multiple days for one farm/batch in a single session</div>
+  </div>
+  <div class="page-header-right">
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'daily_entry_single_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Status:</label>
+        <select class="form-select" id="status">
+          <option value="">-All-</option>
+          <option value="Active" selected>Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+        <button type="button" class="btn btn-outline-secondary" id="filter-clear">Clear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-bordered mb-0" id="groups-table" style="width:100%">
+      <thead class="table-dark">
+        <tr><th></th><th>Farm</th><th>Batch</th><th>Status</th><th>Entries</th><th class="text-center">Action</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="edit-form">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Day Record</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="edit-id">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Date</label>
+              <input type="date" class="form-control" id="edit-date" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Mortality</label>
+              <input type="number" min="0" step="1" class="form-control" id="edit-mortality" value="0">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Culls</label>
+              <input type="number" min="0" step="1" class="form-control" id="edit-culls" value="0">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Feed 1</label>
+              <select class="form-select" id="edit-feed-1">
+                <option value="">select</option>
+                {% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Kgs</label>
+              <input type="number" min="0" step=".01" class="form-control" id="edit-kgs-1" value="0">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Feed 2</label>
+              <select class="form-select" id="edit-feed-2">
+                <option value="">select</option>
+                {% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Kgs</label>
+              <input type="number" min="0" step=".01" class="form-control" id="edit-kgs-2" value="0">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Avg. Wt. (Gms)</label>
+              <input type="number" min="0" step=".01" class="form-control" id="edit-avg-wt" value="0">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Remarks</label>
+              <input type="text" class="form-control" id="edit-remarks">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this daily entry?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn"><i class="fas fa-trash me-1"></i>Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Group Delete Modal -->
+<div class="modal fade" id="groupDeleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete Entire Batch</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>This will permanently delete <strong id="group-delete-count"></strong> entries for <strong id="group-delete-label"></strong>. This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-group-delete-btn"><i class="fas fa-trash me-1"></i>Delete All</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let pendingDeleteId = null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function groupKey(r) { return r.batch ? `batch-${r.batch}` : `farm-${r.farm}`; }
+
+  const deepLinkParams = new URLSearchParams(window.location.search);
+  const deepLinkBatch = deepLinkParams.get("batch");
+  const deepLinkNoBatchFarm = deepLinkParams.get("nobatch_farm");
+
+  // The expanded detail content for one batch group — DataTables' official
+  // "child rows" pattern (row.child(...).show()), which is what gives us a
+  // real DataTable (search box, Copy/CSV/Excel/PDF/Print/Column visibility,
+  // like every other module's register) while still supporting a per-batch
+  // expand/collapse. ``g.rows`` is the batch's FULL history (not
+  // date-filtered), so opening a group always shows every entry ever made
+  // for it, not just the ones inside the current date search — the date
+  // filter only controls which batches qualify to appear at all.
+  function detailHtml(g) {
+    const lastId = g.rows[g.rows.length - 1].id;
+    const rowsHtml = g.rows.map(function (r) {
+      const feedQty = (Number(r.feed_1_qty) || 0) + (Number(r.feed_2_qty) || 0);
+      const canDelete = r.id === lastId;
+      // Only the newest entry in a group may be individually deleted —
+      // removing an older one would leave every later row's stored running
+      // stock chained off a balance that no longer exists.
+      const deleteBtn = canDelete
+        ? `{% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}`
+        : `{% if page_perms.delete %}<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Only the newest entry can be deleted"><i class="fas fa-trash"></i></button>{% endif %}`;
+      return `<tr>
+        <td>${escapeHtml(r.date)}</td>
+        <td>${escapeHtml(r.entry_no)}</td>
+        <td>${r.age_days}</td>
+        <td>${r.mortality}</td>
+        <td>${feedQty.toFixed(2)}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm edit-button" data-id="${r.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+            ${deleteBtn}
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+    return `
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered mb-0">
+          <thead class="table-light">
+            <tr><th>Date</th><th>Trnum</th><th>Age</th><th>Mortality</th><th>Feed Qty</th><th class="text-center">Action</th></tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // Initialized once, empty, right away — so the search box and
+  // Copy/CSV/Excel/PDF/Print/Column-visibility toolbar are always visible
+  // on page load, matching every other module's register, instead of only
+  // appearing once a search happens to return results.
+  const table = $("#groups-table").DataTable({
+    data: [],
+    order: [],
+    columns: [
+      { data: null, orderable: false, className: "dt-control", defaultContent: '<i class="fas fa-chevron-right group-chevron"></i>' },
+      { data: "farm_name" },
+      { data: "label" },
+      { data: "is_active", render: v => v ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' },
+      { data: "rows", render: rws => rws.length },
+      {
+        data: null, orderable: false, className: "text-center",
+        render: function (g) {
+          const editHref = g.batchId ? `?batch=${g.batchId}` : `?nobatch_farm=${g.farmId}`;
+          return `<div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="${editHref}" target="_blank" rel="noopener" title="Open batch in a new tab"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm group-delete-button" data-batch="${g.batchId}" data-farm="${g.farmId}" data-count="${g.rows.length}" data-label="${escapeHtml(g.farm_name)} — ${escapeHtml(g.label)}" title="Delete entire batch"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>`;
+        },
+      },
+    ],
+    dom: "Bfrtip",
+    buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+    language: { emptyTable: "No data available in table" },
+  });
+
+  function renderGroups(rows, qualifyingKeys) {
+    const groups = {};
+    rows.forEach(function (r) {
+      const key = groupKey(r);
+      if (!qualifyingKeys.has(key)) return;
+      if (!groups[key]) {
+        groups[key] = {
+          label: r.batch_name || "No Active Batch", farm_name: r.farm_name, is_active: r.is_active,
+          batchId: r.batch || "", farmId: r.farm, rows: [],
+        };
+      }
+      groups[key].rows.push(r);
+    });
+
+    Object.values(groups).forEach(function (g) {
+      g.rows.sort(function (a, b) { return a.date === b.date ? a.id - b.id : (a.date < b.date ? -1 : 1); });
+    });
+
+    const groupList = Object.values(groups).sort(function (a, b) {
+      const aLast = a.rows[a.rows.length - 1], bLast = b.rows[b.rows.length - 1];
+      return aLast.date === bLast.date ? bLast.id - aLast.id : (aLast.date < bLast.date ? 1 : -1);
+    });
+
+    table.clear();
+    table.rows.add(groupList);
+    table.draw();
+
+    // A batch/nobatch_farm query param (from a group's "open in new tab"
+    // link) means this tab exists to look at exactly one batch — expand it
+    // automatically instead of leaving it collapsed like a normal search.
+    if ((deepLinkBatch || deepLinkNoBatchFarm) && groupList.length) {
+      const firstRow = table.row(0);
+      if (firstRow.any()) {
+        $(firstRow.node()).find(".group-chevron").removeClass("fa-chevron-right").addClass("fa-chevron-down");
+        firstRow.child(detailHtml(firstRow.data())).show();
+      }
+    }
+  }
+
+  $("#groups-table tbody").on("click", "td.dt-control", function () {
+    const row = table.row($(this).closest("tr"));
+    const chevron = $(this).find(".group-chevron");
+    if (row.child.isShown()) {
+      row.child.hide();
+      chevron.removeClass("fa-chevron-down").addClass("fa-chevron-right");
+    } else {
+      row.child(detailHtml(row.data())).show();
+      chevron.removeClass("fa-chevron-right").addClass("fa-chevron-down");
+    }
+  });
+
+  function loadRows() {
+    const filterParams = { status: $("#status").val() };
+    if (deepLinkBatch) { filterParams.batch = deepLinkBatch; }
+    if (deepLinkNoBatchFarm) { filterParams.nobatch_farm = deepLinkNoBatchFarm; }
+    const dateParams = Object.assign({}, filterParams, { from_date: $("#from-date").val(), to_date: $("#to-date").val() });
+    $.getJSON("{% url 'daily_entry_api_list' %}", dateParams, function (filteredRows) {
+      const qualifyingKeys = new Set(filteredRows.map(groupKey));
+      if (!qualifyingKeys.size) { renderGroups([], qualifyingKeys); return; }
+      $.getJSON("{% url 'daily_entry_api_list' %}", filterParams, function (allRows) {
+        renderGroups(allRows, qualifyingKeys);
+      });
+    }).fail(function () {
+      alert("Failed to load daily entries.");
+    });
+  }
+
+  $("#filter-submit").on("click", loadRows);
+  $("#filter-clear").on("click", function () {
+    $("#from-date").val(today);
+    $("#to-date").val(today);
+    $("#status").val("Active");
+    loadRows();
+  });
+
+  let pendingGroupDelete = null;
+  $(document).on("click", ".group-delete-button", function () {
+    pendingGroupDelete = { batch: $(this).data("batch"), farm: $(this).data("farm") };
+    $("#group-delete-count").text($(this).data("count"));
+    $("#group-delete-label").text($(this).data("label"));
+    $("#groupDeleteConfirmationModal").modal("show");
+  });
+
+  $("#confirm-group-delete-btn").on("click", function () {
+    if (!pendingGroupDelete) return;
+    const params = pendingGroupDelete.batch
+      ? { batch: pendingGroupDelete.batch }
+      : { farm: pendingGroupDelete.farm };
+    $.ajax({
+      url: "{% url 'daily_entry_group_delete' %}?" + $.param(params),
+      type: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        $("#groupDeleteConfirmationModal").modal("hide");
+        loadRows();
+      },
+      error: function (xhr) {
+        $("#groupDeleteConfirmationModal").modal("hide");
+        alert(xhr.responseJSON?.error || "Failed to delete batch.");
+      },
+    });
+  });
+
+  $(document).on("click", ".edit-button", function () {
+    const id = $(this).data("id");
+    $.getJSON(`/daily_entry_api/${id}/`, function (r) {
+      $("#edit-id").val(r.id);
+      $("#edit-date").val(r.date);
+      $("#edit-mortality").val(r.mortality);
+      $("#edit-culls").val(r.culls);
+      $("#edit-feed-1").val(r.feed_1 || "");
+      $("#edit-kgs-1").val(r.feed_1_qty);
+      $("#edit-feed-2").val(r.feed_2 || "");
+      $("#edit-kgs-2").val(r.feed_2_qty);
+      $("#edit-avg-wt").val(r.avg_weight_gms);
+      $("#edit-remarks").val(r.remarks);
+      $("#editModal").modal("show");
+    }).fail(function () {
+      alert("Failed to load entry.");
+    });
+  });
+
+  $("#edit-form").on("submit", function (e) {
+    e.preventDefault();
+    const id = $("#edit-id").val();
+    $.ajax({
+      url: `/daily_entry_api/${id}/`,
+      type: "PUT",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({
+        date: $("#edit-date").val(),
+        mortality: $("#edit-mortality").val(),
+        culls: $("#edit-culls").val(),
+        feed_1: $("#edit-feed-1").val(),
+        feed_1_qty: $("#edit-kgs-1").val(),
+        feed_2: $("#edit-feed-2").val(),
+        feed_2_qty: $("#edit-kgs-2").val(),
+        avg_weight_gms: $("#edit-avg-wt").val(),
+        remarks: $("#edit-remarks").val(),
+      }),
+      success: function () {
+        $("#editModal").modal("hide");
+        loadRows();
+      },
+      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to update entry."); },
+    });
+  });
+
+  $(document).on("click", ".delete-button", function () {
+    pendingDeleteId = $(this).data("id");
+    $("#deleteConfirmationModal").modal("show");
+  });
+
+  $("#confirm-delete-btn").on("click", function () {
+    if (!pendingDeleteId) return;
+    $.ajax({
+      url: `/daily_entry_api/${pendingDeleteId}/`,
+      type: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        $("#deleteConfirmationModal").modal("hide");
+        loadRows();
+      },
+      error: function (xhr) {
+        $("#deleteConfirmationModal").modal("hide");
+        alert(xhr.responseJSON?.error || "Failed to delete entry.");
+      },
+    });
+  });
+
+  loadRows();
+});
+</script>
+{% endblock %}
