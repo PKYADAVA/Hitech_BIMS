@@ -10,9 +10,11 @@
  {% include '_user_management_subnavbar.html' with active_tab='picklists' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Picklists</div>
-    <div class="page-header-right">
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Picklists</div>
       <div class="page-header-subtitle">Define named lists of values that fields across the ERP can be bound to</div>
+    </div>
+    <div class="page-header-right">
       {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#picklistFormModal">
         <i class="fas fa-plus"></i> Add New Picklist
       </button>{% endif %}
@@ -110,7 +112,7 @@
         </form>
         <div class="table-responsive">
           <table class="table table-sm table-hover align-middle mb-0">
-            <thead class="table-dark"><tr><th>Value</th><th>Label</th><th>Sort</th><th>Active</th><th class="text-center">Actions</th></tr></thead>
+            <thead><tr><th>Value</th><th>Label</th><th>Sort</th><th>Active</th><th class="text-center">Actions</th></tr></thead>
             <tbody id="values_table_body"><tr><td colspan="5" class="text-center text-muted py-3">Loading…</td></tr></tbody>
           </table>
         </div>
@@ -127,7 +129,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="picklist-table">
-        <thead class="table-dark">
+        <thead>
           <tr><th>Key</th><th>Name</th><th>Source</th><th>Active</th><th class="text-center">Actions</th></tr>
         </thead>
         <tbody id="picklist-table-body"></tbody>
@@ -249,7 +251,7 @@ $(document).ready(function () {
         $('#picklistFormModal').modal('hide');
         loadPicklists();
       },
-      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save picklist.'); },
+      error: function (xhr) { window.showToast('danger', (xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save picklist.'); },
     });
   });
 
@@ -267,8 +269,8 @@ $(document).ready(function () {
     $('#picklistFormModal').modal('show');
   });
 
-  $(document).on('click', '.delete-picklist', function () {
-    if (!confirm('Delete this picklist? Any fields bound to it will fall back to free text.')) return;
+  $(document).on('click', '.delete-picklist', async function () {
+    if (!(await window.bimsConfirm('Delete this picklist? Any fields bound to it will fall back to free text.'))) return;
     $.ajax({ url: `/picklists/api/${$(this).data('id')}/delete/`, type: 'DELETE', headers: { 'X-CSRFToken': csrf() }, success: loadPicklists });
   });
 
@@ -322,7 +324,7 @@ $(document).ready(function () {
       headers: { 'X-CSRFToken': csrf() },
       data: JSON.stringify(payload),
       success: function () { resetValueForm(); loadValues(); },
-      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save value.'); },
+      error: function (xhr) { window.showToast('danger', (xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save value.'); },
     });
   });
   $(document).on('click', '.edit-value', function () {
@@ -342,13 +344,13 @@ $(document).ready(function () {
       headers: { 'X-CSRFToken': csrf() },
       data: JSON.stringify({ is_active: cb.is(':checked') }),
       error: function (xhr) {
-        alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to update status.');
+        window.showToast('danger', (xhr.responseJSON && xhr.responseJSON.error) || 'Unable to update status.');
         cb.prop('checked', !cb.is(':checked'));
       },
     });
   });
-  $(document).on('click', '.delete-value', function () {
-    if (!confirm('Delete this value?')) return;
+  $(document).on('click', '.delete-value', async function () {
+    if (!(await window.bimsConfirm('Delete this value?'))) return;
     $.ajax({ url: `/picklists/${currentPicklistId}/values/${$(this).data('id')}/delete/`, type: 'DELETE', headers: { 'X-CSRFToken': csrf() }, success: loadValues });
   });
 });

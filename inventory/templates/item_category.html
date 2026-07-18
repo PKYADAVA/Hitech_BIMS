@@ -10,14 +10,12 @@
 {% include '_inventory_subnavbar.html' with active_tab='item_category' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Categories</div>
-    <div class="page-header-subtitle">Add and manage item categories</div>
-</div>
-
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        {% if page_perms.add %}<button
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Categories</div>
+      <div class="page-header-subtitle">Add and manage item categories</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#categoryFormModal"
@@ -25,7 +23,9 @@
             <i class="fas fa-plus"></i> Add New Category
         </button>{% endif %}
     </div>
-    <!-- Modal Structure -->
+</div>
+
+<div class="row g-4">    <!-- Modal Structure -->
     <div
         class="modal fade"
         id="categoryFormModal"
@@ -88,7 +88,7 @@
                         class="table table-hover table-bordered mb-0"
                         id="category-table"
                     >
-                        <thead class="table-dark">
+                        <thead>
                             <tr>
                                 <th>Name</th>
                                 <th>Actions</th>
@@ -229,31 +229,31 @@
                     $("#categoryFormModal").modal("hide");
                     $("#category-form")[0].reset();
                     loadCategoryList();
-                    alert("Category added successfully!");
+                    window.showToast('success', "Category added successfully!");
                 },
                 error: function (xhr, status, error) {
                     console.error("Failed to add category:", error);
-                    alert("An error occurred while adding the category.");
+                    window.showToast('danger', "An error occurred while adding the category.");
                 },
             });
         });
 
         // Handle delete button click
-        $(document).on("click", ".delete-category", function () {
+        $(document).on("click", ".delete-category", async function () {
             const id = $(this).data("id");
             const csrfToken = "{{ csrf_token }}";
 
-            if (confirm("Are you sure you want to delete this category?")) {
+            if ((await window.bimsConfirm("Are you sure you want to delete this category?"))) {
                 $.ajax({
                     url: `/category/${id}/delete/`, // Construct delete URL
                     method: "DELETE",
                     headers: { "X-CSRFToken": csrfToken },
                     success: function () {
                         loadCategoryList();
-                        alert("Category deleted successfully!");
+                        window.showToast('success', "Category deleted successfully!");
                     },
                     error: function () {
-                        alert("An error occurred while deleting the category.");
+                        window.showToast('danger', "An error occurred while deleting the category.");
                     },
                 });
             }

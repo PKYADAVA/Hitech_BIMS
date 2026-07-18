@@ -11,15 +11,17 @@
 {% include '_subnav.html' with module='hatchery_master' active_tab='hatchery_creation' %}
 
 <div class="page-header">
-    <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
       <i class="fa-solid fa-kiwi-bird"></i>
       {% if hatchery %}Edit Hatchery{% else %}Add Hatchery{% endif %}
     </div>
-    <div class="page-header-right">
       <div class="page-header-subtitle">
       {% if hatchery %}Update this hatchery's details{% else %}Register a new hatchery facility/partner{% endif %}
     </div>
-        <a href="{% url 'hatchery_master_list' %}" class="btn btn-secondary">
+    </div>
+    <div class="page-header-right">
+      <a href="{% url 'hatchery_master_list' %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left"></i>
     Back to list
   </a>

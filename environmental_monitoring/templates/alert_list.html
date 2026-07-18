@@ -11,13 +11,15 @@
 {% include '_subnav.html' with module='environmental_monitoring' active_tab='alerts' %}
 
 <div class="page-header">
-  <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
     <i class="fas fa-bell"></i>
     Alerts
   </div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">Temperature, humidity, battery and connectivity alerts</div>
-    {% if alerts %}
+      <div class="page-header-subtitle">Temperature, humidity, battery and connectivity alerts</div>
+    </div>
+    <div class="page-header-right">
+      {% if alerts %}
     <form method="post" action="{% url 'env_alert_clear_all' %}"
           onsubmit="return confirm('Permanently delete all {{ alerts|length }} alert(s)? This cannot be undone.');">
       {% csrf_token %}
@@ -27,7 +29,7 @@
       </button>
     </form>
     {% endif %}
-  </div>
+    </div>
 </div>
 
 <div class="card">
@@ -38,7 +40,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table id="alertTable" class="table table-hover table-bordered mb-0">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Type</th>
             <th>Sensor / Hub</th>

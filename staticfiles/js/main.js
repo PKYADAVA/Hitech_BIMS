@@ -97,6 +97,96 @@ $.extend(true, $.fn.dataTable.defaults, {
   });
 })(jQuery);
 
+// ---------------------------------------------------------------------------
+// Shared UI helpers (design-system single source of truth). Pages currently
+// copy-paste their own showToast()/escapeHtml() locally; those local defs still
+// shadow these globals, so adding them here is non-breaking. New/refactored
+// pages can drop their duplicates and call window.showToast / window.escapeHtml
+// / window.bimsConfirm instead, keeping toast colours and confirm dialogs
+// consistent site-wide and sourced from the CSS tokens.
+// ---------------------------------------------------------------------------
+(function () {
+  // Solid token hexes (Toastify needs a colour string, not a CSS var).
+  var TOAST_BG = {
+    success: '#16a34a',
+    danger:  '#dc2626',
+    error:   '#dc2626',
+    warning: '#d97706',
+    info:    '#0891b2',
+    primary: '#2563eb'
+  };
+
+  window.escapeHtml = window.escapeHtml || function (unsafe) {
+    return (unsafe == null ? '' : String(unsafe))
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  window.showToast = window.showToast || function (type, message) {
+    if (typeof Toastify === 'undefined') { return; }
+    Toastify({
+      text: message,
+      duration: 3000,
+      gravity: 'top',
+      position: 'right',
+      close: true,
+      style: { background: TOAST_BG[type] || TOAST_BG.primary }
+    }).showToast();
+  };
+
+  // Promise-based, on-brand replacement for native confirm(). Usage:
+  //   window.bimsConfirm('Delete this record?').then(function (ok) { ... });
+  // Falls back to native confirm() if Bootstrap's modal isn't available.
+  window.bimsConfirm = function (message, opts) {
+    opts = opts || {};
+    var title = opts.title || 'Please confirm';
+    var confirmText = opts.confirmText || 'Confirm';
+    var cancelText = opts.cancelText || 'Cancel';
+    var danger = opts.danger !== false; // default to destructive styling
+    if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+      return Promise.resolve(window.confirm(message));
+    }
+    return new Promise(function (resolve) {
+      var el = document.createElement('div');
+      el.className = 'modal fade';
+      el.setAttribute('tabindex', '-1');
+      el.innerHTML =
+        '<div class="modal-dialog modal-dialog-centered">' +
+          '<div class="modal-content">' +
+            '<div class="modal-header' + (danger ? ' danger-header' : '') + '">' +
+              '<h5 class="modal-title"><i class="fas fa-' +
+                (danger ? 'triangle-exclamation' : 'circle-question') + ' me-2"></i>' +
+                window.escapeHtml(title) + '</h5>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+            '</div>' +
+            '<div class="modal-body">' + window.escapeHtml(message) + '</div>' +
+            '<div class="modal-footer">' +
+              '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">' +
+                window.escapeHtml(cancelText) + '</button>' +
+              '<button type="button" class="btn btn-' + (danger ? 'danger' : 'primary') +
+                '" data-bims-confirm>' + window.escapeHtml(confirmText) + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(el);
+      var modal = new bootstrap.Modal(el);
+      var confirmed = false;
+      el.querySelector('[data-bims-confirm]').addEventListener('click', function () {
+        confirmed = true;
+        modal.hide();
+      });
+      el.addEventListener('hidden.bs.modal', function () {
+        el.remove();
+        resolve(confirmed);
+      });
+      modal.show();
+    });
+  };
+})();
+
 $(document).ready(function () {
   $('#example').DataTable();
 

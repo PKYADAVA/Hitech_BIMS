@@ -13,22 +13,22 @@
  {% include '_sales_subnavbar.html' with active_tab='sales_price_master' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Sales Prices</div>
-    <div class="page-header-subtitle">Add and manage sales price master records</div>
-</div>
-
-<div class="row g-4">
-  <!-- Button to Open the Modal -->
-  <div class="text-end mb-3">
-    {% if page_perms.add %}<button
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Sales Prices</div>
+      <div class="page-header-subtitle">Add and manage sales price master records</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button
       class="btn btn-primary"
       data-bs-toggle="modal"
       data-bs-target="#salesPriceFormModal"
     >
       <i class="fas fa-plus"></i> Add New Sales Price
     </button>{% endif %}
-  </div>
-  <!-- Modal Structure -->
+    </div>
+</div>
+
+<div class="row g-4">  <!-- Modal Structure -->
   <div class="modal fade" id="salesPriceFormModal" tabindex="-1" aria-labelledby="salesPriceFormModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -88,7 +88,7 @@
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table table-hover table-bordered mb-0" id="sales-price-table">
-            <thead class="table-dark">
+            <thead>
               <tr>
                 <th>Item Category</th>
                 <th>Item</th>

@@ -5,8 +5,13 @@
 {% block content %}
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='chick_sale' %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-cash-register"></i> Chick Sale</div>
-  <div class="page-header-right"><div class="page-header-subtitle">Chick sale invoices, fresh or converted from delivery challans</div>{% if page_perms.add %}<a class="btn btn-primary" href="{% url 'chick_sale_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}</div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-cash-register"></i> Chick Sale</div>
+      <div class="page-header-subtitle">Chick sale invoices, fresh or converted from delivery challans</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'chick_sale_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+    </div>
 </div>
 
 <!-- Date Filter -->
@@ -33,7 +38,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="chick-sale-table">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Date</th>
             <th>Bill No</th>
@@ -55,77 +60,6 @@
   </div>
 </div>
 
-
-<!-- View Modal (read-only) -->
-<div class="modal fade" id="viewSaleModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-eye me-2"></i>View Chick Sale</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="d-none d-print-block mb-3 print-report-header">
-          <h4 class="mb-1">CHICK SALE INVOICE</h4>
-        </div>
-        <div id="view-sale-body" class="sale-view-content">
-          <div class="text-center text-muted py-4">Loading...</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" id="view-print-btn"><i class="fas fa-print"></i> Print</button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Hidden print-only container: used by a row's Print button so printing
-     doesn't visibly open the View modal on screen first. -->
-<div id="print-only-container" class="d-none">
-  <div class="print-report-header mb-3"><h4 class="mb-1">CHICK SALE INVOICE</h4></div>
-  <div id="print-sale-body" class="sale-view-content"></div>
-</div>
-
-<style>
-.sale-view-content .company-header { text-align:center; border-bottom:2px solid #333; padding-bottom:8px; margin-bottom:12px; }
-.sale-view-content .company-header h4 { margin:0 0 4px; font-size:16px; }
-.sale-view-content .company-header div { font-size:12px; }
-.sale-view-content .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; border-top:1px solid #ccc; border-bottom:1px solid #ccc; margin-bottom:12px; font-size:12.5px; }
-.sale-view-content .detail-grid > div { padding:8px 10px; }
-.sale-view-content .detail-grid > div + div { border-left:1px solid #ccc; }
-.sale-view-content .detail-grid hr { margin:4px 0 6px; border-top:1px solid #999; }
-.sale-view-content table { width:100%; border-collapse:collapse; margin-bottom:12px; }
-.sale-view-content table th, .sale-view-content table td { border:1px solid #333; padding:6px 8px; font-size:12.5px; }
-.sale-view-content table th { background:#eee; }
-.sale-view-content .total-row { text-align:right; font-size:15px; font-weight:700; padding:8px 10px; background:#fbe4d5; margin-bottom:8px; }
-.sale-view-content .amount-words { font-size:12.5px; margin-bottom:4px; }
-.sale-view-content .footer-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:10px; margin-top:16px; font-size:12.5px; }
-.sale-view-content .signature-box { text-align:right; }
-.sale-view-content .signature-line { margin-top:50px; border-top:1px solid #333; padding-top:4px; }
-
-@media print {
-  @page { margin: 1.5cm; }
-  body * { visibility: hidden; }
-  #viewSaleModal.show, #viewSaleModal.show *,
-  #print-only-container, #print-only-container * { visibility: visible; }
-
-  #viewSaleModal.show { position: absolute; left: 0; top: 0; width: 100%; }
-  #viewSaleModal.show .modal-dialog { max-width: 100%; margin: 0; }
-  #viewSaleModal.show .modal-content { border: none; box-shadow: none; }
-  #viewSaleModal.show .modal-header {
-    background: #fff !important; color: #000 !important;
-    border-bottom: 2px solid #000; padding: 0 0 10px 0; margin-bottom: 10px;
-  }
-  #viewSaleModal.show .modal-title { display: none; }
-  #viewSaleModal.show .modal-header .btn-close,
-  #viewSaleModal.show .modal-footer { display: none !important; }
-  #viewSaleModal.show .modal-body { padding: 0; }
-
-  #print-only-container { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
-}
-</style>
-
 {% endblock %}
 {% block js %}
 <script>
@@ -138,72 +72,7 @@ $(function () {
   $("#from-date").val(today);
   $("#to-date").val(today);
 
-  function escapeHtml(str) {
-    if (str === null || str === undefined) return "";
-    return String(str)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-  }
-
-  function numberToWordsIndian(num) {
-    num = Math.round(Number(num) || 0); if (num === 0) return "Zero";
-    const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-    function twoDigits(n) { if (n < 20) return ones[n]; return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : ""); }
-    function threeDigits(n) { let s = ""; if (n >= 100) { s += ones[Math.floor(n / 100)] + " Hundred"; n %= 100; if (n) s += " "; } if (n) s += twoDigits(n); return s; }
-    const crore = Math.floor(num / 10000000); num %= 10000000;
-    const lakh = Math.floor(num / 100000); num %= 100000;
-    const thousand = Math.floor(num / 1000); num %= 1000;
-    const hundred = num;
-    const parts = [];
-    if (crore) parts.push(threeDigits(crore) + " Crore");
-    if (lakh) parts.push(twoDigits(lakh) + " Lakh");
-    if (thousand) parts.push(twoDigits(thousand) + " Thousand");
-    if (hundred) parts.push(threeDigits(hundred));
-    return parts.join(" ");
-  }
-
-  function detailLines(pairs) {
-    return pairs.filter(([label, val]) => val).map(([label, val]) => `<b>${label}:</b> ${escapeHtml(val)}`).join("<br>");
-  }
-
-  function renderSaleViewHtml(c) {
-    const company = c.company || {};
-    const finalAmount = Number(c.final_amount) || 0;
-    let html = `<div class="company-header">
-      <h4>${escapeHtml(company.name)}</h4>
-      <div>${escapeHtml(company.address).replace(/\n/g, "<br>")}</div>
-      <div>Mobile: ${escapeHtml(company.mobile)} | Email: ${escapeHtml(company.email)}</div>
-      <div>GSTIN: ${escapeHtml(company.gstin)} | PAN: ${escapeHtml(company.pan)}</div>
-    </div>`;
-    html += `<div class="detail-grid">
-      <div><b>Bill Number:</b> ${escapeHtml(c.bill_no)}<br><b>Bill Date:</b> ${escapeHtml(c.date)}<br><b>Converted From DC:</b> ${escapeHtml(c.dc_no) || "-"}<br><b>Farm/Warehouse:</b> ${escapeHtml(c.warehouse_name)}</div>
-      <div><b>Transport &amp; Payment</b><hr>${detailLines([
-        ["Vehicle", c.vehicle],
-        ["Driver", c.driver],
-        ["Freight Type", c.freight_type],
-        ["Freight Amount", c.freight_amount],
-        ["Payment Mode", c.payment_mode],
-      ]) || '<span class="text-muted">—</span>'}</div>
-    </div>`;
-    html += `<div class="detail-grid">
-      <div><b>Billing Details</b><br>Name: ${escapeHtml(c.customer_name)}<br>GSTIN: ${escapeHtml(c.customer_gstin)} | Mobile: ${escapeHtml(c.customer_mobile)}<br>Email: ${escapeHtml(c.customer_email)}<br>Address: ${escapeHtml(c.customer_address)}</div>
-      <div><b>Shipping Details</b><br>Name: ${escapeHtml(c.customer_name)}<br>GSTIN: ${escapeHtml(c.customer_gstin)} | Mobile: ${escapeHtml(c.customer_mobile)}<br>Address: ${escapeHtml(c.shipping_address) || escapeHtml(c.customer_address)}</div>
-    </div>`;
-    html += `<table><thead><tr><th>Sr.</th><th>Item</th><th>Farm</th><th>Total Qty</th><th>Mortality</th><th>Culls</th><th>Sale Qty</th><th>Disc %</th><th>Free Qty</th><th>Billed Qty</th><th>Rate</th><th>Amount (₹)</th></tr></thead><tbody>`;
-    (c.items || []).forEach((row, i) => {
-      html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_description)}</td><td>${escapeHtml(row.farm) || "-"}</td><td>${row.total_qty}</td><td>${row.mortality}</td><td>${row.culls}</td><td>${row.sale_qty}</td><td>${row.discount_percent}%</td><td>${row.free_qty}</td><td>${row.net_qty}</td><td>${escapeHtml(row.sale_rate)}</td><td>${escapeHtml(row.amount)}</td></tr>`;
-    });
-    html += `</tbody></table>`;
-    html += `<div class="total-row">Total &nbsp; ${finalAmount.toFixed(2)}</div>`;
-    html += `<div class="amount-words">Rs. ${numberToWordsIndian(finalAmount)} Only</div>`;
-    html += `<div class="footer-grid">
-      <div><b>Terms and Conditions</b><br>${c.terms ? escapeHtml(c.terms).replace(/\n/g, "<br>") : "-"}${c.remarks ? `<br><br><b>Remarks</b><br>${escapeHtml(c.remarks).replace(/\n/g, "<br>")}` : ""}</div>
-      <div><b>Bank Details</b><br>A/c: ${escapeHtml(company.bank_account_no)}<br>Bank: ${escapeHtml(company.bank_name)}<br>IFSC: ${escapeHtml(company.ifsc_code)}<br>Branch: ${escapeHtml(company.bank_branch)}</div>
-      <div class="signature-box">For ${escapeHtml(company.name)}<div class="signature-line">Signature</div></div>
-    </div>`;
-    return html;
-  }
+  // escapeHtml() provided globally by main.js
 
   function renderRows(rows) {
     if (table) { table.destroy(); }
@@ -224,8 +93,6 @@ $(function () {
         <td>${escapeHtml(row.warehouse_name)}</td>
         <td>
           <div class="d-flex gap-1 justify-content-center">
-            {% if page_perms.view %}<button class="btn btn-outline-info btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>{% endif %}
-            {% if page_perms.print %}<button class="btn btn-outline-secondary btn-sm print-button" data-id="${row.id}" title="Print"><i class="fas fa-print"></i></button>{% endif %}
             {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/chick-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/chick-sale/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -258,38 +125,15 @@ $(function () {
 
   $("#filter-submit").on("click", applyDateFilter);
 
-  $(document).on("click", ".view-button", function () {
+  $(document).on("click", ".delete-button", async function () {
     const id = $(this).data("id");
-    $("#view-sale-body").html('<div class="text-center text-muted py-4">Loading...</div>');
-    new bootstrap.Modal(document.getElementById("viewSaleModal")).show();
-    $.getJSON(`/chick_sale_api/${id}/`, function (c) {
-      $("#view-sale-body").html(renderSaleViewHtml(c));
-    }).fail(function () {
-      $("#view-sale-body").html('<div class="text-danger">Failed to load record.</div>');
-    });
-  });
-
-  $(document).on("click", ".print-button", function () {
-    const id = $(this).data("id");
-    $.getJSON(`/chick_sale_api/${id}/`, function (c) {
-      $("#print-sale-body").html(renderSaleViewHtml(c));
-      window.print();
-    }).fail(function () {
-      alert("Failed to load record for printing.");
-    });
-  });
-
-  $("#view-print-btn").on("click", function () { window.print(); });
-
-  $(document).on("click", ".delete-button", function () {
-    const id = $(this).data("id");
-    if (!confirm("Are you sure you want to delete this chick sale?")) return;
+    if (!(await window.bimsConfirm("Are you sure you want to delete this chick sale?"))) return;
     $.ajax({
       url: `/chick_sale_api/${id}/`,
       type: "DELETE",
       headers: { "X-CSRFToken": csrfToken },
       success: function () { loadChickSaleList(); },
-      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to delete chick sale."); },
+      error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to delete chick sale."); },
     });
   });
 
@@ -303,8 +147,8 @@ $(function () {
       type: "POST",
       headers: { "X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/json" },
       data: JSON.stringify({ module: "chick_sale", object_id: $(this).data("id"), action: "delete", note: note || "" }),
-      success: function () { alert("Deletion request submitted for approval."); },
-      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to submit deletion request."); },
+      success: function () { window.showToast('danger', "Deletion request submitted for approval."); },
+      error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to submit deletion request."); },
     });
   });
 });

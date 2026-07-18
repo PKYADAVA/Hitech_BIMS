@@ -5,8 +5,10 @@
 {% block content %}
 {% include '_subnav.html' with module='notification_master' active_tab='sms_settings' %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-gear"></i> SMS Settings</div>
-  <div class="page-header-right"><div class="page-header-subtitle">Gateway configuration — changes apply immediately, no restart needed</div></div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-gear"></i> SMS Settings</div>
+      <div class="page-header-subtitle">Gateway configuration — changes apply immediately, no restart needed</div>
+    </div>
 </div>
 
 <div class="row g-3">
@@ -116,19 +118,19 @@ $(function () {
   const csrfToken = "{{ csrf_token }}";
   let clearApiKey = false;
 
-  $("#clear-api-key").on("click", function (e) {
+  $("#clear-api-key").on("click", async function (e) {
     e.preventDefault();
-    if (!confirm("Clear the API key saved here and fall back to the .env key?")) return;
+    if (!(await window.bimsConfirm("Clear the API key saved here and fall back to the .env key?"))) return;
     clearApiKey = true;
     $("#cfg-api-key").val("").attr("placeholder", "Will be cleared on save");
     $(this).addClass("fw-bold").text("Key will be cleared when you save");
   });
 
-  $("#sms-settings-form").on("submit", function (e) {
+  $("#sms-settings-form").on("submit", async function (e) {
     e.preventDefault();
     const enabled = $("#cfg-enabled").is(":checked");
     const mock = $("#cfg-mock").is(":checked");
-    if (enabled && !mock && !confirm("LIVE mode: every send will hit the real gateway and consume SMS credit. Continue?")) return;
+    if (enabled && !mock && !(await window.bimsConfirm("LIVE mode: every send will hit the real gateway and consume SMS credit. Continue?"))) return;
     $.ajax({
       url: "{% url 'sms_settings' %}",
       type: "POST",

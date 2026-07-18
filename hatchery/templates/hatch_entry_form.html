@@ -5,8 +5,12 @@
 {% block content %}
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='hatch_entry' %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-dove"></i> {% if hatch_entry_id %}Edit{% else %}Add{% endif %} Hatch Entry</div>
-  <div class="page-header-right"><a href="{% url 'hatch_entry_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-dove"></i> {% if hatch_entry_id %}Edit{% else %}Add{% endif %} Hatch Entry</div>
+    </div>
+    <div class="page-header-right">
+      <a href="{% url 'hatch_entry_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a>
+    </div>
 </div>
 
 <form id="hatch-entry-form">
@@ -106,8 +110,8 @@ async function submitChangeRequest(module, payloadData, listUrl) {
   const note = prompt('Reason for this change (optional):') || '';
   const res = await fetch('/change_request_api/', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},
     body: JSON.stringify({module: module, object_id: editId, action: 'edit', payload: payloadData, note: note})});
-  if (!res.ok) { const err = await res.json(); return alert(err.error || 'Unable to submit change request.'); }
-  alert('Change request submitted for approval.');
+  if (!res.ok) { const err = await res.json(); return window.showToast('danger', err.error || 'Unable to submit change request.'); }
+  window.showToast('danger', 'Change request submitted for approval.');
   location.href = listUrl;
 }
 const traySettings = {{ tray_settings|safe }};
@@ -189,12 +193,12 @@ function csrf() { return document.cookie.split('; ').find(v => v.startsWith('csr
 
 get('hatch-entry-form').onsubmit = async e => {
   e.preventDefault();
-  if (!value('tray_setting')) return alert('Select a Setting No.');
+  if (!value('tray_setting')) return window.showToast('warning', 'Select a Setting No.');
   const data = payload();
   if (requestMode) return submitChangeRequest('hatch_entry', data, '{% url "hatch_entry_list" %}');
   const url = editId ? `/hatch_entry_api/${editId}/` : '{% url "hatch_entry_api_list" %}';
   const res = await fetch(url, { method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(data) });
-  if (!res.ok) { const err = await res.json(); return alert(err.error || 'Unable to save hatch entry.'); }
+  if (!res.ok) { const err = await res.json(); return window.showToast('danger', err.error || 'Unable to save hatch entry.'); }
   location.href = '{% url "hatch_entry_list" %}';
 };
 

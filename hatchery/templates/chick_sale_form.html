@@ -5,8 +5,12 @@
 {% block content %}
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='chick_sale' %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-cash-register"></i> {% if chick_sale_id %}Edit{% else %}Add{% endif %} Chick Sale</div>
-  <div class="page-header-right"><a href="{% url 'chick_sale_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-cash-register"></i> {% if chick_sale_id %}Edit{% else %}Add{% endif %} Chick Sale</div>
+    </div>
+    <div class="page-header-right">
+      <a href="{% url 'chick_sale_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a>
+    </div>
 </div>
 
 <form id="chick-sale-form">
@@ -176,8 +180,8 @@ async function submitChangeRequest(module, payloadData, listUrl) {
   const note = prompt('Reason for this change (optional):') || '';
   const res = await fetch('/change_request_api/', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},
     body: JSON.stringify({module: module, object_id: editId, action: 'edit', payload: payloadData, note: note})});
-  if (!res.ok) { const err = await res.json(); return alert(err.error || 'Unable to submit change request.'); }
-  alert('Change request submitted for approval.');
+  if (!res.ok) { const err = await res.json(); return window.showToast('danger', err.error || 'Unable to submit change request.'); }
+  window.showToast('danger', 'Change request submitted for approval.');
   location.href = listUrl;
 }
 const fromChallan = {{ from_challan|safe }};
@@ -286,7 +290,7 @@ get('shipping_address_list').addEventListener('change', e=>{ if(e.target.classLi
 get('shipping_address_list').addEventListener('click', e=>{ const btn=e.target.closest('.edit-address'); if(!btn) return; const address=shippingAddresses.find(a=>String(a.id)===String(btn.dataset.id)); if(!address) return; get('shipping_address_modal_title').textContent='Edit Shipping Address'; fillShippingAddressFields(address.address); get('shipping_contact_person').value=address.contact_person||''; get('shipping_mobile').value=address.mobile||''; get('shipping_is_default').checked=address.is_default; selectedShippingAddressId=address.id; changeShippingAddressModal.hide(); shippingAddressModal.show(); });
 get('open_add_shipping_address').onclick=()=>{ get('shipping_address_modal_title').textContent='Add Shipping Address'; get('shipping-address-form').reset(); fillShippingAddressFields(get('billing_address').textContent); get('shipping_mobile').value=get('customer').selectedOptions[0]?.dataset.mobile||''; selectedShippingAddressId=null; changeShippingAddressModal.hide(); shippingAddressModal.show(); };
 get('shippingAddressModal').addEventListener('hidden.bs.modal', ()=>{ if(selectedCustomer()) changeShippingAddressModal.show(); });
-get('shipping-address-form').onsubmit=async event=>{event.preventDefault(); const customerId=selectedCustomer(); const composedAddress=composeShippingAddress(); const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:value('shipping_contact_person'),mobile:value('shipping_mobile'),is_default:get('shipping_is_default').checked}; const id=selectedShippingAddressId; const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)}); if(!response.ok){const err=await response.json();return alert(err.error||'Unable to save shipping address.')} const result=await response.json(); const savedId=id||result.id; await loadShippingAddresses(savedId); pendingShippingAddressId=savedId; renderShippingAddressList(); shippingAddressModal.hide();};
+get('shipping-address-form').onsubmit=async event=>{event.preventDefault(); const customerId=selectedCustomer(); const composedAddress=composeShippingAddress(); const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:value('shipping_contact_person'),mobile:value('shipping_mobile'),is_default:get('shipping_is_default').checked}; const id=selectedShippingAddressId; const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)}); if(!response.ok){const err=await response.json();return window.showToast('danger', err.error||'Unable to save shipping address.')} const result=await response.json(); const savedId=id||result.id; await loadShippingAddresses(savedId); pendingShippingAddressId=savedId; renderShippingAddressList(); shippingAddressModal.hide();};
 get('confirm_shipping_address').onclick=()=>{ selectedShippingAddressId=pendingShippingAddressId; showShippingAddress(shippingAddresses.find(a=>String(a.id)===String(selectedShippingAddressId))); changeShippingAddressModal.hide(); };
 
 /* ------------------- save ------------------- */
@@ -312,11 +316,11 @@ function payload(){
 get('chick-sale-form').onsubmit=async e=>{
   e.preventDefault();
   const data=payload();
-  if(!data.items.length||data.items.some(x=>!x.item)) return alert('Add at least one item line.');
+  if(!data.items.length||data.items.some(x=>!x.item)) return window.showToast('warning', 'Add at least one item line.');
   if (requestMode) return submitChangeRequest('chick_sale', data, '{% url "chick_sale_list" %}');
   const url=editId?`/chick_sale_api/${editId}/`:'{% url "chick_sale_api_list" %}';
   const res=await fetch(url,{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
-  if(!res.ok){const err=await res.json();return alert(err.error||'Unable to save chick sale.')}
+  if(!res.ok){const err=await res.json();return window.showToast('danger', err.error||'Unable to save chick sale.')}
   location.href='{% url "chick_sale_list" %}';
 };
 

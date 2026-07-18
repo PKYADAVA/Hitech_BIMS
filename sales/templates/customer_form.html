@@ -11,14 +11,16 @@
 {% include '_sales_subnavbar.html' with active_tab='customer' %}
 
 <div class="page-header">
-    <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
       <i class="fas fa-user"></i>
       {% if customer %}Edit Customer{% else %}Add Customer{% endif %}
     </div>
-    <div class="page-header-right">
       <div class="page-header-subtitle">
         {% if customer %}Update this customer's details{% else %}Register a new customer/party record{% endif %}
       </div>
+    </div>
+    <div class="page-header-right">
       <a href="{% url 'customer' %}" class="btn btn-secondary">
         <i class="fas fa-arrow-left"></i> Back to list
       </a>
@@ -334,7 +336,7 @@ get('billing_address_preview').onclick=()=>{
   billingAddressModal.show();
 };
 get('save_billing_address').onclick=()=>{
-  if(!get('billing_street').value.trim()){ return alert('Street address is required.'); }
+  if(!get('billing_street').value.trim()){ return window.showToast('warning', 'Street address is required.'); }
   get('address').value = composeBillingAddress();
   updateBillingSummary();
   if(!selectedShippingAddressId) showShippingAddress(null);
@@ -343,7 +345,7 @@ get('save_billing_address').onclick=()=>{
 get('customer-form').addEventListener('submit', e=>{
   if(!get('address').value.trim()){
     e.preventDefault();
-    alert('Billing address is required.');
+    window.showToast('warning', 'Billing address is required.');
   }
 });
 
@@ -408,7 +410,7 @@ get('shipping_address_list').addEventListener('click', async e=>{
     shippingAddressModal.show();
   }
   if(deleteBtn){
-    if(!confirm('Delete this shipping address?')) return;
+    if (!(await window.bimsConfirm('Delete this shipping address?'))) return;
     await fetch(`/customer/${customerId}/shipping-addresses/${deleteBtn.dataset.id}/`, {method:'DELETE', headers:{'X-CSRFToken':csrf()}});
     await loadShippingAddresses();
     pendingShippingAddressId = selectedShippingAddressId;
@@ -421,7 +423,7 @@ get('shipping-address-form').onsubmit=async event=>{
   const data={label:composedAddress.slice(0,100),address:composedAddress,contact_person:get('shipping_contact_person').value,mobile:get('shipping_mobile').value,is_default:get('shipping_is_default').checked};
   const id=editingShippingAddressId;
   const response=await fetch(`/customer/${customerId}/shipping-addresses/${id?`${id}/`:''}`,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(data)});
-  if(!response.ok){const err=await response.json();return alert(err.error||'Unable to save shipping address.')}
+  if(!response.ok){const err=await response.json();return window.showToast('danger', err.error||'Unable to save shipping address.')}
   const result=await response.json();
   const savedId=id||result.id;
   await loadShippingAddresses();
@@ -446,7 +448,7 @@ function refreshLocalShippingSummary(){
   showShippingAddress(def);
   syncShippingAddressesField();
 }
-get('shipping_address_list').addEventListener('click', e=>{
+get('shipping_address_list').addEventListener('click', async e=>{
   const editBtn = e.target.closest('.edit-address');
   const deleteBtn = e.target.closest('.delete-address');
   if(editBtn){
@@ -462,7 +464,7 @@ get('shipping_address_list').addEventListener('click', e=>{
     shippingAddressModal.show();
   }
   if(deleteBtn){
-    if(!confirm('Delete this shipping address?')) return;
+    if (!(await window.bimsConfirm('Delete this shipping address?'))) return;
     shippingAddresses = shippingAddresses.filter(a=>String(a.id)!==String(deleteBtn.dataset.id));
     if(String(pendingShippingAddressId)===String(deleteBtn.dataset.id)){
       pendingShippingAddressId = (shippingAddresses.find(a=>a.is_default) || shippingAddresses[0])?.id || null;

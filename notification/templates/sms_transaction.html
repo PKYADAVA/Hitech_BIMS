@@ -5,8 +5,10 @@
 {% block content %}
 {% include '_subnav.html' with module='notification_transaction' active_tab='sms_transaction' %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-paper-plane"></i> SMS Transaction</div>
-  <div class="page-header-right"><div class="page-header-subtitle">Send templated SMS to customers/suppliers from ERP documents</div></div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-paper-plane"></i> SMS Transaction</div>
+      <div class="page-header-subtitle">Send templated SMS to customers/suppliers from ERP documents</div>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -72,7 +74,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="sms-doc-table">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th style="width:36px" class="text-center"><input type="checkbox" class="form-check-input" id="select-all"></th>
             <th>Date</th>
@@ -123,12 +125,7 @@ $(function () {
   $("#from-date").val(today);
   $("#to-date").val(today);
 
-  function escapeHtml(str) {
-    if (str === null || str === undefined) return "";
-    return String(str)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-  }
+  // escapeHtml() provided globally by main.js
 
   function partyType() {
     return $("#module option:selected").data("party-type") || "customer";
@@ -255,7 +252,7 @@ $(function () {
       renderRows();
       $("#select-all").prop("checked", false);
     }).fail(function (xhr) {
-      alert(xhr.responseJSON?.error || "Failed to load documents.");
+      window.showToast('danger', xhr.responseJSON?.error || "Failed to load documents.");
     });
   }
 
@@ -298,9 +295,9 @@ $(function () {
   }
 
   function requireSelection() {
-    if (!$("#template").val()) { alert("Select a template first."); return null; }
+    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return null; }
     const idx = selectedIndexes();
-    if (!idx.length) { alert("Select at least one record."); return null; }
+    if (!idx.length) { window.showToast('warning', "Select at least one record."); return null; }
     return idx;
   }
 
@@ -311,8 +308,8 @@ $(function () {
     new bootstrap.Modal(document.getElementById("previewModal")).show();
   });
 
-  $(document).on("click", ".row-preview", function () {
-    if (!$("#template").val()) { alert("Select a template first."); return; }
+  $(document).on("click", ".row-preview", async function () {
+    if (!$("#template").val()) { window.showToast('warning', "Select a template first."); return; }
     $("#preview-body").html(previewCards([Number($(this).data("index"))]));
     new bootstrap.Modal(document.getElementById("previewModal")).show();
   });
@@ -335,9 +332,9 @@ $(function () {
     const already = idx.filter(i => sentForSelectedTemplate(rows[i]).length);
     if (already.length) {
       const names = already.slice(0, 5).map(i => rows[i].doc_no).join(", ");
-      if (!confirm(`${already.length} of the selected document(s) already received this template successfully (${names}${already.length > 5 ? ", …" : ""}).\n\nOK = send to them AGAIN.\nCancel = skip them and send only to the rest.`)) {
+      if (!(await window.bimsConfirm(`${already.length} of the selected document(s) already received this template successfully (${names}${already.length > 5 ? ", …" : ""}).\n\nOK = send to them AGAIN.\nCancel = skip them and send only to the rest.`))) {
         idx = idx.filter(i => !sentForSelectedTemplate(rows[i]).length);
-        if (!idx.length) { alert("Nothing left to send — all selected documents already received this SMS."); return; }
+        if (!idx.length) { window.showToast('danger', "Nothing left to send — all selected documents already received this SMS."); return; }
       }
     }
     $("#send-btn, #preview-send-btn").prop("disabled", true);
@@ -350,7 +347,7 @@ $(function () {
       try {
         let out = await sendOne(r, false);
         if (out.status === 409 && out.data.duplicate) {
-          if (confirm(`${r.party_name} (${r.doc_no}): ${out.data.error}`)) {
+          if ((await window.bimsConfirm(`${r.party_name} (${r.doc_no}): ${out.data.error}`))) {
             out = await sendOne(r, true);
           } else { skipped++; continue; }
         }

@@ -32,14 +32,16 @@
  {% csrf_token %}
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-map-location-dot"></i>Live Tracking Dashboard</div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">Field team status, positions and today's activity</div>
-    <div class="d-flex gap-2 align-items-center">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-map-location-dot"></i>Live Tracking Dashboard</div>
+      <div class="page-header-subtitle">Field team status, positions and today's activity</div>
+    </div>
+    <div class="page-header-right">
+      <div class="d-flex gap-2 align-items-center">
       <span id="trk-updated"></span>
       <button class="btn btn-outline-secondary" id="trk-refresh"><i class="fas fa-rotate"></i> Refresh</button>
     </div>
-  </div>
+    </div>
 </div>
 
 {% if not tracking_enabled %}
@@ -126,7 +128,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-sm align-middle mb-0">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th></th><th>Employee</th><th>Designation</th><th>Branch</th><th>Status</th>
             <th>Speed</th><th>Battery</th><th>Network</th><th>Customer</th>

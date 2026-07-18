@@ -37,17 +37,19 @@
 </div>
 
 <div class="page-header">
-  <div class="page-header-title">
+    <div class="page-header-main">
+      <div class="page-header-title">
     <i class="fas fa-hub"></i>
     Hubs
   </div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">Register and manage Tapo H100 hubs</div>
-    {% if page_perms.add %}<a href="{% url 'env_hub_create' %}" class="btn btn-primary">
+      <div class="page-header-subtitle">Register and manage Tapo H100 hubs</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<a href="{% url 'env_hub_create' %}" class="btn btn-primary">
       <i class="fas fa-plus"></i>
       Add
     </a>{% endif %}
-  </div>
+    </div>
 </div>
 
 <div class="card">
@@ -58,7 +60,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table id="hubTable" class="table table-hover table-bordered mb-0">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Name</th>
             <th>IP Address</th>

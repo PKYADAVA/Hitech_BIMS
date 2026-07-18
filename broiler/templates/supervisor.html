@@ -7,14 +7,12 @@
 {% include '_broiler_subnavbar.html' with active_tab='supervisor' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Supervisor</div>
-    <div class="page-header-subtitle">Add and manage broiler supervisors</div>
-</div>
-
-<div class="row g-4">
-    <!-- Button to Open the Modal -->
-    <div class="text-end mb-3">
-        {% if page_perms.add %}<button
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Supervisor</div>
+      <div class="page-header-subtitle">Add and manage broiler supervisors</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<button
             class="btn btn-primary"
             data-bs-toggle="modal"
             data-bs-target="#branchFormModal"
@@ -22,7 +20,9 @@
         <i class="fas fa-plus"></i> Add New Supervisor
         </button>{% endif %}
     </div>
-    <!-- Modal Structure -->
+</div>
+
+<div class="row g-4">    <!-- Modal Structure -->
     <div class="modal fade" id="branchFormModal" tabindex="-1" aria-labelledby="branchFormModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -75,7 +75,7 @@
                         class="table table-hover table-bordered mb-0"
                         id="supervisor-table"
                         >
-                        <thead class="table-dark">
+                        <thead>
                             <tr>
                                 <th>Branch Name</th>
                                 <th>Supervisor Name</th>
@@ -192,7 +192,7 @@
                                 },
                                 data: JSON.stringify(jsonData),
                                 success: function () {
-                                    alert("Supervisor updated successfully.");
+                                    window.showToast('success', "Supervisor updated successfully.");
                                     loadSupervisorList();
                                     $(`#${modalId}`).modal("hide");
                                 },
@@ -233,7 +233,7 @@
                 },
                 success: function () {
                     $("#branchFormModal").modal("hide");
-                    alert("Supervisor created successfully.");
+                    window.showToast('success', "Supervisor created successfully.");
                     loadSupervisorList();
                     $("#supervisor-form").trigger("reset");
                 },
@@ -252,7 +252,7 @@
                 type: "DELETE",
                 headers: { "X-CSRFToken": "{{ csrf_token }}" },
                 success: function () {
-                    alert("Supervisor deleted successfully.");
+                    window.showToast('success', "Supervisor deleted successfully.");
                     loadSupervisorList();
                 },
                 error: function (xhr, status, error) {

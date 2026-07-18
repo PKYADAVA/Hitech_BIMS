@@ -5,8 +5,13 @@
 {% block content %}
 {% include '_subnav.html' with module='hatchery_transaction' active_tab='hatch_entry' %}
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-dove"></i> Hatch Entry</div>
-  <div class="page-header-right"><div class="page-header-subtitle">Hatch outcome, egg cost and vaccine consumption per setting</div>{% if page_perms.add %}<a class="btn btn-primary" href="{% url 'hatch_entry_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}</div>
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-dove"></i> Hatch Entry</div>
+      <div class="page-header-subtitle">Hatch outcome, egg cost and vaccine consumption per setting</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'hatch_entry_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+    </div>
 </div>
 
 <!-- Date Filter -->
@@ -33,7 +38,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="hatch-entry-table">
-        <thead class="table-dark">
+        <thead>
           <tr>
             <th>Setting Date</th>
             <th>Hatch Date</th>
@@ -66,12 +71,7 @@ $(function () {
   $("#from-date").val(today);
   $("#to-date").val(today);
 
-  function escapeHtml(str) {
-    if (str === null || str === undefined) return "";
-    return String(str)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-  }
+  // escapeHtml() provided globally by main.js
 
   function renderRows(rows) {
     if (table) { table.destroy(); }
@@ -123,15 +123,15 @@ $(function () {
 
   $("#filter-submit").on("click", applyDateFilter);
 
-  $(document).on("click", ".delete-button", function () {
+  $(document).on("click", ".delete-button", async function () {
     const id = $(this).data("id");
-    if (!confirm("Are you sure you want to delete this hatch entry?")) return;
+    if (!(await window.bimsConfirm("Are you sure you want to delete this hatch entry?"))) return;
     $.ajax({
       url: `/hatch_entry_api/${id}/`,
       type: "DELETE",
       headers: { "X-CSRFToken": csrfToken },
       success: function () { loadHatchEntryList(); },
-      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to delete hatch entry."); },
+      error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to delete hatch entry."); },
     });
   });
 
@@ -145,8 +145,8 @@ $(function () {
       type: "POST",
       headers: { "X-CSRFToken": "{{ csrf_token }}", "Content-Type": "application/json" },
       data: JSON.stringify({ module: "hatch_entry", object_id: $(this).data("id"), action: "delete", note: note || "" }),
-      success: function () { alert("Deletion request submitted for approval."); },
-      error: function (xhr) { alert(xhr.responseJSON?.error || "Failed to submit deletion request."); },
+      success: function () { window.showToast('danger', "Deletion request submitted for approval."); },
+      error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to submit deletion request."); },
     });
   });
 });

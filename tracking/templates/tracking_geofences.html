@@ -18,13 +18,15 @@
  {% csrf_token %}
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-draw-polygon"></i>Geofences</div>
-  <div class="page-header-right">
-    <div class="page-header-subtitle">Office, warehouse, farm and customer fences with entry/exit alerts</div>
-    {% if page_perms.add %}
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-draw-polygon"></i>Geofences</div>
+      <div class="page-header-subtitle">Office, warehouse, farm and customer fences with entry/exit alerts</div>
+    </div>
+    <div class="page-header-right">
+      {% if page_perms.add %}
     <button class="btn btn-primary" id="geo-add"><i class="fas fa-plus"></i> Add Geofence</button>
     {% endif %}
-  </div>
+    </div>
 </div>
 
 <div class="row g-3">
@@ -39,7 +41,7 @@
       <div class="card-header"><i class="fas fa-table"></i> Fences <span class="badge bg-secondary" id="geo-count">0</span></div>
       <div class="card-body p-0" style="max-height:440px; overflow-y:auto;">
         <table class="table table-hover table-sm align-middle mb-0">
-          <thead class="table-dark">
+          <thead>
             <tr><th>Name</th><th>Type</th><th>Radius</th><th>Alerts</th><th></th></tr>
           </thead>
           <tbody id="geo-rows">
@@ -253,11 +255,11 @@
   const addButton = document.getElementById("geo-add");
   if (addButton) addButton.addEventListener("click", () => openEditor(null));
 
-  document.getElementById("geo-rows").addEventListener("click", event => {
+  document.getElementById("geo-rows").addEventListener("click", async event => {
     const edit = event.target.closest("[data-edit]");
     const off = event.target.closest("[data-off]");
     if (edit) openEditor(fences.find(fence => fence.id === Number(edit.dataset.edit)));
-    if (off && confirm("Deactivate this geofence?")) {
+    if (off && (await window.bimsConfirm("Deactivate this geofence?"))) {
       fetch(API + "?id=" + off.dataset.off, {
         method: "DELETE", credentials: "same-origin",
         headers: { "X-CSRFToken": CSRF },

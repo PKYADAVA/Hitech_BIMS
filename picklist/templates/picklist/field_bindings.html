@@ -10,9 +10,11 @@
  {% include '_user_management_subnavbar.html' with active_tab='field_bindings' %}
 
 <div class="page-header">
-    <div class="page-header-title">Manage Field Bindings</div>
-    <div class="page-header-right">
+    <div class="page-header-main">
+      <div class="page-header-title">Manage Field Bindings</div>
       <div class="page-header-subtitle">Choose whether each registered field is free text or a picklist</div>
+    </div>
+    <div class="page-header-right">
       {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bindingFormModal">
         <i class="fas fa-plus"></i> Add Binding
       </button>{% endif %}
@@ -87,7 +89,7 @@
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="binding-table">
-        <thead class="table-dark">
+        <thead>
           <tr><th>Module</th><th>Category</th><th>Field</th><th>Mode</th><th>Picklist</th><th>Required</th><th class="text-center">Actions</th></tr>
         </thead>
         <tbody id="binding-table-body"></tbody>
@@ -181,7 +183,7 @@ $(document).ready(function () {
       headers: { 'X-CSRFToken': csrf() },
       data: JSON.stringify(payload),
       success: function () { $('#bindingFormModal').modal('hide'); loadBindings(); },
-      error: function (xhr) { alert((xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save binding.'); },
+      error: function (xhr) { window.showToast('danger', (xhr.responseJSON && xhr.responseJSON.error) || 'Unable to save binding.'); },
     });
   });
 
@@ -200,8 +202,8 @@ $(document).ready(function () {
     $('#bindingFormModal').modal('show');
   });
 
-  $(document).on('click', '.delete-binding', function () {
-    if (!confirm('Delete this binding? The field will fall back to free text.')) return;
+  $(document).on('click', '.delete-binding', async function () {
+    if (!(await window.bimsConfirm('Delete this binding? The field will fall back to free text.'))) return;
     $.ajax({ url: `/field_bindings/api/${$(this).data('id')}/delete/`, type: 'DELETE', headers: { 'X-CSRFToken': csrf() }, success: loadBindings });
   });
 });
