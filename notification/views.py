@@ -278,38 +278,58 @@ class SmsHistoryPageView(View):
 
 @login_required
 def sms_transaction_source(request):
-    """Grid rows for the transaction screen, with per-row variable context."""
+    """Grid rows for the transaction screen, with per-row variable context.
+
+    An empty ``module`` means "All" — rows are pulled from every registered
+    source and tagged with their real source key (``r["module"]``) so the
+    sender/preview/history lookups below (and the frontend's send call) can
+    always address the document's actual module, never the literal "All".
+    """
     module = (request.GET.get("module") or "").strip()
-    source = DOC_SOURCES.get(module)
-    if not source:
-        return JsonResponse({"error": "Select a valid module."}, status=400)
-    rows = source["rows"](
-        (request.GET.get("from_date") or "").strip() or None,
-        (request.GET.get("to_date") or "").strip() or None,
-        (request.GET.get("party") or "").strip() or None,
-    )
+    from_date = (request.GET.get("from_date") or "").strip() or None
+    to_date = (request.GET.get("to_date") or "").strip() or None
+    party_id = (request.GET.get("party") or "").strip() or None
+
+    if module:
+        source = DOC_SOURCES.get(module)
+        if not source:
+            return JsonResponse({"error": "Select a valid module."}, status=400)
+        modules = [module]
+        party_type = source["party_type"]
+    else:
+        modules = list(DOC_SOURCES)
+        party_type = None
+        party_id = None  # party ids aren't comparable across different party tables
+
+    rows = []
+    for key in modules:
+        for r in DOC_SOURCES[key]["rows"](from_date, to_date, party_id):
+            r["module"] = key
+            rows.append(r)
+    rows.sort(key=lambda r: (r["date"], r["doc_id"]), reverse=True)
+
     # Stamp each row with its successful-send history (per template), so the
     # grid can tell the sender exactly what already went out — and for which
     # template — before they send again.
-    doc_nos = [r["doc_no"] for r in rows]
+    doc_nos = {r["doc_no"] for r in rows}
     sent_map = {}
     successful = (SmsMessage.objects
-                  .filter(module=module, document_no__in=doc_nos,
+                  .filter(module__in=modules, document_no__in=doc_nos,
                           status__in=["sent", "delivered", "mocked"])
                   .order_by("-created_at")
-                  .values("document_no", "template_id", "template_name",
+                  .values("module", "document_no", "template_id", "template_name",
                           "mobile", "created_at"))
     for m in successful:
-        sent_map.setdefault(m["document_no"], []).append({
+        sent_map.setdefault((m["module"], m["document_no"]), []).append({
             "template_id": m["template_id"],
             "template_name": m["template_name"],
             "mobile": m["mobile"],
             "sent_at": timezone.localtime(m["created_at"]).strftime("%d-%m-%Y %H:%M"),
         })
     for r in rows:
-        r["sent_history"] = sent_map.get(r["doc_no"], [])
+        r["sent_history"] = sent_map.get((r["module"], r["doc_no"]), [])
         r["already_sent"] = bool(r["sent_history"])
-    return JsonResponse({"rows": rows, "party_type": source["party_type"]})
+    return JsonResponse({"rows": rows, "party_type": party_type})
 
 
 def _client_ip(request):

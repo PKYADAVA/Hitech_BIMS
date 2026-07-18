@@ -26,6 +26,7 @@
       <div class="col-md-2">
         <label class="form-label">Module</label>
         <select class="form-select" id="module">
+          <option value="" data-party-type="" data-transaction="" data-module="">All</option>
           {% for key, label, ptype, txn, mod in doc_sources %}
           <option value="{{ key }}" data-party-type="{{ ptype }}" data-transaction="{{ txn }}" data-module="{{ mod }}">{{ label }}</option>
           {% endfor %}
@@ -78,6 +79,7 @@
           <tr>
             <th style="width:36px" class="text-center"><input type="checkbox" class="form-check-input" id="select-all"></th>
             <th>Date</th>
+            <th>Module</th>
             <th>Party Type</th>
             <th>Name</th>
             <th>Mobile</th>
@@ -118,6 +120,9 @@ $(function () {
   const COMPANY_NAME = "{{ company_name|escapejs }}";
   const USER_NAME = "{{ request.user.username|escapejs }}";
   const ALL_TEMPLATES = {{ templates_json|safe }};
+  const MODULE_LABELS = {
+    {% for key, label, ptype, txn, mod in doc_sources %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
+  };
   let table = null;
   let rows = [];
 
@@ -127,11 +132,19 @@ $(function () {
 
   // escapeHtml() provided globally by main.js
 
+  function isAllModules() {
+    return $("#module").val() === "";
+  }
+
   function partyType() {
     return $("#module option:selected").data("party-type") || "customer";
   }
 
+  // "All" spans customer- and supplier-sourced documents at once, so a single
+  // party id (from either table) can't filter it — party selection is hidden
+  // for "All" and no party filter is sent.
   function partyValue() {
+    if (isAllModules()) return "";
     return partyType() === "supplier" ? $("#party-supplier").val() : $("#party-customer").val();
   }
 
@@ -161,10 +174,17 @@ $(function () {
   }
 
   $("#module").on("change", function () {
-    const supplier = partyType() === "supplier";
-    $("#party-label").text(supplier ? "Supplier" : "Customer");
-    $("#party-supplier").toggleClass("d-none", !supplier);
-    $("#party-customer").toggleClass("d-none", supplier);
+    const all = isAllModules();
+    $("#party-customer").toggleClass("d-none", all);
+    $("#party-supplier").toggleClass("d-none", all);
+    if (all) {
+      $("#party-label").text("Party");
+    } else {
+      const supplier = partyType() === "supplier";
+      $("#party-label").text(supplier ? "Supplier" : "Customer");
+      $("#party-supplier").toggleClass("d-none", !supplier);
+      $("#party-customer").toggleClass("d-none", supplier);
+    }
     refreshTemplateOptions();
   });
 
@@ -226,6 +246,7 @@ $(function () {
       tbody.append(`<tr>
         <td class="text-center"><input type="checkbox" class="form-check-input row-check" data-index="${i}" ${r.mobile ? "" : "disabled title='No mobile number'"} ${checked.has(i) ? "checked" : ""}></td>
         <td>${escapeHtml(r.date)}</td>
+        <td>${escapeHtml(MODULE_LABELS[r.module] || r.module)}</td>
         <td class="text-capitalize">${escapeHtml(r.party_type)}</td>
         <td>${escapeHtml(r.party_name)}</td>
         <td>${escapeHtml(r.mobile) || '<span class="text-danger small">missing</span>'}</td>
@@ -238,7 +259,7 @@ $(function () {
     table = $("#sms-doc-table").DataTable({
       responsive: true, order: [[1, "desc"]],
       dom: "Bfrtip", buttons: ["copy", "csv", "excel", "print"],
-      columnDefs: [{ orderable: false, targets: [0, 8] }],
+      columnDefs: [{ orderable: false, targets: [0, 9] }],
       language: { emptyTable: "No documents match the filters" },
     });
   }
@@ -315,10 +336,12 @@ $(function () {
   });
 
   async function sendOne(r, force) {
+    // r.module is the document's real source key (backend-stamped) — required
+    // when the "All" filter is selected, and correct in every other case too.
     const resp = await fetch("{% url 'sms_transaction_send' %}", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
-      body: JSON.stringify({ module: $("#module").val(), doc_id: r.doc_id,
+      body: JSON.stringify({ module: r.module, doc_id: r.doc_id,
                              template_id: $("#template").val(), force: force }),
     });
     return { status: resp.status, data: await resp.json() };
