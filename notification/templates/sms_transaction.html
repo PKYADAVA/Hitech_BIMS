@@ -175,15 +175,17 @@ $(function () {
 
   $("#module").on("change", function () {
     const all = isAllModules();
-    $("#party-customer").toggleClass("d-none", all);
-    $("#party-supplier").toggleClass("d-none", all);
     if (all) {
+      // Keep the customer <select> visible (disabled, forced to "-All-") so
+      // the filter row doesn't leave a blank gap where the dropdown was.
       $("#party-label").text("Party");
+      $("#party-customer").removeClass("d-none").prop("disabled", true).val("");
+      $("#party-supplier").addClass("d-none").prop("disabled", false);
     } else {
       const supplier = partyType() === "supplier";
       $("#party-label").text(supplier ? "Supplier" : "Customer");
-      $("#party-supplier").toggleClass("d-none", !supplier);
-      $("#party-customer").toggleClass("d-none", supplier);
+      $("#party-customer").prop("disabled", false).toggleClass("d-none", supplier);
+      $("#party-supplier").prop("disabled", false).toggleClass("d-none", !supplier);
     }
     refreshTemplateOptions();
   });
