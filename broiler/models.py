@@ -167,10 +167,17 @@ class Supervisor(models.Model):
     Represents a supervisor who manages broiler farms.
     """
     branch = models.ForeignKey(
-        Branch, 
+        Branch,
         on_delete=models.CASCADE,
         related_name='supervisors',
         help_text=_("Branch this supervisor belongs to")
+    )
+    employee = models.ForeignKey(
+        'hr.Employee',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='broiler_supervisor_roles',
+        help_text=_("HR employee record this supervisor is — name/phone/address are copied from here")
     )
     name = models.CharField(
         max_length=100,
@@ -178,6 +185,7 @@ class Supervisor(models.Model):
     )
     phone_no = models.CharField(
         max_length=15,
+        blank=True,
         validators=[
             RegexValidator(
                 regex=r'^\+?1?\d{9,15}$',
@@ -186,7 +194,7 @@ class Supervisor(models.Model):
         ],
         help_text=_("Contact number of the supervisor")
     )
-    address = models.TextField(help_text=_("Residential address of the supervisor"))
+    address = models.TextField(blank=True, help_text=_("Residential address of the supervisor"))
     email = models.EmailField(blank=True, null=True, help_text=_("Email address of the supervisor"))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -440,7 +448,9 @@ class BroilerFarm(models.Model):
     farm_code = models.CharField(
         max_length=50,
         unique=True,
-        help_text=_("Unique code for the farm")
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code, e.g. FRM/AKB-0203 — FRM/<branch prefix>-<branch code suffix><farm serial>")
     )
     farm_name = models.CharField(
         max_length=100,
@@ -559,6 +569,25 @@ class BroilerFarm(models.Model):
                 'supervisor': _('Selected supervisor does not belong to the selected branch.')
             })
 
+    @classmethod
+    def next_farm_code(cls, branch):
+        """FRM/<branch prefix>-<branch code suffix><per-branch serial>, e.g.
+        the 3rd farm of branch AKB (code BRH-0002) is FRM/AKB-0203."""
+        match = re.match(r"^BRH-(\d+)$", branch.code or "")
+        branch_suffix = f"{int(match.group(1)):02d}" if match else f"{branch.pk:02d}"
+        prefix = f"FRM/{branch.prefix}-{branch_suffix}"
+        serials = []
+        for existing in cls.objects.filter(farm_code__startswith=prefix).values_list("farm_code", flat=True):
+            code_match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if code_match:
+                serials.append(int(code_match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1:02d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.farm_code and self.branch_id:
+            self.farm_code = self.next_farm_code(self.branch)
+        super().save(*args, **kwargs)
+
 
 class BroilerFarmShed(models.Model):
     """
@@ -635,7 +664,18 @@ class BroilerBatch(models.Model):
     )
     batch_name = models.CharField(
         max_length=50,
-        help_text=_("Name or identifier for the batch")
+        blank=True,
+        help_text=_("Auto-generated per farm, e.g. FRM/BAH-0201-BATCH 1")
+    )
+    book_number = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text=_("Grower book number for this batch")
+    )
+    lot_no = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text=_("Lot number for this batch")
     )
     start_date = models.DateField(
         blank=True, 
@@ -662,6 +702,23 @@ class BroilerBatch(models.Model):
     def get_disease_count(self):
         """Returns the number of diseases recorded for this batch."""
         return self.broilerdisease_set.count()
+
+    @classmethod
+    def next_batch_name(cls, farm):
+        """<farm code>-BATCH <n>, serial per farm — e.g. the 2nd batch of
+        farm FRM/BAH-0201 is FRM/BAH-0201-BATCH 2."""
+        prefix = f"{farm.farm_code}-BATCH "
+        serials = []
+        for existing in cls.objects.filter(broiler_farm=farm, batch_name__startswith=prefix).values_list("batch_name", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.batch_name and self.broiler_farm_id:
+            self.batch_name = self.next_batch_name(self.broiler_farm)
+        super().save(*args, **kwargs)
 
 
 class BroilerDisease(models.Model):

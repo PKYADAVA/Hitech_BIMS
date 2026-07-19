@@ -411,12 +411,17 @@ class SupervisorTemplateView(View):
     """View for rendering the supervisor template."""
     
     def get(self, request):
+        from hr.models import Employee
+
         cache_key = "branch_list"
         branches = cache.get(cache_key)
         if not branches:
             branches = list(Branch.objects.values())
             cache.set(cache_key, branches)
-        context = {"branches": branches}
+        context = {
+            "branches": branches,
+            "employees": Employee.objects.filter(relieve=False).order_by("full_name"),
+        }
         return render(request, "supervisor.html", context)
 
 @method_decorator(login_required, name="dispatch")
@@ -473,52 +478,80 @@ class SupervisorAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                supervisor = Supervisor.objects.select_related("branch").get(id=id)
+                supervisor = Supervisor.objects.select_related("branch", "employee").get(id=id)
                 return JsonResponse({
-                    "id": supervisor.id.id,
+                    "id": supervisor.id,
                     "supervisor": supervisor.name,
+                    "branch": supervisor.branch_id,
                     "branch_name": supervisor.branch.branch_name,
+                    "employee": supervisor.employee_id,
                 })
-            
+
             cache_key = "supervisor_list"
             cached_data = self.get_cached_data(cache_key)
             if cached_data:
                 return JsonResponse(cached_data, safe=False)
-            
+
             supervisors = list(
                 Supervisor.objects.select_related("branch")
                 .annotate(branch_name=F("branch__branch_name"))
-                .values("id", "name", "branch_name")
+                .values("id", "name", "branch_name", "branch", "employee")
             )
             self.set_cached_data(cache_key, supervisors)
             return JsonResponse(supervisors, safe=False)
         except Exception as e:
             return self.handle_exception(e)
 
+    @staticmethod
+    def _apply_employee(supervisor, employee):
+        """Supervisor's name/phone/address are always a copy of the chosen
+        HR Employee record — Supervisor is picked from the Employee list,
+        not typed in freehand."""
+        supervisor.employee = employee
+        supervisor.name = employee.full_name or ""
+        supervisor.phone_no = str(employee.personal_contact) if employee.personal_contact else ""
+        supervisor.address = employee.correspondence_address or ""
+
     def post(self, request) -> JsonResponse:
+        from hr.models import Employee
         try:
-            data = request.POST
-            branch = Branch.objects.get(branch_name=data["branch"])
+            data = json.loads(request.body or "{}")
+            try:
+                branch = Branch.objects.get(id=data.get("branch"))
+            except Branch.DoesNotExist:
+                return JsonResponse({"error": "Invalid branch"}, status=400)
+            try:
+                employee = Employee.objects.get(id=data.get("employee"))
+            except Employee.DoesNotExist:
+                return JsonResponse({"error": "Select an employee"}, status=400)
             with transaction.atomic():
-                Supervisor.objects.create(
-                    name=data["supervisor_name"],
-                    branch=branch
-                )
+                supervisor = Supervisor(branch=branch)
+                self._apply_employee(supervisor, employee)
+                supervisor.save()
                 cache.delete("supervisor_list")
             return JsonResponse({"message": "Supervisor created"}, status=201)
         except Exception as e:
             return self.handle_exception(e)
 
     def put(self, request, id: int) -> JsonResponse:
+        from hr.models import Employee
         try:
             supervisor = Supervisor.objects.get(id=id)
-            data = json.loads(request.body)
+            data = json.loads(request.body or "{}")
             with transaction.atomic():
-                supervisor.name = data["supervisor_name"]
-                supervisor.branch.branch_name = data["branch"]
+                if data.get("branch"):
+                    supervisor.branch_id = data["branch"]
+                if data.get("employee"):
+                    try:
+                        employee = Employee.objects.get(id=data["employee"])
+                    except Employee.DoesNotExist:
+                        return JsonResponse({"error": "Invalid employee"}, status=400)
+                    self._apply_employee(supervisor, employee)
                 supervisor.save()
                 cache.delete("supervisor_list")
             return JsonResponse({"message": "Supervisor updated"})
+        except Supervisor.DoesNotExist:
+            raise Http404("Supervisor not found")
         except Exception as e:
             return self.handle_exception(e)
 
@@ -755,18 +788,20 @@ class BroilerBatchAPI(BaseAPIView):
                 return JsonResponse({
                     "id": broiler_batch.id,
                     "name": broiler_batch.batch_name,
+                    "book_number": broiler_batch.book_number,
+                    "lot_no": broiler_batch.lot_no,
                     "broiler_farm_name": broiler_batch.broiler_farm.farm_name,
                 })
-            
+
             cache_key = "broiler_batch_list"
             cached_data = self.get_cached_data(cache_key)
             if cached_data:
                 return JsonResponse(cached_data, safe=False)
-            
+
             broiler_batches = list(
                 BroilerBatch.objects.select_related("broiler_farm")
                 .annotate(broiler_farm_name=F("broiler_farm__farm_name"))
-                .values("id", "batch_name", "broiler_farm_name")
+                .values("id", "batch_name", "book_number", "lot_no", "broiler_farm_name")
             )
             self.set_cached_data(cache_key, broiler_batches)
             return JsonResponse(broiler_batches, safe=False)
@@ -778,24 +813,34 @@ class BroilerBatchAPI(BaseAPIView):
             data = request.POST
             farm_obj = BroilerFarm.objects.get(id=data["broiler_farm_id"])
             with transaction.atomic():
-                BroilerBatch.objects.create(
-                    batch_name=data["batch_name"],
-                    broiler_farm=farm_obj
+                # batch_name is auto-generated (<farm code>-BATCH <n>) in
+                # BroilerBatch.save() — never accepted from the form.
+                batch = BroilerBatch.objects.create(
+                    broiler_farm=farm_obj,
+                    book_number=data.get("book_number") or "",
+                    lot_no=data.get("lot_no") or "",
                 )
                 cache.delete("broiler_batch_list")
-            return JsonResponse({"message": "BroilerBatch created"}, status=201)
+            return JsonResponse({"message": "BroilerBatch created", "batch_name": batch.batch_name}, status=201)
         except Exception as e:
             return self.handle_exception(e)
 
     def put(self, request, id: int) -> JsonResponse:
         try:
             broiler_batch = BroilerBatch.objects.get(id=id)
-            data = json.loads(request.body)
+            data = json.loads(request.body or "{}")
             with transaction.atomic():
-                broiler_batch.batch_name = data["batch_name"]
+                # Only Book Number / Lot No are editable — batch_name is an
+                # auto-generated code and the farm is fixed at creation.
+                if "book_number" in data:
+                    broiler_batch.book_number = data["book_number"] or ""
+                if "lot_no" in data:
+                    broiler_batch.lot_no = data["lot_no"] or ""
                 broiler_batch.save()
                 cache.delete("broiler_batch_list")
             return JsonResponse({"message": "BroilerBatch updated"})
+        except BroilerBatch.DoesNotExist:
+            raise Http404("Broiler batch not found")
         except Exception as e:
             return self.handle_exception(e)
 
@@ -896,8 +941,10 @@ class BroilerFarmAPI(BaseAPIView):
         "agreement_copy", "other_documents",
         "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file",
     ]
+    # farm_code is auto-generated (FRM/<branch prefix>-<branch suffix><serial>)
+    # in BroilerFarm.save() — never accepted from the form.
     FORM_FIELDS = [
-        "farm_code", "farm_name", "region", "line", "farm_pincode", "farm_capacity",
+        "farm_name", "region", "line", "farm_pincode", "farm_capacity",
         "farm_type", "state", "district", "area", "farm_address", "farm_latitude",
         "farm_longitude", "agreement_start_date", "agreement_end_date", "agreement_months",
         "farm_sqft", "cheque_1_no", "cheque_2_no", "cheque_3_no", "cheque_4_no", "remarks",
@@ -912,6 +959,7 @@ class BroilerFarmAPI(BaseAPIView):
                 data = {field: getattr(broiler_farm, field) for field in self.FORM_FIELDS}
                 data.update({
                     "id": broiler_farm.id,
+                    "farm_code": broiler_farm.farm_code,
                     "branch_id": broiler_farm.branch_id,
                     "supervisor_id": broiler_farm.supervisor_id,
                     "farmer_id": broiler_farm.farmer_id,

@@ -275,8 +275,8 @@
                     </div>
 
                     <div class="col-md-3">
-                        <label for="farm_code" class="form-label">Farm Code<span class="text-danger">*</span></label>
-                        <input type="text" id="farm_code" class="form-control" required />
+                        <label for="farm_code" class="form-label">Farm Code</label>
+                        <input type="text" id="farm_code" class="form-control bg-light" readonly placeholder="Auto-generated" />
                     </div>
                     <div class="col-md-3">
                         <label for="farmer" class="form-label">Farmer<span class="text-danger">*</span></label>
@@ -902,7 +902,6 @@ $(document).ready(function () {
         formData.append("farmer_id", $("#farmer").val());
         formData.append("region", $("#region option:selected").text());
         formData.append("line", $("#line").val());
-        formData.append("farm_code", $("#farm_code").val());
         formData.append("farm_name", $("#farm_name").val());
         formData.append("farm_pincode", $("#farm_pincode").val());
         formData.append("farm_capacity", $("#farm_capacity").val());

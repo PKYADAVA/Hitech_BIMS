@@ -49,9 +49,9 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="batch_name">Batch Name</label>
-              <input type="text" id="batch_name" class="form-control"
-                     placeholder="Enter batch name" required>
+              <label class="form-label" for="batch_name">Batch No.</label>
+              <input type="text" id="batch_name" class="form-control bg-light" readonly
+                     placeholder="Auto-generated (Farm Code-BATCH n)">
             </div>
           </div>
           <div class="d-flex justify-content-end gap-2 mt-4">
@@ -80,7 +80,7 @@
         <thead>
           <tr>
             <th>Broiler Farm</th>
-            <th>Batch Name</th>
+            <th>Batch No.</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -107,23 +107,15 @@ $(document).ready(function () {
         }
         tableBody.empty();
 
+        // Batch names are auto-generated codes (<farm code>-BATCH n), so
+        // there's nothing left to edit on a batch — only delete remains.
         response.forEach((batch) => {
-          const modalId = `editBatchModal-${batch.id}`;
-          const formId = `edit-batch-form-${batch.id}`;
-
           const tableRow = `
             <tr>
               <td>${batch.broiler_farm_name}</td>
               <td>${batch.batch_name}</td>
               <td>
                 <div class="d-flex gap-1">
-                  {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
-                    data-bs-toggle="modal" data-bs-target="#${modalId}"
-                    data-id="${batch.id}"
-                    data-broiler-farm="${batch.broiler_farm}"
-                    data-batch-name="${batch.batch_name}">
-                    <i class="fas fa-pen"></i>
-                  </button>{% endif %}
                   {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${batch.id}">
                     <i class="fas fa-trash"></i>
                   </button>{% endif %}
@@ -131,64 +123,7 @@ $(document).ready(function () {
               </td>
             </tr>`;
 
-          const modal = `
-            <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
-              <div class="modal-dialog">
-                <div class="modal-content">
-                  <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-pen me-2"></i>Edit Batch</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                  </div>
-                  <form id="${formId}">
-                    <div class="modal-body">
-                      <input type="hidden" name="batch-id" value="${batch.id}">
-                      <div class="mb-3">
-                        <label class="form-label">Broiler Farm</label>
-                        <input type="text" class="form-control" name="broiler_farm"
-                               value="${batch.broiler_farm}" required>
-                      </div>
-                      <div class="mb-3">
-                        <label class="form-label">Batch Name</label>
-                        <input type="text" class="form-control" name="batch_name"
-                               value="${batch.batch_name}" required>
-                      </div>
-                    </div>
-                    <div class="modal-footer">
-                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times"></i>Cancel
-                      </button>
-                      <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i>Update
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>`;
-
           tableBody.append(tableRow);
-          $("body").append(modal);
-
-          $(`#${formId}`).off("submit").on("submit", function (e) {
-            e.preventDefault();
-            $.ajax({
-              url: `/broiler_batch/${batch.id}/update/`,
-              type: "POST",
-              headers: { "X-CSRFToken": "{{ csrf_token }}" },
-              data: {
-                batch_id: $(`#${formId} [name="batch-id"]`).val(),
-                broiler_farm: $(`#${formId} [name="broiler_farm"]`).val(),
-                batch_name: $(`#${formId} [name="batch_name"]`).val(),
-              },
-              success: function () {
-                loadBatchList();
-                $(`#${modalId}`).modal("hide");
-              },
-              error: function () {
-                window.showToast('danger', "Failed to update batch. Please try again.");
-              },
-            });
-          });
         });
 
         table.DataTable({
@@ -216,12 +151,12 @@ $(document).ready(function () {
       headers: { "X-CSRFToken": "{{ csrf_token }}" },
       data: {
         broiler_farm_id: $("#broiler_farm").val(),
-        batch_name: $("#batch_name").val(),
       },
-      success: function () {
+      success: function (resp) {
         loadBatchList();
         $("#batchFormModal").modal("hide");
         $("#broiler-batch-form").trigger("reset");
+        window.showToast('success', `Batch ${resp.batch_name} created.`);
       },
       error: function () {
         window.showToast('danger', "Failed to add new batch.");

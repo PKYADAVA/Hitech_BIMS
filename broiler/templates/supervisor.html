@@ -34,25 +34,23 @@
                     <!-- Form Section -->
                     <form id="supervisor-form">
                         {% csrf_token %}
-                        <input type="hidden" id="supervisor-id" />
                         <div class="mb-3">
                             <label for="branch" class="form-label">Branch</label>
-                            <select id="branch" class="form-control" required>
+                            <select id="branch" class="form-select" required>
                                 <option value="" selected disabled>Select a branch</option>
                                 {% for branch in branches %}
-                                <option value="{{ branch.branch_name }}">{{ branch.branch_name }}</option>
+                                <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label for="branch_name" class="form-label">Supervisor Name</label>
-                            <input
-                                type="text"
-                                id="supervisor_name"
-                                class="form-control"
-                                placeholder="Enter supervisor name"
-                                required
-                                />
+                            <label for="employee" class="form-label">Supervisor (Employee)</label>
+                            <select id="employee" class="form-select" required>
+                                <option value="" selected disabled>Select an employee</option>
+                                {% for e in employees %}
+                                <option value="{{ e.id }}">{{ e.full_name }}{% if e.designation %} - {{ e.designation }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                         <div class="d-flex justify-content-end gap-2 mt-3">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -94,6 +92,10 @@
 
 <script>
     $(document).ready(function () {
+        const csrfToken = "{{ csrf_token }}";
+        const employeeOptionsHtml = $("#employee").html();
+        const branchOptionsHtml = $("#branch").html();
+
         // Function to Load Supervisor List
         function loadSupervisorList() {
             $.ajax({
@@ -108,25 +110,22 @@
                         table.DataTable().clear().destroy();
                     }
                     tableBody.empty();
+                    $(".supervisor-edit-modal").remove();
 
                     // Populate the table dynamically
                     response.forEach((item) => {
                         const modalId = `editSupervisorModal-${item.id}`;
                         const formId = `edit-supervisor-form-${item.id}`;
-                        console.log(item, "item");
 
                         const tableRow = `
                             <tr>
-                                <td>${item.branch_name}</td>
-                                <td>${item.name}</td>
+                                <td>${escapeHtml(item.branch_name)}</td>
+                                <td>${escapeHtml(item.name)}</td>
                                 <td>
                                     <div class="d-flex gap-1">
                                     {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-button"
                                         data-bs-toggle="modal"
-                                        data-bs-target="#${modalId}"
-                                        data-id="${item.id}"
-                                        data-branch="${item.branch_name}"
-                                        data-supervisor-name="${item.name}">
+                                        data-bs-target="#${modalId}">
                                         <i class="fas fa-pen"></i>
                                     </button>{% endif %}
                                     {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-supervisor"
@@ -139,7 +138,7 @@
                         `;
 
                         const modal = `
-                            <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
+                            <div class="modal fade supervisor-edit-modal" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}-Label" aria-hidden="true">
                                 <div class="modal-dialog">
                                     <div class="modal-content">
                                         <div class="modal-header">
@@ -148,14 +147,13 @@
                                         </div>
                                         <form id="${formId}">
                                             <div class="modal-body">
-                                                <input type="hidden" name="supervisor-id" value="${item.id}">
                                                 <div class="mb-3">
                                                     <label class="form-label">Branch</label>
-                                                    <input type="text" class="form-control" name="branch" value="${item.branch_name}" required>
+                                                    <select class="form-select" name="branch" required>${branchOptionsHtml}</select>
                                                 </div>
                                                 <div class="mb-3">
-                                                    <label class="form-label">Supervisor Name</label>
-                                                    <input type="text" class="form-control" name="supervisor_name" value="${item.name}" required>
+                                                    <label class="form-label">Supervisor (Employee)</label>
+                                                    <select class="form-select" name="employee" required>${employeeOptionsHtml}</select>
                                                 </div>
                                             </div>
                                             <div class="modal-footer">
@@ -170,24 +168,23 @@
 
                         tableBody.append(tableRow);
                         $("body").append(modal);
+                        $(`#${formId} [name="branch"]`).val(item.branch);
+                        $(`#${formId} [name="employee"]`).val(item.employee);
 
                         // Add event listener for the form inside modal
                         $(`#${formId}`).off("submit").on("submit", function (e) {
                             e.preventDefault();
 
                             const jsonData = {
-                                supervisor_id: $(`#${formId} [name="supervisor-id"]`).val(),
                                 branch: $(`#${formId} [name="branch"]`).val(),
-                                supervisor_name: $(`#${formId} [name="supervisor_name"]`).val(),
+                                employee: $(`#${formId} [name="employee"]`).val(),
                             };
-
-                            console.log(jsonData, "jsonData");
 
                             $.ajax({
                                 url: `/supervisor/${item.id}/`,
                                 type: "PUT",
                                 headers: {
-                                    "X-CSRFToken": "{{ csrf_token }}",
+                                    "X-CSRFToken": csrfToken,
                                     "Content-Type": "application/json",
                                 },
                                 data: JSON.stringify(jsonData),
@@ -196,8 +193,8 @@
                                     loadSupervisorList();
                                     $(`#${modalId}`).modal("hide");
                                 },
-                                error: function (xhr, status, error) {
-                                    console.error(`Update error: ${error}`);
+                                error: function (xhr) {
+                                    window.showToast('danger', xhr.responseJSON?.error || "Failed to update supervisor.");
                                 },
                             });
                         });
@@ -219,26 +216,23 @@
         $("#supervisor-form").submit(function (e) {
             e.preventDefault();
 
-            const formData = $(this).serialize();
-            const branch = $("#branch").val();
-            const supervisor_name = $("#supervisor_name").val();
-
             $.ajax({
                 url: "{% url 'supervisor_create' %}",
                 type: "POST",
-                data: {
-                    branch: branch,
-                    supervisor_name: supervisor_name,
-                    csrfmiddlewaretoken: "{{ csrf_token }}",
-                },
+                contentType: "application/json",
+                headers: { "X-CSRFToken": csrfToken },
+                data: JSON.stringify({
+                    branch: $("#branch").val(),
+                    employee: $("#employee").val(),
+                }),
                 success: function () {
                     $("#branchFormModal").modal("hide");
                     window.showToast('success', "Supervisor created successfully.");
                     loadSupervisorList();
                     $("#supervisor-form").trigger("reset");
                 },
-                error: function (xhr, status, error) {
-                    console.error(`Create error: ${error}`);
+                error: function (xhr) {
+                    window.showToast('danger', xhr.responseJSON?.error || "Failed to create supervisor.");
                 },
             });
         });
@@ -250,13 +244,13 @@
             $.ajax({
                 url: `/supervisor/${supervisorId}/delete/`,
                 type: "DELETE",
-                headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                headers: { "X-CSRFToken": csrfToken },
                 success: function () {
                     window.showToast('success', "Supervisor deleted successfully.");
                     loadSupervisorList();
                 },
-                error: function (xhr, status, error) {
-                    console.error(`Delete error: ${error}`);
+                error: function (xhr) {
+                    window.showToast('danger', xhr.responseJSON?.error || "Failed to delete supervisor.");
                 },
             });
         });
