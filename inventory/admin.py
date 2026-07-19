@@ -2,7 +2,7 @@ from django.contrib import admin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from import_export.fields import Field
-from import_export.widgets import ForeignKeyWidget
+from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
 from .models import ItemCategory, Warehouse, Item
 
 
@@ -13,7 +13,7 @@ class ItemResource(resources.ModelResource):
     )
     warehouse = Field(
         attribute='warehouse', column_name='warehouse',
-        widget=ForeignKeyWidget(Warehouse, field='name'),
+        widget=ManyToManyWidget(Warehouse, field='name'),
     )
 
     class Meta:
@@ -35,11 +35,15 @@ class WarehouseAdmin(ImportExportModelAdmin):
 @admin.register(Item)
 class ItemAdmin(ImportExportModelAdmin):
     resource_classes = [ItemResource]
-    list_display = ('id', 'item_code', 'description', 'category', 'warehouse', 'valuation_method',
+    list_display = ('id', 'item_code', 'description', 'category', 'warehouse_list', 'valuation_method',
                     'usage', 'source', 'type', 'item_account', 'lot_serial_control')
     list_filter = ('category', 'warehouse', 'valuation_method', 'usage', 'source', 'type', 'item_account', 'lot_serial_control')
     search_fields = ('item_code', 'description', 'category__name', 'warehouse__name', 'hsn_code')
-    autocomplete_fields = ('category', 'warehouse')
+    autocomplete_fields = ('category',)
+    filter_horizontal = ('warehouse',)
+
+    def warehouse_list(self, obj):
+        return ", ".join(w.name for w in obj.warehouse.all())
     fieldsets = (
         ("General Information", {
             'fields': ('item_code', 'description', 'category', 'warehouse')

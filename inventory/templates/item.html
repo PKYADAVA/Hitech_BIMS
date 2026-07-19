@@ -79,9 +79,11 @@
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label for="warehouse" class="form-label">Warehouse</label>
-                            <select id="warehouse" class="form-select" required>
-                                <option value="" selected disabled>Select warehouse</option>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label for="warehouse" class="form-label mb-0">Warehouse</label>
+                                <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#warehouse">Select All</button>
+                            </div>
+                            <select id="warehouse" class="form-select" multiple required>
                                 {% for warehouse in warehouses %}
                                     <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
                                 {% endfor %}
@@ -113,6 +115,24 @@
                                 <option value="" selected disabled>Select usage</option>
                                 <option value="Produced">Produced</option>
                                 <option value="Sales">Sales</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="storage_uom" class="form-label">Storage UOM</label>
+                            <select id="storage_uom" class="form-select">
+                                <option value="">Select storage UOM</option>
+                                {% for uom in uoms %}
+                                    <option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="consumption_uom" class="form-label">Consumption UOM</label>
+                            <select id="consumption_uom" class="form-select">
+                                <option value="">Select consumption UOM</option>
+                                {% for uom in uoms %}
+                                    <option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="d-flex justify-content-end gap-2 mt-3">
@@ -151,6 +171,8 @@
                                 <th>Valuation Method</th>
                                 <th>Standard Cost/Unit</th>
                                 <th>Usage</th>
+                                <th>Storage UOM</th>
+                                <th>Consumption UOM</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -165,6 +187,36 @@
 </div>
 
 <script>
+    const UOM_OPTIONS = [
+        {% for uom in uoms %}{ id: {{ uom.id }}, label: "{{ uom.name|escapejs }}{% if uom.symbol %} ({{ uom.symbol|escapejs }}){% endif %}" },{% endfor %}
+    ];
+
+    function uomOptionsHtml(selectedId) {
+        const selected = selectedId !== undefined && selectedId !== null ? String(selectedId) : "";
+        let html = `<option value="" ${selected === "" ? "selected" : ""}>Select UOM</option>`;
+        UOM_OPTIONS.forEach((u) => {
+            html += `<option value="${u.id}" ${String(u.id) === selected ? "selected" : ""}>${escapeHtml(u.label)}</option>`;
+        });
+        return html;
+    }
+
+    const WAREHOUSE_OPTIONS = [
+        {% for warehouse in warehouses %}{ id: {{ warehouse.id }}, name: "{{ warehouse.name|escapejs }}" },{% endfor %}
+    ];
+
+    function warehouseOptionsHtml(selectedIds) {
+        const selected = new Set((selectedIds || []).map(String));
+        return WAREHOUSE_OPTIONS.map((w) =>
+            `<option value="${w.id}" ${selected.has(String(w.id)) ? "selected" : ""}>${escapeHtml(w.name)}</option>`
+        ).join("");
+    }
+
+    $(document).on("click", ".select-all-warehouses", function () {
+        const target = $($(this).data("target"));
+        target.find("option").prop("selected", true);
+        target.trigger("change");
+    });
+
     $(document).ready(function () {
         // Function to Load Item List
         function loadItemList() {
@@ -184,6 +236,8 @@
 
                     // Populate the table dynamically
                     response.forEach((item) => {
+                        const storageUomLabel = item.storage_uom__symbol || item.storage_uom__name || "";
+                        const consumptionUomLabel = item.consumption_uom__symbol || item.consumption_uom__name || "";
                         const tableRow = `
                             <tr>
                                 <td>${item.item_code}</td>
@@ -193,6 +247,8 @@
                                 <td>${item.valuation_method}</td>
                                 <td>${item.standard_cost_per_unit}</td>
                                 <td>${item.usage}</td>
+                                <td>${escapeHtml(storageUomLabel)}</td>
+                                <td>${escapeHtml(consumptionUomLabel)}</td>
                                 <td>
                                     <div class="d-flex gap-1">
                                     {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-item"
@@ -200,10 +256,12 @@
                                         data-item_code="${item.item_code}"
                                         data-description="${item.description}"
                                         data-category="${item.category__name}"
-                                        data-warehouse="${item.warehouse__name}"
+                                        data-warehouse='${JSON.stringify(item.warehouse_ids || [])}'
                                         data-valuation_method="${item.valuation_method}"
                                         data-standard_cost_per_unit="${item.standard_cost_per_unit}"
-                                        data-usage="${item.usage}">
+                                        data-usage="${item.usage}"
+                                        data-storage_uom="${item.storage_uom ?? ""}"
+                                        data-consumption_uom="${item.consumption_uom ?? ""}">
                                         <i class="fas fa-pen"></i>
                                     </button>{% endif %}
                                     {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-item"
@@ -263,8 +321,11 @@
                                         <input type="text" id="dynamic-category" class="form-control" value="${itemData.category}" required />
                                     </div>
                                     <div class="mb-3">
-                                        <label for="dynamic-warehouse" class="form-label">Warehouse</label>
-                                        <input type="text" id="dynamic-warehouse" class="form-control" value="${itemData.warehouse}" required />
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <label for="dynamic-warehouse" class="form-label mb-0">Warehouse</label>
+                                            <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#dynamic-warehouse">Select All</button>
+                                        </div>
+                                        <select id="dynamic-warehouse" class="form-select" multiple required>${warehouseOptionsHtml(itemData.warehouse)}</select>
                                     </div>
                                     <div class="mb-3">
                                         <label for="dynamic-valuation_method" class="form-label">Valuation Method</label>
@@ -283,6 +344,14 @@
                                             <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
                                             <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
                                         </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-storage_uom" class="form-label">Storage UOM</label>
+                                        <select id="dynamic-storage_uom" class="form-select">${uomOptionsHtml(itemData.storage_uom)}</select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-consumption_uom" class="form-label">Consumption UOM</label>
+                                        <select id="dynamic-consumption_uom" class="form-select">${uomOptionsHtml(itemData.consumption_uom)}</select>
                                     </div>
                                     <div class="d-flex justify-content-end gap-2 mt-3">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -313,10 +382,12 @@
                     item_code: $("#dynamic-item_code").val(),
                     description: $("#dynamic-description").val(),
                     category: $("#dynamic-category").val(),
-                    warehouse: $("#dynamic-warehouse").val(),
+                    warehouse: $("#dynamic-warehouse").val() || [],
                     valuation_method: $("#dynamic-valuation_method").val(),
                     standard_cost_per_unit: parseFloat($("#dynamic-standard_cost_per_unit").val()) || 0,
                     usage: $("#dynamic-usage").val(),
+                    storage_uom: $("#dynamic-storage_uom").val() || null,
+                    consumption_uom: $("#dynamic-consumption_uom").val() || null,
                 };
                 console.log(updatedItemData, "updatedItemData");
 
@@ -363,6 +434,8 @@
                 valuation_method: $("#valuation_method").val(),
                 standard_cost_per_unit: parseFloat($("#standard_cost_per_unit").val()) || 0,
                 usage: $("#usage").val(),
+                storage_uom: $("#storage_uom").val() || null,
+                consumption_uom: $("#consumption_uom").val() || null,
             };
 
             $.ajax({

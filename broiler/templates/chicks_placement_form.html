@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Chicks Placement — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock %}
+
+{% block content %}
+{% include '_broiler_transaction_subnavbar.html' with active_tab='chicks_placement' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fa-solid fa-kiwi-bird"></i> Add Chicks Placement</div>
+  <div class="page-header-right"><a href="{% url 'chicks_placement_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
+</div>
+
+<div class="alert alert-info mx-auto" style="max-width:1100px">
+  This records the same data as Inventory &gt; Stock Transfer (Warehouse &rarr; Farm), just as a
+  simplified chicks-only entry screen — the two registers show the same underlying transfers.
+</div>
+
+<form id="chicks-placement-form">
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="direct-hatchery-toggle">
+        <label class="form-check-label" for="direct-hatchery-toggle">
+          <strong>Direct from Hatchery</strong> — no separate Warehouse leg for these rows
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">
+      <i class="fas fa-list-ol me-1"></i><strong>Chicks Placement Records</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="row-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:120px">Date <span class="text-danger">*</span></th>
+              <th style="min-width:110px">DC No.</th>
+              <th style="min-width:160px">Source Hatchery <span class="text-danger">*</span></th>
+              <th style="min-width:180px">From Warehouse</th>
+              <th style="min-width:180px">Farm <span class="text-danger">*</span></th>
+              <th style="min-width:140px">Batch</th>
+              <th style="min-width:220px">Chicks Item <span class="text-danger">*</span></th>
+              <th style="min-width:100px">Chicks Ordered <span class="text-danger">*</span></th>
+              <th style="min-width:100px">Transit Mortality</th>
+              <th style="min-width:90px">Shortage</th>
+              <th style="min-width:80px">Culls</th>
+              <th style="min-width:110px">Placement Qty</th>
+              <th style="min-width:90px">Rate</th>
+              <th style="min-width:110px">Amount</th>
+              <th style="min-width:100px">Vehicle</th>
+              <th style="min-width:100px">Driver</th>
+              <th style="min-width:140px">Remarks</th>
+              <th style="min-width:90px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit">Submit</button>
+    <a href="{% url 'chicks_placement_list' %}" class="btn btn-danger">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
+const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
+const hatcheryOptions = `<option value="">select</option>{% for h in hatcheries %}<option value="{{ h.id }}" data-warehouse="{{ h.warehouse_id|default:'' }}">{{ h.hatchery_name|escapejs }}</option>{% endfor %}`;
+const itemOptions = `<option value="">select</option>{% for item in chick_items %}<option value="{{ item.id }}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const TODAY = "{{ today }}";
+const get = id => document.getElementById(id);
+
+function row() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="form-control date" type="date" value="${TODAY}" required></td>
+    <td><input class="form-control dc-no"></td>
+    <td><select class="form-select source-hatchery" required>${hatcheryOptions}</select></td>
+    <td><select class="form-select warehouse" required>${warehouseOptions}</select></td>
+    <td><select class="form-select farm" required>${farmOptions}</select></td>
+    <td><select class="form-select batch" disabled><option value="">select a farm</option></select></td>
+    <td><select class="form-select item" required>${itemOptions}</select></td>
+    <td><input class="form-control chicks-ordered" type="number" min="0" step="1" value="0" required></td>
+    <td><input class="form-control transit-mortality" type="number" min="0" step="1" value="0"></td>
+    <td><input class="form-control shortage" type="number" min="0" step="1" value="0"></td>
+    <td><input class="form-control culls" type="number" min="0" step="1" value="0"></td>
+    <td><input class="form-control bg-light quantity" type="number" readonly value="0"></td>
+    <td><input class="form-control rate" type="number" min="0" step="0.01" value="0"></td>
+    <td><input class="form-control bg-light amount" readonly value="0.00"></td>
+    <td><input class="form-control vehicle-no"></td>
+    <td><input class="form-control driver-name"></td>
+    <td><input class="form-control remarks"></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('row-table').tBodies[0].append(tr);
+  applyDirectMode(tr);
+  refreshRowAddButtons();
+  return tr;
+}
+
+function isDirectHatchery() {
+  return get('direct-hatchery-toggle').checked;
+}
+
+// Only the last row offers "+" (add another row); earlier rows just delete.
+// The sole remaining row can't be deleted — no "+" would be left to add one back.
+function refreshRowAddButtons() {
+  const rows = document.querySelectorAll('#row-table tbody tr');
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').disabled = rows.length === 1;
+  });
+}
+
+function recalcAmount(tr) {
+  const qty = Number(tr.querySelector('.quantity').value) || 0;
+  const rate = Number(tr.querySelector('.rate').value) || 0;
+  tr.querySelector('.amount').value = (qty * rate).toFixed(2);
+}
+
+// Placement Qty is the only figure that ever reaches inventory/stock —
+// Chicks Ordered/Transit Mortality/Shortage/Culls are reference-only and
+// never sent anywhere except as their own fields.
+function recalcPlacementQty(tr) {
+  const ordered = Number(tr.querySelector('.chicks-ordered').value) || 0;
+  const transitMortality = Number(tr.querySelector('.transit-mortality').value) || 0;
+  const shortage = Number(tr.querySelector('.shortage').value) || 0;
+  const culls = Number(tr.querySelector('.culls').value) || 0;
+  const placementQty = Math.max(ordered - transitMortality - shortage - culls, 0);
+  tr.querySelector('.quantity').value = placementQty;
+  recalcAmount(tr);
+}
+
+async function refreshBatchBox(tr) {
+  const batchSelect = tr.querySelector('.batch');
+  const farmId = tr.querySelector('.farm').value;
+  if (!farmId) {
+    batchSelect.innerHTML = '<option value="">select a farm</option>';
+    batchSelect.disabled = true;
+    return;
+  }
+  batchSelect.disabled = false;
+  batchSelect.innerHTML = '<option value="">loading…</option>';
+  const resp = await fetch(`{% url 'stock_transfer_farm_batches' %}?farm=${farmId}`);
+  const batches = await resp.json();
+  batchSelect.innerHTML = '<option value="">select</option>' + batches.map(b =>
+    `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.batch_name}${b.is_active ? ' (Active)' : ''}</option>`).join('');
+}
+
+// A Warehouse can have several Hatcheries mapped to it (Hatchery.warehouse);
+// picking a Warehouse just soft-selects the matching Hatchery if there's
+// exactly one — it never hides other options, since the mapping data may
+// be incomplete.
+function autoSelectHatchery(tr) {
+  const warehouseId = tr.querySelector('.warehouse').value;
+  if (!warehouseId) return;
+  const hatcherySelect = tr.querySelector('.source-hatchery');
+  const matches = [...hatcherySelect.options].filter(o => o.value && o.dataset.warehouse === warehouseId);
+  if (matches.length === 1) { hatcherySelect.value = matches[0].value; }
+}
+
+// "Direct from Hatchery" (the toggle above the grid, applying to every row)
+// skips the Warehouse leg entirely — the technical transfer source becomes
+// that Hatchery's own mapped Warehouse (Stock Transfer always needs a
+// Warehouse/Farm source; there's no "hatchery" location type), so From
+// Warehouse is disabled rather than left applicable.
+function applyDirectMode(tr) {
+  const direct = isDirectHatchery();
+  const warehouseSelect = tr.querySelector('.warehouse');
+  warehouseSelect.disabled = direct;
+  warehouseSelect.required = !direct;
+  warehouseSelect.classList.toggle('bg-light', direct);
+  if (direct) { warehouseSelect.value = ''; }
+}
+
+get('direct-hatchery-toggle').addEventListener('change', () => {
+  document.querySelectorAll('#row-table tbody tr').forEach(applyDirectMode);
+});
+
+get('row-table').addEventListener('change', e => {
+  if (e.target.classList.contains('farm')) {
+    refreshBatchBox(e.target.closest('tr'));
+  }
+  if (e.target.classList.contains('warehouse')) {
+    autoSelectHatchery(e.target.closest('tr'));
+  }
+  if (e.target.classList.contains('item')) {
+    const tr = e.target.closest('tr');
+    const opt = e.target.selectedOptions[0];
+    if (opt && opt.dataset.rate && Number(tr.querySelector('.rate').value) === 0) {
+      tr.querySelector('.rate').value = opt.dataset.rate;
+      recalcAmount(tr);
+    }
+  }
+});
+
+get('row-table').addEventListener('input', e => {
+  if (e.target.matches('.chicks-ordered, .transit-mortality, .shortage, .culls')) {
+    recalcPlacementQty(e.target.closest('tr'));
+  } else if (e.target.matches('.rate')) {
+    recalcAmount(e.target.closest('tr'));
+  }
+});
+
+get('row-table').addEventListener('click', e => {
+  if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
+    e.target.closest('tr').remove(); refreshRowAddButtons();
+  }
+  if (e.target.closest('.add-row-inline')) { row(); }
+});
+
+get('chicks-placement-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  let missingWarehouseForDirect = false;
+  const direct = isDirectHatchery();
+  const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => {
+    const hatcherySelect = tr.querySelector('.source-hatchery');
+    const hatcheryId = hatcherySelect.value;
+    let warehouseId = tr.querySelector('.warehouse').value;
+    if (direct) {
+      // No separate Warehouse leg — the transfer's technical source is
+      // whichever Warehouse the chosen Hatchery is itself mapped to.
+      const opt = hatcherySelect.selectedOptions[0];
+      warehouseId = opt ? (opt.dataset.warehouse || '') : '';
+      if (hatcheryId && !warehouseId) { missingWarehouseForDirect = true; }
+    }
+    return {
+      date: tr.querySelector('.date').value,
+      dc_no: tr.querySelector('.dc-no').value,
+      source_hatchery: hatcheryId,
+      item: tr.querySelector('.item').value,
+      chicks_ordered: tr.querySelector('.chicks-ordered').value,
+      transit_mortality: tr.querySelector('.transit-mortality').value,
+      shortage: tr.querySelector('.shortage').value,
+      culls: tr.querySelector('.culls').value,
+      quantity: tr.querySelector('.quantity').value,
+      purchase_rate: tr.querySelector('.rate').value,
+      rate: tr.querySelector('.rate').value,
+      from_location_type: 'warehouse',
+      from_location_id: warehouseId,
+      to_location_type: 'farm',
+      to_location_id: tr.querySelector('.farm').value,
+      to_batch: tr.querySelector('.batch').value,
+      vehicle_no: tr.querySelector('.vehicle-no').value,
+      driver_name: tr.querySelector('.driver-name').value,
+      remarks: tr.querySelector('.remarks').value,
+    };
+  });
+  if (missingWarehouseForDirect) {
+    alert('One or more selected Hatcheries (Direct) has no Warehouse mapped to it — map one under Hatchery Master first, or untick Direct and pick a Warehouse.');
+    return;
+  }
+  if (!rows.length || rows.some(r => !r.item || !r.source_hatchery || !r.from_location_id || !r.to_location_id)) {
+    alert('Add at least one row with Chicks Item, Source Hatchery, Warehouse (or a Direct hatchery with a mapped Warehouse) and Farm selected.');
+    return;
+  }
+  if (rows.some(r => !Number(r.chicks_ordered))) {
+    alert('Enter Chicks Ordered for every row.');
+    return;
+  }
+  fetch("{% url 'stock_transfer_api_list' %}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+    body: JSON.stringify({ rows: rows }),
+  }).then(async r => {
+    if (!r.ok) { const err = await r.json(); throw new Error(err.error || 'Failed to save.'); }
+    window.location.href = "{% url 'chicks_placement_list' %}";
+  }).catch(err => alert(err.message));
+});
+
+row();
+</script>
+{% endblock %}

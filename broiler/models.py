@@ -886,3 +886,180 @@ class MedicineVaccineEntry(models.Model):
         row = (MedicineVaccineEntry.objects.filter(farm_id=farm_id, item_id=item_id)
                .filter(date_filter).order_by('-date', '-id').first())
         return row.stock if row else 0
+
+
+class BirdSale(models.Model):
+    """One sale of grown/live birds from a Farm/Batch to a Customer or a
+    Farmer (Broiler > Transactions > Bird Sale). A record/audit document
+    like Inventory's Stock Issue — it does not track a running live-bird
+    balance on the batch."""
+
+    SALE_TYPE_CHOICES = [
+        ('customer', 'Customer Sale'),
+        ('farmer', 'Farmer Sale'),
+    ]
+
+    sale_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                               help_text="Auto-generated transaction number, e.g. BS-2627-0001")
+    date = models.DateField(default=now)
+    doc_no = models.CharField(max_length=100, blank=True, help_text="External/reference document number")
+
+    sale_type = models.CharField(max_length=10, choices=SALE_TYPE_CHOICES, default='customer')
+    customer = models.ForeignKey('sales.Customer', on_delete=models.PROTECT, null=True, blank=True,
+                                 related_name='bird_sales')
+    farmer = models.ForeignKey(Farmer, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name='bird_sales')
+
+    farm = models.ForeignKey(BroilerFarm, on_delete=models.PROTECT, related_name='bird_sales')
+    batch = models.ForeignKey(BroilerBatch, on_delete=models.PROTECT, null=True, blank=True,
+                              related_name='bird_sales',
+                              help_text="Auto-set to the farm's active batch at the time of sale")
+
+    birds = models.PositiveIntegerField(default=0)
+    net_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Net weight in Kgs")
+    avg_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, editable=False,
+                                     help_text="Net weight / Birds")
+    rate = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Rate per Kg")
+    round_off = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False,
+                                 help_text="Net weight x Rate + RoundOff")
+
+    lifting_supervisor = models.ForeignKey(Supervisor, on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name='bird_sales')
+    vehicle = models.CharField(max_length=50, blank=True)
+    driver = models.CharField(max_length=100, blank=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    entry_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='broiler_bird_sales')
+    entry_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Bird Sale")
+        verbose_name_plural = _("Bird Sales")
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return self.sale_no
+
+    @property
+    def is_batch_active(self):
+        return bool(self.batch and self.batch.end_date is None)
+
+    def clean(self):
+        if self.sale_type == 'customer' and not self.customer_id:
+            raise ValidationError("Customer is required for a Customer Sale.")
+        if self.sale_type == 'farmer' and not self.farmer_id:
+            raise ValidationError("Farmer is required for a Farmer Sale.")
+
+    def save(self, *args, **kwargs):
+        self.avg_weight = round(self.net_weight / self.birds, 2) if self.birds else 0
+        self.amount = (self.net_weight or 0) * (self.rate or 0) + (self.round_off or 0)
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.sale_no:
+            self.sale_no = self._next_sale_no(self.date)
+            super().save(update_fields=["sale_no"])
+
+    @classmethod
+    def _next_sale_no(cls, on_date=None):
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"BS-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(sale_no__startswith=prefix).values_list("sale_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+
+class BirdSaleReceipt(models.Model):
+    """A payment received from a Bird Sale customer or farmer, booked
+    against a cost centre (Broiler > Transactions > Receipt). Reduces that
+    buyer's outstanding balance — not linked to one specific Bird Sale
+    row, mirroring Purchase's Supplier Payment."""
+
+    MODE_CHOICES = [
+        ('Cash', 'Cash'), ('Bank Transfer', 'Bank Transfer'),
+        ('Cheque', 'Cheque'), ('UPI', 'UPI'), ('Card', 'Card'),
+    ]
+
+    receipt_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                                  help_text="Auto-generated transaction number, e.g. RC-2627-0001")
+    date = models.DateField(default=now)
+    location = models.ForeignKey('inventory.Warehouse', on_delete=models.PROTECT,
+                                 related_name='bird_sale_receipts')
+
+    sale_type = models.CharField(max_length=10, choices=BirdSale.SALE_TYPE_CHOICES, default='customer')
+    customer = models.ForeignKey('sales.Customer', on_delete=models.PROTECT, null=True, blank=True,
+                                 related_name='bird_sale_receipts')
+    farmer = models.ForeignKey(Farmer, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name='bird_sale_receipts')
+
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='Cash')
+    receipt_account = models.ForeignKey('account.ChartOfAccount', on_delete=models.PROTECT,
+                                        related_name='bird_sale_receipts')
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    reference_no = models.CharField(max_length=100, blank=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    entry_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='broiler_bird_sale_receipts')
+    entry_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Bird Sale Receipt")
+        verbose_name_plural = _("Bird Sale Receipts")
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return self.receipt_no
+
+    def clean(self):
+        if self.sale_type == 'customer' and not self.customer_id:
+            raise ValidationError("Customer is required for a Customer receipt.")
+        if self.sale_type == 'farmer' and not self.farmer_id:
+            raise ValidationError("Farmer is required for a Farmer receipt.")
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.receipt_no:
+            self.receipt_no = self._next_receipt_no(self.date)
+            super().save(update_fields=["receipt_no"])
+
+    @classmethod
+    def _next_receipt_no(cls, on_date=None):
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"RC-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(receipt_no__startswith=prefix).values_list("receipt_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    @staticmethod
+    def balance_due(location_id, sale_type, customer_id, farmer_id, exclude_id=None):
+        """Total sold to this buyer minus total received from them, rolled
+        up across every Farm/Location sharing the given Location's Branch
+        (a cost centre has no direct Farm link, only a shared Branch)."""
+        from inventory.models import Warehouse
+        if not location_id or not (customer_id or farmer_id):
+            return 0
+        location = Warehouse.objects.filter(id=location_id).first()
+        if not location or not location.branch_id:
+            return 0
+        branch_id = location.branch_id
+        buyer_filter = {"farmer_id": farmer_id} if sale_type == 'farmer' else {"customer_id": customer_id}
+        total_sold = (BirdSale.objects.filter(farm__branch_id=branch_id, sale_type=sale_type, **buyer_filter)
+                      .aggregate(total=models.Sum('amount'))['total'] or 0)
+        receipts = BirdSaleReceipt.objects.filter(location__branch_id=branch_id, sale_type=sale_type, **buyer_filter)
+        if exclude_id:
+            receipts = receipts.exclude(id=exclude_id)
+        total_received = receipts.aggregate(total=models.Sum('amount'))['total'] or 0
+        return total_sold - total_received

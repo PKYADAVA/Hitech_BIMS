@@ -6,19 +6,21 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.http import Http404, JsonResponse
-from django.db.models import F, Prefetch, Q
+from django.db.models import F, Prefetch, Q, Sum
 from django.core.files.storage import default_storage
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
 from .models import (
-    Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
+    BirdSale, BirdSaleReceipt, Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
     BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup, MedicineVaccineEntry,
     Region, Supervisor,
 )
 from account.models import ChartOfAccount
-from inventory.models import Item
+from inventory.models import Item, Warehouse
+from sales.models import Customer
+from hatchery_master.models import Hatchery
 from decimal import Decimal
 from datetime import timedelta
 from django.utils import timezone
@@ -26,6 +28,13 @@ import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _uom_label(uom):
+    """Display text for a UnitOfMeasurement FK (symbol if set, else name)."""
+    if not uom:
+        return ""
+    return uom.symbol or uom.name
 
 # Constants
 STATES_AND_TERRITORIES = [
@@ -1319,7 +1328,7 @@ def _medicine_entry_to_dict(row):
         "batch": row.batch_id, "batch_name": row.batch.batch_name if row.batch_id else "",
         "age_days": row.age_days,
         "item": row.item_id, "item_name": row.item.item_code if row.item_id else "",
-        "unit": row.item.consumption_uom if row.item_id else "",
+        "unit": _uom_label(row.item.consumption_uom) if row.item_id else "",
         "qty": str(row.qty), "stock": str(row.stock),
         "remarks": row.remarks,
         "is_active": row.is_batch_active,
@@ -1515,7 +1524,7 @@ def medicine_entry_item_lookup(request):
     Add form's auto-filled Unit field."""
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
-    return JsonResponse({"unit": item.consumption_uom if item else ""})
+    return JsonResponse({"unit": _uom_label(item.consumption_uom) if item else ""})
 
 
 @login_required
@@ -1576,3 +1585,630 @@ def medicine_entry_group_delete(request):
         return JsonResponse({"error": "No entries found for this batch"}, status=404)
     qs.delete()
     return JsonResponse({"message": f"Deleted {count} entries"})
+
+
+# ---------------------------------------------------------------------------
+# Bird Sale (Broiler > Transactions)
+# ---------------------------------------------------------------------------
+
+def _bird_sale_to_dict(row):
+    buyer_name = row.customer.name if row.customer_id else (row.farmer.farmer_name if row.farmer_id else "")
+    return {
+        "id": row.id, "sale_no": row.sale_no, "date": row.date.isoformat(), "doc_no": row.doc_no,
+        "sale_type": row.sale_type,
+        "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
+        "farmer": row.farmer_id, "farmer_name": row.farmer.farmer_name if row.farmer_id else "",
+        "buyer_name": buyer_name,
+        "farm": row.farm_id, "farm_name": row.farm.farm_name,
+        "batch": row.batch_id, "batch_name": row.batch.batch_name if row.batch_id else "",
+        "birds": row.birds, "net_weight": str(row.net_weight), "avg_weight": str(row.avg_weight),
+        "rate": str(row.rate), "round_off": str(row.round_off), "amount": str(row.amount),
+        "lifting_supervisor": row.lifting_supervisor_id,
+        "lifting_supervisor_name": row.lifting_supervisor.name if row.lifting_supervisor_id else "",
+        "vehicle": row.vehicle, "driver": row.driver, "remarks": row.remarks,
+    }
+
+
+def _apply_bird_sale(instance, data):
+    if data.get("date"):
+        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+    instance.doc_no = data.get("doc_no") or ""
+    sale_type = data.get("sale_type") or "customer"
+    instance.sale_type = sale_type
+    farm_id = data.get("farm") or None
+    instance.farm_id = farm_id
+    instance.batch = _active_batch_for_farm(farm_id) if farm_id else None
+    if sale_type == "customer":
+        instance.customer_id = data.get("customer") or None
+        instance.farmer_id = None
+    else:
+        # A Farmer Sale is always the same farmer who grew these birds on
+        # this farm (buying their own birds back) — never a free pick from
+        # the whole Farmer list, so it's derived from the farm, not the
+        # client payload.
+        instance.customer_id = None
+        farm = BroilerFarm.objects.filter(id=farm_id).first() if farm_id else None
+        instance.farmer_id = farm.farmer_id if farm else None
+    instance.birds = int(data.get("birds") or 0)
+    instance.net_weight = Decimal(str(data.get("net_weight") or 0))
+    instance.rate = Decimal(str(data.get("rate") or 0))
+    instance.round_off = Decimal(str(data.get("round_off") or 0))
+    instance.lifting_supervisor_id = data.get("lifting_supervisor") or None
+    instance.vehicle = data.get("vehicle") or ""
+    instance.driver = data.get("driver") or ""
+    instance.remarks = data.get("remarks") or ""
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdSaleListTemplateView(View):
+    def get(self, request):
+        return render(request, "bird_sale_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdSaleFormTemplateView(View):
+    def get(self, request, id=None):
+        return render(request, "bird_sale_form.html", {
+            "instance": BirdSale.objects.filter(id=id).first() if id else None,
+            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "customers": Customer.objects.order_by("name"),
+            "farmers": Farmer.objects.order_by("farmer_name"),
+            "supervisors": Supervisor.objects.order_by("name"),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdSaleAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                row = BirdSale.objects.select_related(
+                    "customer", "farmer", "farm", "batch", "lifting_supervisor").get(id=id)
+                return JsonResponse(_bird_sale_to_dict(row))
+
+            qs = BirdSale.objects.select_related("customer", "farmer", "farm", "batch", "lifting_supervisor")
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            if from_date:
+                qs = qs.filter(date__gte=from_date)
+            if to_date:
+                qs = qs.filter(date__lte=to_date)
+            return JsonResponse([_bird_sale_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        except BirdSale.DoesNotExist:
+            raise Http404("Bird sale not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request) -> JsonResponse:
+        try:
+            data = json.loads(request.body or "{}")
+            rows = data.get("rows") or []
+            if not rows:
+                return JsonResponse({"error": "Add at least one sale row"}, status=400)
+            created = []
+            for row in rows:
+                if not row.get("farm"):
+                    continue
+                instance = BirdSale(entry_by=request.user)
+                _apply_bird_sale(instance, row)
+                instance.full_clean(exclude=["sale_no", "batch"])
+                instance.save()
+                created.append(instance.id)
+            if not created:
+                return JsonResponse({"error": "Add at least one sale row with a Farm selected"}, status=400)
+            return JsonResponse({"message": "Bird sale(s) created", "ids": created}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            instance = BirdSale.objects.get(id=id)
+            data = json.loads(request.body or "{}")
+            _apply_bird_sale(instance, data)
+            instance.full_clean(exclude=["sale_no", "batch"])
+            instance.save()
+            return JsonResponse({"message": "Bird sale updated"})
+        except BirdSale.DoesNotExist:
+            raise Http404("Bird sale not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            instance = BirdSale.objects.get(id=id)
+            instance.delete()
+            return JsonResponse({"message": "Bird sale deleted"})
+        except BirdSale.DoesNotExist:
+            raise Http404("Bird sale not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def bird_sale_farm_lookup(request):
+    """Returns the active batch and owning farmer for a farm, for the Add
+    form's auto-filled Batch field and Farmer Sale buyer (always the same
+    farmer who grew the birds on this farm) as soon as a Farm is picked."""
+    farm_id = request.GET.get("farm")
+    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    farm = BroilerFarm.objects.filter(id=farm_id).select_related("farmer").first() if farm_id else None
+    return JsonResponse({
+        "batch": batch.id if batch else None,
+        "batch_name": batch.batch_name if batch else "",
+        "farmer": farm.farmer_id if farm else None,
+        "farmer_name": farm.farmer.farmer_name if farm and farm.farmer_id else "",
+    })
+
+
+# ---------------------------------------------------------------------------
+# Bird Sale Receipt (Broiler > Transactions)
+# ---------------------------------------------------------------------------
+
+def _bird_sale_receipt_to_dict(row):
+    buyer_name = row.customer.name if row.customer_id else (row.farmer.farmer_name if row.farmer_id else "")
+    return {
+        "id": row.id, "receipt_no": row.receipt_no, "date": row.date.isoformat(),
+        "location": row.location_id, "location_name": row.location.name,
+        "sale_type": row.sale_type,
+        "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
+        "farmer": row.farmer_id, "farmer_name": row.farmer.farmer_name if row.farmer_id else "",
+        "buyer_name": buyer_name,
+        "mode": row.mode,
+        "receipt_account": row.receipt_account_id,
+        "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
+                                 if row.receipt_account_id else ""),
+        "amount": str(row.amount), "reference_no": row.reference_no, "remarks": row.remarks,
+    }
+
+
+def _apply_bird_sale_receipt(instance, data):
+    if data.get("date"):
+        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+    instance.location_id = data.get("location") or None
+    sale_type = data.get("sale_type") or "customer"
+    instance.sale_type = sale_type
+    if sale_type == "customer":
+        instance.customer_id = data.get("customer") or None
+        instance.farmer_id = None
+    else:
+        instance.customer_id = None
+        instance.farmer_id = data.get("farmer") or None
+    instance.mode = data.get("mode") or "Cash"
+    instance.receipt_account_id = data.get("receipt_account") or None
+    instance.amount = Decimal(str(data.get("amount") or 0))
+    instance.reference_no = data.get("reference_no") or ""
+    instance.remarks = data.get("remarks") or ""
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdSaleReceiptListTemplateView(View):
+    def get(self, request):
+        return render(request, "bird_sale_receipt_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdSaleReceiptFormTemplateView(View):
+    def get(self, request, id=None):
+        return render(request, "bird_sale_receipt_form.html", {
+            "instance": BirdSaleReceipt.objects.filter(id=id).first() if id else None,
+            "locations": Warehouse.objects.order_by("name"),
+            "customers": Customer.objects.order_by("name"),
+            "farmers": Farmer.objects.order_by("farmer_name"),
+            "accounts": ChartOfAccount.objects.order_by("code"),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdSaleReceiptAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                row = BirdSaleReceipt.objects.select_related(
+                    "customer", "farmer", "location", "receipt_account").get(id=id)
+                return JsonResponse(_bird_sale_receipt_to_dict(row))
+
+            qs = BirdSaleReceipt.objects.select_related("customer", "farmer", "location", "receipt_account")
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            if from_date:
+                qs = qs.filter(date__gte=from_date)
+            if to_date:
+                qs = qs.filter(date__lte=to_date)
+            return JsonResponse([_bird_sale_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        except BirdSaleReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request) -> JsonResponse:
+        try:
+            data = json.loads(request.body or "{}")
+            rows = data.get("rows") or []
+            if not rows:
+                return JsonResponse({"error": "Add at least one receipt row"}, status=400)
+            created = []
+            for row in rows:
+                if not row.get("location"):
+                    continue
+                instance = BirdSaleReceipt(entry_by=request.user)
+                _apply_bird_sale_receipt(instance, row)
+                instance.full_clean(exclude=["receipt_no"])
+                instance.save()
+                created.append(instance.id)
+            if not created:
+                return JsonResponse({"error": "Add at least one receipt row with a Location selected"}, status=400)
+            return JsonResponse({"message": "Receipt(s) created", "ids": created}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            instance = BirdSaleReceipt.objects.get(id=id)
+            data = json.loads(request.body or "{}")
+            _apply_bird_sale_receipt(instance, data)
+            instance.full_clean(exclude=["receipt_no"])
+            instance.save()
+            return JsonResponse({"message": "Receipt updated"})
+        except BirdSaleReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            instance = BirdSaleReceipt.objects.get(id=id)
+            instance.delete()
+            return JsonResponse({"message": "Receipt deleted"})
+        except BirdSaleReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def bird_sale_receipt_balance_lookup(request):
+    """Outstanding balance for a Customer/Farmer at a cost centre (rolled up
+    across every Farm sharing that Location's Branch), for the Add form's
+    auto-filled Balance field as soon as Location and Customer/Farmer are
+    picked."""
+    location_id = request.GET.get("location")
+    sale_type = request.GET.get("sale_type") or "customer"
+    customer_id = request.GET.get("customer")
+    farmer_id = request.GET.get("farmer")
+    exclude_id = request.GET.get("exclude_id")
+    balance = BirdSaleReceipt.balance_due(location_id, sale_type, customer_id, farmer_id, exclude_id=exclude_id)
+    return JsonResponse({"balance": str(balance)})
+
+
+# ---------------------------------------------------------------------------
+# Batch History Report (Broiler > Reports)
+# ---------------------------------------------------------------------------
+
+def _transfer_location_name(header):
+    if header.from_warehouse_id:
+        return header.from_warehouse.name
+    if header.from_farm_id:
+        return header.from_farm.farm_name
+    return ""
+
+
+def _transfer_to_location_name(header):
+    if header.to_warehouse_id:
+        return header.to_warehouse.name
+    if header.to_farm_id:
+        return header.to_farm.farm_name
+    return ""
+
+
+def _build_batch_report(batch):
+    from inventory.models import StockTransfer, MedicineTransfer
+    from purchase.models import GeneralPurchaseItem
+
+    # Feed Purchase: purchases have no batch/farm FK at all, only a
+    # Warehouse — sometimes that Warehouse directly *is* the farm's own
+    # cost centre (feed bought straight to the farm), sometimes it's a
+    # general warehouse the feed reaches the farm from later via a Stock
+    # Transfer (already captured as Feed Transfer-In). Either way it's
+    # booked to a Warehouse sharing this farm's Branch, so — like Bird Sale
+    # Receipt's balance — it's rolled up at the Branch level, bounded to
+    # this batch's growing window, rather than claimed to be exact-to-batch.
+    branch_id = batch.broiler_farm.branch_id
+    purchase_items = (GeneralPurchaseItem.objects
+                      .filter(farm_warehouse__branch_id=branch_id, purchase__date__gte=batch.start_date)
+                      .filter(Q(purchase__date__lte=batch.end_date) if batch.end_date else Q())
+                      .select_related("purchase", "item__category", "farm_warehouse")
+                      .order_by("purchase__date", "id"))
+    feed_purchase_rows = []
+    for pi in purchase_items:
+        category_name = pi.item.category.name if pi.item.category_id else ""
+        if "chick" in category_name.lower():
+            continue
+        feed_purchase_rows.append({
+            "date": pi.purchase.date, "trnum": pi.purchase.purchase_no, "dc_no": pi.purchase.dc_no,
+            "from_location": pi.farm_warehouse.name, "item": str(pi.item),
+            "quantity": pi.rcv_qty, "rate": pi.rate, "amount": pi.amount,
+        })
+
+    transfers = (StockTransfer.objects.filter(to_batch=batch)
+                 .select_related("item__category", "from_warehouse", "from_farm")
+                 .order_by("date", "id"))
+    chick_rows, feed_rows = [], []
+    feed_cum = Decimal("0")
+    for t in transfers:
+        row = {
+            "date": t.date, "trnum": t.trnum, "dc_no": t.dc_no,
+            "from_location": _transfer_location_name(t),
+            "item": str(t.item), "quantity": t.quantity, "rate": t.rate,
+            "amount": (t.quantity or 0) * (t.rate or 0),
+        }
+        category_name = t.item.category.name if t.item.category_id else ""
+        # Chick-placement transfers are ordinary Stock Transfers of a
+        # "chicks" item; everything else transferred to a batch is treated
+        # as feed (this model has no dedicated chick-placement transaction).
+        if "chick" in category_name.lower():
+            chick_rows.append(row)
+        else:
+            feed_cum += row["quantity"] or 0
+            row["cumulative"] = feed_cum
+            feed_rows.append(row)
+
+    med_transfers = (MedicineTransfer.objects.filter(to_batch=batch)
+                     .prefetch_related("items__item").select_related("from_warehouse", "from_farm")
+                     .order_by("date", "id"))
+    medicine_transfer_rows = []
+    for mt in med_transfers:
+        location_name = _transfer_location_name(mt)
+        for line in mt.items.all():
+            medicine_transfer_rows.append({
+                "date": mt.date, "trnum": mt.trnum, "dc_no": mt.dc_no,
+                "from_location": location_name, "item": str(line.item),
+                "quantity": line.quantity, "rate": line.rate,
+                "amount": (line.quantity or 0) * (line.rate or 0),
+            })
+
+    # Feed/Medicine Return and Transfer-to-Other-Farm are the same "moved
+    # OUT of this batch" leg (from_batch) of the same Stock/Medicine
+    # Transfer transactions — split by destination: back to a warehouse
+    # (Return) vs on to a different farm/batch (Transfer to Other Farm).
+    # Neither is a distinct "return" transaction type in this system.
+    outgoing_transfers = (StockTransfer.objects.filter(from_batch=batch)
+                          .select_related("item__category", "to_warehouse", "to_farm")
+                          .order_by("date", "id"))
+    feed_return_rows, feed_transfer_out_rows = [], []
+    for t in outgoing_transfers:
+        row = {
+            "date": t.date, "trnum": t.trnum, "dc_no": t.dc_no,
+            "to_location": _transfer_to_location_name(t),
+            "item": str(t.item), "quantity": t.quantity, "rate": t.rate,
+            "amount": (t.quantity or 0) * (t.rate or 0),
+        }
+        (feed_return_rows if t.to_warehouse_id else feed_transfer_out_rows).append(row)
+
+    outgoing_med_transfers = (MedicineTransfer.objects.filter(from_batch=batch)
+                              .prefetch_related("items__item").select_related("to_warehouse", "to_farm")
+                              .order_by("date", "id"))
+    medicine_return_rows, medicine_transfer_out_rows = [], []
+    for mt in outgoing_med_transfers:
+        location_name = _transfer_to_location_name(mt)
+        target = medicine_return_rows if mt.to_warehouse_id else medicine_transfer_out_rows
+        for line in mt.items.all():
+            target.append({
+                "date": mt.date, "trnum": mt.trnum, "dc_no": mt.dc_no,
+                "to_location": location_name, "item": str(line.item),
+                "quantity": line.quantity, "rate": line.rate,
+                "amount": (line.quantity or 0) * (line.rate or 0),
+            })
+
+    # Placement baseline for Opening Birds / Cum Mort% / Feed-per-bird below
+    # is the Chick Placement total itself — BroilerBatch has no count field,
+    # but every placement is a real Chick Placement Stock Transfer, so the
+    # baseline is just the sum of those quantities, not a new data point.
+    placement_total = sum((r["quantity"] or 0) for r in chick_rows)
+
+    def _bags(qty, item):
+        return (qty / item.kg_per_bag) if item and item.kg_per_bag else Decimal("0")
+
+    sold_by_date = {}
+    for bs in BirdSale.objects.filter(batch=batch).values("date").annotate(total=Sum("birds")):
+        sold_by_date[bs["date"]] = bs["total"] or 0
+
+    daily_entries = DailyEntry.objects.filter(batch=batch).select_related("feed_1", "feed_2").order_by("date", "id")
+    mortality_rows = []
+    cum_mortality = cum_culls = 0
+    cum_feed_kg = Decimal("0")
+    opening_birds = placement_total
+    for de in daily_entries:
+        cum_mortality += de.mortality
+        cum_culls += de.culls
+        sold = sold_by_date.get(de.date, 0)
+        closing_birds = opening_birds - de.mortality - de.culls - sold
+        feed_1_kg = de.feed_1_qty or Decimal("0")
+        feed_2_kg = de.feed_2_qty or Decimal("0")
+        cum_feed_kg += feed_1_kg + feed_2_kg
+        avg_bw_kg = (de.avg_weight_gms or Decimal("0")) / Decimal("1000")
+        mortality_rows.append({
+            "date": de.date, "age": de.age_days,
+            "opening_birds": opening_birds,
+            "mortality": de.mortality,
+            "mortality_pct": round(de.mortality / opening_birds * 100, 2) if opening_birds else 0,
+            "culls": de.culls, "cum_mortality": cum_mortality,
+            "cum_mortality_pct": round(cum_mortality / placement_total * 100, 2) if placement_total else 0,
+            "sold_birds": sold, "closing_birds": closing_birds,
+            "avg_weight_kg": round(avg_bw_kg, 3),
+            "fcr": round(cum_feed_kg / (closing_birds * avg_bw_kg), 2) if closing_birds and avg_bw_kg else 0,
+            "feed_1_name": de.feed_1.item_code if de.feed_1_id else "", "feed_1_kg": feed_1_kg,
+            "feed_1_bags": round(_bags(feed_1_kg, de.feed_1), 2),
+            "feed_2_name": de.feed_2.item_code if de.feed_2_id else "", "feed_2_kg": feed_2_kg,
+            "feed_2_bags": round(_bags(feed_2_kg, de.feed_2), 2),
+            "cum_feed_kg": cum_feed_kg,
+            "feed_per_bird_g": round(cum_feed_kg * 1000 / placement_total, 2) if placement_total else 0,
+            "balance_feed_kg": (de.feed_1_stock or 0) + (de.feed_2_stock or 0),
+            "balance_feed_bags": round(_bags(de.feed_1_stock or Decimal("0"), de.feed_1)
+                                       + _bags(de.feed_2_stock or Decimal("0"), de.feed_2), 2),
+            "remarks": de.remarks,
+        })
+        opening_birds = closing_birds
+
+    # Weekly subtotal rows, interleaved after every 7th daily row: state
+    # columns (opening/closing/cumulative/balance/%) repeat the week's LAST
+    # day; only the flow quantities (mortality, culls, sold, feed consumed)
+    # are summed across the week.
+    mortality_display = []
+    for i in range(0, len(mortality_rows), 7):
+        week_rows = mortality_rows[i:i + 7]
+        mortality_display.extend({**r, "is_total": False} for r in week_rows)
+        last = week_rows[-1]
+        mortality_display.append({
+            "is_total": True, "label": f"Week {i // 7 + 1} Total",
+            "opening_birds": week_rows[0]["opening_birds"],
+            "mortality": sum(r["mortality"] for r in week_rows),
+            "mortality_pct": last["cum_mortality_pct"],
+            "culls": sum(r["culls"] for r in week_rows),
+            "cum_mortality": last["cum_mortality"], "cum_mortality_pct": last["cum_mortality_pct"],
+            "sold_birds": sum(r["sold_birds"] for r in week_rows), "closing_birds": last["closing_birds"],
+            "avg_weight_kg": last["avg_weight_kg"], "fcr": last["fcr"],
+            "feed_1_kg": sum(r["feed_1_kg"] for r in week_rows), "feed_1_bags": sum(r["feed_1_bags"] for r in week_rows),
+            "feed_2_kg": sum(r["feed_2_kg"] for r in week_rows), "feed_2_bags": sum(r["feed_2_bags"] for r in week_rows),
+            "cum_feed_kg": last["cum_feed_kg"], "feed_per_bird_g": last["feed_per_bird_g"],
+            "balance_feed_kg": last["balance_feed_kg"], "balance_feed_bags": last["balance_feed_bags"],
+        })
+
+    medicine_entries = MedicineVaccineEntry.objects.filter(batch=batch).select_related("item").order_by("date", "id")
+    medicine_consumption_rows = [{
+        "date": me.date, "age": me.age_days, "item": str(me.item) if me.item_id else "",
+        "quantity": me.qty, "stock": me.stock, "remarks": me.remarks,
+    } for me in medicine_entries]
+
+    bird_sales = (BirdSale.objects.filter(batch=batch).select_related("customer", "farmer")
+                  .order_by("date", "id"))
+    bird_sale_rows = [{
+        "date": bs.date, "sale_no": bs.sale_no, "doc_no": bs.doc_no,
+        "buyer_name": bs.customer.name if bs.customer_id else (bs.farmer.farmer_name if bs.farmer_id else ""),
+        "birds": bs.birds, "net_weight": bs.net_weight, "avg_weight": bs.avg_weight,
+        "rate": bs.rate, "round_off": bs.round_off, "amount": bs.amount,
+        "vehicle": bs.vehicle, "driver": bs.driver, "remarks": bs.remarks,
+    } for bs in bird_sales]
+
+    # Feed Summary: per feed item, Purchase + Transfer In - Consumed -
+    # Return - Transfer to Other Farms = Balance (Kg). Bucketed by item_code
+    # (not the row tables' display string) so purchases, transfers, and
+    # DailyEntry consumption of the same item always land in one bucket.
+    feed_summary = {}
+
+    def _feed_bucket(item_code):
+        return feed_summary.setdefault(item_code, {"purchased": Decimal("0"), "transfer_in": Decimal("0"),
+                                                    "consumed": Decimal("0"), "returned": Decimal("0"),
+                                                    "transferred_out": Decimal("0")})
+
+    for pi in purchase_items:
+        category_name = pi.item.category.name if pi.item.category_id else ""
+        if "chick" not in category_name.lower():
+            _feed_bucket(pi.item.item_code)["purchased"] += pi.rcv_qty or 0
+    for t in transfers:
+        if not t.item.category_id or "chick" not in t.item.category.name.lower():
+            _feed_bucket(t.item.item_code)["transfer_in"] += t.quantity or 0
+    for t in outgoing_transfers:
+        if t.to_warehouse_id:
+            _feed_bucket(t.item.item_code)["returned"] += t.quantity or 0
+        else:
+            _feed_bucket(t.item.item_code)["transferred_out"] += t.quantity or 0
+    for de in daily_entries:
+        if de.feed_1_id:
+            _feed_bucket(de.feed_1.item_code)["consumed"] += de.feed_1_qty or 0
+        if de.feed_2_id:
+            _feed_bucket(de.feed_2.item_code)["consumed"] += de.feed_2_qty or 0
+    feed_summary_rows = [{
+        "item": item_code, **b,
+        "balance": b["purchased"] + b["transfer_in"] - b["consumed"] - b["returned"] - b["transferred_out"],
+    } for item_code, b in feed_summary.items()]
+
+    return {
+        "chick_placement": chick_rows,
+        "feed_purchase": feed_purchase_rows,
+        "feed_transfer_in": feed_rows,
+        "feed_return": feed_return_rows,
+        "feed_transfer_out": feed_transfer_out_rows,
+        "feed_summary": feed_summary_rows,
+        "medicine_transfer_in": medicine_transfer_rows,
+        "medicine_return": medicine_return_rows,
+        "medicine_transfer_out": medicine_transfer_out_rows,
+        "mortality": mortality_display,
+        "placement_total": placement_total,
+        "medicine_consumption": medicine_consumption_rows,
+        "bird_sales": bird_sale_rows,
+        "totals": {
+            "birds": sum(r["birds"] for r in bird_sale_rows),
+            "net_weight": sum(r["net_weight"] for r in bird_sale_rows),
+            "amount": sum(r["amount"] for r in bird_sale_rows),
+            "mortality": cum_mortality, "culls": cum_culls,
+        },
+    }
+
+
+@login_required
+def broiler_batch_report(request):
+    """One Batch's full growing history — feed purchase, chick placement,
+    feed/medicine transfers-in and returns/transfers-out, a feed summary,
+    daily mortality & feed consumption, medicine consumption, and bird
+    sales (Broiler > Reports > Batch History Report).
+
+    Feed Purchase has no batch/farm FK at all (only a Warehouse), so it's
+    rolled up at the Branch level and bounded to the batch's growing
+    window rather than claimed to be exact-to-batch. The Batch Costing
+    Summary from the reference report isn't included: it needs a
+    placement bird-count baseline that BroilerBatch doesn't track.
+    """
+    from account.models import CompanyProfile
+
+    batch_id = (request.GET.get("batch") or "").strip()
+    batch = (BroilerBatch.objects
+             .select_related("broiler_farm__branch", "broiler_farm__supervisor", "broiler_farm__farmer")
+             .filter(id=batch_id).first()) if batch_id else None
+    return render(request, "broiler_batch_report.html", {
+        "farms": BroilerFarm.objects.order_by("farm_name"),
+        "batches": BroilerBatch.objects.select_related("broiler_farm").order_by("-start_date", "-id"),
+        "batch": batch,
+        "batch_requested": bool(batch_id),
+        "report": _build_batch_report(batch) if batch else None,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Chicks Placement (Broiler > Transactions)
+# ---------------------------------------------------------------------------
+# Not a separate model — chick placement is an ordinary inventory Stock
+# Transfer (Warehouse -> Farm/Batch) of a "chicks" category item, per the
+# same convention the Batch History Report already relies on. This is a
+# purpose-built, simplified front end over that same StockTransfer data
+# (Warehouse supplier -> Farm, auto-derived active Batch, item restricted to
+# the chicks category) so Broiler users don't have to use the generic
+# Inventory > Stock Transfer form's full location-type/item-picker.
+
+@method_decorator(login_required, name="dispatch")
+class ChicksPlacementListTemplateView(View):
+    def get(self, request):
+        return render(request, "chicks_placement_list.html", {
+            "warehouses": Warehouse.objects.order_by("name"),
+            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
+            "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class ChicksPlacementFormTemplateView(View):
+    def get(self, request):
+        return render(request, "chicks_placement_form.html", {
+            "warehouses": Warehouse.objects.order_by("name"),
+            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
+            "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+            "today": timezone.localdate().isoformat(),
+        })

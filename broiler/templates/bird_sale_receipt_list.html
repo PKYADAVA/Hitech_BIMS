@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Receipt - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_broiler_transaction_subnavbar.html' with active_tab='bird_sale_receipt' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-receipt"></i> Receipt</div>
+    <div class="page-header-subtitle">Payments received from Bird Sale customers/farmers at a Farm</div>
+  </div>
+  <div class="page-header-right">
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'bird_sale_receipt_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="receipt-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Date</th><th>Trnum</th><th>Customer</th><th>Mode</th>
+            <th>Method</th><th>Amount</th><th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this receipt?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn"><i class="fas fa-trash me-1"></i>Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let table = null;
+  let pendingDeleteId = null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  // escapeHtml() provided globally by main.js
+
+  function renderRows(rows) {
+    if (table) { table.destroy(); }
+    const tbody = $("#receipt-table tbody");
+    tbody.empty();
+    rows.forEach(function (row) {
+      tbody.append(`<tr>
+        <td>${escapeHtml(row.date)}</td>
+        <td>${escapeHtml(row.receipt_no)}</td>
+        <td>${escapeHtml(row.buyer_name)}</td>
+        <td>${escapeHtml(row.mode)}</td>
+        <td>${escapeHtml(row.receipt_account_name)}</td>
+        <td>${Number(row.amount).toFixed(2)}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+    table = $("#receipt-table").DataTable({
+      responsive: true, order: [[0, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      columnDefs: [{ orderable: false, targets: [-1] }],
+      language: { emptyTable: "No data available in table" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'bird_sale_receipt_api_list' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+    }, function (rows) {
+      renderRows(rows);
+    }).fail(function () {
+      window.showToast('danger', "Failed to load receipts.");
+    });
+  }
+
+  $("#filter-submit").on("click", loadRows);
+
+  $(document).on("click", ".delete-button", function () {
+    pendingDeleteId = $(this).data("id");
+    $("#deleteConfirmationModal").modal("show");
+  });
+
+  $("#confirm-delete-btn").on("click", function () {
+    if (!pendingDeleteId) return;
+    $.ajax({
+      url: `/bird_sale_receipt_api/${pendingDeleteId}/`,
+      type: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        $("#deleteConfirmationModal").modal("hide");
+        loadRows();
+        window.showToast('success', "Receipt deleted successfully!");
+      },
+      error: function (xhr) {
+        $("#deleteConfirmationModal").modal("hide");
+        window.showToast('danger', xhr.responseJSON?.error || "Failed to delete receipt.");
+      },
+    });
+  });
+
+  loadRows();
+});
+</script>
+{% endblock %}

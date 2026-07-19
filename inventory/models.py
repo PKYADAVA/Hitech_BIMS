@@ -6,10 +6,27 @@ from django.utils.timezone import now
 
 
 class ItemCategory(models.Model):
+    code = models.CharField(max_length=20, unique=True, editable=False, blank=True,
+                            help_text="Auto-generated code for this category, e.g. CAT-0001")
     name = models.CharField(max_length=255, unique=True)
 
     def __str__(self):
         return self.name
+
+    @classmethod
+    def next_code(cls):
+        prefix = "CAT-"
+        serials = []
+        for code in cls.objects.filter(code__startswith=prefix).values_list("code", flat=True):
+            match = re.match(r"^CAT-(\d+)$", code or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.code:
+            self.code = self.next_code()
+        super().save(*args, **kwargs)
     
 
 class Sector(models.Model):
@@ -17,6 +34,17 @@ class Sector(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class UnitOfMeasurement(models.Model):
+    name = models.CharField(max_length=100, unique=True, help_text="e.g. Kilogram, Piece, Litre")
+    symbol = models.CharField(max_length=20, blank=True, help_text="Short form, e.g. Kg, Pcs, Ltr")
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.symbol})" if self.symbol else self.name
 
 
 class Warehouse(models.Model):
@@ -90,11 +118,14 @@ class Item(models.Model):
     item_code = models.CharField(max_length=100, unique=True)
     description = models.TextField()
     category = models.ForeignKey(ItemCategory, on_delete=models.CASCADE, related_name='items')
-    warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='items')
+    warehouse = models.ManyToManyField(Warehouse, related_name='items', blank=True,
+                                       help_text="Warehouse(s) that stock/handle this item")
     valuation_method = models.CharField(max_length=50, choices=VALUATION_METHODS)
     standard_cost_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
-    storage_uom = models.CharField(max_length=100)
-    consumption_uom = models.CharField(max_length=100)
+    storage_uom = models.ForeignKey(UnitOfMeasurement, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='items_storage_uom')
+    consumption_uom = models.ForeignKey(UnitOfMeasurement, on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='items_consumption_uom')
     usage = models.CharField(max_length=50, choices=USAGE_CHOICES)
     source = models.CharField(max_length=50, choices=SOURCE_CHOICES)
     type = models.CharField(max_length=50, choices=TYPE_CHOICES)
@@ -105,6 +136,23 @@ class Item(models.Model):
 
     def __str__(self):
         return f"{self.item_code} - {self.description}"
+
+
+class ItemPriceList(models.Model):
+    """A dated price entry for an Item — Inventory > Master > Item Price
+    List. Not tied to sales; a general price history the item can be
+    referenced against elsewhere."""
+
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='price_list_entries')
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    effective_date = models.DateField(default=now)
+
+    class Meta:
+        ordering = ['-effective_date', '-id']
+        unique_together = [('item', 'effective_date')]
+
+    def __str__(self):
+        return f"{self.item} - {self.price} (from {self.effective_date})"
 
 
 class StockTransfer(models.Model):
@@ -125,6 +173,17 @@ class StockTransfer(models.Model):
 
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name='stock_transfers')
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Reference-only breakdown for Broiler > Chicks Placement — none of
+    # these feed into `quantity` or the running `stock` balance below.
+    # `quantity` (the Placement Qty actually received into inventory) is
+    # computed client-side as chicks_ordered - transit_mortality - shortage
+    # - culls and is the ONLY figure that affects warehouse stock.
+    chicks_ordered = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    transit_mortality = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    shortage = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    culls = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     purchase_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     stock = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False,
@@ -149,6 +208,12 @@ class StockTransfer(models.Model):
     # batches this stock is being received into.
     to_batch = models.ForeignKey('broiler.BroilerBatch', on_delete=models.PROTECT, null=True, blank=True,
                                  related_name='stock_transfers_in')
+
+    # Reference-only: the hatchery chicks actually originated from, for
+    # transfers recorded via Broiler > Chicks Placement — the transfer
+    # itself is still Warehouse -> Farm; this doesn't change that flow.
+    source_hatchery = models.ForeignKey('hatchery_master.Hatchery', on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='stock_transfers_sourced')
 
     vehicle_no = models.CharField(max_length=50, blank=True)
     driver_name = models.CharField(max_length=100, blank=True)

@@ -1,0 +1,382 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Growing Charge Statement — BIMS{% endblock %}
+
+{% block content %}
+
+<style>
+  body { background: #eef2f5; }
+  .report-doc { max-width: 1400px; margin: 0 auto; background: #fff; }
+  .report-back { display: inline-block; margin-bottom: .5rem; font-size: .85rem; }
+  .report-letterhead {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #cfe3ec; border: 1px solid #9fc3d6; padding: .75rem 1.25rem;
+  }
+  .report-letterhead img { max-height: 70px; }
+  .report-letterhead .company-block { text-align: center; }
+  .report-letterhead .company-name { color: #b02a2a; font-weight: 700; font-size: 1.15rem; margin-bottom: .15rem; }
+  .report-letterhead .company-meta { color: #333; font-size: .8rem; line-height: 1.35; }
+  .report-doc-title {
+    text-align: center; font-size: 1.4rem; font-weight: 600; color: #222;
+    border: 1px solid #9fc3d6; border-top: none; padding: .5rem; background: #fff;
+  }
+  .report-filter-bar {
+    border: 1px solid #dee2e6; border-top: none; padding: .75rem 1.25rem; background: #f8f9fa;
+  }
+  .report-batch-info {
+    background: #cfe3ec; border: 1px solid #9fc3d6; padding: .5rem 1rem;
+    font-weight: 600; font-size: .9rem;
+  }
+  .report-batch-info span { margin-right: 1.25rem; }
+  .report-section-title {
+    text-align: center; color: #0d5f8a; font-weight: 700; font-size: 1.05rem;
+    padding: .5rem 0 .25rem;
+  }
+  .report-table { border: 1px solid #9fc3d6; }
+  .report-table th {
+    background: #cfe3ec; border-color: #9fc3d6 !important; font-size: .8rem;
+    font-weight: 700; padding: .35rem .5rem; white-space: nowrap;
+  }
+  .report-table td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; }
+  .report-table tbody tr:nth-child(even) { background: #f7f4fb; }
+  .report-table tfoot td, .report-table tr.report-total-row td {
+    font-weight: 700; background: #dbe9f0 !important;
+  }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+  }
+</style>
+
+<div class="report-doc">
+  <a href="{% url 'bird_sale_list' %}" class="report-back no-print"><i class="fas fa-arrow-left"></i> Back to Broiler</a>
+
+  <div class="report-letterhead">
+    <img src="{% static 'images/logo.png' %}" alt="{{ company.name }}" onerror="this.style.display='none'">
+    <div class="company-block">
+      <div class="company-name">{{ company.name }}</div>
+      <div class="company-meta">
+        {{ company.address }}{% if company.state %}, {{ company.state }}{% endif %}<br>
+        {% if company.gstin %}GSTIN: {{ company.gstin }}<br>{% endif %}
+        {% if company.mobile %}Cont: {{ company.mobile }}{% endif %}
+      </div>
+    </div>
+    <div style="width:70px"></div>
+  </div>
+  <div class="report-doc-title">Growing Charge Statement</div>
+
+  <div class="report-filter-bar no-print">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Farm</label>
+        <select class="form-select" id="report-farm">
+          <option value="">select</option>
+          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Batch <span class="text-danger">*</span></label>
+        <select class="form-select" name="batch" id="report-batch" required>
+          <option value="">select</option>
+          {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
+            {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name|escapejs }} — {{ b.batch_name|escapejs }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" type="submit">Submit</button>
+        {% if batch %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>{% endif %}
+      </div>
+    </form>
+  </div>
+
+{% if batch %}
+  <div class="report-batch-info">
+    <span>Branch: {{ batch.broiler_farm.branch.branch_name }}</span>
+    <span>Line: {{ batch.broiler_farm.line }}</span>
+    <span>Farm: {{ batch.broiler_farm.farm_name }}</span>
+    <span>Supervisor: {{ batch.broiler_farm.supervisor.name }}</span>
+    <span>Farmer: {{ batch.broiler_farm.farmer.farmer_name }}</span>
+    <span>Batch: {{ batch.batch_name }}</span>
+  </div>
+
+  <div class="report-section-title">Chick Placement</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.chick_placement %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No chick placement transfers for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Feed Purchase</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Warehouse</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.feed_purchase %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed purchases at this farm's branch during the batch window</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Feed Transfer-In</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Cumulative</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.feed_transfer_in %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td>
+          <td class="text-end">{{ r.amount }}</td><td class="text-end">{{ r.cumulative }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="9" class="text-center text-muted">No feed transfers for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Feed Return</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.feed_return %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed returned for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Feed Transfer to Other Farms</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.feed_transfer_out %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed transferred to other farms for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Feed Summary</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Feed Name</th><th>Purchase</th><th>Transfer In</th><th>Consumed</th><th>Return</th><th>Transfer to Other Farms</th><th>Balance</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.feed_summary %}
+        <tr>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.purchased }}</td><td class="text-end">{{ r.transfer_in }}</td><td class="text-end">{{ r.consumed }}</td>
+          <td class="text-end">{{ r.returned }}</td><td class="text-end">{{ r.transferred_out }}</td><td class="text-end">{{ r.balance }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="7" class="text-center text-muted">No feed movement for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Medicine and Vaccine Transfer In</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.medicine_transfer_in %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transfers for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Medicine and Vaccine Return</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.medicine_return %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine returned for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Medicine and Vaccine Transfer to Other Farms</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.medicine_transfer_out %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transferred to other farms for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Mortality And Feed Consumption Details</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr>
+          <th colspan="2"></th><th>Opening</th><th colspan="2">Mortality</th><th></th><th colspan="2"></th>
+          <th>Sold</th><th>Closing</th><th colspan="2"></th>
+          <th colspan="3">Feed 1</th><th colspan="3">Feed 2</th>
+          <th colspan="2">Cumulative</th><th colspan="2">Balance Feed</th><th></th>
+        </tr>
+        <tr>
+          <th>Date</th><th>Age</th><th>Birds</th><th>Count</th><th>%</th><th>Culls</th><th>Cum Mort</th><th>Cum Mort%</th>
+          <th>Birds</th><th>Birds</th><th>Avg.Bw</th><th>FCR</th>
+          <th>Name</th><th>Kgs</th><th>Bags</th><th>Name</th><th>Kgs</th><th>Bags</th>
+          <th>Feed</th><th>Feed/Bird</th><th>In Kgs</th><th>In Bags</th><th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.mortality %}
+        {% if r.is_total %}
+        <tr class="report-total-row">
+          <td colspan="2">{{ r.label }}</td>
+          <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
+          <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
+          <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
+          <td class="text-end">{{ r.avg_weight_kg }}</td><td class="text-end">{{ r.fcr }}</td>
+          <td></td><td class="text-end">{{ r.feed_1_kg }}</td><td class="text-end">{{ r.feed_1_bags }}</td>
+          <td></td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
+          <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
+          <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
+          <td></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.age }}</td>
+          <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
+          <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
+          <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
+          <td class="text-end">{{ r.avg_weight_kg }}</td><td class="text-end">{{ r.fcr }}</td>
+          <td>{{ r.feed_1_name }}</td><td class="text-end">{{ r.feed_1_kg }}</td><td class="text-end">{{ r.feed_1_bags }}</td>
+          <td>{{ r.feed_2_name }}</td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
+          <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
+          <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
+          <td>{{ r.remarks }}</td>
+        </tr>
+        {% endif %}
+        {% empty %}<tr><td colspan="23" class="text-center text-muted">No daily entries for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Medicine and Vaccine Consumption</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Age</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Stock</th><th>Remarks</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.medicine_consumption %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.age }}</td><td>{{ r.item }}</td>
+          <td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.stock }}</td><td>{{ r.remarks }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-muted">No medicine/vaccine consumption for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title">Bird Sales</div>
+  <div class="table-responsive mb-4">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Sale No.</th><th>Doc No.</th><th>Customer/Farmer</th><th>Birds</th>
+          <th>Net Weight</th><th>Avg Wt</th><th>Rate</th><th>RoundOff</th><th>Amount</th><th>Vehicle</th><th>Driver</th><th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in report.bird_sales %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.sale_no }}</td><td>{{ r.doc_no }}</td><td>{{ r.buyer_name }}</td>
+          <td class="text-end">{{ r.birds }}</td><td class="text-end">{{ r.net_weight }}</td><td class="text-end">{{ r.avg_weight }}</td>
+          <td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.round_off }}</td><td class="text-end">{{ r.amount }}</td>
+          <td>{{ r.vehicle }}</td><td>{{ r.driver }}</td><td>{{ r.remarks }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="13" class="text-center text-muted">No bird sales for this batch</td></tr>{% endfor %}
+      </tbody>
+      {% if report.bird_sales %}
+      <tfoot>
+        <tr>
+          <td colspan="4">Total</td>
+          <td class="text-end">{{ report.totals.birds }}</td>
+          <td class="text-end">{{ report.totals.net_weight }}</td>
+          <td></td><td></td><td></td>
+          <td class="text-end">{{ report.totals.amount }}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+
+{% elif batch_requested %}
+  <div class="alert alert-warning">Batch not found.</div>
+{% endif %}
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  function filterBatches() {
+    const farmId = $('#report-farm').val();
+    $('#report-batch option').each(function () {
+      const opt = $(this);
+      if (!opt.val()) return;
+      opt.toggle(!farmId || opt.data('farm') == farmId);
+    });
+  }
+  $('#report-farm').on('change', filterBatches);
+  {% if batch %}$('#report-farm').val('{{ batch.broiler_farm_id }}');{% endif %}
+  filterBatches();
+});
+</script>
+{% endblock %}

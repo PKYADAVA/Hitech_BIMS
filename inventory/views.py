@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
@@ -10,25 +10,40 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.auth.decorators import login_required
 from .models import (
-    ItemCategory, Item, Sector, Warehouse, StockTransfer, MedicineTransfer, MedicineTransferItem,
-    InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive, StockReceiveItem,
+    ItemCategory, Item, ItemPriceList, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
+    MedicineTransferItem, InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive,
+    StockReceiveItem,
 )
 from hatchery_master.models import Hatchery
 from broiler.models import Branch, BroilerFarm, BroilerBatch
 from account.models import ChartOfAccount
 import json
 
+
+def _uom_label(uom):
+    """Display text for a UnitOfMeasurement FK (symbol if set, else name)."""
+    if not uom:
+        return ""
+    return uom.symbol or uom.name
+
+
 # Create your views here.
 @login_required
 def items(request):
     categories  = ItemCategory.objects.all()
     warehouses = Warehouse.objects.all()
-    return render(request, 'item.html', {'categories': categories, 'warehouses': warehouses})
+    uoms = UnitOfMeasurement.objects.order_by('name')
+    return render(request, 'item.html', {'categories': categories, 'warehouses': warehouses, 'uoms': uoms})
 
 
 @login_required
 def item_category(request):
     return render(request, 'item_category.html')
+
+@login_required
+def item_price_list(request):
+    items = Item.objects.order_by('item_code')
+    return render(request, 'item_price_list.html', {'items': items})
 
 @login_required
 def warehouse(request):
@@ -37,6 +52,10 @@ def warehouse(request):
 @login_required
 def sector(request):
     return render(request, 'sector.html')
+
+@login_required
+def unit_of_measurement(request):
+    return render(request, 'unit_of_measurement.html')
 
 
 
@@ -47,11 +66,11 @@ class CategoryAPI(View):
         if id:
             try:
                 category = ItemCategory.objects.get(id=id)
-                return JsonResponse({"id": category.id, "name": category.name})
+                return JsonResponse({"id": category.id, "code": category.code, "name": category.name})
             except ItemCategory.DoesNotExist:
                 raise Http404("Category not found")
         else:
-            categories = list(ItemCategory.objects.values("id", "name"))
+            categories = list(ItemCategory.objects.order_by("name").values("id", "code", "name"))
             return JsonResponse(categories, safe=False)
 
     def post(self, request):
@@ -97,6 +116,18 @@ class CategoryAPI(View):
 @method_decorator(login_required, name="dispatch")
 class ItemAPI(View):
 
+    @staticmethod
+    def _resolve_warehouses(raw_ids):
+        """(warehouses, error) for a list of warehouse ids — "All" is just
+        every Warehouse id being present in that list, no special sentinel."""
+        ids = raw_ids or []
+        warehouses = list(Warehouse.objects.filter(id__in=ids))
+        if len(warehouses) != len(set(ids)):
+            return None, "Invalid warehouse ID"
+        if not warehouses:
+            return None, "At least one warehouse is required"
+        return warehouses, None
+
     def get(self, request, id=None):
         if id:
             try:
@@ -106,11 +137,11 @@ class ItemAPI(View):
                     "item_code": item.item_code,
                     "description": item.description,
                     "category": item.category.id,
-                    "warehouse": item.warehouse.id,
+                    "warehouse": list(item.warehouse.values_list("id", flat=True)),
                     "valuation_method": item.valuation_method,
                     "standard_cost_per_unit": str(item.standard_cost_per_unit),
-                    "storage_uom": item.storage_uom,
-                    "consumption_uom": item.consumption_uom,
+                    "storage_uom": item.storage_uom_id,
+                    "consumption_uom": item.consumption_uom_id,
                     "usage": item.usage,
                     "source": item.source,
                     "type": item.type,
@@ -122,13 +153,27 @@ class ItemAPI(View):
             except Item.DoesNotExist:
                 raise Http404("Item not found")
         else:
-            items = list(
-                Item.objects.values(
-                    "id", "item_code", "description", "category__name", "warehouse__name", "valuation_method",
-                    "standard_cost_per_unit", "storage_uom", "consumption_uom", "usage", "source",
-                    "type", "item_account", "lot_serial_control", "kg_per_bag", "hsn_code"
-                )
-            )
+            items = []
+            for item in (Item.objects.select_related("category", "storage_uom", "consumption_uom")
+                         .prefetch_related("warehouse")):
+                items.append({
+                    "id": item.id, "item_code": item.item_code, "description": item.description,
+                    "category__name": item.category.name,
+                    "warehouse__name": ", ".join(w.name for w in item.warehouse.all()),
+                    "warehouse_ids": [w.id for w in item.warehouse.all()],
+                    "valuation_method": item.valuation_method,
+                    "standard_cost_per_unit": str(item.standard_cost_per_unit),
+                    "storage_uom": item.storage_uom_id,
+                    "storage_uom__name": item.storage_uom.name if item.storage_uom_id else "",
+                    "storage_uom__symbol": item.storage_uom.symbol if item.storage_uom_id else "",
+                    "consumption_uom": item.consumption_uom_id,
+                    "consumption_uom__name": item.consumption_uom.name if item.consumption_uom_id else "",
+                    "consumption_uom__symbol": item.consumption_uom.symbol if item.consumption_uom_id else "",
+                    "usage": item.usage, "source": item.source, "type": item.type,
+                    "item_account": item.item_account, "lot_serial_control": item.lot_serial_control,
+                    "kg_per_bag": str(item.kg_per_bag) if item.kg_per_bag else None,
+                    "hsn_code": item.hsn_code,
+                })
             return JsonResponse(items, safe=False)
 
     def post(self, request):
@@ -137,27 +182,26 @@ class ItemAPI(View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-        
         try:
             category = ItemCategory.objects.get(id=data["category"])
         except ItemCategory.DoesNotExist:
             return JsonResponse({"error": "Invalid category ID"}, status=400)
 
-        try:
-            warehouse = Warehouse.objects.get(id=data["warehouse"])
-        except Warehouse.DoesNotExist:
-            return JsonResponse({"error": "Invalid warehouse ID"}, status=400)
-        
+        warehouses, error = self._resolve_warehouses(data.get("warehouse"))
+        if error:
+            return JsonResponse({"error": error}, status=400)
 
-        Item.objects.create(
+        item = Item.objects.create(
             item_code=data["item_code"],
             description=data["description"],
             category=category,
-            warehouse=warehouse,
             valuation_method=data["valuation_method"],
-            standard_cost_per_unit=data["standard_cost_per_unit"],            
-            usage=data["usage"]
+            standard_cost_per_unit=data["standard_cost_per_unit"],
+            usage=data["usage"],
+            storage_uom_id=data.get("storage_uom") or None,
+            consumption_uom_id=data.get("consumption_uom") or None,
         )
+        item.warehouse.set(warehouses)
         return JsonResponse({"message": "Item created"}, status=201)
 
     def put(self, request, id):
@@ -173,11 +217,16 @@ class ItemAPI(View):
 
         for field in [
             "item_code", "description", "valuation_method", "standard_cost_per_unit",
-            "storage_uom", "consumption_uom", "usage", "source", "type", "item_account", "lot_serial_control",
+            "usage", "source", "type", "item_account", "lot_serial_control",
             "kg_per_bag", "hsn_code"
         ]:
             if field in data:
                 setattr(item, field, data[field])
+
+        if "storage_uom" in data:
+            item.storage_uom_id = data["storage_uom"] or None
+        if "consumption_uom" in data:
+            item.consumption_uom_id = data["consumption_uom"] or None
 
         if "category" in data:
             try:
@@ -185,13 +234,15 @@ class ItemAPI(View):
             except ItemCategory.DoesNotExist:
                 return JsonResponse({"error": "Invalid category ID"}, status=400)
 
+        warehouses = None
         if "warehouse" in data:
-            try:
-                item.warehouse = Warehouse.objects.get(id=data["warehouse"])
-            except Warehouse.DoesNotExist:
-                return JsonResponse({"error": "Invalid warehouse ID"}, status=400)
+            warehouses, error = self._resolve_warehouses(data["warehouse"])
+            if error:
+                return JsonResponse({"error": error}, status=400)
 
         item.save()
+        if warehouses is not None:
+            item.warehouse.set(warehouses)
         return JsonResponse({"message": "Item updated"})
 
     def delete(self, request, id):
@@ -332,6 +383,143 @@ class SectorAPI(View):
         return JsonResponse({"message": "Sector deleted"})
 
 
+@method_decorator(login_required, name="dispatch")
+class UnitOfMeasurementAPI(View):
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                uom = UnitOfMeasurement.objects.get(id=id)
+                return JsonResponse({"id": uom.id, "name": uom.name, "symbol": uom.symbol})
+            except UnitOfMeasurement.DoesNotExist:
+                raise Http404("Unit of Measurement not found")
+        else:
+            uoms = list(UnitOfMeasurement.objects.order_by("name").values("id", "name", "symbol"))
+            return JsonResponse(uoms, safe=False)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        if not data.get("name"):
+            return JsonResponse({"error": "Name is required"}, status=400)
+
+        UnitOfMeasurement.objects.create(name=data["name"], symbol=data.get("symbol", ""))
+        return JsonResponse({"message": "Unit of Measurement created"}, status=201)
+
+    def put(self, request, id):
+        try:
+            uom = UnitOfMeasurement.objects.get(id=id)
+        except UnitOfMeasurement.DoesNotExist:
+            raise Http404("Unit of Measurement not found")
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        if "name" in data:
+            uom.name = data["name"]
+        if "symbol" in data:
+            uom.symbol = data["symbol"]
+        uom.save()
+        return JsonResponse({"message": "Unit of Measurement updated"})
+
+    def delete(self, request, id):
+        try:
+            uom = UnitOfMeasurement.objects.get(id=id)
+        except UnitOfMeasurement.DoesNotExist:
+            raise Http404("Unit of Measurement not found")
+
+        uom.delete()
+        return JsonResponse({"message": "Unit of Measurement deleted"})
+
+
+@method_decorator(login_required, name="dispatch")
+class ItemPriceListAPI(View):
+
+    @staticmethod
+    def _to_dict(entry):
+        return {
+            "id": entry.id, "item": entry.item_id,
+            "item_label": f"{entry.item.item_code} - {entry.item.description}",
+            "price": str(entry.price), "effective_date": entry.effective_date.isoformat(),
+        }
+
+    def get(self, request, id=None):
+        if id:
+            try:
+                entry = ItemPriceList.objects.select_related("item").get(id=id)
+                return JsonResponse(self._to_dict(entry))
+            except ItemPriceList.DoesNotExist:
+                raise Http404("Price list entry not found")
+        else:
+            entries = ItemPriceList.objects.select_related("item").all()
+            return JsonResponse([self._to_dict(e) for e in entries], safe=False)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        if not data.get("item"):
+            return JsonResponse({"error": "Item is required"}, status=400)
+        if not data.get("price"):
+            return JsonResponse({"error": "Price is required"}, status=400)
+
+        try:
+            item = Item.objects.get(id=data["item"])
+        except Item.DoesNotExist:
+            return JsonResponse({"error": "Invalid item ID"}, status=400)
+
+        try:
+            entry = ItemPriceList.objects.create(
+                item=item, price=data["price"], effective_date=data.get("effective_date") or timezone.now().date(),
+            )
+        except IntegrityError:
+            return JsonResponse({"error": "This item already has a price entry for that date"}, status=400)
+        return JsonResponse({"message": "Price list entry created", "id": entry.id}, status=201)
+
+    def put(self, request, id):
+        try:
+            entry = ItemPriceList.objects.get(id=id)
+        except ItemPriceList.DoesNotExist:
+            raise Http404("Price list entry not found")
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        if "item" in data:
+            try:
+                entry.item = Item.objects.get(id=data["item"])
+            except Item.DoesNotExist:
+                return JsonResponse({"error": "Invalid item ID"}, status=400)
+        if "price" in data:
+            entry.price = data["price"]
+        if "effective_date" in data:
+            entry.effective_date = data["effective_date"]
+
+        try:
+            entry.save()
+        except IntegrityError:
+            return JsonResponse({"error": "This item already has a price entry for that date"}, status=400)
+        return JsonResponse({"message": "Price list entry updated"})
+
+    def delete(self, request, id):
+        try:
+            entry = ItemPriceList.objects.get(id=id)
+        except ItemPriceList.DoesNotExist:
+            raise Http404("Price list entry not found")
+
+        entry.delete()
+        return JsonResponse({"message": "Price list entry deleted"})
+
+
 @login_required
 def warehouse_mapping(request):
     return render(request, "warehouse_mapping.html")
@@ -422,14 +610,21 @@ def _stock_transfer_to_dict(row):
         "id": row.id, "date": row.date.isoformat(), "trnum": row.trnum, "dc_no": row.dc_no,
         "item": row.item_id, "item_code": row.item.item_code if row.item_id else "",
         "item_name": row.item.description if row.item_id else "",
-        "unit": row.item.storage_uom if row.item_id else "",
+        "item_category_name": row.item.category.name if row.item_id and row.item.category_id else "",
+        "unit": _uom_label(row.item.storage_uom) if row.item_id else "",
         "quantity": str(row.quantity), "purchase_rate": str(row.purchase_rate), "rate": str(row.rate),
         "stock": str(row.stock),
+        "chicks_ordered": str(row.chicks_ordered) if row.chicks_ordered is not None else "",
+        "transit_mortality": str(row.transit_mortality) if row.transit_mortality is not None else "",
+        "shortage": str(row.shortage) if row.shortage is not None else "",
+        "culls": str(row.culls) if row.culls is not None else "",
         "from_location_type": from_loc["type"], "from_location_id": from_loc["id"],
         "from_location_name": from_loc["name"],
         "from_batch": row.from_batch_id, "from_batch_name": row.from_batch.batch_name if row.from_batch_id else "",
         "to_location_type": to_loc["type"], "to_location_id": to_loc["id"], "to_location_name": to_loc["name"],
         "to_batch": row.to_batch_id, "to_batch_name": row.to_batch.batch_name if row.to_batch_id else "",
+        "source_hatchery": row.source_hatchery_id,
+        "source_hatchery_name": row.source_hatchery.hatchery_name if row.source_hatchery_id else "",
         "vehicle_no": row.vehicle_no, "driver_name": row.driver_name,
         "remarks": row.remarks,
     }
@@ -441,6 +636,12 @@ def _apply_stock_transfer_row(instance, row, user):
     instance.dc_no = row.get("dc_no") or ""
     instance.item_id = row.get("item") or None
     instance.quantity = Decimal(str(row.get("quantity") or 0))
+    # Reference-only breakdown (Broiler > Chicks Placement) — never read
+    # back into `quantity`/`stock`; the client already folded them into
+    # `quantity` before sending it.
+    for field in ("chicks_ordered", "transit_mortality", "shortage", "culls"):
+        value = row.get(field)
+        setattr(instance, field, Decimal(str(value)) if value not in (None, "") else None)
     instance.purchase_rate = Decimal(str(row.get("purchase_rate") or 0))
     instance.rate = Decimal(str(row.get("rate") or 0))
 
@@ -458,6 +659,7 @@ def _apply_stock_transfer_row(instance, row, user):
     instance.to_farm_id = to_id if to_type == "farm" else None
     instance.to_batch_id = row.get("to_batch") if to_type == "farm" else None
 
+    instance.source_hatchery_id = row.get("source_hatchery") or None
     instance.vehicle_no = row.get("vehicle_no") or ""
     instance.driver_name = row.get("driver_name") or ""
     instance.remarks = row.get("remarks") or ""
@@ -514,14 +716,15 @@ class StockTransferAPI(View):
         if id:
             try:
                 row = StockTransfer.objects.select_related(
-                    "item", "from_warehouse", "from_farm", "from_batch",
-                    "to_warehouse", "to_farm", "to_batch").get(id=id)
+                    "item__category", "from_warehouse", "from_farm", "from_batch",
+                    "to_warehouse", "to_farm", "to_batch", "source_hatchery").get(id=id)
                 return JsonResponse(_stock_transfer_to_dict(row))
             except StockTransfer.DoesNotExist:
                 raise Http404("Stock transfer not found")
 
         qs = StockTransfer.objects.select_related(
-            "item", "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch")
+            "item__category", "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch",
+            "source_hatchery")
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -625,7 +828,7 @@ def stock_transfer_item_lookup(request):
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
     return JsonResponse({
-        "unit": item.storage_uom if item else "",
+        "unit": _uom_label(item.storage_uom) if item else "",
         "purchase_rate": str(item.standard_cost_per_unit) if item else "0",
     })
 
@@ -691,7 +894,7 @@ def _medicine_transfer_detail_dict(header):
             {
                 "id": l.id, "item": l.item_id, "item_code": l.item.item_code if l.item_id else "",
                 "item_name": l.item.description if l.item_id else "",
-                "unit": l.item.storage_uom if l.item_id else "",
+                "unit": _uom_label(l.item.storage_uom) if l.item_id else "",
                 "quantity": str(l.quantity), "rate": str(l.rate), "remarks": l.remarks, "stock": str(l.stock),
             }
             for l in header.items.all()
@@ -1000,7 +1203,7 @@ def medicine_transfer_item_lookup(request):
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
     return JsonResponse({
-        "unit": item.storage_uom if item else "",
+        "unit": _uom_label(item.storage_uom) if item else "",
         "rate": str(item.standard_cost_per_unit) if item else "0",
     })
 
@@ -1066,7 +1269,7 @@ def _inventory_adjustment_detail_dict(header):
             {
                 "id": l.id, "item": l.item_id, "item_code": l.item.item_code if l.item_id else "",
                 "item_name": l.item.description if l.item_id else "",
-                "unit": l.item.storage_uom if l.item_id else "",
+                "unit": _uom_label(l.item.storage_uom) if l.item_id else "",
                 "adjustment_type": l.adjustment_type, "quantity": str(l.quantity), "rate": str(l.rate),
                 "amount": str(l.amount), "remarks": l.remarks, "stock": str(l.stock),
             }
@@ -1278,7 +1481,7 @@ def inventory_adjustment_item_lookup(request):
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
     return JsonResponse({
-        "unit": item.storage_uom if item else "",
+        "unit": _uom_label(item.storage_uom) if item else "",
         "rate": str(item.standard_cost_per_unit) if item else "0",
     })
 
@@ -1345,7 +1548,7 @@ def _stock_issue_detail_dict(header):
             {
                 "id": l.id, "item": l.item_id, "item_code": l.item.item_code if l.item_id else "",
                 "item_name": l.item.description if l.item_id else "",
-                "unit": l.item.storage_uom if l.item_id else "",
+                "unit": _uom_label(l.item.storage_uom) if l.item_id else "",
                 "quantity": str(l.quantity), "rate": str(l.rate), "amount": str(l.amount),
                 "location_type": l.location_type,
                 "location_id": (l.farm_id if l.location_type == 'farm' else l.warehouse_id),
@@ -1517,7 +1720,7 @@ def stock_issue_item_lookup(request):
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
     return JsonResponse({
-        "unit": item.storage_uom if item else "",
+        "unit": _uom_label(item.storage_uom) if item else "",
         "rate": str(item.standard_cost_per_unit) if item else "0",
     })
 
@@ -1568,7 +1771,7 @@ def _stock_receive_detail_dict(header):
             {
                 "id": l.id, "item": l.item_id, "item_code": l.item.item_code if l.item_id else "",
                 "item_name": l.item.description if l.item_id else "",
-                "unit": l.item.storage_uom if l.item_id else "",
+                "unit": _uom_label(l.item.storage_uom) if l.item_id else "",
                 "quantity": str(l.quantity), "rate": str(l.rate), "amount": str(l.amount),
                 "location_type": l.location_type,
                 "location_id": (l.farm_id if l.location_type == 'farm' else l.warehouse_id),
@@ -1740,7 +1943,7 @@ def stock_receive_item_lookup(request):
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
     return JsonResponse({
-        "unit": item.storage_uom if item else "",
+        "unit": _uom_label(item.storage_uom) if item else "",
         "rate": str(item.standard_cost_per_unit) if item else "0",
     })
 

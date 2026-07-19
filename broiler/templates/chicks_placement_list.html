@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Chicks Placement - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_broiler_transaction_subnavbar.html' with active_tab='chicks_placement' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fa-solid fa-kiwi-bird"></i> Chicks Placement</div>
+    <div class="page-header-subtitle">Day-old chicks placed at a Farm/Batch — recorded as an Inventory Stock Transfer (Warehouse &rarr; Farm)</div>
+  </div>
+  <div class="page-header-right">
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'chicks_placement_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Farm:</label>
+        <select class="form-select" id="farm-filter">
+          <option value="">All</option>
+          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="placement-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Source Hatchery</th><th>From Warehouse</th>
+            <th>Farm</th><th>Batch</th><th>Item</th>
+            <th>Chicks Ordered</th><th>Transit Mortality</th><th>Shortage</th><th>Culls</th><th>Placement Qty</th>
+            <th>Rate</th><th>Amount</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Chicks Placement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="edit-form">
+        <div class="modal-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="edit-direct-hatchery">
+            <label class="form-check-label" for="edit-direct-hatchery">
+              <strong>Direct from Hatchery</strong> — no separate Warehouse leg
+            </label>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Date</label>
+              <input type="date" class="form-control" id="edit-date" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">DC No.</label>
+              <input type="text" class="form-control" id="edit-dc-no">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Source Hatchery <span class="text-danger">*</span></label>
+              <select class="form-select" id="edit-source-hatchery" required>
+                <option value="">select</option>
+                {% for h in hatcheries %}<option value="{{ h.id }}" data-warehouse="{{ h.warehouse_id|default:'' }}">{{ h.hatchery_name|escapejs }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">From Warehouse</label>
+              <select class="form-select" id="edit-warehouse" required>
+                <option value="">select</option>
+                {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Farm</label>
+              <select class="form-select" id="edit-farm" required>
+                <option value="">select</option>
+                {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Batch</label>
+              <select class="form-select" id="edit-batch">
+                <option value="">select</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Item</label>
+              <select class="form-select" id="edit-item" required>
+                <option value="">select</option>
+                {% for item in chick_items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Chicks Ordered <span class="text-danger">*</span></label>
+              <input type="number" min="0" step="1" class="form-control" id="edit-chicks-ordered" required>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Transit Mortality</label>
+              <input type="number" min="0" step="1" class="form-control" id="edit-transit-mortality" value="0">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Shortage</label>
+              <input type="number" min="0" step="1" class="form-control" id="edit-shortage" value="0">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Culls</label>
+              <input type="number" min="0" step="1" class="form-control" id="edit-culls" value="0">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Placement Qty</label>
+              <input type="number" class="form-control bg-light" id="edit-quantity" readonly value="0">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Rate</label>
+              <input type="number" min="0" step="0.01" class="form-control" id="edit-rate">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Vehicle</label>
+              <input type="text" class="form-control" id="edit-vehicle-no">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Driver</label>
+              <input type="text" class="form-control" id="edit-driver-name">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Remarks</label>
+              <input type="text" class="form-control" id="edit-remarks">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this chicks placement?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn"><i class="fas fa-trash me-1"></i>Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let table = null;
+  let pendingDeleteId = null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  $("#from-date").val(today);
+  $("#to-date").val(today);
+
+  // escapeHtml() provided globally by main.js
+
+  function isChickRow(row) {
+    return row.to_location_type === 'farm' && (row.item_category_name || '').toLowerCase().includes('chick');
+  }
+
+  function renderRows(rows) {
+    const chickRows = rows.filter(isChickRow);
+    if (table) { table.destroy(); }
+    const tbody = $("#placement-table tbody");
+    tbody.empty();
+    chickRows.forEach(function (row) {
+      tbody.append(`<tr>
+        <td>${escapeHtml(row.date)}</td>
+        <td>${escapeHtml(row.trnum)}</td>
+        <td>${escapeHtml(row.dc_no) || "-"}</td>
+        <td>${escapeHtml(row.source_hatchery_name) || "-"}</td>
+        <td>${escapeHtml(row.from_location_name)}</td>
+        <td>${escapeHtml(row.to_location_name)}</td>
+        <td>${escapeHtml(row.to_batch_name) || "-"}</td>
+        <td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_name)}</td>
+        <td>${row.chicks_ordered ? Number(row.chicks_ordered).toFixed(0) : "-"}</td>
+        <td>${row.transit_mortality ? Number(row.transit_mortality).toFixed(0) : "-"}</td>
+        <td>${row.shortage ? Number(row.shortage).toFixed(0) : "-"}</td>
+        <td>${row.culls ? Number(row.culls).toFixed(0) : "-"}</td>
+        <td>${Number(row.quantity).toFixed(0)}</td>
+        <td>${Number(row.rate).toFixed(2)}</td>
+        <td>${(Number(row.quantity) * Number(row.rate)).toFixed(2)}</td>
+        <td class="text-center">
+          <div class="d-flex gap-1 justify-content-center">
+            {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm edit-button" data-id="${row.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+            {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          </div>
+        </td>
+      </tr>`);
+    });
+    table = $("#placement-table").DataTable({
+      responsive: true, order: [[0, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      columnDefs: [{ orderable: false, targets: [-1] }],
+      language: { emptyTable: "No data available in table" },
+    });
+  }
+
+  function loadRows() {
+    $.getJSON("{% url 'stock_transfer_api_list' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      to_location_type: 'farm', to_location_id: $("#farm-filter").val(),
+    }, function (rows) {
+      renderRows(rows);
+    }).fail(function () {
+      window.showToast('danger', "Failed to load chicks placements.");
+    });
+  }
+
+  $("#filter-submit").on("click", loadRows);
+
+  $(document).on("click", ".delete-button", function () {
+    pendingDeleteId = $(this).data("id");
+    $("#deleteConfirmationModal").modal("show");
+  });
+
+  $("#confirm-delete-btn").on("click", function () {
+    if (!pendingDeleteId) return;
+    $.ajax({
+      url: `/stock_transfer_api/${pendingDeleteId}/`,
+      type: "DELETE",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () {
+        $("#deleteConfirmationModal").modal("hide");
+        loadRows();
+        window.showToast('success', "Chicks placement deleted successfully!");
+      },
+      error: function (xhr) {
+        $("#deleteConfirmationModal").modal("hide");
+        window.showToast('danger', xhr.responseJSON?.error || "Failed to delete chicks placement.");
+      },
+    });
+  });
+
+  function refreshEditBatches(farmId, selected) {
+    if (!farmId) { $("#edit-batch").html('<option value="">select</option>'); return; }
+    $.getJSON(`{% url 'stock_transfer_farm_batches' %}?farm=${farmId}`, function (batches) {
+      $("#edit-batch").html('<option value="">select</option>' + batches.map(b =>
+        `<option value="${b.id}" ${String(b.id) === String(selected) ? "selected" : ""}>${escapeHtml(b.batch_name)}${b.is_active ? " (Active)" : ""}</option>`).join(""));
+    });
+  }
+
+  $("#edit-farm").on("change", function () { refreshEditBatches(this.value, ""); });
+
+  // Same soft auto-select + Direct-mode toggle as the Add form: picking a
+  // Warehouse suggests the matching Hatchery (if exactly one is mapped to
+  // it) without hiding other options; Direct mode disables Warehouse and
+  // derives it from the chosen Hatchery's own mapping on submit.
+  $("#edit-warehouse").on("change", function () {
+    const warehouseId = this.value;
+    if (!warehouseId) return;
+    const matches = $("#edit-source-hatchery option").filter(function () {
+      return $(this).val() && $(this).data("warehouse") == warehouseId;
+    });
+    if (matches.length === 1) { $("#edit-source-hatchery").val(matches.val()); }
+  });
+
+  $("#edit-direct-hatchery").on("change", function () {
+    const direct = this.checked;
+    $("#edit-warehouse").prop("disabled", direct).prop("required", !direct).toggleClass("bg-light", direct);
+    if (direct) { $("#edit-warehouse").val(""); }
+  });
+
+  // Placement Qty is the only figure that ever reaches inventory/stock —
+  // Chicks Ordered/Transit Mortality/Shortage/Culls are reference-only.
+  function recalcEditPlacementQty() {
+    const ordered = Number($("#edit-chicks-ordered").val()) || 0;
+    const transitMortality = Number($("#edit-transit-mortality").val()) || 0;
+    const shortage = Number($("#edit-shortage").val()) || 0;
+    const culls = Number($("#edit-culls").val()) || 0;
+    $("#edit-quantity").val(Math.max(ordered - transitMortality - shortage - culls, 0));
+  }
+  $("#edit-chicks-ordered, #edit-transit-mortality, #edit-shortage, #edit-culls").on("input", recalcEditPlacementQty);
+
+  let editingId = null;
+  $(document).on("click", ".edit-button", function () {
+    editingId = $(this).data("id");
+    $.getJSON(`/stock_transfer_api/${editingId}/`, function (row) {
+      $("#edit-date").val(row.date);
+      $("#edit-dc-no").val(row.dc_no);
+      $("#edit-chicks-ordered").val(row.chicks_ordered || row.quantity);
+      $("#edit-transit-mortality").val(row.transit_mortality || 0);
+      $("#edit-shortage").val(row.shortage || 0);
+      $("#edit-culls").val(row.culls || 0);
+      $("#edit-quantity").val(row.quantity);
+      $("#edit-rate").val(row.rate);
+      $("#edit-vehicle-no").val(row.vehicle_no);
+      $("#edit-driver-name").val(row.driver_name);
+      $("#edit-remarks").val(row.remarks);
+      $("#edit-source-hatchery").val(row.source_hatchery);
+      $("#edit-direct-hatchery").prop("checked", false);
+      $("#edit-warehouse").prop("disabled", false).prop("required", true).removeClass("bg-light");
+      $("#edit-warehouse").val(row.from_location_id);
+      $("#edit-farm").val(row.to_location_id);
+      $("#edit-item").val(row.item);
+      refreshEditBatches(row.to_location_id, row.to_batch);
+      $("#editModal").modal("show");
+    });
+  });
+
+  $("#edit-form").on("submit", function (e) {
+    e.preventDefault();
+    const hatcherySelect = $("#edit-source-hatchery");
+    const hatcheryId = hatcherySelect.val();
+    let warehouseId = $("#edit-warehouse").val();
+    if ($("#edit-direct-hatchery").is(":checked")) {
+      warehouseId = hatcherySelect.find(":selected").data("warehouse") || "";
+      if (hatcheryId && !warehouseId) {
+        window.showToast('danger', "Selected Hatchery (Direct) has no Warehouse mapped to it — map one under Hatchery Master first, or untick Direct.");
+        return;
+      }
+    }
+    $.ajax({
+      url: `/stock_transfer_api/${editingId}/`,
+      type: "PUT",
+      contentType: "application/json",
+      headers: { "X-CSRFToken": csrfToken },
+      data: JSON.stringify({
+        date: $("#edit-date").val(), dc_no: $("#edit-dc-no").val(),
+        source_hatchery: hatcheryId,
+        item: $("#edit-item").val(),
+        chicks_ordered: $("#edit-chicks-ordered").val(),
+        transit_mortality: $("#edit-transit-mortality").val(),
+        shortage: $("#edit-shortage").val(),
+        culls: $("#edit-culls").val(),
+        quantity: $("#edit-quantity").val(),
+        purchase_rate: $("#edit-rate").val(), rate: $("#edit-rate").val(),
+        from_location_type: "warehouse", from_location_id: warehouseId,
+        to_location_type: "farm", to_location_id: $("#edit-farm").val(),
+        to_batch: $("#edit-batch").val(),
+        vehicle_no: $("#edit-vehicle-no").val(), driver_name: $("#edit-driver-name").val(),
+        remarks: $("#edit-remarks").val(),
+      }),
+      success: function () {
+        $("#editModal").modal("hide");
+        loadRows();
+        window.showToast('success', "Chicks placement updated successfully!");
+      },
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Failed to update chicks placement.");
+      },
+    });
+  });
+
+  loadRows();
+});
+</script>
+{% endblock %}

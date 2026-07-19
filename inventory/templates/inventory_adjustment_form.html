@@ -94,7 +94,7 @@
 
 {% block js %}
 <script>
-const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{{ item.storage_uom|escapejs }}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const typeOptions = `<option value="">select</option><option value="Add">Add</option><option value="Deduct">Deduct</option>`;
 const get = id => document.getElementById(id);
 const editId = new URLSearchParams(window.location.search).get('id');

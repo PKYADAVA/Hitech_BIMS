@@ -82,4 +82,23 @@ urlpatterns = [
     path('medicine-entry/farm-lookup/', views.medicine_entry_farm_lookup, name='medicine_entry_farm_lookup'),
     path('medicine-entry/item-lookup/', views.medicine_entry_item_lookup, name='medicine_entry_item_lookup'),
     path('medicine-entry/stock-lookup/', views.medicine_entry_stock_lookup, name='medicine_entry_stock_lookup'),
+
+    path('bird-sale/', views.BirdSaleListTemplateView.as_view(), name='bird_sale_list'),
+    path('bird-sale/add/', views.BirdSaleFormTemplateView.as_view(), name='bird_sale_add'),
+    path('bird-sale/<int:id>/edit/', views.BirdSaleFormTemplateView.as_view(), name='bird_sale_edit'),
+    path('bird_sale_api/', views.BirdSaleAPI.as_view(), name='bird_sale_api_list'),
+    path('bird_sale_api/<int:id>/', views.BirdSaleAPI.as_view(), name='bird_sale_api'),
+    path('bird-sale/farm-lookup/', views.bird_sale_farm_lookup, name='bird_sale_farm_lookup'),
+
+    path('bird-sale-receipt/', views.BirdSaleReceiptListTemplateView.as_view(), name='bird_sale_receipt_list'),
+    path('bird-sale-receipt/add/', views.BirdSaleReceiptFormTemplateView.as_view(), name='bird_sale_receipt_add'),
+    path('bird-sale-receipt/<int:id>/edit/', views.BirdSaleReceiptFormTemplateView.as_view(), name='bird_sale_receipt_edit'),
+    path('bird_sale_receipt_api/', views.BirdSaleReceiptAPI.as_view(), name='bird_sale_receipt_api_list'),
+    path('bird_sale_receipt_api/<int:id>/', views.BirdSaleReceiptAPI.as_view(), name='bird_sale_receipt_api'),
+    path('bird-sale-receipt/balance-lookup/', views.bird_sale_receipt_balance_lookup, name='bird_sale_receipt_balance_lookup'),
+
+    path('broiler-report/', views.broiler_batch_report, name='broiler_batch_report'),
+
+    path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
+    path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),
 ]

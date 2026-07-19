@@ -425,7 +425,7 @@ class AutoPostingTests(EngineTestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         import datetime
-        from inventory.models import Item, ItemCategory, Warehouse
+        from inventory.models import Item, ItemCategory, UnitOfMeasurement, Warehouse
 
         cls.fy = FinancialYear.objects.create(
             start_date=datetime.date(2026, 4, 1),
@@ -434,12 +434,14 @@ class AutoPostingTests(EngineTestCase):
         )
         cls.warehouse = Warehouse.objects.create(name="Main Hatchery")
         category = ItemCategory.objects.create(name="Eggs")
+        nos_uom = UnitOfMeasurement.objects.create(name="Nos")
         cls.item = Item.objects.create(
             item_code="HE-001", description="Hatching Eggs", category=category,
-            warehouse=cls.warehouse, valuation_method="Weighted Average",
-            standard_cost_per_unit=5, storage_uom="Nos", consumption_uom="Nos",
+            valuation_method="Weighted Average",
+            standard_cost_per_unit=5, storage_uom=nos_uom, consumption_uom=nos_uom,
             usage="Produced", source="Purchased", type="Raw Material", item_account="Expense",
         )
+        cls.item.warehouse.set([cls.warehouse])
 
     def setUp(self):
         self.generate()

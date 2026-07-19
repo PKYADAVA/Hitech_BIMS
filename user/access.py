@@ -49,6 +49,15 @@ MODULE_REGISTRY = [
                     ("daily_entry_list", "Daily Entry"),
                     ("medicine_entry_list", "Medicine Vaccine Consumption"),
                     ("daily_entry_single_list", "Single Batch Daily Entry"),
+                    ("bird_sale_list", "Bird Sale"),
+                    ("bird_sale_receipt_list", "Receipt"),
+                    ("chicks_placement_list", "Chicks Placement"),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("broiler_batch_report", "Batch History Report"),
                 ],
             },
         ],
@@ -192,7 +201,9 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("item_category", "Item Category"),
                     ("items", "Items"),
+                    ("item_price_list", "Item Price List"),
                     ("sector", "Sector"),
+                    ("unit_of_measurement", "Unit of Measurement"),
                     ("warehouse", "Office"),
                     ("warehouse_mapping", "Office Mapping"),
                 ],
@@ -403,6 +414,9 @@ _ACTION_BASE_TO_TAB = {
     "broiler_batch": "broiler_batch",
     "broiler_disease": "broiler_disease",
     "farmer_group": "farmer_group",
+    "bird_sale": "bird_sale_list",
+    "bird_sale_receipt": "bird_sale_receipt_list",
+    "chicks_placement": "chicks_placement_list",
     # Hatchery master
     "hatchery_master": "hatchery_master_list",
     "setter": "setter_list",
@@ -441,8 +455,10 @@ _ACTION_BASE_TO_TAB = {
     # Inventory
     "category": "item_category",
     "item": "items",
+    "item_price_list": "item_price_list",
     "warehouse": "warehouse",
     "sector": "sector",
+    "uom": "unit_of_measurement",
     "stock_transfer": "stock_transfer_list",
     "medicine_transfer": "medicine_transfer_list",
     "inventory_adjustment": "inventory_adjustment_list",

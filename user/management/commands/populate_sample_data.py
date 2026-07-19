@@ -4,7 +4,7 @@ from datetime import date
 from django.core.management.base import BaseCommand
 
 from account.models import BankCode, ChartOfAccount, CoACategory, FinancialYear, Schedule
-from inventory.models import Item, ItemCategory, Warehouse
+from inventory.models import Item, ItemCategory, UnitOfMeasurement, Warehouse
 from purchase.models import CreditTerm, GeneralPurchase, GeneralPurchaseItem, Supplier, VendorGroup
 from sales.models import Customer, CustomerGroup, SalesPriceMaster
 
@@ -16,16 +16,16 @@ class Command(BaseCommand):
         # Inventory
         category, _ = ItemCategory.objects.get_or_create(name="Broiler Feed")
         warehouse, _ = Warehouse.objects.get_or_create(name="Main Warehouse")
+        bag_uom, _ = UnitOfMeasurement.objects.get_or_create(name="Bag")
         item, created_item = Item.objects.get_or_create(
             item_code="ITEM-001",
             defaults={
                 "description": "Balanced broiler feed",
                 "category": category,
-                "warehouse": warehouse,
                 "valuation_method": "Weighted Average",
                 "standard_cost_per_unit": Decimal("120.00"),
-                "storage_uom": "Bag",
-                "consumption_uom": "Bag",
+                "storage_uom": bag_uom,
+                "consumption_uom": bag_uom,
                 "usage": "Sales",
                 "source": "Purchased",
                 "type": "Finished Goods",
@@ -34,6 +34,7 @@ class Command(BaseCommand):
                 "hsn_code": "2302",
             },
         )
+        item.warehouse.set([warehouse])
 
         # Purchase
         credit_term, _ = CreditTerm.objects.get_or_create(term="Net 30")
