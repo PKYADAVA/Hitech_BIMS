@@ -11,7 +11,7 @@ the cookie) into data-csrf below.
   <div class="dropdown">
     <button class="alert-bell-btn btn position-relative" type="button"
             id="alertBellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside"
-            aria-expanded="false" title="Notifications">
+            data-bs-display="static" aria-expanded="false" title="Notifications">
       <i class="fa-solid fa-bell"></i>
       <span id="alertBellBadge" class="alert-bell-badge badge rounded-pill bg-danger d-none">0</span>
     </button>
@@ -40,7 +40,12 @@ the cookie) into data-csrf below.
   .alert-bell-btn{background:transparent;border:0;color:#fff;font-size:1.05rem;line-height:1;width:2.4rem;height:2.4rem;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:50%;transition:background .15s;}
   .alert-bell-btn:hover,.alert-bell-btn:focus{background:rgba(255,255,255,.15);color:#fff;box-shadow:none;}
   .alert-bell-badge{position:absolute;top:0;right:0;font-size:.6rem;line-height:1;min-width:1.05rem;padding:.2em .35em;transform:translate(15%,-15%);}
-  .alert-bell-menu{width:360px;max-width:calc(100vw - 1rem);border:0;box-shadow:0 12px 40px rgba(0,0,0,.18);border-radius:.75rem;overflow:hidden;}
+  /* Pin the menu to the viewport's right edge (fixed) so it sits at the far right
+     of the navbar regardless of where the bell is. `top` is set from the button on
+     open via JS. !important beats Bootstrap/Popper's left-anchored inline styles. */
+  .alert-bell-menu{width:min(360px,calc(100vw - 1rem));
+    position:fixed !important;right:1rem !important;left:auto !important;transform:none !important;
+    border:0;box-shadow:0 12px 40px rgba(0,0,0,.18);border-radius:.75rem;overflow:hidden;}
   .alert-bell-head{padding:.75rem 1rem;border-bottom:1px solid #eef0f3;background:#f8f9fb;}
   .alert-bell-markall{text-decoration:none;font-size:.78rem;}
   .alert-bell-list{max-height:60vh;overflow-y:auto;}
@@ -60,10 +65,9 @@ the cookie) into data-csrf below.
   .alert-bell-empty{padding:1.75rem 1rem;text-align:center;font-size:.85rem;}
   .alert-bell-foot{padding:.65rem 1rem;font-size:.8rem;font-weight:600;color:#2563eb;background:#f8f9fb;border-top:1px solid #eef0f3;text-decoration:none;white-space:nowrap;}
   .alert-bell-foot:hover{background:#eef2f9;color:#1d4ed8;}
-  /* On phones, drop the menu as a right-anchored sheet so it never clips off-screen. */
+  /* On phones, stretch to a near-full-width sheet so it never clips off-screen. */
   @media (max-width:575.98px){
-    .alert-bell-menu{position:fixed !important;top:64px !important;right:.5rem !important;left:auto !important;
-      width:auto !important;inset-inline:.5rem .5rem !important;transform:none !important;}
+    .alert-bell-menu{right:.5rem !important;left:.5rem !important;width:auto !important;}
   }
 </style>
 
@@ -75,6 +79,7 @@ the cookie) into data-csrf below.
   const badge = document.getElementById("alertBellBadge");
   const list = document.getElementById("alertBellList");
   const btn = document.getElementById("alertBellBtn");
+  const menu = wrap.querySelector(".alert-bell-menu");
   const markAllBtn = document.getElementById("alertMarkAll");
   const API = "/api/alerts/";
   const SEV_ICON = {info:"fa-circle-info",success:"fa-circle-check",warning:"fa-triangle-exclamation",error:"fa-circle-xmark",critical:"fa-skull-crossbones"};
@@ -146,7 +151,13 @@ the cookie) into data-csrf below.
     } catch (e) { /* ignore */ }
   }
 
-  btn.addEventListener("show.bs.dropdown", loadList);
+  function positionMenu() {
+    // Anchor the fixed menu just below the bell; right edge is pinned via CSS.
+    const r = btn.getBoundingClientRect();
+    menu.style.top = (r.bottom + 8) + "px";
+  }
+  btn.addEventListener("show.bs.dropdown", () => { positionMenu(); loadList(); });
+  window.addEventListener("resize", () => { if (menu.classList.contains("show")) positionMenu(); });
   markAllBtn.addEventListener("click", (e) => { e.stopPropagation(); markAll(); });
 
   refreshCount();
