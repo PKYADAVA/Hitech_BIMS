@@ -23,6 +23,8 @@ urlpatterns = [
     path("", include("environmental_monitoring.urls")),
     path("", include("tracking.urls")),
     path("", include("picklist.urls")),
+    # Alert & Audit module: /alerts/center/ page + /api/alerts/ REST API.
+    path("", include("alerts.urls")),
 ]
 
 # Serve media files in development

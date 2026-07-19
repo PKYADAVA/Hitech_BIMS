@@ -92,6 +92,8 @@ INSTALLED_APPS = [
     "environmental_monitoring",
     "tracking",
     "picklist",
+    "alerts",
+    "rest_framework",
 ]
 
 MIDDLEWARE = [
@@ -105,6 +107,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Publishes the active request/user into thread-local context so the alerts
+    # module can attribute model-signal events without threading the request
+    # through every call site. Must sit AFTER AuthenticationMiddleware so
+    # request.user is populated. See alerts/middleware.py.
+    "alerts.middleware.AlertContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Enforces the per-group Web-Access matrix server-side (see user/access.py).
@@ -370,3 +377,33 @@ if not DEBUG:
 
 # Clickjacking protection - safe to apply in both DEBUG and production.
 X_FRAME_OPTIONS = "DENY"
+
+# Django REST Framework — session-auth by default so the alerts API reuses the
+# existing login. Kept minimal; the alerts viewsets set their own permissions.
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+# Alert & Audit module configuration (see alerts/conf.py for all keys/defaults).
+# Everything below is optional — the module ships working defaults. Values here
+# only override those defaults. Toggle channels via the ENABLE_* flags; email/
+# websocket/slack/teams stay dormant until their infra is configured.
+ALERT_SETTINGS = {
+    "TRACK_ALL_MODELS": env_bool("ALERTS_TRACK_ALL_MODELS", True),
+    "ENABLE_AUDIT": env_bool("ALERTS_ENABLE_AUDIT", True),
+    "ENABLE_ALERTS": env_bool("ALERTS_ENABLE_ALERTS", True),
+    "ENABLE_BULK_EVENTS": env_bool("ALERTS_ENABLE_BULK_EVENTS", True),
+    "ENABLE_AUTH_EVENTS": env_bool("ALERTS_ENABLE_AUTH_EVENTS", True),
+    "ENABLE_EMAIL": env_bool("ALERTS_ENABLE_EMAIL", False),
+    "ENABLE_WEBSOCKET": env_bool("ALERTS_ENABLE_WEBSOCKET", False),
+    "ENABLE_SLACK": env_bool("ALERTS_ENABLE_SLACK", False),
+    "SLACK_WEBHOOK_URL": os.getenv("ALERTS_SLACK_WEBHOOK_URL", ""),
+    # High-churn detail/line-item tables that would flood the feed. Add freely;
+    # these are audited in the DB but excluded from noisy alerting if desired.
+    "IGNORE_MODELS": env_list("ALERTS_IGNORE_MODELS"),
+}

@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% comment %}
+Alert Center — full-page notification feed.
+
+The HTML is a static shell; rows, filters and pagination are hydrated from the
+alerts REST API (/api/alerts/) so this page reuses the exact same scoping and
+serialization as the navbar bell. No server-side alert querying happens here.
+{% endcomment %}
+
+{% block title %}Notifications — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='alerts' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  .ac-wrap{max-width:1000px;margin:1.5rem auto;padding:0 1rem;}
+  .ac-head{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;justify-content:space-between;margin-bottom:1rem;}
+  .ac-title{font-size:1.4rem;font-weight:700;margin:0;color:#1f2937;display:flex;align-items:center;gap:.5rem;}
+  .ac-title .badge{font-size:.7rem;}
+  .ac-filters{display:flex;flex-wrap:wrap;gap:.5rem;background:#fff;padding:.75rem;border-radius:.75rem;box-shadow:0 2px 10px rgba(0,0,0,.05);margin-bottom:1rem;}
+  .ac-filters select,.ac-filters input{font-size:.85rem;border:1px solid #dfe3e8;border-radius:.5rem;padding:.4rem .6rem;}
+  .ac-card{background:#fff;border-radius:.85rem;box-shadow:0 2px 14px rgba(0,0,0,.06);overflow:hidden;}
+  .ac-item{display:flex;gap:.85rem;padding:.9rem 1.1rem;border-bottom:1px solid #f1f2f4;transition:background .12s;}
+  .ac-item:hover{background:#f8fafc;}
+  .ac-item.unread{background:#eff5ff;}
+  .ac-ic{flex:0 0 auto;width:2.4rem;height:2.4rem;border-radius:.6rem;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.95rem;}
+  .sev-info{background:#3b82f6;}.sev-success{background:#16a34a;}.sev-warning{background:#f59e0b;}.sev-error{background:#ef4444;}.sev-critical{background:#b91c1c;}
+  .ac-body{flex:1 1 auto;min-width:0;}
+  .ac-item-title{font-weight:600;color:#1f2937;margin:0 0 .15rem;font-size:.92rem;}
+  .ac-item-msg{color:#5b6472;font-size:.83rem;margin:0;}
+  .ac-meta{font-size:.73rem;color:#9aa2af;margin-top:.35rem;display:flex;flex-wrap:wrap;gap:.75rem;}
+  .ac-chip{background:#eef1f5;color:#475569;border-radius:1rem;padding:.05rem .5rem;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.02em;}
+  .ac-changes{margin-top:.4rem;font-size:.78rem;background:#f7f9fc;border:1px solid #eceff3;border-radius:.5rem;padding:.4rem .6rem;color:#475569;}
+  .ac-changes b{color:#1f2937;}
+  .ac-empty{padding:3rem 1rem;text-align:center;color:#9aa2af;}
+  .ac-foot{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.1rem;background:#f8f9fb;}
+  .ac-foot button{border:1px solid #dfe3e8;background:#fff;border-radius:.5rem;padding:.35rem .8rem;font-size:.82rem;cursor:pointer;}
+  .ac-foot button:disabled{opacity:.5;cursor:default;}
+  .ac-btn-primary{background:#2563eb;border:0;color:#fff;border-radius:.5rem;padding:.45rem .9rem;font-size:.82rem;cursor:pointer;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ac-wrap" id="acRoot" data-csrf="{{ csrf_token }}">
+  <div class="ac-head">
+    <h1 class="ac-title">
+      <i class="fa-solid fa-bell text-primary"></i> Notifications
+      <span class="badge rounded-pill bg-danger d-none" id="acUnread">0</span>
+    </h1>
+    <button class="ac-btn-primary" id="acMarkAll"><i class="fa-solid fa-check-double me-1"></i>Mark all read</button>
+  </div>
+
+  <div class="ac-filters">
+    <select id="fSeverity">
+      <option value="">All severities</option>
+      {% for value, label in severity_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="fAction">
+      <option value="">All actions</option>
+      {% for value, label in action_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="fRead">
+      <option value="">Read &amp; unread</option>
+      <option value="false">Unread only</option>
+      <option value="true">Read only</option>
+    </select>
+    <input type="date" id="fFrom" title="From date">
+    <input type="date" id="fTo" title="To date">
+    <input type="search" id="fSearch" placeholder="Search…" style="flex:1 1 160px;">
+  </div>
+
+  <div class="ac-card">
+    <div id="acList"><div class="ac-empty">Loading…</div></div>
+    <div class="ac-foot">
+      <span id="acCount" class="text-muted" style="font-size:.82rem;"></span>
+      <span>
+        <button id="acPrev" disabled>&larr; Prev</button>
+        <button id="acNext" disabled>Next &rarr;</button>
+      </span>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  const root = document.getElementById("acRoot");
+  const CSRF = root.dataset.csrf;
+  const API = "/api/alerts/";
+  const listEl = document.getElementById("acList");
+  const SEV_ICON = {info:"fa-circle-info",success:"fa-circle-check",warning:"fa-triangle-exclamation",error:"fa-circle-xmark",critical:"fa-skull-crossbones"};
+  let page = 1, nextUrl = null, prevUrl = null;
+
+  const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"']/g, c => (
+    {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])));
+  const fmt = (iso) => new Date(iso).toLocaleString();
+
+  const $ = (id) => document.getElementById(id);
+  const filters = ["fSeverity","fAction","fRead","fFrom","fTo","fSearch"].map($);
+
+  function buildUrl() {
+    const p = new URLSearchParams();
+    p.set("page", page);
+    if ($("fSeverity").value) p.set("severity", $("fSeverity").value);
+    if ($("fAction").value)   p.set("action", $("fAction").value);
+    if ($("fRead").value)     p.set("is_read", $("fRead").value);
+    if ($("fFrom").value)     p.set("date_from", $("fFrom").value);
+    if ($("fTo").value)       p.set("date_to", $("fTo").value);
+    if ($("fSearch").value)   p.set("search", $("fSearch").value);
+    return API + "?" + p.toString();
+  }
+
+  function renderChanges(cf) {
+    if (!cf || !Object.keys(cf).length) return "";
+    const parts = Object.values(cf).slice(0, 4).map(c =>
+      `<div><b>${esc(c.label||"Field")}</b>: ${esc(c.old)} &rarr; ${esc(c.new)}</div>`);
+    return `<div class="ac-changes">${parts.join("")}</div>`;
+  }
+
+  function renderItem(a) {
+    const sev = a.severity || "info";
+    return `<div class="ac-item ${a.is_read ? "" : "unread"}" data-id="${a.id}">
+      <span class="ac-ic sev-${esc(sev)}"><i class="fa-solid ${SEV_ICON[sev]||"fa-bell"}"></i></span>
+      <div class="ac-body">
+        <p class="ac-item-title">${esc(a.title)}</p>
+        ${a.message && a.message !== a.title ? `<p class="ac-item-msg">${esc(a.message)}</p>` : ""}
+        ${renderChanges(a.changed_fields)}
+        <div class="ac-meta">
+          <span class="ac-chip">${esc(a.severity_display||sev)}</span>
+          <span><i class="fa-regular fa-user me-1"></i>${esc(a.actor_label||"System")}</span>
+          ${a.model_name ? `<span><i class="fa-regular fa-file me-1"></i>${esc(a.model_name)}${a.object_id ? " #"+esc(a.object_id) : ""}</span>` : ""}
+          <span><i class="fa-regular fa-clock me-1"></i>${esc(fmt(a.created_at))}</span>
+          ${a.is_read ? "" : `<a href="#" class="ac-read text-primary">Mark read</a>`}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  async function load() {
+    listEl.innerHTML = `<div class="ac-empty">Loading…</div>`;
+    try {
+      const r = await fetch(buildUrl(), {headers:{"X-Requested-With":"XMLHttpRequest"}});
+      const data = await r.json();
+      const rows = data.results || [];
+      nextUrl = data.next; prevUrl = data.previous;
+      $("acNext").disabled = !nextUrl; $("acPrev").disabled = !prevUrl;
+      $("acCount").textContent = (data.count || 0) + " notification" + (data.count === 1 ? "" : "s");
+      listEl.innerHTML = rows.length
+        ? rows.map(renderItem).join("")
+        : `<div class="ac-empty"><i class="fa-regular fa-bell-slash d-block mb-2" style="font-size:1.8rem"></i>No notifications match these filters</div>`;
+      listEl.querySelectorAll(".ac-read").forEach(el => el.addEventListener("click", (e) => {
+        e.preventDefault();
+        markRead(el.closest(".ac-item"));
+      }));
+    } catch (e) {
+      listEl.innerHTML = `<div class="ac-empty text-danger">Could not load notifications</div>`;
+    }
+    refreshUnread();
+  }
+
+  async function refreshUnread() {
+    try {
+      const r = await fetch(API + "unread_count/", {headers:{"X-Requested-With":"XMLHttpRequest"}});
+      const n = (await r.json()).unread || 0;
+      const b = $("acUnread");
+      if (n > 0) { b.textContent = n; b.classList.remove("d-none"); } else b.classList.add("d-none");
+    } catch (e) {}
+  }
+
+  async function markRead(item) {
+    try {
+      const r = await fetch(`${API}${item.dataset.id}/mark_read/`, {method:"POST", headers:{"X-CSRFToken":CSRF,"X-Requested-With":"XMLHttpRequest"}});
+      if (r.ok) { item.classList.remove("unread"); const l = item.querySelector(".ac-read"); if (l) l.remove(); refreshUnread(); }
+    } catch (e) {}
+  }
+
+  let searchTimer;
+  filters.forEach(el => el.addEventListener(el.type === "search" ? "input" : "change", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { page = 1; load(); }, el.type === "search" ? 350 : 0);
+  }));
+  $("acNext").addEventListener("click", () => { if (nextUrl) { page++; load(); } });
+  $("acPrev").addEventListener("click", () => { if (prevUrl && page > 1) { page--; load(); } });
+  $("acMarkAll").addEventListener("click", async () => {
+    try {
+      await fetch(API + "mark_all_read/", {method:"POST", headers:{"X-CSRFToken":CSRF,"X-Requested-With":"XMLHttpRequest"}});
+      load();
+    } catch (e) {}
+  });
+
+  load();
+})();
+</script>
+{% endblock %}
