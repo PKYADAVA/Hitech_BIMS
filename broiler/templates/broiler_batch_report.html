@@ -8,13 +8,15 @@
 <style>
   body { background: #eef2f5; }
   .report-doc { max-width: 1400px; margin: 0 auto; background: #fff; }
-  .report-back { display: inline-block; margin-bottom: .5rem; font-size: .85rem; }
   .report-letterhead {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center;
     background: #cfe3ec; border: 1px solid #9fc3d6; padding: .75rem 1.25rem;
   }
-  .report-letterhead img { max-height: 70px; }
-  .report-letterhead .company-block { text-align: center; }
+  /* Equal fixed-width side boxes keep the company block dead-centre even
+     when the logo image is missing/hidden. */
+  .report-letterhead .logo-box { flex: 0 0 120px; }
+  .report-letterhead img { max-height: 70px; max-width: 120px; }
+  .report-letterhead .company-block { flex: 1; text-align: center; }
   .report-letterhead .company-name { color: #b02a2a; font-weight: 700; font-size: 1.15rem; margin-bottom: .15rem; }
   .report-letterhead .company-meta { color: #333; font-size: .8rem; line-height: 1.35; }
   .report-doc-title {
@@ -50,10 +52,10 @@
 </style>
 
 <div class="report-doc">
-  <a href="{% url 'bird_sale_list' %}" class="report-back no-print"><i class="fas fa-arrow-left"></i> Back to Broiler</a>
-
   <div class="report-letterhead">
-    <img src="{% static 'images/logo.png' %}" alt="{{ company.name }}" onerror="this.style.display='none'">
+    <div class="logo-box">
+      <img src="{% static 'images/logo.png' %}" alt="{{ company.name }}" onerror="this.style.display='none'">
+    </div>
     <div class="company-block">
       <div class="company-name">{{ company.name }}</div>
       <div class="company-meta">
@@ -62,7 +64,7 @@
         {% if company.mobile %}Cont: {{ company.mobile }}{% endif %}
       </div>
     </div>
-    <div style="width:70px"></div>
+    <div class="logo-box"></div>
   </div>
   <div class="report-doc-title">Growing Charge Statement</div>
 
@@ -254,6 +256,23 @@
     </table>
   </div>
 
+  <div class="report-section-title">Medicine and Vaccine Consumption</div>
+  <div class="table-responsive">
+    <table class="table table-bordered mb-0 report-table">
+      <thead>
+        <tr><th>Date</th><th>Age</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Stock</th><th>Remarks</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.medicine_consumption %}
+        <tr>
+          <td>{{ r.date }}</td><td>{{ r.age }}</td><td>{{ r.item }}</td>
+          <td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.stock }}</td><td>{{ r.remarks }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-muted">No medicine/vaccine consumption for this batch</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
   <div class="report-section-title">Mortality And Feed Consumption Details</div>
   <div class="table-responsive">
     <table class="table table-bordered mb-0 report-table">
@@ -301,23 +320,6 @@
         </tr>
         {% endif %}
         {% empty %}<tr><td colspan="23" class="text-center text-muted">No daily entries for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Medicine and Vaccine Consumption</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Age</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Stock</th><th>Remarks</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.medicine_consumption %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.age }}</td><td>{{ r.item }}</td>
-          <td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.stock }}</td><td>{{ r.remarks }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="6" class="text-center text-muted">No medicine/vaccine consumption for this batch</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>

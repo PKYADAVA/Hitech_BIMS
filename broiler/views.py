@@ -57,7 +57,13 @@ class BaseAPIView(View):
         if isinstance(e, Http404):
             return JsonResponse({"error": str(e)}, status=404)
         if isinstance(e, ValidationError):
-            return JsonResponse({"error": str(e)}, status=400)
+            if hasattr(e, "message_dict"):
+                message = "; ".join(
+                    f"{field}: {' '.join(msgs)}" for field, msgs in e.message_dict.items()
+                )
+            else:
+                message = "; ".join(e.messages)
+            return JsonResponse({"error": message}, status=400)
         return JsonResponse({"error": "Internal server error"}, status=500)
 
     def get_cached_data(self, cache_key: str, ttl: int = 300) -> Optional[List]:
@@ -813,8 +819,9 @@ class BroilerBatchAPI(BaseAPIView):
             data = request.POST
             farm_obj = BroilerFarm.objects.get(id=data["broiler_farm_id"])
             with transaction.atomic():
-                # batch_name is auto-generated (<farm code>-BATCH <n>) in
-                # BroilerBatch.save() — never accepted from the form.
+                # batch_name is auto-generated (<farm code minus FRM/>-<n>,
+                # e.g. BAH-0201-1) in BroilerBatch.save() — never accepted
+                # from the form.
                 batch = BroilerBatch.objects.create(
                     broiler_farm=farm_obj,
                     book_number=data.get("book_number") or "",
@@ -941,8 +948,8 @@ class BroilerFarmAPI(BaseAPIView):
         "agreement_copy", "other_documents",
         "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file",
     ]
-    # farm_code is auto-generated (FRM/<branch prefix>-<branch suffix><serial>)
-    # in BroilerFarm.save() — never accepted from the form.
+    # farm_code is auto-generated (<branch prefix>-<branch suffix><serial>,
+    # e.g. AKB-0203) in BroilerFarm.save() — never accepted from the form.
     FORM_FIELDS = [
         "farm_name", "region", "line", "farm_pincode", "farm_capacity",
         "farm_type", "state", "district", "area", "farm_address", "farm_latitude",
@@ -1019,7 +1026,10 @@ class BroilerFarmAPI(BaseAPIView):
 
                 for field in self.FORM_FIELDS:
                     if field in data:
-                        setattr(broiler_farm, field, data[field] or None)
+                        value = data[field]
+                        if value == "" and BroilerFarm._meta.get_field(field).null:
+                            value = None
+                        setattr(broiler_farm, field, value)
 
                 for field in self.FILE_FIELDS:
                     if field in request.FILES:
@@ -1966,10 +1976,16 @@ def _build_batch_report(batch):
     # booked to a Warehouse sharing this farm's Branch, so — like Bird Sale
     # Receipt's balance — it's rolled up at the Branch level, bounded to
     # this batch's growing window, rather than claimed to be exact-to-batch.
+    # start_date/end_date are both nullable (the Batch form sets neither),
+    # so each bound is applied only when it exists — an unbounded batch
+    # simply shows every purchase at the branch.
     branch_id = batch.broiler_farm.branch_id
-    purchase_items = (GeneralPurchaseItem.objects
-                      .filter(farm_warehouse__branch_id=branch_id, purchase__date__gte=batch.start_date)
-                      .filter(Q(purchase__date__lte=batch.end_date) if batch.end_date else Q())
+    purchase_items = GeneralPurchaseItem.objects.filter(farm_warehouse__branch_id=branch_id)
+    if batch.start_date:
+        purchase_items = purchase_items.filter(purchase__date__gte=batch.start_date)
+    if batch.end_date:
+        purchase_items = purchase_items.filter(purchase__date__lte=batch.end_date)
+    purchase_items = (purchase_items
                       .select_related("purchase", "item__category", "farm_warehouse")
                       .order_by("purchase__date", "id"))
     feed_purchase_rows = []

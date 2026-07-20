@@ -450,7 +450,7 @@ class BroilerFarm(models.Model):
         unique=True,
         editable=False,
         blank=True,
-        help_text=_("Auto-generated code, e.g. FRM/AKB-0203 — FRM/<branch prefix>-<branch code suffix><farm serial>")
+        help_text=_("Auto-generated code, e.g. AKB-0203 — <branch prefix>-<branch code suffix><farm serial>")
     )
     farm_name = models.CharField(
         max_length=100,
@@ -507,9 +507,13 @@ class BroilerFarm(models.Model):
         help_text=_("Longitude coordinate of the farm")
     )
     agreement_start_date = models.DateField(
+        blank=True,
+        null=True,
         help_text=_("Agreement start date")
     )
     agreement_end_date = models.DateField(
+        blank=True,
+        null=True,
         help_text=_("Agreement end date")
     )
     agreement_months = models.PositiveIntegerField(
@@ -519,6 +523,8 @@ class BroilerFarm(models.Model):
     )
     agreement_copy = models.FileField(
         upload_to='farm/agreements/',
+        blank=True,
+        null=True,
         help_text=_("Uploaded copy of the agreement")
     )
     other_documents = models.FileField(
@@ -571,11 +577,11 @@ class BroilerFarm(models.Model):
 
     @classmethod
     def next_farm_code(cls, branch):
-        """FRM/<branch prefix>-<branch code suffix><per-branch serial>, e.g.
-        the 3rd farm of branch AKB (code BRH-0002) is FRM/AKB-0203."""
+        """<branch prefix>-<branch code suffix><per-branch serial>, e.g.
+        the 3rd farm of branch AKB (code BRH-0002) is AKB-0203."""
         match = re.match(r"^BRH-(\d+)$", branch.code or "")
         branch_suffix = f"{int(match.group(1)):02d}" if match else f"{branch.pk:02d}"
-        prefix = f"FRM/{branch.prefix}-{branch_suffix}"
+        prefix = f"{branch.prefix}-{branch_suffix}"
         serials = []
         for existing in cls.objects.filter(farm_code__startswith=prefix).values_list("farm_code", flat=True):
             code_match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
@@ -665,7 +671,7 @@ class BroilerBatch(models.Model):
     batch_name = models.CharField(
         max_length=50,
         blank=True,
-        help_text=_("Auto-generated per farm, e.g. FRM/BAH-0201-BATCH 1")
+        help_text=_("Auto-generated per farm, e.g. BAH-0201-1")
     )
     book_number = models.CharField(
         max_length=50,
@@ -705,9 +711,10 @@ class BroilerBatch(models.Model):
 
     @classmethod
     def next_batch_name(cls, farm):
-        """<farm code>-BATCH <n>, serial per farm — e.g. the 2nd batch of
-        farm FRM/BAH-0201 is FRM/BAH-0201-BATCH 2."""
-        prefix = f"{farm.farm_code}-BATCH "
+        """<farm code>-<n>, serial per farm — e.g. the 2nd batch of farm
+        BAH-0201 is BAH-0201-2. removeprefix keeps batches short for farms
+        created while codes still carried the old "FRM/" prefix."""
+        prefix = f"{farm.farm_code.removeprefix('FRM/')}-"
         serials = []
         for existing in cls.objects.filter(broiler_farm=farm, batch_name__startswith=prefix).values_list("batch_name", flat=True):
             match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")

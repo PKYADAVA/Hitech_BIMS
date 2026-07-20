@@ -358,12 +358,12 @@
                 <div class="form-section-label"><i class="fas fa-file-contract"></i>Agreement &amp; Documents</div>
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label for="agreement_start_date" class="form-label">Agreement Start Date<span class="text-danger">*</span></label>
-                        <input type="date" id="agreement_start_date" class="form-control" required />
+                        <label for="agreement_start_date" class="form-label">Agreement Start Date</label>
+                        <input type="date" id="agreement_start_date" class="form-control" />
                     </div>
                     <div class="col-md-4">
-                        <label for="agreement_end_date" class="form-label">Agreement End Date<span class="text-danger">*</span></label>
-                        <input type="date" id="agreement_end_date" class="form-control" required />
+                        <label for="agreement_end_date" class="form-label">Agreement End Date</label>
+                        <input type="date" id="agreement_end_date" class="form-control" />
                     </div>
                     <div class="col-md-4">
                         <label for="agreement_months" class="form-label">Agreement Months</label>
@@ -371,7 +371,7 @@
                     </div>
 
                     <div class="col-md-4">
-                        <label for="agreement_copy" class="form-label">Agreement Copy<span class="text-danger">*</span></label>
+                        <label for="agreement_copy" class="form-label">Agreement Copy</label>
                         <input type="file" id="agreement_copy" class="form-control" />
                         <div class="form-text" id="agreement_copy_current"></div>
                     </div>
@@ -933,11 +933,6 @@ $(document).ready(function () {
             formData.append("farm_pictures", pictures[i]);
         }
 
-        if (!id && !$("#agreement_copy")[0].files[0]) {
-            window.showToast('warning', "Agreement Copy is required.");
-            return;
-        }
-
         $.ajax({
             url: id ? `/broiler_farm/${id}/update/` : "{% url 'broiler_farm_create' %}",
             type: "POST",
@@ -951,8 +946,9 @@ $(document).ready(function () {
                 loadFarms();
                 window.showToast("success", id ? "Farm updated successfully!" : "Farm added successfully!");
             },
-            error: function () {
-                window.showToast('danger', "Error saving farm. Please check your input.");
+            error: function (xhr) {
+                const serverError = xhr.responseJSON && xhr.responseJSON.error;
+                window.showToast('danger', serverError || "Error saving farm. Please check your input.");
             }
         });
     }

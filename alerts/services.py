@@ -142,8 +142,8 @@ class AuditService:
             event_type=event.event_type or event.action,
             action=event.action,
             model_name=event.model_name,
-            object_id=str(event.object_id or ""),
-            object_display=event.object_display,
+            object_id=str(event.object_id or "")[:64],
+            object_display=(event.object_display or "")[:255],
             performed_by_id=snapshot.user_id,
             actor_label=snapshot.username or "system",
             before=event.before,
@@ -176,9 +176,9 @@ class AlertService:
             action=event.action,
             severity=severity,
             model_name=event.model_name,
-            object_id=str(event.object_id or ""),
-            object_display=event.object_display,
-            title=title,
+            object_id=str(event.object_id or "")[:64],
+            object_display=(event.object_display or "")[:255],
+            title=title[:255],
             message=message,
             performed_by_id=snapshot.user_id,
             actor_label=actor_label,
@@ -245,9 +245,14 @@ def deliver_to_channels(payload: dict[str, Any]) -> None:
 def process_event(event: AlertEvent) -> Optional[Alert]:
     """Persist audit + alert for one event. The single funnel all paths use."""
     try:
-        snapshot = capture_snapshot()
-        AuditService.record(event, snapshot)
-        return AlertService.create(event)
+        # The nested atomic() is a savepoint: if the audit/alert INSERT
+        # fails while the caller is already inside a transaction, only this
+        # savepoint rolls back — without it, the caller's whole transaction
+        # is poisoned and the except below can't actually protect anything.
+        with transaction.atomic():
+            snapshot = capture_snapshot()
+            AuditService.record(event, snapshot)
+            return AlertService.create(event)
     except Exception:
         # Auditing must never break the business operation that triggered it.
         logger.exception("alerts: failed to process event %s", event.action)
