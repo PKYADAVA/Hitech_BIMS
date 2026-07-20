@@ -361,6 +361,12 @@
               {% if 'bank_cash' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'bank_cash' %}">
                 <i class="fas fa-university"></i>Bank / Cash Masters
               </a></li>{% endif %}
+              {% if 'cost_center' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'cost_center' %}">
+                <i class="fas fa-sitemap"></i>Cost Center
+              </a></li>{% endif %}
+              {% if 'cost_center_mapping' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'cost_center_mapping' %}">
+                <i class="fas fa-diagram-project"></i>Cost Center Mapping
+              </a></li>{% endif %}
               {% if 'company_profile' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'company_profile' %}">
                 <i class="fas fa-building"></i>Company Profile
               </a></li>{% endif %}
@@ -400,6 +406,12 @@
               </a></li>{% endif %}
               {% if 'balance_sheet_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'balance_sheet_report' %}">
                 <i class="fas fa-scale-balanced"></i>Balance Sheet
+              </a></li>{% endif %}
+              {% if 'cost_center_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'cost_center_report' %}">
+                <i class="fas fa-chart-pie"></i>Cost Center Report
+              </a></li>{% endif %}
+              {% if 'branch_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'branch_summary_report' %}">
+                <i class="fas fa-code-branch"></i>Branch Summary Report
               </a></li>{% endif %}
             </ul>
           </li>
@@ -443,6 +455,9 @@
               </a></li>{% endif %}
               {% if 'warehouse_mapping' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'warehouse_mapping' %}">
                 <i class="fas fa-diagram-project"></i>Office Mapping
+              </a></li>{% endif %}
+              {% if 'linked_tree' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'linked_tree' %}">
+                <i class="fas fa-sitemap"></i>Linked Tree
               </a></li>{% endif %}
             </ul>
           </li>
@@ -495,9 +510,12 @@
               <i class="fas fa-user-cog"></i>Employee Management
             </a>
             <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'employee_list' %}">
+              {% if 'employee_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_list' %}">
                 <i class="fas fa-users"></i>Employee List
-              </a></li>
+              </a></li>{% endif %}
+              {% if 'designation' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'designation' %}">
+                <i class="fas fa-id-badge"></i>Designation
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

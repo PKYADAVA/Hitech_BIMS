@@ -5,7 +5,7 @@ def validate_employee_data(data):
     """
     Validates employee form data before processing.
     """
-    required_fields = ["full_name", "designation"]
+    required_fields = ["full_name", "designation", "warehouse"]
     for field in required_fields:
         if not data.get(field):
             return False, f"{field.replace('_', ' ').title()} is required"

@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from account.models import (
     AccountType,
-    BankCode,
+    BankCashMaster,
     ChartOfAccount,
     CoAGenerationLog,
     CoATemplateAccount,
@@ -168,8 +168,8 @@ class CoAGeneratorService:
             self.summary["inventory_accounts"] = self._create_from_specs(INVENTORY_SPECS)
         if self.with_cash:
             self.summary["cash_accounts"] = self._create_from_specs(CASH_SPECS)
-        if self.with_banks:
-            self.summary["bank_accounts"] = self._generate_bank_accounts()
+        if self.with_banks or self.with_cash:
+            self.summary["bank_cash_accounts"] = self._generate_bank_cash_accounts()
         if self.with_fixed_assets:
             self.summary["fixed_assets"] = self._generate_fixed_assets()
         self.summary["equity_accounts"] = self._create_from_specs(EQUITY_SPECS)
@@ -216,22 +216,31 @@ class CoAGeneratorService:
             skipped += int(not was_created)
         return {"created": created, "skipped": skipped}
 
-    def _generate_bank_accounts(self):
+    def _generate_bank_cash_accounts(self):
+        """Backfill BankCashMaster rows that predate this company's COA —
+        each files under Bank Accounts or Cash & Cash Equivalents per its
+        ``is_cash`` flag. Rows created after the COA exists get their ledger
+        from the post_save signal instead (account.signals.bank_cash_ledger)."""
         created = skipped = 0
-        parent, _ = self._ensure_account("BANK_ACCOUNTS", "Bank Accounts", "ASSET", "CURRENT_ASSETS", True)
+        bank_parent, _ = self._ensure_account("BANK_ACCOUNTS", "Bank Accounts", "ASSET", "CURRENT_ASSETS", True)
+        cash_parent, _ = self._ensure_account("CASH", "Cash & Cash Equivalents", "ASSET", "CURRENT_ASSETS", True)
         from django.contrib.contenttypes.models import ContentType
-        bank_ct = ContentType.objects.get_for_model(BankCode)
-        for bank in BankCode.objects.all():
+        ct = ContentType.objects.get_for_model(BankCashMaster)
+        for row in BankCashMaster.objects.all():
+            if row.is_cash and not self.with_cash:
+                continue
+            if not row.is_cash and not self.with_banks:
+                continue
             if ChartOfAccount.all_objects.filter(
-                company=self.company, source_content_type=bank_ct, source_object_id=bank.pk
+                company=self.company, source_content_type=ct, source_object_id=row.pk
             ).exists():
                 skipped += 1
                 continue
             self._create_leaf(
-                name=bank.bank_name,
+                name=row.name,
                 type_code="ASSET",
-                parent=parent,
-                source=bank,
+                parent=cash_parent if row.is_cash else bank_parent,
+                source=row,
             )
             created += 1
         return {"created": created, "skipped": skipped}

@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block title %}Linked Tree{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='inventory' %}
+{% endblock %}
+
+{% block content %}
+{% include '_inventory_subnavbar.html' with active_tab='linked_tree' %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-sitemap"></i>Linked Tree</div>
+      <div class="page-header-subtitle">What's linked to what — Region &rarr; Branch &rarr; Office &rarr; Hatchery / Bank / Cash, read-only</div>
+    </div>
+</div>
+
+<div id="tree-loading" class="text-muted"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+<div id="tree-root" class="row g-3"></div>
+
+<div class="row g-3 mt-1" id="tree-unmapped-row" style="display:none">
+    <div class="col-md-4">
+        <div class="card border-warning h-100">
+            <div class="card-header bg-warning bg-opacity-25"><i class="fas fa-triangle-exclamation me-1"></i>Offices not mapped to a Branch</div>
+            <ul class="list-group list-group-flush" id="tree-unmapped-offices"></ul>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning h-100">
+            <div class="card-header bg-warning bg-opacity-25"><i class="fas fa-triangle-exclamation me-1"></i>Hatcheries not mapped to an Office</div>
+            <ul class="list-group list-group-flush" id="tree-unmapped-hatcheries"></ul>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info h-100">
+            <div class="card-header bg-info bg-opacity-25"><i class="fas fa-globe me-1"></i>Bank / Cash mapped to All Offices</div>
+            <ul class="list-group list-group-flush" id="tree-all-office-bank-cash"></ul>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(document).ready(function () {
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function bankCashBadge(bc) {
+        const cls = bc.is_cash ? "bg-warning text-dark" : "bg-primary";
+        const icon = bc.is_cash ? "fa-money-bill-wave" : "fa-university";
+        return `<span class="badge ${cls} me-1 mb-1"><i class="fas ${icon}"></i> ${escapeHtml(bc.code)} - ${escapeHtml(bc.name)}</span>`;
+    }
+
+    function officeCard(office) {
+        const hatcheryBadges = office.hatcheries.length
+            ? office.hatcheries.map(h => `<span class="badge bg-success me-1 mb-1"><i class="fa-solid fa-kiwi-bird"></i> ${escapeHtml(h.name)}</span>`).join("")
+            : '<span class="text-muted small">No hatchery mapped</span>';
+        const bankCashBadges = office.bank_cash.length
+            ? office.bank_cash.map(bankCashBadge).join("")
+            : '<span class="text-muted small">No bank/cash mapped</span>';
+        const costCenterBadge = office.cost_center_name
+            ? `<span class="badge bg-info text-dark me-1 mb-1"><i class="fas fa-sitemap"></i> ${escapeHtml(office.cost_center_name)}</span>`
+            : '<span class="text-muted small">No cost center mapped</span>';
+        return `
+            <div class="border rounded p-2 mb-2 bg-light">
+                <div class="fw-semibold"><i class="fas fa-building me-1"></i>${escapeHtml(office.name)}</div>
+                <div class="mt-1">${hatcheryBadges}</div>
+                <div class="mt-1">${bankCashBadges}</div>
+                <div class="mt-1">${costCenterBadge}</div>
+            </div>`;
+    }
+
+    function branchCard(branch) {
+        const ccBadge = branch.cost_center_code
+            ? `<span class="badge bg-info text-dark ms-2"><i class="fas fa-link"></i> ${escapeHtml(branch.cost_center_code)}</span>`
+            : `<span class="badge bg-secondary ms-2">No Cost Center</span>`;
+        const offices = branch.offices.length
+            ? branch.offices.map(officeCard).join("")
+            : '<div class="text-muted small ps-2">No offices mapped to this branch</div>';
+        return `
+            <div class="card mb-3">
+                <div class="card-header d-flex align-items-center">
+                    <i class="fas fa-code-branch me-1"></i>${escapeHtml(branch.name)}${ccBadge}
+                </div>
+                <div class="card-body">
+                    ${offices}
+                </div>
+            </div>`;
+    }
+
+    function regionColumn(region) {
+        const branches = region.branches.length
+            ? region.branches.map(branchCard).join("")
+            : '<div class="text-muted">No branches in this region</div>';
+        return `
+            <div class="col-12">
+                <h5 class="mb-2"><i class="fas fa-map-marked-alt me-1"></i>${escapeHtml(region.name)}</h5>
+                ${branches}
+            </div>`;
+    }
+
+    $.get("{% url 'linked_tree_data' %}", function (data) {
+        $("#tree-loading").hide();
+
+        const root = $("#tree-root");
+        if (!data.regions.length) {
+            root.append('<div class="col-12 text-muted">No regions/branches found.</div>');
+        } else {
+            data.regions.forEach(function (region) {
+                root.append(regionColumn(region));
+            });
+        }
+
+        if (data.unmapped_offices.length || data.unmapped_hatcheries.length || data.all_office_bank_cash.length) {
+            $("#tree-unmapped-row").show();
+        }
+        const uo = $("#tree-unmapped-offices").empty();
+        if (!data.unmapped_offices.length) uo.append('<li class="list-group-item text-muted small">None</li>');
+        data.unmapped_offices.forEach(o => uo.append(`<li class="list-group-item">${escapeHtml(o.name)}</li>`));
+
+        const uh = $("#tree-unmapped-hatcheries").empty();
+        if (!data.unmapped_hatcheries.length) uh.append('<li class="list-group-item text-muted small">None</li>');
+        data.unmapped_hatcheries.forEach(h => uh.append(`<li class="list-group-item">${escapeHtml(h.name)}</li>`));
+
+        const abc = $("#tree-all-office-bank-cash").empty();
+        if (!data.all_office_bank_cash.length) abc.append('<li class="list-group-item text-muted small">None</li>');
+        data.all_office_bank_cash.forEach(bc => abc.append(`<li class="list-group-item">${bankCashBadge(bc)}</li>`));
+    }).fail(function () {
+        $("#tree-loading").html('<span class="text-danger">Failed to load.</span>');
+    });
+});
+</script>
+{% endblock %}

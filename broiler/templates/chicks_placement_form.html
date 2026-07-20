@@ -16,17 +16,6 @@
 
 <form id="chicks-placement-form">
   <div class="card mb-3">
-    <div class="card-body">
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="direct-hatchery-toggle">
-        <label class="form-check-label" for="direct-hatchery-toggle">
-          <strong>Direct from Hatchery</strong>
-        </label>
-      </div>
-    </div>
-  </div>
-
-  <div class="card mb-3">
     <div class="card-header">
       <i class="fas fa-list-ol me-1"></i><strong>Chicks Placement Records</strong>
     </div>
@@ -102,13 +91,8 @@ function row() {
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
   get('row-table').tBodies[0].append(tr);
-  applyDirectMode(tr);
   refreshRowAddButtons();
   return tr;
-}
-
-function isDirectHatchery() {
-  return get('direct-hatchery-toggle').checked;
 }
 
 // Only the last row offers "+" (add another row); earlier rows just delete.
@@ -156,10 +140,10 @@ async function refreshBatchBox(tr) {
     `<option value="${b.id}" ${b.is_active ? 'selected' : ''}>${b.batch_name}${b.is_active ? ' (Active)' : ''}</option>`).join('');
 }
 
-// A Warehouse can have several Hatcheries mapped to it (Hatchery.warehouse);
-// picking a Warehouse just soft-selects the matching Hatchery if there's
-// exactly one — it never hides other options, since the mapping data may
-// be incomplete.
+// A Warehouse can have several Hatcheries mapped to it (Inventory > Office
+// Mapping); picking a Warehouse just soft-selects the matching Hatchery if
+// there's exactly one — it never hides other options, since the mapping
+// data may be incomplete.
 function autoSelectHatchery(tr) {
   const warehouseId = tr.querySelector('.warehouse').value;
   if (!warehouseId) return;
@@ -167,24 +151,6 @@ function autoSelectHatchery(tr) {
   const matches = [...hatcherySelect.options].filter(o => o.value && o.dataset.warehouse === warehouseId);
   if (matches.length === 1) { hatcherySelect.value = matches[0].value; }
 }
-
-// "Direct from Hatchery" (the toggle above the grid, applying to every row)
-// skips the Warehouse leg entirely — the technical transfer source becomes
-// that Hatchery's own mapped Warehouse (Stock Transfer always needs a
-// Warehouse/Farm source; there's no "hatchery" location type), so From
-// Warehouse is disabled rather than left applicable.
-function applyDirectMode(tr) {
-  const direct = isDirectHatchery();
-  const warehouseSelect = tr.querySelector('.warehouse');
-  warehouseSelect.disabled = direct;
-  warehouseSelect.required = !direct;
-  warehouseSelect.classList.toggle('bg-light', direct);
-  if (direct) { warehouseSelect.value = ''; }
-}
-
-get('direct-hatchery-toggle').addEventListener('change', () => {
-  document.querySelectorAll('#row-table tbody tr').forEach(applyDirectMode);
-});
 
 get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('farm')) {
@@ -220,19 +186,10 @@ get('row-table').addEventListener('click', e => {
 
 get('chicks-placement-form').addEventListener('submit', function (e) {
   e.preventDefault();
-  let missingWarehouseForDirect = false;
-  const direct = isDirectHatchery();
   const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => {
     const hatcherySelect = tr.querySelector('.source-hatchery');
     const hatcheryId = hatcherySelect.value;
-    let warehouseId = tr.querySelector('.warehouse').value;
-    if (direct) {
-      // No separate Warehouse leg — the transfer's technical source is
-      // whichever Warehouse the chosen Hatchery is itself mapped to.
-      const opt = hatcherySelect.selectedOptions[0];
-      warehouseId = opt ? (opt.dataset.warehouse || '') : '';
-      if (hatcheryId && !warehouseId) { missingWarehouseForDirect = true; }
-    }
+    const warehouseId = tr.querySelector('.warehouse').value;
     return {
       date: tr.querySelector('.date').value,
       dc_no: tr.querySelector('.dc-no').value,
@@ -255,12 +212,8 @@ get('chicks-placement-form').addEventListener('submit', function (e) {
       remarks: tr.querySelector('.remarks').value,
     };
   });
-  if (missingWarehouseForDirect) {
-    alert('One or more selected Hatcheries (Direct) has no Warehouse mapped to it — map one under Hatchery Master first, or untick Direct and pick a Warehouse.');
-    return;
-  }
   if (!rows.length || rows.some(r => !r.item || !r.source_hatchery || !r.from_location_id || !r.to_location_id)) {
-    alert('Add at least one row with Chicks Item, Source Hatchery, Warehouse (or a Direct hatchery with a mapped Warehouse) and Farm selected.');
+    alert('Add at least one row with Chicks Item, Source Hatchery, Warehouse and Farm selected.');
     return;
   }
   if (rows.some(r => !Number(r.chicks_ordered))) {

@@ -70,7 +70,7 @@
 <script>
 $(function () {
   const csrfToken = "{{ csrf_token }}";
-  let offices = [], branches = [], hatcheries = [];
+  let offices = [], branches = [], hatcheries = [], banks = [], cashLocations = [];
   let table = null;
 
   function escapeHtml(str) {
@@ -85,6 +85,8 @@ $(function () {
       offices = data.offices;
       branches = data.branches;
       hatcheries = data.hatcheries;
+      banks = data.banks;
+      cashLocations = data.cash_locations;
       renderTable();
     });
   }
@@ -117,6 +119,31 @@ $(function () {
             {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-hatchery-mapping" data-id="${h.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
             {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-hatchery-mapping" data-id="${h.id}" ${h.warehouse_id ? "" : "disabled"} title="Clear mapping"><i class="fas fa-trash"></i></button>{% endif %}
           </div>
+        </td>
+      </tr>`);
+    });
+
+    // Bank/Cash -> Office is a required field on those masters, not a row in
+    // this generic Mapping table — shown here read-only for one-place
+    // visibility; always edited from Account > Bank / Cash Masters.
+    banks.forEach(b => {
+      body.append(`<tr>
+        <td><span class="badge bg-primary">Bank</span></td>
+        <td>${escapeHtml(b.name)}</td>
+        <td>${escapeHtml(b.office_name)}</td>
+        <td class="text-center">
+          <a href="{% url 'bank_cash' %}" class="btn btn-outline-secondary btn-sm" title="Edit in Bank / Cash Masters"><i class="fas fa-arrow-up-right-from-square"></i></a>
+        </td>
+      </tr>`);
+    });
+
+    cashLocations.forEach(c => {
+      body.append(`<tr>
+        <td><span class="badge bg-warning text-dark">Cash</span></td>
+        <td>${escapeHtml(c.name)}</td>
+        <td>${escapeHtml(c.office_name)}</td>
+        <td class="text-center">
+          <a href="{% url 'bank_cash' %}" class="btn btn-outline-secondary btn-sm" title="Edit in Bank / Cash Masters"><i class="fas fa-arrow-up-right-from-square"></i></a>
         </td>
       </tr>`);
     });

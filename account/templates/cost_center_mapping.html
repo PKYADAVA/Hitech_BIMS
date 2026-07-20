@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Cost Center Mapping{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_account_subnavbar.html' with active_tab='cost_center_mapping' %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title">Cost Center Mapping</div>
+      <div class="page-header-subtitle">Pick which Cost Center each Office routes its postings to — entirely manual, nothing auto-created</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="fas fa-diagram-project me-2"></i>Office &rarr; Cost Center</div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0" id="ccm-table">
+                <thead>
+                    <tr><th>Office</th><th>Mapped Cost Center</th><th class="text-center">Action</th></tr>
+                </thead>
+                <tbody id="ccm-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="ccmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Map Office to Cost Center</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Office</label>
+          <input type="text" class="form-control" id="ccm-office-name" readonly />
+          <input type="hidden" id="ccm-office-id" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Cost Center</label>
+          <select class="form-select" id="ccm-cost-center">
+            <option value="">None (unmapped)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ccm-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let offices = [], costCenters = [];
+  let table = null;
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function loadData() {
+    $.getJSON("{% url 'cost_center_mapping_data' %}", function (data) {
+      offices = data.offices;
+      costCenters = data.cost_centers;
+      renderTable();
+    });
+  }
+
+  function renderTable() {
+    if (table) { table.destroy(); }
+    const body = $("#ccm-body").empty();
+    offices.forEach(o => {
+      body.append(`<tr>
+        <td>${escapeHtml(o.name)}</td>
+        <td>${o.cost_center_id ? escapeHtml(o.cost_center_name) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-center">
+          {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-ccm" data-id="${o.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+          {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm clear-ccm" data-id="${o.id}" ${o.cost_center_id ? "" : "disabled"} title="Clear mapping"><i class="fas fa-trash"></i></button>{% endif %}
+        </td>
+      </tr>`);
+    });
+    table = $("#ccm-table").DataTable({ responsive: true, language: { emptyTable: "No offices found" } });
+  }
+
+  function openModal(office) {
+    $("#ccm-office-id").val(office.id);
+    $("#ccm-office-name").val(office.name);
+    $("#ccm-cost-center").html('<option value="">None (unmapped)</option>' +
+      costCenters.map(c => `<option value="${c.id}">${escapeHtml(c.code)} - ${escapeHtml(c.name)}</option>`).join(""));
+    $("#ccm-cost-center").val(office.cost_center_id || "");
+    new bootstrap.Modal(document.getElementById("ccmModal")).show();
+  }
+
+  $(document).on("click", ".edit-ccm", function () {
+    const office = offices.find(o => o.id === Number($(this).data("id")));
+    if (office) openModal(office);
+  });
+
+  $("#ccm-save-btn").on("click", function () {
+    $.ajax({
+      url: "{% url 'cost_center_mapping_save' %}",
+      type: "POST",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify({
+        office: $("#ccm-office-id").val(),
+        cost_center: $("#ccm-cost-center").val() || null,
+      }),
+      success: function () {
+        bootstrap.Modal.getInstance(document.getElementById("ccmModal")).hide();
+        window.showToast("success", "Mapping saved.");
+        loadData();
+      },
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Failed to save mapping.");
+      }
+    });
+  });
+
+  $(document).on("click", ".clear-ccm", function () {
+    const id = $(this).data("id");
+    window.bimsConfirm("Clear this office's cost center mapping?", { title: "Clear mapping", confirmText: "Clear" }).then(function (ok) {
+      if (!ok) return;
+      $.ajax({
+        url: "{% url 'cost_center_mapping_save' %}",
+        type: "POST",
+        headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+        data: JSON.stringify({ office: id, cost_center: null }),
+        success: loadData,
+        error: function (xhr) {
+          window.showToast('danger', xhr.responseJSON?.error || "Failed to clear mapping.");
+        }
+      });
+    });
+  });
+
+  loadData();
+});
+</script>
+{% endblock %}

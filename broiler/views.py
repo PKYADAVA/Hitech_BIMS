@@ -295,6 +295,7 @@ class BranchTemplateView(View):
         return render(request, "branch.html", context)
 
 def _branch_to_dict(branch: Branch) -> dict:
+    cost_center = getattr(branch, "cost_center", None)
     return {
         "id": branch.id,
         "code": branch.code,
@@ -304,6 +305,7 @@ def _branch_to_dict(branch: Branch) -> dict:
         "prefix": branch.prefix,
         "is_active": branch.is_active,
         "is_locked": branch.is_locked,
+        "cost_center_code": cost_center.code if cost_center else "",
     }
 
 @method_decorator(login_required, name="dispatch")
@@ -313,10 +315,10 @@ class BranchAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                branch = Branch.objects.select_related("region").get(id=id)
+                branch = Branch.objects.select_related("region", "cost_center").get(id=id)
                 return JsonResponse(_branch_to_dict(branch))
 
-            branches = Branch.objects.select_related("region").all()
+            branches = Branch.objects.select_related("region", "cost_center").all()
             return JsonResponse([_branch_to_dict(b) for b in branches], safe=False)
         except Exception as e:
             return self.handle_exception(e)
@@ -2255,6 +2257,22 @@ def broiler_batch_report(request):
 # the chicks category) so Broiler users don't have to use the generic
 # Inventory > Stock Transfer form's full location-type/item-picker.
 
+def _hatcheries_with_warehouse():
+    """Hatchery queryset annotated with `warehouse_id` — its mapped Office,
+    looked up from inventory.Mapping (Inventory > Office Mapping) rather
+    than a direct FK, so templates can keep reading `h.warehouse_id` as
+    before."""
+    from django.db.models import OuterRef, Subquery
+    from inventory.models import Mapping
+
+    mapped_warehouse = Mapping.objects.filter(
+        type=Mapping.TYPE_HATCHERY_OFFICE, from_id=OuterRef("pk")
+    ).values("to_id")[:1]
+    return Hatchery.objects.order_by("hatchery_name").annotate(
+        warehouse_id=Subquery(mapped_warehouse)
+    )
+
+
 @method_decorator(login_required, name="dispatch")
 class ChicksPlacementListTemplateView(View):
     def get(self, request):
@@ -2262,7 +2280,7 @@ class ChicksPlacementListTemplateView(View):
             "warehouses": Warehouse.objects.order_by("name"),
             "farms": BroilerFarm.objects.order_by("farm_name"),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
-            "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+            "hatcheries": _hatcheries_with_warehouse(),
         })
 
 
@@ -2273,6 +2291,6 @@ class ChicksPlacementFormTemplateView(View):
             "warehouses": Warehouse.objects.order_by("name"),
             "farms": BroilerFarm.objects.order_by("farm_name"),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
-            "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+            "hatcheries": _hatcheries_with_warehouse(),
             "today": timezone.localdate().isoformat(),
         })

@@ -80,10 +80,11 @@ def create_new_employee(request):
             blood_group = request.POST.get("blood_group")
             qualification = request.POST.get("qualification")
             driving_license = request.POST.get("driving_license") == "on"
+            driving_license_no = request.POST.get("driving_license_no", "").strip() or None
             pan_card = request.POST.get("pan_card")
             aadhar_number = request.POST.get("aadhar_number")
-            personal_contact = request.POST.get("personal_contact")
-            emergency_contact = request.POST.get("emergency_contact")
+            personal_contact = request.POST.get("personal_contact") or None
+            emergency_contact = request.POST.get("emergency_contact") or None
             country = request.POST.get("country")
             correspondence_address = request.POST.get("correspondence_address")
             warehouse_id = request.POST.get("warehouse")
@@ -103,23 +104,21 @@ def create_new_employee(request):
 
             if not full_name:
                 error_message = "Full Name is required."
-            if not date_of_birth:
-                error_message = "Date of Birth is required."
-            if not salary:
-                error_message = "Salary is required."
             if not designation_id:
                 error_message = "Designation is required."
+            if not warehouse_id:
+                error_message = "Warehouse is required."
 
-            if not salary.isdigit():
+            if salary and not salary.isdigit():
                 error_message = "Salary must be a valid number."
 
             if error_message is None:
-                try:
+                if date_of_birth:
                     date_of_birth = parse_date(date_of_birth)
                     if not date_of_birth:
                         error_message = "Invalid date format for Date of Birth."
-                except ValueError:
-                    error_message = "Invalid date format for Date of Birth."
+                else:
+                    date_of_birth = None
 
             if error_message is None:
                 try:
@@ -133,7 +132,7 @@ def create_new_employee(request):
                     request, "new_employee.html", {"error_message": error_message}
                 )
             warehouse = Warehouse.objects.filter(id=warehouse_id).first()
-            group = Group.objects.filter(id=group_id).first()
+            group = Group.objects.filter(id=group_id).first() if group_id else None
 
             employee = Employee(
                 full_name=full_name,
@@ -144,6 +143,7 @@ def create_new_employee(request):
                 date_of_birth=date_of_birth,
                 blood_group=blood_group,
                 driving_license=driving_license,
+                driving_license_no=driving_license_no if driving_license else None,
                 qualification=qualification,
                 pan_card=pan_card,
                 aadhar_number=aadhar_number,
@@ -153,10 +153,10 @@ def create_new_employee(request):
                 correspondence_address=correspondence_address,
                 warehouse=warehouse,
                 group=group,
-                salary=int(salary),
+                salary=int(salary) if salary else 0,
                 salary_type=salary_type,
-                advance=int(advance),
-                savings=int(saving),
+                advance=int(advance) if advance else 0,
+                savings=int(saving) if saving else 0,
                 date_of_joining=parse_date(date_of_joining),
                 report_to=report_to,
                 salary_account=salary_account,
@@ -207,21 +207,28 @@ def edit_employee(request, pk):
 
                     employee.marital_status = request.POST.get("marital_status")
                     employee.gender = request.POST.get("gender")
-                    employee.date_of_birth = request.POST.get("date_of_birth")
+                    employee.date_of_birth = request.POST.get("date_of_birth") or None
                     employee.blood_group = request.POST.get("blood_group")
                     employee.driving_license = bool(request.POST.get("driving_license"))
+                    employee.driving_license_no = (
+                        request.POST.get("driving_license_no", "").strip() or None
+                        if employee.driving_license else None
+                    )
 
                     designation_id = request.POST.get("designation")
                     if designation_id:
                         employee.designation = get_object_or_404(
                             Designation, id=designation_id
                         )
-                    employee.warehouse = Warehouse.objects.filter(
-                        id=request.POST.get("warehouse")
-                    ).first()
-                    employee.group = Group.objects.filter(
-                        id=request.POST.get("group")
-                    ).first()
+                    warehouse_id = request.POST.get("warehouse")
+                    employee.warehouse = (
+                        Warehouse.objects.filter(id=warehouse_id).first()
+                        if warehouse_id else None
+                    )
+                    group_id = request.POST.get("group")
+                    employee.group = (
+                        Group.objects.filter(id=group_id).first() if group_id else None
+                    )
 
                     if request.POST.get("salary"):
                         employee.salary = float(request.POST.get("salary"))
@@ -240,7 +247,7 @@ def edit_employee(request, pk):
                             employee.emergency_contact = None
                     else:
                         employee.emergency_contact = None
-                    employee.personal_contact = request.POST.get("personal_contact")
+                    employee.personal_contact = request.POST.get("personal_contact") or None
                     employee.country = request.POST.get("country")
                     employee.correspondence_address = request.POST.get(
                         "correspondence_address"
@@ -983,3 +990,82 @@ class EmployeePayrollDashboardView(View):
         )
 
         return payroll
+
+
+# ---------------------------------------------------------------------------
+# Designation (HR > Employee Management)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class DesignationTemplateView(View):
+    """Renders the designation master page."""
+
+    def get(self, request):
+        return render(request, "designation.html")
+
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class DesignationAPI(View):
+    """API endpoints for Designation operations."""
+
+    def handle_exception(self, e):
+        logger.error(f"Error in {self.__class__.__name__}: {str(e)}", exc_info=True)
+        if isinstance(e, ValidationError):
+            if hasattr(e, "message_dict"):
+                message = "; ".join(
+                    f"{field}: {' '.join(msgs)}" for field, msgs in e.message_dict.items()
+                )
+            else:
+                message = "; ".join(e.messages)
+            return JsonResponse({"error": message}, status=400)
+        return JsonResponse({"error": "Internal server error"}, status=500)
+
+    def _to_dict(self, designation):
+        return {
+            "id": designation.id,
+            "code": designation.code,
+            "title": designation.title,
+            "description": designation.description,
+            "base_salary": str(designation.base_salary) if designation.base_salary is not None else "",
+            "employee_count": designation.employees.count(),
+        }
+
+    def get(self, request, id=None):
+        try:
+            if id:
+                return JsonResponse(self._to_dict(Designation.objects.get(id=id)))
+            designations = Designation.objects.all().order_by("title")
+            return JsonResponse([self._to_dict(d) for d in designations], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request, id=None):
+        try:
+            data = request.POST
+            with transaction.atomic():
+                designation = Designation.objects.get(id=id) if id else Designation()
+                designation.title = data.get("title", "").strip() or None
+                designation.description = data.get("description", "").strip() or None
+                designation.base_salary = data.get("base_salary") or None
+                designation.full_clean()
+                designation.save()
+            return JsonResponse(
+                {"message": "Designation updated" if id else "Designation created", "id": designation.id},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            designation = Designation.objects.get(id=id)
+            employee_count = designation.employees.count()
+            if employee_count:
+                return JsonResponse(
+                    {"error": f"Cannot delete: {employee_count} employee(s) have this designation."},
+                    status=400,
+                )
+            designation.delete()
+            return JsonResponse({"message": "Designation deleted"})
+        except Exception as e:
+            return self.handle_exception(e)

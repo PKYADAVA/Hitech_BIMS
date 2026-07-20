@@ -81,3 +81,43 @@ def sync_ledger(instance, name, anchor_roles, company=None):
             "Auto-ledger sync failed for %s #%s", type(instance).__name__, instance.pk
         )
         return []
+
+
+def sync_branch_cost_center(branch, company=None):
+    """Ensure exactly one CostCenter (kind = the 'Branch Office' Sector)
+    exists for *branch*, named and active-flagged to match — the same
+    guarantee sync_ledger makes for COA ledgers, but for the cost-center
+    reporting dimension instead. Never raises; a Branch save must not fail
+    because of this bookkeeping.
+    """
+    from account.models import CostCenter
+    from inventory.models import Sector
+
+    try:
+        company = company or CompanyProfile.objects.filter(pk=1).first()
+        if company is None:
+            return None
+        cost_center = CostCenter.objects.filter(branch=branch).first()
+        if cost_center:
+            changed = []
+            if cost_center.name != branch.branch_name:
+                cost_center.name = branch.branch_name
+                changed.append("name")
+            if cost_center.is_active != branch.is_active:
+                cost_center.is_active = branch.is_active
+                changed.append("is_active")
+            if changed:
+                cost_center.save(update_fields=changed)
+            return cost_center
+        branch_kind = Sector.objects.filter(code=CostCenter.KIND_BRANCH).first()
+        if branch_kind is None:
+            return None
+        cost_center = CostCenter(
+            company=company, branch=branch, name=branch.branch_name,
+            kind=branch_kind, is_active=branch.is_active,
+        )
+        cost_center.save()
+        return cost_center
+    except Exception:
+        logger.exception("Branch cost-center sync failed for Branch #%s", branch.pk)
+        return None

@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import F
+from django.db.models.deletion import ProtectedError
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -10,13 +11,13 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.auth.decorators import login_required
 from .models import (
-    ItemCategory, Item, ItemPriceList, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
+    ItemCategory, Item, ItemPriceList, Mapping, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
     MedicineTransferItem, InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive,
     StockReceiveItem,
 )
 from hatchery_master.models import Hatchery
 from broiler.models import Branch, BroilerFarm, BroilerBatch
-from account.models import ChartOfAccount
+from account.models import BankCashMaster, ChartOfAccount, CostCenter
 import json
 
 
@@ -158,6 +159,7 @@ class ItemAPI(View):
                          .prefetch_related("warehouse")):
                 items.append({
                     "id": item.id, "item_code": item.item_code, "description": item.description,
+                    "category": item.category_id,
                     "category__name": item.category.name,
                     "warehouse__name": ", ".join(w.name for w in item.warehouse.all()),
                     "warehouse_ids": [w.id for w in item.warehouse.all()],
@@ -192,7 +194,6 @@ class ItemAPI(View):
             return JsonResponse({"error": error}, status=400)
 
         item = Item.objects.create(
-            item_code=data["item_code"],
             description=data["description"],
             category=category,
             valuation_method=data["valuation_method"],
@@ -216,7 +217,7 @@ class ItemAPI(View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         for field in [
-            "item_code", "description", "valuation_method", "standard_cost_per_unit",
+            "description", "valuation_method", "standard_cost_per_unit",
             "usage", "source", "type", "item_account", "lot_serial_control",
             "kg_per_bag", "hsn_code"
         ]:
@@ -231,7 +232,7 @@ class ItemAPI(View):
         if "category" in data:
             try:
                 item.category = ItemCategory.objects.get(id=data["category"])
-            except ItemCategory.DoesNotExist:
+            except (ItemCategory.DoesNotExist, ValueError, TypeError):
                 return JsonResponse({"error": "Invalid category ID"}, status=400)
 
         warehouses = None
@@ -251,7 +252,15 @@ class ItemAPI(View):
         except Item.DoesNotExist:
             raise Http404("Item not found")
 
-        item.delete()
+        try:
+            item.delete()
+        except ProtectedError as e:
+            related = sorted({str(obj._meta.verbose_name) for obj in list(e.protected_objects)[:50]})
+            names = ", ".join(related) if related else "other records"
+            return JsonResponse(
+                {"error": f"Cannot delete: this item is used in {names}."},
+                status=400,
+            )
         return JsonResponse({"message": "Item deleted"})
 
 
@@ -338,11 +347,11 @@ class SectorAPI(View):
         if id:
             try:
                 sector = Sector.objects.get(id=id)
-                return JsonResponse({"id": sector.id, "name": sector.name})
+                return JsonResponse({"id": sector.id, "code": sector.code, "name": sector.name})
             except Sector.DoesNotExist:
                 raise Http404("Sector not found")
         else:
-            sectors = list(Sector.objects.values("id", "name"))
+            sectors = list(Sector.objects.values("id", "code", "name"))
             return JsonResponse(sectors, safe=False)
 
     def post(self, request):
@@ -525,14 +534,164 @@ def warehouse_mapping(request):
     return render(request, "warehouse_mapping.html")
 
 
+# Registry driving the generic Mapping model: for each mapping type, which
+# models "from"/"to" refer to. Kept here (not on Mapping itself, which lives
+# in inventory.models) because resolving broiler.Branch and
+# hatchery_master.Hatchery from inventory/models.py would risk a circular
+# import — those apps only ever reference inventory via lazy string FKs.
+def _mapping_types():
+    return {
+        Mapping.TYPE_SECTOR_BRANCH: {
+            "from_model": Warehouse, "from_label": "name",
+            "to_model": Branch, "to_label": "branch_name",
+        },
+        Mapping.TYPE_HATCHERY_OFFICE: {
+            "from_model": Hatchery, "from_label": "hatchery_name",
+            "to_model": Warehouse, "to_label": "name",
+        },
+    }
+
+
 @login_required
 def warehouse_mapping_data(request):
-    offices = list(Warehouse.objects.select_related("branch").values(
-        "id", "name", "branch_id", branch_name=F("branch__branch_name")))
+    types = _mapping_types()
+
+    def _rows(mapping_type, id_key, name_key, mapped_id_key, mapped_name_key):
+        spec = types[mapping_type]
+        to_names = dict(spec["to_model"].objects.values_list("id", spec["to_label"]))
+        mappings = dict(
+            Mapping.objects.filter(type=mapping_type).values_list("from_id", "to_id")
+        )
+        rows = []
+        for obj_id, name in spec["from_model"].objects.values_list("id", spec["from_label"]):
+            to_id = mappings.get(obj_id)
+            rows.append({
+                id_key: obj_id, name_key: name,
+                mapped_id_key: to_id,
+                mapped_name_key: to_names.get(to_id, "") if to_id else "",
+            })
+        return rows
+
+    offices = _rows(Mapping.TYPE_SECTOR_BRANCH, "id", "name", "branch_id", "branch_name")
+    hatcheries = _rows(Mapping.TYPE_HATCHERY_OFFICE, "id", "hatchery_name", "warehouse_id", "warehouse_name")
     branches = list(Branch.objects.values("id", "branch_name"))
-    hatcheries = list(Hatchery.objects.select_related("warehouse").values(
-        "id", "hatchery_name", "warehouse_id", warehouse_name=F("warehouse__name")))
-    return JsonResponse({"offices": offices, "branches": branches, "hatcheries": hatcheries})
+
+    # Bank/Cash -> Office(s) is a many-to-many on BankCashMaster (Account >
+    # Bank / Cash Masters; empty means "All Offices"), not a row in the
+    # generic Mapping table — it's shown here read-only, for one-place
+    # visibility, but only ever edited from that page (single source of
+    # truth).
+    def _bank_cash_row(record):
+        offices = list(record.sectors.values_list("name", flat=True))
+        return {
+            "id": record.id, "name": record.name,
+            "office_name": "All Offices" if not offices else ", ".join(offices),
+        }
+
+    bank_cash_records = list(BankCashMaster.objects.prefetch_related("sectors"))
+    banks = [_bank_cash_row(r) for r in bank_cash_records if not r.is_cash]
+    cash_locations = [_bank_cash_row(r) for r in bank_cash_records if r.is_cash]
+
+    return JsonResponse({
+        "offices": offices, "branches": branches, "hatcheries": hatcheries,
+        "banks": banks, "cash_locations": cash_locations,
+    })
+
+
+@login_required
+def linked_tree(request):
+    return render(request, "linked_tree.html")
+
+
+@login_required
+def linked_tree_data(request):
+    """Region -> Branch -> Office -> {Hatcheries, Bank/Cash} in one read-only
+    tree, pulling together every cross-app link built so far: Branch's
+    auto-linked Cost Center, Sector->Branch and Hatchery->Office (Mapping),
+    and Bank/Cash's Office(s) (All-or-Limited). Nothing here is editable —
+    each link is still only ever changed from its own screen; this page just
+    answers "what's linked to what" in one place."""
+    office_to_branch = dict(
+        Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__isnull=False)
+        .values_list("from_id", "to_id")
+    )
+    hatchery_to_office = dict(
+        Mapping.objects.filter(type=Mapping.TYPE_HATCHERY_OFFICE, to_id__isnull=False)
+        .values_list("from_id", "to_id")
+    )
+    office_to_cost_center = dict(
+        Mapping.objects.filter(type=Mapping.TYPE_OFFICE_COST_CENTER, to_id__isnull=False)
+        .values_list("from_id", "to_id")
+    )
+    cost_center_names = dict(CostCenter.objects.values_list("id", "name"))
+
+    offices = list(Warehouse.objects.all())
+    branches = list(Branch.objects.select_related("region", "cost_center"))
+    hatcheries = list(Hatchery.objects.all())
+    bank_cash_records = list(BankCashMaster.objects.prefetch_related("sectors"))
+
+    hatcheries_by_office = {}
+    unmapped_hatcheries = []
+    for h in hatcheries:
+        office_id = hatchery_to_office.get(h.id)
+        (hatcheries_by_office.setdefault(office_id, []) if office_id else unmapped_hatcheries).append(
+            {"id": h.id, "name": h.hatchery_name}
+        )
+
+    bank_cash_by_office = {}
+    all_office_bank_cash = []
+    for bc in bank_cash_records:
+        sector_ids = [s.id for s in bc.sectors.all()]
+        entry = {"id": bc.id, "code": bc.code, "name": bc.name, "is_cash": bc.is_cash}
+        if not sector_ids:
+            all_office_bank_cash.append(entry)
+        else:
+            for sid in sector_ids:
+                bank_cash_by_office.setdefault(sid, []).append(entry)
+
+    def _office_node(office):
+        cost_center_id = office_to_cost_center.get(office.id)
+        return {
+            "id": office.id, "name": office.name,
+            "hatcheries": hatcheries_by_office.get(office.id, []),
+            "bank_cash": bank_cash_by_office.get(office.id, []),
+            "cost_center_name": cost_center_names.get(cost_center_id) if cost_center_id else None,
+        }
+
+    offices_by_branch = {}
+    unmapped_offices = []
+    for office in offices:
+        branch_id = office_to_branch.get(office.id)
+        (offices_by_branch.setdefault(branch_id, []) if branch_id else unmapped_offices).append(office)
+
+    regions = {}
+    for branch in branches:
+        region = regions.setdefault(branch.region_id, {
+            "id": branch.region_id, "name": branch.region.description, "branches": [],
+        })
+        cost_center = getattr(branch, "cost_center", None)
+        region["branches"].append({
+            "id": branch.id, "name": branch.branch_name,
+            "cost_center_code": cost_center.code if cost_center else None,
+            "offices": [_office_node(o) for o in offices_by_branch.get(branch.id, [])],
+        })
+
+    return JsonResponse({
+        "regions": list(regions.values()),
+        "unmapped_offices": [_office_node(o) for o in unmapped_offices],
+        "unmapped_hatcheries": unmapped_hatcheries,
+        "all_office_bank_cash": all_office_bank_cash,
+    })
+
+
+def _save_mapping(mapping_type, from_id, to_id):
+    """Create/update/clear the single Mapping row for (mapping_type, from_id)."""
+    if to_id is None:
+        Mapping.objects.filter(type=mapping_type, from_id=from_id).delete()
+        return
+    Mapping.objects.update_or_create(
+        type=mapping_type, from_id=from_id, defaults={"to_id": to_id}
+    )
 
 
 @login_required
@@ -551,14 +710,12 @@ def warehouse_mapping_save_branch(request):
     branch_id = data.get("branch") or None
     if not office_id:
         return JsonResponse({"error": "Sector (warehouse) is required"}, status=400)
-    office = Warehouse.objects.filter(id=office_id).first()
-    if not office:
+    if not Warehouse.objects.filter(id=office_id).exists():
         return JsonResponse({"error": "Sector not found"}, status=404)
     if branch_id and not Branch.objects.filter(id=branch_id).exists():
         return JsonResponse({"error": "Branch not found"}, status=404)
 
-    office.branch_id = branch_id
-    office.save(update_fields=["branch"])
+    _save_mapping(Mapping.TYPE_SECTOR_BRANCH, office_id, branch_id)
     return JsonResponse({"message": "Mapping saved"})
 
 
@@ -576,14 +733,12 @@ def warehouse_mapping_save_hatchery(request):
     office_id = data.get("warehouse") or None
     if not hatchery_id:
         return JsonResponse({"error": "Hatchery is required"}, status=400)
-    hatchery = Hatchery.objects.filter(id=hatchery_id).first()
-    if not hatchery:
+    if not Hatchery.objects.filter(id=hatchery_id).exists():
         return JsonResponse({"error": "Hatchery not found"}, status=404)
     if office_id and not Warehouse.objects.filter(id=office_id).exists():
         return JsonResponse({"error": "Warehouse not found"}, status=404)
 
-    hatchery.warehouse_id = office_id
-    hatchery.save(update_fields=["warehouse"])
+    _save_mapping(Mapping.TYPE_HATCHERY_OFFICE, hatchery_id, office_id)
     return JsonResponse({"message": "Mapping saved"})
 
 

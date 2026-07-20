@@ -30,10 +30,29 @@ class ItemCategory(models.Model):
     
 
 class Sector(models.Model):
+    """Classifies what an Office is (Warehouse, Head Office, ...) and, since
+    it's shared with account.CostCenter.kind, what a Cost Center represents
+    (Department, Vehicle, Project, ...). ``code`` is a stable key set once at
+    creation from the name — matching logic elsewhere (e.g. which Sector row
+    means "this is a Branch") keys off ``code``, not the freely-renameable
+    ``name``, so renaming a Sector never silently breaks that logic."""
+    code = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                            help_text="Auto-generated stable key, e.g. WAREHOUSE, BRANCH_OFFICE")
     name = models.CharField(max_length=255, unique=True)
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.code:
+            base = re.sub(r"[^A-Za-z0-9]+", "_", self.name).strip("_").upper() or "SECTOR"
+            code = base
+            suffix = 1
+            while Sector.objects.filter(code=code).exists():
+                suffix += 1
+                code = f"{base}_{suffix}"
+            self.code = code
+        super().save(*args, **kwargs)
 
 
 class UnitOfMeasurement(models.Model):
@@ -58,10 +77,6 @@ class Warehouse(models.Model):
                                related_name="offices")
     address = models.TextField(blank=True)
     location = models.CharField(max_length=255, blank=True)
-    # Sector Mapping: many warehouses can map to the same broiler Branch
-    # (e.g. "Akbarpur Warehouse" and "Cost Centre Akbarpur" both -> "Akbarpur Branch").
-    branch = models.ForeignKey("broiler.Branch", on_delete=models.SET_NULL, null=True, blank=True,
-                               related_name="warehouses")
 
     def __str__(self):
         return self.name
@@ -80,6 +95,44 @@ class Warehouse(models.Model):
         if self._state.adding and not self.code:
             self.code = self.next_code()
         super().save(*args, **kwargs)
+
+
+class Mapping(models.Model):
+    """Generic association between two entities elsewhere in the system —
+    e.g. a Sector/Office mapped to its Broiler Branch, or a Hatchery mapped
+    to its Office. Replaces bespoke FK columns (the old Warehouse.branch,
+    Hatchery.warehouse) with one shared table any "map A to B" relationship
+    can be registered under, keyed by ``type``. ``to_id=None`` means the
+    "from" side has been explicitly unmapped rather than never mapped.
+
+    ``type`` is the only thing that decides which models "from"/"to" refer
+    to — resolving those ids to real objects is the caller's job (see
+    inventory.views.MAPPING_TYPES), not this model's, since the two related
+    apps (broiler, hatchery_master) can't be imported here without risking
+    a circular import.
+    """
+
+    TYPE_SECTOR_BRANCH = "sector_branch"
+    TYPE_HATCHERY_OFFICE = "hatchery_office"
+    TYPE_OFFICE_COST_CENTER = "office_cost_center"
+    TYPE_CHOICES = [
+        (TYPE_SECTOR_BRANCH, "Sector → Branch"),
+        (TYPE_HATCHERY_OFFICE, "Hatchery → Office"),
+        (TYPE_OFFICE_COST_CENTER, "Office → Cost Center"),
+    ]
+
+    type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    from_id = models.PositiveIntegerField()
+    to_id = models.PositiveIntegerField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["type", "from_id"], name="unique_mapping_per_type_from"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_type_display()}: {self.from_id} -> {self.to_id}"
 
 
 class Item(models.Model):
@@ -115,7 +168,8 @@ class Item(models.Model):
         ('Serial', 'Serial'),
     ]
 
-    item_code = models.CharField(max_length=100, unique=True)
+    item_code = models.CharField(max_length=100, unique=True, editable=False, blank=True,
+                                 help_text="Auto-generated code for this item, e.g. ITM-0001")
     description = models.TextField()
     category = models.ForeignKey(ItemCategory, on_delete=models.CASCADE, related_name='items')
     warehouse = models.ManyToManyField(Warehouse, related_name='items', blank=True,
@@ -136,6 +190,21 @@ class Item(models.Model):
 
     def __str__(self):
         return f"{self.item_code} - {self.description}"
+
+    @classmethod
+    def next_code(cls):
+        prefix = "ITM-"
+        serials = []
+        for code in cls.objects.filter(item_code__startswith=prefix).values_list("item_code", flat=True):
+            match = re.match(r"^ITM-(\d+)$", code or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.item_code:
+            self.item_code = self.next_code()
+        super().save(*args, **kwargs)
 
 
 class ItemPriceList(models.Model):

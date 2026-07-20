@@ -22,6 +22,13 @@ class Group(models.Model):
 class Designation(models.Model):
     """repersently designates an organization"""
 
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text="Auto-generated code for this designation",
+    )
     title = models.CharField(max_length=100, unique=True, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     base_salary = models.DecimalField(
@@ -31,6 +38,13 @@ class Designation(models.Model):
     def __str__(self):
         """Returns a string representation of this object with the given fields"""
         return f"{self.title}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"DSG-{self.pk:04d}"
+            super().save(update_fields=["code"])
 
 
 class Employee(models.Model):
@@ -65,6 +79,7 @@ class Employee(models.Model):
     date_of_birth = models.DateField(null=True, blank=True)
     blood_group = models.CharField(max_length=5, blank=True, null=True)
     driving_license = models.BooleanField(default=False)
+    driving_license_no = models.CharField(max_length=30, blank=True, null=True)
     qualification = models.CharField(max_length=100, blank=True, null=True)
     pan_card = models.CharField(max_length=20, blank=True, null=True)
     aadhar_number = models.CharField(max_length=12, blank=True, null=True)

@@ -3,7 +3,7 @@ from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from import_export.fields import Field
 from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
-from .models import ItemCategory, Warehouse, Item
+from .models import ItemCategory, Mapping, Warehouse, Item
 
 
 class ItemResource(resources.ModelResource):
@@ -30,6 +30,12 @@ class CategoryAdmin(ImportExportModelAdmin):
 class WarehouseAdmin(ImportExportModelAdmin):
     list_display = ('id', 'name')
     search_fields = ('name',)
+
+
+@admin.register(Mapping)
+class MappingAdmin(admin.ModelAdmin):
+    list_display = ('id', 'type', 'from_id', 'to_id', 'updated_at')
+    list_filter = ('type',)
 
 
 @admin.register(Item)

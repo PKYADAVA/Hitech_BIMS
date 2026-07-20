@@ -228,6 +228,44 @@ class AccountLedgerAPI(View):
 
 
 @method_decorator(login_required, name="dispatch")
+class BranchSummaryReportAPI(View):
+    def get(self, request):
+        company = _company(request)
+        report = journal.branch_summary_report(
+            company,
+            date_from=request.GET.get("from") or None,
+            date_to=request.GET.get("to") or None,
+        )
+        return JsonResponse({
+            "rows": [
+                {key: (str(value) if key in ("debit", "credit", "net") else value)
+                 for key, value in row.items()}
+                for row in report["rows"]
+            ],
+            "totals": {key: str(value) for key, value in report["totals"].items()},
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class CostCenterReportAPI(View):
+    def get(self, request):
+        company = _company(request)
+        report = journal.cost_center_report(
+            company,
+            date_from=request.GET.get("from") or None,
+            date_to=request.GET.get("to") or None,
+        )
+        return JsonResponse({
+            "rows": [
+                {key: (str(value) if key in ("debit", "credit", "net") else value)
+                 for key, value in row.items()}
+                for row in report["rows"]
+            ],
+            "totals": {key: str(value) for key, value in report["totals"].items()},
+        })
+
+
+@method_decorator(login_required, name="dispatch")
 class TrialBalanceAPI(View):
     def get(self, request):
         company = _company(request)

@@ -36,7 +36,7 @@
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-4">
-          <label class="form-label" for="title">Title <span class="text-danger">*</span></label>
+          <label class="form-label" for="title">Title</label>
           <select class="form-select" id="title" name="title">
             <option value="Mr.">Mr.</option>
             <option value="Ms.">Ms.</option>
@@ -45,14 +45,14 @@
         </div>
         <div class="col-md-4">
           <label class="form-label" for="full_name">Full Name <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" id="full_name" name="full_name" placeholder="Enter full name">
+          <input type="text" class="form-control" id="full_name" name="full_name" placeholder="Enter full name" required>
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="father_name">Father Name <span class="text-danger">*</span></label>
+          <label class="form-label" for="father_name">Father Name</label>
           <input type="text" class="form-control" id="father_name" name="father_name" placeholder="Enter father's name">
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="marital_status">Marital Status <span class="text-danger">*</span></label>
+          <label class="form-label" for="marital_status">Marital Status</label>
           <select class="form-select" id="marital_status" name="marital_status">
             <option value="Married">Married</option>
             <option value="Single">Single</option>
@@ -60,14 +60,14 @@
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="gender">Gender <span class="text-danger">*</span></label>
+          <label class="form-label" for="gender">Gender</label>
           <select class="form-select" id="gender" name="gender">
             <option value="Male">Male</option>
             <option value="Female">Female</option>
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="date_of_birth">Date of Birth <span class="text-danger">*</span></label>
+          <label class="form-label" for="date_of_birth">Date of Birth</label>
           <input type="date" class="form-control" id="date_of_birth" name="date_of_birth">
         </div>
         <div class="col-md-4">
@@ -79,19 +79,19 @@
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="salary">Salary <span class="text-danger">*</span></label>
+          <label class="form-label" for="salary">Salary</label>
           <input type="number" class="form-control" id="salary" name="salary" placeholder="0.00">
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="qualification">Qualification <span class="text-danger">*</span></label>
+          <label class="form-label" for="qualification">Qualification</label>
           <input type="text" class="form-control" id="qualification" name="qualification" placeholder="Enter qualification">
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="country">Country <span class="text-danger">*</span></label>
+          <label class="form-label" for="country">Country</label>
           <input type="text" class="form-control" id="country" name="country" placeholder="Enter country">
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="personal_contact">Personal Contact <span class="text-danger">*</span></label>
+          <label class="form-label" for="personal_contact">Personal Contact</label>
           <input type="number" class="form-control" id="personal_contact" name="personal_contact" placeholder="Contact number">
         </div>
       </div>
@@ -116,8 +116,8 @@
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="group">Group <span class="text-danger">*</span></label>
-          <select class="form-select" id="group" name="group" required>
+          <label class="form-label" for="group">Group</label>
+          <select class="form-select" id="group" name="group">
             <option value="" disabled selected>Select Group</option>
             {% for group in group_detail %}
               <option value="{{ group.id }}">{{ group.name }}</option>
@@ -125,7 +125,7 @@
           </select>
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="salary_type">Salary Type <span class="text-danger">*</span></label>
+          <label class="form-label" for="salary_type">Salary Type</label>
           <select class="form-select" id="salary_type" name="salary_type">
             <option value="Monthly">Monthly</option>
             <option value="Hourly">Hourly</option>
@@ -178,9 +178,13 @@
         </div>
         <div class="col-md-4 d-flex flex-column justify-content-end">
           <label class="form-label" for="driving_license">Driving License</label>
-          <div class="form-check form-switch mt-1">
-            <input class="form-check-input" type="checkbox" id="driving_license" name="driving_license"
-                   style="height:28px;width:54px;">
+          <div class="d-flex align-items-center gap-2">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="driving_license" name="driving_license"
+                     style="height:28px;width:54px;">
+            </div>
+            <input type="text" class="form-control d-none flex-grow-1" id="driving_license_no" name="driving_license_no"
+                   placeholder="License number">
           </div>
         </div>
       </div>
@@ -238,6 +242,14 @@
 
 {% block js %}
 <script src="{% static 'js/hr/new-employee.js' %}"></script>
+<script>
+  // License number field pops in beside the toggle only while it is on.
+  $("#driving_license").on("change", function () {
+    $("#driving_license_no").toggleClass("d-none", !this.checked);
+    if (!this.checked) $("#driving_license_no").val("");
+    else $("#driving_license_no").trigger("focus");
+  });
+</script>
 <script>
   {% if error_message %}
     Toastify({

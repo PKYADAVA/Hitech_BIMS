@@ -347,6 +347,96 @@ def account_ledger(account, date_from=None, date_to=None):
     return {'opening': opening, 'rows': rows, 'closing': running}
 
 
+def branch_summary_report(company, date_from=None, date_to=None):
+    """Per-branch debit/credit/net movement from posted lines, rolled up via
+    each voucher's Office (Voucher.sector) through the Sector -> Branch
+    mapping (Inventory > Master > Office Mapping). Vouchers with no Office,
+    or whose Office isn't linked to a Branch yet, land under 'Unmapped' —
+    the report doubles as a nudge to finish that mapping."""
+    from broiler.models import Branch
+    from inventory.models import Mapping
+
+    lines = _posted_lines(company)
+    if date_from:
+        lines = lines.filter(date__gte=date_from)
+    if date_to:
+        lines = lines.filter(date__lte=date_to)
+
+    by_office = lines.values('voucher__sector_id').annotate(debit=Sum('debit'), credit=Sum('credit'))
+
+    office_to_branch = dict(
+        Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__isnull=False)
+        .values_list('from_id', 'to_id')
+    )
+    branch_names = dict(Branch.objects.values_list('id', 'branch_name'))
+
+    buckets = {}
+    for entry in by_office:
+        office_id = entry['voucher__sector_id']
+        debit = entry['debit'] or Decimal('0')
+        credit = entry['credit'] or Decimal('0')
+        if not (debit or credit):
+            continue
+        branch_id = office_to_branch.get(office_id) if office_id else None
+        bucket = buckets.setdefault(branch_id, {'debit': Decimal('0'), 'credit': Decimal('0')})
+        bucket['debit'] += debit
+        bucket['credit'] += credit
+
+    rows = []
+    totals = {'debit': Decimal('0'), 'credit': Decimal('0'), 'net': Decimal('0')}
+    for branch_id, amounts in buckets.items():
+        net = amounts['debit'] - amounts['credit']
+        rows.append({
+            'branch_id': branch_id,
+            'branch_name': branch_names.get(branch_id, 'Unmapped') if branch_id else 'Unmapped',
+            'debit': amounts['debit'],
+            'credit': amounts['credit'],
+            'net': net,
+        })
+        totals['debit'] += amounts['debit']
+        totals['credit'] += amounts['credit']
+        totals['net'] += net
+    rows.sort(key=lambda r: (r['branch_name'] == 'Unmapped', r['branch_name']))
+    return {'rows': rows, 'totals': totals}
+
+
+def cost_center_report(company, date_from=None, date_to=None):
+    """Per-cost-center debit/credit/net movement from posted lines, for the
+    Cost Center Report (Account > Reports > Cost Center). Lines with no
+    cost center tagged roll up under an 'Unassigned' row, so the report also
+    surfaces how much posted spend isn't tagged yet."""
+    lines = _posted_lines(company)
+    if date_from:
+        lines = lines.filter(date__gte=date_from)
+    if date_to:
+        lines = lines.filter(date__lte=date_to)
+
+    aggregated = lines.values(
+        'cost_center_id', 'cost_center__code', 'cost_center__name', 'cost_center__kind__name',
+    ).annotate(debit=Sum('debit'), credit=Sum('credit')).order_by('cost_center__code')
+
+    rows = []
+    totals = {'debit': Decimal('0'), 'credit': Decimal('0'), 'net': Decimal('0')}
+    for entry in aggregated:
+        debit = entry['debit'] or Decimal('0')
+        credit = entry['credit'] or Decimal('0')
+        if not (debit or credit):
+            continue
+        rows.append({
+            'cost_center_id': entry['cost_center_id'],
+            'code': entry['cost_center__code'] or '—',
+            'name': entry['cost_center__name'] or 'Unassigned',
+            'kind': entry['cost_center__kind__name'] or '',
+            'debit': debit,
+            'credit': credit,
+            'net': debit - credit,
+        })
+        totals['debit'] += debit
+        totals['credit'] += credit
+        totals['net'] += debit - credit
+    return {'rows': rows, 'totals': totals}
+
+
 def trial_balance(company, date_from=None, date_to=None):
     """Per-account opening/period/closing figures from posted lines."""
     from django.db.models import Q

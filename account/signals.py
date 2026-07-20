@@ -6,7 +6,7 @@ the account app never imports the other apps' modules at startup.
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from account.services.auto_ledger import sync_ledger
+from account.services.auto_ledger import sync_branch_cost_center, sync_ledger
 
 
 @receiver(post_save, sender='sales.Customer', dispatch_uid='coa_ledger_customer')
@@ -19,9 +19,10 @@ def supplier_ledger(sender, instance, **kwargs):
     sync_ledger(instance, instance.name, ['ACCOUNTS_PAYABLE'])
 
 
-@receiver(post_save, sender='account.BankCode', dispatch_uid='coa_ledger_bank')
-def bank_ledger(sender, instance, **kwargs):
-    sync_ledger(instance, instance.bank_name, ['BANK_ACCOUNTS'])
+@receiver(post_save, sender='account.BankCashMaster', dispatch_uid='coa_ledger_bank_cash')
+def bank_cash_ledger(sender, instance, **kwargs):
+    anchor_role = 'CASH' if instance.is_cash else 'BANK_ACCOUNTS'
+    sync_ledger(instance, instance.name, [anchor_role])
 
 
 @receiver(post_save, sender='hr.Employee', dispatch_uid='coa_ledger_employee')
@@ -32,6 +33,11 @@ def employee_ledger(sender, instance, **kwargs):
 @receiver(post_save, sender='inventory.Warehouse', dispatch_uid='coa_ledger_warehouse')
 def warehouse_ledger(sender, instance, **kwargs):
     sync_ledger(instance, instance.name, ['INVENTORY'])
+
+
+@receiver(post_save, sender='broiler.Branch', dispatch_uid='cost_center_branch_sync')
+def branch_cost_center(sender, instance, **kwargs):
+    sync_branch_cost_center(instance)
 
 
 # Deleting a business document cancels its auto-posted voucher (the voucher

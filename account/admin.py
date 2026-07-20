@@ -2,14 +2,14 @@ from django.contrib import admin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from import_export.fields import Field
-from import_export.widgets import ForeignKeyWidget
+from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
 from django.utils.translation import gettext_lazy as _
 from inventory.models import Warehouse
 from .models import (
     AccountAuditLog,
     AccountGroup,
     AccountType,
-    BankCode,
+    BankCashMaster,
     ChartOfAccount,
     CoACategory,
     CoAGenerationLog,
@@ -35,14 +35,14 @@ class ChartOfAccountResource(resources.ModelResource):
         model = ChartOfAccount
 
 
-class BankCodeResource(resources.ModelResource):
-    sector = Field(
-        attribute='sector', column_name='sector',
-        widget=ForeignKeyWidget(Warehouse, field='name'),
+class BankCashMasterResource(resources.ModelResource):
+    sectors = Field(
+        attribute='sectors', column_name='sectors',
+        widget=ManyToManyWidget(Warehouse, field='name'),
     )
 
     class Meta:
-        model = BankCode
+        model = BankCashMaster
 
 
 @admin.register(CoACategory)
@@ -147,25 +147,26 @@ class ChartOfAccountAdmin(ImportExportModelAdmin):
     )
 
 
-@admin.register(BankCode)
-class BankCodeAdmin(ImportExportModelAdmin):
-    """
-    Admin configuration for BankCode model.
-    
-    Provides a clean interface for managing bank codes with proper validation
-    and display of important fields.
-    """
-    resource_classes = [BankCodeResource]
-    list_display = ('bank_code', 'bank_name', 'sector', 'micr', 'contact_person', 'created_at')
-    list_filter = ('sector', 'created_at')
-    search_fields = ('bank_code', 'bank_name', 'micr', 'contact_person')
-    ordering = ('bank_name',)
+@admin.register(BankCashMaster)
+class BankCashMasterAdmin(ImportExportModelAdmin):
+    """Admin configuration for the unified Bank/Cash master."""
+    resource_classes = [BankCashMasterResource]
+    list_display = ('code', 'name', 'is_cash', 'sector_list', 'contact_person', 'created_at')
+    list_filter = ('is_cash', 'sectors', 'created_at')
+    search_fields = ('code', 'name', 'micr', 'contact_person')
+    ordering = ('name',)
     list_per_page = 20
-    readonly_fields = ('created_at', 'updated_at')
-    
+    readonly_fields = ('code', 'created_at', 'updated_at')
+    filter_horizontal = ('sectors',)
+
+    def sector_list(self, obj):
+        names = [s.name for s in obj.sectors.all()]
+        return ", ".join(names) if names else "All Offices"
+    sector_list.short_description = "Offices"
+
     fieldsets = (
         (None, {
-            'fields': ('bank_code', 'bank_name', 'sector', 'micr')
+            'fields': ('code', 'is_cash', 'name', 'sectors', 'micr')
         }),
         (_('Contact Information'), {
             'fields': ('address', 'email', 'phone', 'fax', 'contact_person')
@@ -252,6 +253,7 @@ class CostCenterAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'kind', 'company', 'parent', 'is_active')
     list_filter = ('kind', 'is_active')
     search_fields = ('code', 'name')
+    readonly_fields = ('code', 'created_at')
 
 
 class VoucherLineInline(admin.TabularInline):

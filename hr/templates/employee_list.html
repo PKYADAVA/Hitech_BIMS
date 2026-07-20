@@ -211,7 +211,7 @@
                   data-gender="{{ employee.gender|default:'' }}"
                   data-dob="{{ employee.date_of_birth|date:'Y-m-d'|default:'' }}"
                   data-blood="{{ employee.blood_group|default:'' }}"
-                  data-license="{{ employee.driving_license|yesno:'Yes,No' }}"
+                  data-license="{% if employee.driving_license %}Yes{% if employee.driving_license_no %} — {{ employee.driving_license_no }}{% endif %}{% else %}No{% endif %}"
                   data-qualification="{{ employee.qualification|default:'' }}"
                   data-pan="{{ employee.pan_card|default:'' }}"
                   data-aadhar="{{ employee.aadhar_number|default:'' }}"

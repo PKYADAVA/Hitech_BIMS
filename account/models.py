@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -444,87 +446,112 @@ class ChartOfAccount(models.Model):
         ]
 
 
-class BankCode(models.Model):
+class BankCashMaster(models.Model):
     """
-    Model to manage bank and cash codes.
-    
-    This model represents banks and their details.
+    Single master for both Bank accounts and Cash locations — Account >
+    Master > Bank / Cash Masters — distinguished by the ``is_cash`` tick box
+    rather than two separate models/screens.
+
+    Each row gets its own ledger auto-created under the matching chart-of-
+    accounts anchor (Bank Accounts for a bank, Cash & Cash Equivalents for
+    cash — see account.signals.bank_cash_ledger / auto_ledger.sync_ledger).
     """
-    bank_code = models.CharField(
-        max_length=20, 
-        unique=True, 
-        help_text=_("Unique code for the bank")
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code, e.g. BANK-0001 / CASH-0001")
     )
-    bank_name = models.CharField(
-        max_length=255, 
-        help_text=_("Name of the bank")
+    is_cash = models.BooleanField(
+        default=False,
+        help_text=_("Tick if this is a Cash location; leave unticked for a Bank account")
     )
-    sector = models.ForeignKey(
-        Warehouse, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        related_name='banks',
-        help_text=_("Sector of the bank")
+    name = models.CharField(
+        max_length=255,
+        help_text=_("Name of the bank account / cash location")
+    )
+    sectors = models.ManyToManyField(
+        Warehouse,
+        blank=True,
+        related_name='bank_cash_masters',
+        help_text=_("Offices this bank/cash record is mapped to — leave empty to map to All Offices")
     )
     micr = models.CharField(
-        max_length=15, 
-        blank=True, 
-        null=True, 
-        help_text=_("MICR code of the bank")
+        max_length=15,
+        blank=True,
+        null=True,
+        help_text=_("MICR code (banks only)")
     )
     address = models.TextField(
-        help_text=_("Address of the bank")
+        blank=True,
+        null=True,
+        help_text=_("Address")
     )
     email = models.EmailField(
-        blank=True, 
-        null=True, 
-        help_text=_("Email address of the bank")
+        blank=True,
+        null=True,
+        help_text=_("Email address")
     )
     phone = models.CharField(
-        max_length=20, 
-        blank=True, 
-        null=True, 
+        max_length=20,
+        blank=True,
+        null=True,
         validators=[
             RegexValidator(
                 regex=r'^\+?1?\d{9,15}$',
                 message=_("Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed.")
             )
         ],
-        help_text=_("Phone number of the bank")
+        help_text=_("Phone number")
     )
     fax = models.CharField(
-        max_length=20, 
-        blank=True, 
-        null=True, 
-        help_text=_("Fax number of the bank")
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text=_("Fax number (banks only)")
     )
     contact_person = models.CharField(
-        max_length=100, 
-        blank=True, 
-        null=True, 
-        help_text=_("Contact person at the bank")
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text=_("Contact person")
     )
     created_at = models.DateTimeField(
-        auto_now_add=True, 
+        auto_now_add=True,
         help_text=_("Record created at")
     )
     updated_at = models.DateTimeField(
-        auto_now=True, 
+        auto_now=True,
         help_text=_("Last updated at")
     )
 
     def __str__(self):
-        return f"{self.bank_code} - {self.bank_name}"
+        return f"{self.code} - {self.name}"
 
     class Meta:
-        ordering = ['bank_name']
-        verbose_name = _("Bank Code")
-        verbose_name_plural = _("Bank Codes")
+        ordering = ['name']
+        verbose_name = _("Bank / Cash Master")
+        verbose_name_plural = _("Bank / Cash Masters")
         indexes = [
-            models.Index(fields=['bank_code']),
-            models.Index(fields=['bank_name']),
+            models.Index(fields=['code']),
+            models.Index(fields=['name']),
         ]
+
+    @classmethod
+    def next_code(cls, is_cash):
+        prefix = "CASH-" if is_cash else "BANK-"
+        serials = []
+        for code in cls.objects.filter(code__startswith=prefix).values_list("code", flat=True):
+            match = re.match(rf"^{prefix}(\d+)$", code or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.code:
+            self.code = self.next_code(self.is_cash)
+        super().save(*args, **kwargs)
 
 
 class CompanyProfile(models.Model):
@@ -729,21 +756,38 @@ class AccountAuditLog(models.Model):
 
 
 class CostCenter(models.Model):
-    """Analysis dimension for postings (department, farm, vehicle, ...)."""
-    KIND_CHOICES = [
-        ('Department', _('Department')),
-        ('Warehouse', _('Warehouse')),
-        ('Farm', _('Farm')),
-        ('Project', _('Project')),
-        ('Branch', _('Branch')),
-        ('Vehicle', _('Vehicle')),
-        ('ProductionUnit', _('Production Unit')),
-    ]
+    """Analysis dimension for postings (department, farm, vehicle, ...) —
+    Account > Master > Cost Center. Tag a Journal Voucher line with one to
+    later report expense/income by department, farm, vehicle, etc. (see
+    account.services.journal.cost_center_report).
+
+    ``kind`` shares Inventory > Master > Sector's picklist rather than its
+    own hardcoded list — one editable list of "what kind of thing is this"
+    instead of two overlapping ones. The Branch/Warehouse auto-link logic
+    keys off Sector.code (a stable, non-user-facing key), so renaming a
+    Sector's display name never breaks it.
+    """
+    # Sector.code values this model has special-cased behaviour for.
+    KIND_BRANCH = "BRANCH_OFFICE"
+    KIND_WAREHOUSE = "WAREHOUSE"
+    KIND_PREFIX = {
+        'DEPARTMENT': 'DEPT', 'WAREHOUSE': 'WH', 'FARM': 'FARM',
+        'PROJECT': 'PRJ', 'BRANCH_OFFICE': 'BRN', 'VEHICLE': 'VEH', 'PRODUCTION_UNIT': 'PU',
+    }
     company = models.ForeignKey('CompanyProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='cost_centers')
     parent = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='children')
-    code = models.CharField(max_length=20)
+    branch = models.OneToOneField(
+        'broiler.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='cost_center',
+        help_text=_("Broiler Branch this cost center represents — auto-created and kept in sync "
+                    "with the branch's name/active status; see account.signals.branch_cost_center")
+    )
+    code = models.CharField(max_length=20, editable=False, blank=True,
+                            help_text=_("Auto-generated code, e.g. DEPT-0001 / VEH-0001"))
     name = models.CharField(max_length=150)
-    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='Department')
+    kind = models.ForeignKey(
+        'inventory.Sector', on_delete=models.PROTECT, related_name='cost_centers',
+        help_text=_("What this cost center represents — shared with Inventory > Sector")
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -757,6 +801,21 @@ class CostCenter(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['company', 'code'], name='uniq_costcenter_company_code'),
         ]
+
+    @classmethod
+    def next_code(cls, company, kind):
+        prefix = f"{cls.KIND_PREFIX.get(kind.code, 'CC')}-"
+        serials = []
+        for code in cls.objects.filter(company=company, code__startswith=prefix).values_list("code", flat=True):
+            match = re.match(rf"^{prefix}(\d+)$", code or "")
+            if match:
+                serials.append(int(match.group(1)))
+        return f"{prefix}{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.code:
+            self.code = self.next_code(self.company, self.kind)
+        super().save(*args, **kwargs)
 
 
 class Voucher(models.Model):

@@ -19,7 +19,6 @@
   <div class="mb-5">
     <form method="POST" id="employee-form" enctype="multipart/form-data">
       {% csrf_token %}
-      <span class="text-danger">*</span>    
       <div class="card mb-4">
         <div class="card-header">
           <h5 class="mb-0">Basic Information</h5>
@@ -27,7 +26,7 @@
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="title">Title <span class="text-danger">*</span></label>
+              <label for="title">Title</label>
               <select class="form-control" id="title" name="title">
                 <option value="Mr." {% if employee.title == 'Mr.' %}selected{% endif %}>Mr.</option>
                 <option value="Ms." {% if employee.title == 'Ms.' %}selected{% endif %}>Ms.</option>
@@ -37,11 +36,11 @@
             
             <div class="col-md-4">
               <label for="full_name">Full Name <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="full_name" value="{{ employee.full_name|default:'' }}" placeholder="Enter Full Name" name="full_name" />
+              <input type="text" class="form-control" id="full_name" value="{{ employee.full_name|default:'' }}" placeholder="Enter Full Name" name="full_name" required />
             </div>
             
             <div class="col-md-4">
-              <label for="father_name">Father Name <span class="text-danger">*</span></label>
+              <label for="father_name">Father Name</label>
               <input type="text" class="form-control" id="father_name" value="{{ employee.father_name|default:'' }}" name="father_name" placeholder="Enter Father Name" />
             </div>
           </div>
@@ -49,7 +48,7 @@
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="marital_status">Marital Status <span class="text-danger">*</span></label>
+              <label for="marital_status">Marital Status</label>
               <select class="form-control" id="marital_status" name="marital_status">
                 <option value="Married" {% if employee.marital_status == 'Married' %}selected{% endif %}>Married</option>
                 <option value="Single" {% if employee.marital_status == 'Single' %}selected{% endif %}>Single</option>
@@ -57,14 +56,14 @@
               </select>
             </div>
             <div class="col-md-4">
-              <label for="gender">Gender <span class="text-danger">*</span></label>
+              <label for="gender">Gender</label>
               <select class="form-control" id="gender" name="gender">
                 <option value="Male" {% if employee.gender == 'Male' %}selected{% endif %}>Male</option>
                 <option value="Female" {% if employee.gender == 'Female' %}selected{% endif %}>Female</option>
               </select>
             </div>
             <div class="col-md-4">
-              <label for="date_of_birth">Date of Birth <span class="text-danger">*</span></label>
+              <label for="date_of_birth">Date of Birth</label>
               <input type="date" class="form-control" id="date_of_birth" value="{{ employee.date_of_birth|date:'Y-m-d'|default:'' }}" name="date_of_birth" />
             </div>
           </div>
@@ -82,11 +81,11 @@
               </select>
             </div>
             <div class="col-md-4">
-              <label for="salary">Salary <span class="text-danger">*</span></label>
+              <label for="salary">Salary</label>
               <input type="number" class="form-control" id="salary" value="{{ employee.salary|default:0 }}" name="salary" placeholder="Salary" />
             </div>
             <div class="col-md-4">
-              <label for="qualification">Qualification <span class="text-danger">*</span></label>
+              <label for="qualification">Qualification</label>
               <input type="text" class="form-control" value="{{ employee.qualification|default:'' }}" id="qualification" name="qualification" placeholder="Enter Qualification" />
             </div>
           </div>
@@ -94,11 +93,11 @@
         <div class="card-body">
           <div class="row">
             <div class="col-md-4">
-              <label for="country">Country <span class="text-danger">*</span></label>
+              <label for="country">Country</label>
               <input type="text" class="form-control" value="{{ employee.country|default:'India' }}" id="country" name="country" placeholder="Enter Country" />
             </div> 
             <div class="col-md-4">
-              <label for="personal_contact">Personal Contact <span class="text-danger">*</span></label>
+              <label for="personal_contact">Personal Contact</label>
               <input type="number" class="form-control" value="{{ employee.personal_contact|default:'' }}" id="personal_contact" name="personal_contact" placeholder="Enter Personal Contact" />
             </div>         
           </div>
@@ -125,8 +124,8 @@
             
             <!-- Group Dropdown -->
             <div class="col-md-4">
-              <label for="group">Group <span class="text-danger">*</span></label>
-              <select class="form-control" id="group" name="group" required>
+              <label for="group">Group</label>
+              <select class="form-control" id="group" name="group">
                 <option value="" disabled>Select Group</option>
                 {% for group in group_detail %}
                   <option value="{{ group.id }}" {% if employee.group.id == group.id %}selected{% endif %}>
@@ -138,7 +137,7 @@
             
           
             <div class="col-md-4">
-              <label for="salary_type">Salary Type <span class="text-danger">*</span></label>
+              <label for="salary_type">Salary Type</label>
               <select class="form-control" id="salary_type" name="salary_type">
                 <option value="Monthly" {% if employee.salary_type == 'Monthly' %}selected{% endif %}>Monthly</option>
                 <option value="Hourly" {% if employee.salary_type == 'Hourly' %}selected{% endif %}>Hourly</option>
@@ -178,12 +177,15 @@
               <label for="emergency_contact">Emergency Contact</label>
               <input type="number" class="form-control" value="{{ employee.emergency_contact|default:'' }}" id="emergency_contact" name="emergency_contact" placeholder="Enter Emergency Contact" />
             </div>
-            <div class="col-md-4 form-check form-switch">
+            <div class="col-md-4">
               <div>
                 <label class="form-check-label" for="driving_license">Driving License</label>
               </div>
-              <div class="form-checkbox">
-                <input type="checkbox" class="form-check-input" id="driving_license" name="driving_license" {% if employee.driving_license %}checked{% endif %} style="height: 30px;width: 60px;" />
+              <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch mb-0">
+                  <input type="checkbox" class="form-check-input" id="driving_license" name="driving_license" {% if employee.driving_license %}checked{% endif %} style="height: 30px;width: 60px;" />
+                </div>
+                <input type="text" class="form-control flex-grow-1 {% if not employee.driving_license %}d-none{% endif %}" id="driving_license_no" name="driving_license_no" value="{{ employee.driving_license_no|default:'' }}" placeholder="License number" />
               </div>
             </div>
           </div>
@@ -259,6 +261,14 @@
 {% endblock %}
 {% block js %}
   <script src="{% static 'js/hr/new-employee.js' %}"></script>
+  <script>
+    // License number field pops in beside the toggle only while it is on.
+    $("#driving_license").on("change", function () {
+      $("#driving_license_no").toggleClass("d-none", !this.checked);
+      if (!this.checked) $("#driving_license_no").val("");
+      else $("#driving_license_no").trigger("focus");
+    });
+  </script>
   <script>
     {% if error_message %}
         Toastify({

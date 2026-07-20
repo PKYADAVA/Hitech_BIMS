@@ -3,7 +3,7 @@ from datetime import date
 
 from django.core.management.base import BaseCommand
 
-from account.models import BankCode, ChartOfAccount, CoACategory, FinancialYear, Schedule
+from account.models import BankCashMaster, ChartOfAccount, CoACategory, FinancialYear, Schedule
 from inventory.models import Item, ItemCategory, UnitOfMeasurement, Warehouse
 from purchase.models import CreditTerm, GeneralPurchase, GeneralPurchaseItem, Supplier, VendorGroup
 from sales.models import Customer, CustomerGroup, SalesPriceMaster
@@ -126,10 +126,10 @@ class Command(BaseCommand):
                 "status": "Active",
             },
         )
-        BankCode.objects.get_or_create(
-            bank_code="BK-001",
+        BankCashMaster.objects.get_or_create(
+            name="Sample Bank",
             defaults={
-                "bank_name": "Sample Bank",
+                "is_cash": False,
                 "sector": warehouse,
             },
         )

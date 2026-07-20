@@ -34,6 +34,7 @@
             <th>Description</th>
             <th>Region</th>
             <th>Prefix</th>
+            <th>Cost Center</th>
             <th class="text-center">Action</th>
           </tr>
         </thead>
@@ -180,6 +181,7 @@ $(document).ready(function () {
                             <td>${escapeHtml(branch.branch_name)}</td>
                             <td>${escapeHtml(branch.region_name)}</td>
                             <td>${escapeHtml(branch.prefix)}</td>
+                            <td>${branch.cost_center_code ? `<span class="badge bg-info text-dark"><i class="fas fa-link"></i> ${escapeHtml(branch.cost_center_code)}</span>` : '<span class="text-muted">—</span>'}</td>
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center flex-wrap">
                                 ${branch.is_locked ? `

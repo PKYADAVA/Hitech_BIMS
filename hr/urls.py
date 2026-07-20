@@ -18,6 +18,8 @@ from hr.views import (
     EmployeeLeaveRequest,
     EmployeeLeaveDashboard,
     EmployeeAttendance,
+    DesignationTemplateView,
+    DesignationAPI,
 )
 
 
@@ -47,6 +49,12 @@ urlpatterns = [
     ),  # for single employee attendance
     path("attendance/<int:id>/", EmployeeAttendance.as_view(), name="attendance"),
     path("payroll/", EmployeePayrollDashboardView.as_view(), name="payroll"),
+    path("designation/", DesignationTemplateView.as_view(), name="designation"),
+    path("designation_list/", DesignationAPI.as_view(), name="designation_list"),
+    path("designation/<int:id>/", DesignationAPI.as_view(), name="designation_detail"),
+    path("designation-create/", DesignationAPI.as_view(), name="designation_create"),
+    path("designation/<int:id>/update/", DesignationAPI.as_view(), name="designation_update"),
+    path("designation/<int:id>/delete/", DesignationAPI.as_view(), name="designation_delete"),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -69,11 +69,11 @@
                     <table class="table table-hover table-bordered mb-0" id="farm-table">
                         <thead>
                             <tr>
+                                <th>Farm Code</th>
                                 <th>Branch</th>
                                 <th>Supervisor</th>
                                 <th>Farmer</th>
                                 <th>Farm Name</th>
-                                <th>Farm Code</th>
                                 <th>Farm Type</th>
                                 <th>Actions</th>
                             </tr>
@@ -867,11 +867,11 @@ $(document).ready(function () {
                 data.forEach(function (farm) {
                     tbody.append(`
                         <tr>
+                            <td>${farm.farm_code}</td>
                             <td>${farm.branch_name || ""}</td>
                             <td>${farm.supervisor_name || ""}</td>
                             <td>${farm.farmer_name || ""}</td>
                             <td>${farm.farm_name}</td>
-                            <td>${farm.farm_code}</td>
                             <td>${FARM_TYPE_LABELS[farm.farm_type] || farm.farm_type}</td>
                             <td>
                                 <div class="d-flex gap-1">

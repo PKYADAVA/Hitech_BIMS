@@ -162,7 +162,15 @@ MODULE_REGISTRY = [
                         "api_coa_export", "api_coa_opening_balance", "api_coa_audit",
                         "api_coa_detail", "chart_of_accounts_list",
                     )),
-                    ("bank_cash", "Bank / Cash Masters"),
+                    ("bank_cash", "Bank / Cash Masters", (
+                        "bank_cash_master_list",
+                    )),
+                    ("cost_center", "Cost Center", (
+                        "cost_center_master_list",
+                    )),
+                    ("cost_center_mapping", "Cost Center Mapping", (
+                        "cost_center_mapping_data",
+                    )),
                     ("company_profile", "Company Profile"),
                     ("terms", "Terms & Conditions"),
                 ],
@@ -188,6 +196,12 @@ MODULE_REGISTRY = [
                     ("balance_sheet_report", "Balance Sheet", (
                         "api_balance_sheet",
                     )),
+                    ("cost_center_report", "Cost Center Report", (
+                        "api_cost_center_report",
+                    )),
+                    ("branch_summary_report", "Branch Summary Report", (
+                        "api_branch_summary_report",
+                    )),
                 ],
             },
         ],
@@ -206,6 +220,7 @@ MODULE_REGISTRY = [
                     ("unit_of_measurement", "Unit of Measurement"),
                     ("warehouse", "Office"),
                     ("warehouse_mapping", "Office Mapping"),
+                    ("linked_tree", "Linked Tree"),
                 ],
             },
             {
@@ -228,6 +243,9 @@ MODULE_REGISTRY = [
                 "label": "Employee Management",
                 "tabs": [
                     ("employee_list", "Employee List"),
+                    ("designation", "Designation", (
+                        "designation_list", "designation_detail",
+                    )),
                 ],
             },
             {
@@ -452,6 +470,8 @@ _ACTION_BASE_TO_TAB = {
     "chart_of_accounts": "coa",
     "financial_year": "fin_year",
     "terms_conditions": "terms",
+    "bank_cash_master": "bank_cash",
+    "cost_center_master": "cost_center",
     # Inventory
     "category": "item_category",
     "item": "items",
@@ -464,6 +484,8 @@ _ACTION_BASE_TO_TAB = {
     "inventory_adjustment": "inventory_adjustment_list",
     "stock_issue": "stock_issue_list",
     "stock_receive": "stock_receive_list",
+    # HR
+    "designation": "designation",
     # Picklist Master
     "picklist": "picklists",
     "picklist_value": "picklists",

@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Branch Summary Report{% endblock %}
+
+{% block nav %}
+ {% include 'main_top_navbar.html' with active_tab='account' %}
+{% endblock %}
+
+{% block content %}
+ {% include '_account_report_subnavbar.html' with active_tab='branch_summary_report' %}
+
+<div class="page-header">
+    <div class="page-header-title"><i class="fas fa-code-branch"></i>Branch Summary Report</div>
+    <div class="page-header-right">
+      <div class="page-header-subtitle">Debit/credit movement by Branch, rolled up from each voucher's Office via Office Mapping</div>
+      <button class="btn btn-outline-secondary" id="bs-print" disabled><i class="fas fa-print"></i> Print</button>
+    </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">From</label>
+        <input type="date" id="bs-from" class="form-control" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">To<span class="text-danger">*</span></label>
+        <input type="date" id="bs-to" class="form-control" />
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-primary" id="bs-load"><i class="fas fa-search"></i> View Report</button>
+      </div>
+    </div>
+    <div class="form-text mt-2">
+      Leave "From" blank to see cumulative figures since inception. A voucher's branch comes from its Office
+      (Inventory &gt; Master &gt; Office Mapping — Sector &rarr; Branch); vouchers with no Office, or an
+      Office not yet mapped to a Branch, appear under "Unmapped".
+    </div>
+  </div>
+</div>
+
+<div class="card" id="bs-card" style="display:none">
+  <div class="card-header" id="bs-heading"><i class="fas fa-table"></i> Branch Summary Report</div>
+  <div class="card-body p-0">
+    <div id="bs-print-area">
+      <table class="table table-bordered mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Branch</th>
+            <th class="text-end">Debit</th>
+            <th class="text-end">Credit</th>
+            <th class="text-end">Net</th>
+          </tr>
+        </thead>
+        <tbody id="bs-body"></tbody>
+        <tfoot id="bs-foot"></tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+$(document).ready(function () {
+    function showToast(type, message) {
+        const colors = {
+            success: "linear-gradient(135deg, #065f46, #059669)",
+            danger: "linear-gradient(135deg, #991b1b, #dc2626)",
+        };
+        Toastify({ text: message, duration: 3500, gravity: "top", position: "right",
+                   style: { background: colors[type] || colors.success } }).showToast();
+    }
+    function escapeHtml(unsafe) {
+        return (unsafe ?? "").toString()
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    function fmt(n) {
+        const v = parseFloat(n) || 0;
+        return v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function loadReport() {
+        const to = $('#bs-to').val();
+        if (!to) { showToast('danger', 'Select a "To" date.'); return; }
+        const params = new URLSearchParams({ to });
+        if ($('#bs-from').val()) params.set('from', $('#bs-from').val());
+        $.get(`{% url 'api_branch_summary_report' %}?${params}`, function (response) {
+            const period = $('#bs-from').val() ? `${$('#bs-from').val()} to ${to}` : `Since inception to ${to}`;
+            $('#bs-heading').html(`<i class="fas fa-table"></i> Branch Summary Report <small class="text-muted">(${escapeHtml(period)})</small>`);
+
+            const body = $('#bs-body').empty();
+            if (!response.rows.length) {
+                body.append('<tr><td colspan="4" class="text-muted text-center py-3">No posted entries in this period.</td></tr>');
+            } else {
+                response.rows.forEach(function (r) {
+                    const netClass = parseFloat(r.net) >= 0 ? '' : 'text-danger';
+                    const rowClass = r.branch_name === 'Unmapped' ? 'table-warning' : '';
+                    body.append(`
+                        <tr class="${rowClass}">
+                          <td>${escapeHtml(r.branch_name)}</td>
+                          <td class="text-end">${fmt(r.debit)}</td>
+                          <td class="text-end">${fmt(r.credit)}</td>
+                          <td class="text-end ${netClass}">${fmt(r.net)}</td>
+                        </tr>`);
+                });
+            }
+
+            const foot = $('#bs-foot').empty();
+            foot.append(`
+                <tr class="fw-bold table-light">
+                  <td>Total</td>
+                  <td class="text-end">${fmt(response.totals.debit)}</td>
+                  <td class="text-end">${fmt(response.totals.credit)}</td>
+                  <td class="text-end">${fmt(response.totals.net)}</td>
+                </tr>`);
+
+            $('#bs-card').show();
+            $('#bs-print').prop('disabled', false);
+        }).fail((xhr) => showToast('danger', xhr.responseJSON?.error || 'Failed to load report.'));
+    }
+    $('#bs-load').on('click', loadReport);
+
+    $('#bs-print').on('click', function () {
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html><head><title>Branch Summary Report</title>
+            <style>
+              body { font-family: sans-serif; padding: 24px; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #999; padding: 4px 8px; font-size: 12px; }
+              th { background: #eee; }
+            </style></head><body>
+            <h3>Branch Summary Report</h3>
+            ${document.getElementById('bs-print-area').innerHTML}
+            </body></html>`);
+        win.document.close();
+        win.print();
+    });
+
+    $('#bs-to').val(new Date().toISOString().slice(0, 10));
+});
+</script>
+{% endblock %}

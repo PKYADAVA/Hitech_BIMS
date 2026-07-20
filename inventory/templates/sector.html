@@ -59,6 +59,7 @@
                     <table class="table table-hover table-bordered mb-0" id="sector-table">
                         <thead class="table-dark">
                             <tr>
+                                <th>Code</th>
                                 <th>Name</th>
                                 <th>Actions</th>
                             </tr>
@@ -103,6 +104,7 @@ $(document).ready(function () {
                     const formId = `edit-sector-form-${sector.id}`;
                     const tableRow = `
                         <tr>
+                            <td>${escapeHtml(sector.code)}</td>
                             <td>${escapeHtml(sector.name)}</td>
                             <td>
                                 <div class="d-flex gap-1">

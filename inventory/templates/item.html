@@ -55,9 +55,9 @@
                             <input
                                 type="text"
                                 id="item_code"
-                                class="form-control"
-                                placeholder="Enter item code"
-                                required
+                                class="form-control bg-light"
+                                readonly
+                                placeholder="Auto-generated"
                             />
                         </div>
                         <div class="mb-3">
@@ -191,6 +191,17 @@
         {% for uom in uoms %}{ id: {{ uom.id }}, label: "{{ uom.name|escapejs }}{% if uom.symbol %} ({{ uom.symbol|escapejs }}){% endif %}" },{% endfor %}
     ];
 
+    const CATEGORY_OPTIONS = [
+        {% for category in categories %}{ id: {{ category.id }}, name: "{{ category.name|escapejs }}" },{% endfor %}
+    ];
+
+    function categoryOptionsHtml(selectedId) {
+        const selected = selectedId !== undefined && selectedId !== null ? String(selectedId) : "";
+        return CATEGORY_OPTIONS.map((c) =>
+            `<option value="${c.id}" ${String(c.id) === selected ? "selected" : ""}>${escapeHtml(c.name)}</option>`
+        ).join("");
+    }
+
     function uomOptionsHtml(selectedId) {
         const selected = selectedId !== undefined && selectedId !== null ? String(selectedId) : "";
         let html = `<option value="" ${selected === "" ? "selected" : ""}>Select UOM</option>`;
@@ -255,7 +266,7 @@
                                         data-item_id="${item.id}"
                                         data-item_code="${item.item_code}"
                                         data-description="${item.description}"
-                                        data-category="${item.category__name}"
+                                        data-category="${item.category ?? ""}"
                                         data-warehouse='${JSON.stringify(item.warehouse_ids || [])}'
                                         data-valuation_method="${item.valuation_method}"
                                         data-standard_cost_per_unit="${item.standard_cost_per_unit}"
@@ -310,7 +321,7 @@
                                     <input type="hidden" id="item-id" value="${itemData.item_id}" />
                                     <div class="mb-3">
                                         <label for="dynamic-item_code" class="form-label">Item Code</label>
-                                        <input type="text" id="dynamic-item_code" class="form-control" value="${itemData.item_code}" required />
+                                        <input type="text" id="dynamic-item_code" class="form-control bg-light" value="${itemData.item_code}" readonly />
                                     </div>
                                     <div class="mb-3">
                                         <label for="dynamic-description" class="form-label">Description</label>
@@ -318,7 +329,7 @@
                                     </div>
                                     <div class="mb-3">
                                         <label for="dynamic-category" class="form-label">Category</label>
-                                        <input type="text" id="dynamic-category" class="form-control" value="${itemData.category}" required />
+                                        <select id="dynamic-category" class="form-select" required>${categoryOptionsHtml(itemData.category)}</select>
                                     </div>
                                     <div class="mb-3">
                                         <div class="d-flex justify-content-between align-items-center">
@@ -427,7 +438,6 @@
 
             // Collect form data
             const itemData = {
-                item_code: $("#item_code").val(),
                 description: $("#description").val(),
                 category: $("#category").val(),
                 warehouse: $("#warehouse").val(),

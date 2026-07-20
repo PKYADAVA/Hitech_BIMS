@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Manage Bank Codes{% endblock %}
+{% block title %}Bank / Cash Masters{% endblock %}
 
 {% block nav %}
  {% include 'main_top_navbar.html' with active_tab='account' %}
@@ -12,159 +12,40 @@
 
 <div class="page-header">
     <div class="page-header-main">
-      <div class="page-header-title">Manage Bank Codes</div>
-      <div class="page-header-subtitle">Add and manage bank details</div>
+      <div class="page-header-title">Bank / Cash Masters</div>
+      <div class="page-header-subtitle">Add and manage bank accounts and cash locations</div>
     </div>
     <div class="page-header-right">
-      <button
-            class="btn btn-primary"
-            data-bs-toggle="modal"
-            data-bs-target="#bankCodeFormModal"
-        >
-            <i class="fas fa-plus"></i> Add New Bank
-        </button>
+      {% if page_perms.add %}<button class="btn btn-primary" id="add-bank-cash-btn"
+          data-bs-toggle="modal" data-bs-target="#bankCashFormModal">
+      <i class="fas fa-plus"></i> Add New
+      </button>{% endif %}
     </div>
 </div>
 
-<div class="row g-4">    <!-- Modal for Add/Edit Bank -->
-    <div
-        class="modal fade"
-        id="bankCodeFormModal"
-        tabindex="-1"
-        aria-labelledby="bankCodeFormModalLabel"
-        aria-hidden="true"
-    >
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="bankCodeFormModalLabel">Add Bank Details</h5>
-                    <button
-                        type="button"
-                        class="btn-close"
-                        data-bs-dismiss="modal"
-                        aria-label="Close"
-                    ></button>
-                </div>
-                <div class="modal-body">
-                    <form id="bank-code-form">
-                        {% csrf_token %}
-                        <input type="hidden" id="bank-id" />
-                        <div class="mb-3">
-                            <label for="bank-code" class="form-label">Bank Code</label>
-                            <input
-                                type="text"
-                                id="bank-code"
-                                class="form-control"
-                                placeholder="Enter unique bank code"
-                                required
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="bank-name" class="form-label">Bank Name</label>
-                            <input
-                                type="text"
-                                id="bank-name"
-                                class="form-control"
-                                placeholder="Enter bank name"
-                                required
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="sector" class="form-label">Sector</label>
-                            <select id="sector" class="form-select">
-                                <option value="">Select a sector</option>
-                                {% for sector in sectors %}
-                                <option value="{{ sector.id }}">{{ sector.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="micr" class="form-label">MICR Code</label>
-                            <input
-                                type="text"
-                                id="micr"
-                                class="form-control"
-                                placeholder="Enter MICR code"
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="address" class="form-label">Address</label>
-                            <textarea
-                                id="address"
-                                class="form-control"
-                                rows="3"
-                                placeholder="Enter bank address"
-                                required
-                            ></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <input
-                                type="email"
-                                id="email"
-                                class="form-control"
-                                placeholder="Enter bank email"
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="phone" class="form-label">Phone</label>
-                            <input
-                                type="text"
-                                id="phone"
-                                class="form-control"
-                                placeholder="Enter phone number"
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="fax" class="form-label">Fax</label>
-                            <input
-                                type="text"
-                                id="fax"
-                                class="form-control"
-                                placeholder="Enter fax number"
-                            />
-                        </div>
-                        <div class="mb-3">
-                            <label for="contact-person" class="form-label">Contact Person</label>
-                            <input
-                                type="text"
-                                id="contact-person"
-                                class="form-control"
-                                placeholder="Enter contact person name"
-                            />
-                        </div>
-                        <div class="d-flex justify-content-end gap-2 mt-3">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Save</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Bank List Section -->
+<div class="row g-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-table me-2"></i>Bank Code List</h5>
+                <h5 class="mb-0"><i class="fas fa-money-check-dollar me-2"></i>Bank / Cash List</h5>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered mb-0" id="bank-code-table">
+                    <table class="table table-hover table-bordered mb-0" id="bank-cash-table">
                         <thead>
                             <tr>
-                                <th>Bank Code</th>
-                                <th>Bank Name</th>
-                                <th>Sector</th>
+                                <th>Code</th>
+                                <th>Type</th>
+                                <th>Name</th>
+                                <th>Office</th>
+                                <th>COA Head</th>
                                 <th>Address</th>
-                                <th>Email</th>
                                 <th>Phone</th>
                                 <th>Contact Person</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="bank-code-table-body">
+                        <tbody id="bank-cash-table-body">
                             <!-- Dynamic content will be added via AJAX -->
                         </tbody>
                     </table>
@@ -174,4 +55,269 @@
     </div>
 </div>
 
+<!-- Modal: Add/Edit Bank / Cash -->
+<div class="modal fade" id="bankCashFormModal" tabindex="-1" aria-labelledby="bankCashFormModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bankCashFormModalLabel">Add Bank / Cash</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bank-cash-form">
+                    {% csrf_token %}
+                    <input type="hidden" id="bc-id" />
+                    <div class="mb-3">
+                        <label for="bc-code" class="form-label">Code</label>
+                        <input type="text" id="bc-code" class="form-control bg-light" readonly placeholder="Auto-generated" />
+                    </div>
+                    <div class="mb-3 form-check form-switch">
+                        <input type="checkbox" class="form-check-input" id="bc-is-cash" style="height:28px;width:54px;" />
+                        <label class="form-check-label" for="bc-is-cash">This is a Cash location (untick for Bank)</label>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Ledgers under: <strong id="bc-coa-head">{{ bank_coa_head }}</strong></small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="bc-name" class="form-label" id="bc-name-label">Bank Name <span class="text-danger">*</span></label>
+                        <input type="text" id="bc-name" class="form-control" placeholder="Enter bank name" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mapped To</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="bc-scope" id="bc-scope-all" value="all" checked>
+                                <label class="form-check-label" for="bc-scope-all">All Offices</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="bc-scope" id="bc-scope-limited" value="limited">
+                                <label class="form-check-label" for="bc-scope-limited">Limited to specific Offices</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3 d-none" id="bc-sectors-wrap">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="bc-sectors" class="form-label mb-0">Offices <span class="text-danger">*</span></label>
+                            <button type="button" class="btn btn-link btn-sm p-0" id="bc-select-all-sectors">Select All</button>
+                        </div>
+                        <select id="bc-sectors" class="form-select" multiple>
+                            {% for sector in sectors %}
+                            <option value="{{ sector.id }}">{{ sector.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3 bank-only-field">
+                        <label for="bc-micr" class="form-label">MICR Code</label>
+                        <input type="text" id="bc-micr" class="form-control" placeholder="Enter MICR code" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="bc-address" class="form-label">Address</label>
+                        <textarea id="bc-address" class="form-control" rows="3" placeholder="Enter address"></textarea>
+                    </div>
+                    <div class="mb-3 bank-only-field">
+                        <label for="bc-email" class="form-label">Email</label>
+                        <input type="email" id="bc-email" class="form-control" placeholder="Enter email" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="bc-phone" class="form-label">Phone</label>
+                        <input type="text" id="bc-phone" class="form-control" placeholder="Enter phone number" />
+                    </div>
+                    <div class="mb-3 bank-only-field">
+                        <label for="bc-fax" class="form-label">Fax</label>
+                        <input type="text" id="bc-fax" class="form-control" placeholder="Enter fax number" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="bc-contact-person" class="form-label">Contact Person</label>
+                        <input type="text" id="bc-contact-person" class="form-control" placeholder="Enter contact person name" />
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" id="bc-submit-btn" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block js %}
+<script>
+$(document).ready(function () {
+    const csrfToken = "{{ csrf_token }}";
+    const BANK_COA_HEAD = "{{ bank_coa_head|escapejs }}";
+    const CASH_COA_HEAD = "{{ cash_coa_head|escapejs }}";
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function applyTypeMode() {
+        const isCash = $("#bc-is-cash").is(":checked");
+        $("#bc-coa-head").text(isCash ? CASH_COA_HEAD : BANK_COA_HEAD);
+        $("#bc-name-label").html(isCash ? 'Cash Location <span class="text-danger">*</span>' : 'Bank Name <span class="text-danger">*</span>');
+        $("#bc-name").attr("placeholder", isCash ? "Enter cash location name" : "Enter bank name");
+        $(".bank-only-field").toggleClass("d-none", isCash);
+    }
+    $("#bc-is-cash").on("change", applyTypeMode);
+
+    function applyScopeMode() {
+        const limited = $("#bc-scope-limited").is(":checked");
+        $("#bc-sectors-wrap").toggleClass("d-none", !limited);
+        if (!limited) $("#bc-sectors").val(null);
+    }
+    $("input[name='bc-scope']").on("change", applyScopeMode);
+    $("#bc-select-all-sectors").on("click", function () {
+        $("#bc-sectors option").prop("selected", true);
+        $("#bc-sectors").trigger("change");
+    });
+
+    function loadList() {
+        $.ajax({
+            url: "{% url 'bank_cash_master_list' %}",
+            type: "GET",
+            success: function (response) {
+                const table = $("#bank-cash-table");
+                if ($.fn.DataTable.isDataTable(table)) {
+                    table.DataTable().clear().destroy();
+                }
+                const tbody = $("#bank-cash-table-body").empty();
+                response.forEach(function (row) {
+                    const typeBadge = row.is_cash
+                        ? '<span class="badge bg-warning text-dark">Cash</span>'
+                        : '<span class="badge bg-primary">Bank</span>';
+                    tbody.append(`
+                        <tr>
+                            <td>${escapeHtml(row.code)}</td>
+                            <td>${typeBadge}</td>
+                            <td>${escapeHtml(row.name)}</td>
+                            <td>${escapeHtml(row.sector_names)}</td>
+                            <td>${escapeHtml(row.coa_head)}</td>
+                            <td>${escapeHtml(row.address)}</td>
+                            <td>${escapeHtml(row.phone)}</td>
+                            <td>${escapeHtml(row.contact_person)}</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-bank-cash" data-id="${row.id}"><i class="fas fa-pen"></i></button>{% endif %}
+                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-bank-cash" data-id="${row.id}"><i class="fas fa-trash"></i></button>{% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    `);
+                });
+                table.DataTable({ destroy: true, responsive: true, paging: true, searching: true, info: true });
+            },
+            error: function () {
+                window.showToast('danger', "Error loading list. Please try again.");
+            }
+        });
+    }
+
+    function resetForm() {
+        $("#bank-cash-form").trigger("reset");
+        $("#bc-id").val("");
+        $("#bc-code").val("");
+        $("#bc-scope-all").prop("checked", true);
+        $("#bankCashFormModalLabel").text("Add Bank / Cash");
+        $("#bc-submit-btn").text("Save");
+        applyTypeMode();
+        applyScopeMode();
+    }
+
+    $("#add-bank-cash-btn").on("click", resetForm);
+
+    $("#bank-cash-form").on("submit", function (e) {
+        e.preventDefault();
+        const id = $("#bc-id").val();
+        const limited = $("#bc-scope-limited").is(":checked");
+        const selectedSectors = limited ? ($("#bc-sectors").val() || []) : [];
+        if (limited && selectedSectors.length === 0) {
+            window.showToast('warning', "Select at least one office, or choose \"All Offices\".");
+            return;
+        }
+        const payload = {
+            is_cash: $("#bc-is-cash").is(":checked"),
+            name: $("#bc-name").val(),
+            sectors: selectedSectors,
+            micr: $("#bc-micr").val(),
+            address: $("#bc-address").val(),
+            email: $("#bc-email").val(),
+            phone: $("#bc-phone").val(),
+            fax: $("#bc-fax").val(),
+            contact_person: $("#bc-contact-person").val(),
+        };
+        $.ajax({
+            url: id ? `/bank_cash_master/${id}/` : "{% url 'bank_cash_master_create' %}",
+            type: id ? "PUT" : "POST",
+            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+            data: JSON.stringify(payload),
+            success: function () {
+                $("#bankCashFormModal").modal("hide");
+                resetForm();
+                loadList();
+                window.showToast("success", id ? "Updated successfully!" : "Added successfully!");
+            },
+            error: function (xhr) {
+                const serverError = xhr.responseJSON && xhr.responseJSON.error;
+                window.showToast('danger', serverError || "Error saving. Please check your input.");
+            }
+        });
+    });
+
+    $(document).on("click", ".edit-bank-cash", function () {
+        const id = $(this).data("id");
+        $.ajax({
+            url: `/bank_cash_master/${id}/`,
+            type: "GET",
+            success: function (row) {
+                $("#bc-id").val(row.id);
+                $("#bc-code").val(row.code);
+                $("#bc-is-cash").prop("checked", row.is_cash);
+                $("#bc-name").val(row.name);
+                const hasLimitedSectors = row.sectors && row.sectors.length > 0;
+                $("#bc-scope-limited").prop("checked", hasLimitedSectors);
+                $("#bc-scope-all").prop("checked", !hasLimitedSectors);
+                $("#bc-sectors").val(hasLimitedSectors ? row.sectors.map(String) : null);
+                applyScopeMode();
+                $("#bc-micr").val(row.micr);
+                $("#bc-address").val(row.address);
+                $("#bc-email").val(row.email);
+                $("#bc-phone").val(row.phone);
+                $("#bc-fax").val(row.fax);
+                $("#bc-contact-person").val(row.contact_person);
+                applyTypeMode();
+                $("#bankCashFormModalLabel").text("Edit Bank / Cash");
+                $("#bc-submit-btn").text("Update");
+                new bootstrap.Modal(document.getElementById("bankCashFormModal")).show();
+            },
+            error: function () {
+                window.showToast('danger', "Error loading details.");
+            }
+        });
+    });
+
+    $(document).on("click", ".delete-bank-cash", async function () {
+        const id = $(this).data("id");
+        if (!(await window.bimsConfirm("Are you sure you want to delete this record?", { title: "Delete record", confirmText: "Delete" }))) return;
+        $.ajax({
+            url: `/bank_cash_master/${id}/delete/`,
+            type: "DELETE",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                window.showToast('success', "Deleted successfully!");
+                loadList();
+            },
+            error: function (xhr) {
+                const serverError = xhr.responseJSON && xhr.responseJSON.error;
+                window.showToast('danger', serverError || "An error occurred while deleting.");
+            }
+        });
+    });
+
+    loadList();
+});
+</script>
 {% endblock %}
