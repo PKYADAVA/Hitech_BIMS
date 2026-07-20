@@ -18,7 +18,7 @@ from django.db import transaction
 from django.db.models import DecimalField, F, Sum
 from django.utils import timezone
 
-from account.models import ChartOfAccount, CostCenter, FinancialYear, Voucher, VoucherLine
+from account.models import AccountingControlSettings, ChartOfAccount, CostCenter, FinancialYear, Voucher, VoucherLine
 
 VOUCHER_PREFIX = {
     'Journal': 'JV',
@@ -98,6 +98,10 @@ def validate_lines(company, lines_data, manual=True):
     """Validate raw line dicts -> list of cleaned dicts. Raises ValidationError."""
     if not lines_data or len(lines_data) < 2:
         raise ValidationError("A voucher needs at least two lines (one debit, one credit).")
+    controls = AccountingControlSettings.get_solo()
+    default_cost_center = None
+    if controls.require_cost_center:
+        default_cost_center = CostCenter.objects.filter(company=company, is_default=True).first()
     cleaned = []
     total_debit = total_credit = Decimal('0')
     for index, raw in enumerate(lines_data, start=1):
@@ -119,6 +123,20 @@ def validate_lines(company, lines_data, manual=True):
             cost_center = CostCenter.objects.filter(pk=raw['cost_center'], company=company).first()
             if cost_center is None:
                 raise ValidationError(f"Line {index}: cost center not found in this company.")
+            if manual and not cost_center.allow_manual_selection:
+                raise ValidationError(f"Line {index}: {cost_center.code} - {cost_center.name} cannot be selected manually.")
+            if cost_center.allow_children_only:
+                raise ValidationError(
+                    f"Line {index}: {cost_center.code} - {cost_center.name} is a grouping cost centre; "
+                    "select one of its child cost centres instead."
+                )
+        elif controls.require_cost_center:
+            if default_cost_center is None:
+                raise ValidationError(
+                    f"Line {index}: a cost center is required. Select one, or configure a Default "
+                    "Cost Centre under Account > Master > Cost Center."
+                )
+            cost_center = default_cost_center
         total_debit += debit
         total_credit += credit
         cleaned.append({
@@ -322,7 +340,7 @@ def account_ledger(account, date_from=None, date_to=None):
     lines = (
         _posted_lines(account.company)
         .filter(account=account)
-        .select_related('voucher')
+        .select_related('voucher', 'cost_center')
         .order_by('date', 'voucher_id', 'line_no')
     )
     if date_from:
@@ -340,6 +358,8 @@ def account_ledger(account, date_from=None, date_to=None):
             'voucher_no': line.voucher.voucher_no,
             'voucher_type': line.voucher.voucher_type,
             'narration': line.narration or line.voucher.narration,
+            'cost_center': line.cost_center.name if line.cost_center_id else '',
+            'cost_center_code': line.cost_center.code if line.cost_center_id else '',
             'debit': line.debit,
             'credit': line.credit,
             'balance': running,

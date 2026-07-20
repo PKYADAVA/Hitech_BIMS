@@ -34,7 +34,6 @@
             <th>Description</th>
             <th>Region</th>
             <th>Prefix</th>
-            <th>Cost Center</th>
             <th class="text-center">Action</th>
           </tr>
         </thead>
@@ -69,17 +68,26 @@
 
                     <label class="form-label d-block">Branch / Prefix<span class="text-danger">*</span></label>
                     <div class="row g-2 mb-1">
-                        <div class="col-md-5"><small class="text-muted fw-semibold">Branch name</small></div>
-                        <div class="col-md-5"><small class="text-muted fw-semibold">Prefix</small></div>
+                        <div class="col-md-4"><small class="text-muted fw-semibold">Branch name</small></div>
+                        <div class="col-md-3"><small class="text-muted fw-semibold">Prefix</small></div>
+                        <div class="col-md-4"><small class="text-muted fw-semibold">Office<span class="text-danger">*</span></small></div>
                         <div class="col-md-1"></div>
                     </div>
                     <div id="branch-rows">
                         <div class="row g-2 align-items-center mb-2 branch-row">
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <input type="text" name="branch_name[]" class="form-control" placeholder="Enter branch name..." required />
                             </div>
-                            <div class="col-md-5">
+                            <div class="col-md-3">
                                 <input type="text" name="prefix[]" class="form-control" placeholder="Enter prefix..." required />
+                            </div>
+                            <div class="col-md-4">
+                                <select name="office_id[]" class="form-select" required>
+                                    <option value="" selected disabled>Select office</option>
+                                    {% for w in warehouses %}
+                                    <option value="{{ w.id }}">{{ w.name }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                             <div class="col-md-1">
                                 <button type="button" class="btn btn-outline-success btn-sm add-branch-row" title="Add another row">
@@ -88,6 +96,7 @@
                             </div>
                         </div>
                     </div>
+                    <div class="form-text">Office maps straight to this Branch — same as Inventory &gt; Office Mapping, one less trip.</div>
 
                     <div class="d-flex justify-content-end gap-2 mt-3">
                         <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
@@ -126,6 +135,17 @@
                         <div class="mb-3">
                             <label class="form-label">Prefix</label>
                             <input type="text" class="form-control" name="prefix" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Office<span class="text-danger">*</span></label>
+                            <select class="form-select" name="office_id" required>
+                                <option value="" disabled>Select office</option>
+                                {% for w in warehouses %}
+                                <option value="{{ w.id }}">{{ w.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="hidden" name="previous_office_id" value="">
+                            <div class="form-text">Same Sector &rarr; Branch mapping as Inventory &gt; Office Mapping.</div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -181,7 +201,6 @@ $(document).ready(function () {
                             <td>${escapeHtml(branch.branch_name)}</td>
                             <td>${escapeHtml(branch.region_name)}</td>
                             <td>${escapeHtml(branch.prefix)}</td>
-                            <td>${branch.cost_center_code ? `<span class="badge bg-info text-dark"><i class="fas fa-link"></i> ${escapeHtml(branch.cost_center_code)}</span>` : '<span class="text-muted">—</span>'}</td>
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center flex-wrap">
                                 ${branch.is_locked ? `
@@ -191,7 +210,8 @@ $(document).ready(function () {
                                     data-id="${branch.id}"
                                     data-region-id="${branch.region_id}"
                                     data-branch-name="${escapeHtml(branch.branch_name)}"
-                                    data-prefix="${escapeHtml(branch.prefix)}" title="Edit">
+                                    data-prefix="${escapeHtml(branch.prefix)}"
+                                    data-office-id="${branch.office_id || ''}" title="Edit">
                                     <i class="fas fa-pen"></i>
                                 </button>{% endif %}
                                 `}
@@ -226,15 +246,19 @@ $(document).ready(function () {
         });
     }
 
-    // Dynamic Branch/Prefix rows
+    // Dynamic Branch/Prefix/Office rows
+    const officeOptionsHtml = `<option value="" selected disabled>Select office</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
     function branchRowHtml() {
         return `
             <div class="row g-2 align-items-center mb-2 branch-row">
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <input type="text" name="branch_name[]" class="form-control" placeholder="Enter branch name..." required />
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-3">
                     <input type="text" name="prefix[]" class="form-control" placeholder="Enter prefix..." required />
+                </div>
+                <div class="col-md-4">
+                    <select name="office_id[]" class="form-select" required>${officeOptionsHtml}</select>
                 </div>
                 <div class="col-md-1">
                     {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm remove-branch-row" title="Remove row">
@@ -282,6 +306,7 @@ $(document).ready(function () {
         const regionId = $(this).data("region-id");
         const branchName = $(this).data("branch-name");
         const prefix = $(this).data("prefix");
+        const officeId = $(this).data("office-id");
 
         // Remove existing modal if any
         $(`#editBranchModal-${id}`).remove();
@@ -297,6 +322,8 @@ $(document).ready(function () {
         $(`#edit-branch-form-${id} [name="region"]`).val(regionId);
         $(`#edit-branch-form-${id} [name="branch_name"]`).val(branchName);
         $(`#edit-branch-form-${id} [name="prefix"]`).val(prefix);
+        $(`#edit-branch-form-${id} [name="office_id"]`).val(officeId || "");
+        $(`#edit-branch-form-${id} [name="previous_office_id"]`).val(officeId || "");
     });
 
     // Update Branch
@@ -307,6 +334,8 @@ $(document).ready(function () {
             region: $(this).find('[name="region"]').val(),
             branch_name: $(this).find('[name="branch_name"]').val(),
             prefix: $(this).find('[name="prefix"]').val(),
+            office_id: $(this).find('[name="office_id"]').val() || null,
+            previous_office_id: $(this).find('[name="previous_office_id"]').val() || null,
         };
 
         $.ajax({

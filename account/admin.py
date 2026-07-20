@@ -8,6 +8,7 @@ from inventory.models import Warehouse
 from .models import (
     AccountAuditLog,
     AccountGroup,
+    AccountingControlSettings,
     AccountType,
     BankCashMaster,
     ChartOfAccount,
@@ -292,6 +293,23 @@ class NarrationSettingsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Singleton (pk=1, see NarrationSettings.get_solo()): only one row ever.
         return not NarrationSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        obj.modified_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(AccountingControlSettings)
+class AccountingControlSettingsAdmin(admin.ModelAdmin):
+    list_display = ('require_cost_center', 'modified_by', 'modified_at')
+    readonly_fields = ('modified_by', 'modified_at')
+
+    def has_add_permission(self, request):
+        # Singleton (pk=1, see AccountingControlSettings.get_solo()): only one row ever.
+        return not AccountingControlSettings.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False

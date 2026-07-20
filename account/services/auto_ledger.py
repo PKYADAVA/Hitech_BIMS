@@ -84,11 +84,13 @@ def sync_ledger(instance, name, anchor_roles, company=None):
 
 
 def sync_branch_cost_center(branch, company=None):
-    """Ensure exactly one CostCenter (kind = the 'Branch Office' Sector)
-    exists for *branch*, named and active-flagged to match — the same
-    guarantee sync_ledger makes for COA ledgers, but for the cost-center
-    reporting dimension instead. Never raises; a Branch save must not fail
-    because of this bookkeeping.
+    """Create one CostCenter (kind = the 'Branch Office' Sector) the first
+    time *branch* is saved, as a convenience — a new Branch shouldn't need a
+    separate manual step to get a matching cost center. One-time only: once
+    it exists, it's a normal, freely-editable Cost Center like any other —
+    nothing here re-syncs its name/active state on later Branch saves, so a
+    manual edit on the Cost Center side is never silently overwritten.
+    Never raises; a Branch save must not fail because of this bookkeeping.
     """
     from account.models import CostCenter
     from inventory.models import Sector
@@ -99,15 +101,6 @@ def sync_branch_cost_center(branch, company=None):
             return None
         cost_center = CostCenter.objects.filter(branch=branch).first()
         if cost_center:
-            changed = []
-            if cost_center.name != branch.branch_name:
-                cost_center.name = branch.branch_name
-                changed.append("name")
-            if cost_center.is_active != branch.is_active:
-                cost_center.is_active = branch.is_active
-                changed.append("is_active")
-            if changed:
-                cost_center.save(update_fields=changed)
             return cost_center
         branch_kind = Sector.objects.filter(code=CostCenter.KIND_BRANCH).first()
         if branch_kind is None:

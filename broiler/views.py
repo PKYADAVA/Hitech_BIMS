@@ -291,11 +291,14 @@ class BranchTemplateView(View):
     """View for rendering the branch template."""
 
     def get(self, request):
-        context = {"regions": Region.objects.filter(is_active=True)}
+        context = {
+            "regions": Region.objects.filter(is_active=True),
+            "warehouses": Warehouse.objects.order_by("name"),
+        }
         return render(request, "branch.html", context)
 
-def _branch_to_dict(branch: Branch) -> dict:
-    cost_center = getattr(branch, "cost_center", None)
+def _branch_to_dict(branch: Branch, office_by_branch: dict = None) -> dict:
+    office = (office_by_branch or {}).get(branch.id)
     return {
         "id": branch.id,
         "code": branch.code,
@@ -305,8 +308,29 @@ def _branch_to_dict(branch: Branch) -> dict:
         "prefix": branch.prefix,
         "is_active": branch.is_active,
         "is_locked": branch.is_locked,
-        "cost_center_code": cost_center.code if cost_center else "",
+        "office_id": office[0] if office else None,
+        "office_name": office[1] if office else "",
     }
+
+
+def _office_by_branch_map():
+    """First mapped Office (Sector -> Branch) per Branch id, for display in
+    the Branch list/edit — a Branch can have several Offices mapped to it,
+    this just surfaces one representative one; the full picture is still
+    Inventory > Office Mapping."""
+    from inventory.models import Mapping, Warehouse
+
+    mappings = (
+        Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__isnull=False)
+        .order_by("from_id")
+        .values_list("from_id", "to_id")
+    )
+    office_names = dict(Warehouse.objects.values_list("id", "name"))
+    result = {}
+    for office_id, branch_id in mappings:
+        result.setdefault(branch_id, (office_id, office_names.get(office_id, "")))
+    return result
+
 
 @method_decorator(login_required, name="dispatch")
 class BranchAPI(BaseAPIView):
@@ -314,17 +338,23 @@ class BranchAPI(BaseAPIView):
 
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
+            office_by_branch = _office_by_branch_map()
             if id:
-                branch = Branch.objects.select_related("region", "cost_center").get(id=id)
-                return JsonResponse(_branch_to_dict(branch))
+                branch = Branch.objects.select_related("region").get(id=id)
+                return JsonResponse(_branch_to_dict(branch, office_by_branch))
 
-            branches = Branch.objects.select_related("region", "cost_center").all()
-            return JsonResponse([_branch_to_dict(b) for b in branches], safe=False)
+            branches = Branch.objects.select_related("region").all()
+            return JsonResponse([_branch_to_dict(b, office_by_branch) for b in branches], safe=False)
         except Exception as e:
             return self.handle_exception(e)
 
     def post(self, request) -> JsonResponse:
-        """Create one or more branches against a single region in one submit."""
+        """Create one or more branches against a single region in one submit.
+        Each row must pick an Office to map straight to the new branch
+        (Sector -> Branch, the same mapping Inventory > Office Mapping
+        manages) so linking doesn't require a separate trip there."""
+        from inventory.models import Mapping
+
         try:
             data = request.POST
             region = Region.objects.filter(id=data.get("region")).first()
@@ -333,25 +363,62 @@ class BranchAPI(BaseAPIView):
 
             branch_names = data.getlist("branch_name[]")
             prefixes = data.getlist("prefix[]")
+            office_ids = data.getlist("office_id[]")
+
+            already_mapped = dict(
+                Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__isnull=False)
+                .values_list("from_id", "to_id")
+            )
+            office_names = dict(Warehouse.objects.values_list("id", "name"))
+
+            # Validate every row before creating anything.
+            rows = []
+            for i, (branch_name, prefix) in enumerate(zip(branch_names, prefixes)):
+                branch_name = branch_name.strip()
+                prefix = prefix.strip()
+                if not branch_name and not prefix:
+                    continue
+                if not branch_name or not prefix:
+                    return JsonResponse({"error": "Enter both a branch name and a prefix for every row."}, status=400)
+                office_id = office_ids[i] if i < len(office_ids) else ""
+                if not office_id:
+                    return JsonResponse({"error": f"Office is required for {branch_name}."}, status=400)
+                office_id = int(office_id)
+                if office_id not in office_names:
+                    return JsonResponse({"error": "Invalid office selected."}, status=400)
+                if office_id in already_mapped:
+                    return JsonResponse(
+                        {"error": f"{office_names[office_id]} is already mapped to another branch."}, status=400
+                    )
+                rows.append((branch_name, prefix, office_id))
+
+            if not rows:
+                return JsonResponse({"error": "Enter at least one branch name and prefix."}, status=400)
 
             created = 0
             with transaction.atomic():
-                for branch_name, prefix in zip(branch_names, prefixes):
-                    branch_name = branch_name.strip()
-                    prefix = prefix.strip()
-                    if not branch_name or not prefix:
-                        continue
-                    Branch.objects.create(region=region, branch_name=branch_name, prefix=prefix)
+                for branch_name, prefix, office_id in rows:
+                    branch = Branch.objects.create(region=region, branch_name=branch_name, prefix=prefix)
                     created += 1
+                    Mapping.objects.update_or_create(
+                        type=Mapping.TYPE_SECTOR_BRANCH, from_id=office_id,
+                        defaults={"to_id": branch.id},
+                    )
                 cache.delete("branch_list")
 
-            if not created:
-                return JsonResponse({"error": "Enter at least one branch name and prefix."}, status=400)
             return JsonResponse({"message": f"{created} branch(es) created"}, status=201)
         except Exception as e:
             return self.handle_exception(e)
 
     def put(self, request, id: int) -> JsonResponse:
+        """Update the branch, and adjust which Office maps to it
+        (Sector -> Branch). Office is required; previous_office_id is only
+        touched if it still points at this branch, so it can't clobber a
+        mapping changed elsewhere in the meantime; a picked office_id always
+        takes over that office's mapping, matching how one office can only
+        map to one branch."""
+        from inventory.models import Mapping
+
         try:
             branch = Branch.objects.get(id=id)
             if branch.is_locked:
@@ -360,11 +427,39 @@ class BranchAPI(BaseAPIView):
             region = Region.objects.filter(id=data.get("region")).first()
             if not region:
                 return JsonResponse({"error": "Select a valid region."}, status=400)
+
+            new_office_id = data.get("office_id") or None
+            previous_office_id = data.get("previous_office_id") or None
+            if not new_office_id:
+                return JsonResponse({"error": "Office is required."}, status=400)
+            office = Warehouse.objects.filter(id=new_office_id).first()
+            if not office:
+                return JsonResponse({"error": "Office not found."}, status=404)
+
+            existing_mapping = (
+                Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, from_id=new_office_id)
+                .exclude(to_id=branch.id)
+                .first()
+            )
+            if existing_mapping:
+                return JsonResponse(
+                    {"error": f"{office.name} is already mapped to another branch."}, status=400
+                )
+
             with transaction.atomic():
                 branch.region = region
                 branch.branch_name = data["branch_name"]
                 branch.prefix = data["prefix"]
                 branch.save()
+
+                if previous_office_id and previous_office_id != new_office_id:
+                    Mapping.objects.filter(
+                        type=Mapping.TYPE_SECTOR_BRANCH, from_id=previous_office_id, to_id=branch.id,
+                    ).delete()
+                Mapping.objects.update_or_create(
+                    type=Mapping.TYPE_SECTOR_BRANCH, from_id=new_office_id,
+                    defaults={"to_id": branch.id},
+                )
                 cache.delete("branch_list")
             return JsonResponse({"message": "Branch updated"})
         except Exception as e:

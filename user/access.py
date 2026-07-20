@@ -166,7 +166,9 @@ MODULE_REGISTRY = [
                         "bank_cash_master_list",
                     )),
                     ("cost_center", "Cost Center", (
-                        "cost_center_master_list",
+                        "cost_center_master_list", "cost_center_tree", "cost_center_children",
+                        "cost_center_parent", "cost_center_toggle_lock", "cost_center_approve",
+                        "cost_center_export_excel",
                     )),
                     ("cost_center_mapping", "Cost Center Mapping", (
                         "cost_center_mapping_data",

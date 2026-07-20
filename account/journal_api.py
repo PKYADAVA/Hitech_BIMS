@@ -53,11 +53,12 @@ def _serialize_voucher(voucher, with_lines=False):
                 "account_code": line.account.code,
                 "account_name": line.account.description,
                 "cost_center": line.cost_center_id,
+                "cost_center_name": f"{line.cost_center.code} - {line.cost_center.name}" if line.cost_center_id else None,
                 "debit": str(line.debit),
                 "credit": str(line.credit),
                 "narration": line.narration,
             }
-            for line in voucher.lines.select_related("account").order_by("line_no")
+            for line in voucher.lines.select_related("account", "cost_center").order_by("line_no")
         ]
     return data
 
@@ -217,6 +218,8 @@ class AccountLedgerAPI(View):
                     "voucher_no": row["voucher_no"],
                     "voucher_type": row["voucher_type"],
                     "narration": row["narration"],
+                    "cost_center": row["cost_center"],
+                    "cost_center_code": row["cost_center_code"],
                     "debit": str(row["debit"]),
                     "credit": str(row["credit"]),
                     "balance": str(abs(row["balance"])),

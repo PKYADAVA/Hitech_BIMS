@@ -622,6 +622,43 @@ class NarrationSettings(models.Model):
         return obj
 
 
+class AccountingControlSettings(models.Model):
+    """Single record of company-wide accounting posting controls
+    (Account > Master > Cost Center, Phase 2: Accounting Controls).
+
+    Only the Accounting posting path (Journal Voucher lines) is wired to
+    this today — Inventory/Payroll/Production equivalents wait until those
+    apps have their own cost_center field to enforce against.
+    """
+    require_cost_center = models.BooleanField(
+        default=False,
+        help_text=_("Every voucher line must carry a cost center — falls back to the Default Cost "
+                    "Centre (see CostCenter.is_default) if a line doesn't specify one, and is rejected "
+                    "at posting if neither is present"),
+    )
+    modified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Accounting Control Settings")
+        verbose_name_plural = _("Accounting Control Settings")
+
+    def __str__(self):
+        return "Accounting Control Settings"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.pk is None and not AccountingControlSettings.objects.exists():
+            self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class CoATemplate(models.Model):
     """Master COA blueprint per industry/country, copied per company at setup."""
     INDUSTRY_CHOICES = [
@@ -774,12 +811,18 @@ class CostCenter(models.Model):
         'DEPARTMENT': 'DEPT', 'WAREHOUSE': 'WH', 'FARM': 'FARM',
         'PROJECT': 'PRJ', 'BRANCH_OFFICE': 'BRN', 'VEHICLE': 'VEH', 'PRODUCTION_UNIT': 'PU',
     }
+    APPROVAL_CHOICES = [
+        ('Draft', _('Draft')),
+        ('Pending', _('Pending Approval')),
+        ('Approved', _('Approved')),
+        ('Rejected', _('Rejected')),
+    ]
     company = models.ForeignKey('CompanyProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='cost_centers')
     parent = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='children')
     branch = models.OneToOneField(
         'broiler.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='cost_center',
-        help_text=_("Broiler Branch this cost center represents — auto-created and kept in sync "
-                    "with the branch's name/active status; see account.signals.branch_cost_center")
+        help_text=_("Broiler Branch this cost center represents — auto-created the first time the "
+                    "branch is saved; see account.signals.branch_cost_center")
     )
     code = models.CharField(max_length=20, editable=False, blank=True,
                             help_text=_("Auto-generated code, e.g. DEPT-0001 / VEH-0001"))
@@ -788,8 +831,40 @@ class CostCenter(models.Model):
         'inventory.Sector', on_delete=models.PROTECT, related_name='cost_centers',
         help_text=_("What this cost center represents — shared with Inventory > Sector")
     )
+    level = models.PositiveIntegerField(
+        default=0, editable=False,
+        help_text=_("Depth in the parent/child hierarchy — 0 for a top-level cost center")
+    )
+    description = models.TextField(blank=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    is_locked = models.BooleanField(default=False, help_text=_("Locked records can't be edited or deleted"))
+    allow_manual_selection = models.BooleanField(
+        default=True,
+        help_text=_("Whether users can pick this cost center directly when entering a voucher line"),
+    )
+    allow_children_only = models.BooleanField(
+        default=False,
+        help_text=_("Grouping node — only its child cost centers can be selected on a transaction, not this one itself"),
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text=_("Fallback cost center auto-applied to a voucher line when Accounting Controls "
+                    "requires one and the line didn't specify one — only one per company"),
+    )
+    approval_status = models.CharField(max_length=10, choices=APPROVAL_CHOICES, default='Draft')
+    approval_remarks = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cost_centers_created', editable=False,
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cost_centers_updated', editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -812,10 +887,33 @@ class CostCenter(models.Model):
                 serials.append(int(match.group(1)))
         return f"{prefix}{max(serials, default=0) + 1:04d}"
 
+    def clean(self):
+        if self.parent_id:
+            ancestor = self.parent
+            seen = {self.pk} if self.pk else set()
+            while ancestor is not None:
+                if ancestor.pk in seen:
+                    raise ValidationError({'parent': _("This would create a circular hierarchy.")})
+                seen.add(ancestor.pk)
+                ancestor = ancestor.parent
+        if self.is_default and self.allow_children_only:
+            raise ValidationError({
+                'is_default': _("A grouping cost centre (children-only) can't be the Default — "
+                                "pick a leaf cost centre instead."),
+            })
+
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
             self.code = self.next_code(self.company, self.kind)
+        new_level = 0 if not self.parent_id else (self.parent.level + 1)
+        level_changed = not self._state.adding and new_level != self.level
+        self.level = new_level
         super().save(*args, **kwargs)
+        if level_changed:
+            for child in self.children.all():
+                child.save()
+        if self.is_default:
+            CostCenter.objects.filter(company=self.company, is_default=True).exclude(pk=self.pk).update(is_default=False)
 
 
 class Voucher(models.Model):

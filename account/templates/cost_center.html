@@ -12,99 +12,203 @@
 <div class="page-header">
     <div class="page-header-main">
       <div class="page-header-title">Cost Center</div>
-      <div class="page-header-subtitle">Tag journal voucher lines by department, farm, vehicle, etc. for cost reporting</div>
-    </div>
-    <div class="page-header-right">
-      {% if page_perms.add %}<button class="btn btn-primary" id="add-cc-btn"
-          data-bs-toggle="modal" data-bs-target="#costCenterFormModal">
-      <i class="fas fa-plus"></i> Add New
-      </button>{% endif %}
+      <div class="page-header-subtitle">Unlimited parent/child hierarchy — tag journal voucher lines to report by responsibility area</div>
     </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-sitemap me-2"></i>Cost Center List</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover table-bordered mb-0" id="cc-table">
-                        <thead>
-                            <tr>
-                                <th>Code</th>
-                                <th>Name</th>
-                                <th>Kind</th>
-                                <th>Linked Branch</th>
-                                <th>Parent</th>
-                                <th>Active</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cc-table-body">
-                            <!-- Dynamic content will be added via AJAX -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+<!-- Toolbar -->
+<div class="card mb-2">
+  <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+    {% if page_perms.add %}<button class="btn btn-primary btn-sm" id="cc-new-btn" title="New (Ctrl+N)"><i class="fas fa-plus"></i> New</button>{% endif %}
+    {% if page_perms.edit %}<button class="btn btn-success btn-sm" id="cc-save-btn" title="Save (Ctrl+S)"><i class="fas fa-save"></i> Save</button>{% endif %}
+    {% if page_perms.delete %}<button class="btn btn-danger btn-sm" id="cc-delete-btn" disabled title="Delete"><i class="fas fa-trash"></i> Delete</button>{% endif %}
+    <button class="btn btn-outline-secondary btn-sm" id="cc-refresh-btn" title="Refresh"><i class="fas fa-rotate"></i> Refresh</button>
+    <button class="btn btn-outline-secondary btn-sm" id="cc-print-btn" disabled title="Print"><i class="fas fa-print"></i> Print</button>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'cost_center_export_excel' %}" title="Export Excel"><i class="fas fa-file-excel"></i> Export Excel</a>
+    <div class="ms-auto" style="min-width:220px">
+      <input type="search" class="form-control form-control-sm" id="cc-search" placeholder="Search (Ctrl+F)... code, name, kind">
     </div>
+  </div>
 </div>
 
-<!-- Modal: Add/Edit Cost Center -->
-<div class="modal fade" id="costCenterFormModal" tabindex="-1" aria-labelledby="costCenterFormModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="costCenterFormModalLabel">Add Cost Center</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form id="cc-form">
-                    {% csrf_token %}
-                    <input type="hidden" id="cc-id" />
-                    <div class="mb-3">
-                        <label for="cc-code" class="form-label">Code</label>
-                        <input type="text" id="cc-code" class="form-control bg-light" readonly placeholder="Auto-generated" />
-                    </div>
-                    <div class="mb-3 d-none" id="cc-branch-notice">
-                        <div class="alert alert-info py-2 mb-0">
-                            <i class="fas fa-link"></i> Auto-linked to Branch <strong id="cc-branch-name"></strong> —
-                            Name, Kind and Active follow the Branch and can't be edited here.
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="cc-name" class="form-label">Name <span class="text-danger">*</span></label>
-                        <input type="text" id="cc-name" class="form-control" placeholder="Enter name" required />
-                    </div>
-                    <div class="mb-3">
-                        <label for="cc-kind" class="form-label">Kind <span class="text-danger">*</span></label>
-                        <select id="cc-kind" class="form-select" required>
-                            {% for kind in kinds %}
-                            <option value="{{ kind.id }}" data-code="{{ kind.code }}">{{ kind.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Shared with Inventory &gt; Master &gt; Sector — add a new kind there if you don't see it here.</div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="cc-parent" class="form-label">Parent</label>
-                        <select id="cc-parent" class="form-select">
-                            <option value="">None (top level)</option>
-                        </select>
-                    </div>
-                    <div class="mb-3 form-check form-switch">
-                        <input type="checkbox" class="form-check-input" id="cc-is-active" checked style="height:28px;width:54px;" />
-                        <label class="form-check-label" for="cc-is-active">Active</label>
-                    </div>
-                    <div class="d-flex justify-content-end gap-2 mt-3">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" id="cc-submit-btn" class="btn btn-primary">Save</button>
-                    </div>
-                </form>
-            </div>
-        </div>
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb mb-0" id="cc-breadcrumb">
+    <li class="breadcrumb-item text-muted">Select a cost center from the tree</li>
+  </ol>
+</nav>
+
+<div class="row g-3">
+  <!-- Left: hierarchy tree -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header"><i class="fas fa-sitemap me-1"></i>Hierarchy</div>
+      <div class="card-body p-2" id="cc-tree-panel" style="max-height:65vh; overflow-y:auto;">
+        <div class="text-muted small p-2"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+      </div>
     </div>
+  </div>
+
+  <!-- Right: edit form -->
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header" id="cc-form-heading"><i class="fas fa-file-lines me-1"></i>New Cost Center</div>
+      <div class="card-body">
+        <form id="cc-form" onsubmit="return false;">
+          <input type="hidden" id="cc-id" />
+          <input type="hidden" id="cc-parent-id" />
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Company</label>
+              <input type="text" id="cc-company" class="form-control bg-light" readonly />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Branch</label>
+              <input type="text" id="cc-nearest-branch" class="form-control bg-light" readonly placeholder="Not under a Branch" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Code</label>
+              <input type="text" id="cc-code" class="form-control bg-light" readonly placeholder="Auto-generated" />
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Level</label>
+              <input type="text" id="cc-level" class="form-control bg-light" readonly />
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Parent</label>
+              <div class="input-group">
+                <input type="text" id="cc-parent-label" class="form-control bg-light" readonly placeholder="Top level" />
+                {% if page_perms.edit %}<button type="button" class="btn btn-outline-secondary" id="cc-change-parent-btn"><i class="fas fa-diagram-project"></i> Change</button>{% endif %}
+              </div>
+            </div>
+
+            <div class="col-md-8">
+              <label class="form-label">Name <span class="text-danger">*</span></label>
+              <input type="text" id="cc-name" class="form-control" placeholder="Enter cost center name" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Cost Centre Type <span class="text-danger">*</span></label>
+              <select id="cc-kind" class="form-select" required>
+                {% for kind in kinds %}
+                <option value="{{ kind.id }}" data-code="{{ kind.code }}">{{ kind.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12">
+              <div class="alert alert-info py-2 mb-0 d-none" id="cc-branch-notice">
+                <i class="fas fa-link"></i> Originally created from Branch <strong id="cc-branch-name"></strong> —
+                freely editable here; edits won't be overwritten by the Branch.
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Description</label>
+              <textarea id="cc-description" class="form-control" rows="2" placeholder="Optional notes"></textarea>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Effective From</label>
+              <input type="date" id="cc-effective-from" class="form-control" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Effective To</label>
+              <input type="date" id="cc-effective-to" class="form-control" />
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <div class="form-check form-switch">
+                <input type="checkbox" class="form-check-input" id="cc-is-active" checked style="height:28px;width:54px;" />
+                <label class="form-check-label" for="cc-is-active">Active</label>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="row g-3 align-items-center">
+            <div class="col-12"><span class="fw-semibold small text-muted text-uppercase">Accounting Controls</span></div>
+            <div class="col-md-4">
+              <div class="form-check form-switch">
+                <input type="checkbox" class="form-check-input" id="cc-allow-manual" checked />
+                <label class="form-check-label" for="cc-allow-manual">Allow Manual Selection</label>
+              </div>
+              <div class="form-text">Uncheck to stop users picking this directly on a voucher line.</div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check form-switch">
+                <input type="checkbox" class="form-check-input" id="cc-children-only" />
+                <label class="form-check-label" for="cc-children-only">Children Only (Grouping)</label>
+              </div>
+              <div class="form-text">A grouping node — only its child cost centres can be posted to.</div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check form-switch">
+                <input type="checkbox" class="form-check-input" id="cc-is-default" />
+                <label class="form-check-label" for="cc-is-default">Default Cost Centre</label>
+              </div>
+              <div class="form-text">Auto-applied when a voucher line requires one but doesn't pick one. One per company.</div>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="row g-3 align-items-center">
+            <div class="col-md-4">
+              <span class="fw-semibold me-2">Lock:</span>
+              <span id="cc-lock-badge" class="badge bg-secondary">Unlocked</span>
+              {% if page_perms.edit %}<button type="button" class="btn btn-outline-dark btn-sm ms-2" id="cc-lock-btn" disabled><i class="fas fa-lock"></i> Toggle</button>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label mb-0">Approval Status</label>
+              <select id="cc-approval-status" class="form-select form-select-sm">
+                <option value="Draft">Draft</option>
+                <option value="Pending">Pending Approval</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm" id="cc-approve-btn" disabled><i class="fas fa-check"></i> Update Approval</button>{% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label mb-0">Approval Remarks</label>
+              <input type="text" id="cc-approval-remarks" class="form-control form-control-sm" placeholder="Optional remarks" />
+            </div>
+          </div>
+
+          <hr>
+          <div class="small text-muted" id="cc-audit-info">Not yet saved.</div>
+
+          <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn btn-secondary btn-sm" id="cc-cancel-btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="cc-print-area" class="d-none"></div>
+
+<!-- Parent picker: searchable list of every cost center, excluding this node and its own descendants -->
+<div class="modal fade" id="ccParentPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Choose Parent Cost Center</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="search" class="form-control mb-2" id="cc-parent-picker-search" placeholder="Search by name or code...">
+        <div class="list-group" id="cc-parent-picker-list" style="max-height:320px; overflow-y:auto;"></div>
+        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="cc-parent-picker-clear">
+          <i class="fas fa-xmark"></i> Make top-level (no parent)
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 {% endblock %}
@@ -113,7 +217,10 @@
 $(document).ready(function () {
     const csrfToken = "{{ csrf_token }}";
     const BRANCH_KIND_CODE = "{{ branch_kind_code }}";
-    let currentRows = [];
+    const COMPANY_NAME = "{{ company_name|escapejs }}";
+    let treeData = [];
+    let flatById = {};
+    let selectedId = null;
 
     function escapeHtml(str) {
         if (str === null || str === undefined) return "";
@@ -122,157 +229,446 @@ $(document).ready(function () {
             .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    function populateParentOptions(excludeId) {
-        const select = $("#cc-parent");
-        select.html('<option value="">None (top level)</option>');
-        currentRows.forEach(function (row) {
-            if (excludeId && row.id === excludeId) return;
-            select.append(`<option value="${row.id}">${escapeHtml(row.code)} - ${escapeHtml(row.name)}</option>`);
+    // Keyed by Sector.code (stable) — falls back to a generic folder icon
+    // for any Cost Centre Type not listed here (e.g. a custom Sector).
+    const TYPE_ICONS = {
+        BRANCH_OFFICE: "🏢", HEAD_OFFICE: "🏢", DEPARTMENT: "💼",
+        FARM: "🐔", UNIT: "📦", SHED: "🏠",
+        FEED_STORE: "🌾", FEEDMILL: "🏭", MEDICINE_STORE: "💊",
+        HATCHERY: "🥚", WAREHOUSE: "📦", SALES: "💰",
+        ADMINISTRATION: "💼", MAINTENANCE: "🛠", TRANSPORT: "🚚",
+        HR: "👤", FINANCE: "💰", VEHICLE: "🚚", PROJECT: "📁",
+        PRODUCTION_UNIT: "📦", OTHER: "⚪",
+    };
+    function typeIcon(kindCode) {
+        return TYPE_ICONS[kindCode] || "📁";
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Tree                                                               */
+    /* ---------------------------------------------------------------- */
+    function flattenTree(nodes, parentId, out) {
+        nodes.forEach(function (node) {
+            out[node.id] = Object.assign({}, node, { parent_id: parentId, children: undefined });
+            flattenTree(node.children || [], node.id, out);
         });
     }
 
-    function loadList() {
-        $.ajax({
-            url: "{% url 'cost_center_master_list' %}",
-            type: "GET",
-            success: function (response) {
-                currentRows = response;
-                const table = $("#cc-table");
-                if ($.fn.DataTable.isDataTable(table)) {
-                    table.DataTable().clear().destroy();
-                }
-                const tbody = $("#cc-table-body").empty();
-                response.forEach(function (row) {
-                    const activeBadge = row.is_active
-                        ? '<span class="badge bg-success">Active</span>'
-                        : '<span class="badge bg-secondary">Inactive</span>';
-                    const linkedBranch = row.branch
-                        ? `<span class="badge bg-info text-dark"><i class="fas fa-link"></i> ${escapeHtml(row.branch_name)}</span>`
-                        : '<span class="text-muted">—</span>';
-                    tbody.append(`
-                        <tr>
-                            <td>${escapeHtml(row.code)}</td>
-                            <td>${escapeHtml(row.name)}</td>
-                            <td>${escapeHtml(row.kind_name)}</td>
-                            <td>${linkedBranch}</td>
-                            <td>${escapeHtml(row.parent_label) || '<span class="text-muted">—</span>'}</td>
-                            <td>${activeBadge}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-cc" data-id="${row.id}"><i class="fas fa-pen"></i></button>{% endif %}
-                                {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-cc" data-id="${row.id}" ${row.branch ? "disabled title=\"Auto-linked to a Branch\"" : ""}><i class="fas fa-trash"></i></button>{% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                    `);
-                });
-                table.DataTable({ destroy: true, responsive: true, paging: true, searching: true, info: true });
-            },
-            error: function () {
-                window.showToast('danger', "Error loading list. Please try again.");
+    function nodeHtml(node) {
+        const hasChildren = node.children && node.children.length > 0;
+        const statusIcon = !node.is_active ? '<i class="fas fa-circle-pause text-muted ms-1" title="Inactive"></i>' : '';
+        const lockIcon = node.is_locked ? '<i class="fas fa-lock text-warning ms-1" title="Locked"></i>' : '';
+        return `
+            <div class="cc-node" data-id="${node.id}">
+                <div class="d-flex align-items-center cc-node-row" style="cursor:pointer;padding:2px 4px;border-radius:4px;">
+                    <span class="cc-toggle" style="width:16px;display:inline-block;text-align:center;">
+                        ${hasChildren ? '<i class="fas fa-caret-right"></i>' : ''}
+                    </span>
+                    <span class="cc-label flex-grow-1" title="${escapeHtml(node.code)}">
+                        ${typeIcon(node.kind_code)} ${escapeHtml(node.name)}${statusIcon}${lockIcon}
+                    </span>
+                </div>
+                <div class="cc-children ms-3 d-none">
+                    ${hasChildren ? node.children.map(nodeHtml).join("") : ""}
+                </div>
+            </div>`;
+    }
+
+    function renderTree() {
+        const panel = $("#cc-tree-panel").empty();
+        if (!treeData.length) {
+            panel.append('<div class="text-muted small p-2">No cost centers yet — click New to add the first one.</div>');
+            return;
+        }
+        treeData.forEach(node => panel.append(nodeHtml(node)));
+        if (selectedId) {
+            panel.find(`.cc-node[data-id='${selectedId}'] > .cc-node-row`).addClass("bg-primary bg-opacity-25");
+        }
+    }
+
+    $(document).on("click", ".cc-toggle", function (e) {
+        e.stopPropagation();
+        const node = $(this).closest(".cc-node");
+        node.children(".cc-children").toggleClass("d-none");
+        const icon = $(this).find("i");
+        icon.toggleClass("fa-caret-right fa-caret-down");
+    });
+
+    $(document).on("click", ".cc-node-row", function () {
+        const id = Number($(this).closest(".cc-node").data("id"));
+        selectNode(id);
+    });
+
+    function buildBreadcrumb(id) {
+        const crumbs = [];
+        let current = flatById[id];
+        while (current) {
+            crumbs.unshift(current);
+            current = current.parent_id ? flatById[current.parent_id] : null;
+        }
+        const bc = $("#cc-breadcrumb").empty();
+        crumbs.forEach(function (node, i) {
+            const isLast = i === crumbs.length - 1;
+            bc.append(`<li class="breadcrumb-item ${isLast ? 'active' : ''}">${escapeHtml(node.name)}</li>`);
+        });
+    }
+
+    function selectNode(id) {
+        selectedId = id;
+        $("#cc-tree-panel .cc-node-row").removeClass("bg-primary bg-opacity-25");
+        $(`.cc-node[data-id='${id}'] > .cc-node-row`).addClass("bg-primary bg-opacity-25");
+        buildBreadcrumb(id);
+        loadIntoForm(id);
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Form                                                               */
+    /* ---------------------------------------------------------------- */
+    function restrictKindOptions(allowBranch) {
+        // "Branch Office" is reserved for the auto-link from Broiler > Branch —
+        // only ever selectable when displaying an already-linked record.
+        $(`#cc-kind option[data-code='${BRANCH_KIND_CODE}']`).toggle(!!allowBranch);
+    }
+
+    function resetForm(presetParentId) {
+        restrictKindOptions(false);
+        $("#cc-form")[0].reset();
+        $("#cc-id").val("");
+        $("#cc-code").val("");
+        $("#cc-level").val("");
+        $("#cc-is-active").prop("checked", true);
+        $("#cc-allow-manual").prop("checked", true);
+        $("#cc-children-only").prop("checked", false);
+        $("#cc-is-default").prop("checked", false);
+        $("#cc-branch-notice").addClass("d-none");
+        $("#cc-approval-status").val("Draft");
+        $("#cc-approval-remarks").val("");
+        $("#cc-lock-badge").text("Unlocked").removeClass("bg-danger").addClass("bg-secondary");
+        $("#cc-lock-btn, #cc-approve-btn, #cc-delete-btn, #cc-print-btn").prop("disabled", true);
+        $("#cc-audit-info").text("Not yet saved.");
+        $("#cc-company").val(COMPANY_NAME);
+
+        if (presetParentId && flatById[presetParentId]) {
+            const parent = flatById[presetParentId];
+            $("#cc-parent-id").val(presetParentId);
+            $("#cc-parent-label").val(`${parent.name} (${parent.code})`);
+            $("#cc-level").val(parent.level + 1);
+            $("#cc-nearest-branch").val(nearestBranchLabel(presetParentId));
+        } else {
+            $("#cc-parent-id").val("");
+            $("#cc-parent-label").val("");
+            $("#cc-level").val(0);
+            $("#cc-nearest-branch").val("");
+        }
+        $("#cc-form-heading").html('<i class="fas fa-file-lines me-1"></i>New Cost Center');
+    }
+
+    function nearestBranchLabel(id) {
+        let node = flatById[id];
+        const seen = new Set();
+        while (node && !seen.has(node.id)) {
+            if (node.kind_code === BRANCH_KIND_CODE) return node.name;
+            seen.add(node.id);
+            node = node.parent_id ? flatById[node.parent_id] : null;
+        }
+        return "";
+    }
+
+    function loadIntoForm(id) {
+        $.get(`/cost_center_master/${id}/`, function (row) {
+            $("#cc-id").val(row.id);
+            $("#cc-code").val(row.code);
+            $("#cc-level").val(row.level);
+            $("#cc-company").val(row.company_name || COMPANY_NAME);
+            $("#cc-nearest-branch").val(row.nearest_branch_name || "");
+            $("#cc-name").val(row.name);
+            restrictKindOptions(!!row.branch);
+            $("#cc-kind").val(row.kind);
+            $("#cc-parent-id").val(row.parent || "");
+            $("#cc-parent-label").val(row.parent ? row.parent_label : "");
+            $("#cc-description").val(row.description);
+            $("#cc-effective-from").val(row.effective_from || "");
+            $("#cc-effective-to").val(row.effective_to || "");
+            $("#cc-is-active").prop("checked", row.is_active);
+            $("#cc-allow-manual").prop("checked", row.allow_manual_selection);
+            $("#cc-children-only").prop("checked", row.allow_children_only);
+            $("#cc-is-default").prop("checked", row.is_default);
+            $("#cc-approval-status").val(row.approval_status);
+            $("#cc-approval-remarks").val(row.approval_remarks);
+
+            if (row.branch) {
+                $("#cc-branch-name").text(row.branch_name);
+                $("#cc-branch-notice").removeClass("d-none");
+            } else {
+                $("#cc-branch-notice").addClass("d-none");
+            }
+
+            const isLocked = row.is_locked;
+            $("#cc-lock-badge").text(isLocked ? "Locked" : "Unlocked")
+                .toggleClass("bg-danger", isLocked).toggleClass("bg-secondary", !isLocked);
+            $("#cc-lock-btn, #cc-approve-btn, #cc-delete-btn, #cc-print-btn").prop("disabled", false);
+
+            $("#cc-audit-info").html(
+                `Created by <strong>${escapeHtml(row.created_by || "—")}</strong> on ${escapeHtml(row.created_at)} &nbsp;|&nbsp; ` +
+                `Last updated by <strong>${escapeHtml(row.updated_by || "—")}</strong> on ${escapeHtml(row.updated_at)}`
+            );
+            $("#cc-form-heading").html(`<i class="fas fa-file-lines me-1"></i>Edit Cost Center — ${escapeHtml(row.code)}`);
+        }).fail(function () {
+            window.showToast("danger", "Failed to load cost center.");
+        });
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Toolbar actions                                                    */
+    /* ---------------------------------------------------------------- */
+    function loadTree(preserveSelection) {
+        $.getJSON("{% url 'cost_center_tree' %}", function (data) {
+            treeData = data.tree;
+            flatById = {};
+            flattenTree(treeData, null, flatById);
+            renderTree();
+            if (preserveSelection && selectedId && flatById[selectedId]) {
+                selectNode(selectedId);
             }
         });
     }
 
-    function restrictKindOptions(allowBranch) {
-        // The "Branch Office" kind is reserved for the auto-link from
-        // Broiler > Branch — only ever selectable when displaying an
-        // already-linked record.
-        $(`#cc-kind option[data-code='${BRANCH_KIND_CODE}']`).toggle(!!allowBranch);
+    $("#cc-new-btn").on("click", function () {
+        resetForm(selectedId);
+    });
+
+    $("#cc-cancel-btn").on("click", function () {
+        resetForm(null);
+        selectedId = null;
+        $("#cc-tree-panel .cc-node-row").removeClass("bg-primary bg-opacity-25");
+        $("#cc-breadcrumb").html('<li class="breadcrumb-item text-muted">Select a cost center from the tree</li>');
+    });
+
+    $("#cc-refresh-btn").on("click", function () { loadTree(true); });
+
+    /* ---------------------------------------------------------------- */
+    /* Parent picker — searchable, excludes this node + its descendants   */
+    /* ---------------------------------------------------------------- */
+    function isDescendantOf(candidateId, ancestorId) {
+        let node = flatById[candidateId];
+        const seen = new Set();
+        while (node && !seen.has(node.id)) {
+            if (node.id === ancestorId) return true;
+            seen.add(node.id);
+            node = node.parent_id ? flatById[node.parent_id] : null;
+        }
+        return false;
     }
 
-    function resetForm() {
-        $("#cc-form").trigger("reset");
-        $("#cc-id").val("");
-        $("#cc-code").val("");
-        $("#cc-branch-notice").addClass("d-none");
-        $("#cc-name, #cc-kind, #cc-is-active").prop("disabled", false);
-        restrictKindOptions(false);
-        populateParentOptions(null);
-        $("#costCenterFormModalLabel").text("Add Cost Center");
-        $("#cc-submit-btn").text("Save");
+    function renderParentPickerList(filterText) {
+        const currentId = Number($("#cc-id").val()) || null;
+        const q = (filterText || "").trim().toLowerCase();
+        const list = $("#cc-parent-picker-list").empty();
+        const candidates = Object.values(flatById)
+            .filter(node => node.id !== currentId && !(currentId && isDescendantOf(node.id, currentId)))
+            .filter(node => !q || `${node.code} ${node.name}`.toLowerCase().includes(q))
+            .sort((a, b) => a.code.localeCompare(b.code));
+        if (!candidates.length) {
+            list.append('<div class="text-muted small p-2">No matches.</div>');
+            return;
+        }
+        candidates.forEach(function (node) {
+            const indent = "&nbsp;&nbsp;".repeat(node.level);
+            list.append(
+                `<button type="button" class="list-group-item list-group-item-action cc-parent-pick" data-id="${node.id}">` +
+                `${indent}${typeIcon(node.kind_code)} ${escapeHtml(node.name)} <span class="text-muted small">(${escapeHtml(node.code)})</span></button>`
+            );
+        });
     }
 
-    $("#add-cc-btn").on("click", resetForm);
+    $("#cc-change-parent-btn").on("click", function () {
+        renderParentPickerList("");
+        $("#cc-parent-picker-search").val("");
+        new bootstrap.Modal(document.getElementById("ccParentPickerModal")).show();
+    });
 
-    $("#cc-form").on("submit", function (e) {
-        e.preventDefault();
+    $("#cc-parent-picker-search").on("input", function () { renderParentPickerList($(this).val()); });
+
+    $(document).on("click", ".cc-parent-pick", function () {
+        const id = Number($(this).data("id"));
+        const node = flatById[id];
+        $("#cc-parent-id").val(id);
+        $("#cc-parent-label").val(`${node.name} (${node.code})`);
+        $("#cc-level").val(node.level + 1);
+        $("#cc-nearest-branch").val(nearestBranchLabel(id));
+        bootstrap.Modal.getInstance(document.getElementById("ccParentPickerModal")).hide();
+    });
+
+    $("#cc-parent-picker-clear").on("click", function () {
+        $("#cc-parent-id").val("");
+        $("#cc-parent-label").val("");
+        $("#cc-level").val(0);
+        $("#cc-nearest-branch").val("");
+        bootstrap.Modal.getInstance(document.getElementById("ccParentPickerModal")).hide();
+    });
+
+    $("#cc-save-btn").on("click", function () {
         const id = $("#cc-id").val();
+        if (!$("#cc-name").val() || !$("#cc-kind").val()) {
+            window.showToast("warning", "Name and Kind are required.");
+            return;
+        }
         const payload = {
             name: $("#cc-name").val(),
             kind: $("#cc-kind").val(),
-            parent: $("#cc-parent").val() || null,
+            parent: $("#cc-parent-id").val() || null,
+            description: $("#cc-description").val(),
+            effective_from: $("#cc-effective-from").val() || null,
+            effective_to: $("#cc-effective-to").val() || null,
             is_active: $("#cc-is-active").is(":checked"),
+            allow_manual_selection: $("#cc-allow-manual").is(":checked"),
+            allow_children_only: $("#cc-children-only").is(":checked"),
+            is_default: $("#cc-is-default").is(":checked"),
         };
         $.ajax({
             url: id ? `/cost_center_master/${id}/` : "{% url 'cost_center_master_create' %}",
             type: id ? "PUT" : "POST",
             headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
             data: JSON.stringify(payload),
-            success: function () {
-                $("#costCenterFormModal").modal("hide");
-                resetForm();
-                loadList();
+            success: function (response) {
                 window.showToast("success", id ? "Updated successfully!" : "Added successfully!");
+                const newId = id || response.id;
+                loadTree(false);
+                setTimeout(function () { selectNode(Number(newId)); }, 150);
             },
             error: function (xhr) {
-                const serverError = xhr.responseJSON && xhr.responseJSON.error;
-                window.showToast('danger', serverError || "Error saving. Please check your input.");
+                window.showToast("danger", (xhr.responseJSON && xhr.responseJSON.error) || "Error saving.");
             }
         });
     });
 
-    $(document).on("click", ".edit-cc", function () {
-        const id = $(this).data("id");
-        $.ajax({
-            url: `/cost_center_master/${id}/`,
-            type: "GET",
-            success: function (row) {
-                $("#cc-id").val(row.id);
-                $("#cc-code").val(row.code);
-                $("#cc-name").val(row.name);
-                restrictKindOptions(!!row.branch);
-                $("#cc-kind").val(row.kind);
-                populateParentOptions(row.id);
-                $("#cc-parent").val(row.parent || "");
-                $("#cc-is-active").prop("checked", row.is_active);
-                if (row.branch) {
-                    $("#cc-branch-name").text(row.branch_name);
-                    $("#cc-branch-notice").removeClass("d-none");
-                    $("#cc-name, #cc-kind, #cc-is-active").prop("disabled", true);
-                } else {
-                    $("#cc-branch-notice").addClass("d-none");
-                    $("#cc-name, #cc-kind, #cc-is-active").prop("disabled", false);
-                }
-                $("#costCenterFormModalLabel").text("Edit Cost Center");
-                $("#cc-submit-btn").text("Update");
-                new bootstrap.Modal(document.getElementById("costCenterFormModal")).show();
-            },
-            error: function () {
-                window.showToast('danger', "Error loading details.");
-            }
-        });
-    });
-
-    $(document).on("click", ".delete-cc", async function () {
-        const id = $(this).data("id");
-        if (!(await window.bimsConfirm("Are you sure you want to delete this cost center?", { title: "Delete cost center", confirmText: "Delete" }))) return;
+    $("#cc-delete-btn").on("click", async function () {
+        const id = $("#cc-id").val();
+        if (!id) return;
+        if (!(await window.bimsConfirm("Delete this cost center? This cannot be undone.", { title: "Delete cost center", confirmText: "Delete" }))) return;
         $.ajax({
             url: `/cost_center_master/${id}/delete/`,
             type: "DELETE",
             headers: { "X-CSRFToken": csrfToken },
             success: function () {
-                window.showToast('success', "Deleted successfully!");
-                loadList();
+                window.showToast("success", "Deleted successfully!");
+                selectedId = null;
+                resetForm(null);
+                loadTree(false);
             },
             error: function (xhr) {
-                const serverError = xhr.responseJSON && xhr.responseJSON.error;
-                window.showToast('danger', serverError || "An error occurred while deleting.");
+                window.showToast("danger", (xhr.responseJSON && xhr.responseJSON.error) || "Error deleting.");
             }
         });
     });
 
-    loadList();
+    $("#cc-lock-btn").on("click", function () {
+        const id = $("#cc-id").val();
+        if (!id) return;
+        $.ajax({
+            url: `/cost_center_master/${id}/toggle-lock/`,
+            type: "POST",
+            headers: { "X-CSRFToken": csrfToken },
+            success: function () {
+                loadIntoForm(id);
+                loadTree(true);
+            },
+            error: function () { window.showToast("danger", "Failed to toggle lock."); }
+        });
+    });
+
+    $("#cc-approve-btn").on("click", function () {
+        const id = $("#cc-id").val();
+        if (!id) return;
+        $.ajax({
+            url: `/cost_center_master/${id}/approve/`,
+            type: "POST",
+            headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+            data: JSON.stringify({
+                approval_status: $("#cc-approval-status").val(),
+                approval_remarks: $("#cc-approval-remarks").val(),
+            }),
+            success: function () {
+                window.showToast("success", "Approval status updated.");
+                loadIntoForm(id);
+                loadTree(true);
+            },
+            error: function (xhr) { window.showToast("danger", (xhr.responseJSON && xhr.responseJSON.error) || "Failed to update approval."); }
+        });
+    });
+
+    $("#cc-print-btn").on("click", function () {
+        const win = window.open("", "_blank");
+        win.document.write(`
+            <html><head><title>Cost Center - ${escapeHtml($("#cc-code").val())}</title>
+            <style>body{font-family:sans-serif;padding:24px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #999;padding:6px 10px;text-align:left;}</style>
+            </head><body>
+            <h3>Cost Center: ${escapeHtml($("#cc-code").val())} - ${escapeHtml($("#cc-name").val())}</h3>
+            <table>
+              <tr><th>Level</th><td>${escapeHtml($("#cc-level").val())}</td></tr>
+              <tr><th>Parent</th><td>${escapeHtml($("#cc-parent-label").val()) || "Top level"}</td></tr>
+              <tr><th>Kind</th><td>${escapeHtml($("#cc-kind option:selected").text())}</td></tr>
+              <tr><th>Status</th><td>${$("#cc-is-active").is(":checked") ? "Active" : "Inactive"}</td></tr>
+              <tr><th>Approval Status</th><td>${escapeHtml($("#cc-approval-status").val())}</td></tr>
+              <tr><th>Description</th><td>${escapeHtml($("#cc-description").val())}</td></tr>
+              <tr><th>Effective From</th><td>${escapeHtml($("#cc-effective-from").val())}</td></tr>
+              <tr><th>Effective To</th><td>${escapeHtml($("#cc-effective-to").val())}</td></tr>
+            </table>
+            </body></html>`);
+        win.document.close();
+        win.print();
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Search — filters the tree, expands matches                        */
+    /* ---------------------------------------------------------------- */
+    $("#cc-search").on("input", function () {
+        const q = $(this).val().trim().toLowerCase();
+        $("#cc-tree-panel .cc-node").each(function () {
+            $(this).show();
+        });
+        if (!q) {
+            $("#cc-tree-panel .cc-children").addClass("d-none");
+            $("#cc-tree-panel .cc-toggle i").removeClass("fa-caret-down").addClass("fa-caret-right");
+            return;
+        }
+        $("#cc-tree-panel .cc-node").each(function () {
+            const id = Number($(this).data("id"));
+            const node = flatById[id];
+            if (!node) return;
+            const haystack = `${node.code} ${node.name} ${node.kind_name}`.toLowerCase();
+            const matches = haystack.includes(q);
+            $(this).toggle(matches || $(this).find(".cc-node:visible").length > 0);
+            if (matches) {
+                $(this).parents(".cc-node").each(function () {
+                    $(this).show().children(".cc-children").removeClass("d-none");
+                    $(this).children(".cc-node-row").find(".cc-toggle i").removeClass("fa-caret-right").addClass("fa-caret-down");
+                });
+            }
+        });
+    });
+
+    /* ---------------------------------------------------------------- */
+    /* Keyboard shortcuts                                                 */
+    /* ---------------------------------------------------------------- */
+    $(document).on("keydown", function (e) {
+        const inField = $(e.target).is("input, textarea, select");
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+            e.preventDefault();
+            $("#cc-new-btn").trigger("click");
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            $("#cc-save-btn").trigger("click");
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+            e.preventDefault();
+            $("#cc-search").trigger("focus");
+        } else if (e.key === "Delete" && !inField && selectedId) {
+            $("#cc-delete-btn").trigger("click");
+        }
+    });
+
+    resetForm(null);
+    loadTree(false);
 });
 </script>
 {% endblock %}

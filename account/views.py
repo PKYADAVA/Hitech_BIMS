@@ -8,6 +8,7 @@ from django.views import View
 from django.utils.decorators import method_decorator
 import json
 import openpyxl
+from django.http import HttpResponse
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -214,21 +215,53 @@ def _default_company():
 
 @login_required
 def cost_center(request):
+    company = _default_company()
     return render(request, "cost_center.html", {
         "kinds": Sector.objects.order_by("name"),
         "branch_kind_code": CostCenter.KIND_BRANCH,
-        "cost_centers": CostCenter.objects.order_by("code"),
+        "company_name": company.name if company else "",
     })
+
+
+def _nearest_branch_name(cc):
+    """Walk up from *cc* (including itself) to the nearest ancestor that's
+    actually linked to a real Branch — so even a Shed/Unit deep in the tree
+    can show which Branch it ultimately belongs to, without every node
+    needing its own redundant Branch field to keep in sync."""
+    node = cc
+    seen = set()
+    while node is not None and node.pk not in seen:
+        if node.branch_id:
+            return node.branch.branch_name
+        seen.add(node.pk)
+        node = node.parent
+    return ""
 
 
 def _cost_center_dict(cc):
     return {
         "id": cc.id, "code": cc.code, "name": cc.name,
         "kind": cc.kind_id, "kind_name": cc.kind.name, "kind_code": cc.kind.code,
-        "parent": cc.parent_id, "parent_label": str(cc.parent) if cc.parent_id else "",
+        "parent": cc.parent_id, "parent_label": f"{cc.parent.name} ({cc.parent.code})" if cc.parent_id else "",
+        "level": cc.level,
+        "description": cc.description,
+        "effective_from": cc.effective_from.isoformat() if cc.effective_from else None,
+        "effective_to": cc.effective_to.isoformat() if cc.effective_to else None,
         "is_active": cc.is_active,
+        "is_locked": cc.is_locked,
+        "allow_manual_selection": cc.allow_manual_selection,
+        "allow_children_only": cc.allow_children_only,
+        "is_default": cc.is_default,
+        "approval_status": cc.approval_status,
+        "approval_remarks": cc.approval_remarks,
         "branch": cc.branch_id,
         "branch_name": cc.branch.branch_name if cc.branch_id else "",
+        "nearest_branch_name": _nearest_branch_name(cc),
+        "company_name": cc.company.name if cc.company_id else "",
+        "created_by": cc.created_by.get_username() if cc.created_by_id else "",
+        "created_at": cc.created_at.strftime("%d-%b-%Y %H:%M"),
+        "updated_by": cc.updated_by.get_username() if cc.updated_by_id else "",
+        "updated_at": cc.updated_at.strftime("%d-%b-%Y %H:%M"),
     }
 
 
@@ -237,10 +270,12 @@ class CostCenterAPI(View):
     def get(self, request, id=None):
         if id:
             try:
-                return JsonResponse(_cost_center_dict(CostCenter.objects.select_related("parent", "branch", "kind").get(id=id)))
+                return JsonResponse(_cost_center_dict(
+                    CostCenter.objects.select_related("parent", "branch", "kind", "created_by", "updated_by").get(id=id)
+                ))
             except CostCenter.DoesNotExist:
                 raise Http404("Cost center not found")
-        rows = CostCenter.objects.select_related("parent", "branch", "kind").order_by("code")
+        rows = CostCenter.objects.select_related("parent", "branch", "kind", "created_by", "updated_by").order_by("code")
         return JsonResponse([_cost_center_dict(r) for r in rows], safe=False)
 
     def post(self, request):
@@ -259,16 +294,29 @@ class CostCenterAPI(View):
                 {"error": "Branch cost centers are created automatically from Broiler > Master > Branch — add the Branch there instead."},
                 status=400,
             )
+        parent_id = data.get("parent") or None
+        if parent_id and CostCenter.objects.filter(id=parent_id, is_locked=True).exists():
+            return JsonResponse({"error": "The selected parent cost center is locked."}, status=400)
 
         try:
-            cc = CostCenter.objects.create(
+            cc = CostCenter(
                 company=_default_company(), name=data["name"], kind=kind,
-                parent_id=data.get("parent") or None,
+                parent_id=parent_id,
+                description=data.get("description", ""),
+                effective_from=data.get("effective_from") or None,
+                effective_to=data.get("effective_to") or None,
                 is_active=bool(data.get("is_active", True)),
+                allow_manual_selection=bool(data.get("allow_manual_selection", True)),
+                allow_children_only=bool(data.get("allow_children_only", False)),
+                is_default=bool(data.get("is_default", False)),
+                created_by=request.user, updated_by=request.user,
             )
+            cc.full_clean(exclude=["code"])
+            cc.save()
             return JsonResponse({"message": "Saved", "id": cc.id, "code": cc.code}, status=201)
         except (KeyError, ValidationError) as e:
-            return JsonResponse({"error": str(e)}, status=400)
+            message = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            return JsonResponse({"error": message}, status=400)
         except IntegrityError:
             return JsonResponse({"error": "A cost center with this code may already exist."}, status=400)
 
@@ -277,6 +325,8 @@ class CostCenterAPI(View):
             cc = CostCenter.objects.select_related("kind").get(id=id)
         except CostCenter.DoesNotExist:
             raise Http404("Cost center not found")
+        if cc.is_locked:
+            return JsonResponse({"error": "This cost center is locked."}, status=400)
 
         try:
             data = json.loads(request.body)
@@ -286,10 +336,6 @@ class CostCenterAPI(View):
         kind = Sector.objects.filter(id=data.get("kind", cc.kind_id)).first()
         if not kind:
             return JsonResponse({"error": "Invalid kind"}, status=400)
-        if cc.branch_id and kind.code != CostCenter.KIND_BRANCH:
-            return JsonResponse(
-                {"error": "This cost center is auto-linked to a Branch and must stay Kind = Branch Office."}, status=400
-            )
         if not cc.branch_id and kind.code == CostCenter.KIND_BRANCH:
             return JsonResponse(
                 {"error": "Branch cost centers are created automatically from Broiler > Master > Branch — this one isn't linked to a Branch."},
@@ -298,13 +344,21 @@ class CostCenterAPI(View):
         parent_id = data.get("parent") or None
         if parent_id and int(parent_id) == cc.id:
             return JsonResponse({"error": "A cost center cannot be its own parent"}, status=400)
+        if parent_id and CostCenter.objects.filter(id=parent_id, is_locked=True).exists():
+            return JsonResponse({"error": "The selected parent cost center is locked."}, status=400)
 
         try:
-            # Name/active state are driven by the linked Branch, not editable here.
-            cc.name = cc.branch.branch_name if cc.branch_id else data.get("name", cc.name)
+            cc.name = data.get("name", cc.name)
             cc.kind = kind
             cc.parent_id = parent_id
-            cc.is_active = cc.branch.is_active if cc.branch_id else bool(data.get("is_active", cc.is_active))
+            cc.description = data.get("description", cc.description)
+            cc.effective_from = data.get("effective_from") or None
+            cc.effective_to = data.get("effective_to") or None
+            cc.is_active = bool(data.get("is_active", cc.is_active))
+            cc.allow_manual_selection = bool(data.get("allow_manual_selection", cc.allow_manual_selection))
+            cc.allow_children_only = bool(data.get("allow_children_only", cc.allow_children_only))
+            cc.is_default = bool(data.get("is_default", cc.is_default))
+            cc.updated_by = request.user
             cc.full_clean(exclude=["code"])
             cc.save()
             return JsonResponse({"message": "Updated"})
@@ -318,11 +372,8 @@ class CostCenterAPI(View):
             cc = CostCenter.objects.get(id=id)
         except CostCenter.DoesNotExist:
             raise Http404("Cost center not found")
-        if cc.branch_id:
-            return JsonResponse(
-                {"error": "This cost center is auto-linked to a Branch — delete/deactivate the Branch instead."},
-                status=400,
-            )
+        if cc.is_locked:
+            return JsonResponse({"error": "This cost center is locked."}, status=400)
         try:
             cc.delete()
         except ProtectedError as e:
@@ -332,6 +383,119 @@ class CostCenterAPI(View):
                 {"error": f"Cannot delete: this cost center is used in {names}."}, status=400
             )
         return JsonResponse({"message": "Deleted"})
+
+
+@login_required
+def cost_center_toggle_lock(request, id):
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        cc = CostCenter.objects.get(id=id)
+    except CostCenter.DoesNotExist:
+        return JsonResponse({"error": "Cost center not found."}, status=404)
+    cc.is_locked = not cc.is_locked
+    cc.save(update_fields=["is_locked"])
+    return JsonResponse({"message": "Cost center updated", "is_locked": cc.is_locked})
+
+
+@login_required
+def cost_center_approve(request, id):
+    """Set approval status (Approved/Rejected/Pending) with optional
+    remarks. Gated behind the same 'edit' permission as the rest of the
+    master — a distinct Approve permission would need extending the whole
+    Web-Access permission matrix, out of scope for this page alone."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        cc = CostCenter.objects.get(id=id)
+    except CostCenter.DoesNotExist:
+        return JsonResponse({"error": "Cost center not found."}, status=404)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    status = data.get("approval_status")
+    if status not in dict(CostCenter.APPROVAL_CHOICES):
+        return JsonResponse({"error": "Invalid approval status"}, status=400)
+    cc.approval_status = status
+    cc.approval_remarks = data.get("approval_remarks", cc.approval_remarks)
+    cc.updated_by = request.user
+    cc.save(update_fields=["approval_status", "approval_remarks", "updated_by", "updated_at"])
+    return JsonResponse({"message": "Approval status updated"})
+
+
+def _cost_center_tree_node(cc, children_by_parent):
+    return {
+        "id": cc.id, "code": cc.code, "name": cc.name, "level": cc.level,
+        "kind_name": cc.kind.name, "kind_code": cc.kind.code,
+        "is_active": cc.is_active, "is_locked": cc.is_locked,
+        "approval_status": cc.approval_status,
+        "children": [
+            _cost_center_tree_node(child, children_by_parent)
+            for child in children_by_parent.get(cc.id, [])
+        ],
+    }
+
+
+@login_required
+def cost_center_tree(request):
+    """Full hierarchy as nested JSON, for the tree panel."""
+    rows = list(CostCenter.objects.select_related("kind").order_by("code"))
+    children_by_parent = {}
+    for cc in rows:
+        children_by_parent.setdefault(cc.parent_id, []).append(cc)
+    roots = children_by_parent.get(None, [])
+    return JsonResponse({"tree": [_cost_center_tree_node(cc, children_by_parent) for cc in roots]})
+
+
+@login_required
+def cost_center_children(request, id):
+    """Direct children of one cost center (id=0 for top-level roots)."""
+    parent_id = id or None
+    rows = CostCenter.objects.select_related("kind").filter(parent_id=parent_id).order_by("code")
+    return JsonResponse([{
+        "id": r.id, "code": r.code, "name": r.name, "level": r.level,
+        "kind_name": r.kind.name, "is_active": r.is_active,
+    } for r in rows], safe=False)
+
+
+@login_required
+def cost_center_parent(request, id):
+    try:
+        cc = CostCenter.objects.select_related("parent__kind").get(id=id)
+    except CostCenter.DoesNotExist:
+        return JsonResponse({"error": "Cost center not found."}, status=404)
+    if not cc.parent_id:
+        return JsonResponse({})
+    return JsonResponse(_cost_center_dict(CostCenter.objects.select_related("kind", "branch", "created_by", "updated_by").get(id=cc.parent_id)))
+
+
+@login_required
+def cost_center_export_excel(request):
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Cost Centers"
+    headers = ["Code", "Name", "Kind", "Level", "Parent", "Branch", "Status", "Locked", "Approval Status", "Effective From", "Effective To"]
+    sheet.append(headers)
+    for cc in CostCenter.objects.select_related("kind", "parent", "branch").order_by("code"):
+        sheet.append([
+            cc.code, cc.name, cc.kind.name, cc.level,
+            cc.parent.code if cc.parent_id else "",
+            cc.branch.branch_name if cc.branch_id else "",
+            "Active" if cc.is_active else "Inactive",
+            "Yes" if cc.is_locked else "No",
+            cc.approval_status,
+            cc.effective_from.isoformat() if cc.effective_from else "",
+            cc.effective_to.isoformat() if cc.effective_to else "",
+        ])
+    for column_cells in sheet.columns:
+        lengths = [len(str(cell.value)) for cell in column_cells if cell.value is not None]
+        sheet.column_dimensions[column_cells[0].column_letter].width = max(10, (max(lengths) if lengths else 0) + 2)
+
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="cost_centers.xlsx"'
+    workbook.save(response)
+    return response
 
 
 # ---------------------------------------------------------------------------

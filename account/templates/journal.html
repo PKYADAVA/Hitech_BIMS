@@ -118,6 +118,7 @@
                   <th style="min-width:220px">From CoA <small class="fw-normal">(money out · credit)</small></th>
                   <th style="min-width:220px">To CoA <small class="fw-normal">(money in · debit)</small></th>
                   <th style="min-width:160px">Sector</th>
+                  <th style="min-width:180px">Cost Centre</th>
                   <th style="width:140px" class="text-end">Amount</th>
                   <th>Remarks</th>
                   <th style="width:84px"></th>
@@ -126,7 +127,7 @@
               <tbody id="simple-rows-body"></tbody>
               <tfoot>
                 <tr class="fw-bold">
-                  <td colspan="3" class="text-end">Total Vouchers: <span id="simple-count">1</span> &nbsp;·&nbsp; Voucher Amount</td>
+                  <td colspan="4" class="text-end">Total Vouchers: <span id="simple-count">1</span> &nbsp;·&nbsp; Voucher Amount</td>
                   <td class="text-end" id="simple-total">0.00</td>
                   <td colspan="2" class="text-muted small fw-normal">Each row becomes one balanced voucher — no debit/credit to think about.</td>
                 </tr>
@@ -143,6 +144,7 @@
                 <tr>
                   <th style="min-width:280px">Account</th>
                   <th style="width:190px">Money In / Out</th>
+                  <th style="min-width:180px">Cost Centre</th>
                   <th style="width:150px" class="text-end">Amount</th>
                   <th>Line Narration</th>
                   <th style="width:84px"></th>
@@ -151,7 +153,7 @@
               <tbody id="voucher-lines-body"></tbody>
               <tfoot>
                 <tr class="fw-bold">
-                  <td colspan="2" class="text-end">Totals</td>
+                  <td colspan="3" class="text-end">Totals</td>
                   <td class="text-end text-nowrap">In (Dr) <span id="lines-total-debit">0.00</span> · Out (Cr) <span id="lines-total-credit">0.00</span></td>
                   <td colspan="2" id="lines-balance-hint" class="text-danger"></td>
                 </tr>
@@ -221,6 +223,8 @@ $(document).ready(function () {
     const csrfToken = "{{ csrf_token }}";
     let accounts = [];   // postable accounts for line selects
     let accountsById = {};   // full map (incl. group/anchor accounts) for the narration engine
+    let costCenters = [];   // manually-selectable cost centres for line selects
+    let costCentersById = {};   // full map, for the read-only voucher view
 
     // showToast() provided globally by main.js
     // escapeHtml() provided globally by main.js
@@ -476,6 +480,12 @@ $(document).ready(function () {
         ).join('');
     }
 
+    function costCenterOptions(selected) {
+        return '<option value="">Cost centre...</option>' + costCenters.map(cc =>
+            `<option value="${cc.id}" ${cc.id == selected ? 'selected' : ''}>${escapeHtml(cc.code)} - ${escapeHtml(cc.name)}</option>`
+        ).join('');
+    }
+
     const sectorOptions = `<option value="">Sector...</option>{% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}`;
     const rowButtons = (addClass, removeClass) =>
         `<div class="d-flex gap-1 justify-content-center">
@@ -497,6 +507,7 @@ $(document).ready(function () {
                   <option value="in" ${out ? '' : 'selected'}>Money In (Debit)</option>
                   <option value="out" ${out ? 'selected' : ''}>Money Out (Credit)</option>
                 </select></td>
+            <td><select class="form-select form-select-sm line-cost-center">${costCenterOptions(line.cost_center)}</select></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end line-amount" value="${amount || ''}"></td>
             <td><input type="text" class="form-control form-control-sm line-narration" value="${escapeHtml(line.narration || '')}"></td>
             <td class="text-center">${rowButtons('add-line-inline', 'remove-line')}</td>
@@ -542,6 +553,7 @@ $(document).ready(function () {
             <td><select class="form-select form-select-sm simple-from">${accountOptions()}</select></td>
             <td><select class="form-select form-select-sm simple-to">${accountOptions()}</select></td>
             <td><select class="form-select form-select-sm simple-sector">${sectorOptions}</select></td>
+            <td><select class="form-select form-select-sm simple-cost-center">${costCenterOptions()}</select></td>
             <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end simple-amount" placeholder="0.00"></td>
             <td><input type="text" class="form-control form-control-sm simple-remarks" placeholder="Remarks..."></td>
             <td class="text-center">${rowButtons('add-simple-inline', 'remove-simple-row')}</td>
@@ -549,10 +561,12 @@ $(document).ready(function () {
         refreshSimpleTotals();
     }
     $(document).on('click', '.add-simple-inline', function () {
-        // New row starts with the same sector - batches are usually one branch.
+        // New row starts with the same sector/cost centre - batches are usually one branch.
         const sector = $(this).closest('tr').find('.simple-sector').val();
+        const costCenter = $(this).closest('tr').find('.simple-cost-center').val();
         addSimpleRow();
         if (sector) $('#simple-rows-body tr:last .simple-sector').val(sector).trigger('change');
+        if (costCenter) $('#simple-rows-body tr:last .simple-cost-center').val(costCenter);
     });
     $(document).on('click', '.remove-simple-row', function () {
         if ($('#simple-rows-body tr').length > 1) $(this).closest('tr').remove();
@@ -598,13 +612,14 @@ $(document).ready(function () {
             const from = $(this).find('.simple-from').val();
             const to = $(this).find('.simple-to').val();
             const sector = $(this).find('.simple-sector').val();
+            const costCenter = $(this).find('.simple-cost-center').val();
             const amount = parseFloat($(this).find('.simple-amount').val()) || 0;
             const remarks = $(this).find('.simple-remarks').val();
             if (!from && !to && !amount) return; // blank row, skip
             if (!from || !to) { error = `Row ${index + 1}: choose both From and To accounts.`; return false; }
             if (from === to) { error = `Row ${index + 1}: From and To cannot be the same account.`; return false; }
             if (!amount) { error = `Row ${index + 1}: enter an amount.`; return false; }
-            rows.push({ from, to, sector, amount: amount.toFixed(2), remarks });
+            rows.push({ from, to, sector, costCenter, amount: amount.toFixed(2), remarks });
         });
         return { rows, error };
     }
@@ -635,8 +650,8 @@ $(document).ready(function () {
                 narration_source: row.remarks ? 'MANUAL' : base.narration_source,
                 sector: row.sector || null,
                 lines: [
-                    { account: row.to, debit: row.amount, credit: 0, narration: row.remarks },
-                    { account: row.from, debit: 0, credit: row.amount, narration: row.remarks },
+                    { account: row.to, debit: row.amount, credit: 0, narration: row.remarks, cost_center: row.costCenter || null },
+                    { account: row.from, debit: 0, credit: row.amount, narration: row.remarks, cost_center: row.costCenter || null },
                 ],
             }),
         }).then(() => { saved++; }, (xhr) => { failed++; showToast('danger', xhr.responseJSON?.error || 'Save failed.'); }));
@@ -661,6 +676,7 @@ $(document).ready(function () {
                     debit: out ? 0 : amount.toFixed(2),
                     credit: out ? amount.toFixed(2) : 0,
                     narration: $(this).find('.line-narration').val(),
+                    cost_center: $(this).find('.line-cost-center').val() || null,
                 });
             }
         });
@@ -677,8 +693,8 @@ $(document).ready(function () {
     }
 
     function openVoucherForm(voucher, revise) {
-        // Wait for the account list so the line dropdowns are never empty.
-        accountsReady.always(() => reallyOpenVoucherForm(voucher, revise));
+        // Wait for the account and cost centre lists so the line dropdowns are never empty.
+        $.when(accountsReady, costCentersReady).always(() => reallyOpenVoucherForm(voucher, revise));
     }
     function reallyOpenVoucherForm(voucher, revise) {
         $('#voucher-id').val(voucher && !revise ? voucher.id : '');
@@ -789,6 +805,7 @@ $(document).ready(function () {
             $('#voucher-view-title').html(`${escapeHtml(v.voucher_no)} ${statusBadge(v.status)}`);
             const lines = v.lines.map(l => `
                 <tr><td>${escapeHtml(l.account_code)} - ${escapeHtml(l.account_name)}</td>
+                    <td>${escapeHtml(l.cost_center_name || '')}</td>
                     <td class="text-end">${l.debit != '0.00' ? l.debit : ''}</td>
                     <td class="text-end">${l.credit != '0.00' ? l.credit : ''}</td>
                     <td>${escapeHtml(l.narration)}</td></tr>`).join('');
@@ -802,9 +819,9 @@ $(document).ready(function () {
                 </div>
                 ${v.narration ? `<p>${escapeHtml(v.narration)}${narrationSourceBadge(v)}</p>` : ''}
                 <table class="table table-sm table-bordered">
-                  <thead><tr><th>Account</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Narration</th></tr></thead>
+                  <thead><tr><th>Account</th><th>Cost Centre</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Narration</th></tr></thead>
                   <tbody>${lines}</tbody>
-                  <tfoot><tr class="fw-bold"><td class="text-end">Total</td>
+                  <tfoot><tr class="fw-bold"><td class="text-end" colspan="2">Total</td>
                     <td class="text-end">${v.total_debit}</td><td class="text-end">${v.total_credit}</td><td></td></tr></tfoot>
                 </table>`);
             const actions = [];
@@ -886,6 +903,13 @@ $(document).ready(function () {
         // only offer postable, active leaves.
         response.results.forEach(a => { accountsById[a.id] = a; });
         accounts = response.results.filter(a => a.status === 'Active' && a.is_postable);
+    });
+    const costCentersReady = $.get("{% url 'cost_center_master_list' %}", function (response) {
+        response.forEach(cc => { costCentersById[cc.id] = cc; });
+        // Grouping nodes and ones marked "no manual selection" mirror the same
+        // rules account.services.journal enforces server-side — no point
+        // offering a pick here that would just get rejected on save.
+        costCenters = response.filter(cc => cc.is_active && cc.allow_manual_selection && !cc.allow_children_only);
     });
     loadVouchers();
 });

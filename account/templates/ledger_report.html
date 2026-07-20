@@ -53,7 +53,7 @@
       <table class="table table-hover table-bordered mb-0">
         <thead>
           <tr>
-            <th>Date</th><th>Voucher</th><th>Type</th><th>Narration</th>
+            <th>Date</th><th>Voucher</th><th>Type</th><th>Narration</th><th>Cost Centre</th>
             <th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th>
           </tr>
         </thead>
@@ -98,10 +98,10 @@ $(document).ready(function () {
                 ($('#ledger-from').val() || $('#ledger-to').val()
                     ? ` <small class="text-muted">(${$('#ledger-from').val() || 'start'} → ${$('#ledger-to').val() || 'today'})</small>` : ''));
             const body = $('#ledger-body').empty();
-            body.append(`<tr class="table-light fw-bold"><td colspan="6">Opening Balance</td>
+            body.append(`<tr class="table-light fw-bold"><td colspan="7">Opening Balance</td>
                 <td class="text-end">${response.opening.amount} ${response.opening.side}</td></tr>`);
             if (!response.rows.length) {
-                body.append('<tr><td colspan="7" class="text-center text-muted p-3">No posted entries in this period.</td></tr>');
+                body.append('<tr><td colspan="8" class="text-center text-muted p-3">No posted entries in this period.</td></tr>');
             }
             response.rows.forEach(row => {
                 body.append(`<tr>
@@ -109,11 +109,12 @@ $(document).ready(function () {
                     <td>${escapeHtml(row.voucher_no)}</td>
                     <td>${escapeHtml(row.voucher_type)}</td>
                     <td>${escapeHtml(row.narration)}</td>
+                    <td>${escapeHtml(row.cost_center || '')}</td>
                     <td class="text-end">${row.debit != '0.00' ? row.debit : ''}</td>
                     <td class="text-end">${row.credit != '0.00' ? row.credit : ''}</td>
                     <td class="text-end">${row.balance} ${row.balance_side}</td></tr>`);
             });
-            body.append(`<tr class="table-light fw-bold"><td colspan="6">Closing Balance</td>
+            body.append(`<tr class="table-light fw-bold"><td colspan="7">Closing Balance</td>
                 <td class="text-end">${response.closing.amount} ${response.closing.side}</td></tr>`);
             $('#ledger-card').show();
             $('#ledger-print, #ledger-csv').prop('disabled', false);
@@ -141,10 +142,10 @@ $(document).ready(function () {
 
     $('#ledger-csv').on('click', function () {
         if (!currentRows) return;
-        const lines = [['Date', 'Voucher', 'Type', 'Narration', 'Debit', 'Credit', 'Balance', 'Side']];
-        lines.push(['', '', '', 'Opening Balance', '', '', currentRows.opening.amount, currentRows.opening.side]);
-        currentRows.rows.forEach(r => lines.push([r.date, r.voucher_no, r.voucher_type, r.narration, r.debit, r.credit, r.balance, r.balance_side]));
-        lines.push(['', '', '', 'Closing Balance', '', '', currentRows.closing.amount, currentRows.closing.side]);
+        const lines = [['Date', 'Voucher', 'Type', 'Narration', 'Cost Centre', 'Debit', 'Credit', 'Balance', 'Side']];
+        lines.push(['', '', '', 'Opening Balance', '', '', '', currentRows.opening.amount, currentRows.opening.side]);
+        currentRows.rows.forEach(r => lines.push([r.date, r.voucher_no, r.voucher_type, r.narration, r.cost_center, r.debit, r.credit, r.balance, r.balance_side]));
+        lines.push(['', '', '', 'Closing Balance', '', '', '', currentRows.closing.amount, currentRows.closing.side]);
         const csv = lines.map(row => row.map(cell => `"${(cell ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
         const link = document.createElement('a');
         link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
