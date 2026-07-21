@@ -77,11 +77,10 @@
               <th style="min-width:100px;">Rcv Qty</th>
               <th style="min-width:100px;">Free Qty</th>
               <th style="min-width:110px;">No. of Boxes</th>
-              <th style="min-width:110px;">Amount <span class="text-danger">*</span></th>
+              <th style="min-width:100px;">Rate <span class="text-danger">*</span></th>
               <th style="min-width:90px;">Disc %</th>
               <th style="min-width:90px;">Disc ₹</th>
               <th style="min-width:120px;">Total Amount</th>
-              <th style="min-width:90px;">Rate</th>
               <th style="width:40px;"></th>
             </tr>
           </thead>
@@ -216,11 +215,10 @@ $(document).ready(function () {
                 <td><input type="number" class="form-control rcv-qty" step="0.01" value="${data.rcv_qty || 0}"></td>
                 <td><input type="number" class="form-control free-qty" step="0.01" value="${data.free_qty || 0}"></td>
                 <td><input type="number" class="form-control no-boxes" step="0.01" value="${data.no_of_boxes || 0}"></td>
-                <td><input type="number" class="form-control amount" step="0.01" value="${data.amount || 0}"></td>
+                <td><input type="number" class="form-control rate" step="0.01" value="${data.rate || 0}"></td>
                 <td><input type="number" class="form-control disc-percent" step="0.01" value="${data.discount_percent || 0}"></td>
                 <td><input type="number" class="form-control disc-amount" step="0.01" value="${data.discount_amount || 0}"></td>
                 <td><input type="text" class="form-control total-amount" readonly value="0.00"></td>
-                <td><input type="text" class="form-control rate" readonly value="0.00"></td>
                 <td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm remove-row"><i class="fas fa-times"></i></button></td>
             </tr>
         `);
@@ -229,28 +227,31 @@ $(document).ready(function () {
     }
 
     function recalcRow(row) {
-        const amount = parseFloat(row.find(".amount").val()) || 0;
+        const rate = parseFloat(row.find(".rate").val()) || 0;
         const discPercent = parseFloat(row.find(".disc-percent").val()) || 0;
         const discAmount = parseFloat(row.find(".disc-amount").val()) || 0;
         const rcvQty = parseFloat(row.find(".rcv-qty").val()) || 0;
         const sentQty = parseFloat(row.find(".sent-qty").val()) || 0;
 
+        const qtyBasis = rcvQty || sentQty;
+        const amount = rate * qtyBasis;
         const discFromPercent = amount * discPercent / 100;
         const total = amount - discFromPercent - discAmount;
-        const qtyBasis = rcvQty || sentQty;
-        const rate = qtyBasis ? (total / qtyBasis) : 0;
 
         row.find(".total-amount").val(total.toFixed(2));
-        row.find(".rate").val(rate.toFixed(2));
         recalcFooter();
     }
 
     function recalcFooter() {
         let grossAmount = 0;
         let netQuantity = 0;
+        let netRateQty = 0;
         $("#item-rows-body tr").each(function () {
             grossAmount += parseFloat($(this).find(".total-amount").val()) || 0;
-            netQuantity += parseFloat($(this).find(".rcv-qty").val()) || 0;
+            const rcvQty = parseFloat($(this).find(".rcv-qty").val()) || 0;
+            const freeQty = parseFloat($(this).find(".free-qty").val()) || 0;
+            netQuantity += rcvQty + freeQty;
+            netRateQty += rcvQty;
         });
 
         const freightType = $("#freight_type").val();
@@ -262,7 +263,10 @@ $(document).ready(function () {
         const tcsAmount = tcsApplicable ? (freightIncludedAmount * tcsPercent / 100) : 0;
 
         const netAmount = freightIncludedAmount + tcsAmount;
-        const netRate = netQuantity ? (netAmount / netQuantity) : 0;
+        // Free Qty has no cost basis, so Net Rate is still spread over
+        // Received Qty only -- Net Quantity (shown above) includes Free Qty,
+        // but that's a display total, not this rate's denominator.
+        const netRate = netRateQty ? (netAmount / netRateQty) : 0;
 
         $("#tcs_amount_display").val(tcsAmount.toFixed(2));
         $("#supplier_amount_display").val(grossAmount.toFixed(2));
@@ -298,7 +302,7 @@ $(document).ready(function () {
                 rcv_qty: row.find(".rcv-qty").val() || 0,
                 free_qty: row.find(".free-qty").val() || 0,
                 no_of_boxes: row.find(".no-boxes").val() || 0,
-                amount: row.find(".amount").val() || 0,
+                rate: row.find(".rate").val() || 0,
                 discount_percent: row.find(".disc-percent").val() || 0,
                 discount_amount: row.find(".disc-amount").val() || 0,
             });

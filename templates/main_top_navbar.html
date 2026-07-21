@@ -441,6 +441,9 @@
               {% if 'item_category' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'item_category' %}">
                 <i class="fas fa-folder"></i>Item Category
               </a></li>{% endif %}
+              {% if 'unit_of_measurement' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'unit_of_measurement' %}">
+                <i class="fas fa-ruler"></i>Unit of Measurement
+              </a></li>{% endif %}
               {% if 'items' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'items' %}">
                 <i class="fas fa-box"></i>Items
               </a></li>{% endif %}

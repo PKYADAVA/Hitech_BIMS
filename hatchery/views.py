@@ -9,6 +9,7 @@ from django.views import View
 from django.http import Http404, HttpResponse, JsonResponse
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 import json
 import logging
 
@@ -23,7 +24,7 @@ from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
     DeliveryChallan, DeliveryChallanItem, TraySetting, TraySettingLine,
-    HatchEntry, HatchEntryVaccine, ChickSale, ChickSaleItem, ChangeRequest,
+    HatchEntry, HatchEntryHatcherOutput, HatchEntryVaccine, ChickSale, ChickSaleItem, ChangeRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -469,7 +470,7 @@ class EggPurchaseAPI(BaseAPIView):
                 rcv_qty=Decimal(str(row.get("rcv_qty") or 0)),
                 free_qty=Decimal(str(row.get("free_qty") or 0)),
                 no_of_boxes=Decimal(str(row.get("no_of_boxes") or 0)),
-                amount=Decimal(str(row.get("amount") or 0)),
+                rate=Decimal(str(row.get("rate") or 0)),
                 discount_percent=Decimal(str(row.get("discount_percent") or 0)),
                 discount_amount=Decimal(str(row.get("discount_amount") or 0)),
             )
@@ -1141,6 +1142,7 @@ def _tray_setting_to_dict(ts):
             "supplier_name": line.supplier.name if line.supplier else "",
             "setter": line.setter_id, "setter_no": line.setter.setter_no,
             "item": line.item_id,
+            "no_trays": line.no_trays, "tray_size": line.tray_size,
             "total_eggs": str(line.total_eggs), "broken": str(line.broken),
             "damaged": str(line.damaged), "eggs_set": str(line.eggs_set),
             "avg_weight": str(line.avg_weight), "expected_chicks": line.expected_chicks,
@@ -1227,6 +1229,8 @@ class TraySettingAPI(BaseAPIView):
                 supplier=Supplier.objects.filter(id=row.get("supplier") or 0).first(),
                 setter=get_object_or_404(Setter, id=row["setter"]),
                 item=Item.objects.filter(id=row.get("item") or 0).first(),
+                no_trays=int(float(row["no_trays"])) if row.get("no_trays") else None,
+                tray_size=int(float(row["tray_size"])) if row.get("tray_size") else None,
                 total_eggs=Decimal(str(row.get("total_eggs") or 0)),
                 broken=Decimal(str(row.get("broken") or 0)),
                 damaged=Decimal(str(row.get("damaged") or 0)),
@@ -1249,7 +1253,17 @@ class HatchEntryListTemplateView(View):
 class HatchEntryFormTemplateView(View):
     def get(self, request, id: Optional[int] = None, request_mode: bool = False):
         used = HatchEntry.objects.exclude(id=id or 0).values_list("tray_setting_id", flat=True)
-        tray_settings = TraySetting.objects.exclude(id__in=used).select_related("hatchery", "grading__purchase_invoice")
+        # "Current active settings" = not already converted to a Hatch Entry,
+        # and belonging to an active Hatchery -- except the one this entry
+        # already points to, kept selectable even if its Hatchery has since
+        # been deactivated so editing an older entry doesn't break.
+        current_ts_id = HatchEntry.objects.filter(id=id or 0).values_list("tray_setting_id", flat=True).first()
+        tray_settings = (
+            TraySetting.objects.exclude(id__in=used)
+            .filter(Q(hatchery__is_active=True) | Q(id=current_ts_id))
+            .select_related("hatchery", "grading__purchase_invoice")
+            .prefetch_related("lines__setter")
+        )
         return render(request, "hatch_entry_form.html", {
             "hatch_entry_id": id,
             "request_mode": request_mode,
@@ -1261,8 +1275,12 @@ class HatchEntryFormTemplateView(View):
                 "purchase_qty": str(ts.grading.purchase_invoice.net_quantity()),
                 "purchase_rate": str(ts.grading.purchase_invoice.net_rate()),
                 "purchase_amount": str(ts.grading.purchase_invoice.net_amount()),
+                "lines": [{
+                    "setter_no": line.setter.setter_no, "eggs_set": str(line.eggs_set),
+                } for line in ts.lines.all()],
             } for ts in tray_settings]),
             "items": Item.objects.all().order_by("item_code"),
+            "hatchers": Hatcher.objects.filter(is_active=True).select_related("hatchery").order_by("hatcher_no"),
             "next_transaction_no": HatchEntry.next_transaction_no() if id is None else None,
         })
 
@@ -1279,6 +1297,13 @@ def _hatch_entry_to_dict(he):
         "chicks_total": str(he.chicks_total), "chick_rate": str(he.chick_rate), "chicks_amount": str(he.chicks_amount),
         "net_rate": str(he.net_rate), "net_amount": str(he.net_amount),
         "remarks": he.remarks,
+        "hatcher_outputs": [{
+            "id": h.id, "hatcher": h.hatcher_id, "hatcher_no": h.hatcher.hatcher_no,
+            "infertile_qty": h.infertile_qty, "early_dead_qty": h.early_dead_qty,
+            "blasting_qty": h.blasting_qty, "transfer_qty": h.transfer_qty,
+            "dead_in_shell_qty": h.dead_in_shell_qty, "culls_malf_qty": h.culls_malf_qty,
+            "saleable_chicks": h.saleable_chicks,
+        } for h in he.hatcher_outputs.select_related("hatcher")],
         "vaccines": [{
             "id": v.id, "item": v.item_id, "item_label": f"{v.item.item_code} - {v.item.description}",
             "quantity": str(v.quantity), "rate": str(v.rate), "amount": str(v.amount),
@@ -1333,10 +1358,16 @@ class HatchEntryAPI(BaseAPIView):
         clash = HatchEntry.objects.filter(tray_setting=ts).exclude(id=hatch_entry_id or 0)
         if clash.exists():
             raise ValidationError("A hatch entry already exists for this setting number.")
+        hatcher_rows = [row for row in data.get("hatcher_outputs", []) if row.get("hatcher")]
+        # Saleable chicks is the source of truth for chicks_total — derived
+        # server-side from the candling/grading breakdown, not trusted from
+        # the client, mirroring how HatchSetting.total_saleable_chicks() rolls
+        # up HatchHatcherOutput in the older Hatch Register.
+        chicks_total = sum(int(float(row.get("saleable_chicks") or 0)) for row in hatcher_rows)
         values = {
             "tray_setting": ts,
             "hatch_date": data.get("hatch_date") or ts.hatch_date,
-            "chicks_total": Decimal(str(data.get("chicks_total") or 0)),
+            "chicks_total": Decimal(str(chicks_total)),
             "remarks": data.get("remarks") or "",
         }
         if hatch_entry_id:
@@ -1349,7 +1380,19 @@ class HatchEntryAPI(BaseAPIView):
         he.full_clean(exclude=["transaction_no"])
         he.save()
         if hatch_entry_id:
+            he.hatcher_outputs.all().delete()
             he.vaccines.all().delete()
+        for row in hatcher_rows:
+            HatchEntryHatcherOutput.objects.create(
+                hatch_entry=he, hatcher=get_object_or_404(Hatcher, id=row["hatcher"]),
+                infertile_qty=int(float(row.get("infertile_qty") or 0)),
+                early_dead_qty=int(float(row.get("early_dead_qty") or 0)),
+                blasting_qty=int(float(row.get("blasting_qty") or 0)),
+                transfer_qty=int(float(row.get("transfer_qty") or 0)),
+                dead_in_shell_qty=int(float(row.get("dead_in_shell_qty") or 0)),
+                culls_malf_qty=int(float(row.get("culls_malf_qty") or 0)),
+                saleable_chicks=int(float(row.get("saleable_chicks") or 0)),
+            )
         for row in data.get("vaccines", []):
             if not row.get("item"):
                 continue

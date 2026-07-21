@@ -18,6 +18,7 @@ urlpatterns = [
     path('warehouse-mapping/data/', views.warehouse_mapping_data, name='warehouse_mapping_data'),
     path('warehouse-mapping/save-branch/', views.warehouse_mapping_save_branch, name='warehouse_mapping_save_branch'),
     path('warehouse-mapping/save-hatchery/', views.warehouse_mapping_save_hatchery, name='warehouse_mapping_save_hatchery'),
+    path('warehouse-mapping/save-office-hatchery/', views.warehouse_mapping_save_office_hatchery, name='warehouse_mapping_save_office_hatchery'),
     path('linked-tree/', views.linked_tree, name='linked_tree'),
     path('linked-tree/data/', views.linked_tree_data, name='linked_tree_data'),
     path('items/', views.items, name='items'),

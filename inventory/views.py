@@ -539,6 +539,13 @@ def warehouse_mapping(request):
 # in inventory.models) because resolving broiler.Branch and
 # hatchery_master.Hatchery from inventory/models.py would risk a circular
 # import — those apps only ever reference inventory via lazy string FKs.
+#
+# Sector -> Branch and Hatchery -> Office are BOTH keyed one-row-per-Office
+# (from_model=Warehouse): many offices can point at the same Branch, and
+# separately many offices can point at the same Hatchery — an office maps to
+# exactly one Branch and one Hatchery, but a Branch/Hatchery can have several
+# offices. (Office -> Cost Center, registered separately in account/views.py,
+# follows the same shape.)
 def _mapping_types():
     return {
         Mapping.TYPE_SECTOR_BRANCH: {
@@ -546,8 +553,8 @@ def _mapping_types():
             "to_model": Branch, "to_label": "branch_name",
         },
         Mapping.TYPE_HATCHERY_OFFICE: {
-            "from_model": Hatchery, "from_label": "hatchery_name",
-            "to_model": Warehouse, "to_label": "name",
+            "from_model": Warehouse, "from_label": "name",
+            "to_model": Hatchery, "to_label": "hatchery_name",
         },
     }
 
@@ -573,7 +580,35 @@ def warehouse_mapping_data(request):
         return rows
 
     offices = _rows(Mapping.TYPE_SECTOR_BRANCH, "id", "name", "branch_id", "branch_name")
-    hatcheries = _rows(Mapping.TYPE_HATCHERY_OFFICE, "id", "hatchery_name", "warehouse_id", "warehouse_name")
+
+    # Hatchery rows are still shown one-per-hatchery (not one-per-office) on
+    # this page, since that's the more natural unit to browse/edit — each
+    # hatchery just now lists ALL its offices instead of a single one.
+    office_names = dict(Warehouse.objects.values_list("id", "name"))
+    hatchery_names = dict(Hatchery.objects.values_list("id", "hatchery_name"))
+    office_to_hatchery = dict(
+        Mapping.objects.filter(type=Mapping.TYPE_HATCHERY_OFFICE, to_id__isnull=False)
+        .values_list("from_id", "to_id")
+    )
+    # Each office row also carries its own Hatchery, so the Sector edit
+    # modal can set both Branch and Hatchery for that one office together.
+    for row in offices:
+        h_id = office_to_hatchery.get(row["id"])
+        row["hatchery_id"] = h_id
+        row["hatchery_name"] = hatchery_names.get(h_id, "") if h_id else ""
+
+    offices_by_hatchery = {}
+    for office_id, hatchery_id in office_to_hatchery.items():
+        offices_by_hatchery.setdefault(hatchery_id, []).append(office_id)
+    hatcheries = []
+    for h_id, h_name in Hatchery.objects.values_list("id", "hatchery_name"):
+        office_ids = offices_by_hatchery.get(h_id, [])
+        hatcheries.append({
+            "id": h_id, "hatchery_name": h_name,
+            "office_ids": office_ids,
+            "office_names": ", ".join(office_names.get(o, "") for o in office_ids),
+        })
+
     branches = list(Branch.objects.values("id", "branch_name"))
 
     # Bank/Cash -> Office(s) is a many-to-many on BankCashMaster (Account >
@@ -615,7 +650,10 @@ def linked_tree_data(request):
         Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__isnull=False)
         .values_list("from_id", "to_id")
     )
-    hatchery_to_office = dict(
+    # from_id=office, to_id=hatchery — one office belongs to one hatchery,
+    # but (unlike office_to_branch) several offices can share the same
+    # hatchery, so this is office -> hatchery, not the other way round.
+    office_to_hatchery = dict(
         Mapping.objects.filter(type=Mapping.TYPE_HATCHERY_OFFICE, to_id__isnull=False)
         .values_list("from_id", "to_id")
     )
@@ -630,13 +668,17 @@ def linked_tree_data(request):
     hatcheries = list(Hatchery.objects.all())
     bank_cash_records = list(BankCashMaster.objects.prefetch_related("sectors"))
 
+    hatchery_names = {h.id: h.hatchery_name for h in hatcheries}
     hatcheries_by_office = {}
-    unmapped_hatcheries = []
-    for h in hatcheries:
-        office_id = hatchery_to_office.get(h.id)
-        (hatcheries_by_office.setdefault(office_id, []) if office_id else unmapped_hatcheries).append(
-            {"id": h.id, "name": h.hatchery_name}
+    mapped_hatchery_ids = set()
+    for office_id, hatchery_id in office_to_hatchery.items():
+        hatcheries_by_office.setdefault(office_id, []).append(
+            {"id": hatchery_id, "name": hatchery_names.get(hatchery_id, "")}
         )
+        mapped_hatchery_ids.add(hatchery_id)
+    unmapped_hatcheries = [
+        {"id": h.id, "name": h.hatchery_name} for h in hatcheries if h.id not in mapped_hatchery_ids
+    ]
 
     bank_cash_by_office = {}
     all_office_bank_cash = []
@@ -695,6 +737,33 @@ def _save_mapping(mapping_type, from_id, to_id):
 
 
 @login_required
+def warehouse_mapping_save_office_hatchery(request):
+    """Set (or clear) which Hatchery ONE Office/Warehouse belongs to — the
+    office-centric counterpart to warehouse_mapping_save_hatchery's
+    hatchery-centric multi-select, writing the exact same Mapping rows, so
+    a warehouse's own Branch and Hatchery can both be set from its own row
+    without switching Type."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    office_id = data.get("warehouse")
+    hatchery_id = data.get("hatchery") or None
+    if not office_id:
+        return JsonResponse({"error": "Office is required"}, status=400)
+    if not Warehouse.objects.filter(id=office_id).exists():
+        return JsonResponse({"error": "Office not found"}, status=404)
+    if hatchery_id and not Hatchery.objects.filter(id=hatchery_id).exists():
+        return JsonResponse({"error": "Hatchery not found"}, status=404)
+
+    _save_mapping(Mapping.TYPE_HATCHERY_OFFICE, office_id, hatchery_id)
+    return JsonResponse({"message": "Mapping saved"})
+
+
+@login_required
 def warehouse_mapping_save_branch(request):
     """Sector Mapping: set which broiler Branch one Warehouse/Sector belongs
     to — e.g. Akbarpur Warehouse -> Akbarpur Branch. Many warehouses can
@@ -709,9 +778,9 @@ def warehouse_mapping_save_branch(request):
     office_id = data.get("warehouse")
     branch_id = data.get("branch") or None
     if not office_id:
-        return JsonResponse({"error": "Sector (warehouse) is required"}, status=400)
+        return JsonResponse({"error": "Office is required"}, status=400)
     if not Warehouse.objects.filter(id=office_id).exists():
-        return JsonResponse({"error": "Sector not found"}, status=404)
+        return JsonResponse({"error": "Office not found"}, status=404)
     if branch_id and not Branch.objects.filter(id=branch_id).exists():
         return JsonResponse({"error": "Branch not found"}, status=404)
 
@@ -721,7 +790,11 @@ def warehouse_mapping_save_branch(request):
 
 @login_required
 def warehouse_mapping_save_hatchery(request):
-    """Map one Hatchery to its Warehouse/Office."""
+    """Map one Hatchery to one or more Warehouses/Offices. Kept one-row-per-
+    office under the hood (Mapping.TYPE_HATCHERY_OFFICE, from_id=office),
+    so an office can only ever belong to one hatchery at a time — picking an
+    office already mapped elsewhere is rejected rather than silently
+    reassigned, same as Broiler > Branch's Office picker."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required."}, status=405)
     try:
@@ -730,15 +803,38 @@ def warehouse_mapping_save_hatchery(request):
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     hatchery_id = data.get("hatchery")
-    office_id = data.get("warehouse") or None
+    office_ids = data.get("warehouses") or []
     if not hatchery_id:
         return JsonResponse({"error": "Hatchery is required"}, status=400)
     if not Hatchery.objects.filter(id=hatchery_id).exists():
         return JsonResponse({"error": "Hatchery not found"}, status=404)
-    if office_id and not Warehouse.objects.filter(id=office_id).exists():
-        return JsonResponse({"error": "Warehouse not found"}, status=404)
 
-    _save_mapping(Mapping.TYPE_HATCHERY_OFFICE, hatchery_id, office_id)
+    try:
+        office_ids = [int(o) for o in office_ids]
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Invalid office selection"}, status=400)
+    valid_ids = set(Warehouse.objects.filter(id__in=office_ids).values_list("id", flat=True))
+    if len(valid_ids) != len(set(office_ids)):
+        return JsonResponse({"error": "One or more offices were not found"}, status=404)
+
+    conflicts = list(
+        Mapping.objects.filter(type=Mapping.TYPE_HATCHERY_OFFICE, from_id__in=office_ids)
+        .exclude(to_id=hatchery_id)
+        .values_list("from_id", flat=True)
+    )
+    if conflicts:
+        names = ", ".join(Warehouse.objects.filter(id__in=conflicts).values_list("name", flat=True))
+        return JsonResponse({"error": f"{names} already mapped to another hatchery"}, status=400)
+
+    with transaction.atomic():
+        Mapping.objects.filter(
+            type=Mapping.TYPE_HATCHERY_OFFICE, to_id=hatchery_id
+        ).exclude(from_id__in=office_ids).delete()
+        for office_id in office_ids:
+            Mapping.objects.update_or_create(
+                type=Mapping.TYPE_HATCHERY_OFFICE, from_id=office_id,
+                defaults={"to_id": hatchery_id},
+            )
     return JsonResponse({"message": "Mapping saved"})
 
 

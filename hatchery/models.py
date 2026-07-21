@@ -310,7 +310,10 @@ class EggPurchase(models.Model):
         return self.items.aggregate(total=models.Sum('total_amount'))['total'] or 0
 
     def net_quantity(self):
-        return self.items.aggregate(total=models.Sum('rcv_qty'))['total'] or 0
+        """Received + Free — the actual eggs that arrived, bonus stock included."""
+        return self.items.aggregate(
+            total=models.Sum(models.F('rcv_qty') + models.F('free_qty'))
+        )['total'] or 0
 
     def freight_included_amount(self):
         return self.gross_amount() + (self.freight_amount if self.freight_type == 'Include' else 0)
@@ -324,7 +327,10 @@ class EggPurchase(models.Model):
         return self.freight_included_amount() + self.tcs_amount()
 
     def net_rate(self):
-        qty = self.net_quantity()
+        # Free qty has no cost basis, so the per-unit rate is still spread
+        # over Received Qty only — net_quantity() (which does include Free
+        # Qty) is a display figure, not this rate's denominator.
+        qty = self.items.aggregate(total=models.Sum('rcv_qty'))['total'] or 0
         return round(self.net_amount() / qty, 2) if qty else 0
 
     def supplier_amount(self):
@@ -344,11 +350,11 @@ class EggPurchaseItem(models.Model):
     rcv_qty = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     free_qty = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     no_of_boxes = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    rate = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text=_("Rate per unit (Rcv Qty, or Sent Qty if none received) — Amount is derived from this"))
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False, validators=[MinValueValidator(0)])
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
-    rate = models.DecimalField(max_digits=10, decimal_places=2, default=0, editable=False)
 
     class Meta:
         verbose_name = _("Egg Purchase Item")
@@ -359,10 +365,10 @@ class EggPurchaseItem(models.Model):
         return f"{self.item} ({self.egg_purchase.transaction_no})"
 
     def save(self, *args, **kwargs):
+        qty_basis = self.rcv_qty or self.sent_qty
+        self.amount = round((self.rate or 0) * qty_basis, 2)
         discount_from_percent = (self.amount * self.discount_percent / 100) if self.discount_percent else 0
         self.total_amount = self.amount - discount_from_percent - (self.discount_amount or 0)
-        qty_basis = self.rcv_qty or self.sent_qty
-        self.rate = round(self.total_amount / qty_basis, 2) if qty_basis else 0
         super().save(*args, **kwargs)
 
 
@@ -622,8 +628,13 @@ class TraySettingLine(models.Model):
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True, related_name='tray_setting_lines')
     setter = models.ForeignKey('hatchery_master.Setter', on_delete=models.PROTECT, related_name='tray_setting_lines')
     item = models.ForeignKey(Item, on_delete=models.PROTECT, null=True, blank=True, related_name='tray_setting_lines')
+    no_trays = models.PositiveIntegerField(null=True, blank=True)
+    tray_size = models.PositiveIntegerField(null=True, blank=True)
     total_eggs = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    broken = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    broken = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text=_("Legacy field — broken/damaged eggs are tracked in Egg Grading, not re-entered per tray-set line"),
+    )
     damaged = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     eggs_set = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     avg_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text=_("Average egg weight"))
@@ -694,6 +705,29 @@ class HatchEntry(models.Model):
         self.chick_rate = self.net_rate
         self.chicks_amount = self.net_amount
         super(HatchEntry, self).save(update_fields=['net_amount', 'net_rate', 'chick_rate', 'chicks_amount'])
+
+
+class HatchEntryHatcherOutput(models.Model):
+    """One hatcher machine's candling/transfer/final-grading breakdown within
+    a hatch entry — same shape as HatchHatcherOutput (Hatch Register), but
+    against the newer TraySetting -> HatchEntry pipeline. ``hatcher`` is a
+    real FK to hatchery_master.Hatcher (Hatchery > Master > Hatcher), the
+    same way TraySettingLine.setter picks from hatchery_master.Setter."""
+    hatch_entry = models.ForeignKey(HatchEntry, on_delete=models.CASCADE, related_name='hatcher_outputs')
+    hatcher = models.ForeignKey('hatchery_master.Hatcher', on_delete=models.PROTECT, related_name='hatch_entry_outputs')
+    infertile_qty = models.PositiveIntegerField(default=0)
+    early_dead_qty = models.PositiveIntegerField(default=0)
+    blasting_qty = models.PositiveIntegerField(default=0)
+    transfer_qty = models.PositiveIntegerField(default=0)
+    dead_in_shell_qty = models.PositiveIntegerField(default=0)
+    culls_malf_qty = models.PositiveIntegerField(default=0)
+    saleable_chicks = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"Hatcher {self.hatcher.hatcher_no} ({self.hatch_entry.transaction_no})"
 
 
 class HatchEntryVaccine(models.Model):

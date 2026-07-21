@@ -36,6 +36,10 @@
           </select>
         </div>
         <div class="col-md-2">
+          <label class="form-label">Total Eggs Set</label>
+          <input class="form-control bg-light" id="total_eggs_set" readonly value="0">
+        </div>
+        <div class="col-md-2">
           <label class="form-label">Setting Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control bg-light" id="setting_date" readonly>
         </div>
@@ -43,6 +47,80 @@
           <label class="form-label">Hatch Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control" id="hatch_date">
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-kiwi-bird me-1"></i>Candling &amp; Hatcher Transfer</span>
+      <button type="button" class="btn btn-sm btn-primary" id="add-hatcher-row"><i class="fas fa-plus"></i> Add Hatcher Row</button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0" id="hatcher-candling-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:36px;">Sr.</th>
+              <th style="min-width:90px;">Hatcher No.</th>
+              <th style="min-width:90px;">Infertile Qty</th>
+              <th style="min-width:70px;">Infertile %</th>
+              <th style="min-width:90px;">Early Dead</th>
+              <th style="min-width:70px;">ED %</th>
+              <th style="min-width:90px;">Blasting Qty</th>
+              <th style="min-width:70px;">BQ %</th>
+              <th style="min-width:90px;">Transfer Qty</th>
+              <th style="min-width:70px;">TQ %</th>
+            </tr>
+          </thead>
+          <tbody id="hatcher-candling-tbody"></tbody>
+          <tfoot>
+            <tr class="table-light fw-bold">
+              <td colspan="2">TOTAL</td>
+              <td id="hatcher-total-infertile">0</td>
+              <td id="hatcher-total-infertile-pct">0%</td>
+              <td id="hatcher-total-ed">0</td>
+              <td id="hatcher-total-ed-pct">0%</td>
+              <td id="hatcher-total-bq">0</td>
+              <td id="hatcher-total-bq-pct">0%</td>
+              <td id="hatcher-total-tq">0</td>
+              <td id="hatcher-total-tq-pct">0%</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="small text-muted p-2">Standard Targets &rarr; Max Infertility: &lt; 12.00% | Max Dead-in-Shell Loss: &lt; 2.00% | Min Target Saleable Hatch: &gt; 65.00% - 70.00%</div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-egg me-1"></i>Final Hatch Output Grading</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0" id="hatcher-grading-table">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:36px;">Sr.</th>
+              <th style="min-width:100px;">Dead-In-Shell</th>
+              <th style="min-width:100px;">Culls / Malf.</th>
+              <th style="min-width:110px;">Saleable Chicks</th>
+              <th style="min-width:90px;"></th>
+            </tr>
+          </thead>
+          <tbody id="hatcher-grading-tbody"></tbody>
+          <tfoot>
+            <tr class="table-light fw-bold">
+              <td>TOTAL</td>
+              <td id="hatcher-total-dis">0</td>
+              <td id="hatcher-total-culls">0</td>
+              <td id="hatcher-total-saleable">0</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end p-2">
+        <div class="fw-bold">Hatch % (of Eggs Set): <span id="hatcher-total-hatch-pct" class="text-primary">0%</span></div>
       </div>
     </div>
   </div>
@@ -64,8 +142,8 @@
               <td></td>
             </tr>
             <tr>
-              <td class="align-middle">Chicks Details <span class="text-muted small">(rate = net cost &divide; saleable chicks)</span></td>
-              <td><input class="form-control" id="chicks_total" type="number" min="0" step="1" value="0"></td>
+              <td class="align-middle">Chicks Details <span class="text-muted small">(rate = net cost &divide; saleable chicks; total from Hatcher Output Grading above)</span></td>
+              <td><input class="form-control bg-light" id="chicks_total" readonly value="0"></td>
               <td><input class="form-control bg-light" id="chick_rate" readonly value="0.00"></td>
               <td><input class="form-control bg-light" id="chicks_amount" readonly value="0.00"></td>
               <td></td>
@@ -116,14 +194,25 @@ async function submitChangeRequest(module, payloadData, listUrl) {
 }
 const traySettings = {{ tray_settings|safe }};
 const itemOptions = `{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const hatchers = [{% for h in hatchers %}{id: {{ h.id }}, hatchery: {{ h.hatchery_id }}, label: "{{ h.hatcher_no|escapejs }}"},{% endfor %}];
 const get = id => document.getElementById(id); const value = id => get(id).value;
+
+function hatcherOptionsFor(hatcheryId) {
+  return hatchers.filter(h => !hatcheryId || String(h.hatchery) === String(hatcheryId))
+    .map(h => `<option value="${h.id}">${h.label}</option>`).join('');
+}
 const num = id => Number(value(id)) || 0;
 
 function rebuildSettingOptions(keepValue) {
   const hatcheryId = value('hatchery');
   const options = traySettings.filter(ts => !hatcheryId || String(ts.hatchery) === String(hatcheryId));
   get('tray_setting').innerHTML = '<option value="">select</option>' +
-    options.map(ts => `<option value="${ts.id}">${ts.setting_no}</option>`).join('');
+    options.map(ts => {
+      const setterCount = (ts.lines || []).length;
+      const setterLabel = setterCount ? `, ${setterCount} setter${setterCount > 1 ? 's' : ''}` : '';
+      return `<option value="${ts.id}">${ts.setting_no} — Set: ${ts.setting_date}, Hatch: ${ts.hatch_date}, ` +
+        `Eggs Set: ${Math.round(Number(ts.eggs_set))}${setterLabel}</option>`;
+    }).join('');
   if (keepValue && [...get('tray_setting').options].some(o => o.value === String(keepValue))) {
     get('tray_setting').value = keepValue;
   }
@@ -136,7 +225,99 @@ function applySetting() {
   get('eggs_total').value = ts ? ts.purchase_qty : 0;
   get('egg_rate').value = ts ? Number(ts.purchase_rate).toFixed(2) : '0.00';
   get('eggs_amount').value = ts ? Number(ts.purchase_amount).toFixed(2) : '0.00';
-  if (ts && !editId && !num('chicks_total')) get('chicks_total').value = Math.round(Number(ts.expected_chicks) || 0);
+  window.eggsSetQty = ts ? Number(ts.eggs_set) || 0 : 0;
+  get('total_eggs_set').value = window.eggsSetQty;
+  recalcHatcherSection();
+}
+
+/* One Setter line was used per Setter machine on this Setting No.'s Tray Set
+   -- seed the same number of Hatcher rows so the count lines up; which
+   Hatcher machine each one transferred to still has to be picked from the
+   Hatcher master (a different set of machines than Setters). */
+function populateHatcherRowsFromSetting() {
+  const ts = traySettings.find(t => String(t.id) === value('tray_setting'));
+  get('hatcher-candling-tbody').innerHTML = '';
+  get('hatcher-grading-tbody').innerHTML = '';
+  const rowCount = (ts && ts.lines && ts.lines.length) || 1;
+  for (let i = 0; i < rowCount; i++) hatcherRow();
+}
+
+/* Candling & Hatcher Transfer and Final Hatch Output Grading are two
+   separate tables, but each row in one has a matching row in the other at
+   the same position -- both rows are always added/removed together, so
+   index-in-tbody is what pairs them (no shared id needed). */
+function hatcherRow(row = {}) {
+  const candlingTr = document.createElement('tr');
+  candlingTr.innerHTML = `<td class="sr text-center align-middle"></td>
+    <td><select class="form-select form-select-sm hatcher-no" required><option value="">select</option>${hatcherOptionsFor(value('hatchery'))}</select></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end hatcher-qty-input infertile-qty" value="${row.infertile_qty || 0}"></td>
+    <td><input type="text" class="form-control form-control-sm text-end infertile-pct" readonly value="0%"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end hatcher-qty-input early-dead-qty" value="${row.early_dead_qty || 0}"></td>
+    <td><input type="text" class="form-control form-control-sm text-end ed-pct" readonly value="0%"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end hatcher-qty-input blasting-qty" value="${row.blasting_qty || 0}"></td>
+    <td><input type="text" class="form-control form-control-sm text-end bq-pct" readonly value="0%"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end transfer-qty" readonly value="${row.transfer_qty || 0}"></td>
+    <td><input type="text" class="form-control form-control-sm text-end tq-pct" readonly value="0%"></td>`;
+  get('hatcher-candling-tbody').append(candlingTr);
+  if (row.hatcher) candlingTr.querySelector('.hatcher-no').value = row.hatcher;
+
+  const gradingTr = document.createElement('tr');
+  gradingTr.innerHTML = `<td class="sr text-center align-middle"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end hatcher-qty-input dead-in-shell-qty" value="${row.dead_in_shell_qty || 0}"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end hatcher-qty-input culls-malf-qty" value="${row.culls_malf_qty || 0}"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm text-end saleable-chicks" readonly value="${row.saleable_chicks || 0}"></td>
+    <td class="text-center align-middle">
+      <div class="d-flex gap-1 justify-content-center">
+        <button type="button" class="btn btn-sm btn-outline-primary add-hatcher-row-inline" title="Add row"><i class="fas fa-plus"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger remove" title="Remove row"><i class="fas fa-times"></i></button>
+      </div>
+    </td>`;
+  get('hatcher-grading-tbody').append(gradingTr);
+
+  renumberHatcherRows();
+  recalcHatcherSection();
+}
+
+function renumberHatcherRows() {
+  document.querySelectorAll('#hatcher-candling-tbody tr').forEach((tr, i) => { tr.querySelector('.sr').textContent = i + 1; });
+  document.querySelectorAll('#hatcher-grading-tbody tr').forEach((tr, i) => { tr.querySelector('.sr').textContent = i + 1; });
+}
+
+function recalcHatcherSection() {
+  const settingQty = window.eggsSetQty || 0;
+  const candlingRows = document.querySelectorAll('#hatcher-candling-tbody tr');
+  const gradingRows = document.querySelectorAll('#hatcher-grading-tbody tr');
+  let totalInfertile = 0, totalED = 0, totalBQ = 0, totalTQ = 0, totalDIS = 0, totalCulls = 0, totalSaleable = 0;
+  candlingRows.forEach((ctr, i) => {
+    const gtr = gradingRows[i];
+    if (!gtr) return;
+    const n = (root, sel) => Number(root.querySelector(sel).value) || 0;
+    const infertile = n(ctr, '.infertile-qty'), ed = n(ctr, '.early-dead-qty'), bq = n(ctr, '.blasting-qty');
+    const dis = n(gtr, '.dead-in-shell-qty'), culls = n(gtr, '.culls-malf-qty');
+    const tq = Math.max(settingQty - (infertile + ed + bq), 0);
+    const saleable = Math.max(tq - (dis + culls), 0);
+    ctr.querySelector('.transfer-qty').value = tq;
+    gtr.querySelector('.saleable-chicks').value = saleable;
+    ctr.querySelector('.infertile-pct').value = (settingQty ? (infertile / settingQty * 100).toFixed(2) : 0) + '%';
+    ctr.querySelector('.ed-pct').value = (settingQty ? (ed / settingQty * 100).toFixed(2) : 0) + '%';
+    ctr.querySelector('.bq-pct').value = (settingQty ? (bq / settingQty * 100).toFixed(2) : 0) + '%';
+    ctr.querySelector('.tq-pct').value = (settingQty ? (tq / settingQty * 100).toFixed(2) : 0) + '%';
+    totalInfertile += infertile; totalED += ed; totalBQ += bq; totalTQ += tq;
+    totalDIS += dis; totalCulls += culls; totalSaleable += saleable;
+  });
+  get('hatcher-total-infertile').textContent = totalInfertile;
+  get('hatcher-total-infertile-pct').textContent = (settingQty ? (totalInfertile / settingQty * 100).toFixed(2) : 0) + '%';
+  get('hatcher-total-ed').textContent = totalED;
+  get('hatcher-total-ed-pct').textContent = (settingQty ? (totalED / settingQty * 100).toFixed(2) : 0) + '%';
+  get('hatcher-total-bq').textContent = totalBQ;
+  get('hatcher-total-bq-pct').textContent = (settingQty ? (totalBQ / settingQty * 100).toFixed(2) : 0) + '%';
+  get('hatcher-total-tq').textContent = totalTQ;
+  get('hatcher-total-tq-pct').textContent = (settingQty ? (totalTQ / settingQty * 100).toFixed(2) : 0) + '%';
+  get('hatcher-total-dis').textContent = totalDIS;
+  get('hatcher-total-culls').textContent = totalCulls;
+  get('hatcher-total-saleable').textContent = totalSaleable;
+  get('hatcher-total-hatch-pct').textContent = (settingQty ? (totalSaleable / settingQty * 100).toFixed(2) : 0) + '%';
+  get('chicks_total').value = totalSaleable;
   recalc();
 }
 
@@ -169,9 +350,35 @@ function recalc() {
   get('chicks_amount').value = netAmount.toFixed(2);
 }
 
-get('hatchery').addEventListener('change', () => { rebuildSettingOptions(); applySetting(); });
-get('tray_setting').addEventListener('change', applySetting);
-get('chicks_total').addEventListener('input', recalc);
+get('hatchery').addEventListener('change', () => {
+  rebuildSettingOptions();
+  applySetting();
+  document.querySelectorAll('#hatcher-candling-tbody tr .hatcher-no').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = `<option value="">select</option>${hatcherOptionsFor(value('hatchery'))}`;
+    if ([...sel.options].some(o => o.value === current)) sel.value = current;
+  });
+});
+get('tray_setting').addEventListener('change', () => { applySetting(); populateHatcherRowsFromSetting(); });
+get('add-hatcher-row').onclick = () => hatcherRow();
+get('hatcher-candling-tbody').addEventListener('input', e => {
+  if (e.target.classList.contains('hatcher-qty-input')) recalcHatcherSection();
+});
+get('hatcher-grading-tbody').addEventListener('input', e => {
+  if (e.target.classList.contains('hatcher-qty-input')) recalcHatcherSection();
+});
+get('hatcher-grading-tbody').addEventListener('click', e => {
+  if (e.target.closest('.add-hatcher-row-inline')) { hatcherRow(); }
+  if (e.target.closest('.remove')) {
+    const gradingRows = [...document.querySelectorAll('#hatcher-grading-tbody tr')];
+    const idx = gradingRows.indexOf(e.target.closest('tr'));
+    const candlingRow = document.querySelectorAll('#hatcher-candling-tbody tr')[idx];
+    if (candlingRow) candlingRow.remove();
+    e.target.closest('tr').remove();
+    renumberHatcherRows();
+    recalcHatcherSection();
+  }
+});
 get('add-vaccine').onclick = () => vaccineRow();
 get('vaccine-rows').addEventListener('input', recalc);
 get('vaccine-rows').addEventListener('click', e => {
@@ -181,7 +388,20 @@ get('vaccine-rows').addEventListener('click', e => {
 function payload() {
   return {
     tray_setting: value('tray_setting'), hatch_date: value('hatch_date'),
-    chicks_total: value('chicks_total'), remarks: value('remarks'),
+    remarks: value('remarks'),
+    hatcher_outputs: [...document.querySelectorAll('#hatcher-candling-tbody tr')].map((tr, i) => {
+      const gtr = document.querySelectorAll('#hatcher-grading-tbody tr')[i];
+      return {
+        hatcher: tr.querySelector('.hatcher-no').value,
+        infertile_qty: tr.querySelector('.infertile-qty').value,
+        early_dead_qty: tr.querySelector('.early-dead-qty').value,
+        blasting_qty: tr.querySelector('.blasting-qty').value,
+        transfer_qty: tr.querySelector('.transfer-qty').value,
+        dead_in_shell_qty: gtr.querySelector('.dead-in-shell-qty').value,
+        culls_malf_qty: gtr.querySelector('.culls-malf-qty').value,
+        saleable_chicks: gtr.querySelector('.saleable-chicks').value,
+      };
+    }),
     vaccines: [...document.querySelectorAll('#vaccine-rows tr')].map(tr => ({
       item: tr.querySelector('.vaccine-item').value,
       quantity: tr.querySelector('.vaccine-qty').value,
@@ -216,6 +436,10 @@ get('hatch-entry-form').onsubmit = async e => {
     get('eggs_amount').value = data.eggs_amount;
     get('chicks_total').value = data.chicks_total;
     get('remarks').value = data.remarks || '';
+    const ts = traySettings.find(t => String(t.id) === String(data.tray_setting));
+    window.eggsSetQty = ts ? Number(ts.eggs_set) || 0 : 0;
+    get('total_eggs_set').value = window.eggsSetQty;
+    data.hatcher_outputs.forEach(hatcherRow);
     data.vaccines.forEach(vaccineRow);
     recalc();
   }

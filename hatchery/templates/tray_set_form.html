@@ -67,22 +67,30 @@
     <div class="card-header d-flex justify-content-between align-items-start">
       <div>
         <div><i class="fas fa-egg me-1"></i><strong>Setter Lines</strong></div>
-        <div class="form-text mb-0">No. of Eggs Set is auto-calculated as Total Eggs &minus; Broken &minus; Damaged, but can be overridden</div>
+        <div class="form-text mb-0">No. of Eggs Set is auto-calculated as No. of Trays &times; Tray Size, but can be overridden</div>
       </div>
       <button class="btn btn-sm btn-primary" type="button" id="add-row"><i class="fas fa-plus"></i> Add Row</button>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered mb-0" id="line-table">
+        <table class="table table-bordered table-sm mb-0" id="line-table">
           <thead class="table-light">
             <tr>
-              <th>Sr.</th><th>Supplier/Batch</th><th>Setter No <span class="text-danger">*</span></th><th>Item</th>
-              <th>Total Eggs</th><th>Broken</th><th>Broken %</th><th>Damaged</th><th>Damage %</th><th>No. of Eggs Set</th><th>Avg. Wt.</th><th>Expected Chicks</th><th></th>
+              <th style="min-width:40px;">Sr.</th>
+              <th style="min-width:160px;">Supplier/Batch</th>
+              <th style="min-width:130px;">Setter No <span class="text-danger">*</span></th>
+              <th style="min-width:170px;">Item</th>
+              <th style="min-width:90px;">No. of Trays</th>
+              <th style="min-width:90px;">Tray Size</th>
+              <th style="min-width:110px;">No. of Eggs Set</th>
+              <th style="min-width:90px;">Avg. Wt.</th>
+              <th style="min-width:110px;">Expected Chicks</th>
+              <th style="min-width:90px;"></th>
             </tr>
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="9" class="text-end">Total No. of Eggs Set</th><th id="total_eggs_set">0</th><th></th><th id="total_expected_chicks">0</th><th></th></tr>
+            <tr><th colspan="6" class="text-end">Total No. of Eggs Set</th><th id="total_eggs_set">0</th><th></th><th id="total_expected_chicks">0</th><th></th></tr>
           </tfoot>
         </table>
       </div>
@@ -121,39 +129,33 @@ function setterOptionsFor(hatcheryId) {
 
 function lineRow(row = {}) {
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td class="sr text-center"></td>
-    <td><select class="form-select supplier"><option value="">select</option>${supplierOptions}</select></td>
-    <td><select class="form-select setter" required><option value="">select</option>${setterOptionsFor(value('hatchery'))}</select></td>
-    <td><select class="form-select item"><option value="">select</option>${itemOptions}</select></td>
-    <td><input class="form-control total-eggs" type="number" min="0" step=".01" value="${row.total_eggs || 0}"></td>
-    <td><input class="form-control broken" type="number" min="0" step=".01" value="${row.broken || 0}"></td>
-    <td class="broken-pct text-end align-middle">0%</td>
-    <td><input class="form-control damaged" type="number" min="0" step=".01" value="${row.damaged || 0}"></td>
-    <td class="damaged-pct text-end align-middle">0%</td>
-    <td><input class="form-control eggs-set" type="number" min="0" step=".01" value="${row.eggs_set || 0}"></td>
-    <td><input class="form-control avg-weight" type="number" min="0" step=".01" value="${row.avg_weight || 0}"></td>
-    <td><input class="form-control expected-chicks" type="number" min="0" step="1" value="${row.expected_chicks || 0}"></td>
-    <td><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`;
+  tr.innerHTML = `<td class="sr text-center align-middle"></td>
+    <td><select class="form-select form-select-sm supplier"><option value="">select</option>${supplierOptions}</select></td>
+    <td><select class="form-select form-select-sm setter" required><option value="">select</option>${setterOptionsFor(value('hatchery'))}</select></td>
+    <td><select class="form-select form-select-sm item"><option value="">select</option>${itemOptions}</select></td>
+    <td><input class="form-control form-control-sm text-end no-trays" type="number" min="0" step="1" value="${row.no_trays ?? ''}"></td>
+    <td><input class="form-control form-control-sm text-end tray-size" type="number" min="0" step="1" value="${row.tray_size ?? ''}"></td>
+    <td><input class="form-control form-control-sm text-end eggs-set" type="number" min="0" step=".01" value="${row.eggs_set || 0}"></td>
+    <td><input class="form-control form-control-sm text-end avg-weight" type="number" min="0" step=".01" value="${row.avg_weight || 0}"></td>
+    <td><input class="form-control form-control-sm text-end expected-chicks" type="number" min="0" step="1" value="${row.expected_chicks || 0}"></td>
+    <td class="text-center align-middle">
+      <div class="d-flex gap-1 justify-content-center">
+        <button type="button" class="btn btn-sm btn-outline-primary add-row-inline" title="Add row"><i class="fas fa-plus"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger remove" title="Remove row"><i class="fas fa-times"></i></button>
+      </div>
+    </td>`;
   get('line-table').tBodies[0].append(tr);
   if (row.supplier) tr.querySelector('.supplier').value = row.supplier;
   if (row.setter) tr.querySelector('.setter').value = row.setter;
   if (row.item) tr.querySelector('.item').value = row.item;
   tr.dataset.eggsSetOverridden = row.eggs_set ? 'true' : 'false';
   if (!row.eggs_set) recalcEggsSet(tr);
-  recalcPcts(tr);
   renumberRows(); totals();
 }
 
 function recalcEggsSet(tr) {
   const num = s => Number(tr.querySelector(s).value) || 0;
-  tr.querySelector('.eggs-set').value = Math.max(0, num('.total-eggs') - num('.broken') - num('.damaged'));
-}
-
-function recalcPcts(tr) {
-  const num = s => Number(tr.querySelector(s).value) || 0;
-  const total = num('.total-eggs');
-  tr.querySelector('.broken-pct').textContent = (total ? (num('.broken') / total * 100) : 0).toFixed(2) + '%';
-  tr.querySelector('.damaged-pct').textContent = (total ? (num('.damaged') / total * 100) : 0).toFixed(2) + '%';
+  tr.querySelector('.eggs-set').value = num('.no-trays') * num('.tray-size');
 }
 
 function totals() {
@@ -176,13 +178,13 @@ get('line-table').addEventListener('input', e => {
   if (e.target.classList.contains('eggs-set')) {
     tr.dataset.eggsSetOverridden = e.target.value.trim() === '' ? 'false' : 'true';
     if (tr.dataset.eggsSetOverridden === 'false') recalcEggsSet(tr);
-  } else if (['total-eggs', 'broken', 'damaged'].some(cls => e.target.classList.contains(cls))) {
+  } else if (['no-trays', 'tray-size'].some(cls => e.target.classList.contains(cls))) {
     if (tr.dataset.eggsSetOverridden !== 'true') recalcEggsSet(tr);
   }
-  recalcPcts(tr);
   totals();
 });
 get('line-table').addEventListener('click', e => {
+  if (e.target.closest('.add-row-inline')) { lineRow(); }
   if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); totals(); }
 });
 
@@ -224,13 +226,18 @@ function payload() {
   return {
     hatchery: value('hatchery'), setting_date: value('setting_date'), transfer_date: value('transfer_date'), hatch_date: value('hatch_date'),
     setting_time: value('setting_time'), loaded_by: value('loaded_by'), grading: value('grading'),
-    lines: [...document.querySelectorAll('#line-table tbody tr')].map(tr => ({
-      supplier: tr.querySelector('.supplier').value, setter: tr.querySelector('.setter').value,
-      item: tr.querySelector('.item').value, total_eggs: tr.querySelector('.total-eggs').value,
-      broken: tr.querySelector('.broken').value, damaged: tr.querySelector('.damaged').value,
-      eggs_set: tr.querySelector('.eggs-set').value, avg_weight: tr.querySelector('.avg-weight').value,
-      expected_chicks: tr.querySelector('.expected-chicks').value,
-    })),
+    lines: [...document.querySelectorAll('#line-table tbody tr')].map(tr => {
+      const noTrays = Number(tr.querySelector('.no-trays').value) || 0;
+      const traySize = Number(tr.querySelector('.tray-size').value) || 0;
+      return {
+        supplier: tr.querySelector('.supplier').value, setter: tr.querySelector('.setter').value,
+        item: tr.querySelector('.item').value,
+        no_trays: tr.querySelector('.no-trays').value, tray_size: tr.querySelector('.tray-size').value,
+        total_eggs: noTrays * traySize,
+        eggs_set: tr.querySelector('.eggs-set').value, avg_weight: tr.querySelector('.avg-weight').value,
+        expected_chicks: tr.querySelector('.expected-chicks').value,
+      };
+    }),
   };
 }
 function csrf() { return document.cookie.split('; ').find(v => v.startsWith('csrftoken='))?.split('=')[1] || '{{ csrf_token }}'; }
