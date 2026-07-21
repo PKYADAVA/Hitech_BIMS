@@ -7,6 +7,8 @@ import json
 import logging
 from calendar import monthrange
 from datetime import date, timedelta
+import requests
+from django.conf import settings
 from django.forms import ValidationError
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.dateparse import parse_date
@@ -367,6 +369,48 @@ class RelieveEmployeeView(View):
                 {"success": False, "message": f"An unexpected error occurred: {e}"},
                 status=500,
             )
+
+
+@login_required(login_url="login")
+def leave_calendar_holidays(request):
+    """Proxy for the Calendarific holiday lookup used by the Leave Placed
+    calendar — keeps the API key server-side instead of exposed in public
+    static JS. GET params: year (required), month (0-11, optional filter,
+    matching JS Date.getMonth())."""
+    year = request.GET.get("year")
+    month = request.GET.get("month")
+    if not year or not year.isdigit():
+        return JsonResponse({"error": "A valid year is required."}, status=400)
+
+    if not settings.CALENDARIFIC_API_KEY:
+        # No key configured — degrade to "no holidays" rather than error,
+        # matching the previous client-side behaviour on a failed fetch.
+        return JsonResponse({"holidays": []})
+
+    try:
+        response = requests.get(
+            "https://calendarific.com/api/v2/holidays",
+            params={
+                "api_key": settings.CALENDARIFIC_API_KEY,
+                "country": settings.CALENDARIFIC_COUNTRY,
+                "year": year,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        holidays = response.json().get("response", {}).get("holidays", [])
+    except (requests.RequestException, ValueError) as e:
+        logger.warning(f"Calendarific holiday lookup failed: {e}")
+        return JsonResponse({"holidays": []})
+
+    if month is not None and month.lstrip("-").isdigit():
+        month = int(month)
+        holidays = [
+            h for h in holidays
+            if date.fromisoformat(h["date"]["iso"][:10]).month - 1 == month
+        ]
+
+    return JsonResponse({"holidays": holidays})
 
 
 @method_decorator(login_required(login_url="login"), name="dispatch")

@@ -15,7 +15,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
 
-from account.models import BankCashMaster, ChartOfAccount, CompanyProfile, CostCenter, FinancialYear, TermsConditions
+from account.models import BankCashMaster, ChartOfAccount, CompanyProfile, FinancialYear, OrganizationCentre, TermsConditions
 from hatchery_master.models import STATES_AND_TERRITORIES
 from inventory.models import Mapping, Sector, Warehouse
 
@@ -214,11 +214,12 @@ def _default_company():
 
 
 @login_required
-def cost_center(request):
+def organization_centre(request):
     company = _default_company()
-    return render(request, "cost_center.html", {
-        "kinds": Sector.objects.order_by("name"),
-        "branch_kind_code": CostCenter.KIND_BRANCH,
+    return render(request, "organization_centre.html", {
+        "centre_types": Sector.objects.order_by("name"),
+        "branch_centre_type_code": OrganizationCentre.CENTRE_TYPE_BRANCH,
+        "category_choices": OrganizationCentre.CATEGORY_CHOICES,
         "company_name": company.name if company else "",
     })
 
@@ -238,10 +239,11 @@ def _nearest_branch_name(cc):
     return ""
 
 
-def _cost_center_dict(cc):
+def _organization_centre_dict(cc):
     return {
         "id": cc.id, "code": cc.code, "name": cc.name,
-        "kind": cc.kind_id, "kind_name": cc.kind.name, "kind_code": cc.kind.code,
+        "centre_type": cc.centre_type_id, "centre_type_name": cc.centre_type.name, "centre_type_code": cc.centre_type.code,
+        "category": cc.category,
         "parent": cc.parent_id, "parent_label": f"{cc.parent.name} ({cc.parent.code})" if cc.parent_id else "",
         "level": cc.level,
         "description": cc.description,
@@ -258,6 +260,7 @@ def _cost_center_dict(cc):
         "branch_name": cc.branch.branch_name if cc.branch_id else "",
         "nearest_branch_name": _nearest_branch_name(cc),
         "company_name": cc.company.name if cc.company_id else "",
+        "children_count": cc.children.count(),
         "created_by": cc.created_by.get_username() if cc.created_by_id else "",
         "created_at": cc.created_at.strftime("%d-%b-%Y %H:%M"),
         "updated_by": cc.updated_by.get_username() if cc.updated_by_id else "",
@@ -266,17 +269,17 @@ def _cost_center_dict(cc):
 
 
 @method_decorator(login_required, name="dispatch")
-class CostCenterAPI(View):
+class OrganizationCentreAPI(View):
     def get(self, request, id=None):
         if id:
             try:
-                return JsonResponse(_cost_center_dict(
-                    CostCenter.objects.select_related("parent", "branch", "kind", "created_by", "updated_by").get(id=id)
+                return JsonResponse(_organization_centre_dict(
+                    OrganizationCentre.objects.select_related("parent", "branch", "centre_type", "created_by", "updated_by").get(id=id)
                 ))
-            except CostCenter.DoesNotExist:
-                raise Http404("Cost center not found")
-        rows = CostCenter.objects.select_related("parent", "branch", "kind", "created_by", "updated_by").order_by("code")
-        return JsonResponse([_cost_center_dict(r) for r in rows], safe=False)
+            except OrganizationCentre.DoesNotExist:
+                raise Http404("Organization centre not found")
+        rows = OrganizationCentre.objects.select_related("parent", "branch", "centre_type", "created_by", "updated_by").order_by("code")
+        return JsonResponse([_organization_centre_dict(r) for r in rows], safe=False)
 
     def post(self, request):
         try:
@@ -286,21 +289,25 @@ class CostCenterAPI(View):
 
         if not data.get("name"):
             return JsonResponse({"error": "Name is required"}, status=400)
-        kind = Sector.objects.filter(id=data.get("kind")).first()
-        if not kind:
-            return JsonResponse({"error": "Invalid kind"}, status=400)
-        if kind.code == CostCenter.KIND_BRANCH:
+        centre_type = Sector.objects.filter(id=data.get("centre_type")).first()
+        if not centre_type:
+            return JsonResponse({"error": "Invalid centre type"}, status=400)
+        if centre_type.code == OrganizationCentre.CENTRE_TYPE_BRANCH:
             return JsonResponse(
-                {"error": "Branch cost centers are created automatically from Broiler > Master > Branch — add the Branch there instead."},
+                {"error": "Branch centres are created automatically from Broiler > Master > Branch — add the Branch there instead."},
                 status=400,
             )
+        category = data.get("category") or OrganizationCentre.CATEGORY_BOTH
+        if category not in dict(OrganizationCentre.CATEGORY_CHOICES):
+            return JsonResponse({"error": "Invalid category"}, status=400)
         parent_id = data.get("parent") or None
-        if parent_id and CostCenter.objects.filter(id=parent_id, is_locked=True).exists():
-            return JsonResponse({"error": "The selected parent cost center is locked."}, status=400)
+        if parent_id and OrganizationCentre.objects.filter(id=parent_id, is_locked=True).exists():
+            return JsonResponse({"error": "The selected parent centre is locked."}, status=400)
 
         try:
-            cc = CostCenter(
-                company=_default_company(), name=data["name"], kind=kind,
+            cc = OrganizationCentre(
+                company=_default_company(), name=data["name"], centre_type=centre_type,
+                category=category,
                 parent_id=parent_id,
                 description=data.get("description", ""),
                 effective_from=data.get("effective_from") or None,
@@ -318,38 +325,42 @@ class CostCenterAPI(View):
             message = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
             return JsonResponse({"error": message}, status=400)
         except IntegrityError:
-            return JsonResponse({"error": "A cost center with this code may already exist."}, status=400)
+            return JsonResponse({"error": "An organization centre with this code may already exist."}, status=400)
 
     def put(self, request, id):
         try:
-            cc = CostCenter.objects.select_related("kind").get(id=id)
-        except CostCenter.DoesNotExist:
-            raise Http404("Cost center not found")
+            cc = OrganizationCentre.objects.select_related("centre_type").get(id=id)
+        except OrganizationCentre.DoesNotExist:
+            raise Http404("Organization centre not found")
         if cc.is_locked:
-            return JsonResponse({"error": "This cost center is locked."}, status=400)
+            return JsonResponse({"error": "This organization centre is locked."}, status=400)
 
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-        kind = Sector.objects.filter(id=data.get("kind", cc.kind_id)).first()
-        if not kind:
-            return JsonResponse({"error": "Invalid kind"}, status=400)
-        if not cc.branch_id and kind.code == CostCenter.KIND_BRANCH:
+        centre_type = Sector.objects.filter(id=data.get("centre_type", cc.centre_type_id)).first()
+        if not centre_type:
+            return JsonResponse({"error": "Invalid centre type"}, status=400)
+        if not cc.branch_id and centre_type.code == OrganizationCentre.CENTRE_TYPE_BRANCH:
             return JsonResponse(
-                {"error": "Branch cost centers are created automatically from Broiler > Master > Branch — this one isn't linked to a Branch."},
+                {"error": "Branch centres are created automatically from Broiler > Master > Branch — this one isn't linked to a Branch."},
                 status=400,
             )
+        category = data.get("category", cc.category)
+        if category not in dict(OrganizationCentre.CATEGORY_CHOICES):
+            return JsonResponse({"error": "Invalid category"}, status=400)
         parent_id = data.get("parent") or None
         if parent_id and int(parent_id) == cc.id:
-            return JsonResponse({"error": "A cost center cannot be its own parent"}, status=400)
-        if parent_id and CostCenter.objects.filter(id=parent_id, is_locked=True).exists():
-            return JsonResponse({"error": "The selected parent cost center is locked."}, status=400)
+            return JsonResponse({"error": "An organization centre cannot be its own parent"}, status=400)
+        if parent_id and OrganizationCentre.objects.filter(id=parent_id, is_locked=True).exists():
+            return JsonResponse({"error": "The selected parent centre is locked."}, status=400)
 
         try:
             cc.name = data.get("name", cc.name)
-            cc.kind = kind
+            cc.centre_type = centre_type
+            cc.category = category
             cc.parent_id = parent_id
             cc.description = data.get("description", cc.description)
             cc.effective_from = data.get("effective_from") or None
@@ -365,24 +376,54 @@ class CostCenterAPI(View):
         except ValidationError as e:
             return JsonResponse({"error": "; ".join(e.messages)}, status=400)
         except IntegrityError:
-            return JsonResponse({"error": "A cost center with this code may already exist."}, status=400)
+            return JsonResponse({"error": "An organization centre with this code may already exist."}, status=400)
 
     def delete(self, request, id):
         try:
-            cc = CostCenter.objects.get(id=id)
-        except CostCenter.DoesNotExist:
-            raise Http404("Cost center not found")
+            cc = OrganizationCentre.objects.get(id=id)
+        except OrganizationCentre.DoesNotExist:
+            raise Http404("Organization centre not found")
         if cc.is_locked:
-            return JsonResponse({"error": "This cost center is locked."}, status=400)
+            return JsonResponse({"error": "This organization centre is locked."}, status=400)
         try:
             cc.delete()
         except ProtectedError as e:
             related = sorted({str(obj._meta.verbose_name) for obj in list(e.protected_objects)[:50]})
             names = ", ".join(related) if related else "other records"
             return JsonResponse(
-                {"error": f"Cannot delete: this cost center is used in {names}."}, status=400
+                {"error": f"Cannot delete: this organization centre is used in {names}."}, status=400
             )
         return JsonResponse({"message": "Deleted"})
+
+
+@login_required
+def organization_centre_duplicate(request, id):
+    """Clone one centre — same parent/centre_type/category, a fresh
+    auto-generated code, unlocked, approval reset to Draft."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    try:
+        source = OrganizationCentre.objects.select_related("centre_type").get(id=id)
+    except OrganizationCentre.DoesNotExist:
+        return JsonResponse({"error": "Organization centre not found."}, status=404)
+    try:
+        clone = OrganizationCentre(
+            company=source.company, parent_id=source.parent_id,
+            name=f"{source.name} (Copy)", centre_type=source.centre_type,
+            category=source.category, description=source.description,
+            effective_from=source.effective_from, effective_to=source.effective_to,
+            is_active=source.is_active,
+            allow_manual_selection=source.allow_manual_selection,
+            allow_children_only=source.allow_children_only,
+            created_by=request.user, updated_by=request.user,
+        )
+        clone.full_clean(exclude=["code"])
+        clone.save()
+        return JsonResponse({"message": "Duplicated", "id": clone.id, "code": clone.code}, status=201)
+    except ValidationError as e:
+        return JsonResponse({"error": "; ".join(e.messages)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "An organization centre with this code may already exist."}, status=400)
 
 
 @login_required
@@ -390,12 +431,12 @@ def cost_center_toggle_lock(request, id):
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request method."}, status=400)
     try:
-        cc = CostCenter.objects.get(id=id)
-    except CostCenter.DoesNotExist:
-        return JsonResponse({"error": "Cost center not found."}, status=404)
+        cc = OrganizationCentre.objects.get(id=id)
+    except OrganizationCentre.DoesNotExist:
+        return JsonResponse({"error": "Organization centre not found."}, status=404)
     cc.is_locked = not cc.is_locked
     cc.save(update_fields=["is_locked"])
-    return JsonResponse({"message": "Cost center updated", "is_locked": cc.is_locked})
+    return JsonResponse({"message": "Organization centre updated", "is_locked": cc.is_locked})
 
 
 @login_required
@@ -407,15 +448,15 @@ def cost_center_approve(request, id):
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request method."}, status=400)
     try:
-        cc = CostCenter.objects.get(id=id)
-    except CostCenter.DoesNotExist:
-        return JsonResponse({"error": "Cost center not found."}, status=404)
+        cc = OrganizationCentre.objects.get(id=id)
+    except OrganizationCentre.DoesNotExist:
+        return JsonResponse({"error": "Organization centre not found."}, status=404)
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     status = data.get("approval_status")
-    if status not in dict(CostCenter.APPROVAL_CHOICES):
+    if status not in dict(OrganizationCentre.APPROVAL_CHOICES):
         return JsonResponse({"error": "Invalid approval status"}, status=400)
     cc.approval_status = status
     cc.approval_remarks = data.get("approval_remarks", cc.approval_remarks)
@@ -427,7 +468,7 @@ def cost_center_approve(request, id):
 def _cost_center_tree_node(cc, children_by_parent):
     return {
         "id": cc.id, "code": cc.code, "name": cc.name, "level": cc.level,
-        "kind_name": cc.kind.name, "kind_code": cc.kind.code,
+        "centre_type_name": cc.centre_type.name, "centre_type_code": cc.centre_type.code, "category": cc.category,
         "is_active": cc.is_active, "is_locked": cc.is_locked,
         "approval_status": cc.approval_status,
         "children": [
@@ -440,7 +481,7 @@ def _cost_center_tree_node(cc, children_by_parent):
 @login_required
 def cost_center_tree(request):
     """Full hierarchy as nested JSON, for the tree panel."""
-    rows = list(CostCenter.objects.select_related("kind").order_by("code"))
+    rows = list(OrganizationCentre.objects.select_related("centre_type").order_by("code"))
     children_by_parent = {}
     for cc in rows:
         children_by_parent.setdefault(cc.parent_id, []).append(cc)
@@ -450,36 +491,36 @@ def cost_center_tree(request):
 
 @login_required
 def cost_center_children(request, id):
-    """Direct children of one cost center (id=0 for top-level roots)."""
+    """Direct children of one organization centre (id=0 for top-level roots)."""
     parent_id = id or None
-    rows = CostCenter.objects.select_related("kind").filter(parent_id=parent_id).order_by("code")
+    rows = OrganizationCentre.objects.select_related("centre_type").filter(parent_id=parent_id).order_by("code")
     return JsonResponse([{
         "id": r.id, "code": r.code, "name": r.name, "level": r.level,
-        "kind_name": r.kind.name, "is_active": r.is_active,
+        "centre_type_name": r.centre_type.name, "is_active": r.is_active,
     } for r in rows], safe=False)
 
 
 @login_required
 def cost_center_parent(request, id):
     try:
-        cc = CostCenter.objects.select_related("parent__kind").get(id=id)
-    except CostCenter.DoesNotExist:
-        return JsonResponse({"error": "Cost center not found."}, status=404)
+        cc = OrganizationCentre.objects.select_related("parent__centre_type").get(id=id)
+    except OrganizationCentre.DoesNotExist:
+        return JsonResponse({"error": "Organization centre not found."}, status=404)
     if not cc.parent_id:
         return JsonResponse({})
-    return JsonResponse(_cost_center_dict(CostCenter.objects.select_related("kind", "branch", "created_by", "updated_by").get(id=cc.parent_id)))
+    return JsonResponse(_organization_centre_dict(OrganizationCentre.objects.select_related("centre_type", "branch", "created_by", "updated_by").get(id=cc.parent_id)))
 
 
 @login_required
 def cost_center_export_excel(request):
     workbook = openpyxl.Workbook()
     sheet = workbook.active
-    sheet.title = "Cost Centers"
-    headers = ["Code", "Name", "Kind", "Level", "Parent", "Branch", "Status", "Locked", "Approval Status", "Effective From", "Effective To"]
+    sheet.title = "Organization Centres"
+    headers = ["Code", "Name", "Centre Type", "Category", "Level", "Parent", "Branch", "Status", "Locked", "Approval Status", "Effective From", "Effective To"]
     sheet.append(headers)
-    for cc in CostCenter.objects.select_related("kind", "parent", "branch").order_by("code"):
+    for cc in OrganizationCentre.objects.select_related("centre_type", "parent", "branch").order_by("code"):
         sheet.append([
-            cc.code, cc.name, cc.kind.name, cc.level,
+            cc.code, cc.name, cc.centre_type.name, cc.get_category_display(), cc.level,
             cc.parent.code if cc.parent_id else "",
             cc.branch.branch_name if cc.branch_id else "",
             "Active" if cc.is_active else "Inactive",
@@ -493,23 +534,23 @@ def cost_center_export_excel(request):
         sheet.column_dimensions[column_cells[0].column_letter].width = max(10, (max(lengths) if lengths else 0) + 2)
 
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response["Content-Disposition"] = 'attachment; filename="cost_centers.xlsx"'
+    response["Content-Disposition"] = 'attachment; filename="organization_centres.xlsx"'
     workbook.save(response)
     return response
 
 
 # ---------------------------------------------------------------------------
-# Cost Center Mapping (Account > Master > Cost Center Mapping)
+# Organization Centre Mapping (Account > Master > Organization Centre Mapping)
 # ---------------------------------------------------------------------------
-# Separate from the Cost Center master on purpose: that page only names/codes
-# a cost center; this page is the one place that says which Office(s) route
-# their postings to it. Entirely manual — no auto-creation, no auto-sync —
-# built on the same generic Mapping table Inventory > Office Mapping uses,
-# under its own type so it doesn't show up on that screen.
+# Separate from the Organization Centre master on purpose: that page only
+# names/codes a centre; this page is the one place that says which Office(s)
+# route their postings to it. Entirely manual — no auto-creation, no
+# auto-sync — built on the same generic Mapping table Inventory > Office
+# Mapping uses, under its own type so it doesn't show up on that screen.
 
 @login_required
 def cost_center_mapping(request):
-    return render(request, "cost_center_mapping.html")
+    return render(request, "organization_centre_mapping.html")
 
 
 @login_required
@@ -518,7 +559,7 @@ def cost_center_mapping_data(request):
         Mapping.objects.filter(type=Mapping.TYPE_OFFICE_COST_CENTER, to_id__isnull=False)
         .values_list("from_id", "to_id")
     )
-    cost_center_names = dict(CostCenter.objects.values_list("id", "name"))
+    cost_center_names = dict(OrganizationCentre.objects.values_list("id", "name"))
     offices = [
         {
             "id": office.id, "name": office.name,
@@ -527,7 +568,7 @@ def cost_center_mapping_data(request):
         }
         for office in Warehouse.objects.order_by("name")
     ]
-    cost_centers = list(CostCenter.objects.order_by("code").values("id", "code", "name"))
+    cost_centers = list(OrganizationCentre.objects.order_by("code").values("id", "code", "name"))
     return JsonResponse({"offices": offices, "cost_centers": cost_centers})
 
 
@@ -546,8 +587,8 @@ def cost_center_mapping_save(request):
         return JsonResponse({"error": "Office is required"}, status=400)
     if not Warehouse.objects.filter(id=office_id).exists():
         return JsonResponse({"error": "Office not found"}, status=404)
-    if cost_center_id and not CostCenter.objects.filter(id=cost_center_id).exists():
-        return JsonResponse({"error": "Cost center not found"}, status=404)
+    if cost_center_id and not OrganizationCentre.objects.filter(id=cost_center_id).exists():
+        return JsonResponse({"error": "Organization centre not found"}, status=404)
 
     if cost_center_id is None:
         Mapping.objects.filter(type=Mapping.TYPE_OFFICE_COST_CENTER, from_id=office_id).delete()

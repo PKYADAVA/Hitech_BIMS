@@ -257,6 +257,7 @@ class CostCenterReportAPI(View):
             company,
             date_from=request.GET.get("from") or None,
             date_to=request.GET.get("to") or None,
+            category=request.GET.get("category") or None,
         )
         return JsonResponse({
             "rows": [

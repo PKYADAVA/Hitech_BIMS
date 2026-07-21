@@ -165,13 +165,13 @@ MODULE_REGISTRY = [
                     ("bank_cash", "Bank / Cash Masters", (
                         "bank_cash_master_list",
                     )),
-                    ("cost_center", "Cost Center", (
-                        "cost_center_master_list", "cost_center_tree", "cost_center_children",
-                        "cost_center_parent", "cost_center_toggle_lock", "cost_center_approve",
-                        "cost_center_export_excel",
+                    ("organization_centre", "Organization Centre", (
+                        "organization_centre_master_list", "organization_centre_tree", "organization_centre_children",
+                        "organization_centre_parent", "organization_centre_toggle_lock", "organization_centre_approve",
+                        "organization_centre_export_excel", "organization_centre_duplicate",
                     )),
-                    ("cost_center_mapping", "Cost Center Mapping", (
-                        "cost_center_mapping_data",
+                    ("organization_centre_mapping", "Organization Centre Mapping", (
+                        "organization_centre_mapping_data",
                     )),
                     ("company_profile", "Company Profile"),
                     ("terms", "Terms & Conditions"),
@@ -253,7 +253,9 @@ MODULE_REGISTRY = [
             {
                 "label": "Attendance",
                 "tabs": [
-                    ("leave_employee", "Leave Placed"),
+                    ("leave_employee", "Leave Placed", (
+                        "leave_calendar_holidays",
+                    )),
                     ("employee_leave_details", "Leave Details"),
                     ("employee_attendance", "Attendance"),
                 ],
@@ -473,7 +475,7 @@ _ACTION_BASE_TO_TAB = {
     "financial_year": "fin_year",
     "terms_conditions": "terms",
     "bank_cash_master": "bank_cash",
-    "cost_center_master": "cost_center",
+    "organization_centre_master": "organization_centre",
     # Inventory
     "category": "item_category",
     "item": "items",

@@ -36,6 +36,20 @@
   .home-trk-meta { font-size:.75rem; opacity:.7; }
 </style>
 {% endif %}
+<style>
+  .home-cal-card { max-width: 260px; }
+  .home-cal-card .card-header { display:flex; align-items:center; justify-content:space-between; padding:.4rem .6rem; font-size:.8rem; }
+  .home-cal-card .card-body { padding:.5rem; }
+  .home-cal-nav { display:flex; align-items:center; gap:.25rem; }
+  .home-cal-nav button { border:none; background:transparent; color:inherit; opacity:.7; cursor:pointer; font-size:.75rem; line-height:1; padding:.1rem .2rem; }
+  .home-cal-nav button:hover { opacity:1; }
+  .home-cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:1px; text-align:center; }
+  .home-cal-grid .home-cal-dow { font-size:.58rem; font-weight:600; text-transform:uppercase; opacity:.6; padding:.15rem 0; }
+  .home-cal-grid .home-cal-day { font-size:.68rem; padding:.2rem 0; border-radius:.25rem; }
+  .home-cal-grid .home-cal-day.is-blank { visibility:hidden; }
+  .home-cal-grid .home-cal-day.is-today { background:#0d6efd; color:#fff; font-weight:600; }
+  .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -88,6 +102,25 @@
         <div class="quick-icon purple"><i class="fa-solid fa-kiwi-bird"></i></div>
         <div class="quick-label">Hatchery</div>
       </a>
+    </div>
+
+    <!-- Calendar -->
+    <div class="row g-3 mb-4">
+      <div class="col-lg-3 col-md-4">
+        <div class="card home-cal-card h-100">
+          <div class="card-header">
+            <span><i class="fas fa-calendar-days"></i> <span id="home-cal-label">Calendar</span></span>
+            <div class="home-cal-nav">
+              <button type="button" id="home-cal-prev" title="Previous month"><i class="fas fa-chevron-left"></i></button>
+              <button type="button" id="home-cal-today" title="Jump to today">Today</button>
+              <button type="button" id="home-cal-next" title="Next month"><i class="fas fa-chevron-right"></i></button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="home-cal-grid" id="home-cal-grid"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     {% if 'tracking_dashboard' in allowed_tabs %}
@@ -264,6 +297,69 @@
 {% endblock %}
 
 {% block js %}
+<script>
+(function () {
+  "use strict";
+  const MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+  const DOW_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+  const today = new Date();
+  let viewYear = today.getFullYear();
+  let viewMonth = today.getMonth(); // 0-11
+
+  const grid = document.getElementById("home-cal-grid");
+  const label = document.getElementById("home-cal-label");
+
+  function render() {
+    label.textContent = MONTH_NAMES[viewMonth] + " " + viewYear;
+    grid.innerHTML = "";
+
+    DOW_NAMES.forEach(function (d) {
+      const cell = document.createElement("div");
+      cell.className = "home-cal-dow";
+      cell.textContent = d;
+      grid.appendChild(cell);
+    });
+
+    const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstWeekday; i++) {
+      const blank = document.createElement("div");
+      blank.className = "home-cal-day is-blank";
+      grid.appendChild(blank);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const cell = document.createElement("div");
+      const weekday = new Date(viewYear, viewMonth, day).getDay();
+      const isToday = viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
+      cell.className = "home-cal-day" + (isToday ? " is-today" : "") + ((weekday === 0 || weekday === 6) ? " is-weekend" : "");
+      cell.textContent = day;
+      grid.appendChild(cell);
+    }
+  }
+
+  document.getElementById("home-cal-prev").addEventListener("click", function () {
+    viewMonth -= 1;
+    if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
+    render();
+  });
+  document.getElementById("home-cal-next").addEventListener("click", function () {
+    viewMonth += 1;
+    if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
+    render();
+  });
+  document.getElementById("home-cal-today").addEventListener("click", function () {
+    viewYear = today.getFullYear();
+    viewMonth = today.getMonth();
+    render();
+  });
+
+  render();
+})();
+</script>
 {% if 'tracking_dashboard' in allowed_tabs %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>

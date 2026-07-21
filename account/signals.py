@@ -6,7 +6,7 @@ the account app never imports the other apps' modules at startup.
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from account.services.auto_ledger import sync_branch_cost_center, sync_ledger
+from account.services.auto_ledger import sync_branch_organization_centre, sync_ledger
 
 
 @receiver(post_save, sender='sales.Customer', dispatch_uid='coa_ledger_customer')
@@ -35,9 +35,9 @@ def warehouse_ledger(sender, instance, **kwargs):
     sync_ledger(instance, instance.name, ['INVENTORY'])
 
 
-@receiver(post_save, sender='broiler.Branch', dispatch_uid='cost_center_branch_sync')
+@receiver(post_save, sender='broiler.Branch', dispatch_uid='organization_centre_branch_sync')
 def branch_cost_center(sender, instance, **kwargs):
-    sync_branch_cost_center(instance)
+    sync_branch_organization_centre(instance)
 
 
 # Deleting a business document cancels its auto-posted voucher (the voucher

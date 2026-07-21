@@ -18,7 +18,7 @@ from django.db import transaction
 from django.db.models import DecimalField, F, Sum
 from django.utils import timezone
 
-from account.models import AccountingControlSettings, ChartOfAccount, CostCenter, FinancialYear, Voucher, VoucherLine
+from account.models import AccountingControlSettings, ChartOfAccount, FinancialYear, OrganizationCentre, Voucher, VoucherLine
 
 VOUCHER_PREFIX = {
     'Journal': 'JV',
@@ -101,7 +101,7 @@ def validate_lines(company, lines_data, manual=True):
     controls = AccountingControlSettings.get_solo()
     default_cost_center = None
     if controls.require_cost_center:
-        default_cost_center = CostCenter.objects.filter(company=company, is_default=True).first()
+        default_cost_center = OrganizationCentre.objects.filter(company=company, is_default=True).first()
     cleaned = []
     total_debit = total_credit = Decimal('0')
     for index, raw in enumerate(lines_data, start=1):
@@ -120,7 +120,7 @@ def validate_lines(company, lines_data, manual=True):
             raise ValidationError(f"Line {index}: enter either a debit or a credit amount (not both, not neither).")
         cost_center = None
         if raw.get('cost_center'):
-            cost_center = CostCenter.objects.filter(pk=raw['cost_center'], company=company).first()
+            cost_center = OrganizationCentre.objects.filter(pk=raw['cost_center'], company=company).first()
             if cost_center is None:
                 raise ValidationError(f"Line {index}: cost center not found in this company.")
             if manual and not cost_center.allow_manual_selection:
@@ -420,19 +420,25 @@ def branch_summary_report(company, date_from=None, date_to=None):
     return {'rows': rows, 'totals': totals}
 
 
-def cost_center_report(company, date_from=None, date_to=None):
-    """Per-cost-center debit/credit/net movement from posted lines, for the
-    Cost Center Report (Account > Reports > Cost Center). Lines with no
-    cost center tagged roll up under an 'Unassigned' row, so the report also
-    surfaces how much posted spend isn't tagged yet."""
+def cost_center_report(company, date_from=None, date_to=None, category=None):
+    """Per-organization-centre debit/credit/net movement from posted lines,
+    for the Cost Center Report (Account > Reports > Cost Center). Lines with
+    no centre tagged roll up under an 'Unassigned' row, so the report also
+    surfaces how much posted spend isn't tagged yet. ``category`` optionally
+    restricts to centres tagged Cost/Profit/Both (e.g. 'COST' also includes
+    'BOTH' centres) — Reporting Logic: Cost routes to expense/budget-style
+    reports, Profit routes to revenue-style reports, Both feeds either."""
     lines = _posted_lines(company)
     if date_from:
         lines = lines.filter(date__gte=date_from)
     if date_to:
         lines = lines.filter(date__lte=date_to)
+    if category in ('COST', 'PROFIT'):
+        lines = lines.filter(cost_center__category__in=[category, 'BOTH'])
 
     aggregated = lines.values(
-        'cost_center_id', 'cost_center__code', 'cost_center__name', 'cost_center__kind__name',
+        'cost_center_id', 'cost_center__code', 'cost_center__name',
+        'cost_center__centre_type__name', 'cost_center__category',
     ).annotate(debit=Sum('debit'), credit=Sum('credit')).order_by('cost_center__code')
 
     rows = []
@@ -446,7 +452,8 @@ def cost_center_report(company, date_from=None, date_to=None):
             'cost_center_id': entry['cost_center_id'],
             'code': entry['cost_center__code'] or '—',
             'name': entry['cost_center__name'] or 'Unassigned',
-            'kind': entry['cost_center__kind__name'] or '',
+            'kind': entry['cost_center__centre_type__name'] or '',
+            'category': entry['cost_center__category'] or '',
             'debit': debit,
             'credit': credit,
             'net': debit - credit,

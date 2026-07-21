@@ -1,28 +1,28 @@
 {% extends 'base.html' %}
 
-{% block title %}Cost Center Mapping{% endblock %}
+{% block title %}Organization Centre Mapping{% endblock %}
 
 {% block nav %}
  {% include 'main_top_navbar.html' with active_tab='account' %}
 {% endblock %}
 
 {% block content %}
- {% include '_account_subnavbar.html' with active_tab='cost_center_mapping' %}
+ {% include '_account_subnavbar.html' with active_tab='organization_centre_mapping' %}
 
 <div class="page-header">
     <div class="page-header-main">
-      <div class="page-header-title">Cost Center Mapping</div>
-      <div class="page-header-subtitle">Pick which Cost Center each Office routes its postings to — entirely manual, nothing auto-created</div>
+      <div class="page-header-title">Organization Centre Mapping</div>
+      <div class="page-header-subtitle">Pick which Organization Centre each Office routes its postings to — entirely manual, nothing auto-created</div>
     </div>
 </div>
 
 <div class="card">
-    <div class="card-header"><i class="fas fa-diagram-project me-2"></i>Office &rarr; Cost Center</div>
+    <div class="card-header"><i class="fas fa-diagram-project me-2"></i>Office &rarr; Organization Centre</div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover table-bordered mb-0" id="ccm-table">
                 <thead>
-                    <tr><th>Office</th><th>Mapped Cost Center</th><th class="text-center">Action</th></tr>
+                    <tr><th>Office</th><th>Mapped Organization Centre</th><th class="text-center">Action</th></tr>
                 </thead>
                 <tbody id="ccm-body"></tbody>
             </table>
@@ -35,7 +35,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Map Office to Cost Center</h5>
+        <h5 class="modal-title">Map Office to Organization Centre</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -45,7 +45,7 @@
           <input type="hidden" id="ccm-office-id" />
         </div>
         <div class="mb-3">
-          <label class="form-label">Cost Center</label>
+          <label class="form-label">Organization Centre</label>
           <select class="form-select" id="ccm-cost-center">
             <option value="">None (unmapped)</option>
           </select>
@@ -75,7 +75,7 @@ $(function () {
   }
 
   function loadData() {
-    $.getJSON("{% url 'cost_center_mapping_data' %}", function (data) {
+    $.getJSON("{% url 'organization_centre_mapping_data' %}", function (data) {
       offices = data.offices;
       costCenters = data.cost_centers;
       renderTable();
@@ -114,7 +114,7 @@ $(function () {
 
   $("#ccm-save-btn").on("click", function () {
     $.ajax({
-      url: "{% url 'cost_center_mapping_save' %}",
+      url: "{% url 'organization_centre_mapping_save' %}",
       type: "POST",
       headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
       data: JSON.stringify({
@@ -134,10 +134,10 @@ $(function () {
 
   $(document).on("click", ".clear-ccm", function () {
     const id = $(this).data("id");
-    window.bimsConfirm("Clear this office's cost center mapping?", { title: "Clear mapping", confirmText: "Clear" }).then(function (ok) {
+    window.bimsConfirm("Clear this office's organization centre mapping?", { title: "Clear mapping", confirmText: "Clear" }).then(function (ok) {
       if (!ok) return;
       $.ajax({
-        url: "{% url 'cost_center_mapping_save' %}",
+        url: "{% url 'organization_centre_mapping_save' %}",
         type: "POST",
         headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
         data: JSON.stringify({ office: id, cost_center: null }),

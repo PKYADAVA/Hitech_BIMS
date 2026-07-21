@@ -118,7 +118,7 @@
                   <th style="min-width:220px">From CoA <small class="fw-normal">(money out · credit)</small></th>
                   <th style="min-width:220px">To CoA <small class="fw-normal">(money in · debit)</small></th>
                   <th style="min-width:160px">Sector</th>
-                  <th style="min-width:180px">Cost Centre</th>
+                  <th style="min-width:180px">Organization Centre</th>
                   <th style="width:140px" class="text-end">Amount</th>
                   <th>Remarks</th>
                   <th style="width:84px"></th>
@@ -144,7 +144,7 @@
                 <tr>
                   <th style="min-width:280px">Account</th>
                   <th style="width:190px">Money In / Out</th>
-                  <th style="min-width:180px">Cost Centre</th>
+                  <th style="min-width:180px">Organization Centre</th>
                   <th style="width:150px" class="text-end">Amount</th>
                   <th>Line Narration</th>
                   <th style="width:84px"></th>
@@ -481,7 +481,7 @@ $(document).ready(function () {
     }
 
     function costCenterOptions(selected) {
-        return '<option value="">Cost centre...</option>' + costCenters.map(cc =>
+        return '<option value="">Organization centre...</option>' + costCenters.map(cc =>
             `<option value="${cc.id}" ${cc.id == selected ? 'selected' : ''}>${escapeHtml(cc.code)} - ${escapeHtml(cc.name)}</option>`
         ).join('');
     }
@@ -819,7 +819,7 @@ $(document).ready(function () {
                 </div>
                 ${v.narration ? `<p>${escapeHtml(v.narration)}${narrationSourceBadge(v)}</p>` : ''}
                 <table class="table table-sm table-bordered">
-                  <thead><tr><th>Account</th><th>Cost Centre</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Narration</th></tr></thead>
+                  <thead><tr><th>Account</th><th>Organization Centre</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th>Narration</th></tr></thead>
                   <tbody>${lines}</tbody>
                   <tfoot><tr class="fw-bold"><td class="text-end" colspan="2">Total</td>
                     <td class="text-end">${v.total_debit}</td><td class="text-end">${v.total_credit}</td><td></td></tr></tfoot>
@@ -904,7 +904,7 @@ $(document).ready(function () {
         response.results.forEach(a => { accountsById[a.id] = a; });
         accounts = response.results.filter(a => a.status === 'Active' && a.is_postable);
     });
-    const costCentersReady = $.get("{% url 'cost_center_master_list' %}", function (response) {
+    const costCentersReady = $.get("{% url 'organization_centre_master_list' %}", function (response) {
         response.forEach(cc => { costCentersById[cc.id] = cc; });
         // Grouping nodes and ones marked "no manual selection" mirror the same
         // rules account.services.journal enforces server-side — no point

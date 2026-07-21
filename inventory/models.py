@@ -31,11 +31,12 @@ class ItemCategory(models.Model):
 
 class Sector(models.Model):
     """Classifies what an Office is (Warehouse, Head Office, ...) and, since
-    it's shared with account.CostCenter.kind, what a Cost Center represents
-    (Department, Vehicle, Project, ...). ``code`` is a stable key set once at
-    creation from the name — matching logic elsewhere (e.g. which Sector row
-    means "this is a Branch") keys off ``code``, not the freely-renameable
-    ``name``, so renaming a Sector never silently breaks that logic."""
+    it's shared with account.OrganizationCentre.centre_type, what an
+    Organization Centre represents (Department, Vehicle, Project, ...).
+    ``code`` is a stable key set once at creation from the name — matching
+    logic elsewhere (e.g. which Sector row means "this is a Branch") keys
+    off ``code``, not the freely-renameable ``name``, so renaming a Sector
+    never silently breaks that logic."""
     code = models.CharField(max_length=30, unique=True, editable=False, blank=True,
                             help_text="Auto-generated stable key, e.g. WAREHOUSE, BRANCH_OFFICE")
     name = models.CharField(max_length=255, unique=True)

@@ -632,9 +632,9 @@ class AccountingControlSettings(models.Model):
     """
     require_cost_center = models.BooleanField(
         default=False,
-        help_text=_("Every voucher line must carry a cost center — falls back to the Default Cost "
-                    "Centre (see CostCenter.is_default) if a line doesn't specify one, and is rejected "
-                    "at posting if neither is present"),
+        help_text=_("Every voucher line must carry a cost center — falls back to the Default "
+                    "Organization Centre (see OrganizationCentre.is_default) if a line doesn't specify "
+                    "one, and is rejected at posting if neither is present"),
     )
     modified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
@@ -792,48 +792,68 @@ class AccountAuditLog(models.Model):
         ]
 
 
-class CostCenter(models.Model):
-    """Analysis dimension for postings (department, farm, vehicle, ...) —
-    Account > Master > Cost Center. Tag a Journal Voucher line with one to
-    later report expense/income by department, farm, vehicle, etc. (see
+class OrganizationCentre(models.Model):
+    """Unified hierarchy master — Account > Master > Organization Centre.
+    Every node can behave as a Cost Centre, Profit Centre, or Both
+    (``category``), replacing what would otherwise be two separate masters.
+    Tag a Journal Voucher line with one to later report expense/income by
+    department, farm, vehicle, etc. (see
     account.services.journal.cost_center_report).
 
-    ``kind`` shares Inventory > Master > Sector's picklist rather than its
-    own hardcoded list — one editable list of "what kind of thing is this"
-    instead of two overlapping ones. The Branch/Warehouse auto-link logic
-    keys off Sector.code (a stable, non-user-facing key), so renaming a
+    ``centre_type`` shares Inventory > Master > Sector's picklist rather than
+    its own hardcoded list — one editable list of "what kind of thing is
+    this" instead of two overlapping ones. The Branch/Warehouse auto-link
+    logic keys off Sector.code (a stable, non-user-facing key), so renaming a
     Sector's display name never breaks it.
     """
     # Sector.code values this model has special-cased behaviour for.
-    KIND_BRANCH = "BRANCH_OFFICE"
-    KIND_WAREHOUSE = "WAREHOUSE"
-    KIND_PREFIX = {
+    CENTRE_TYPE_BRANCH = "BRANCH_OFFICE"
+    CENTRE_TYPE_WAREHOUSE = "WAREHOUSE"
+    CENTRE_TYPE_PREFIX = {
         'DEPARTMENT': 'DEPT', 'WAREHOUSE': 'WH', 'FARM': 'FARM',
         'PROJECT': 'PRJ', 'BRANCH_OFFICE': 'BRN', 'VEHICLE': 'VEH', 'PRODUCTION_UNIT': 'PU',
+        'HEAD_OFFICE': 'HO', 'UNIT': 'UNIT', 'SHED': 'SHED', 'FEED_STORE': 'FWH',
+        'MEDICINE_STORE': 'MWH', 'GENERAL_WAREHOUSE': 'GWH', 'FEEDMILL': 'FML',
+        'HATCHERY': 'HAT', 'SALES': 'SAL', 'ADMINISTRATION': 'ADM', 'MAINTENANCE': 'MNT',
+        'TRANSPORT': 'TRN', 'HR': 'HR', 'FINANCE': 'ACC', 'PURCHASE': 'PUR',
+        'PROCESSING_PLANT': 'PPL', 'LABORATORY': 'LAB', 'QUALITY_CONTROL': 'QC',
     }
+    CATEGORY_COST = 'COST'
+    CATEGORY_PROFIT = 'PROFIT'
+    CATEGORY_BOTH = 'BOTH'
+    CATEGORY_CHOICES = [
+        (CATEGORY_COST, _('Cost Centre')),
+        (CATEGORY_PROFIT, _('Profit Centre')),
+        (CATEGORY_BOTH, _('Both')),
+    ]
     APPROVAL_CHOICES = [
         ('Draft', _('Draft')),
         ('Pending', _('Pending Approval')),
         ('Approved', _('Approved')),
         ('Rejected', _('Rejected')),
     ]
-    company = models.ForeignKey('CompanyProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='cost_centers')
+    company = models.ForeignKey('CompanyProfile', on_delete=models.CASCADE, null=True, blank=True, related_name='organization_centres')
     parent = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='children')
     branch = models.OneToOneField(
-        'broiler.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='cost_center',
-        help_text=_("Broiler Branch this cost center represents — auto-created the first time the "
+        'broiler.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='organization_centre',
+        help_text=_("Broiler Branch this centre represents — auto-created the first time the "
                     "branch is saved; see account.signals.branch_cost_center")
     )
     code = models.CharField(max_length=20, editable=False, blank=True,
                             help_text=_("Auto-generated code, e.g. DEPT-0001 / VEH-0001"))
     name = models.CharField(max_length=150)
-    kind = models.ForeignKey(
-        'inventory.Sector', on_delete=models.PROTECT, related_name='cost_centers',
-        help_text=_("What this cost center represents — shared with Inventory > Sector")
+    centre_type = models.ForeignKey(
+        'inventory.Sector', on_delete=models.PROTECT, related_name='organization_centres',
+        help_text=_("What this centre represents — shared with Inventory > Sector")
+    )
+    category = models.CharField(
+        max_length=10, choices=CATEGORY_CHOICES, default=CATEGORY_BOTH,
+        help_text=_("Whether this centre is used for expense tracking (Cost Centre), "
+                    "revenue/profitability (Profit Centre), or both"),
     )
     level = models.PositiveIntegerField(
         default=0, editable=False,
-        help_text=_("Depth in the parent/child hierarchy — 0 for a top-level cost center")
+        help_text=_("Depth in the parent/child hierarchy — 0 for a top-level centre")
     )
     description = models.TextField(blank=True)
     effective_from = models.DateField(null=True, blank=True)
@@ -842,26 +862,26 @@ class CostCenter(models.Model):
     is_locked = models.BooleanField(default=False, help_text=_("Locked records can't be edited or deleted"))
     allow_manual_selection = models.BooleanField(
         default=True,
-        help_text=_("Whether users can pick this cost center directly when entering a voucher line"),
+        help_text=_("Whether users can pick this centre directly when entering a voucher line"),
     )
     allow_children_only = models.BooleanField(
         default=False,
-        help_text=_("Grouping node — only its child cost centers can be selected on a transaction, not this one itself"),
+        help_text=_("Grouping node — only its child centres can be selected on a transaction, not this one itself"),
     )
     is_default = models.BooleanField(
         default=False,
-        help_text=_("Fallback cost center auto-applied to a voucher line when Accounting Controls "
+        help_text=_("Fallback centre auto-applied to a voucher line when Accounting Controls "
                     "requires one and the line didn't specify one — only one per company"),
     )
     approval_status = models.CharField(max_length=10, choices=APPROVAL_CHOICES, default='Draft')
     approval_remarks = models.TextField(blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='cost_centers_created', editable=False,
+        related_name='organization_centres_created', editable=False,
     )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='cost_centers_updated', editable=False,
+        related_name='organization_centres_updated', editable=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -871,15 +891,15 @@ class CostCenter(models.Model):
 
     class Meta:
         ordering = ['code']
-        verbose_name = _("Cost Center")
-        verbose_name_plural = _("Cost Centers")
+        verbose_name = _("Organization Centre")
+        verbose_name_plural = _("Organization Centres")
         constraints = [
-            models.UniqueConstraint(fields=['company', 'code'], name='uniq_costcenter_company_code'),
+            models.UniqueConstraint(fields=['company', 'code'], name='uniq_orgcentre_company_code'),
         ]
 
     @classmethod
-    def next_code(cls, company, kind):
-        prefix = f"{cls.KIND_PREFIX.get(kind.code, 'CC')}-"
+    def next_code(cls, company, centre_type):
+        prefix = f"{cls.CENTRE_TYPE_PREFIX.get(centre_type.code, 'OC')}-"
         serials = []
         for code in cls.objects.filter(company=company, code__startswith=prefix).values_list("code", flat=True):
             match = re.match(rf"^{prefix}(\d+)$", code or "")
@@ -898,13 +918,13 @@ class CostCenter(models.Model):
                 ancestor = ancestor.parent
         if self.is_default and self.allow_children_only:
             raise ValidationError({
-                'is_default': _("A grouping cost centre (children-only) can't be the Default — "
-                                "pick a leaf cost centre instead."),
+                'is_default': _("A grouping centre (children-only) can't be the Default — "
+                                "pick a leaf centre instead."),
             })
 
     def save(self, *args, **kwargs):
         if self._state.adding and not self.code:
-            self.code = self.next_code(self.company, self.kind)
+            self.code = self.next_code(self.company, self.centre_type)
         new_level = 0 if not self.parent_id else (self.parent.level + 1)
         level_changed = not self._state.adding and new_level != self.level
         self.level = new_level
@@ -913,7 +933,7 @@ class CostCenter(models.Model):
             for child in self.children.all():
                 child.save()
         if self.is_default:
-            CostCenter.objects.filter(company=self.company, is_default=True).exclude(pk=self.pk).update(is_default=False)
+            OrganizationCentre.objects.filter(company=self.company, is_default=True).exclude(pk=self.pk).update(is_default=False)
 
 
 class Voucher(models.Model):
@@ -1021,7 +1041,7 @@ class VoucherLine(models.Model):
     voucher = models.ForeignKey(Voucher, on_delete=models.CASCADE, related_name='lines')
     line_no = models.PositiveSmallIntegerField(default=1)
     account = models.ForeignKey(ChartOfAccount, on_delete=models.PROTECT, related_name='voucher_lines')
-    cost_center = models.ForeignKey(CostCenter, on_delete=models.PROTECT, null=True, blank=True, related_name='voucher_lines')
+    cost_center = models.ForeignKey(OrganizationCentre, on_delete=models.PROTECT, null=True, blank=True, related_name='voucher_lines')
     date = models.DateField(editable=False, db_index=True)
     debit = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     credit = models.DecimalField(max_digits=18, decimal_places=2, default=0)

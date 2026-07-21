@@ -1,6 +1,8 @@
-// API Configuration
-const API_KEY = '4HJ9RWU0qQam2CpxkjPYlWZsnqidPvqP'; // Replace with your API key
-const COUNTRY = 'IN'; // Replace with the desired country code (e.g., 'US' for the USA)
+// Holiday lookups go through our own server-side proxy (hr.views.leave_calendar_holidays)
+// so the third-party API key never has to live in public static JS. URL is
+// injected by the template (window.LEAVE_HOLIDAYS_URL) since this file has
+// no access to Django's {% url %} tag.
+const HOLIDAYS_URL = window.LEAVE_HOLIDAYS_URL;
 
 // Calendar state
 let currentDate = new Date();
@@ -23,16 +25,13 @@ function populateYearSelector() {
    }
 }
 
-// Fetch holidays from API
+// Fetch holidays via our own server-side proxy (keeps the third-party API
+// key out of public JS) — month is filtered server-side too.
 async function fetchHolidays(year, month) {
    try {
-      const response = await fetch(
-         `https://calendarific.com/api/v2/holidays?api_key=${API_KEY}&country=${COUNTRY}&year=${year}`
-      );
+      const response = await fetch(`${HOLIDAYS_URL}?year=${year}&month=${month}`, { credentials: "same-origin" });
       const data = await response.json();
-      return data.response.holidays.filter((holiday) =>
-         new Date(holiday.date.iso).getMonth() === month
-      );
+      return data.holidays || [];
    } catch (error) {
       console.error("Error fetching holidays:", error);
       return [];

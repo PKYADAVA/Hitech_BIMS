@@ -17,7 +17,7 @@ from .models import (
 )
 from hatchery_master.models import Hatchery
 from broiler.models import Branch, BroilerFarm, BroilerBatch
-from account.models import BankCashMaster, ChartOfAccount, CostCenter
+from account.models import BankCashMaster, ChartOfAccount, OrganizationCentre
 import json
 
 
@@ -661,10 +661,10 @@ def linked_tree_data(request):
         Mapping.objects.filter(type=Mapping.TYPE_OFFICE_COST_CENTER, to_id__isnull=False)
         .values_list("from_id", "to_id")
     )
-    cost_center_names = dict(CostCenter.objects.values_list("id", "name"))
+    cost_center_names = dict(OrganizationCentre.objects.values_list("id", "name"))
 
     offices = list(Warehouse.objects.all())
-    branches = list(Branch.objects.select_related("region", "cost_center"))
+    branches = list(Branch.objects.select_related("region", "organization_centre"))
     hatcheries = list(Hatchery.objects.all())
     bank_cash_records = list(BankCashMaster.objects.prefetch_related("sectors"))
 
@@ -711,7 +711,7 @@ def linked_tree_data(request):
         region = regions.setdefault(branch.region_id, {
             "id": branch.region_id, "name": branch.region.description, "branches": [],
         })
-        cost_center = getattr(branch, "cost_center", None)
+        cost_center = getattr(branch, "organization_centre", None)
         region["branches"].append({
             "id": branch.id, "name": branch.branch_name,
             "cost_center_code": cost_center.code if cost_center else None,

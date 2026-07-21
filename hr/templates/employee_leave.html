@@ -4,9 +4,6 @@
 {% block nav %}
    {% include 'main_top_navbar.html' with active_tab='hr' %}
 {% endblock nav %}
-{% block css %}
-   <link rel="stylesheet" href="{% static 'css/attendance-calender.css' %}">
-{% endblock css %}
 {% block content %}
 <body class="bg-light">
    <div class="modal fade" id="relieveConfirmationModal" tabindex="-1" aria-labelledby="relieveConfirmationLabel" aria-hidden="true">
@@ -125,5 +122,6 @@
 {% endblock content %}
 {% block js %}
 <script src="{% static 'js/hr/attendance-calender.js' %}"></script>
+<script>window.LEAVE_HOLIDAYS_URL = "{% url 'leave_calendar_holidays' %}";</script>
 <script src="{% static 'js/hr/calender-api.js' %}"></script>
 {% endblock js %}

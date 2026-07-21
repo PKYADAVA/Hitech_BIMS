@@ -20,6 +20,7 @@ from hr.views import (
     EmployeeAttendance,
     DesignationTemplateView,
     DesignationAPI,
+    leave_calendar_holidays,
 )
 
 
@@ -34,6 +35,7 @@ urlpatterns = [
         name="relieve_employee",
     ),
     path("employees/leave/", EmployeeLeaveRequest.as_view(), name="leave_employee"),
+    path("employees/leave/holidays/", leave_calendar_holidays, name="leave_calendar_holidays"),
     path(
         "employee/leave/details/",
         EmployeeLeaveDashboard.as_view(),

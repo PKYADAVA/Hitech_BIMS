@@ -270,6 +270,10 @@ SMS_GATEWAYHUB_API_KEY = os.getenv("SMS_GATEWAYHUB_API_KEY", "")
 SMS_GATEWAYHUB_SENDER_ID = os.getenv("SMS_GATEWAYHUB_SENDER_ID", "")
 SMS_GATEWAYHUB_ROUTE = os.getenv("SMS_GATEWAYHUB_ROUTE", "1")
 SMS_GATEWAYHUB_CHANNEL = os.getenv("SMS_GATEWAYHUB_CHANNEL", "2")
+
+# Calendarific holiday lookup (HR > Attendance > Leave Placed calendar).
+CALENDARIFIC_API_KEY = os.getenv("CALENDARIFIC_API_KEY", "")
+CALENDARIFIC_COUNTRY = os.getenv("CALENDARIFIC_COUNTRY", "IN")
 SMS_GATEWAYHUB_DCS = os.getenv("SMS_GATEWAYHUB_DCS", "0")
 # DLT registration fields (required for Indian traffic when provisioned).
 SMS_GATEWAYHUB_ENTITY_ID = os.getenv("SMS_GATEWAYHUB_ENTITY_ID", "")

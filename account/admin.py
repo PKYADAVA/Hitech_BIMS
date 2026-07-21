@@ -16,7 +16,7 @@ from .models import (
     CoAGenerationLog,
     CoATemplate,
     CoATemplateAccount,
-    CostCenter,
+    OrganizationCentre,
     FinancialYear,
     NarrationSettings,
     Schedule,
@@ -249,10 +249,10 @@ class AccountAuditLogAdmin(admin.ModelAdmin):
         return False  # audit trail is immutable
 
 
-@admin.register(CostCenter)
-class CostCenterAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'kind', 'company', 'parent', 'is_active')
-    list_filter = ('kind', 'is_active')
+@admin.register(OrganizationCentre)
+class OrganizationCentreAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'centre_type', 'category', 'company', 'parent', 'is_active')
+    list_filter = ('centre_type', 'category', 'is_active')
     search_fields = ('code', 'name')
     readonly_fields = ('code', 'created_at')
 

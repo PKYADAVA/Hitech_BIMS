@@ -83,34 +83,36 @@ def sync_ledger(instance, name, anchor_roles, company=None):
         return []
 
 
-def sync_branch_cost_center(branch, company=None):
-    """Create one CostCenter (kind = the 'Branch Office' Sector) the first
-    time *branch* is saved, as a convenience — a new Branch shouldn't need a
-    separate manual step to get a matching cost center. One-time only: once
-    it exists, it's a normal, freely-editable Cost Center like any other —
-    nothing here re-syncs its name/active state on later Branch saves, so a
-    manual edit on the Cost Center side is never silently overwritten.
+def sync_branch_organization_centre(branch, company=None):
+    """Create one OrganizationCentre (centre_type = the 'Branch Office'
+    Sector, category = Both) the first time *branch* is saved, as a
+    convenience — a new Branch shouldn't need a separate manual step to get
+    a matching centre. One-time only: once it exists, it's a normal,
+    freely-editable Organization Centre like any other — nothing here
+    re-syncs its name/active state on later Branch saves, so a manual edit
+    on the Organization Centre side is never silently overwritten.
     Never raises; a Branch save must not fail because of this bookkeeping.
     """
-    from account.models import CostCenter
+    from account.models import OrganizationCentre
     from inventory.models import Sector
 
     try:
         company = company or CompanyProfile.objects.filter(pk=1).first()
         if company is None:
             return None
-        cost_center = CostCenter.objects.filter(branch=branch).first()
-        if cost_center:
-            return cost_center
-        branch_kind = Sector.objects.filter(code=CostCenter.KIND_BRANCH).first()
-        if branch_kind is None:
+        centre = OrganizationCentre.objects.filter(branch=branch).first()
+        if centre:
+            return centre
+        branch_type = Sector.objects.filter(code=OrganizationCentre.CENTRE_TYPE_BRANCH).first()
+        if branch_type is None:
             return None
-        cost_center = CostCenter(
+        centre = OrganizationCentre(
             company=company, branch=branch, name=branch.branch_name,
-            kind=branch_kind, is_active=branch.is_active,
+            centre_type=branch_type, category=OrganizationCentre.CATEGORY_BOTH,
+            is_active=branch.is_active,
         )
-        cost_center.save()
-        return cost_center
+        centre.save()
+        return centre
     except Exception:
-        logger.exception("Branch cost-center sync failed for Branch #%s", branch.pk)
+        logger.exception("Branch organization-centre sync failed for Branch #%s", branch.pk)
         return None
