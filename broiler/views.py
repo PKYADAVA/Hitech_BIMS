@@ -2186,7 +2186,7 @@ def _build_batch_report(batch):
     for pi in purchase_items:
         category_name = pi.item.category.name if pi.item.category_id else ""
         if "chick" not in category_name.lower():
-            _feed_bucket(pi.item.item_code)["purchased"] += pi.rcv_qty or 0
+            _feed_bucket(pi.item.item_code)["purchased"] += (pi.rcv_qty or 0) + (pi.free_qty or 0)
     for t in transfers:
         if not t.item.category_id or "chick" not in t.item.category.name.lower():
             _feed_bucket(t.item.item_code)["transfer_in"] += t.quantity or 0

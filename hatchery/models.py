@@ -447,7 +447,9 @@ class EggGrading(models.Model):
 
     @classmethod
     def available_stock(cls, purchase_invoice_id, item_id, exclude_id=None):
-        """Rcv qty on the purchase invoice's matching item line, minus what's already been graded against it."""
+        """Rcv + Free qty on the purchase invoice's matching item line (the
+        actual eggs that arrived, same basis as EggPurchase.net_quantity()),
+        minus what's already been graded against it."""
         try:
             purchase_line = EggPurchaseItem.objects.get(egg_purchase_id=purchase_invoice_id, item_id=item_id)
         except EggPurchaseItem.DoesNotExist:
@@ -456,7 +458,7 @@ class EggGrading(models.Model):
         if exclude_id:
             already_graded_qs = already_graded_qs.exclude(id=exclude_id)
         already_graded = already_graded_qs.aggregate(total=models.Sum('quantity'))['total'] or 0
-        remaining = purchase_line.rcv_qty - already_graded
+        remaining = (purchase_line.rcv_qty + purchase_line.free_qty) - already_graded
         return remaining if remaining > 0 else 0
 
 
