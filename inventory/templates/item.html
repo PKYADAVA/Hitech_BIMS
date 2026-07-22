@@ -96,6 +96,9 @@
                                 <option value="" selected disabled>Select valuation method</option>
                                 <option value="Weighted Average">Weighted Average</option>
                                 <option value="Standard Costing">Standard Costing</option>
+                                <option value="FIFO">FIFO (First In, First Out)</option>
+                                <option value="LIFO">LIFO (Last In, First Out)</option>
+                                <option value="FEFO">FEFO (First Expiry, First Out)</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -134,6 +137,10 @@
                                     <option value="{{ uom.id }}">{{ uom.name }}{% if uom.symbol %} ({{ uom.symbol }}){% endif %}</option>
                                 {% endfor %}
                             </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="hsn_code" class="form-label">HSN / SAC</label>
+                            <input type="text" id="hsn_code" class="form-control" placeholder="e.g. 01051100" maxlength="100">
                         </div>
                         <div class="d-flex justify-content-end gap-2 mt-3">
                             <button
@@ -272,7 +279,8 @@
                                         data-standard_cost_per_unit="${item.standard_cost_per_unit}"
                                         data-usage="${item.usage}"
                                         data-storage_uom="${item.storage_uom ?? ""}"
-                                        data-consumption_uom="${item.consumption_uom ?? ""}">
+                                        data-consumption_uom="${item.consumption_uom ?? ""}"
+                                        data-hsn_code="${item.hsn_code ?? ""}">
                                         <i class="fas fa-pen"></i>
                                     </button>{% endif %}
                                     {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-item"
@@ -343,6 +351,9 @@
                                         <select id="dynamic-valuation_method" class="form-select" required>
                                             <option value="Weighted Average" ${itemData.valuation_method === "Weighted Average" ? "selected" : ""}>Weighted Average</option>
                                             <option value="Standard Costing" ${itemData.valuation_method === "Standard Costing" ? "selected" : ""}>Standard Costing</option>
+                                            <option value="FIFO" ${itemData.valuation_method === "FIFO" ? "selected" : ""}>FIFO (First In, First Out)</option>
+                                            <option value="LIFO" ${itemData.valuation_method === "LIFO" ? "selected" : ""}>LIFO (Last In, First Out)</option>
+                                            <option value="FEFO" ${itemData.valuation_method === "FEFO" ? "selected" : ""}>FEFO (First Expiry, First Out)</option>
                                         </select>
                                     </div>
                                     <div class="mb-3">
@@ -363,6 +374,10 @@
                                     <div class="mb-3">
                                         <label for="dynamic-consumption_uom" class="form-label">Consumption UOM</label>
                                         <select id="dynamic-consumption_uom" class="form-select">${uomOptionsHtml(itemData.consumption_uom)}</select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="dynamic-hsn_code" class="form-label">HSN / SAC</label>
+                                        <input type="text" id="dynamic-hsn_code" class="form-control" maxlength="100" value="${itemData.hsn_code ?? ""}">
                                     </div>
                                     <div class="d-flex justify-content-end gap-2 mt-3">
                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -399,6 +414,7 @@
                     usage: $("#dynamic-usage").val(),
                     storage_uom: $("#dynamic-storage_uom").val() || null,
                     consumption_uom: $("#dynamic-consumption_uom").val() || null,
+                    hsn_code: $("#dynamic-hsn_code").val() || null,
                 };
                 console.log(updatedItemData, "updatedItemData");
 
@@ -446,6 +462,7 @@
                 usage: $("#usage").val(),
                 storage_uom: $("#storage_uom").val() || null,
                 consumption_uom: $("#consumption_uom").val() || null,
+                hsn_code: $("#hsn_code").val() || null,
             };
 
             $.ajax({

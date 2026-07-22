@@ -73,6 +73,26 @@
           </li>
           {% endif %}
 
+          <!-- Growing Charges Submenu -->
+          {% if 'broiler_growing_charges' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="broilerGrowingChargesDd">
+              <i class="fas fa-hand-holding-dollar"></i>Growing Charges
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'growing_charge' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'growing_charge' %}">
+                <i class="fas fa-hand-holding-dollar"></i>Growing Charges Master
+              </a></li>{% endif %}
+              {% if 'breed' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'breed' %}">
+                <i class="fa-solid fa-dna"></i>Breed
+              </a></li>{% endif %}
+              {% if 'breed_standard' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'breed_standard' %}">
+                <i class="fa-solid fa-chart-line"></i>Breed Standard
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+
           <!-- Transactions Submenu -->
           {% if 'broiler_transactions' in allowed_sections %}
           <li class="dropdown-submenu">

@@ -139,7 +139,10 @@ class Mapping(models.Model):
 class Item(models.Model):
     VALUATION_METHODS = [
         ('Weighted Average', 'Weighted Average'),
-        ('Standard Costing', 'Standard Costing')
+        ('Standard Costing', 'Standard Costing'),
+        ('FIFO', 'FIFO (First In, First Out)'),
+        ('LIFO', 'LIFO (Last In, First Out)'),
+        ('FEFO', 'FEFO (First Expiry, First Out)'),
     ]
 
     USAGE_CHOICES = [

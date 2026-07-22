@@ -101,4 +101,30 @@ urlpatterns = [
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),
+
+    path('breed/', views.BreedTemplateView.as_view(), name='breed'),
+    path('breed_list/', views.BreedAPI.as_view(), name='breed_list'),  # For listing all breeds
+    path('create-breed/', views.BreedAPI.as_view(), name='breed_create'),  # For creating new breed
+    path('breed/<int:id>/', views.BreedAPI.as_view(), name='breed_edit'),  # For editing breed
+    path('breed/<int:id>/delete/', views.BreedAPI.as_view(), name='breed_delete'),  # For deleting breed
+    path('breed/<int:id>/toggle-active/', views.toggle_breed_active, name='breed_toggle_active'),
+    path('breed/<int:id>/toggle-lock/', views.toggle_breed_lock, name='breed_toggle_lock'),
+
+    path('breed-standard/', views.BreedStandardTemplateView.as_view(), name='breed_standard'),
+    path('breed_standard_list/', views.BreedStandardAPI.as_view(), name='breed_standard_list'),  # Grouped by breed
+    path('save-breed-standard/', views.save_breed_standard, name='breed_standard_save'),  # Create/replace a breed's curve
+    path('breed-standard/breed/<int:breed_id>/', views.breed_standard_by_breed, name='breed_standard_by_breed'),  # Rows for edit
+    path('breed_standard/<int:id>/', views.BreedStandardAPI.as_view(), name='breed_standard_detail'),
+    path('breed_standard/<int:id>/delete/', views.BreedStandardAPI.as_view(), name='breed_standard_delete'),
+    path('breed_standard/<int:id>/toggle-active/', views.toggle_breed_standard_active, name='breed_standard_toggle_active'),
+    path('breed_standard/<int:id>/toggle-lock/', views.toggle_breed_standard_lock, name='breed_standard_toggle_lock'),
+
+    path('growing-charge/', views.GrowingChargeSchemeTemplateView.as_view(), name='growing_charge'),
+    path('growing_charge_list/', views.GrowingChargeSchemeAPI.as_view(), name='growing_charge_list'),
+    path('create-growing-charge/', views.GrowingChargeSchemeAPI.as_view(), name='growing_charge_create'),
+    path('growing_charge/<int:id>/', views.GrowingChargeSchemeAPI.as_view(), name='growing_charge_edit'),
+    path('growing_charge/<int:id>/delete/', views.GrowingChargeSchemeAPI.as_view(), name='growing_charge_delete'),
+    path('growing_charge/<int:id>/toggle-active/', views.toggle_growing_charge_active, name='growing_charge_toggle_active'),
+    path('growing_charge/<int:id>/toggle-lock/', views.toggle_growing_charge_lock, name='growing_charge_toggle_lock'),
+    path('growing_charge/<int:id>/duplicate/', views.growing_charge_duplicate, name='growing_charge_duplicate'),
 ]

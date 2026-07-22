@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}Breed Standard{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_broiler_growing_charge_subnavbar.html' with active_tab='breed_standard' %}
+
+<style>
+  html, body, .content, .container-cstm { background:#fff !important; }
+  #bs-form-view { max-width:1050px; margin:0 auto; }
+  .bs-ctrl-col { width:70px; flex:0 0 70px; }
+  .bs-ctrl { cursor:pointer; font-size:1.3rem; line-height:1; }
+  .bs-ctrl.add { color:#2d6cdf; }
+  .bs-ctrl.sub { color:#e03131; }
+  /* one +/- pair per grid: only the last row shows its controls */
+  .bs-drow:not(:last-child) .bs-row-ctrl { visibility:hidden; }
+  .bs-age { background:#f4f6f8; text-align:center; font-weight:600; }
+  /* auto-filled by default, but editable; manual overrides get a stronger tint */
+  .bs-auto { background:#f4f8ff; }
+  .bs-auto[data-manual] { background:#fff6e6; }
+  .bs-col-head { font-weight:700; color:#222; }
+  /* collapsible breed groups */
+  .bs-group > td { background:#eef2f7; cursor:pointer; user-select:none; font-weight:600; }
+  .bs-group:hover > td { background:#e2e8f1; }
+  .bs-group .chevron { transition:transform .15s ease; }
+  .bs-group.collapsed .chevron { transform:rotate(-90deg); }
+</style>
+
+<!-- ============================ LIST VIEW ============================ -->
+<div id="bs-list-view">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="mb-0">Breed Standard</h5>
+    {% if page_perms.add %}<button class="btn btn-primary" id="bs-add-btn"><i class="fas fa-bars me-1"></i>ADD</button>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="row g-2 align-items-center mb-2">
+        <div class="col-sm-6 col-md-4">
+          <input type="text" class="form-control form-control-sm" id="bs-search" placeholder="Search breed...">
+        </div>
+        <div class="col text-end">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bs-expand-all"><i class="fas fa-angles-down me-1"></i>Expand all</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bs-collapse-all"><i class="fas fa-angles-up me-1"></i>Collapse all</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered mb-0" id="bs-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Breed</th>
+              <th>Age</th>
+              <th>Body Wt.</th>
+              <th>Feed Intake (gms)</th>
+              <th>Avg. Gain</th>
+              <th>FCR</th>
+              <th>Cum. Feed</th>
+              <th class="text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="bs-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ FORM VIEW ============================ -->
+<div id="bs-form-view" style="display:none;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><span id="bs-form-title">Add Breed Standard</span></h5>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="bs-back-btn"><i class="fas fa-arrow-left me-1"></i>Back to list</button>
+  </div>
+
+  <div class="card"><div class="card-body">
+  <form id="bs-form">
+    {% csrf_token %}
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Breed<span class="text-danger">*</span></label>
+        <select class="form-select" id="bs-breed" required>
+          <option value="" selected disabled>select</option>
+          {% for b in breeds %}<option value="{{ b.id }}">{{ b.description }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-2">
+      <div class="bs-ctrl-col bs-col-head">Age<span class="text-danger">*</span></div>
+      <div class="flex-fill bs-col-head">Body Wt.<span class="text-danger">*</span></div>
+      <div class="flex-fill bs-col-head">Feed Intake (gms)<span class="text-danger">*</span></div>
+      <div class="flex-fill bs-col-head">Avg. Daily Gain<span class="text-danger">*</span></div>
+      <div class="flex-fill bs-col-head">FCR <small class="text-muted fw-normal">(auto · editable)</small></div>
+      <div class="flex-fill bs-col-head">Cum. Feed <small class="text-muted fw-normal">(auto · editable)</small></div>
+      <div class="bs-ctrl-col"></div>
+    </div>
+    <div id="bs-rows"></div>
+
+    <div class="d-flex justify-content-center gap-2 mt-4">
+      <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Submit</button>
+      <button type="button" class="btn btn-danger" id="bs-cancel-btn"><i class="fas fa-times me-1"></i>Cancel</button>
+    </div>
+  </form>
+  </div></div>
+</div>
+
+<!-- Row template: each data input carries data-f="<field>" -->
+<template id="tmpl-bs-row"><div class="d-flex gap-2 mb-2 bs-drow align-items-start">
+  <div class="bs-ctrl-col"><input type="number" step="1" min="1" class="form-control bs-age" data-f="age" value=""></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="body_weight" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="feed_intake" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="avg_daily_gain" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.001" class="form-control bs-auto" data-f="fcr" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control bs-auto" data-f="cum_feed" placeholder="0.00"></div>
+  <div class="bs-ctrl-col bs-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="bs-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="bs-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+
+<script>
+$(document).ready(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const canAdd = {% if page_perms.add %}true{% else %}false{% endif %};
+  const canEdit = {% if page_perms.edit %}true{% else %}false{% endif %};
+  const canDelete = {% if page_perms.delete %}true{% else %}false{% endif %};
+
+  const FIELDS = ['body_weight', 'feed_intake', 'avg_daily_gain', 'fcr', 'cum_feed'];
+
+  function showForm() { $('#bs-list-view').hide(); $('#bs-form-view').show(); window.scrollTo(0, 0); }
+  function showList() { $('#bs-form-view').hide(); $('#bs-list-view').show(); }
+
+  // ---- form rows ----
+  function fmtNum(n) { return Number.isFinite(n) ? String(parseFloat(n.toFixed(2))) : ''; }
+
+  // Suggest the next Age = highest current age + 1 (defaults to 1).
+  function nextAge() {
+    const ages = $('#bs-rows .bs-drow [data-f="age"]').map(function () {
+      return parseInt($(this).val(), 10);
+    }).get().filter(n => !isNaN(n));
+    return ages.length ? Math.max(...ages) + 1 : 1;
+  }
+
+  // Cum. Feed = previous cumulative + this row's feed intake; FCR = cum feed / body weight.
+  // Both are auto-filled but user-editable: a cell the user typed into is flagged
+  // [data-manual] and is left untouched by the auto-calc (until it is cleared).
+  function recalc() {
+    let cum = 0;
+    $('#bs-rows .bs-drow').each(function () {
+      const $r = $(this);
+      const body = parseFloat($r.find('[data-f="body_weight"]').val()) || 0;
+      const intakeRaw = $r.find('[data-f="feed_intake"]').val();
+      const intake = parseFloat(intakeRaw) || 0;
+      const $cum = $r.find('[data-f="cum_feed"]');
+      const $fcr = $r.find('[data-f="fcr"]');
+
+      if ($cum.attr('data-manual')) {
+        cum = parseFloat($cum.val()) || cum;          // manual value drives the running total
+      } else {
+        const hasData = intakeRaw !== '' || cum > 0;
+        cum += intake;
+        $cum.val(hasData ? fmtNum(cum) : '');
+      }
+      if (!$fcr.attr('data-manual')) {
+        const cumVal = parseFloat($cum.val());
+        $fcr.val((body > 0 && Number.isFinite(cumVal)) ? fmtNum(cumVal / body) : '');
+      }
+    });
+  }
+
+  function addRow(data) {
+    const node = document.getElementById('tmpl-bs-row').content.cloneNode(true);
+    const $node = $(node);
+    if (data) {
+      $node.find('[data-f]').each(function () {
+        const f = $(this).data('f');
+        if (data[f] !== undefined && data[f] !== null) $(this).val(data[f]);
+      });
+      // Loaded rows keep their stored Cum. Feed / FCR (treated as manual so the
+      // auto-calc doesn't overwrite them on load).
+      $node.find('[data-f="cum_feed"], [data-f="fcr"]').each(function () {
+        if ($(this).val() !== '') $(this).attr('data-manual', '1');
+      });
+    } else {
+      $node.find('[data-f="age"]').val(nextAge());
+    }
+    $('#bs-rows').append($node);
+  }
+  // One blank row to start; the user adds the rest manually with the + button.
+  function seedRows() { $('#bs-rows').empty(); addRow(); recalc(); }
+
+  // Auto-recompute when Body Wt. / Feed Intake change.
+  $(document).on('input', '#bs-rows [data-f="body_weight"], #bs-rows [data-f="feed_intake"]', recalc);
+  // Flag Cum. Feed / FCR as manual when the user types into them (clearing reverts to auto).
+  $(document).on('input', '#bs-rows [data-f="cum_feed"], #bs-rows [data-f="fcr"]', function () {
+    if ($(this).val() === '') $(this).removeAttr('data-manual'); else $(this).attr('data-manual', '1');
+    recalc();
+  });
+
+  $(document).on('click', '#bs-rows .bs-ctrl.add', function () { addRow(); recalc(); });
+  $(document).on('click', '#bs-rows .bs-ctrl.sub', function () {
+    const rows = $('#bs-rows .bs-drow');
+    if (rows.length > 1) { $(this).closest('.bs-drow').remove(); }
+    else { $(this).closest('.bs-drow').find('[data-f]').val('').removeAttr('data-manual'); }
+    recalc();
+  });
+
+  function collectRows() {
+    return $('#bs-rows .bs-drow').map(function () {
+      const o = {};
+      $(this).find('[data-f]').each(function () { o[$(this).data('f')] = $(this).val(); });
+      return o;
+    }).get();
+  }
+
+  // When a breed is picked, load its existing curve (edit-in-place) or seed blanks.
+  let suppressBreedLoad = false;
+  function loadBreedRows(breedId) {
+    $.getJSON(`/breed-standard/breed/${breedId}/`, function (res) {
+      $('#bs-rows').empty();
+      if (res.rows && res.rows.length) { res.rows.forEach(r => addRow(r)); recalc(); }
+      else { seedRows(); }
+    }).fail(() => { seedRows(); });
+  }
+  $('#bs-breed').on('change', function () {
+    if (suppressBreedLoad) return;
+    const id = $(this).val();
+    if (id) loadBreedRows(id); else seedRows();
+  });
+
+  // ---- add / edit ----
+  $('#bs-add-btn').on('click', function () {
+    $('#bs-form-title').text('Add Breed Standard');
+    $('#bs-breed').val('').trigger('change.select2 change');
+    seedRows();
+    showForm();
+  });
+  $('#bs-back-btn, #bs-cancel-btn').on('click', showList);
+
+  $(document).on('click', '.bs-edit', function () {
+    const breedId = $(this).data('breed-id');
+    $('#bs-form-title').text('Edit Breed Standard');
+    suppressBreedLoad = true;
+    $('#bs-breed').val(breedId).trigger('change.select2');
+    suppressBreedLoad = false;
+    loadBreedRows(breedId);
+    showForm();
+  });
+
+  // ---- submit ----
+  $('#bs-form').on('submit', function (e) {
+    e.preventDefault();
+    const breedId = $('#bs-breed').val();
+    if (!breedId) { showToast('danger', 'Please select a breed'); return; }
+    const payload = { breed_id: breedId, rows: collectRows() };
+    $.ajax({
+      url: "{% url 'breed_standard_save' %}",
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+      data: JSON.stringify(payload),
+      success: function () { showList(); loadList(); showToast('success', 'Breed standard saved!'); },
+      error: (xhr, st, err) => showToast('danger', 'Failed to save: ' + (xhr.responseJSON?.error || err)),
+    });
+  });
+
+  // ---- list (grouped by breed, collapsible) ----
+  function actionButtons(r) {
+    let html = '<div class="d-flex gap-1 justify-content-center flex-nowrap">';
+    if (r.is_locked) {
+      html += '<button class="btn btn-outline-secondary btn-sm" disabled title="Locked"><i class="fas fa-pen"></i></button>';
+    } else if (canEdit) {
+      html += `<button class="btn btn-outline-warning btn-sm bs-edit" data-breed-id="${r.breed_id}" title="Edit"><i class="fas fa-pen"></i></button>`;
+    }
+    if (canDelete) {
+      html += `<button class="btn btn-outline-danger btn-sm bs-delete" data-id="${r.id}" ${r.is_locked ? 'disabled' : ''} title="Delete"><i class="fas fa-trash"></i></button>`;
+    }
+    html += `<button class="btn btn-outline-secondary btn-sm bs-print" title="Print"><i class="fas fa-print"></i></button>`;
+    html += `<button class="btn btn-outline-info btn-sm bs-toggle-active" data-id="${r.id}" ${r.is_locked ? 'disabled' : ''} title="${r.is_active ? 'Pause' : 'Activate'}"><i class="fas ${r.is_active ? 'fa-pause' : 'fa-play'}"></i></button>`;
+    html += `<button class="btn btn-outline-dark btn-sm bs-toggle-lock" data-id="${r.id}" title="${r.is_locked ? 'Unlock' : 'Lock'}"><i class="fas ${r.is_locked ? 'fa-lock' : 'fa-lock-open'}"></i></button>`;
+    html += '</div>';
+    return html;
+  }
+
+  function groupHeaderHtml(g) {
+    return `<tr class="bs-group" data-breed="${g.breed_id}" data-breed-name="${escapeHtml((g.breed_name || '').toLowerCase())}">
+      <td colspan="9">
+        <i class="fas fa-chevron-down chevron me-2"></i>
+        <i class="fas fa-folder text-warning me-2"></i>
+        <strong>${escapeHtml(g.breed_name)}</strong>
+        <small class="text-muted ms-2">${escapeHtml(g.breed_code)}</small>
+        <span class="badge bg-secondary ms-2">${g.rows.length} ages</span>
+      </td>
+    </tr>`;
+  }
+
+  function dataRowHtml(r, breedId) {
+    return `<tr class="bs-row bs-grp-${breedId}">
+      <td>${escapeHtml(r.code)}
+        ${!r.is_active ? '<span class="badge bg-secondary ms-1">Inactive</span>' : ''}
+        ${r.is_locked ? '<span class="badge bg-warning text-dark ms-1">Locked</span>' : ''}</td>
+      <td>${escapeHtml(r.breed_name)}</td>
+      <td>${escapeHtml(r.age)}</td>
+      <td>${escapeHtml(r.body_weight)}</td>
+      <td>${escapeHtml(r.feed_intake)}</td>
+      <td>${escapeHtml(r.avg_daily_gain)}</td>
+      <td>${escapeHtml(r.fcr)}</td>
+      <td>${escapeHtml(r.cum_feed)}</td>
+      <td class="text-center">${actionButtons(r)}</td>
+    </tr>`;
+  }
+
+  function loadList() {
+    $.getJSON("{% url 'breed_standard_list' %}", function (rows) {
+      // rows arrive ordered by breed then age -> fold into groups
+      const groups = [];
+      const byId = {};
+      rows.forEach(r => {
+        let g = byId[r.breed_id];
+        if (!g) {
+          g = { breed_id: r.breed_id, breed_code: r.breed_code, breed_name: r.breed_name, rows: [] };
+          byId[r.breed_id] = g; groups.push(g);
+        }
+        g.rows.push(r);
+      });
+
+      const body = $('#bs-table-body').empty();
+      if (!groups.length) {
+        body.append('<tr><td colspan="9" class="text-center text-muted py-4">No breed standards found</td></tr>');
+        return;
+      }
+      groups.forEach(g => {
+        body.append(groupHeaderHtml(g));
+        g.rows.forEach(r => body.append(dataRowHtml(r, g.breed_id)));
+      });
+    }).fail(() => showToast('danger', 'Failed to load breed standards'));
+  }
+
+  // expand / collapse a breed group
+  $(document).on('click', '.bs-group', function () {
+    const $g = $(this);
+    $g.toggleClass('collapsed');
+    $(`.bs-grp-${$g.data('breed')}`).toggle(!$g.hasClass('collapsed'));
+  });
+  $('#bs-expand-all').on('click', function () {
+    $('.bs-group').removeClass('collapsed');
+    $('#bs-table-body .bs-row').show();
+  });
+  $('#bs-collapse-all').on('click', function () {
+    $('.bs-group').addClass('collapsed');
+    $('#bs-table-body .bs-row').hide();
+  });
+
+  // filter groups by breed name
+  $('#bs-search').on('input', function () {
+    const q = $(this).val().trim().toLowerCase();
+    $('.bs-group').each(function () {
+      const $g = $(this);
+      const match = !q || ($g.data('breed-name') || '').indexOf(q) !== -1;
+      $g.toggle(match);
+      const $rows = $(`.bs-grp-${$g.data('breed')}`);
+      if (!match) { $rows.hide(); }
+      else if (q) { $g.removeClass('collapsed'); $rows.show(); }   // reveal matches
+      else { $rows.toggle(!$g.hasClass('collapsed')); }            // restore collapse state
+    });
+  });
+
+  // ---- row actions ----
+  $(document).on('click', '.bs-delete', function () {
+    const id = $(this).data('id');
+    window.bimsConfirm('Delete this breed standard row?', { title: 'Delete row', confirmText: 'Delete' })
+      .then(ok => { if (!ok) return;
+        $.ajax({ url: `/breed_standard/${id}/delete/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
+          success: () => { loadList(); showToast('success', 'Row deleted!'); },
+          error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) }); });
+  });
+  $(document).on('click', '.bs-toggle-active', function () {
+    const id = $(this).data('id');
+    $.ajax({ url: `/breed_standard/${id}/toggle-active/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+      success: loadList, error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) });
+  });
+  $(document).on('click', '.bs-toggle-lock', function () {
+    const id = $(this).data('id');
+    $.ajax({ url: `/breed_standard/${id}/toggle-lock/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+      success: loadList, error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) });
+  });
+  $(document).on('click', '.bs-print', function () {
+    const c = $(this).closest('tr').find('td');
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Breed Standard</title></head><body style="font-family:sans-serif;padding:24px;">
+      <h3>Breed Standard</h3><table style="border-collapse:collapse;">
+      <tr><td style="padding:4px 12px;font-weight:bold;">Code</td><td style="padding:4px 12px;">${c.eq(0).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Breed</td><td style="padding:4px 12px;">${c.eq(1).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Age</td><td style="padding:4px 12px;">${c.eq(2).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Body Wt.</td><td style="padding:4px 12px;">${c.eq(3).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Feed Intake</td><td style="padding:4px 12px;">${c.eq(4).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Avg. Gain</td><td style="padding:4px 12px;">${c.eq(5).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">FCR</td><td style="padding:4px 12px;">${c.eq(6).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Cum. Feed</td><td style="padding:4px 12px;">${c.eq(7).text().trim()}</td></tr>
+      </table></body></html>`);
+    win.document.close(); win.print();
+  });
+
+  // init
+  loadList();
+});
+</script>
+{% endblock %}

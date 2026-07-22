@@ -13,15 +13,18 @@ from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
 from .models import (
-    BirdSale, BirdSaleReceipt, Branch, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
-    BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup, MedicineVaccineEntry,
+    BirdSale, BirdSaleReceipt, Branch, Breed, BreedStandard, BroilerBatch, BroilerDisease, BroilerFarm, BroilerFarmImage,
+    BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup,
+    GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
+    GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
+    GCFCRRecovery, GCFarmerClassification, MedicineVaccineEntry,
     Region, Supervisor,
 )
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
 from sales.models import Customer
 from hatchery_master.models import Hatchery
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import timedelta
 from django.utils import timezone
 import json
@@ -284,6 +287,333 @@ def toggle_region_lock(request, id):
         return JsonResponse({"message": "Region updated", "is_locked": region.is_locked})
     except Region.DoesNotExist:
         return JsonResponse({"error": "Region not found."}, status=404)
+
+
+@method_decorator(login_required, name="dispatch")
+class BreedTemplateView(View):
+    """View for rendering the breed template."""
+
+    def get(self, request):
+        return render(request, "breed.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class BreedAPI(BaseAPIView):
+    """API endpoints for Breed operations."""
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                breed = Breed.objects.get(id=id)
+                return JsonResponse({
+                    "id": breed.id,
+                    "code": breed.code,
+                    "description": breed.description,
+                    "is_active": breed.is_active,
+                    "is_locked": breed.is_locked,
+                })
+
+            breeds = Breed.objects.all()
+            results = [{
+                "id": breed.id,
+                "code": breed.code,
+                "description": breed.description,
+                "is_active": breed.is_active,
+                "is_locked": breed.is_locked,
+            } for breed in breeds]
+            return JsonResponse(results, safe=False)
+        except Breed.DoesNotExist:
+            return JsonResponse({"error": "Breed not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request) -> JsonResponse:
+        try:
+            data = request.POST
+            with transaction.atomic():
+                Breed.objects.create(description=data["description"])
+            return JsonResponse({"message": "Breed created"}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            breed = Breed.objects.get(id=id)
+            if breed.is_locked:
+                return JsonResponse({"error": "This breed is locked."}, status=400)
+            data = json.loads(request.body)
+            with transaction.atomic():
+                breed.description = data["description"]
+                breed.save()
+            return JsonResponse({"message": "Breed updated"})
+        except Breed.DoesNotExist:
+            return JsonResponse({"error": "Breed not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            breed = Breed.objects.get(id=id)
+            if breed.is_locked:
+                return JsonResponse({"error": "This breed is locked."}, status=400)
+            with transaction.atomic():
+                breed.delete()
+            return JsonResponse({"message": "Breed deleted"})
+        except Breed.DoesNotExist:
+            return JsonResponse({"error": "Breed not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def toggle_breed_active(request, id):
+    """Toggle a breed's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        breed = Breed.objects.get(id=id)
+        if breed.is_locked:
+            return JsonResponse({"error": "This breed is locked."}, status=400)
+        breed.is_active = not breed.is_active
+        breed.save(update_fields=["is_active"])
+        return JsonResponse({"message": "Breed updated", "is_active": breed.is_active})
+    except Breed.DoesNotExist:
+        return JsonResponse({"error": "Breed not found."}, status=404)
+
+
+@login_required
+def toggle_breed_lock(request, id):
+    """Toggle a breed's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        breed = Breed.objects.get(id=id)
+        breed.is_locked = not breed.is_locked
+        breed.save(update_fields=["is_locked"])
+        return JsonResponse({"message": "Breed updated", "is_locked": breed.is_locked})
+    except Breed.DoesNotExist:
+        return JsonResponse({"error": "Breed not found."}, status=404)
+
+
+def _to_decimal(value):
+    """Parse a user-supplied number, treating blanks as 0."""
+    if value in (None, ""):
+        return Decimal("0")
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return Decimal("0")
+
+
+def _fmt(value):
+    """Render a Decimal without trailing zeros (12.00 -> '12', 0.240 -> '0.24')."""
+    s = f"{Decimal(value):f}"
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+@method_decorator(login_required, name="dispatch")
+class BreedStandardTemplateView(View):
+    """View for rendering the breed standard template."""
+
+    def get(self, request):
+        context = {"breeds": Breed.objects.filter(is_active=True)}
+        return render(request, "breed_standard.html", context)
+
+
+def _breed_standard_row(bs):
+    return {
+        "id": bs.id,
+        "code": bs.code,
+        "age": bs.age,
+        "body_weight": _fmt(bs.body_weight),
+        "feed_intake": _fmt(bs.feed_intake),
+        "avg_daily_gain": _fmt(bs.avg_daily_gain),
+        "fcr": _fmt(bs.fcr),
+        "cum_feed": _fmt(bs.cum_feed),
+        "is_active": bs.is_active,
+        "is_locked": bs.is_locked,
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class BreedStandardAPI(BaseAPIView):
+    """API endpoints for Breed Standard operations. The list is grouped
+    into one folder per breed."""
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                bs = BreedStandard.objects.select_related("breed").get(id=id)
+                data = _breed_standard_row(bs)
+                data.update({"breed_id": bs.breed_id, "breed_name": bs.breed.description})
+                return JsonResponse(data)
+
+            # Flat list, ordered by breed then age (keeps each breed's rows together).
+            rows = (
+                BreedStandard.objects.select_related("breed")
+                .order_by("breed__code", "age")
+            )
+            results = []
+            for bs in rows:
+                data = _breed_standard_row(bs)
+                data.update({
+                    "breed_id": bs.breed_id,
+                    "breed_code": bs.breed.code,
+                    "breed_name": bs.breed.description,
+                })
+                results.append(data)
+            return JsonResponse(results, safe=False)
+        except BreedStandard.DoesNotExist:
+            return JsonResponse({"error": "Breed standard not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            bs = BreedStandard.objects.get(id=id)
+            if bs.is_locked:
+                return JsonResponse({"error": "This breed standard row is locked."}, status=400)
+            with transaction.atomic():
+                bs.delete()
+            return JsonResponse({"message": "Breed standard deleted"})
+        except BreedStandard.DoesNotExist:
+            return JsonResponse({"error": "Breed standard not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def breed_standard_by_breed(request, breed_id: int):
+    """Return all standard rows for a breed (used to load the edit form)."""
+    try:
+        breed = Breed.objects.get(id=breed_id)
+    except Breed.DoesNotExist:
+        return JsonResponse({"error": "Breed not found."}, status=404)
+    rows = [
+        _breed_standard_row(bs)
+        for bs in BreedStandard.objects.filter(breed=breed).order_by("age")
+    ]
+    return JsonResponse({
+        "breed_id": breed.id,
+        "breed_name": breed.description,
+        "rows": rows,
+    })
+
+
+@login_required
+def save_breed_standard(request):
+    """Create/replace the whole standard curve for a breed. Rows are
+    re-numbered by age (1..N) in submitted order."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        data = json.loads(request.body or "{}")
+        breed_id = data.get("breed_id")
+        rows = data.get("rows") or []
+        if not breed_id:
+            return JsonResponse({"error": "Please select a breed."}, status=400)
+        if not rows:
+            return JsonResponse({"error": "Add at least one row."}, status=400)
+        try:
+            breed = Breed.objects.get(id=breed_id)
+        except Breed.DoesNotExist:
+            return JsonResponse({"error": "Invalid breed."}, status=400)
+
+        existing = BreedStandard.objects.filter(breed=breed)
+        if existing.filter(is_locked=True).exists():
+            return JsonResponse(
+                {"error": "This breed has locked rows. Unlock them before editing."},
+                status=400,
+            )
+
+        # Resolve ages first (Age is editable; blanks default to row position) and
+        # reject duplicates before we touch the DB, so nothing is half-written.
+        ages = []
+        seen = set()
+        for idx, row in enumerate(rows, start=1):
+            try:
+                age = int(row.get("age"))
+            except (TypeError, ValueError):
+                age = idx
+            if age <= 0:
+                age = idx
+            if age in seen:
+                return JsonResponse(
+                    {"error": f"Duplicate age {age}. Each row must have a unique age."},
+                    status=400,
+                )
+            seen.add(age)
+            ages.append(age)
+
+        with transaction.atomic():
+            existing.delete()
+            cum_running = Decimal("0")  # running total, anchored to whatever is stored
+            for age, row in zip(ages, rows):
+                body_weight = _to_decimal(row.get("body_weight"))
+                feed_intake = _to_decimal(row.get("feed_intake"))
+
+                # Cum. Feed: manual override if given, else previous cumulative + feed intake
+                cum_raw = row.get("cum_feed")
+                if cum_raw not in (None, ""):
+                    cum_feed = _to_decimal(cum_raw)
+                else:
+                    cum_feed = cum_running + feed_intake
+                cum_running = cum_feed
+
+                # FCR: manual override if given, else cumulative feed / body weight
+                fcr_raw = row.get("fcr")
+                if fcr_raw not in (None, ""):
+                    fcr = _to_decimal(fcr_raw)
+                elif body_weight > 0:
+                    fcr = (cum_feed / body_weight).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                else:
+                    fcr = Decimal("0")
+
+                BreedStandard.objects.create(
+                    breed=breed,
+                    age=age,
+                    body_weight=body_weight,
+                    feed_intake=feed_intake,
+                    avg_daily_gain=_to_decimal(row.get("avg_daily_gain")),
+                    fcr=fcr,
+                    cum_feed=cum_feed,
+                )
+        return JsonResponse({"message": "Breed standard saved"}, status=201)
+    except Exception as e:
+        logger.error(f"Error in save_breed_standard: {str(e)}", exc_info=True)
+        return JsonResponse({"error": "Internal server error"}, status=500)
+
+
+@login_required
+def toggle_breed_standard_active(request, id):
+    """Toggle a breed standard row's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        bs = BreedStandard.objects.get(id=id)
+        if bs.is_locked:
+            return JsonResponse({"error": "This breed standard row is locked."}, status=400)
+        bs.is_active = not bs.is_active
+        bs.save(update_fields=["is_active"])
+        return JsonResponse({"message": "Breed standard updated", "is_active": bs.is_active})
+    except BreedStandard.DoesNotExist:
+        return JsonResponse({"error": "Breed standard not found."}, status=404)
+
+
+@login_required
+def toggle_breed_standard_lock(request, id):
+    """Toggle a breed standard row's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        bs = BreedStandard.objects.get(id=id)
+        bs.is_locked = not bs.is_locked
+        bs.save(update_fields=["is_locked"])
+        return JsonResponse({"message": "Breed standard updated", "is_locked": bs.is_locked})
+    except BreedStandard.DoesNotExist:
+        return JsonResponse({"error": "Breed standard not found."}, status=404)
 
 
 @method_decorator(login_required, name="dispatch")
@@ -1977,8 +2307,219 @@ def _transfer_to_location_name(header):
     return ""
 
 
-def _build_batch_report(batch):
-    from inventory.models import StockTransfer, MedicineTransfer
+def _div(numerator, denominator):
+    """Safe division returning Decimal('0') when the denominator is zero/None."""
+    n = Decimal(str(numerator or 0))
+    d = Decimal(str(denominator or 0))
+    return (n / d) if d else Decimal("0")
+
+
+def _match_growing_charge_scheme(batch, on_date):
+    """The GrowingChargeScheme whose master-defined date range covers the
+    placement date, for this batch's region — branch-specific preferred over
+    an all-branches scheme. Returns None when no scheme covers the date (the
+    caller then shows 'No Data' for scheme-driven cost/price figures). Never
+    falls back to a scheme outside the date range or another branch."""
+    if not on_date:
+        return None
+    branch = batch.broiler_farm.branch
+    qs = GrowingChargeScheme.objects.filter(
+        region_id=branch.region_id, is_active=True,
+        from_date__lte=on_date, to_date__gte=on_date,
+    )
+    return (qs.filter(branch=branch).order_by("-from_date").first()
+            or qs.filter(branch__isnull=True).order_by("-from_date").first())
+
+
+def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, mortality_rows,
+                         chick_rows, feed_rows, feed_summary_rows, feed_return_rows,
+                         medicine_transfer_rows, medicine_consumption_rows, medicine_return_rows,
+                         bird_sale_rows, fetch_type="farmer", scheme_override=None):
+    """Batch Costing Information and Summary block of the Growing Charge
+    Statement — bird/feed/weight KPIs plus the cost roll-up. Cost drivers
+    (Admin Cost, Grade) come from the batch's applicable GrowingChargeScheme
+    (or ``scheme_override`` when a Schema is hand-picked in the filter bar).
+
+    ``fetch_type`` chooses the statement perspective: 'farmer' bills only the
+    farmer's admin share, 'management' bills the full admin cost."""
+    q2, q3 = Decimal("0.01"), Decimal("0.001")
+
+    # --- dates ---
+    placement_date = min((r["date"] for r in chick_rows), default=None) or batch.start_date
+    sale_start_date = min((r["date"] for r in bird_sale_rows), default=None)
+
+    # --- birds ---
+    sold_birds = sum(r["birds"] for r in bird_sale_rows)
+    sold_weight = sum((r["net_weight"] or 0) for r in bird_sale_rows)
+    sold_amount = sum((r["amount"] or 0) for r in bird_sale_rows)
+    shortage_birds = 0  # not tracked in this system
+    excess_birds = placement_total - cum_mortality - cum_culls - sold_birds - shortage_birds
+
+    # --- mortality % (denominator = chicks placed) ---
+    mort_upto_7 = mort_upto_30 = 0
+    for r in mortality_rows:
+        if r["age"] <= 7:
+            mort_upto_7 = r["cum_mortality"]
+        if r["age"] <= 30:
+            mort_upto_30 = r["cum_mortality"]
+    first_week_mort_pct = _div(mort_upto_7 * 100, placement_total)
+    upto_30_mort_pct = _div(mort_upto_30 * 100, placement_total)
+    after_30_mort_pct = _div((cum_mortality - mort_upto_30) * 100, placement_total)
+    total_mort_pct = _div(cum_mortality * 100, placement_total)
+
+    # --- weights / age ---
+    avg_body_weight = _div(sold_weight, sold_birds).quantize(q2)        # kg
+    weighted_age = sum(
+        ((r["date"] - placement_date).days + 1) * r["birds"]
+        for r in bird_sale_rows) if placement_date else 0
+    mean_age = _div(weighted_age, sold_birds).quantize(q2)
+    day_gain = _div(avg_body_weight * 1000, mean_age)                   # g/day (avg wt in g / mean age)
+
+    # --- feed ---
+    feed_in_kg = sum((r["quantity"] or 0) for r in feed_rows)
+    feed_in_amount = sum((r["amount"] or 0) for r in feed_rows)
+    avg_feed_rate = _div(feed_in_amount, feed_in_kg)
+    feed_consumed = sum((r["consumed"] or 0) for r in feed_summary_rows)
+    feed_return_kg = sum((r["quantity"] or 0) for r in feed_return_rows)
+    feed_cost = feed_consumed * avg_feed_rate
+
+    # --- medicine / vaccine ---
+    med_in_qty = sum((r["quantity"] or 0) for r in medicine_transfer_rows)
+    med_in_amount = sum((r["amount"] or 0) for r in medicine_transfer_rows)
+    med_consumed = sum((r["quantity"] or 0) for r in medicine_consumption_rows)
+    med_return_qty = sum((r["quantity"] or 0) for r in medicine_return_rows)
+    med_cost = med_consumed * _div(med_in_amount, med_in_qty)
+
+    # --- FCR / CFCR / Livability / EEF (per client KPI definitions) ---
+    # Mortality Weight = weight of birds that died, from each day's mortality
+    # valued at that day's average body weight (early deaths weigh less).
+    mortality_weight = sum(
+        (Decimal(str(r["mortality"])) * Decimal(str(r["avg_weight_kg"])) for r in mortality_rows),
+        Decimal("0"),
+    )
+    fcr = _div(feed_consumed, sold_weight)                              # Feed / Live Weight
+    cfcr = _div(feed_consumed, sold_weight + mortality_weight)          # Feed / (Live Wt + Mortality Wt)
+    livability_pct = _div(sold_birds * 100, placement_total)           # (Birds Sold / Chicks Placed) x 100
+    eef = _div(livability_pct * avg_body_weight * 100, mean_age * fcr)  # (Livability x Avg Wt x 100) / (Age x FCR)
+
+    # --- costs from the applicable Growing Charge Scheme ---
+    scheme = scheme_override or _match_growing_charge_scheme(batch, placement_date)
+    chick_cost = sum((r["amount"] or 0) for r in chick_rows)
+    if scheme:
+        farmer_rate = scheme.farmer_admin_cost or 0
+        mgmt_rate = scheme.management_admin_cost or 0
+        # Farmer report bills only the farmer's admin share; Management report
+        # bills the full admin cost (farmer + management).
+        admin_rate = farmer_rate if fetch_type == "farmer" else (farmer_rate + mgmt_rate)
+        admin_cost = admin_rate * placement_total
+    else:
+        admin_cost = Decimal("0")
+    total_production_cost = feed_cost + chick_cost + med_cost + admin_cost
+    production_cost_per_kg = _div(total_production_cost, sold_weight)
+
+    # --- Grade: Farmer-Classification band matched on production cost/kg ---
+    grade = ""
+    if scheme:
+        for fc in scheme.farmer_classifications.all():
+            if fc.production_cost_from <= production_cost_per_kg <= fc.production_to:
+                grade = fc.grade
+                break
+
+    # --- Financials (Management view) ---
+    revenue = Decimal(str(sold_amount))
+    gross_profit = revenue - total_production_cost
+    # No overhead ledger (labour/electricity/fuel/...) exists, so Net == Gross here.
+    net_profit = gross_profit
+    prod_cost_per_bird = _div(total_production_cost, placement_total)
+    margin_per_bird = _div(gross_profit, sold_birds)
+    margin_per_kg = _div(gross_profit, sold_weight)
+    roi = _div(gross_profit * 100, total_production_cost)
+
+    # --- Standard rates from the Growing Charge Master (settlement basis;
+    #     NEVER actual company purchase costs) ---
+    _weight = Decimal(str(sold_weight))
+    std_chick_rate = Decimal(str(scheme.chick_cost)) if scheme else Decimal("0")
+    std_feed_rate = Decimal(str(scheme.feed_cost)) if scheme else Decimal("0")
+    std_med_rate = Decimal(str(scheme.medicine_cost)) if scheme else Decimal("0")
+    std_prod_per_kg = Decimal(str(scheme.std_production_cost)) if scheme else Decimal("0")
+    base_gc_rate = Decimal(str(scheme.standard_gc_cost)) if scheme else Decimal("0")
+    base_gc_amount = base_gc_rate * _weight
+    std_prod_total = std_prod_per_kg * _weight
+    prod_cost_variance_kg = std_prod_per_kg - production_cost_per_kg
+    prod_cost_variance_total = std_prod_total - total_production_cost
+
+    data = {
+        "revenue": revenue.quantize(q2),
+        "gross_profit": gross_profit.quantize(q2),
+        "net_profit": net_profit.quantize(q2),
+        "prod_cost_per_bird": prod_cost_per_bird.quantize(q2),
+        "margin_per_bird": margin_per_bird.quantize(q2),
+        "margin_per_kg": margin_per_kg.quantize(q2),
+        "roi": roi.quantize(q2),
+        "std_chick_rate": std_chick_rate.quantize(q2),
+        "std_feed_rate": std_feed_rate.quantize(q2),
+        "std_med_rate": std_med_rate.quantize(q2),
+        "std_prod_per_kg": std_prod_per_kg.quantize(q2),
+        "base_gc_rate": base_gc_rate.quantize(q2),
+        "base_gc_amount": base_gc_amount.quantize(q2),
+        "std_prod_total": std_prod_total.quantize(q2),
+        "prod_cost_variance_kg": prod_cost_variance_kg.quantize(q2),
+        "prod_cost_variance_total": prod_cost_variance_total.quantize(q2),
+        "has_scheme": bool(scheme),
+        "placement_date": placement_date,
+        "sale_start_date": sale_start_date,
+        "chicks_placed": placement_total,
+        "mortality": cum_mortality,
+        "culls": cum_culls,
+        "excess_birds": excess_birds,
+        "shortage_birds": shortage_birds,
+        "grade": grade,
+        "first_week_mort_pct": first_week_mort_pct.quantize(q2),
+        "upto_30_mort_pct": upto_30_mort_pct.quantize(q2),
+        "after_30_mort_pct": after_30_mort_pct.quantize(q2),
+        "total_mort_pct": total_mort_pct.quantize(q2),
+        "avg_body_weight": avg_body_weight.quantize(q2),
+        "mean_age": mean_age.quantize(q2),
+        "day_gain": day_gain.quantize(q2),
+        "fcr": fcr.quantize(q2),
+        "cfcr": cfcr.quantize(q2),
+        "livability_pct": livability_pct.quantize(q2),
+        "mortality_weight": mortality_weight.quantize(q2),
+        "eef": eef.quantize(q2),
+        "sold_birds": sold_birds,
+        "sold_weight": Decimal(str(sold_weight)).quantize(q2),
+        "sold_amount": Decimal(str(sold_amount)).quantize(q2),
+        "avg_sale_rate": _div(sold_amount, sold_weight).quantize(q2),
+        "feed_sent": Decimal(str(feed_in_kg)).quantize(q2),
+        "feed_consumed": Decimal(str(feed_consumed)).quantize(q2),
+        "feed_return": Decimal(str(feed_return_kg)).quantize(q2),
+        "feed_cost": feed_cost.quantize(q2),
+        "chick_cost": Decimal(str(chick_cost)).quantize(q2),
+        "med_sent": Decimal(str(med_in_qty)).quantize(q2),
+        "med_consumed": Decimal(str(med_consumed)).quantize(q2),
+        "med_return": Decimal(str(med_return_qty)).quantize(q2),
+        "med_cost": med_cost.quantize(q2),
+        "admin_cost": admin_cost.quantize(q2),
+        "total_production_cost": total_production_cost.quantize(q2),
+        "production_cost_per_kg": production_cost_per_kg.quantize(q2),
+        "scheme_code": scheme.scheme_code if scheme else "",
+    }
+
+    # No Growing Charge Scheme covers the placement date -> the scheme-driven
+    # cost/settlement/variance figures are undefined; show "No Data" for them
+    # (operational + performance figures still show real values).
+    if not scheme:
+        for key in ("admin_cost", "grade", "total_production_cost", "production_cost_per_kg",
+                    "prod_cost_per_bird", "gross_profit", "net_profit", "margin_per_bird",
+                    "margin_per_kg", "roi", "std_chick_rate", "std_feed_rate", "std_med_rate",
+                    "std_prod_per_kg", "base_gc_rate", "base_gc_amount", "std_prod_total",
+                    "prod_cost_variance_kg", "prod_cost_variance_total"):
+            data[key] = "No Data"
+    return data
+
+
+def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
+    from inventory.models import StockTransfer, MedicineTransfer, Mapping
     from purchase.models import GeneralPurchaseItem
 
     # Feed Purchase: purchases have no batch/farm FK at all, only a
@@ -1992,8 +2533,15 @@ def _build_batch_report(batch):
     # start_date/end_date are both nullable (the Batch form sets neither),
     # so each bound is applied only when it exists — an unbounded batch
     # simply shows every purchase at the branch.
+    # A Warehouse (Office) no longer has a direct Branch FK — its Branch is
+    # resolved through inventory.Mapping (TYPE_SECTOR_BRANCH: from_id=office,
+    # to_id=branch), so we first gather the offices mapped to this branch.
     branch_id = batch.broiler_farm.branch_id
-    purchase_items = GeneralPurchaseItem.objects.filter(farm_warehouse__branch_id=branch_id)
+    branch_office_ids = list(
+        Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id=branch_id)
+        .values_list("from_id", flat=True)
+    )
+    purchase_items = GeneralPurchaseItem.objects.filter(farm_warehouse_id__in=branch_office_ids)
     if batch.start_date:
         purchase_items = purchase_items.filter(purchase__date__gte=batch.start_date)
     if batch.end_date:
@@ -2119,9 +2667,9 @@ def _build_batch_report(batch):
             "sold_birds": sold, "closing_birds": closing_birds,
             "avg_weight_kg": round(avg_bw_kg, 3),
             "fcr": round(cum_feed_kg / (closing_birds * avg_bw_kg), 2) if closing_birds and avg_bw_kg else 0,
-            "feed_1_name": de.feed_1.item_code if de.feed_1_id else "", "feed_1_kg": feed_1_kg,
+            "feed_1_name": de.feed_1.description if de.feed_1_id else "", "feed_1_kg": feed_1_kg,
             "feed_1_bags": round(_bags(feed_1_kg, de.feed_1), 2),
-            "feed_2_name": de.feed_2.item_code if de.feed_2_id else "", "feed_2_kg": feed_2_kg,
+            "feed_2_name": de.feed_2.description if de.feed_2_id else "", "feed_2_kg": feed_2_kg,
             "feed_2_bags": round(_bags(feed_2_kg, de.feed_2), 2),
             "cum_feed_kg": cum_feed_kg,
             "feed_per_bird_g": round(cum_feed_kg * 1000 / placement_total, 2) if placement_total else 0,
@@ -2200,12 +2748,29 @@ def _build_batch_report(batch):
             _feed_bucket(de.feed_1.item_code)["consumed"] += de.feed_1_qty or 0
         if de.feed_2_id:
             _feed_bucket(de.feed_2.item_code)["consumed"] += de.feed_2_qty or 0
+    # Bucketed by item_code (stable key), but display the item name.
+    feed_name_by_code = dict(
+        Item.objects.filter(item_code__in=feed_summary.keys()).values_list("item_code", "description")
+    )
     feed_summary_rows = [{
-        "item": item_code, **b,
+        "item": feed_name_by_code.get(item_code, item_code), **b,
         "balance": b["purchased"] + b["transfer_in"] - b["consumed"] - b["returned"] - b["transferred_out"],
     } for item_code, b in feed_summary.items()]
 
+    # Bird-sale totals (reused by the Total row and the costing block)
+    _bs_birds = sum(r["birds"] for r in bird_sale_rows)
+    _bs_weight = sum(r["net_weight"] for r in bird_sale_rows)
+    _bs_amount = sum(r["amount"] for r in bird_sale_rows)
+
+    batch_costing = _build_batch_costing(
+        batch, placement_total, cum_mortality, cum_culls, mortality_rows,
+        chick_rows, feed_rows, feed_summary_rows, feed_return_rows,
+        medicine_transfer_rows, medicine_consumption_rows, medicine_return_rows,
+        bird_sale_rows, fetch_type=fetch_type, scheme_override=scheme_override,
+    )
+
     return {
+        "batch_costing": batch_costing,
         "chick_placement": chick_rows,
         "feed_purchase": feed_purchase_rows,
         "feed_transfer_in": feed_rows,
@@ -2220,9 +2785,12 @@ def _build_batch_report(batch):
         "medicine_consumption": medicine_consumption_rows,
         "bird_sales": bird_sale_rows,
         "totals": {
-            "birds": sum(r["birds"] for r in bird_sale_rows),
-            "net_weight": sum(r["net_weight"] for r in bird_sale_rows),
-            "amount": sum(r["amount"] for r in bird_sale_rows),
+            "birds": _bs_birds,
+            "net_weight": _bs_weight,
+            "amount": _bs_amount,
+            # Overall averages for the Total row: Avg Wt = weight/birds, Rate = amount/weight
+            "avg_weight": _div(_bs_weight, _bs_birds).quantize(Decimal("0.01")),
+            "avg_sale_rate": _div(_bs_amount, _bs_weight).quantize(Decimal("0.01")),
             "mortality": cum_mortality, "culls": cum_culls,
         },
     }
@@ -2238,22 +2806,59 @@ def broiler_batch_report(request):
     Feed Purchase has no batch/farm FK at all (only a Warehouse), so it's
     rolled up at the Branch level and bounded to the batch's growing
     window rather than claimed to be exact-to-batch. The Batch Costing
-    Summary from the reference report isn't included: it needs a
-    placement bird-count baseline that BroilerBatch doesn't track.
+    Information and Summary block uses the Chick Placement total as the
+    placement baseline and pulls Admin Cost / Grade from the batch's
+    applicable GrowingChargeScheme (see _build_batch_costing).
     """
     from account.models import CompanyProfile
 
     batch_id = (request.GET.get("batch") or "").strip()
+    # Filter-bar selections
+    fetch_type = (request.GET.get("fetch_type") or "farmer").strip().lower()
+    if fetch_type not in ("farmer", "management"):
+        fetch_type = "farmer"
+    book_no = (request.GET.get("book_no") or "").strip()
+    export = (request.GET.get("export") or "display").strip().lower()
+    schema_id = (request.GET.get("schema") or "").strip()
+
     batch = (BroilerBatch.objects
              .select_related("broiler_farm__branch", "broiler_farm__supervisor", "broiler_farm__farmer")
              .filter(id=batch_id).first()) if batch_id else None
+    # A hand-picked Schema overrides the auto-matched Growing Charge Scheme.
+    scheme_override = (GrowingChargeScheme.objects.filter(id=schema_id).first()
+                       if schema_id.isdigit() else None)
+
+    # Schema dropdown: only schemes whose master-defined date range covers the
+    # batch's placement date (region-matched); auto-select the applicable one.
+    schemes = GrowingChargeScheme.objects.filter(is_active=True)
+    selected_schema_id = int(schema_id) if schema_id.isdigit() else None
+    if batch:
+        placement = batch.start_date
+        region_id = batch.broiler_farm.branch.region_id
+        if placement:
+            schemes = schemes.filter(region_id=region_id,
+                                     from_date__lte=placement, to_date__gte=placement)
+        else:
+            schemes = schemes.filter(region_id=region_id)
+        if selected_schema_id is None:
+            matched = _match_growing_charge_scheme(batch, placement)
+            selected_schema_id = matched.id if matched else None
+    schemes = schemes.order_by("schema_name")
+
     return render(request, "broiler_batch_report.html", {
         "farms": BroilerFarm.objects.order_by("farm_name"),
         "batches": BroilerBatch.objects.select_related("broiler_farm").order_by("-start_date", "-id"),
+        "schemes": schemes,
         "batch": batch,
         "batch_requested": bool(batch_id),
-        "report": _build_batch_report(batch) if batch else None,
+        "report": _build_batch_report(batch, fetch_type=fetch_type,
+                                      scheme_override=scheme_override) if batch else None,
         "company": CompanyProfile.get_solo(),
+        "fetch_type": fetch_type,
+        "fetch_type_label": "Management" if fetch_type == "management" else "Farmer",
+        "book_no": book_no,
+        "export": export,
+        "selected_schema_id": selected_schema_id,
     })
 
 
@@ -2305,3 +2910,243 @@ class ChicksPlacementFormTemplateView(View):
             "hatcheries": _hatcheries_with_warehouse(),
             "today": timezone.localdate().isoformat(),
         })
+
+
+# ---------------------------------------------------------------------------
+# Growing Charges Master (Rearing Charge)
+# ---------------------------------------------------------------------------
+
+GROWING_CHARGE_LIST_CACHE_KEY = "growing_charge_scheme_list"
+
+# related_name -> (child model, ordered field list). Rows round-trip as JSON
+# arrays; string fields (incentive_on / grade) stay as text, the rest default 0.
+GC_CHILD_SPECS = [
+    ("production_cost_incentives", GCProductionCostIncentive, ["from_production_cost", "to_production_cost", "rate_pct"]),
+    ("sales_incentives", GCSalesIncentive, ["sale_rate_from", "sale_rate_to", "sales_incentive"]),
+    ("mortality_incentives", GCMortalityIncentive, ["from_mortality_pct", "to_mortality_pct", "incentive_value"]),
+    ("fcr_incentives", GCFCRIncentive, ["cfcr_limit", "body_weight", "incentive_value"]),
+    ("summer_incentives", GCSummerIncentive, ["min_production_cost", "max_production_cost", "incentive_on", "from_production_cost", "to_production_cost", "incentive_rate"]),
+    ("production_cost_decentives", GCProductionCostDecentive, ["from_production_cost", "to_production_cost", "rate_pct"]),
+    ("mortality_decentives", GCMortalityDecentive, ["from_mortality_pct", "to_mortality_pct", "decentive_value"]),
+    ("fcr_recoveries", GCFCRRecovery, ["cfcr_limit", "production_limit", "recovery_rate"]),
+    ("farmer_classifications", GCFarmerClassification, ["production_cost_from", "production_to", "grade"]),
+]
+GC_STRING_ROW_FIELDS = {"incentive_on", "grade"}
+
+
+@method_decorator(login_required, name="dispatch")
+class GrowingChargeSchemeTemplateView(View):
+    """Renders the Rearing / Growing Charge master page."""
+
+    def get(self, request):
+        context = {
+            "regions": Region.objects.order_by("description"),
+            "branches": Branch.objects.select_related("region").order_by("branch_name"),
+            "medicine_basis_choices": GrowingChargeScheme.MedicineCostBasis.choices,
+            "shortage_basis_choices": GrowingChargeScheme.ShortageBasis.choices,
+            "summer_incentive_on_choices": GCSummerIncentive.IncentiveOn.choices,
+        }
+        return render(request, "growing_charge.html", context)
+
+
+@method_decorator(login_required, name="dispatch")
+class GrowingChargeSchemeAPI(BaseAPIView):
+    """CRUD API for the Rearing / Growing Charge master with its nested rows."""
+
+    SCALAR_FIELDS = [
+        "schema_name", "from_date", "to_date",
+        "chick_cost", "feed_cost", "medicine_cost_basis", "medicine_cost",
+        "farmer_admin_cost", "management_admin_cost", "std_production_cost",
+        "standard_gc_cost", "minimum_gc_cost", "standard_fcr", "standard_mortality",
+        "unloading_charges", "maximum_prod_cost", "maximum_rate_incentive",
+        "mort_dec_first_week_exceeds", "mort_dec_overall_above", "mort_dec_first_week_value",
+        "shortage_basis",
+    ]
+    CHOICE_FIELDS = {"medicine_cost_basis", "shortage_basis"}
+    DECIMAL_FIELDS = {
+        "chick_cost", "feed_cost", "medicine_cost", "farmer_admin_cost",
+        "management_admin_cost", "std_production_cost", "standard_gc_cost",
+        "minimum_gc_cost", "standard_fcr", "standard_mortality", "unloading_charges",
+        "maximum_prod_cost", "maximum_rate_incentive", "mort_dec_first_week_exceeds",
+        "mort_dec_overall_above", "mort_dec_first_week_value",
+    }
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                scheme = GrowingChargeScheme.objects.select_related("region", "branch").get(id=id)
+                data = {f: getattr(scheme, f) for f in self.SCALAR_FIELDS}
+                for f in self.DECIMAL_FIELDS:
+                    data[f] = str(data[f])
+                data["from_date"] = scheme.from_date.isoformat() if scheme.from_date else None
+                data["to_date"] = scheme.to_date.isoformat() if scheme.to_date else None
+                data.update({
+                    "id": scheme.id,
+                    "scheme_code": scheme.scheme_code,
+                    "region_id": scheme.region_id,
+                    "branch_id": scheme.branch_id,
+                    "is_active": scheme.is_active,
+                    "is_locked": scheme.is_locked,
+                })
+                for related_name, _model, fields in GC_CHILD_SPECS:
+                    rows = list(getattr(scheme, related_name).values(*fields))
+                    for row in rows:
+                        for k in fields:
+                            if k not in GC_STRING_ROW_FIELDS:
+                                row[k] = str(row[k])
+                    data[related_name] = rows
+                return JsonResponse(data)
+
+            cached = self.get_cached_data(GROWING_CHARGE_LIST_CACHE_KEY)
+            if cached:
+                return JsonResponse(cached, safe=False)
+
+            schemes = []
+            for s in GrowingChargeScheme.objects.select_related("branch"):
+                schemes.append({
+                    "id": s.id,
+                    "scheme_code": s.scheme_code,
+                    "from_date": s.from_date.strftime("%d.%m.%Y") if s.from_date else "",
+                    "to_date": s.to_date.strftime("%d.%m.%Y") if s.to_date else "",
+                    "branch_name": s.branch.branch_name if s.branch else "-All-",
+                    "schema_name": s.schema_name,
+                    "chick_cost": str(s.chick_cost),
+                    "feed_cost": str(s.feed_cost),
+                    "medicine_cost": str(s.medicine_cost),
+                    "farmer_admin_cost": str(s.farmer_admin_cost),
+                    "std_production_cost": str(s.std_production_cost),
+                    "minimum_gc_cost": str(s.minimum_gc_cost),
+                    "standard_fcr": str(s.standard_fcr),
+                    "standard_mortality": str(s.standard_mortality),
+                    "is_active": s.is_active,
+                    "is_locked": s.is_locked,
+                })
+            self.set_cached_data(GROWING_CHARGE_LIST_CACHE_KEY, schemes)
+            return JsonResponse(schemes, safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def _save_children(self, scheme, data):
+        """Replace every nested-row set from the posted JSON arrays."""
+        for related_name, model, fields in GC_CHILD_SPECS:
+            rows = json.loads(data.get(related_name, "[]") or "[]")
+            model.objects.filter(scheme=scheme).delete()
+            for row in rows:
+                kwargs = {}
+                blank = True
+                for f in fields:
+                    val = row.get(f, "")
+                    if f in GC_STRING_ROW_FIELDS:
+                        kwargs[f] = val or ""
+                        if val:
+                            blank = False
+                    else:
+                        kwargs[f] = val if val not in ("", None) else 0
+                        if val not in ("", None, "0", "0.00", 0):
+                            blank = False
+                if blank:
+                    continue
+                model.objects.create(scheme=scheme, **kwargs)
+
+    def post(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            data = request.POST
+            with transaction.atomic():
+                scheme = GrowingChargeScheme.objects.get(id=id) if id else GrowingChargeScheme()
+                if id and scheme.is_locked:
+                    return JsonResponse({"error": "This scheme is locked."}, status=400)
+
+                scheme.region = Region.objects.get(id=data["region_id"])
+                branch_id = data.get("branch_id")
+                scheme.branch = Branch.objects.get(id=branch_id) if branch_id else None
+
+                for field in self.SCALAR_FIELDS:
+                    if field in data:
+                        value = data[field]
+                        if value == "" and field in self.DECIMAL_FIELDS:
+                            value = 0
+                        setattr(scheme, field, value)
+
+                scheme.full_clean(exclude=["scheme_code"])
+                scheme.save()
+
+                self._save_children(scheme, data)
+                cache.delete(GROWING_CHARGE_LIST_CACHE_KEY)
+            return JsonResponse(
+                {"message": "Scheme updated" if id else "Scheme created", "id": scheme.id},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            scheme = GrowingChargeScheme.objects.get(id=id)
+            if scheme.is_locked:
+                return JsonResponse({"error": "This scheme is locked."}, status=400)
+            with transaction.atomic():
+                scheme.delete()
+                cache.delete(GROWING_CHARGE_LIST_CACHE_KEY)
+            return JsonResponse({"message": "Scheme deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def growing_charge_duplicate(request, id):
+    """Clone a scheme (header + all nested rows) into a new draft record."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        src = GrowingChargeScheme.objects.get(id=id)
+    except GrowingChargeScheme.DoesNotExist:
+        return JsonResponse({"error": "Scheme not found."}, status=404)
+    with transaction.atomic():
+        children = [(rn, m, list(getattr(src, rn).all())) for rn, m, _f in GC_CHILD_SPECS]
+        clone = src
+        clone.pk = None
+        clone.scheme_code = ""
+        clone.schema_name = f"{src.schema_name} (Copy)"
+        clone.is_locked = False
+        clone._state.adding = True
+        clone.save()
+        for related_name, model, rows in children:
+            for row in rows:
+                row.pk = None
+                row.scheme = clone
+                row._state.adding = True
+                row.save()
+        cache.delete(GROWING_CHARGE_LIST_CACHE_KEY)
+    return JsonResponse({"message": "Scheme duplicated", "id": clone.id}, status=201)
+
+
+@login_required
+def toggle_growing_charge_active(request, id):
+    """Toggle a scheme's active/inactive status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        scheme = GrowingChargeScheme.objects.get(id=id)
+        if scheme.is_locked:
+            return JsonResponse({"error": "This scheme is locked."}, status=400)
+        scheme.is_active = not scheme.is_active
+        scheme.save(update_fields=["is_active"])
+        cache.delete(GROWING_CHARGE_LIST_CACHE_KEY)
+        return JsonResponse({"message": "Scheme updated", "is_active": scheme.is_active})
+    except GrowingChargeScheme.DoesNotExist:
+        return JsonResponse({"error": "Scheme not found."}, status=404)
+
+
+@login_required
+def toggle_growing_charge_lock(request, id):
+    """Toggle a scheme's locked status."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        scheme = GrowingChargeScheme.objects.get(id=id)
+        scheme.is_locked = not scheme.is_locked
+        scheme.save(update_fields=["is_locked"])
+        cache.delete(GROWING_CHARGE_LIST_CACHE_KEY)
+        return JsonResponse({"message": "Scheme updated", "is_locked": scheme.is_locked})
+    except GrowingChargeScheme.DoesNotExist:
+        return JsonResponse({"error": "Scheme not found."}, status=404)

@@ -7,7 +7,7 @@
 
 <style>
   body { background: #eef2f5; }
-  .report-doc { max-width: 1400px; margin: 0 auto; background: #fff; }
+  .report-doc { width: 98%; max-width: 1900px; margin: 0 auto; background: #fff; }
   .report-letterhead {
     display: flex; align-items: center;
     background: #cfe3ec; border: 1px solid #9fc3d6; padding: .75rem 1.25rem;
@@ -26,11 +26,17 @@
   .report-filter-bar {
     border: 1px solid #dee2e6; border-top: none; padding: .75rem 1.25rem; background: #f8f9fa;
   }
+  /* Keep the whole bar on one row: field columns shrink to fit, buttons don't. */
+  .report-filter-bar form > [class*="col-md-"] { flex-shrink: 1; min-width: 0; }
+  .report-filter-bar .col-auto { white-space: nowrap; }
   .report-batch-info {
-    background: #cfe3ec; border: 1px solid #9fc3d6; padding: .5rem 1rem;
-    font-weight: 600; font-size: .9rem;
+    background: #e2efda; border: 1px solid #b6d7a8; padding: .5rem 1rem;
+    font-weight: 700; font-size: .82rem;
+    white-space: nowrap; overflow-x: auto;
   }
-  .report-batch-info span { margin-right: 1.25rem; }
+  .report-batch-info > span { margin-right: 1.1rem; white-space: nowrap; }
+  .report-batch-info .k { color: #2e7d32; }   /* label — green */
+  .report-batch-info .v { color: #c0392b; }   /* value — red */
   .report-section-title {
     text-align: center; color: #0d5f8a; font-weight: 700; font-size: 1.05rem;
     padding: .5rem 0 .25rem;
@@ -40,11 +46,24 @@
     background: #cfe3ec; border-color: #9fc3d6 !important; font-size: .8rem;
     font-weight: 700; padding: .35rem .5rem; white-space: nowrap;
   }
-  .report-table td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; }
+  .report-table td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; white-space: nowrap; }
+  /* Remarks is the one free-text column — let it wrap instead of stretching the row */
+  .report-table td.report-wrap { white-space: normal; min-width: 120px; }
+  /* Mortality table: compact so more columns fit, in a capped scroll box with a
+     sticky 2-row header that stays locked at the top while the rows scroll. */
+  .report-scroll { max-height: 72vh; overflow: auto; }
+  .report-dense th, .report-dense td { font-size: .72rem; padding: .18rem .3rem; line-height: 1.15; }
+  .report-dense thead th { position: sticky; z-index: 3; }
+  .report-dense thead tr:first-child th { top: 0; }
+  .report-dense thead tr:nth-child(2) th { top: 1.5rem; }
   .report-table tbody tr:nth-child(even) { background: #f7f4fb; }
   .report-table tfoot td, .report-table tr.report-total-row td {
     font-weight: 700; background: #dbe9f0 !important;
   }
+  .report-costing td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; }
+  .report-costing td.lbl { background: #eaf3f8; font-weight: 700; white-space: nowrap; }
+  .report-costing td.val { text-align: right; }
+  .report-costing td.hl { color: #b02a2a; font-weight: 700; text-align: right; }
   @media print {
     .no-print { display: none !important; }
     body { background: #fff; }
@@ -69,23 +88,56 @@
   <div class="report-doc-title">Growing Charge Statement</div>
 
   <div class="report-filter-bar no-print">
-    <form method="get" class="row g-3 align-items-end">
-      <div class="col-md-3">
+    <form method="get" class="row g-2 align-items-end flex-nowrap">
+      <div class="col-6 col-md-2">
         <label class="form-label">Farm</label>
         <select class="form-select" id="report-farm">
           <option value="">select</option>
-          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
+          {% for f in farms %}<option value="{{ f.id }}" data-code="{{ f.farm_code }}">{{ f.farm_name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-1">
+        <label class="form-label">Farm Code</label>
+        <input type="text" class="form-control" id="report-farm-code" readonly placeholder="-">
+      </div>
+      <div class="col-6 col-md-2">
         <label class="form-label">Batch <span class="text-danger">*</span></label>
         <select class="form-select" name="batch" id="report-batch" required>
           <option value="">select</option>
-          {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
-            {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name|escapejs }} — {{ b.batch_name|escapejs }}</option>{% endfor %}
+          {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}" data-book="{{ b.book_number }}"
+            {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-2">
+      <div class="col-6 col-md-1">
+        <label class="form-label">Book No</label>
+        <select class="form-select" name="book_no" id="report-book">
+          <option value="">select</option>
+          {% for b in batches %}{% if b.book_number %}<option value="{{ b.book_number }}" data-batch="{{ b.id }}"
+            {% if book_no == b.book_number %}selected{% endif %}>{{ b.book_number }}</option>{% endif %}{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Report Type</label>
+        <select class="form-select" name="fetch_type" id="report-type">
+          <option value="farmer" {% if fetch_type == 'farmer' %}selected{% endif %}>Farmer Report</option>
+          <option value="management" {% if fetch_type == 'management' %}selected{% endif %}>Management Report</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Schema</label>
+        <select class="form-select" name="schema">
+          <option value="">select</option>
+          {% for s in schemes %}<option value="{{ s.id }}" {% if selected_schema_id == s.id %}selected{% endif %}>{{ s.schema_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-1">
+        <label class="form-label">Export</label>
+        <select class="form-select" name="export">
+          <option value="display" {% if export == 'display' %}selected{% endif %}>Display</option>
+          <option value="pdf" {% if export == 'pdf' %}selected{% endif %}>PDF</option>
+        </select>
+      </div>
+      <div class="col-auto">
         <button class="btn btn-primary" type="submit">Submit</button>
         {% if batch %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>{% endif %}
       </div>
@@ -94,12 +146,14 @@
 
 {% if batch %}
   <div class="report-batch-info">
-    <span>Branch: {{ batch.broiler_farm.branch.branch_name }}</span>
-    <span>Line: {{ batch.broiler_farm.line }}</span>
-    <span>Farm: {{ batch.broiler_farm.farm_name }}</span>
-    <span>Supervisor: {{ batch.broiler_farm.supervisor.name }}</span>
-    <span>Farmer: {{ batch.broiler_farm.farmer.farmer_name }}</span>
-    <span>Batch: {{ batch.batch_name }}</span>
+    <span><span class="k">Branch:</span> <span class="v">{{ batch.broiler_farm.branch.branch_name }}</span></span>
+    <span><span class="k">Line:</span> <span class="v">{{ batch.broiler_farm.line }}</span></span>
+    <span><span class="k">Farm:</span> <span class="v">{{ batch.broiler_farm.farm_name }}</span></span>
+    <span><span class="k">Supervisor:</span> <span class="v">{{ batch.broiler_farm.supervisor.name }}</span></span>
+    <span><span class="k">Farmer:</span> <span class="v">{{ batch.broiler_farm.farmer.farmer_name }}</span></span>
+    <span><span class="k">Batch No.:</span> <span class="v">{{ batch.batch_name }}</span></span>
+    {% if batch.book_number %}<span><span class="k">Book No.:</span> <span class="v">{{ batch.book_number }}</span></span>{% endif %}
+    <span><span class="k">Report Type:</span> <span class="v">{{ fetch_type_label }}</span></span>
   </div>
 
   <div class="report-section-title">Chick Placement</div>
@@ -274,8 +328,8 @@
   </div>
 
   <div class="report-section-title">Mortality And Feed Consumption Details</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
+  <div class="report-scroll">
+    <table class="table table-bordered mb-0 report-table report-dense">
       <thead>
         <tr>
           <th colspan="2"></th><th>Opening</th><th colspan="2">Mortality</th><th></th><th colspan="2"></th>
@@ -307,7 +361,7 @@
         </tr>
         {% else %}
         <tr>
-          <td>{{ r.date }}</td><td>{{ r.age }}</td>
+          <td>{{ r.date|date:"d.m.y" }}</td><td>{{ r.age }}</td>
           <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
           <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
           <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
@@ -316,7 +370,7 @@
           <td>{{ r.feed_2_name }}</td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
           <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
           <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
-          <td>{{ r.remarks }}</td>
+          <td class="report-wrap">{{ r.remarks }}</td>
         </tr>
         {% endif %}
         {% empty %}<tr><td colspan="23" class="text-center text-muted">No daily entries for this batch</td></tr>{% endfor %}
@@ -349,7 +403,9 @@
           <td colspan="4">Total</td>
           <td class="text-end">{{ report.totals.birds }}</td>
           <td class="text-end">{{ report.totals.net_weight }}</td>
-          <td></td><td></td><td></td>
+          <td class="text-end">{{ report.totals.avg_weight }}</td>
+          <td class="text-end">{{ report.totals.avg_sale_rate }}</td>
+          <td></td>
           <td class="text-end">{{ report.totals.amount }}</td>
           <td colspan="3"></td>
         </tr>
@@ -357,6 +413,174 @@
       {% endif %}
     </table>
   </div>
+
+  {% with c=report.batch_costing %}
+  <div class="report-section-title">Batch Costing Information and Summary</div>
+  <div class="table-responsive mb-4">
+    <table class="table table-bordered mb-0 report-costing">
+      <tbody>
+        <tr>
+          <td class="lbl">Placement Date</td><td class="val">{{ c.placement_date|date:"d.m.Y" }}</td>
+          <td class="lbl">1st week Mort%</td><td class="val">{{ c.first_week_mort_pct }}</td>
+          <td class="lbl">Sale Start Date</td><td class="val">{{ c.sale_start_date|date:"d.m.Y" }}</td>
+          <td class="lbl">Feed Sent</td><td class="val">{{ c.feed_sent }}</td>
+          <td class="lbl">Med/Vac Sent</td><td class="val">{{ c.med_sent }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Chicks Placed</td><td class="val">{{ c.chicks_placed }}</td>
+          <td class="lbl">Upto 30days Mort%</td><td class="val">{{ c.upto_30_mort_pct }}</td>
+          <td class="lbl">Sold Birds</td><td class="val">{{ c.sold_birds }}</td>
+          <td class="lbl">Feed Consumed</td><td class="val">{{ c.feed_consumed }}</td>
+          <td class="lbl">Med/Vac Consumed</td><td class="val">{{ c.med_consumed }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Mortality</td><td class="val">{{ c.mortality }}</td>
+          <td class="lbl">After 30days Mort%</td><td class="val">{{ c.after_30_mort_pct }}</td>
+          <td class="lbl">Sold Weight</td><td class="val">{{ c.sold_weight }}</td>
+          <td class="lbl">Feed Return</td><td class="val">{{ c.feed_return }}</td>
+          <td class="lbl">Med/Vac Return</td><td class="val">{{ c.med_return }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Culls</td><td class="val">{{ c.culls }}</td>
+          <td class="lbl">Avg.Body Weight</td><td class="val">{{ c.avg_body_weight }}</td>
+          <td class="lbl">Sold Amount</td><td class="val">{{ c.sold_amount }}</td>
+          <td class="lbl">Feed Cost</td><td class="val">{{ c.feed_cost }}</td>
+          <td class="lbl">Med/Vac Cost</td><td class="val">{{ c.med_cost }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Excess Birds</td><td class="val">{{ c.excess_birds }}</td>
+          <td class="lbl">Mean Age</td><td class="val">{{ c.mean_age }}</td>
+          <td class="lbl">Avg. Sale Rate</td><td class="val">{{ c.avg_sale_rate }}</td>
+          <td class="lbl">Chick Cost</td><td class="val">{{ c.chick_cost }}</td>
+          <td class="lbl">Admin Cost</td><td class="val">{{ c.admin_cost }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Shortage Birds</td><td class="val">{{ c.shortage_birds }}</td>
+          <td class="lbl">Day Gain</td><td class="val">{{ c.day_gain }}</td>
+          <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
+          <td class="lbl">Total Production Cost</td><td class="hl">{{ c.total_production_cost }}</td>
+          <td class="lbl"></td><td class="val"></td>
+        </tr>
+        <tr>
+          <td class="lbl">Grade</td><td class="val">{{ c.grade }}</td>
+          <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
+          <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
+          <td class="lbl">Production Cost Per Kg</td><td class="hl">{{ c.production_cost_per_kg }}</td>
+          <td class="lbl"></td><td class="val"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================= MANAGEMENT DASHBOARD (management report only) ================= -->
+  <div class="report-section-title" data-role="management">Management KPI</div>
+  <div class="table-responsive mb-4" data-role="management">
+    <table class="table table-bordered mb-0 report-costing">
+      <tbody>
+        <tr>
+          <td class="lbl">Total Birds Placed</td><td class="val">{{ c.chicks_placed }}</td>
+          <td class="lbl">Birds Sold</td><td class="val">{{ c.sold_birds }}</td>
+          <td class="lbl">Mortality</td><td class="val">{{ c.mortality }}</td>
+          <td class="lbl">Livability</td><td class="val">{{ c.livability_pct }}%</td>
+        </tr>
+        <tr>
+          <td class="lbl">Average Weight</td><td class="val">{{ c.avg_body_weight }}</td>
+          <td class="lbl">Feed Consumed</td><td class="val">{{ c.feed_consumed }}</td>
+          <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
+          <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
+          <td class="lbl">Production Cost / Bird</td><td class="val">{{ c.prod_cost_per_bird }}</td>
+          <td class="lbl">Production Cost / Kg</td><td class="val">{{ c.production_cost_per_kg }}</td>
+          <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Gross Margin</td><td class="hl">{{ c.gross_profit }}</td>
+          <td class="lbl">Net Margin</td><td class="hl">{{ c.net_profit }}</td>
+          <td class="lbl"></td><td class="val"></td>
+          <td class="lbl"></td><td class="val"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title" data-role="management">Actual Cost Analysis</div>
+  <div class="table-responsive mb-4" data-role="management">
+    <table class="table table-bordered mb-0 report-table">
+      <thead><tr><th>Cost Head</th><th class="text-end">Amount</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>Actual Chick Cost</td><td class="text-end">{{ c.chick_cost }}</td><td class="text-muted">Chick placement</td></tr>
+        <tr><td>Actual Feed Cost</td><td class="text-end">{{ c.feed_cost }}</td><td class="text-muted">Feed consumed &times; transfer rate</td></tr>
+        <tr><td>Actual Medicine Cost</td><td class="text-end">{{ c.med_cost }}</td><td class="text-muted">Medicine consumed</td></tr>
+        <tr><td>Actual Vaccine Cost</td><td class="text-end">&mdash;</td><td class="text-muted">not separated from medicine</td></tr>
+        <tr><td>Labour Cost</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr><td>Electricity</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr><td>Fuel</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr><td>Transport</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr><td>Litter</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr><td>Repair</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr><td>Growing Charges Paid</td><td class="text-end">{{ c.admin_cost }}</td><td class="text-muted">Admin (Growing Charge Master)</td></tr>
+        <tr><td>Overheads</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+        <tr class="report-total-row"><td>Total Production Cost</td><td class="text-end">{{ c.total_production_cost }}</td><td>tracked heads only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title" data-role="management">Variance Analysis</div>
+  <div class="table-responsive mb-4" data-role="management">
+    <table class="table table-bordered mb-0 report-table">
+      <thead><tr><th>Metric</th><th class="text-end">Standard</th><th class="text-end">Actual</th><th class="text-end">Variance</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Production Cost / Kg</td>
+          <td class="text-end">{{ c.std_prod_per_kg }}</td>
+          <td class="text-end">{{ c.production_cost_per_kg }}</td>
+          <td class="text-end">{{ c.prod_cost_variance_kg }}</td>
+        </tr>
+        <tr>
+          <td>Total Production Cost</td>
+          <td class="text-end">{{ c.std_prod_total }}</td>
+          <td class="text-end">{{ c.total_production_cost }}</td>
+          <td class="text-end">{{ c.prod_cost_variance_total }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title" data-role="management">Financial Summary</div>
+  <div class="table-responsive mb-4" data-role="management">
+    <table class="table table-bordered mb-0 report-costing">
+      <tbody>
+        <tr>
+          <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>
+          <td class="lbl">Total Cost</td><td class="val">{{ c.total_production_cost }}</td>
+          <td class="lbl">Gross Profit</td><td class="hl">{{ c.gross_profit }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Net Profit</td><td class="hl">{{ c.net_profit }}</td>
+          <td class="lbl">Margin / Bird</td><td class="val">{{ c.margin_per_bird }}</td>
+          <td class="lbl">Margin / Kg</td><td class="val">{{ c.margin_per_kg }}</td>
+        </tr>
+        <tr>
+          <td class="lbl">ROI %</td><td class="val">{{ c.roi }}</td>
+          <td class="lbl"></td><td class="val"></td>
+          <td class="lbl"></td><td class="val"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-section-title" data-role="management">Comparison &amp; Charts</div>
+  <div class="mb-4" data-role="management">
+    <div class="alert alert-info mb-0">
+      Target vs Actual, Farm / Company averages, Breed-Standard &amp; Previous-Batch comparison, and
+      trend charts (Weight / Feed / Mortality / FCR / Profit) need cross-batch aggregation, a
+      breed link on the batch, and a charting library — not yet available in this system.
+      These will populate once those data sources are added.
+    </div>
+  </div>
+  {% endwith %}
 
 {% elif batch_requested %}
   <div class="alert alert-warning">Batch not found.</div>
@@ -376,9 +600,41 @@ $(function () {
       opt.toggle(!farmId || opt.data('farm') == farmId);
     });
   }
-  $('#report-farm').on('change', filterBatches);
+  function updateFarmCode() {
+    $('#report-farm-code').val($('#report-farm option:selected').data('code') || '');
+  }
+  $('#report-farm').on('change', function () { filterBatches(); updateFarmCode(); });
+
+  // Book No is the batch's book number — keep Batch and Book No in lock-step.
+  function syncBookFromBatch() {
+    $('#report-book').val($('#report-batch option:selected').data('book') || '');
+  }
+  $('#report-batch').on('change', function () {
+    const farmId = $('#report-batch option:selected').data('farm');
+    if (farmId) { $('#report-farm').val(farmId); updateFarmCode(); }
+    syncBookFromBatch();
+  });
+  $('#report-book').on('change', function () {
+    const batchId = $('#report-book option:selected').data('batch');
+    if (batchId) { $('#report-batch').val(batchId).trigger('change'); }
+  });
+
   {% if batch %}$('#report-farm').val('{{ batch.broiler_farm_id }}');{% endif %}
   filterBatches();
+  updateFarmCode();
+  syncBookFromBatch();
+
+  // Report Type: show/hide role-scoped sections instantly, no page reload.
+  // Elements tagged data-role="management" appear only in the Management report;
+  // untagged elements are shared (Farmer + Management).
+  function applyReportType(type) {
+    const showMgmt = (type === 'management');
+    $('[data-role="management"]').each(function () { $(this).toggle(showMgmt); });
+  }
+  $('#report-type').on('change', function () { applyReportType($(this).val()); });
+  applyReportType($('#report-type').val());
+
+  {% if batch and export == 'pdf' %}window.print();{% endif %}
 });
 </script>
 {% endblock %}

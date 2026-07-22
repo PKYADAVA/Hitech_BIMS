@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block title %}Rearing Charge{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_broiler_growing_charge_subnavbar.html' with active_tab='growing_charge' %}
+
+<style>
+  /* whole page uniform white, matching the ERP */
+  html, body, .content, .container-cstm { background:#fff !important; }
+  .gc-section-title { color:#c0392b; font-weight:700; text-align:center; margin:1.75rem 0 1rem; }
+  .gc-sub-label { color:#2d6cdf; font-weight:700; }
+  .gc-col-head { font-weight:700; color:#222; }
+  .gc-ctrl-col { width:70px; flex:0 0 70px; }
+  .gc-ctrl { cursor:pointer; font-size:1.3rem; line-height:1; }
+  .gc-ctrl.add { color:#2d6cdf; }
+  .gc-ctrl.sub { color:#e03131; }
+  /* one +/- pair per section: only the last row shows its controls */
+  .gc-drow:not(:last-child) .gc-row-ctrl { visibility:hidden; }
+  /* keep the form from stretching across ultra-wide screens */
+  #gc-form-view { max-width:1050px; margin:0 auto; }
+</style>
+
+<!-- ============================ LIST VIEW ============================ -->
+<div id="gc-list-view">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="mb-0">Rearing Charge</h5>
+    {% if page_perms.add %}<button class="btn btn-primary" id="gc-add-btn"><i class="fas fa-bars me-1"></i>ADD</button>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered mb-0" id="gc-table" style="width:100%">
+          <thead>
+            <tr>
+              <th>From Date</th>
+              <th>To Date</th>
+              <th>Branch</th>
+              <th>Schema Name</th>
+              <th>Chick Cost</th>
+              <th>Feed Cost</th>
+              <th>Med Cost</th>
+              <th>Admin Cost</th>
+              <th>Std Cost</th>
+              <th>Min Cost</th>
+              <th>Std FCR</th>
+              <th>Std Mort</th>
+              <th class="text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="gc-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ FORM VIEW (single unified page) ============================ -->
+<div id="gc-form-view" style="display:none;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><span id="gc-form-title">Add Rearing Charge</span>
+      <small class="text-muted ms-2" id="gc-form-code"></small></h5>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="gc-back-btn"><i class="fas fa-arrow-left me-1"></i>Back to list</button>
+  </div>
+
+  <div class="card"><div class="card-body">
+  <form id="gc-form">
+    {% csrf_token %}
+    <input type="hidden" id="gc-id" value="">
+
+    <!-- Header -->
+    <div class="row g-3 mb-2">
+      <div class="col-md">
+        <label class="form-label">Region<span class="text-danger">*</span></label>
+        <select class="form-select" id="region_id" required>
+          <option value="" selected disabled>select</option>
+          {% for r in regions %}<option value="{{ r.id }}">{{ r.description }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md">
+        <label class="form-label">Branch<span class="text-danger">*</span></label>
+        <select class="form-select" id="branch_id">
+          <option value="">-All-</option>
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md">
+        <label class="form-label">From Date<span class="text-danger">*</span></label>
+        <input type="date" class="form-control" id="from_date" required>
+      </div>
+      <div class="col-md">
+        <label class="form-label">To Date<span class="text-danger">*</span></label>
+        <input type="date" class="form-control" id="to_date" required>
+      </div>
+      <div class="col-md">
+        <label class="form-label">Schema Name<span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="schema_name" required>
+      </div>
+    </div>
+
+    <!-- Standard Growing Charge -->
+    <div class="gc-section-title">Standard Growing Charge</div>
+    <div class="row justify-content-center"><div class="col-lg-6 col-md-8">
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Chick Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control gc-scost" id="chick_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Feed Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control gc-scost" id="feed_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center">
+        <label class="col-6 col-form-label text-end fw-semibold">Medicine Cost</label>
+        <div class="col-6 d-flex align-items-center flex-wrap gap-3">
+          {% for val, label in medicine_basis_choices %}
+          <div class="form-check mb-0"><input class="form-check-input gc-med-basis" type="radio" name="medicine_cost_basis" id="med_{{ val }}" value="{{ val }}" {% if val == 'actual' %}checked{% endif %}><label class="form-check-label" for="med_{{ val }}">{{ label }}</label></div>
+          {% endfor %}
+          <input type="number" step="0.01" class="form-control gc-scost" id="medicine_cost" placeholder="0.00" style="display:none;width:110px;">
+        </div>
+      </div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Farmer Admin Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control gc-scost" id="farmer_admin_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Management Admin Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control gc-scost" id="management_admin_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Std Production Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="std_production_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Standard GC Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_gc_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Minimum GC Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="minimum_gc_cost" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Standard FCR</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_fcr" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Standard Mortality</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_mortality" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Unloading Charges</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="unloading_charges" placeholder="0.00"></div></div>
+    </div></div>
+
+    <!-- Incentives -->
+    <div class="gc-section-title">Incentives</div>
+
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">Production Cost Incentives</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">From Production Cost</div><div class="flex-fill gc-col-head">To Production Cost</div><div class="flex-fill gc-col-head">Rate %</div><div class="gc-ctrl-col"></div></div>
+        <div id="pci-rows"></div>
+      </div>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">Sales Incentives</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">Sale Rate From</div><div class="flex-fill gc-col-head">Sale Rate To</div><div class="flex-fill gc-col-head">Sales Incentives</div><div class="gc-ctrl-col"></div></div>
+        <div id="si-rows"></div>
+        <div class="row g-3 mt-1">
+          <div class="col-md-6 d-flex align-items-center gap-2"><label class="form-label mb-0">Maximum Prod. Cost</label><input type="number" step="0.01" class="form-control" id="maximum_prod_cost" placeholder="0.00"></div>
+          <div class="col-md-6 d-flex align-items-center gap-2"><label class="form-label mb-0">Maximum Rate Incentive</label><input type="number" step="0.01" class="form-control" id="maximum_rate_incentive" placeholder="0.00"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">Mortality Incentives</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">From Mortality %</div><div class="flex-fill gc-col-head">To Mortality %</div><div class="flex-fill gc-col-head">Incentive Value</div><div class="gc-ctrl-col"></div></div>
+        <div id="mi-rows"></div>
+      </div>
+    </div>
+
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">FCR Incentives</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">CFCR Limit</div><div class="flex-fill gc-col-head">Body Weight</div><div class="flex-fill gc-col-head">Incentive Value</div><div class="gc-ctrl-col"></div></div>
+        <div id="fci-rows"></div>
+      </div>
+    </div>
+
+    <div class="row mb-2">
+      <div class="col-lg-3"><div class="gc-sub-label">Summer Incentives</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">Min. Production Cost</div><div class="flex-fill gc-col-head">MAx. Production Cost</div><div class="flex-fill gc-col-head">Incentive On</div><div class="flex-fill gc-col-head">From Production Cost</div><div class="flex-fill gc-col-head">To Production Cost</div><div class="flex-fill gc-col-head">Incentive Rate</div><div class="gc-ctrl-col"></div></div>
+        <div id="sui-rows"></div>
+      </div>
+    </div>
+
+    <!-- Decentives or Penalty -->
+    <div class="gc-section-title">Decentives or Penalty</div>
+
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">Production Cost Decentives</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">From Production Cost</div><div class="flex-fill gc-col-head">To Production Cost</div><div class="flex-fill gc-col-head">Rate %</div><div class="gc-ctrl-col"></div></div>
+        <div id="pcd-rows"></div>
+      </div>
+    </div>
+
+    <div class="row mb-2">
+      <div class="col-lg-3"><div class="gc-sub-label">Mortality Decentives</div></div>
+      <div class="col-lg-9">
+        <div class="row g-3 mb-3">
+          <div class="col-md-4"><label class="form-label">1st Week Mortality Exceeds</label><input type="number" step="0.01" class="form-control" id="mort_dec_first_week_exceeds" placeholder="0.00"></div>
+          <div class="col-md-4"><label class="form-label">Overall Above</label><input type="number" step="0.01" class="form-control" id="mort_dec_overall_above" placeholder="0.00"></div>
+          <div class="col-md-4"><label class="form-label">1st Week Mortality Exceeds</label><input type="number" step="0.01" class="form-control" id="mort_dec_first_week_value" placeholder="0.00"></div>
+        </div>
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">From Mortality %</div><div class="flex-fill gc-col-head">To Mortality %</div><div class="flex-fill gc-col-head">Decentive Value</div><div class="gc-ctrl-col"></div></div>
+        <div id="mde-rows"></div>
+      </div>
+    </div>
+
+    <!-- Shortage -->
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">Shortage</div></div>
+      <div class="col-lg-9">
+        <div class="row text-center">
+          {% for val, label in shortage_basis_choices %}
+          <div class="col">
+            <label class="form-label d-block gc-col-head">{{ label }}<span class="text-danger">*</span></label>
+            <input class="form-check-input" type="radio" name="shortage_basis" value="{{ val }}" {% if val == 'which_is_higher' %}checked{% endif %}>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- FCR Recovery -->
+    <div class="row mb-4">
+      <div class="col-lg-3"><div class="gc-sub-label">FCR Recovery</div></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">CFCR Limit</div><div class="flex-fill gc-col-head">Production Limit</div><div class="flex-fill gc-col-head">Recovery Rate</div><div class="gc-ctrl-col"></div></div>
+        <div id="fcr-rows"></div>
+      </div>
+    </div>
+
+    <!-- Farmer Classifications -->
+    <div class="gc-section-title">Farmer Classifications</div>
+    <div class="row mb-2">
+      <div class="col-lg-3"></div>
+      <div class="col-lg-9">
+        <div class="d-flex mb-2"><div class="flex-fill gc-col-head">Production Cost From</div><div class="flex-fill gc-col-head">Production To</div><div class="flex-fill gc-col-head">Grade</div><div class="gc-ctrl-col"></div></div>
+        <div id="fcl-rows"></div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-4">
+      <button type="button" class="btn btn-danger" id="gc-cancel-btn"><i class="fas fa-times me-1"></i>Cancel</button>
+      <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+    </div>
+  </form>
+  </div></div>
+</div>
+
+<!-- Row templates: borderless div rows; each input carries data-f="<field>" -->
+<template id="tmpl-production_cost_incentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="from_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="to_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="rate_pct" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-sales_incentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="sale_rate_from" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="sale_rate_to" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="sales_incentive" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-mortality_incentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="from_mortality_pct" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="to_mortality_pct" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="incentive_value" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-fcr_incentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.001" class="form-control" data-f="cfcr_limit" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.001" class="form-control" data-f="body_weight" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="incentive_value" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-summer_incentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="min_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="max_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><select class="form-select" data-f="incentive_on">{% for val, label in summer_incentive_on_choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}</select></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="from_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="to_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="incentive_rate" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-production_cost_decentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="from_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="to_production_cost" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="rate_pct" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-mortality_decentives"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="from_mortality_pct" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="to_mortality_pct" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="decentive_value" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-fcr_recoveries"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.001" class="form-control" data-f="cfcr_limit" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="production_limit" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="recovery_rate" placeholder="0.00"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+<template id="tmpl-farmer_classifications"><div class="d-flex gap-2 mb-2 gc-drow">
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="production_cost_from" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="production_to" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="text" maxlength="5" class="form-control" data-f="grade" placeholder="A-Z"></div>
+  <div class="gc-ctrl-col gc-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="gc-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="gc-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
+</div></template>
+
+<script>
+$(document).ready(function () {
+  const csrfToken = "{{ csrf_token }}";
+  let gcTable;
+
+  const CHILDREN = {
+    production_cost_incentives: '#pci-rows',
+    sales_incentives: '#si-rows',
+    mortality_incentives: '#mi-rows',
+    fcr_incentives: '#fci-rows',
+    summer_incentives: '#sui-rows',
+    production_cost_decentives: '#pcd-rows',
+    mortality_decentives: '#mde-rows',
+    fcr_recoveries: '#fcr-rows',
+    farmer_classifications: '#fcl-rows',
+  };
+  const SCALARS = ['schema_name','from_date','to_date','chick_cost','feed_cost','medicine_cost',
+    'farmer_admin_cost','management_admin_cost','std_production_cost','standard_gc_cost',
+    'minimum_gc_cost','standard_fcr','standard_mortality','unloading_charges',
+    'maximum_prod_cost','maximum_rate_incentive','mort_dec_first_week_exceeds',
+    'mort_dec_overall_above','mort_dec_first_week_value'];
+
+  function showForm() { $('#gc-list-view').hide(); $('#gc-form-view').show(); window.scrollTo(0,0); }
+  function showList() { $('#gc-form-view').hide(); $('#gc-list-view').show(); }
+
+  // Medicine value input only visible when basis = Fixed
+  function toggleMedValue() {
+    $('#medicine_cost').toggle($('input[name=medicine_cost_basis]:checked').val() === 'fixed');
+  }
+  $(document).on('change', '.gc-med-basis', toggleMedValue);
+
+  // ---- nested rows (borderless divs, one +/- pair per section) ----
+  function addRow(cfg, data) {
+    const node = document.getElementById('tmpl-' + cfg).content.cloneNode(true);
+    const $node = $(node);
+    if (data) $node.find('[data-f]').each(function () {
+      const f = $(this).data('f');
+      if (data[f] !== undefined && data[f] !== null) $(this).val(data[f]);
+    });
+    $(CHILDREN[cfg]).append($node);
+  }
+  function collect(cfg) {
+    return $(CHILDREN[cfg]).children().map(function () {
+      const o = {};
+      $(this).find('[data-f]').each(function () { o[$(this).data('f')] = $(this).val(); });
+      return o;
+    }).get();
+  }
+  // rows container id (e.g. #pci-rows) -> cfg key
+  const REVERSE = Object.fromEntries(Object.entries(CHILDREN).map(([k, v]) => [v, k]));
+  $(document).on('click', '.gc-ctrl.add', function () {
+    addRow(REVERSE['#' + $(this).closest('[id$="-rows"]').attr('id')]);
+  });
+  $(document).on('click', '.gc-ctrl.sub', function () {
+    const row = $(this).closest('.gc-drow');
+    const cont = row.parent();
+    if (cont.children().length > 1) row.remove();
+    else row.find('[data-f]').val('');  // keep one row, just clear it
+  });
+  function seedEmptyRows() { Object.keys(CHILDREN).forEach(cfg => addRow(cfg)); }
+
+  // ---- list ----
+  function initTable() {
+    gcTable = $('#gc-table').DataTable({
+      responsive: true, order: [[0, 'desc']],
+      dom: 'Bfrtip', buttons: ['copy','csv','excel','pdf','print','colvis'],
+      columnDefs: [{ orderable: false, targets: [-1] }],
+      language: { emptyTable: 'No data available in table' },
+    });
+  }
+  function loadList() {
+    $.getJSON("{% url 'growing_charge_list' %}", function (rows) {
+      if (gcTable) gcTable.destroy();
+      const body = $('#gc-table-body').empty();
+      rows.forEach(s => {
+        body.append(`
+          <tr>
+            <td>${escapeHtml(s.from_date)}</td>
+            <td>${escapeHtml(s.to_date)}</td>
+            <td>${escapeHtml(s.branch_name)}
+              ${!s.is_active ? '<span class="badge bg-secondary ms-1">Inactive</span>' : ''}
+              ${s.is_locked ? '<span class="badge bg-warning text-dark ms-1">Locked</span>' : ''}
+            </td>
+            <td>${escapeHtml(s.schema_name)}</td>
+            <td>${escapeHtml(s.chick_cost)}</td>
+            <td>${escapeHtml(s.feed_cost)}</td>
+            <td>${escapeHtml(s.medicine_cost)}</td>
+            <td>${escapeHtml(s.farmer_admin_cost)}</td>
+            <td>${escapeHtml(s.std_production_cost)}</td>
+            <td>${escapeHtml(s.minimum_gc_cost)}</td>
+            <td>${escapeHtml(s.standard_fcr)}</td>
+            <td>${escapeHtml(s.standard_mortality)}</td>
+            <td><div class="d-flex gap-1 justify-content-center flex-nowrap">
+              {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm gc-edit" data-id="${s.id}" ${s.is_locked ? 'disabled' : ''} title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+              {% if page_perms.add %}<button class="btn btn-outline-success btn-sm gc-duplicate" data-id="${s.id}" title="Duplicate"><i class="fas fa-clipboard"></i></button>{% endif %}
+              {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm gc-delete" data-id="${s.id}" ${s.is_locked ? 'disabled' : ''} title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+              <button class="btn btn-outline-info btn-sm gc-toggle-active" data-id="${s.id}" ${s.is_locked ? 'disabled' : ''} title="${s.is_active ? 'Pause' : 'Activate'}"><i class="fas ${s.is_active ? 'fa-pause' : 'fa-play'}"></i></button>
+              <button class="btn btn-outline-warning btn-sm gc-toggle-lock" data-id="${s.id}" title="${s.is_locked ? 'Unlock' : 'Lock'}"><i class="fas ${s.is_locked ? 'fa-lock' : 'fa-lock-open'}"></i></button>
+              <button class="btn btn-outline-secondary btn-sm gc-print" title="Print"><i class="fas fa-print"></i></button>
+            </div></td>
+          </tr>`);
+      });
+      initTable();
+    }).fail(() => showToast('danger', 'Failed to load schemes'));
+  }
+
+  // ---- reset / populate ----
+  function resetForm() {
+    $('#gc-form')[0].reset();
+    $('#gc-id').val('');
+    $('#gc-form-title').text('Add Rearing Charge');
+    $('#gc-form-code').text('');
+    Object.keys(CHILDREN).forEach(cfg => $(CHILDREN[cfg]).empty());
+    $('#med_actual').prop('checked', true);
+    $('input[name=shortage_basis][value=which_is_higher]').prop('checked', true);
+    seedEmptyRows();
+    toggleMedValue();
+  }
+  $('#gc-add-btn').on('click', function () { resetForm(); showForm(); });
+  $('#gc-back-btn, #gc-cancel-btn').on('click', showList);
+
+  $(document).on('click', '.gc-edit', function () {
+    const id = $(this).data('id');
+    $.getJSON(`/growing_charge/${id}/`, function (s) {
+      resetForm();
+      $('#gc-id').val(s.id);
+      $('#gc-form-title').text('Edit Rearing Charge');
+      $('#gc-form-code').text(s.scheme_code);
+      $('#region_id').val(s.region_id).trigger('change');
+      $('#branch_id').val(s.branch_id || '').trigger('change');
+      SCALARS.forEach(f => $('#' + f).val(s[f]));
+      $(`input[name=medicine_cost_basis][value="${s.medicine_cost_basis}"]`).prop('checked', true);
+      $(`input[name=shortage_basis][value="${s.shortage_basis}"]`).prop('checked', true);
+      Object.keys(CHILDREN).forEach(cfg => $(CHILDREN[cfg]).empty());  // drop seeded blanks
+      Object.keys(CHILDREN).forEach(cfg => (s[cfg] || []).forEach(row => addRow(cfg, row)));
+      Object.keys(CHILDREN).forEach(cfg => { if (!$(CHILDREN[cfg]).children().length) addRow(cfg); });
+      toggleMedValue();
+      showForm();
+    }).fail(() => showToast('danger', 'Error fetching scheme'));
+  });
+
+  // ---- submit ----
+  $('#gc-form').on('submit', function (e) {
+    e.preventDefault();
+    const id = $('#gc-id').val();
+    const fd = new FormData();
+    fd.append('region_id', $('#region_id').val());
+    fd.append('branch_id', $('#branch_id').val());
+    SCALARS.forEach(f => fd.append(f, $('#' + f).val() || (f === 'schema_name' ? '' : 0)));
+    fd.append('medicine_cost_basis', $('input[name=medicine_cost_basis]:checked').val());
+    fd.append('shortage_basis', $('input[name=shortage_basis]:checked').val());
+    Object.keys(CHILDREN).forEach(cfg => fd.append(cfg, JSON.stringify(collect(cfg))));
+
+    const url = id ? `/growing_charge/${id}/` : "{% url 'growing_charge_create' %}";
+    $.ajax({
+      url: url, method: 'POST', data: fd, processData: false, contentType: false,
+      headers: { 'X-CSRFToken': csrfToken },
+      success: function () { showList(); loadList(); showToast('success', id ? 'Scheme updated!' : 'Scheme created!'); },
+      error: (xhr, st, err) => showToast('danger', 'Failed to save: ' + (xhr.responseJSON?.error || err)),
+    });
+  });
+
+  // ---- row actions ----
+  $(document).on('click', '.gc-delete', function () {
+    const id = $(this).data('id');
+    window.bimsConfirm('Delete this rearing charge scheme?', { title: 'Delete scheme', confirmText: 'Delete' })
+      .then(ok => { if (!ok) return;
+        $.ajax({ url: `/growing_charge/${id}/delete/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
+          success: () => { loadList(); showToast('success', 'Scheme deleted!'); },
+          error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) }); });
+  });
+  $(document).on('click', '.gc-duplicate', function () {
+    const id = $(this).data('id');
+    $.ajax({ url: `/growing_charge/${id}/duplicate/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+      success: () => { loadList(); showToast('success', 'Scheme duplicated!'); },
+      error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) });
+  });
+  $(document).on('click', '.gc-toggle-active', function () {
+    const id = $(this).data('id');
+    $.ajax({ url: `/growing_charge/${id}/toggle-active/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+      success: loadList, error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) });
+  });
+  $(document).on('click', '.gc-toggle-lock', function () {
+    const id = $(this).data('id');
+    $.ajax({ url: `/growing_charge/${id}/toggle-lock/`, method: 'POST', headers: { 'X-CSRFToken': csrfToken },
+      success: loadList, error: (xhr, st, err) => showToast('danger', 'Failed: ' + (xhr.responseJSON?.error || err)) });
+  });
+  $(document).on('click', '.gc-print', function () {
+    const c = $(this).closest('tr').find('td');
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Rearing Charge</title></head><body style="font-family:sans-serif;padding:24px;">
+      <h3>Rearing Charge</h3><table style="border-collapse:collapse;">
+      <tr><td style="padding:4px 12px;font-weight:bold;">From Date</td><td style="padding:4px 12px;">${c.eq(0).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">To Date</td><td style="padding:4px 12px;">${c.eq(1).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Branch</td><td style="padding:4px 12px;">${c.eq(2).text().trim()}</td></tr>
+      <tr><td style="padding:4px 12px;font-weight:bold;">Schema Name</td><td style="padding:4px 12px;">${c.eq(3).text().trim()}</td></tr>
+      </table></body></html>`);
+    win.document.close(); win.print();
+  });
+
+  loadList();
+});
+</script>
+{% endblock %}

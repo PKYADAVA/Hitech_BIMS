@@ -201,6 +201,7 @@ class ItemAPI(View):
             usage=data["usage"],
             storage_uom_id=data.get("storage_uom") or None,
             consumption_uom_id=data.get("consumption_uom") or None,
+            hsn_code=data.get("hsn_code") or None,
         )
         item.warehouse.set(warehouses)
         return JsonResponse({"message": "Item created"}, status=201)

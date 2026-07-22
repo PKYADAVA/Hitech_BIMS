@@ -27,13 +27,19 @@ $.extend(true, $.fn.dataTable.defaults, {
     if ($el.is('[data-no-search]') || $el.hasClass('select2-hidden-accessible')) return;
     if ($el.closest('.dataTables_length').length) return; // keep DataTables' page-size menu native
     const small = $el.hasClass('form-select-sm');
-    const $modal = $el.closest('.modal');
+    // Reparent onto .modal-content (not .modal) when inside a modal: Bootstrap
+    // gives .modal-content `position: relative`, which is the containing
+    // block Select2's offset()-based math expects. .modal itself is
+    // `position: fixed` (viewport-anchored), so children absolutely
+    // positioned against it land wherever the page happens to be scrolled —
+    // the dropdown appears "anywhere" in the modal instead of under the field.
+    const $modalContent = $el.closest('.modal-content');
     $el.select2({
       theme: 'bootstrap-5',
       width: el.style.width ? 'style' : '100%',
       selectionCssClass: small ? 'select2--small' : '',
       dropdownCssClass: small ? 'select2--small' : '',
-      dropdownParent: $modal.length ? $modal : $(document.body),
+      dropdownParent: $modalContent.length ? $modalContent : $(document.body),
     });
     // Select2 raises only jQuery events; re-dispatch native input/change so
     // vanilla listeners (onchange=..., addEventListener) keep working.
@@ -199,10 +205,15 @@ $(document).ready(function () {
 
   // Close any open menu when tapping/clicking outside a dropdown.
   // Dropdowns live either in a .dropdown wrapper (navbar) or a .btn-group
-  // (split/toolbar buttons) — treat both as "inside".
+  // (split/toolbar buttons) — treat both as "inside". DataTables' Buttons
+  // collection (e.g. the "Column visibility" list) renders its own
+  // .dropdown-menu-styled panel appended straight to <body>, detached from
+  // any .dropdown/.btn-group ancestor, so it must be treated as "inside"
+  // too — otherwise every checkbox click inside it reads as an outside
+  // click and force-closes the list after one toggle.
   $(document).on('click', function (e) {
-    if (!$(e.target).closest('.dropdown, .btn-group').length) {
-      $('.dropdown-menu').removeClass('show');
+    if (!$(e.target).closest('.dropdown, .btn-group, .dt-button-collection').length) {
+      $('.dropdown-menu').not('.dt-button-collection').removeClass('show');
     }
   });
 });

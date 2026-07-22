@@ -1442,6 +1442,7 @@ class ChickSaleFormTemplateView(View):
             "next_bill_no": ChickSale.next_bill_no() if id is None else None,
             "from_challan": json.dumps(from_challan),
             "terms_conditions": TermsConditions.objects.filter(party_type=TermsConditions.PartyType.CUSTOMER).exclude(condition__isnull=True).exclude(condition__exact="").order_by("type"),
+            "company": CompanyProfile.get_solo(),
         })
 
 

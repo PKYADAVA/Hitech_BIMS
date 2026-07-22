@@ -44,6 +44,14 @@ MODULE_REGISTRY = [
                 ],
             },
             {
+                "label": "Growing Charges",
+                "tabs": [
+                    ("growing_charge", "Growing Charges Master", ("growing_charge_list",)),
+                    ("breed", "Breed", ("breed_list",)),
+                    ("breed_standard", "Breed Standard", ("breed_standard_list",)),
+                ],
+            },
+            {
                 "label": "Transactions",
                 "tabs": [
                     ("daily_entry_list", "Daily Entry"),
@@ -434,6 +442,9 @@ _ACTION_BASE_TO_TAB = {
     "broiler_line": "broiler_line",
     "broiler_farm": "branch_farm",
     "broiler_batch": "broiler_batch",
+    "growing_charge": "growing_charge",
+    "breed": "breed",
+    "breed_standard": "breed_standard",
     "broiler_disease": "broiler_disease",
     "farmer_group": "farmer_group",
     "bird_sale": "bird_sale_list",

@@ -105,6 +105,103 @@ class Region(models.Model):
             super().save(update_fields=['code'])
 
 
+class Breed(models.Model):
+    """
+    Represents a broiler breed master (e.g. COBB 430 Y) used by the
+    Growing Charges module.
+    """
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this breed")
+    )
+    description = models.CharField(
+        max_length=100,
+        help_text=_("Name of the breed")
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Inactive breeds are hidden from selection elsewhere")
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=_("Locked records can't be edited or deleted")
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Breed")
+        verbose_name_plural = _("Breeds")
+        ordering = ['code']
+
+    def __str__(self):
+        return f"{self.code} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"BRE-{self.pk:04d}"
+            super().save(update_fields=['code'])
+
+
+class BreedStandard(models.Model):
+    """
+    A single age-row of a breed's standard performance curve
+    (body weight / feed intake / daily gain / FCR / cumulative feed by age).
+    One record per (breed, age); the Breed Standard master holds the whole
+    curve as a group of these rows.
+    """
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text=_("Auto-generated code for this breed standard row")
+    )
+    breed = models.ForeignKey(
+        Breed,
+        on_delete=models.PROTECT,
+        related_name='standards',
+        help_text=_("Breed this standard row belongs to")
+    )
+    age = models.PositiveIntegerField(help_text=_("Age (day) of the standard row"))
+    body_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    feed_intake = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    avg_daily_gain = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    fcr = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+    cum_feed = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_("Inactive rows are hidden from selection elsewhere")
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text=_("Locked records can't be edited or deleted")
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Breed Standard")
+        verbose_name_plural = _("Breed Standards")
+        ordering = ['breed__code', 'age']
+        unique_together = ('breed', 'age')
+
+    def __str__(self):
+        return f"{self.code} - {self.breed.description} (age {self.age})"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"BS-{self.pk:04d}"
+            super().save(update_fields=['code'])
+
+
 class Branch(models.Model):
     """
     Represents a branch location in the broiler management system.
@@ -1127,3 +1224,207 @@ class BirdSaleReceipt(models.Model):
             receipts = receipts.exclude(id=exclude_id)
         total_received = receipts.aggregate(total=models.Sum('amount'))['total'] or 0
         return total_sold - total_received
+
+
+class GrowingChargeScheme(models.Model):
+    """
+    Rearing / Growing Charge scheme master, modelled field-for-field on the
+    "Rearing Charge" screen: a header (region/branch/validity/schema name), the
+    Standard Growing Charge block, and the incentive / decentive / shortage /
+    FCR-recovery / farmer-classification rules captured as nested rows.
+    """
+
+    class MedicineCostBasis(models.TextChoices):
+        ACTUAL = 'actual', _('Actual')
+        MASTER = 'master', _('Master')
+        FIXED = 'fixed', _('Fixed')
+
+    class ShortageBasis(models.TextChoices):
+        STD_PRODUCTION_COST = 'std_production_cost', _('Std Production Cost')
+        PRODUCTION_COST = 'production_cost', _('Production Cost')
+        AVG_SALE_RATE = 'avg_sale_rate', _('Avg. Sale Rate')
+        MAX_SALE_RATE = 'max_sale_rate', _('Max. Sale Rate')
+        WHICH_IS_HIGHER = 'which_is_higher', _('Which is Higher')
+
+    scheme_code = models.CharField(
+        max_length=20, unique=True, editable=False, blank=True,
+        help_text=_("Auto-generated code, e.g. GCS-0001")
+    )
+    # --- Header ---
+    region = models.ForeignKey(
+        Region, on_delete=models.PROTECT, related_name='growing_charge_schemes',
+        help_text=_("Region this scheme applies to")
+    )
+    branch = models.ForeignKey(
+        Branch, on_delete=models.PROTECT, related_name='growing_charge_schemes',
+        blank=True, null=True, help_text=_("Branch; blank = all branches")
+    )
+    from_date = models.DateField(help_text=_("Applicable from date"))
+    to_date = models.DateField(help_text=_("Applicable to date"))
+    schema_name = models.CharField(max_length=150, help_text=_("Scheme / schema name"))
+
+    # --- Standard Growing Charge ---
+    chick_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    feed_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    medicine_cost_basis = models.CharField(
+        max_length=10, choices=MedicineCostBasis.choices, default=MedicineCostBasis.ACTUAL
+    )
+    medicine_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text=_("Fixed medicine cost value (used when basis = Fixed)")
+    )
+    farmer_admin_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    management_admin_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    std_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    standard_gc_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    minimum_gc_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    standard_fcr = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    standard_mortality = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    unloading_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # --- Sales Incentives (single fields alongside the rows) ---
+    maximum_prod_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    maximum_rate_incentive = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # --- Mortality Decentives (single header fields above the rows) ---
+    mort_dec_first_week_exceeds = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    mort_dec_overall_above = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    mort_dec_first_week_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # --- Shortage ---
+    shortage_basis = models.CharField(
+        max_length=20, choices=ShortageBasis.choices, default=ShortageBasis.WHICH_IS_HIGHER,
+        help_text=_("Which value is used for shortage recovery")
+    )
+
+    is_active = models.BooleanField(default=True)
+    is_locked = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Growing Charge Scheme")
+        verbose_name_plural = _("Growing Charge Schemes")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.scheme_code} - {self.schema_name}"
+
+    def clean(self):
+        if self.from_date and self.to_date and self.to_date < self.from_date:
+            raise ValidationError({'to_date': _("'To Date' can't be before 'From Date'.")})
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.scheme_code:
+            self.scheme_code = f"GCS-{self.pk:04d}"
+            super().save(update_fields=['scheme_code'])
+
+
+class GCProductionCostIncentive(models.Model):
+    """Production Cost Incentives row: From/To Production Cost + Rate %."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='production_cost_incentives')
+    from_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    to_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    rate_pct = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCSalesIncentive(models.Model):
+    """Sales Incentives row: Sale Rate From/To + Sales Incentive."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='sales_incentives')
+    sale_rate_from = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sale_rate_to = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sales_incentive = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCMortalityIncentive(models.Model):
+    """Mortality Incentives row: From/To Mortality % + Incentive Value."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='mortality_incentives')
+    from_mortality_pct = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    to_mortality_pct = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    incentive_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCFCRIncentive(models.Model):
+    """FCR Incentives row: CFCR Limit + Body Weight + Incentive Value."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='fcr_incentives')
+    cfcr_limit = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    body_weight = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    incentive_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCSummerIncentive(models.Model):
+    """Summer Incentives row: Min/Max Production Cost, Incentive On, From/To Production Cost, Incentive Rate."""
+
+    class IncentiveOn(models.TextChoices):
+        SOLD_BIRDS = 'sold_birds', _('Sold Birds')
+        PLACED_BIRDS = 'placed_birds', _('Placed Birds')
+        LIVE_BIRDS = 'live_birds', _('Live Birds')
+
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='summer_incentives')
+    min_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    max_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    incentive_on = models.CharField(max_length=15, choices=IncentiveOn.choices, default=IncentiveOn.SOLD_BIRDS)
+    from_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    to_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    incentive_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCProductionCostDecentive(models.Model):
+    """Production Cost Decentives row: From/To Production Cost + Rate %."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='production_cost_decentives')
+    from_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    to_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    rate_pct = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCMortalityDecentive(models.Model):
+    """Mortality Decentives row: From/To Mortality % + Decentive Value."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='mortality_decentives')
+    from_mortality_pct = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    to_mortality_pct = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    decentive_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCFCRRecovery(models.Model):
+    """FCR Recovery row: CFCR Limit + Production Limit + Recovery Rate."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='fcr_recoveries')
+    cfcr_limit = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    production_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    recovery_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+
+
+class GCFarmerClassification(models.Model):
+    """Farmer Classifications row: Production Cost From/To + Grade."""
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.CASCADE, related_name='farmer_classifications')
+    production_cost_from = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    production_to = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    grade = models.CharField(max_length=5, blank=True)
+
+    class Meta:
+        ordering = ['id']

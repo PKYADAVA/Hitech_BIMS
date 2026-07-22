@@ -1561,3 +1561,9 @@ img, svg, video, canvas {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* Collapsible batch-group cards (Broiler Daily Entry / Medicine Vaccine
+   Consumption registers) — chevron rotates to show open/closed state. */
+.group-toggle { cursor: pointer; }
+.group-toggle .group-chevron { transition: transform 0.2s ease; }
+.group-toggle:not(.collapsed) .group-chevron { transform: rotate(90deg); }

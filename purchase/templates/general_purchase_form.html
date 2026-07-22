@@ -289,7 +289,7 @@
 const existingItems = {{ existing_items_json|safe }};
 const taxOptions = `<option value="0">select</option>{% for t in tax_masters %}<option value="{{ t.tax_percentage }}">{{ t.tax_code }} ({{ t.tax_percentage }}%)</option>{% endfor %}`;
 const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
-const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}{% endif %}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 

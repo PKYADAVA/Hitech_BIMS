@@ -6,8 +6,11 @@ from import_export.widgets import ForeignKeyWidget
 from django.utils.html import format_html
 from account.models import ChartOfAccount
 from .models import (
-    Branch, Supervisor, BroilerLine, Farmer, FarmerGroup, Region, BroilerFarm,
+    Branch, Breed, BreedStandard, Supervisor, BroilerLine, Farmer, FarmerGroup, Region, BroilerFarm,
     BroilerFarmShed, BroilerFarmImage, BroilerBatch, BroilerDisease,
+    GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
+    GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
+    GCFCRRecovery, GCFarmerClassification,
 )
 
 
@@ -129,6 +132,25 @@ class RegionAdmin(ImportExportModelAdmin):
     list_display = ('code', 'description', 'is_active', 'is_locked')
     search_fields = ('code', 'description')
     list_filter = ('is_active', 'is_locked')
+    list_per_page = 20
+
+
+@admin.register(Breed)
+class BreedAdmin(ImportExportModelAdmin):
+    """Admin interface for Breed records."""
+    list_display = ('code', 'description', 'is_active', 'is_locked')
+    search_fields = ('code', 'description')
+    list_filter = ('is_active', 'is_locked')
+    list_per_page = 20
+
+
+@admin.register(BreedStandard)
+class BreedStandardAdmin(ImportExportModelAdmin):
+    """Admin interface for Breed Standard records."""
+    list_display = ('code', 'breed', 'age', 'body_weight', 'feed_intake',
+                    'avg_daily_gain', 'fcr', 'cum_feed', 'is_active', 'is_locked')
+    search_fields = ('code', 'breed__code', 'breed__description')
+    list_filter = ('breed', 'is_active', 'is_locked')
     list_per_page = 20
 
 
@@ -296,3 +318,23 @@ class BroilerDiseaseAdmin(ImportExportModelAdmin):
             return obj.batch.batch_name
         return '-'
     get_batch_name.short_description = 'Batch'
+
+
+def _gc_inline(model_cls):
+    return type(f"{model_cls.__name__}Inline", (admin.TabularInline,), {"model": model_cls, "extra": 0})
+
+
+@admin.register(GrowingChargeScheme)
+class GrowingChargeSchemeAdmin(admin.ModelAdmin):
+    """Admin interface for the Rearing / Growing Charge master."""
+    list_display = ('id', 'scheme_code', 'schema_name', 'region', 'branch', 'from_date', 'to_date', 'is_active', 'is_locked')
+    search_fields = ('scheme_code', 'schema_name')
+    list_filter = ('is_active', 'is_locked', 'region', 'branch')
+    list_per_page = 20
+    ordering = ('-id',)
+    raw_id_fields = ('region', 'branch')
+    inlines = [_gc_inline(m) for m in (
+        GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive, GCFCRIncentive,
+        GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive, GCFCRRecovery,
+        GCFarmerClassification,
+    )]
