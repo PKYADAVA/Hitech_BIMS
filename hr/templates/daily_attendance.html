@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Daily Attendance — BIMS{% endblock %}
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock nav %}
+{% block body %}
+{% include '_hr_attendance_subnavbar.html' with active_tab='daily_attendance' %}
+
+<style>
+  .att-kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:.75rem; margin-bottom:1rem; }
+  .att-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.6rem; padding:.75rem .9rem; display:flex; gap:.6rem; align-items:center; box-shadow:0 1px 4px rgba(20,30,60,.05); }
+  .att-kpi .ic { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:1rem; flex:0 0 38px; }
+  .att-kpi .l { font-size:.62rem; text-transform:uppercase; letter-spacing:.03em; color:#8a93a3; font-weight:700; }
+  .att-kpi .v { font-size:1.35rem; font-weight:800; line-height:1.1; }
+  .att-kpi .s { font-size:.7rem; color:#6b7280; }
+  .att-filter .form-label { font-size:.78rem; font-weight:600; margin-bottom:.25rem; }
+  .att-table th, .att-table td { font-size:.82rem; vertical-align:middle; white-space:nowrap; }
+  .att-table thead th { background:#f7f8fb; }
+  .st-badge { padding:.15rem .55rem; border-radius:1rem; font-size:.72rem; font-weight:700; }
+  .st-Present { background:#d9f2df; color:#1a7f37; }
+  .st-Absent { background:#fbdcdc; color:#b02a2a; }
+  .st-OnLeave { background:#fef3cd; color:#8a6d00; }
+  .st-HalfDay { background:#e6dff2; color:#6b3fa0; }
+  .src-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:5px; }
+  @media (max-width:1100px){ .att-kpis{ grid-template-columns:repeat(2,1fr); } }
+</style>
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-calendar-check"></i>Daily Attendance</div>
+    <div class="page-header-subtitle">View and manage employee daily attendance</div>
+  </div>
+  <div class="page-header-right">
+    <a href="{% url 'mark_attendance' %}?date={{ filters.date }}" class="btn btn-primary"><i class="fas fa-pen"></i> Mark Attendance</a>
+  </div>
+</div>
+
+<!-- KPI cards -->
+<div class="att-kpis">
+  <div class="att-kpi"><div class="ic" style="background:#6c757d;"><i class="fas fa-users"></i></div>
+    <div><div class="l">Total Employees</div><div class="v">{{ kpi.total }}</div><div class="s">Active</div></div></div>
+  <div class="att-kpi"><div class="ic" style="background:#16a34a;"><i class="fas fa-check"></i></div>
+    <div><div class="l">Present</div><div class="v">{{ kpi.present }}</div><div class="s text-success">{{ kpi.present_pct }}%</div></div></div>
+  <div class="att-kpi"><div class="ic" style="background:#dc2626;"><i class="fas fa-times"></i></div>
+    <div><div class="l">Absent</div><div class="v">{{ kpi.absent }}</div><div class="s text-danger">{{ kpi.absent_pct }}%</div></div></div>
+  <div class="att-kpi"><div class="ic" style="background:#f59e0b;"><i class="far fa-clock"></i></div>
+    <div><div class="l">On Leave</div><div class="v">{{ kpi.on_leave }}</div><div class="s">{{ kpi.on_leave_pct }}%</div></div></div>
+  <div class="att-kpi"><div class="ic" style="background:#2d6cdf;"><i class="fas fa-business-time"></i></div>
+    <div><div class="l">On Duty / OT</div><div class="v">{{ kpi.ot }}</div><div class="s">{{ kpi.ot_pct }}%</div></div></div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-3 att-filter"><div class="card-body">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label">Department</label>
+      <select name="department" class="form-select form-select-sm">
+        <option value="">All Departments</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if filters.department == d.id|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3"><label class="form-label">Branch / Location</label>
+      <select name="branch" class="form-select form-select-sm">
+        <option value="">All Locations</option>
+        {% for w in branches %}<option value="{{ w.id }}" {% if filters.branch == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Shift</label>
+      <select name="shift" class="form-select form-select-sm">
+        <option value="">All Shifts</option>
+        {% for s in shifts %}<option value="{{ s.id }}" {% if filters.shift == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Date</label>
+      <input type="date" name="date" value="{{ filters.date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2 d-flex gap-2">
+      <button class="btn btn-primary btn-sm flex-fill" type="submit"><i class="fas fa-search me-1"></i>Search</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'daily_attendance' %}"><i class="fas fa-rotate-left"></i></a>
+    </div>
+  </form>
+</div></div>
+
+<!-- Table -->
+<div class="card"><div class="card-body">
+  <div class="table-responsive">
+    <table class="table table-hover table-bordered att-table mb-0" id="daily-att-table" style="width:100%">
+      <thead>
+        <tr>
+          <th>Emp Code</th><th>Employee</th><th>Department</th><th>Shift</th>
+          <th>In Time</th><th>Out Time</th><th>Working Hrs</th>
+          <th>Status</th><th>Source</th><th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.emp_code }}</td>
+          <td>{{ r.employee.full_name }}<div class="text-muted" style="font-size:.72rem;">{{ r.designation }}</div></td>
+          <td>{{ r.department|default:"-" }}</td>
+          <td>{% if r.shift %}{{ r.shift.name }}<div class="text-muted" style="font-size:.72rem;">{{ r.shift.timing }}</div>{% else %}-{% endif %}</td>
+          <td>{% if r.check_in %}{{ r.check_in|time:"h:i A" }}{% else %}-{% endif %}</td>
+          <td>{% if r.check_out %}{{ r.check_out|time:"h:i A" }}{% else %}-{% endif %}</td>
+          <td>{{ r.working_hours|default:"-" }}</td>
+          <td>{% if r.status %}<span class="st-badge st-{{ r.status|cut:' ' }}">{{ r.status }}</span>{% else %}<span class="text-muted">Not marked</span>{% endif %}</td>
+          <td>{% if r.source %}<span class="src-dot" style="background:{% if r.source == 'Biometric' %}#16a34a{% elif r.source == 'Mobile App' %}#2d6cdf{% else %}#9ca3af{% endif %};"></span>{{ r.source }}{% else %}-{% endif %}</td>
+          <td>{{ r.remarks|default:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center text-muted py-4">No employees found for these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+
+<script>
+$(function () {
+  if ($('#daily-att-table tbody tr').length && !$('#daily-att-table tbody tr td[colspan]').length) {
+    $('#daily-att-table').DataTable({ ordering:true, pageLength:10, lengthMenu:[10,25,50,100],
+      dom:'Bfrtip', buttons:['copy','csv','excel','pdf','print','colvis'],
+      language:{ emptyTable:'No attendance data' } });
+  }
+});
+</script>
+{% endblock body %}

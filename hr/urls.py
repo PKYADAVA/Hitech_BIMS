@@ -21,6 +21,9 @@ from hr.views import (
     DesignationTemplateView,
     DesignationAPI,
     leave_calendar_holidays,
+    daily_attendance,
+    mark_attendance,
+    save_attendance,
 )
 
 
@@ -57,6 +60,11 @@ urlpatterns = [
     path("designation-create/", DesignationAPI.as_view(), name="designation_create"),
     path("designation/<int:id>/update/", DesignationAPI.as_view(), name="designation_update"),
     path("designation/<int:id>/delete/", DesignationAPI.as_view(), name="designation_delete"),
+
+    # Attendance workflow
+    path("daily-attendance/", daily_attendance, name="daily_attendance"),
+    path("mark-attendance/", mark_attendance, name="mark_attendance"),
+    path("save-attendance/", save_attendance, name="save_attendance"),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

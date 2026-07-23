@@ -19,6 +19,48 @@ class Group(models.Model):
         return self.name
 
 
+class Department(models.Model):
+    """A functional department employees belong to (Broiler Production, Feed
+    Store, Transport, …) — separate from Designation (their role/title)."""
+
+    code = models.CharField(max_length=20, unique=True, editable=False, blank=True,
+                            help_text="Auto-generated, e.g. DEP-0001")
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.code:
+            self.code = f"DEP-{self.pk:04d}"
+            super().save(update_fields=["code"])
+
+
+class Shift(models.Model):
+    """A work shift with a start/end time, e.g. General 08:30–17:30."""
+
+    name = models.CharField(max_length=50, unique=True)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.start_time.strftime('%I:%M %p')} - {self.end_time.strftime('%I:%M %p')})"
+
+    @property
+    def timing(self):
+        return f"{self.start_time.strftime('%H:%M')} - {self.end_time.strftime('%H:%M')}"
+
+
 class Designation(models.Model):
     """repersently designates an organization"""
 
@@ -107,6 +149,21 @@ class Employee(models.Model):
         null=True,
         blank=True,
         related_name="employees",
+    )
+    department = models.ForeignKey(
+        "Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employees",
+    )
+    shift = models.ForeignKey(
+        "Shift",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employees",
+        help_text="Employee's default work shift",
     )
     salary = models.DecimalField(
         max_digits=10, decimal_places=2, default=0.00, null=True, blank=True
@@ -222,6 +279,10 @@ class Attendance(models.Model):
         blank=True,
     )
     date = models.DateField(null=True, blank=True)
+    shift = models.ForeignKey(
+        "Shift", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="attendance_records",
+    )
     check_in_time = models.TimeField(null=True, blank=True)
     check_out_time = models.TimeField(null=True, blank=True)
     status = models.CharField(
@@ -230,6 +291,7 @@ class Attendance(models.Model):
             ("Present", "Present"),
             ("Absent", "Absent"),
             ("On Leave", "On Leave"),
+            ("Half Day", "Half Day"),
             ("First Half", "First Half"),
             ("Second Half", "Second Half"),
         ],
@@ -237,11 +299,29 @@ class Attendance(models.Model):
         null=True,
         blank=True,
     )
+    working_minutes = models.IntegerField(default=0, help_text="Computed from check in/out")
+    ot_minutes = models.IntegerField(default=0, help_text="Overtime minutes")
+    attendance_source = models.CharField(
+        max_length=20,
+        choices=[("Manual", "Manual"), ("Biometric", "Biometric"), ("Mobile App", "Mobile App")],
+        default="Manual",
+    )
+    remarks = models.CharField(max_length=255, blank=True, default="")
     created_date = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+
+    class Meta:
+        unique_together = ("employee", "date")
+        ordering = ["-date", "employee_id"]
 
     def __str__(self):
         """Returns a string representation of this object with the given options as a string."""
         return f"{self.employee.full_name} - {self.date} ({self.status})"
+
+    @property
+    def working_hours_display(self):
+        """working_minutes as HH:MM (e.g. 549 -> '09:09')."""
+        m = self.working_minutes or 0
+        return f"{m // 60:02d}:{m % 60:02d}"
 
 
 class Payroll(models.Model):

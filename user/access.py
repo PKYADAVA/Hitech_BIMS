@@ -269,6 +269,8 @@ MODULE_REGISTRY = [
             {
                 "label": "Attendance",
                 "tabs": [
+                    ("daily_attendance", "Daily Attendance", ("save_attendance",)),
+                    ("mark_attendance", "Mark Attendance"),
                     ("leave_employee", "Leave Placed", (
                         "leave_calendar_holidays",
                     )),

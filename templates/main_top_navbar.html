@@ -570,6 +570,12 @@
               <i class="fas fa-calendar-check"></i>Attendance
             </a>
             <ul class="dropdown-menu">
+              {% if 'daily_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'daily_attendance' %}">
+                <i class="fas fa-calendar-check"></i>Daily Attendance
+              </a></li>{% endif %}
+              {% if 'mark_attendance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'mark_attendance' %}">
+                <i class="fas fa-pen"></i>Mark Attendance
+              </a></li>{% endif %}
               {% if 'leave_employee' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'leave_employee' %}">
                 <i class="fas fa-user-times"></i>Leave Placed
               </a></li>{% endif %}
@@ -706,6 +712,26 @@
       {% endif %}
 
     </ul>
+
+    <!-- Live clock -->
+    <div class="d-flex align-items-center me-lg-3 mt-2 mt-lg-0" style="color:#ffffff;">
+      <i class="fas fa-clock me-2" style="color:#ffffff; opacity:.8;"></i>
+      <span id="navClock" style="color:#ffffff !important; font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; line-height:1.15;"></span>
+    </div>
+    <script>
+      (function () {
+        function tick() {
+          var el = document.getElementById('navClock');
+          if (!el) return;
+          var now = new Date();
+          var d = now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+          var t = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true });
+          el.innerHTML = d + ' &middot; ' + t;
+        }
+        tick();
+        setInterval(tick, 1000);
+      })();
+    </script>
 
     <!-- Notification Bell (alerts module) -->
     {% include "_alerts_bell.html" %}

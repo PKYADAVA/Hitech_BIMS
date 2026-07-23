@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Mark Attendance — BIMS{% endblock %}
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock nav %}
+{% block body %}
+{% include '_hr_attendance_subnavbar.html' with active_tab='mark_attendance' %}
+
+<style>
+  .mk-table th, .mk-table td { font-size:.8rem; vertical-align:middle; }
+  .mk-table thead th { background:#f7f8fb; white-space:nowrap; }
+  .st-pills { display:flex; gap:.3rem; flex-wrap:wrap; }
+  .st-pill { border:1px solid #d1d5db; border-radius:1rem; padding:.1rem .6rem; font-size:.72rem; font-weight:600; cursor:pointer; user-select:none; color:#6b7280; background:#fff; }
+  .st-pill[data-status="Present"].active { background:#16a34a; border-color:#16a34a; color:#fff; }
+  .st-pill[data-status="Absent"].active { background:#dc2626; border-color:#dc2626; color:#fff; }
+  .st-pill[data-status="On Leave"].active { background:#f59e0b; border-color:#f59e0b; color:#fff; }
+  .st-pill[data-status="Half Day"].active { background:#7c3aed; border-color:#7c3aed; color:#fff; }
+  .mk-time { width:100px; }
+  .mk-remarks { min-width:120px; }
+  .legend span { font-size:.72rem; margin-right:.75rem; }
+  .legend .dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:4px; }
+</style>
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-pen"></i>Mark Attendance</div>
+    <div class="page-header-subtitle">Set status, times and remarks, then Save</div>
+  </div>
+  <div class="page-header-right">
+    <a href="{% url 'daily_attendance' %}?date={{ filters.date }}" class="btn btn-outline-secondary"><i class="fas fa-eye"></i> View Attendance</a>
+  </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-3"><div class="card-body">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label" style="font-size:.78rem;font-weight:600;">Department</label>
+      <select name="department" class="form-select form-select-sm">
+        <option value="">All Departments</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if filters.department == d.id|stringformat:'s' %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3"><label class="form-label" style="font-size:.78rem;font-weight:600;">Branch / Location</label>
+      <select name="branch" class="form-select form-select-sm">
+        <option value="">All Locations</option>
+        {% for w in branches %}<option value="{{ w.id }}" {% if filters.branch == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label" style="font-size:.78rem;font-weight:600;">Shift</label>
+      <select name="shift" class="form-select form-select-sm">
+        <option value="">All Shifts</option>
+        {% for s in shifts %}<option value="{{ s.id }}" {% if filters.shift == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label" style="font-size:.78rem;font-weight:600;">Date</label>
+      <input type="date" name="date" value="{{ filters.date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" type="submit"><i class="fas fa-search me-1"></i>Search</button></div>
+  </form>
+</div></div>
+
+<!-- Toolbar -->
+<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+  <button id="mk-save" class="btn btn-primary btn-sm"><i class="fas fa-check me-1"></i>Save Attendance</button>
+  <button class="btn btn-outline-success btn-sm mk-all" data-status="Present">Mark All Present</button>
+  <button class="btn btn-outline-danger btn-sm mk-all" data-status="Absent">Mark All Absent</button>
+  <button class="btn btn-outline-warning btn-sm mk-all" data-status="On Leave">Mark All Leave</button>
+  <div class="ms-auto legend">
+    <span><span class="dot" style="background:#16a34a;"></span>Present</span>
+    <span><span class="dot" style="background:#dc2626;"></span>Absent</span>
+    <span><span class="dot" style="background:#f59e0b;"></span>On Leave</span>
+    <span><span class="dot" style="background:#7c3aed;"></span>Half Day</span>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <div class="table-responsive">
+    <table class="table table-bordered mk-table mb-0" style="width:100%">
+      <thead>
+        <tr>
+          <th>Emp Code</th><th>Employee</th><th>Department</th><th>Shift</th>
+          <th>Status</th><th>Check In</th><th>Check Out</th><th>Total Hrs</th><th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr data-emp="{{ r.employee.id }}" data-shift="{{ r.shift.id|default:'' }}">
+          <td>{{ r.emp_code }}</td>
+          <td>{{ r.employee.full_name }}<div class="text-muted" style="font-size:.72rem;">{{ r.designation }}</div></td>
+          <td>{{ r.department|default:"-" }}</td>
+          <td>{% if r.shift %}{{ r.shift.name }}<div class="text-muted" style="font-size:.72rem;">{{ r.shift.timing }}</div>{% else %}-{% endif %}</td>
+          <td><div class="st-pills">
+            <span class="st-pill {% if r.status == 'Present' %}active{% endif %}" data-status="Present">Present</span>
+            <span class="st-pill {% if r.status == 'Absent' %}active{% endif %}" data-status="Absent">Absent</span>
+            <span class="st-pill {% if r.status == 'On Leave' %}active{% endif %}" data-status="On Leave">On Leave</span>
+            <span class="st-pill {% if r.status == 'Half Day' %}active{% endif %}" data-status="Half Day">Half Day</span>
+          </div></td>
+          <td><input type="time" class="form-control form-control-sm mk-time mk-in" value="{{ r.check_in|time:'H:i' }}"></td>
+          <td><input type="time" class="form-control form-control-sm mk-time mk-out" value="{{ r.check_out|time:'H:i' }}"></td>
+          <td class="mk-total">{{ r.working_hours|default:"00:00" }}</td>
+          <td><input type="text" class="form-control form-control-sm mk-remarks" value="{{ r.remarks }}" placeholder="—"></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No employees found for these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="text-muted mt-2" style="font-size:.78rem;">Note: Click a status to mark, set Check In/Out, then click <b>Save Attendance</b>.</div>
+</div></div>
+
+<script>
+const csrfToken = '{{ csrf_token }}';
+const ATT_DATE = '{{ filters.date }}';
+
+function hhmm(mins){ mins=Math.max(0,mins|0); return String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0'); }
+function calcTotal($tr){
+  const inv=$tr.find('.mk-in').val(), outv=$tr.find('.mk-out').val();
+  if(!inv||!outv){ $tr.find('.mk-total').text('00:00'); return; }
+  const [ih,im]=inv.split(':').map(Number), [oh,om]=outv.split(':').map(Number);
+  let mins=(oh*60+om)-(ih*60+im); if(mins<0) mins+=1440;
+  $tr.find('.mk-total').text(hhmm(mins));
+}
+function setStatus($tr, status){
+  $tr.find('.st-pill').removeClass('active').filter('[data-status="'+status+'"]').addClass('active');
+  if(status==='Absent'||status==='On Leave'){ $tr.find('.mk-in,.mk-out').val(''); $tr.find('.mk-total').text('00:00'); }
+}
+
+$(document).on('click', '.st-pill', function(){ setStatus($(this).closest('tr'), $(this).data('status')); });
+$(document).on('change', '.mk-in,.mk-out', function(){ calcTotal($(this).closest('tr')); });
+$('.mk-all').on('click', function(){ const st=$(this).data('status'); $('.mk-table tbody tr[data-emp]').each(function(){ setStatus($(this), st); }); });
+
+$('#mk-save').on('click', function(){
+  const rows=[];
+  $('.mk-table tbody tr[data-emp]').each(function(){
+    const $tr=$(this);
+    const status=$tr.find('.st-pill.active').data('status');
+    if(!status) return;
+    rows.push({ employee_id:$tr.data('emp'), shift_id:$tr.data('shift')||null, status,
+      check_in:$tr.find('.mk-in').val()||null, check_out:$tr.find('.mk-out').val()||null,
+      remarks:$tr.find('.mk-remarks').val()||'', source:'Manual' });
+  });
+  if(!rows.length){ alert('Mark at least one employee.'); return; }
+  this.disabled=true;
+  fetch('{% url "save_attendance" %}', { method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},
+    body:JSON.stringify({ date:ATT_DATE, rows }) })
+  .then(r=>r.json()).then(d=>{ this.disabled=false;
+    if(window.showToast) showToast('success', d.message||'Saved'); else alert(d.message||'Saved'); })
+  .catch(()=>{ this.disabled=false; alert('Save failed'); });
+});
+</script>
+{% endblock body %}

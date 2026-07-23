@@ -129,6 +129,17 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'user_analytics' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'user_analytics' %}active{% endif %} activate" href="{% url 'user_analytics' %}"><i class="fas fa-chart-line me-1"></i>User Analytics</a></li>{% endif %}
         {% if 'picklists' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'picklists' %}active{% endif %} activate" href="{% url 'picklists' %}"><i class="fas fa-list-check me-1"></i>Picklists</a></li>{% endif %}
         {% if 'field_bindings' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'field_bindings' %}active{% endif %} activate" href="{% url 'field_bindings' %}"><i class="fas fa-link me-1"></i>Field Bindings</a></li>{% endif %}
+      {% elif module == 'hr_employee' %}
+        {% if 'employee_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_list' %}active{% endif %} activate" href="{% url 'employee_list' %}"><i class="fas fa-users me-1"></i>Employee List</a></li>{% endif %}
+        {% if 'designation' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'designation' %}active{% endif %} activate" href="{% url 'designation' %}"><i class="fas fa-id-badge me-1"></i>Designation</a></li>{% endif %}
+      {% elif module == 'hr_attendance' %}
+        {% if 'daily_attendance' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'daily_attendance' %}active{% endif %} activate" href="{% url 'daily_attendance' %}"><i class="fas fa-calendar-check me-1"></i>Daily Attendance</a></li>{% endif %}
+        {% if 'mark_attendance' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'mark_attendance' %}active{% endif %} activate" href="{% url 'mark_attendance' %}"><i class="fas fa-pen me-1"></i>Mark Attendance</a></li>{% endif %}
+        {% if 'employee_attendance' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_attendance' %}active{% endif %} activate" href="{% url 'employee_attendance' %}"><i class="fas fa-user-check me-1"></i>Attendance</a></li>{% endif %}
+        {% if 'leave_employee' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'leave_employee' %}active{% endif %} activate" href="{% url 'leave_employee' %}"><i class="fas fa-user-times me-1"></i>Leave Placed</a></li>{% endif %}
+        {% if 'employee_leave_details' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_leave_details' %}active{% endif %} activate" href="{% url 'employee_leave_details' %}"><i class="fas fa-list-alt me-1"></i>Leave Details</a></li>{% endif %}
+      {% elif module == 'hr_payroll' %}
+        {% if 'payroll' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'payroll' %}active{% endif %} activate" href="{% url 'payroll' %}"><i class="fas fa-money-bill-wave me-1"></i>Payroll</a></li>{% endif %}
       {% endif %}
     </ul>
   </div>

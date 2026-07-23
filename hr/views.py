@@ -28,12 +28,14 @@ from django.views.decorators.csrf import csrf_exempt
 from calendar import monthrange
 from hr.models import (
     Attendance,
+    Department,
     Designation,
     Employee,
     EmployeeLeave,
     Group,
     LeaveSelectedDate,
     Payroll,
+    Shift,
 )
 from hr.validation import validate_employee_data
 from inventory.models import Warehouse
@@ -1113,3 +1115,164 @@ class DesignationAPI(View):
             return JsonResponse({"message": "Designation deleted"})
         except Exception as e:
             return self.handle_exception(e)
+
+
+# ---------------------------------------------------------------------------
+# Daily Attendance + Mark Attendance (HR > Attendance)
+# ---------------------------------------------------------------------------
+
+def _working_minutes(check_in, check_out):
+    """Minutes between two datetime.time values (0 if either missing)."""
+    if not check_in or not check_out:
+        return 0
+    a = check_in.hour * 60 + check_in.minute
+    b = check_out.hour * 60 + check_out.minute
+    if b < a:                       # crossed midnight
+        b += 24 * 60
+    return b - a
+
+
+def _hhmm(minutes):
+    minutes = int(minutes or 0)
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def _attendance_rows(request):
+    """Active employees (optionally filtered) joined with their Attendance for
+    the requested date. Returns (rows, filters, option-lists)."""
+    department_id = (request.GET.get("department") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    shift_id = (request.GET.get("shift") or "").strip()
+    date_str = (request.GET.get("date") or "").strip()
+    on_date = parse_date(date_str) if date_str else timezone.localdate()
+
+    employees = (Employee.objects.filter(relieve=False)
+                 .select_related("designation", "department", "shift", "warehouse")
+                 .order_by("employee_id"))
+    if department_id.isdigit():
+        employees = employees.filter(department_id=department_id)
+    if branch_id.isdigit():
+        employees = employees.filter(warehouse_id=branch_id)
+    if shift_id.isdigit():
+        employees = employees.filter(shift_id=shift_id)
+
+    att_map = {a.employee_id: a for a in Attendance.objects.filter(
+        employee__in=employees, date=on_date).select_related("shift")}
+
+    rows = []
+    for e in employees:
+        a = att_map.get(e.id)
+        shift = (a.shift if a and a.shift_id else None) or e.shift
+        rows.append({
+            "employee": e,
+            "emp_code": f"HTF{e.employee_id}",
+            "designation": e.designation.title if e.designation_id else "",
+            "department": e.department.name if e.department_id else "",
+            "shift": shift,
+            "attendance": a,
+            "status": a.status if a else None,
+            "check_in": a.check_in_time if a else None,
+            "check_out": a.check_out_time if a else None,
+            "working_hours": _hhmm(a.working_minutes) if a else "",
+            "source": a.attendance_source if a else "",
+            "remarks": a.remarks if a else "",
+        })
+
+    filters = {
+        "department": department_id, "branch": branch_id,
+        "shift": shift_id, "date": on_date.isoformat(),
+    }
+    options = {
+        "departments": Department.objects.filter(is_active=True).order_by("name"),
+        "branches": Warehouse.objects.order_by("name"),
+        "shifts": Shift.objects.filter(is_active=True).order_by("name"),
+    }
+    return rows, filters, options, on_date
+
+
+def _attendance_kpis(rows):
+    total = len(rows)
+    present = sum(1 for r in rows if r["status"] == "Present")
+    absent = sum(1 for r in rows if r["status"] == "Absent")
+    on_leave = sum(1 for r in rows if r["status"] == "On Leave")
+    half = sum(1 for r in rows if r["status"] == "Half Day")
+    ot = sum(1 for r in rows if r["attendance"] and (r["attendance"].ot_minutes or 0) > 0)
+    # Anyone not explicitly marked counts as unmarked (shown blank); Absent KPI
+    # counts only those marked Absent.
+
+    def pct(n):
+        return round(n * 100.0 / total, 2) if total else 0.0
+
+    return {
+        "total": total,
+        "present": present, "present_pct": pct(present),
+        "absent": absent, "absent_pct": pct(absent),
+        "on_leave": on_leave, "on_leave_pct": pct(on_leave),
+        "half_day": half, "half_day_pct": pct(half),
+        "ot": ot, "ot_pct": pct(ot),
+    }
+
+
+@login_required
+def daily_attendance(request):
+    """HR > Attendance > Daily Attendance — dashboard for a date."""
+    rows, filters, options, on_date = _attendance_rows(request)
+    return render(request, "daily_attendance.html", {
+        "rows": rows, "filters": filters, "kpi": _attendance_kpis(rows),
+        "on_date": on_date, **options,
+    })
+
+
+@login_required
+def mark_attendance(request):
+    """HR > Attendance > Mark Attendance — editable grid."""
+    rows, filters, options, on_date = _attendance_rows(request)
+    return render(request, "mark_attendance.html", {
+        "rows": rows, "filters": filters, "kpi": _attendance_kpis(rows),
+        "on_date": on_date, **options,
+    })
+
+
+@login_required
+@transaction.atomic
+def save_attendance(request):
+    """Upsert one Attendance row per employee for a date (from the grid)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    on_date = parse_date(data.get("date") or "") or timezone.localdate()
+    saved = 0
+    for row in data.get("rows", []):
+        emp_id = row.get("employee_id")
+        status = row.get("status") or ""
+        if not emp_id or not status:
+            continue
+        try:
+            check_in = datetime.strptime(row["check_in"], "%H:%M").time() if row.get("check_in") else None
+        except (ValueError, TypeError):
+            check_in = None
+        try:
+            check_out = datetime.strptime(row["check_out"], "%H:%M").time() if row.get("check_out") else None
+        except (ValueError, TypeError):
+            check_out = None
+        # No times for non-working statuses.
+        if status in ("Absent", "On Leave"):
+            check_in = check_out = None
+        Attendance.objects.update_or_create(
+            employee_id=emp_id, date=on_date,
+            defaults={
+                "status": status,
+                "check_in_time": check_in,
+                "check_out_time": check_out,
+                "working_minutes": _working_minutes(check_in, check_out),
+                "shift_id": row.get("shift_id") or None,
+                "attendance_source": row.get("source") or "Manual",
+                "remarks": row.get("remarks") or "",
+            },
+        )
+        saved += 1
+    return JsonResponse({"message": f"Attendance saved for {saved} employee(s).", "saved": saved})

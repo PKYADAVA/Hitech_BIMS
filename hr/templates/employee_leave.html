@@ -5,6 +5,7 @@
    {% include 'main_top_navbar.html' with active_tab='hr' %}
 {% endblock nav %}
 {% block content %}
+{% include '_hr_attendance_subnavbar.html' with active_tab='leave_employee' %}
 <body class="bg-light">
    <div class="modal fade" id="relieveConfirmationModal" tabindex="-1" aria-labelledby="relieveConfirmationLabel" aria-hidden="true">
       <div class="modal-dialog">

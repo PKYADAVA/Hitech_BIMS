@@ -11,13 +11,29 @@ from import_export.widgets import ForeignKeyWidget
 from inventory.models import Warehouse
 from hr.models import (
     Attendance,
+    Department,
     Employee,
     Designation,
     EmployeeLeave,
     Group,
     LeaveSelectedDate,
     Payroll,
+    Shift,
 )
+
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active")
+    search_fields = ("code", "name")
+    list_filter = ("is_active",)
+
+
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    list_display = ("name", "start_time", "end_time", "is_active")
+    search_fields = ("name",)
+    list_filter = ("is_active",)
 
 
 class EmployeeResource(resources.ModelResource):
