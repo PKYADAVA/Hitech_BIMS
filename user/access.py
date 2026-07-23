@@ -66,6 +66,8 @@ MODULE_REGISTRY = [
                 "label": "Reports",
                 "tabs": [
                     ("broiler_batch_report", "Batch History Report"),
+                    ("chicks_placement_report", "Chicks Placement Report"),
+                    ("feed_dispatch_stock_report", "Feed Dispatch & Stock Report"),
                 ],
             },
         ],

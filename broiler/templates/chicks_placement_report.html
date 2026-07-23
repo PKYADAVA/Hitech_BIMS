@@ -1,0 +1,385 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chicks Placement Report — BIMS{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+
+<style>
+  .cpr-breadcrumb { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
+  .cpr-breadcrumb a { color: #0d6efd; text-decoration: none; }
+  .cpr-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+  .cpr-header h3 { font-weight: 700; margin-bottom: 0; }
+  /* Keep every KPI card on one row: cards shrink to fit, scroll if they truly can't. */
+  .kpi-row { overflow-x: auto; }
+  .kpi-col { flex: 1 1 0; min-width: 150px; }
+  .kpi-card { border: 1px solid #e9ecef; border-radius: .6rem; padding: 1rem; display: flex; gap: .75rem; align-items: flex-start; height: 100%; }
+  .kpi-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex: 0 0 44px; color: #fff; }
+  .kpi-value { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+  .kpi-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; font-weight: 600; }
+  .kpi-sub { font-size: .78rem; margin-top: .15rem; }
+  .filter-panel-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  /* Keep every filter on one row: fields shrink to fit, Search/Reset never do. */
+  .filter-panel-form { overflow-x: auto; }
+  .filter-panel-form .filter-field { flex: 1 1 0; min-width: 90px; }
+  .filter-panel-form .form-label { font-size: .78rem; margin-bottom: .25rem; white-space: nowrap; }
+  .filter-panel-form .form-control, .filter-panel-form .form-select { font-size: .85rem; }
+  .dt-toolbar-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
+  #placement-table th, #placement-table td { font-size: .8rem; white-space: nowrap; }
+  .dt-buttons { display: inline-flex; gap: .4rem; }
+  @media print {
+    .no-print { display: none !important; }
+  }
+</style>
+
+<div class="cpr-breadcrumb no-print">
+  Reports <span class="mx-1">&rsaquo;</span> Chicks Placement Report
+</div>
+
+<div class="cpr-header no-print">
+  <div>
+    <h3>Chicks Placement Report</h3>
+  </div>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <div id="header-export-slot"></div>
+    <div id="header-print-slot"></div>
+  </div>
+</div>
+
+<!-- KPI cards -->
+<div class="d-flex flex-nowrap gap-2 mb-3 no-print kpi-row">
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#2d6cdf;"><i class="fa-solid fa-kiwi-bird"></i></div>
+      <div>
+        <div class="kpi-label">Total Chicks</div>
+        <div class="kpi-value">{{ kpi.total_placed|floatformat:0 }}</div>
+        <div class="kpi-sub text-success">{{ kpi.placed_pct }}% Placed</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#2e7d32;"><i class="fa-solid fa-skull"></i></div>
+      <div>
+        <div class="kpi-label">Total Mortality</div>
+        <div class="kpi-value">{{ kpi.total_mortality|floatformat:0 }}</div>
+        <div class="kpi-sub text-muted">{{ kpi.overall_mort_pct }}% Mortality</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#e08e0b;"><i class="fa-solid fa-percent"></i></div>
+      <div>
+        <div class="kpi-label">Average Mort%</div>
+        <div class="kpi-value">{{ kpi.average_mort_pct }}%</div>
+        <div class="kpi-sub text-muted">Across All Batches</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#d9534f;"><i class="fa-solid fa-truck-ramp-box"></i></div>
+      <div>
+        <div class="kpi-label">Total Shortage</div>
+        <div class="kpi-value">{{ kpi.total_shortage|floatformat:0 }} <span class="fs-6 text-muted">({{ kpi.shortage_pct }}%)</span></div>
+        <div class="kpi-sub text-muted">Birds Short in Transit</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#8c6d1f;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <div>
+        <div class="kpi-label">Total Weeks/Culls</div>
+        <div class="kpi-value">{{ kpi.total_culls|floatformat:0 }} <span class="fs-6 text-muted">({{ kpi.culls_pct }}%)</span></div>
+        <div class="kpi-sub text-muted">Culled Chicks</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#7b3fe4;"><i class="fa-solid fa-house-chimney"></i></div>
+      <div>
+        <div class="kpi-label">Farms</div>
+        <div class="kpi-value">{{ kpi.farms_count }}</div>
+        <div class="kpi-sub text-muted">Active Farms</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#0d8f8f;"><i class="fa-solid fa-building"></i></div>
+      <div>
+        <div class="kpi-label">Branches</div>
+        <div class="kpi-value">{{ kpi.branches_count }}</div>
+        <div class="kpi-sub text-muted">In this result set</div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card">
+      <div class="kpi-icon" style="background:#c0392b;"><i class="fa-solid fa-warehouse"></i></div>
+      <div>
+        <div class="kpi-label">Warehouses</div>
+        <div class="kpi-value">{{ kpi.warehouses_count }}</div>
+        <div class="kpi-sub text-muted">Active Warehouses</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filter panel -->
+<div class="card mb-3 no-print">
+  <div class="card-body">
+    <div class="filter-panel-header mb-2" id="filter-panel-toggle">
+      <h6 class="mb-0">Filter Report</h6>
+      <span class="text-primary small" id="filter-panel-toggle-label"><i class="fas fa-chevron-up me-1"></i>Collapse</span>
+    </div>
+    <div id="filter-panel-body">
+      <form method="get" class="d-flex flex-nowrap align-items-end gap-2 filter-panel-form">
+        <div class="filter-field">
+          <label class="form-label">From Date</label>
+          <input type="date" class="form-control" name="from_date" value="{{ from_date }}">
+        </div>
+        <div class="filter-field">
+          <label class="form-label">To Date</label>
+          <input type="date" class="form-control" name="to_date" value="{{ to_date }}">
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Region</label>
+          <select class="form-select" name="region">
+            <option value="">All</option>
+            {% for r in regions %}<option value="{{ r.id }}" {% if region_id == r.id|stringformat:"s" %}selected{% endif %}>{{ r.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Branch</label>
+          <select class="form-select" name="branch">
+            <option value="">All</option>
+            {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:"s" %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Line</label>
+          <select class="form-select" name="line">
+            <option value="">All</option>
+            {% for l in lines %}<option value="{{ l }}" {% if line == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Supervisor</label>
+          <select class="form-select" name="supervisor">
+            <option value="">All</option>
+            {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Farm</label>
+          <select class="form-select" name="farm">
+            <option value="">All</option>
+            {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:"s" %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Hatchery / Supplier</label>
+          <select class="form-select" name="hatchery">
+            <option value="">All</option>
+            {% for h in hatcheries %}<option value="{{ h.id }}" {% if hatchery_id == h.id|stringformat:"s" %}selected{% endif %}>{{ h.hatchery_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Status</label>
+          <select class="form-select" name="status">
+            <option value="">All</option>
+            <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+            <option value="completed" {% if status == 'completed' %}selected{% endif %}>Completed</option>
+          </select>
+        </div>
+        <input type="hidden" name="export" value="{{ export }}">
+        <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-primary" type="submit" name="submit" value="1"><i class="fas fa-search me-1"></i>Search</button>
+          <a class="btn btn-outline-secondary" href="{% url 'chicks_placement_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if submitted %}
+<div class="card">
+  <div class="card-body">
+    <div class="dt-toolbar-row no-print">
+      <div style="max-width:320px;width:100%;">
+        <input type="text" class="form-control form-control-sm" id="cpr-search" placeholder="Search by transaction no, dc no, farm...">
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        <div id="table-colvis-slot"></div>
+        <span class="text-muted small" id="filter-toggle-icon" title="Toggle filters" style="cursor:pointer;"><i class="fas fa-filter"></i></span>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="placement-table" style="width:100%">
+        <thead class="table-light">
+          <tr>
+            <th>Date</th><th>Transaction No.</th><th>Dc No.</th><th>Branch</th><th>Line</th><th>Supervisor</th>
+            <th>Farm Code</th><th>Farm Name</th><th>Batch</th><th>Source Hatchery</th><th>Warehouse</th>
+            <th>Quantity Sent</th><th>Mortality</th><th>Mort%</th><th>Shortage</th>
+            <th>Weeks/Culls</th><th>Weeks/Cull%</th><th>Excess</th>
+            <th>Total Chicks Placed</th>
+            <th>Rate</th><th>Amount</th><th>Farm Capacity</th>
+            <th>Status</th>
+            <th class="no-print">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.date|date:"d.m.Y" }}</td><td>{{ r.trnum|default:"-" }}</td><td>{{ r.dc_no|default:"-" }}</td>
+            <td>{{ r.branch_name }}</td><td>{{ r.line }}</td><td>{{ r.supervisor_name|default:"-" }}</td>
+            <td>{{ r.farm_code }}</td><td>{{ r.farm_name }}</td><td>{{ r.batch_name|default:"-" }}</td>
+            <td>{{ r.source_hatchery_name|default:"-" }}</td><td>{{ r.warehouse_name|default:"-" }}</td>
+            <td class="text-end">{{ r.chicks_ordered }}</td><td class="text-end">{{ r.transit_mortality }}</td>
+            <td class="text-end">{{ r.mort_pct }}</td><td class="text-end">{{ r.shortage }}</td>
+            <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.culls_pct }}</td><td class="text-end">{{ r.excess }}</td>
+            <td class="text-end">{{ r.total_placed }}</td>
+            <td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+            <td class="text-end">{{ r.farm_capacity|default:"-" }}</td>
+            <td class="text-center">
+              {% if r.batch_status == 'Active' %}<span class="badge bg-success-subtle text-success border border-success-subtle">Active</span>
+              {% elif r.batch_status == 'Completed' %}<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Completed</span>
+              {% else %}<span class="text-muted">-</span>{% endif %}
+            </td>
+            <td class="text-center no-print">
+              <button type="button" class="btn btn-sm btn-outline-secondary cpr-view" title="View"><i class="fas fa-eye"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-secondary cpr-print" title="Print"><i class="fas fa-print"></i></button>
+            </td>
+          </tr>
+          {% empty %}<tr><td colspan="24" class="text-center text-muted">No chicks placement transactions found for these filters</td></tr>{% endfor %}
+        </tbody>
+        {% if rows %}
+        <tfoot>
+          <tr class="table-light fw-bold">
+            <td colspan="11" class="text-end">Total</td>
+            <td class="text-end">{{ totals.chicks_ordered }}</td>
+            <td class="text-end">{{ totals.transit_mortality }}</td>
+            <td class="text-end">{{ totals.mort_pct }}</td>
+            <td class="text-end">{{ totals.shortage }}</td>
+            <td class="text-end">{{ totals.culls }}</td>
+            <td class="text-end">{{ totals.culls_pct }}</td>
+            <td class="text-end">{{ totals.excess }}</td>
+            <td class="text-end">{{ totals.total_placed }}</td>
+            <td></td>
+            <td class="text-end">{{ totals.amount }}</td>
+            <td></td>
+            <td></td>
+            <td class="no-print"></td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+  <div class="alert alert-info">Choose your filters above and click <strong>Search</strong> to generate the report.</div>
+{% endif %}
+
+<!-- View Row Modal -->
+<div class="modal fade" id="cprViewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Chicks Placement Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-borderless mb-0" id="cprViewBody"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const COLUMN_LABELS = [
+    'Date', 'Transaction No.', 'Dc No.', 'Branch', 'Line', 'Supervisor',
+    'Farm Code', 'Farm Name', 'Batch', 'Source Hatchery', 'Warehouse',
+    'Quantity Sent', 'Mortality', 'Mort%', 'Shortage',
+    'Weeks/Culls', 'Weeks/Cull%', 'Excess',
+    'Total Chicks Placed', 'Rate', 'Amount', 'Farm Capacity',
+  ];
+
+  {% if submitted and rows %}
+  const table = $('#placement-table').DataTable({
+    responsive: false,
+    order: [[0, 'desc']],
+    pageLength: 10,
+    lengthMenu: [10, 25, 50, 100],
+    dom: 'Bfrtip',
+    columnDefs: [{ orderable: false, targets: [-1] }],
+    buttons: [
+      { extend: 'collection', text: '<i class="fas fa-download me-1"></i>Export', className: 'btn btn-outline-secondary btn-sm', buttons: ['copy', 'csv', 'excel', 'pdf'] },
+      { extend: 'print', text: '<i class="fas fa-print me-1"></i>Print', className: 'btn btn-outline-secondary btn-sm' },
+      { extend: 'colvis', text: '<i class="fas fa-sliders-h me-1"></i>Column Settings', className: 'btn btn-outline-secondary btn-sm' },
+    ],
+    language: { emptyTable: 'No data available in table' },
+  });
+
+  // Relocate the real DataTables buttons into our own header/toolbar slots
+  // instead of letting them render inline — same working buttons, different spot.
+  $('#header-export-slot').append(table.button(0).node());
+  $('#header-print-slot').append(table.button(1).node());
+  $('#table-colvis-slot').append(table.button(2).node());
+  $('.dt-buttons').remove();
+
+  // Custom search box drives the DataTable's global search.
+  $('#cpr-search').on('input', function () { table.search(this.value).draw(); });
+
+  function rowValues(tr) {
+    return $(tr).find('td').slice(0, COLUMN_LABELS.length).map(function () { return $(this).text().trim(); }).get();
+  }
+
+  $('#placement-table tbody').on('click', '.cpr-view', function () {
+    const values = rowValues($(this).closest('tr'));
+    const body = $('#cprViewBody').empty();
+    COLUMN_LABELS.forEach((label, i) => {
+      body.append(`<tr><td class="fw-bold" style="width:200px;">${label}</td><td>${values[i] ?? ''}</td></tr>`);
+    });
+    new bootstrap.Modal(document.getElementById('cprViewModal')).show();
+  });
+
+  $('#placement-table tbody').on('click', '.cpr-print', function () {
+    const values = rowValues($(this).closest('tr'));
+    const win = window.open('', '_blank');
+    const rowsHtml = COLUMN_LABELS.map((label, i) =>
+      `<tr><td style="padding:4px 12px;font-weight:bold;">${label}</td><td style="padding:4px 12px;">${values[i] ?? ''}</td></tr>`).join('');
+    win.document.write(`<html><head><title>Chicks Placement</title></head><body style="font-family:sans-serif;padding:24px;">
+      <h3>Chicks Placement</h3><table style="border-collapse:collapse;">${rowsHtml}</table></body></html>`);
+    win.document.close(); win.print();
+  });
+  {% endif %}
+
+  // Collapsible filter panel
+  function setFilterPanelState(open) {
+    $('#filter-panel-body').toggle(open);
+    $('#filter-panel-toggle-label').html(open
+      ? '<i class="fas fa-chevron-up me-1"></i>Collapse'
+      : '<i class="fas fa-chevron-down me-1"></i>Expand');
+  }
+  let filterOpen = true;
+  $('#filter-panel-toggle, #filter-toggle-icon').on('click', function () {
+    filterOpen = !filterOpen;
+    setFilterPanelState(filterOpen);
+  });
+});
+</script>
+{% endblock %}

@@ -174,6 +174,9 @@ class Command(BaseCommand):
             opening = opening - mort - sold
 
         # ---- Feed Transfer-In (Office -> Farm/Batch), covering consumption + buffer ----
+        # One shared DC no. across all three feed types: this is a single
+        # delivery challan carrying Pre-Starter + Starter + Finisher together,
+        # so the Feed Dispatch & Stock Report merges them into one ledger row.
         for item in (pre, starter, finisher):
             qty = (consumed[item.id] + Decimal("40")).quantize(Decimal("0.01"))
             StockTransfer.objects.create(
@@ -181,7 +184,7 @@ class Command(BaseCommand):
                 rate=FEED_RATE, purchase_rate=FEED_RATE,
                 from_location_type="warehouse", from_warehouse=office,
                 to_location_type="farm", to_farm=farm, to_batch=batch,
-                dc_no=f"DC-FD-{item.item_code}", remarks="Feed transfer-in (seed)",
+                dc_no="DC-FD-001", remarks="Feed transfer-in (seed)",
             )
 
         # ---- Feed Return (Farm/Batch -> Office) ----

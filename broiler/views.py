@@ -550,6 +550,7 @@ def save_breed_standard(request):
         with transaction.atomic():
             existing.delete()
             cum_running = Decimal("0")  # running total, anchored to whatever is stored
+            prev_body_weight = None     # previous row's body weight, for Avg Daily Gain
             for age, row in zip(ages, rows):
                 body_weight = _to_decimal(row.get("body_weight"))
                 feed_intake = _to_decimal(row.get("feed_intake"))
@@ -571,12 +572,24 @@ def save_breed_standard(request):
                 else:
                     fcr = Decimal("0")
 
+                # Avg Daily Gain: manual override if given, else this row's body
+                # weight minus the previous row's (the first row has no previous
+                # weight to diff against, so it falls back to 0 unless overridden).
+                gain_raw = row.get("avg_daily_gain")
+                if gain_raw not in (None, ""):
+                    avg_daily_gain = _to_decimal(gain_raw)
+                elif prev_body_weight is not None:
+                    avg_daily_gain = body_weight - prev_body_weight
+                else:
+                    avg_daily_gain = Decimal("0")
+                prev_body_weight = body_weight
+
                 BreedStandard.objects.create(
                     breed=breed,
                     age=age,
                     body_weight=body_weight,
                     feed_intake=feed_intake,
-                    avg_daily_gain=_to_decimal(row.get("avg_daily_gain")),
+                    avg_daily_gain=avg_daily_gain,
                     fcr=fcr,
                     cum_feed=cum_feed,
                 )
@@ -2417,6 +2430,47 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
     total_production_cost = feed_cost + chick_cost + med_cost + admin_cost
     production_cost_per_kg = _div(total_production_cost, sold_weight)
 
+    # Cost Distribution donut (dashboard widget) — captured as plain floats
+    # BEFORE the "no scheme -> No Data" string override below, so the chart
+    # always has real numbers (admin_cost is simply 0 without a scheme).
+    cost_breakdown = {
+        "feed_cost": float(feed_cost.quantize(q2)),
+        "chick_cost": float(Decimal(str(chick_cost)).quantize(q2)),
+        "med_cost": float(med_cost.quantize(q2)),
+        "admin_cost": float(admin_cost.quantize(q2)),
+    }
+    _cb_total = sum(cost_breakdown.values())
+    cost_breakdown["total"] = round(_cb_total, 2)
+    for _k in ("feed_cost", "chick_cost", "med_cost", "admin_cost"):
+        cost_breakdown[f"{_k}_pct"] = round(cost_breakdown[_k] / _cb_total * 100, 1) if _cb_total else 0
+
+    # Performance Overview (dashboard widget) — actual vs the Growing Charge
+    # Master's standard rates, for the 3 metrics the master actually defines
+    # a target for (standard_fcr, standard_mortality, std_production_cost).
+    # Avg Live Weight / Feed-per-Bird / CFCR have no master-defined target in
+    # this system, so they're deliberately left off rather than inventing one.
+    def _perf_status(actual, target):
+        if not target:
+            return "No Target"
+        actual, target = Decimal(str(actual)), Decimal(str(target))
+        if actual <= target:
+            return "Good"
+        if actual <= target * Decimal("1.05"):
+            return "Medium"
+        return "High"
+
+    performance_overview = [
+        {"kpi": "Mortality %", "actual": total_mort_pct.quantize(q2),
+         "target": scheme.standard_mortality if scheme else None,
+         "status": _perf_status(total_mort_pct, scheme.standard_mortality if scheme else None)},
+        {"kpi": "FCR", "actual": fcr.quantize(q2),
+         "target": scheme.standard_fcr if scheme else None,
+         "status": _perf_status(fcr, scheme.standard_fcr if scheme else None)},
+        {"kpi": "Production Cost / Kg", "actual": production_cost_per_kg.quantize(q2),
+         "target": scheme.std_production_cost if scheme else None,
+         "status": _perf_status(production_cost_per_kg, scheme.std_production_cost if scheme else None)},
+    ]
+
     # --- Grade: Farmer-Classification band matched on production cost/kg ---
     grade = ""
     if scheme:
@@ -2503,6 +2557,11 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         "total_production_cost": total_production_cost.quantize(q2),
         "production_cost_per_kg": production_cost_per_kg.quantize(q2),
         "scheme_code": scheme.scheme_code if scheme else "",
+        "cost_breakdown": cost_breakdown,
+        "performance_overview": performance_overview,
+        "mortality_status": performance_overview[0]["status"],
+        "fcr_status": performance_overview[1]["status"],
+        "cost_status": performance_overview[2]["status"],
     }
 
     # No Growing Charge Scheme covers the placement date -> the scheme-driven
@@ -2769,8 +2828,28 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         bird_sale_rows, fetch_type=fetch_type, scheme_override=scheme_override,
     )
 
+    # Dashboard KPI tiles + trend charts (Feed Consumption / Mortality) — as
+    # of the batch's latest DailyEntry, from the same per-day mortality_rows
+    # already computed above (pre weekly-interleave), not a new data source.
+    last_entry = mortality_rows[-1] if mortality_rows else None
+    dashboard = {
+        "current_live_birds": last_entry["closing_birds"] if last_entry else placement_total,
+        "avg_live_weight_kg": last_entry["avg_weight_kg"] if last_entry else Decimal("0"),
+        "as_of_date": last_entry["date"] if last_entry else None,
+        "feed_per_bird_g": last_entry["feed_per_bird_g"] if last_entry else 0,
+        "chart": {
+            "dates": [r["date"].strftime("%d %b") for r in mortality_rows],
+            "daily_feed_kg": [float(r["feed_1_kg"] + r["feed_2_kg"]) for r in mortality_rows],
+            "cum_feed_kg": [float(r["cum_feed_kg"]) for r in mortality_rows],
+            "daily_mortality_pct": [float(r["mortality_pct"]) for r in mortality_rows],
+            "cum_mortality_pct": [float(r["cum_mortality_pct"]) for r in mortality_rows],
+            "fcr": [float(r["fcr"]) for r in mortality_rows],
+        },
+    }
+
     return {
         "batch_costing": batch_costing,
+        "dashboard": dashboard,
         "chick_placement": chick_rows,
         "feed_purchase": feed_purchase_rows,
         "feed_transfer_in": feed_rows,
@@ -2859,6 +2938,637 @@ def broiler_batch_report(request):
         "book_no": book_no,
         "export": export,
         "selected_schema_id": selected_schema_id,
+    })
+
+
+@login_required
+def chicks_placement_report(request):
+    """Register of every Chicks Placement transaction (Warehouse -> Farm/Batch
+    Stock Transfer of a chicks-category item) within a Branch/Farm/date window
+    (Broiler > Reports > Chicks Placement Report). Chicks Ordered/Transit
+    Mortality/Shortage/Culls are the same reference-only fields as the Chicks
+    Placement transaction itself — only Placement Qty ever reaches inventory.
+    """
+    from account.models import CompanyProfile
+    from inventory.models import StockTransfer
+    from hatchery_master.models import Hatchery
+
+    region_id = (request.GET.get("region") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    line = (request.GET.get("line") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    hatchery_id = (request.GET.get("hatchery") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    status = (request.GET.get("status") or "").strip().lower()
+    export = (request.GET.get("export") or "display").strip().lower()
+    submitted = bool(region_id or branch_id or line or supervisor_id or farm_id or hatchery_id
+                     or from_date or to_date or status or request.GET.get("submit"))
+
+    rows, totals = [], None
+    if submitted:
+        qs = (StockTransfer.objects
+              .filter(to_location_type="farm", item__category__name__icontains="chick")
+              .select_related("to_farm__branch", "to_farm__supervisor", "to_batch",
+                              "from_warehouse", "source_hatchery", "item")
+              .order_by("date", "id"))
+        if region_id:
+            qs = qs.filter(to_farm__branch__region_id=region_id)
+        if branch_id:
+            qs = qs.filter(to_farm__branch_id=branch_id)
+        if line:
+            qs = qs.filter(to_farm__line=line)
+        if supervisor_id:
+            qs = qs.filter(to_farm__supervisor_id=supervisor_id)
+        if farm_id:
+            qs = qs.filter(to_farm_id=farm_id)
+        if hatchery_id:
+            qs = qs.filter(source_hatchery_id=hatchery_id)
+        if from_date:
+            qs = qs.filter(date__gte=from_date)
+        if to_date:
+            qs = qs.filter(date__lte=to_date)
+        # Status reflects the linked Batch's own state (see batch_status below).
+        if status == "active":
+            qs = qs.filter(to_batch__isnull=False, to_batch__end_date__isnull=True)
+        elif status == "completed":
+            qs = qs.filter(to_batch__isnull=False, to_batch__end_date__isnull=False)
+
+        # Free Quantity has no backing field on StockTransfer yet, so it's always
+        # 0 (shown, not hidden, so the column stays honest about what isn't
+        # tracked) and Total Chicks Placed = Quantity Received + Free Quantity.
+        free_quantity = Decimal("0")
+        t_ordered = t_mortality = t_shortage = t_culls = t_excess = Decimal("0")
+        t_received = t_free = t_placed = t_amount = Decimal("0")
+        mort_pct_sum = Decimal("0")
+        farm_ids, branch_ids, warehouse_ids = set(), set(), set()
+        for t in qs:
+            ordered = t.chicks_ordered or Decimal("0")
+            mortality = t.transit_mortality or Decimal("0")
+            shortage = t.shortage or Decimal("0")
+            culls = t.culls or Decimal("0")
+            received = t.quantity or Decimal("0")
+            placed = received + free_quantity
+            amount = (received * (t.rate or Decimal("0"))).quantize(Decimal("0.01"))
+            # Excess = birds received beyond what the ordered/loss breakdown expected
+            # (only meaningful when Chicks Ordered was actually recorded).
+            excess = Decimal("0")
+            if ordered > 0:
+                expected = max(ordered - mortality - shortage - culls, Decimal("0"))
+                excess = max(received - expected, Decimal("0"))
+            row_mort_pct = (mortality / ordered * 100).quantize(Decimal("0.01")) if ordered else Decimal("0")
+            # Status reflects the linked Batch's own state — a Batch with no
+            # end_date is still running (Active); once end_date is set it's
+            # Closed. No batch linked means there's nothing to report on.
+            if not t.to_batch_id:
+                batch_status = ""
+            elif t.to_batch.end_date is None:
+                batch_status = "Active"
+            else:
+                batch_status = "Completed"
+            rows.append({
+                "batch_status": batch_status,
+                "date": t.date, "trnum": t.trnum, "dc_no": t.dc_no,
+                "branch_name": t.to_farm.branch.branch_name if t.to_farm_id else "",
+                "line": t.to_farm.line if t.to_farm_id else "",
+                "supervisor_name": t.to_farm.supervisor.name if t.to_farm_id and t.to_farm.supervisor_id else "",
+                "farm_code": t.to_farm.farm_code if t.to_farm_id else "",
+                "farm_name": t.to_farm.farm_name if t.to_farm_id else "",
+                "batch_name": t.to_batch.batch_name if t.to_batch_id else "",
+                "source_hatchery_name": t.source_hatchery.hatchery_name if t.source_hatchery_id else "",
+                "warehouse_name": t.from_warehouse.name if t.from_warehouse_id else "",
+                "chicks_ordered": ordered, "transit_mortality": mortality,
+                "mort_pct": row_mort_pct,
+                "shortage": shortage, "culls": culls,
+                "culls_pct": (culls / ordered * 100).quantize(Decimal("0.01")) if ordered else Decimal("0"),
+                "excess": excess,
+                "quantity_received": received, "free_quantity": free_quantity, "total_placed": placed,
+                "rate": t.rate or Decimal("0"), "amount": amount,
+                "farm_capacity": t.to_farm.farm_capacity if t.to_farm_id else "",
+            })
+            t_ordered += ordered; t_mortality += mortality; t_shortage += shortage
+            t_culls += culls; t_excess += excess
+            t_received += received; t_free += free_quantity; t_placed += placed; t_amount += amount
+            mort_pct_sum += row_mort_pct
+            if t.to_farm_id:
+                farm_ids.add(t.to_farm_id)
+                branch_ids.add(t.to_farm.branch_id)
+            if t.from_warehouse_id:
+                warehouse_ids.add(t.from_warehouse_id)
+
+        shortage_pct = (t_shortage / t_ordered * 100).quantize(Decimal("0.01")) if t_ordered else Decimal("0")
+        culls_pct = (t_culls / t_ordered * 100).quantize(Decimal("0.01")) if t_ordered else Decimal("0")
+        totals = {
+            "chicks_ordered": t_ordered, "transit_mortality": t_mortality,
+            "mort_pct": (t_mortality / t_ordered * 100).quantize(Decimal("0.01")) if t_ordered else Decimal("0"),
+            "shortage": t_shortage, "culls": t_culls, "culls_pct": culls_pct,
+            "excess": t_excess,
+            "quantity_received": t_received, "free_quantity": t_free, "total_placed": t_placed,
+            "amount": t_amount,
+        }
+        # KPI cards: real, derived-only figures — no fabricated "status" metric,
+        # since neither StockTransfer nor BroilerBatch tracks any such state.
+        kpi = {
+            "total_placed": t_placed,
+            "total_ordered": t_ordered,
+            "placed_pct": (t_placed / t_ordered * 100).quantize(Decimal("0.1")) if t_ordered else Decimal("100.0"),
+            "total_mortality": t_mortality,
+            "overall_mort_pct": totals["mort_pct"],
+            "total_shortage": t_shortage,
+            "shortage_pct": shortage_pct,
+            "total_culls": t_culls,
+            "culls_pct": culls_pct,
+            "average_mort_pct": (mort_pct_sum / len(rows)).quantize(Decimal("0.01")) if rows else Decimal("0"),
+            "farms_count": len(farm_ids),
+            "branches_count": len(branch_ids),
+            "warehouses_count": len(warehouse_ids),
+        }
+
+    if not submitted:
+        kpi = {"total_placed": 0, "total_ordered": 0, "placed_pct": Decimal("0"),
+               "total_mortality": 0, "overall_mort_pct": Decimal("0"), "average_mort_pct": Decimal("0"),
+               "total_shortage": 0, "shortage_pct": Decimal("0"),
+               "total_culls": 0, "culls_pct": Decimal("0"),
+               "farms_count": 0, "branches_count": 0, "warehouses_count": 0}
+
+    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+             .values_list("line", flat=True).distinct())
+
+    return render(request, "chicks_placement_report.html", {
+        "regions": Region.objects.order_by("description"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "lines": lines,
+        "supervisors": Supervisor.objects.order_by("name"),
+        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+        "region_id": region_id, "branch_id": branch_id, "line": line,
+        "supervisor_id": supervisor_id, "farm_id": farm_id, "hatchery_id": hatchery_id,
+        "from_date": from_date, "to_date": to_date, "status": status,
+        "submitted": submitted, "rows": rows, "totals": totals, "kpi": kpi,
+        "export": export,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+@login_required
+def feed_dispatch_stock_report(request):
+    """Feed Dispatch & Stock ledger for a single Warehouse (Broiler > Reports
+    > Feed Dispatch & Stock Report) — one row per dispatch (Warehouse ->
+    Farm), return (Farm -> Warehouse) or purchase receipt (Supplier ->
+    Warehouse) of a tracked feed item, in chronological order, carrying a
+    running per-feed-type stock balance (in bags) forward after every row —
+    matching a feed store's own paper stock register.
+
+    Stock is computed independently, event by event, from the very first
+    historical transaction for this warehouse: no single transaction type's
+    own running-stock field reflects the *combined* physical balance (see
+    StockTransfer.stock / InventoryAdjustmentItem.stock — each only chains
+    through its own transaction type), and Purchases don't touch any
+    running-stock field at all.
+
+    Freight is only ever real on purchase-receipt rows (GeneralPurchase.
+    freight_amount) — Stock Transfer has no freight field, so dispatch/return
+    rows show it blank rather than a fabricated 0.
+    """
+    from account.models import CompanyProfile
+    from django.utils.dateparse import parse_date
+    from inventory.models import StockTransfer, Mapping
+    from purchase.models import GeneralPurchaseItem
+
+    region_id = (request.GET.get("region") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    warehouse_id = (request.GET.get("warehouse") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    export = (request.GET.get("export") or "display").strip().lower()
+    submitted = bool(from_date or to_date or request.GET.get("submit"))
+
+    # Feed columns are fully dynamic — every Item under a "Feed" category is
+    # its own ledger column, keyed by item id and ordered by item_code. Add a
+    # new feed Item and it shows up here automatically, no code change needed.
+    feed_items_all = list(Item.objects.filter(category__name__icontains="feed").order_by("item_code"))
+    label_ids = [it.id for it in feed_items_all]
+    label_item = {it.id: it for it in feed_items_all}
+    label_name = {it.id: it.description for it in feed_items_all}
+    # Fixed (non-feed) columns: Date, Txn No.(ERP), Challan No., Branch,
+    # Warehouse, Supplier/Farm Name, Farm Batch No. (7) + Total Bags/Total Kg
+    # (2) + Net Total Bag Stock (1) + Vehicle No./Freight Paid/Remarks (3) = 13.
+    opening_label_colspan = 7  # Date..Farm Batch No.
+    total_columns = 13 + 3 * len(label_ids)
+
+    ledger_rows, opening, ledger_totals, trend = [], None, None, None
+    kpi = {"total_dispatched_bags": Decimal("0"), "total_received_bags": Decimal("0"),
+           "net_total_bag_stock": Decimal("0"), "total_freight": Decimal("0")}
+    top_feed = [{"label": label_name[l], "value": Decimal("0")} for l in label_ids]
+    recent_activity = {"dispatched": Decimal("0"), "received": Decimal("0"),
+                       "adjustment": Decimal("0"), "returned": Decimal("0")}
+    warehouse_snapshot = []
+
+    # A Warehouse (Office) has no direct Branch FK — resolved via inventory.
+    # Mapping (TYPE_SECTOR_BRANCH: from_id=warehouse, to_id=branch). Region
+    # narrows to every Branch in it, Branch narrows to its mapped Warehouse(s).
+    branch_obj = Branch.objects.filter(id=branch_id).first() if branch_id else None
+    region_obj = Region.objects.filter(id=region_id).first() if region_id else None
+
+    warehouse_obj = Warehouse.objects.filter(id=warehouse_id).first() if warehouse_id else None
+    # "All Warehouses" combines every location's stock into one running total
+    # (a company-wide feed pipeline view) — the Warehouse column is only
+    # shown in that mode so each row's origin/destination stays traceable;
+    # with one Warehouse picked, the ledger matches the paper register 1:1.
+    all_warehouses = submitted and not warehouse_obj
+
+    if submitted:
+        tracked_item_ids = label_ids
+        item_label = {iid: iid for iid in label_ids}  # event item_id -> column key (identity: 1 item = 1 column)
+
+        from_date_obj = parse_date(from_date) if from_date else None
+        to_date_obj = parse_date(to_date) if to_date else None
+
+        # Scope every event query to the narrowest filter given: a specific
+        # Warehouse wins outright; otherwise Branch (via Mapping) or Region
+        # (via every Branch in it) narrows to that set of Warehouses; with
+        # none of the three, every Warehouse is in scope (None = no filter).
+        if warehouse_obj:
+            scoped_warehouse_ids = {warehouse_obj.id}
+        elif branch_obj:
+            scoped_warehouse_ids = set(Mapping.objects.filter(
+                type=Mapping.TYPE_SECTOR_BRANCH, to_id=branch_obj.id).values_list("from_id", flat=True))
+        elif region_obj:
+            branch_ids_in_region = Branch.objects.filter(region_id=region_obj.id).values_list("id", flat=True)
+            scoped_warehouse_ids = set(Mapping.objects.filter(
+                type=Mapping.TYPE_SECTOR_BRANCH, to_id__in=branch_ids_in_region).values_list("from_id", flat=True))
+        else:
+            scoped_warehouse_ids = None
+
+        # Warehouse -> Branch, resolved once per warehouse and cached (a
+        # Warehouse/Office has no direct Branch FK — only via inventory.
+        # Mapping) so "All Warehouses" mode doesn't re-query per row.
+        _branch_cache = {}
+
+        def _branch_for_warehouse(wh):
+            if not wh:
+                return ""
+            if wh.id not in _branch_cache:
+                branch_id = (Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, from_id=wh.id)
+                             .values_list("to_id", flat=True).first())
+                branch = Branch.objects.filter(id=branch_id).first() if branch_id else None
+                _branch_cache[wh.id] = branch.branch_name if branch else ""
+            return _branch_cache[wh.id]
+
+        # ---- gather every event ever recorded for the tracked feed items,
+        # scoped to one Warehouse, or every Warehouse when none is chosen ----
+        events = []
+        transfer_qs = StockTransfer.objects.filter(item_id__in=tracked_item_ids)
+        transfer_qs = (transfer_qs.filter(Q(from_warehouse_id__in=scoped_warehouse_ids) | Q(to_warehouse_id__in=scoped_warehouse_ids))
+                      if scoped_warehouse_ids is not None
+                      else transfer_qs.filter(Q(from_warehouse__isnull=False) | Q(to_warehouse__isnull=False)))
+        transfer_qs = transfer_qs.select_related("to_farm__farmer", "from_farm__farmer",
+                                                  "from_warehouse", "to_warehouse", "to_batch", "from_batch")
+        for t in transfer_qs:
+            if t.from_warehouse_id and (scoped_warehouse_ids is None or t.from_warehouse_id in scoped_warehouse_ids):
+                events.append({
+                    "date": t.date, "sort_key": (t.date, 0, t.id), "kind": "dispatch", "source": "dispatch",
+                    "item_id": t.item_id,
+                    "qty_kg": t.quantity or Decimal("0"), "challan_no": t.dc_no, "txn_no": t.trnum,
+                    "warehouse_id": t.from_warehouse_id,
+                    "warehouse_name": t.from_warehouse.name, "branch_name": _branch_for_warehouse(t.from_warehouse),
+                    "batch_no": t.to_batch.batch_name if t.to_batch_id else "",
+                    "farm_code": t.to_farm.farm_code if t.to_farm_id else "",
+                    "name": (t.to_farm.farmer.farmer_name if t.to_farm_id and t.to_farm.farmer_id
+                             else (t.to_farm.farm_name if t.to_farm_id else "")),
+                    "vehicle_no": t.vehicle_no, "freight": None, "remarks": t.remarks,
+                })
+            if t.to_warehouse_id and (scoped_warehouse_ids is None or t.to_warehouse_id in scoped_warehouse_ids):
+                events.append({
+                    "date": t.date, "sort_key": (t.date, 1, t.id), "kind": "receipt", "source": "return",
+                    "item_id": t.item_id,
+                    "qty_kg": t.quantity or Decimal("0"), "challan_no": t.dc_no, "txn_no": t.trnum,
+                    "warehouse_id": t.to_warehouse_id,
+                    "warehouse_name": t.to_warehouse.name, "branch_name": _branch_for_warehouse(t.to_warehouse),
+                    "batch_no": t.from_batch.batch_name if t.from_batch_id else "",
+                    "farm_code": t.from_farm.farm_code if t.from_farm_id else "",
+                    "name": (t.from_farm.farmer.farmer_name if t.from_farm_id and t.from_farm.farmer_id
+                             else (t.from_farm.farm_name if t.from_farm_id else "")),
+                    "vehicle_no": t.vehicle_no, "freight": None, "remarks": t.remarks,
+                })
+
+        purchase_qs = GeneralPurchaseItem.objects.filter(item_id__in=tracked_item_ids)
+        purchase_qs = (purchase_qs.filter(farm_warehouse_id__in=scoped_warehouse_ids) if scoped_warehouse_ids is not None
+                      else purchase_qs.filter(farm_warehouse__isnull=False))
+        purchase_qs = purchase_qs.select_related("purchase__supplier", "farm_warehouse")
+        for p in purchase_qs:
+            events.append({
+                "date": p.purchase.date, "sort_key": (p.purchase.date, 1, -p.id), "kind": "receipt",
+                "source": "purchase", "item_id": p.item_id,
+                "qty_kg": (p.rcv_qty or Decimal("0")) + (p.free_qty or Decimal("0")),
+                "challan_no": p.purchase.dc_no, "txn_no": p.purchase.purchase_no,
+                "warehouse_id": p.farm_warehouse_id,
+                "warehouse_name": p.farm_warehouse.name, "branch_name": _branch_for_warehouse(p.farm_warehouse),
+                "batch_no": "", "farm_code": "",
+                "name": p.purchase.supplier.name if p.purchase.supplier_id else "",
+                "vehicle_no": p.purchase.vehicle_no, "freight": p.purchase.freight_amount or Decimal("0"),
+                "remarks": p.purchase.remarks,
+            })
+
+        # ---- Inventory > Transactions: Stock Received / Stock Issued /
+        # Inventory Adjustment — all warehouse-scoped (location_type='warehouse'),
+        # none of these carry their own running-stock balance either, so
+        # they fold into the same from-scratch reconciliation as everything
+        # else here. None of these three have a real Challan/DC field (only
+        # an auto ERP trnum), so Challan No. is blank and trnum is shown
+        # under Transaction No.(ERP) instead.
+        from inventory.models import StockReceiveItem, StockIssueItem, InventoryAdjustmentItem
+
+        receive_qs = StockReceiveItem.objects.filter(item_id__in=tracked_item_ids, location_type="warehouse")
+        receive_qs = (receive_qs.filter(warehouse_id__in=scoped_warehouse_ids) if scoped_warehouse_ids is not None
+                     else receive_qs.filter(warehouse__isnull=False))
+        receive_qs = receive_qs.select_related("receive", "warehouse")
+        for r in receive_qs:
+            events.append({
+                "date": r.receive.date, "sort_key": (r.receive.date, 1, -r.id), "kind": "receipt",
+                "source": "stock_receive", "item_id": r.item_id, "qty_kg": r.quantity or Decimal("0"),
+                "challan_no": "", "txn_no": r.receive.trnum,
+                "warehouse_id": r.warehouse_id,
+                "warehouse_name": r.warehouse.name, "branch_name": _branch_for_warehouse(r.warehouse),
+                "batch_no": "", "farm_code": "",
+                "name": "Stock Received" + (f" — {r.remarks}" if r.remarks else ""),
+                "vehicle_no": "", "freight": None, "remarks": r.remarks,
+            })
+
+        issue_qs = StockIssueItem.objects.filter(item_id__in=tracked_item_ids, location_type="warehouse")
+        issue_qs = (issue_qs.filter(warehouse_id__in=scoped_warehouse_ids) if scoped_warehouse_ids is not None
+                   else issue_qs.filter(warehouse__isnull=False))
+        issue_qs = issue_qs.select_related("issue", "warehouse")
+        for s in issue_qs:
+            events.append({
+                "date": s.issue.date, "sort_key": (s.issue.date, 0, s.id), "kind": "dispatch",
+                "source": "stock_issue", "item_id": s.item_id, "qty_kg": s.quantity or Decimal("0"),
+                "challan_no": "", "txn_no": s.issue.trnum,
+                "warehouse_id": s.warehouse_id,
+                "warehouse_name": s.warehouse.name, "branch_name": _branch_for_warehouse(s.warehouse),
+                "batch_no": "", "farm_code": "",
+                "name": "Stock Issued",
+                "vehicle_no": "", "freight": None, "remarks": "",
+            })
+
+        adj_qs = InventoryAdjustmentItem.objects.filter(item_id__in=tracked_item_ids,
+                                                         adjustment__location_type="warehouse")
+        adj_qs = (adj_qs.filter(adjustment__warehouse_id__in=scoped_warehouse_ids) if scoped_warehouse_ids is not None
+                 else adj_qs.filter(adjustment__warehouse__isnull=False))
+        adj_qs = adj_qs.select_related("adjustment", "adjustment__warehouse")
+        for a in adj_qs:
+            is_add = a.adjustment_type == "Add"
+            events.append({
+                "date": a.adjustment.date, "sort_key": (a.adjustment.date, 1 if is_add else 0, a.id),
+                "kind": "receipt" if is_add else "dispatch", "source": "adjustment",
+                "item_id": a.item_id, "qty_kg": a.quantity or Decimal("0"),
+                "challan_no": "", "txn_no": a.adjustment.trnum,
+                "warehouse_id": a.adjustment.warehouse_id,
+                "warehouse_name": a.adjustment.warehouse.name, "branch_name": _branch_for_warehouse(a.adjustment.warehouse),
+                "batch_no": "", "farm_code": "",
+                "name": f"Stock Adjustment ({a.adjustment_type})" + (f" — {a.remarks}" if a.remarks else ""),
+                "vehicle_no": "", "freight": None, "remarks": a.remarks,
+            })
+        events.sort(key=lambda e: e["sort_key"])
+
+        def _bags(qty_kg, item):
+            return (qty_kg / item.kg_per_bag).quantize(Decimal("0.01")) if item and item.kg_per_bag else Decimal("0")
+
+        # Opening: replay every event strictly before From Date, from the very
+        # start of history. With no From Date given there is no opening period
+        # at all — opening stays zero and every event falls in the display
+        # window below (guard is essential: without it the loop never breaks
+        # and replays all events here, then the display loop replays them
+        # again, doubling the running balance).
+        running_kg = {label: Decimal("0") for label in label_ids}
+        if from_date_obj:
+            for e in events:
+                if e["date"] >= from_date_obj:
+                    break
+                label = item_label.get(e["item_id"])
+                if not label:
+                    continue
+                running_kg[label] += e["qty_kg"] if e["kind"] == "receipt" else -e["qty_kg"]
+
+        opening_values = [_bags(running_kg[label], label_item.get(label)) for label in label_ids]
+        opening = {"values": opening_values, "net": sum(opening_values)}
+
+        # ---- emit rows within the display window, carrying the running balance ----
+        # Events sharing the same Date + Challan No. + Warehouse + direction
+        # (dispatch/receipt) are one real document covering several feed
+        # types (e.g. one delivery challan with Pre-Starter + Starter both
+        # on it) and are merged into a single row — each feed type still
+        # gets its own column, but the farm/date/challan aren't repeated.
+        # Events with a *different* Challan No. stay on their own row even
+        # if same-day/same-farm, since they're genuinely separate documents.
+        t_dispatched_bags = t_received_bags = t_freight = Decimal("0")
+        dispatch_label_totals = [Decimal("0") for _ in label_ids]
+        received_label_totals = [Decimal("0") for _ in label_ids]
+        total_bag_sum = total_kg_sum = Decimal("0")
+        grouped_rows, group_order = {}, []
+        for e in events:
+            if from_date_obj and e["date"] < from_date_obj:
+                continue
+            if to_date_obj and e["date"] > to_date_obj:
+                continue
+            label = item_label.get(e["item_id"])
+            if not label:
+                continue
+            item = label_item.get(label)
+            bags = _bags(e["qty_kg"], item)
+            is_receipt = e["kind"] == "receipt"
+            running_kg[label] += e["qty_kg"] if is_receipt else -e["qty_kg"]
+            bag_weight = item.kg_per_bag if item and item.kg_per_bag else Decimal("0")
+
+            if is_receipt:
+                t_received_bags += bags
+            else:
+                t_dispatched_bags += bags
+                total_bag_sum += bags
+                total_kg_sum += (bags * bag_weight).quantize(Decimal("0.01"))
+            if e["freight"]:
+                t_freight += e["freight"]
+            label_idx = label_ids.index(label)
+            if is_receipt:
+                received_label_totals[label_idx] += bags
+            else:
+                dispatch_label_totals[label_idx] += bags
+
+            # Stock Received/Issued/Adjustment have no real Challan No. (blank
+            # for all their lines), so grouping on it directly would merge
+            # unrelated same-day documents at the same warehouse together.
+            # Fall back to the event's own ERP txn_no (unique per document)
+            # as the grouping key whenever there's no real challan.
+            doc_key = e["challan_no"] or e["txn_no"]
+            group_key = (e["date"], doc_key, e["warehouse_name"], is_receipt)
+            row = grouped_rows.get(group_key)
+            if row is None:
+                row = {
+                    "date": e["date"], "challan_no": e["challan_no"], "txn_no": e["txn_no"],
+                    "warehouse_name": e["warehouse_name"], "branch_name": e["branch_name"], "batch_no": e["batch_no"],
+                    "farm_code": e["farm_code"], "name": e["name"],
+                    "dispatch_bags": [Decimal("0")] * len(label_ids),
+                    "received_bags": [Decimal("0")] * len(label_ids),
+                    "total_bag": Decimal("0"), "total_kg": Decimal("0"),
+                    "vehicle_no": e["vehicle_no"], "freight": e["freight"], "remarks": e["remarks"],
+                    "is_receipt": is_receipt,
+                }
+                grouped_rows[group_key] = row
+                group_order.append(group_key)
+            if is_receipt:
+                row["received_bags"][label_idx] += bags
+            else:
+                row["dispatch_bags"][label_idx] += bags
+                row["total_bag"] += bags
+                row["total_kg"] += (bags * bag_weight).quantize(Decimal("0.01"))
+            if e["freight"]:
+                row["freight"] = (row["freight"] or Decimal("0")) + e["freight"]
+            # Snapshot the running balance as of the latest event folded into
+            # this row, so a merged row shows the state after the whole document.
+            row["stock_bags"] = [_bags(running_kg[l], label_item.get(l)) for l in label_ids]
+            row["net_stock"] = sum(row["stock_bags"])
+
+        ledger_rows = [grouped_rows[k] for k in group_order]
+
+        current_stock_values = [_bags(running_kg[l], label_item.get(l)) for l in label_ids]
+        current_net_stock = sum(current_stock_values)
+        kpi = {
+            "total_dispatched_bags": t_dispatched_bags, "total_received_bags": t_received_bags,
+            "net_total_bag_stock": current_net_stock,
+            "total_freight": t_freight,
+        }
+        ledger_totals = {
+            "dispatch_bags": dispatch_label_totals, "received_bags": received_label_totals,
+            "total_bag": total_bag_sum, "total_kg": total_kg_sum,
+            "stock_bags": current_stock_values, "net_stock": current_net_stock,
+        }
+
+        # Top feed by |net stock| — all tracked feed columns, ranked by
+        # magnitude (a large negative balance is just as noteworthy as a
+        # large positive one).
+        top_feed = sorted(
+            ({"label": label_name[l], "value": v} for l, v in zip(label_ids, current_stock_values)),
+            key=lambda x: abs(x["value"]), reverse=True,
+        )
+
+        # Warehouse Snapshot: the same combined balance, split back out per
+        # Warehouse — only meaningful in All-Warehouses mode (a single
+        # Warehouse view already shows its own net stock in the KPI card).
+        # Replays every event up to To Date (same cutoff as the ledger's own
+        # current balance), keyed by warehouse this time instead of feed type.
+        warehouse_snapshot = []
+        if all_warehouses:
+            wh_running_kg, wh_names, wh_branches = {}, {}, {}
+            for e in events:
+                if to_date_obj and e["date"] > to_date_obj:
+                    continue
+                label = item_label.get(e["item_id"])
+                if not label:
+                    continue
+                wh_id = e["warehouse_id"]
+                if wh_id not in wh_running_kg:
+                    wh_running_kg[wh_id] = {l: Decimal("0") for l in label_ids}
+                    wh_names[wh_id] = e["warehouse_name"]
+                    wh_branches[wh_id] = e["branch_name"]
+                wh_running_kg[wh_id][label] += e["qty_kg"] if e["kind"] == "receipt" else -e["qty_kg"]
+            warehouse_snapshot = sorted(
+                ({"name": wh_names[wh_id], "branch_name": wh_branches[wh_id],
+                  "net_stock": sum(_bags(kg_map[l], label_item.get(l)) for l in label_ids)}
+                 for wh_id, kg_map in wh_running_kg.items()),
+                key=lambda x: x["name"],
+            )
+
+        # Recent Activity: last 7 days from *today*, independent of the report's
+        # own date filter. Classified by each event's explicit `source` tag
+        # (not kind/freight heuristics) so Stock Received/Issued/Adjustment
+        # from Inventory > Transactions land in the right bucket:
+        #   dispatched = Stock Transfer dispatch + Stock Issued
+        #   received   = Purchase receipt + Stock Received
+        #   returned   = Stock Transfer farm return
+        #   adjustment = Inventory Adjustment (Add or Deduct)
+        today = timezone.localdate()
+        week_ago = today - timedelta(days=6)
+        recent_dispatched = recent_received = recent_returned = recent_adjustment = Decimal("0")
+        for e in events:
+            if not (week_ago <= e["date"] <= today):
+                continue
+            label = item_label.get(e["item_id"])
+            if not label:
+                continue
+            bags = _bags(e["qty_kg"], label_item.get(label))
+            if e["source"] in ("dispatch", "stock_issue"):
+                recent_dispatched += bags
+            elif e["source"] in ("purchase", "stock_receive"):
+                recent_received += bags
+            elif e["source"] == "return":
+                recent_returned += bags
+            elif e["source"] == "adjustment":
+                recent_adjustment += bags
+        recent_activity = {
+            "dispatched": recent_dispatched, "received": recent_received,
+            "adjustment": recent_adjustment, "returned": recent_returned,
+        }
+
+        # Previous-period trend on the 4 headline KPIs — only computable when
+        # both dates are given, since "previous period" needs a defined length.
+        trend = None
+        if from_date_obj and to_date_obj:
+            period_days = (to_date_obj - from_date_obj).days + 1
+            prev_to = from_date_obj - timedelta(days=1)
+            prev_from = prev_to - timedelta(days=period_days - 1)
+
+            prev_dispatched = prev_received = prev_freight = Decimal("0")
+            for e in events:
+                if not (prev_from <= e["date"] <= prev_to):
+                    continue
+                label = item_label.get(e["item_id"])
+                if not label:
+                    continue
+                bags = _bags(e["qty_kg"], label_item.get(label))
+                if e["kind"] == "dispatch":
+                    prev_dispatched += bags
+                else:
+                    prev_received += bags
+                    if e["freight"]:
+                        prev_freight += e["freight"]
+
+            prev_running = {label: Decimal("0") for label in label_ids}
+            for e in events:
+                if e["date"] > prev_to:
+                    break
+                label = item_label.get(e["item_id"])
+                if not label:
+                    continue
+                prev_running[label] += e["qty_kg"] if e["kind"] == "receipt" else -e["qty_kg"]
+            prev_net_stock = sum(_bags(prev_running[l], label_item.get(l)) for l in label_ids)
+
+            def _pct_change(curr, prev):
+                if prev:
+                    return ((curr - prev) / abs(prev) * 100).quantize(Decimal("0.01"))
+                return Decimal("0") if curr == 0 else Decimal("100.00")
+
+            trend = {
+                "dispatched": _pct_change(t_dispatched_bags, prev_dispatched),
+                "received": _pct_change(t_received_bags, prev_received),
+                "net_stock": _pct_change(current_net_stock, prev_net_stock),
+                "freight": _pct_change(t_freight, prev_freight),
+            }
+
+    return render(request, "feed_dispatch_stock_report.html", {
+        "regions": Region.objects.order_by("description"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "feed_labels": [label_name[l] for l in label_ids],
+        "total_columns": total_columns, "opening_label_colspan": opening_label_colspan,
+        "region_id": region_id, "branch_id": branch_id, "warehouse_id": warehouse_id,
+        "warehouse_obj": warehouse_obj, "all_warehouses": all_warehouses,
+        "from_date": from_date, "to_date": to_date,
+        "submitted": submitted, "ledger_rows": ledger_rows, "opening": opening, "kpi": kpi,
+        "ledger_totals": ledger_totals, "top_feed": top_feed,
+        "recent_activity": recent_activity, "trend": trend, "warehouse_snapshot": warehouse_snapshot,
+        "export": export,
+        "company": CompanyProfile.get_solo(),
     })
 
 

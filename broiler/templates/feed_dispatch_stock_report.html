@@ -1,0 +1,462 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Feed Dispatch & Stock Report — BIMS{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+
+<style>
+  .cpr-breadcrumb { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
+  .cpr-breadcrumb a { color: #0d6efd; text-decoration: none; }
+  .cpr-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+  .cpr-header h3 { font-weight: 700; margin-bottom: 0; }
+  .kpi-card { border: 1px solid #edf0f5; border-radius: .75rem; padding: .75rem .9rem; display: flex; gap: .65rem; align-items: center; height: 100%; box-shadow: 0 1px 4px rgba(0,0,0,.05); transition: transform .15s ease, box-shadow .15s ease; }
+  .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,.1); }
+  .kpi-col { min-width: 0; }
+  .kpi-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex: 0 0 40px; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+  .kpi-icon.kpi-blue { background: linear-gradient(135deg, #5b93ff, #2d6cdf); }
+  .kpi-icon.kpi-purple { background: linear-gradient(135deg, #b56fd6, #8e44ad); }
+  .kpi-icon.kpi-teal { background: linear-gradient(135deg, #17bcbc, #0d8f8f); }
+  .kpi-icon.kpi-red { background: linear-gradient(135deg, #e5645a, #c0392b); }
+  .kpi-value { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
+  .kpi-label { font-size: .64rem; text-transform: uppercase; letter-spacing: .04em; color: #8a93a3; font-weight: 700; }
+  .kpi-sub { font-size: .68rem; margin-top: .15rem; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+  .kpi-trend { font-size: .62rem; font-weight: 700; padding: .04rem .35rem; border-radius: .25rem; }
+  .kpi-trend.up { color: #1a7f37; background: #d9f2df; }
+  .kpi-trend.down { color: #b02a2a; background: #fbdcdc; }
+  .filter-panel-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .filter-panel-form { overflow-x: auto; }
+  .filter-panel-form .filter-field { flex: 1 1 0; min-width: 90px; }
+  .filter-panel-form .form-label { font-size: .78rem; margin-bottom: .25rem; white-space: nowrap; }
+  .filter-panel-form .form-control, .filter-panel-form .form-select { font-size: .85rem; border-radius: .5rem; }
+  .dt-toolbar-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
+  .section-title { font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: #495057; margin-bottom: .75rem; }
+  .card { border: none; border-radius: .75rem; box-shadow: 0 2px 12px rgba(20,30,60,.06); }
+  .ledger-table { border-color: #eef0f4; }
+  .ledger-table td { font-size: .76rem; white-space: nowrap; text-align: center; vertical-align: middle; padding: .55rem .5rem; border-color: #eef0f4; }
+  .ledger-table th { font-size: .74rem; white-space: normal; text-align: center !important; vertical-align: middle; word-break: normal; line-height: 1.2; border-color: #e4e7ee; }
+  .ledger-table thead th { background: #f7f8fb; }
+  .grp-date { background: linear-gradient(180deg, #fff5da, #ffe699) !important; }
+  .grp-dispatch { background: linear-gradient(180deg, #fbe0cb, #f8cbad) !important; }
+  .grp-received { background: linear-gradient(180deg, #e7e2f5, #d9d2f0) !important; }
+  .grp-stock { background: linear-gradient(180deg, #e4f0e0, #d9ead3) !important; }
+  .grp-other { background: linear-gradient(180deg, #f9d9d9, #f4cccc) !important; }
+  .ledger-legend { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .legend-chip { padding: .15rem .6rem; border-radius: .3rem; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .ledger-table td.dispatch-cell { background: #cfe2ff; }
+  .ledger-table td.received-cell { background: #e6dff2; }
+  .ledger-table td.stock-cell { font-weight: 700; }
+  .ledger-table td.stock-cell.text-danger, .ledger-table td.net-stock.text-danger { color: #c0392b !important; }
+  .ledger-table td.stock-cell.text-success, .ledger-table td.net-stock.text-success { color: #1a7f37 !important; }
+  .ledger-table tr.receipt-row { background: #fff3cd; }
+  .ledger-table tr.opening-row { background: #f8d7a3; font-weight: 700; }
+  .ledger-table tbody tr:not(.opening-row):hover td { box-shadow: inset 0 0 0 9999px rgba(13,110,253,.07); }
+  .ledger-table tfoot td { background: #dbe9f0 !important; font-weight: 700; color: #2d6cdf; }
+  .ledger-table td.net-stock { font-weight: 700; }
+  .recent-activity-item { display: flex; justify-content: space-between; align-items: center; padding: .3rem 0; border-bottom: 1px solid #f1f3f5; font-size: .8rem; }
+  .recent-activity-item:last-child { border-bottom: none; }
+  .recent-activity-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: .62rem; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+  .recent-activity-icon.kpi-blue { background: linear-gradient(135deg, #5b93ff, #2d6cdf); }
+  .recent-activity-icon.kpi-purple { background: linear-gradient(135deg, #b56fd6, #8e44ad); }
+  .recent-activity-icon.kpi-amber { background: linear-gradient(135deg, #f5a934, #e08e0b); }
+  .recent-activity-icon.kpi-teal { background: linear-gradient(135deg, #17bcbc, #0d8f8f); }
+  .ledger-table-wrap { border-radius: .6rem; overflow: hidden; border: 1px solid #eef0f4; }
+  @media print { .no-print { display: none !important; } }
+</style>
+
+<div class="cpr-breadcrumb no-print">
+  Reports <span class="mx-1">&rsaquo;</span> Feed Dispatch &amp; Stock Report
+</div>
+
+<div class="cpr-header no-print">
+  <div><h3>Feed Dispatch &amp; Stock Report</h3>
+    <div class="text-muted small">{% if warehouse_obj %}{{ warehouse_obj.name }}{% elif all_warehouses %}All Warehouses (combined){% endif %}</div>
+  </div>
+</div>
+
+<!-- KPI cards -->
+<div class="row row-cols-2 row-cols-md-4 g-2 mb-3 no-print kpi-row">
+  <div class="kpi-col">
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-icon kpi-blue"><i class="fas fa-truck-fast"></i></div>
+      <div>
+        <div class="kpi-label">Total Dispatched</div>
+        <div class="kpi-value">{{ kpi.total_dispatched_bags|floatformat:2 }} bags</div>
+        <div class="kpi-sub">
+          {% if trend %}<span class="kpi-trend {% if trend.dispatched >= 0 %}up{% else %}down{% endif %}">{% if trend.dispatched >= 0 %}&#9650;{% else %}&#9660;{% endif %} {{ trend.dispatched }}%</span>{% endif %}
+          <span class="text-muted">To Farms</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card kpi-purple">
+      <div class="kpi-icon kpi-purple"><i class="fas fa-truck-ramp-box"></i></div>
+      <div>
+        <div class="kpi-label">Total Received</div>
+        <div class="kpi-value">{{ kpi.total_received_bags|floatformat:2 }} bags</div>
+        <div class="kpi-sub">
+          {% if trend %}<span class="kpi-trend {% if trend.received >= 0 %}up{% else %}down{% endif %}">{% if trend.received >= 0 %}&#9650;{% else %}&#9660;{% endif %} {{ trend.received }}%</span>{% endif %}
+          <span class="text-muted">From Farms &amp; Suppliers</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card kpi-teal">
+      <div class="kpi-icon kpi-teal"><i class="fas fa-warehouse"></i></div>
+      <div>
+        <div class="kpi-label">Net Stock</div>
+        <div class="kpi-value">{{ kpi.net_total_bag_stock|floatformat:2 }} bags</div>
+        <div class="kpi-sub">
+          {% if trend %}<span class="kpi-trend {% if trend.net_stock >= 0 %}up{% else %}down{% endif %}">{% if trend.net_stock >= 0 %}&#9650;{% else %}&#9660;{% endif %} {{ trend.net_stock }}%</span>{% endif %}
+          <span class="text-muted">As of To Date</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-col">
+    <div class="kpi-card kpi-red">
+      <div class="kpi-icon kpi-red"><i class="fas fa-rupee-sign"></i></div>
+      <div>
+        <div class="kpi-label">Freight Paid</div>
+        <div class="kpi-value">&#8377;{{ kpi.total_freight|floatformat:2 }}</div>
+        <div class="kpi-sub">
+          {% if trend %}<span class="kpi-trend {% if trend.freight >= 0 %}up{% else %}down{% endif %}">{% if trend.freight >= 0 %}&#9650;{% else %}&#9660;{% endif %} {{ trend.freight }}%</span>{% endif %}
+          <span class="text-muted">Purchase invoices only</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filter panel -->
+<div class="card mb-3 no-print">
+  <div class="card-body">
+    <div class="filter-panel-header mb-2" id="filter-panel-toggle">
+      <h6 class="mb-0">Filter Report</h6>
+      <span class="text-primary small" id="filter-panel-toggle-label"><i class="fas fa-chevron-up me-1"></i>Collapse</span>
+    </div>
+    <div id="filter-panel-body">
+      <form method="get" class="d-flex flex-nowrap align-items-end gap-2 filter-panel-form">
+        <div class="filter-field">
+          <label class="form-label">Region</label>
+          <select class="form-select" name="region">
+            <option value="">All</option>
+            {% for r in regions %}<option value="{{ r.id }}" {% if region_id == r.id|stringformat:"s" %}selected{% endif %}>{{ r.description }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">Branch</label>
+          <select class="form-select" name="branch">
+            <option value="">All</option>
+            {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:"s" %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field" style="flex:1.4 1 0;">
+          <label class="form-label">Warehouse</label>
+          <select class="form-select" name="warehouse">
+            <option value="">All Warehouses</option>
+            {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label class="form-label">From Date</label>
+          <input type="date" class="form-control" name="from_date" value="{{ from_date }}">
+        </div>
+        <div class="filter-field">
+          <label class="form-label">To Date</label>
+          <input type="date" class="form-control" name="to_date" value="{{ to_date }}">
+        </div>
+        <input type="hidden" name="export" value="{{ export }}">
+        <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-primary" type="submit" name="submit" value="1"><i class="fas fa-search me-1"></i>Search</button>
+          <a class="btn btn-outline-secondary" href="{% url 'feed_dispatch_stock_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if submitted %}
+
+<!-- Stock Summary / Top Feed / Recent Activity / Warehouse Snapshot -->
+<div class="row g-3 mb-3 no-print">
+  <div class="{% if all_warehouses %}col-lg-3{% else %}col-lg-4{% endif %}">
+    <div class="card h-100"><div class="card-body py-2 px-3">
+      <div class="section-title mb-1" style="font-size:.85rem;">Stock Summary <small class="text-muted fw-normal">(as of {% if to_date %}{{ to_date }}{% else %}today{% endif %})</small></div>
+      <div style="position:relative; height:120px;"><canvas id="stockSummaryChart"></canvas></div>
+      <div class="d-flex justify-content-around text-center mt-2" style="font-size:.72rem;">
+        <div><span class="d-block fw-bold">{{ kpi.total_received_bags|floatformat:2 }}</span><span class="text-muted">Received</span></div>
+        <div><span class="d-block fw-bold">{{ kpi.total_dispatched_bags|floatformat:2 }}</span><span class="text-muted">Dispatched</span></div>
+        <div><span class="d-block fw-bold">{{ kpi.net_total_bag_stock|floatformat:2 }}</span><span class="text-muted">Net Stock</span></div>
+      </div>
+    </div></div>
+  </div>
+  <div class="{% if all_warehouses %}col-lg-3{% else %}col-lg-4{% endif %}">
+    <div class="card h-100"><div class="card-body py-2 px-3">
+      <div class="section-title mb-1" style="font-size:.85rem;">Feed by Net Stock <small class="text-muted fw-normal">(bags)</small></div>
+      <div style="position:relative; height:120px;"><canvas id="topFeedChart"></canvas></div>
+    </div></div>
+  </div>
+  <div class="{% if all_warehouses %}col-lg-3{% else %}col-lg-4{% endif %}">
+    <div class="card h-100"><div class="card-body py-2 px-3">
+      <div class="section-title mb-1" style="font-size:.85rem;">Recent Activity <small class="text-muted fw-normal">(Last 7 Days)</small></div>
+      <div class="recent-activity-item">
+        <span><span class="recent-activity-icon kpi-blue me-2"><i class="fas fa-truck-fast"></i></span>Feed Dispatched</span>
+        <strong>{{ recent_activity.dispatched|floatformat:2 }} bags</strong>
+      </div>
+      <div class="recent-activity-item">
+        <span><span class="recent-activity-icon kpi-purple me-2"><i class="fas fa-truck-ramp-box"></i></span>Feed Received</span>
+        <strong>{{ recent_activity.received|floatformat:2 }} bags</strong>
+      </div>
+      <div class="recent-activity-item">
+        <span><span class="recent-activity-icon kpi-amber me-2"><i class="fas fa-sliders"></i></span>Stock Adjustment</span>
+        <strong>{{ recent_activity.adjustment|floatformat:2 }} bags</strong>
+      </div>
+      <div class="recent-activity-item">
+        <span><span class="recent-activity-icon kpi-teal me-2"><i class="fas fa-rotate-left"></i></span>Stock Return</span>
+        <strong>{{ recent_activity.returned|floatformat:2 }} bags</strong>
+      </div>
+    </div></div>
+  </div>
+
+  {% if all_warehouses %}
+  <div class="col-lg-3">
+    <div class="card h-100"><div class="card-body py-2 px-3">
+      <div class="section-title mb-1" style="font-size:.85rem;">Warehouse Snapshot</div>
+      <table class="table table-sm mb-0" style="font-size:.74rem;">
+        <thead><tr><th class="text-start">Branch</th><th class="text-start">Warehouse</th><th class="text-end">Net Stock (bags)</th></tr></thead>
+        <tbody>
+          {% for w in warehouse_snapshot %}
+          <tr>
+            <td class="text-start">{{ w.branch_name|default:"-" }}</td>
+            <td class="text-start">{{ w.name }}</td>
+            <td class="text-end fw-bold {% if w.net_stock < 0 %}text-danger{% else %}text-success{% endif %}">{{ w.net_stock }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="text-center text-muted">No warehouse activity</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="border-top">
+            <td class="text-start fw-bold" colspan="2">Total</td>
+            <td class="text-end fw-bold {% if kpi.net_total_bag_stock < 0 %}text-danger{% else %}text-success{% endif %}">{{ kpi.net_total_bag_stock|floatformat:2 }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div></div>
+  </div>
+  {% endif %}
+
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="section-title">
+      Feed Dispatch &amp; Stock Ledger — {% if warehouse_obj %}{{ warehouse_obj.name }}{% else %}All Warehouses (combined){% endif %}
+    </div>
+    {% if all_warehouses %}
+    <div class="alert alert-info no-print py-2 small">Showing every Warehouse combined into one running total. Moving stock between two of our own warehouses nets to zero here since nothing left the company; pick a single Warehouse above for its own paper-style register.</div>
+    {% endif %}
+    <div class="dt-toolbar-row no-print">
+      <input type="text" class="form-control form-control-sm" id="ledger-search" style="max-width:280px;" placeholder="Search challan no, name, vehicle...">
+      <div id="ledger-buttons-slot" class="d-flex gap-2"></div>
+    </div>
+    <div class="ledger-legend no-print small mb-1">
+      <span class="legend-chip grp-dispatch">Dispatch Feed (bags)</span>
+      <span class="legend-chip grp-received">Received Feed (bags)</span>
+      <span class="legend-chip grp-stock">Total Stock (bags)</span>
+    </div>
+    <div class="ledger-table-wrap">
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 ledger-table" id="ledger-table" style="width:100%">
+        <thead>
+          <tr>
+            <th class="grp-date" rowspan="2">Date</th>
+            <th class="grp-date" rowspan="2">Transaction No.</th>
+            <th class="grp-date" rowspan="2">Challan No.</th>
+            <th class="grp-date" rowspan="2">Branch</th>
+            <th class="grp-date" rowspan="2">Warehouse</th>
+            <th class="grp-date" rowspan="2">Supplier/Farmer Name</th>
+            <th class="grp-date" rowspan="2">Farm Batch No.</th>
+            <th class="grp-dispatch" colspan="{{ feed_labels|length }}">Dispatched Feed (Bags)</th>
+            <th class="grp-date" rowspan="2">Total Bags</th>
+            <th class="grp-date" rowspan="2">Total Kg</th>
+            <th class="grp-received" colspan="{{ feed_labels|length }}">Received Feed (Bags)</th>
+            <th class="grp-stock" colspan="{{ feed_labels|length }}">Total Stock (Bags)</th>
+            <th class="grp-date" rowspan="2">Net Total Bag Stock</th>
+            <th class="grp-other" rowspan="2">Vehicle No.<br>(Dispatch/Receive)</th>
+            <th class="grp-other" rowspan="2">Freight Paid<br>(If Any)</th>
+            <th class="grp-other" rowspan="2">Remarks</th>
+          </tr>
+          <tr>
+            {% for l in feed_labels %}<th class="grp-dispatch">{{ l }}</th>{% endfor %}
+            {% for l in feed_labels %}<th class="grp-received">{{ l }}</th>{% endfor %}
+            {% for l in feed_labels %}<th class="grp-stock">{{ l }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="opening-row">
+            <td colspan="{{ opening_label_colspan }}">OPENING STOCK {% if from_date %}{{ from_date }}{% else %}(all-time){% endif %}</td>
+            {% for l in feed_labels %}<td></td>{% endfor %}
+            <td></td><td></td>
+            {% for l in feed_labels %}<td></td>{% endfor %}
+            {% for v in opening.values %}<td class="stock-cell {% if v < 0 %}text-danger{% else %}text-success{% endif %}">{{ v }}</td>{% endfor %}
+            <td class="net-stock {% if opening.net < 0 %}text-danger{% else %}text-success{% endif %}">{{ opening.net }}</td>
+            <td></td><td></td><td></td>
+          </tr>
+          {% for r in ledger_rows %}
+          <tr {% if r.is_receipt %}class="receipt-row"{% endif %} data-search="{{ r.challan_no }} {{ r.txn_no }} {{ r.name }} {{ r.vehicle_no }} {{ r.farm_code }} {{ r.batch_no }}">
+            <td>{{ r.date|date:"d.m.Y" }}</td>
+            <td>{{ r.txn_no|default:"-" }}</td>
+            <td>{{ r.challan_no|default:"-" }}</td>
+            <td>{{ r.branch_name|default:"-" }}</td>
+            <td>{{ r.warehouse_name }}</td>
+            <td class="text-start">{{ r.name|default:"-" }}</td>
+            <td>{{ r.batch_no|default:"-" }}</td>
+            {% for v in r.dispatch_bags %}<td class="dispatch-cell">{% if v %}{{ v }}{% endif %}</td>{% endfor %}
+            <td>{% if r.total_bag %}{{ r.total_bag }}{% endif %}</td>
+            <td>{% if r.total_kg %}{{ r.total_kg }}{% endif %}</td>
+            {% for v in r.received_bags %}<td class="received-cell">{% if v %}{{ v }}{% endif %}</td>{% endfor %}
+            {% for v in r.stock_bags %}<td class="stock-cell {% if v < 0 %}text-danger{% else %}text-success{% endif %}">{{ v }}</td>{% endfor %}
+            <td class="net-stock {% if r.net_stock < 0 %}text-danger{% else %}text-success{% endif %}">{{ r.net_stock }}</td>
+            <td>{{ r.vehicle_no|default:"-" }}</td>
+            <td>{% if r.freight is not None %}{{ r.freight }}{% else %}-{% endif %}</td>
+            <td class="text-start">{{ r.remarks|default:"" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ total_columns }}" class="text-center text-muted">No feed dispatch/receipt transactions found for these filters</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if ledger_rows %}
+        <tfoot>
+          <tr>
+            <td colspan="{{ opening_label_colspan }}" class="text-end">TOTAL</td>
+            {% for v in ledger_totals.dispatch_bags %}<td>{{ v }}</td>{% endfor %}
+            <td>{{ ledger_totals.total_bag }}</td>
+            <td>{{ ledger_totals.total_kg }}</td>
+            {% for v in ledger_totals.received_bags %}<td>{{ v }}</td>{% endfor %}
+            {% for v in ledger_totals.stock_bags %}<td class="{% if v < 0 %}text-danger{% else %}text-success{% endif %}">{{ v }}</td>{% endfor %}
+            <td class="{% if ledger_totals.net_stock < 0 %}text-danger{% else %}text-success{% endif %}">{{ ledger_totals.net_stock }}</td>
+            <td></td><td></td><td></td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    </div>
+    <div class="form-text mt-2 no-print">
+      Feed columns are generated from every Item under a Feed category — adding a new feed Item automatically adds its column here, no report changes needed.
+      Freight is only tracked on purchase receipts (Supplier deliveries) — Stock Transfer, Stock Received/Issued and Inventory Adjustment have no freight field, shown as &ldquo;-&rdquo;.
+      Dispatch/Received/Stock columns and Recent Activity now also include Inventory &gt; Transactions' Stock Received, Stock Issued and Inventory Adjustment for this Warehouse.
+    </div>
+  </div>
+</div>
+
+{% else %}
+  <div class="alert alert-info">Choose your filters above (Warehouse optional — leave blank for all warehouses combined), then click <strong>Search</strong>.</div>
+{% endif %}
+
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>
+$(function () {
+  {% if submitted %}
+  // Diagnostics: log exactly what the browser's own DOM looks like right
+  // before DataTables touches it, so a real mismatch (if there is one) is
+  // visible in the console instead of only a blocking alert. Also switch
+  // DataTables to non-blocking error reporting so a failure here can't
+  // freeze the rest of the page/script.
+  $.fn.dataTable.ext.errMode = function (settings, techNote, message) {
+    console.error('DataTables error (table #' + (settings && settings.sTableId) + '):', message);
+  };
+  (function () {
+    const $t = $('#ledger-table');
+    const headRows = $t.find('thead tr').map(function () { return $(this).find('th').length; }).get();
+    const firstBodyRow = $t.find('tbody tr').first();
+    const bodyCells = firstBodyRow.find('td').length;
+    const bodyColspans = firstBodyRow.find('td').map(function () { return $(this).attr('colspan') || 1; }).get();
+    console.log('[ledger-table diagnostics] thead <th> counts per row:', headRows);
+    console.log('[ledger-table diagnostics] first tbody row: raw <td> count =', bodyCells, ', colspans =', bodyColspans,
+      ', effective column count =', bodyColspans.reduce((a, b) => a + Number(b), 0));
+    console.log('[ledger-table diagnostics] total tbody rows:', $t.find('tbody tr').length);
+  })();
+
+  // Charts first: if the ledger table below hits any issue, the dashboard
+  // widgets above it should still render rather than being blocked by it.
+  new Chart(document.getElementById('stockSummaryChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Received', 'Dispatched'],
+      datasets: [{ data: [{{ kpi.total_received_bags }}, {{ kpi.total_dispatched_bags }}], backgroundColor: ['#8e44ad', '#2d6cdf'] }],
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } },
+  });
+
+  const topFeedLabels = [{% for f in top_feed %}'{{ f.label }}',{% endfor %}];
+  const topFeedValues = [{% for f in top_feed %}{{ f.value }},{% endfor %}];
+  new Chart(document.getElementById('topFeedChart'), {
+    type: 'bar',
+    data: { labels: topFeedLabels, datasets: [{ data: topFeedValues,
+      backgroundColor: topFeedValues.map(v => v < 0 ? '#e57373' : '#4caf9e') }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } } },
+  });
+
+  // Single-row <thead> (no rowspan/colspan) so DataTables' column detection
+  // has nothing ambiguous to parse. `buttons` is intentionally NOT passed
+  // inline here: this project sets global DataTables button defaults
+  // (static/js/main.js) via $.extend(true, ...), which deep-merges arrays
+  // *by index* rather than replacing them — a short custom `buttons` array
+  // passed inline ends up spliced together with the leftover global default
+  // buttons, and those defaults' `exportOptions: { columns: "th:not(:last
+  // -child)" }` run their own independent column-count pass that doesn't
+  // agree with this table. Attaching buttons afterwards via the standalone
+  // Buttons API sidesteps that merge entirely.
+  // $.extend(true, ...) merges arrays *by index*, so even an explicit
+  // buttons: [] here would leave the global default's 6 entries in place
+  // (nothing at those indices to overwrite them with). Neutralising the
+  // default right at the moment of merge, then restoring it, is the only
+  // reliable way to keep this table's init from inheriting it.
+  const savedDefaultButtons = $.fn.dataTable.defaults.buttons;
+  $.fn.dataTable.defaults.buttons = [];
+  const ledgerTable = $('#ledger-table').DataTable({
+    ordering: false, paging: true, pageLength: 10, lengthMenu: [10, 25, 50, 100],
+    dom: 'frtip',
+    language: { emptyTable: 'No data available in table' },
+  });
+  $.fn.dataTable.defaults.buttons = savedDefaultButtons;
+  new $.fn.dataTable.Buttons(ledgerTable, {
+    buttons: [
+      { extend: 'collection', text: '<i class="fas fa-download me-1"></i>Export', className: 'btn btn-outline-secondary btn-sm', buttons: ['copy', 'csv', 'excel', 'pdf'] },
+      { extend: 'print', text: '<i class="fas fa-print me-1"></i>Print', className: 'btn btn-outline-secondary btn-sm' },
+      { extend: 'colvis', text: '<i class="fas fa-sliders-h me-1"></i>Column Settings', className: 'btn btn-outline-secondary btn-sm' },
+    ],
+  });
+  $('#ledger-buttons-slot').append(ledgerTable.buttons().container());
+  $('#ledger-search').on('input', function () { ledgerTable.search(this.value).draw(); });
+  {% endif %}
+
+  function setFilterPanelState(open) {
+    $('#filter-panel-body').toggle(open);
+    $('#filter-panel-toggle-label').html(open
+      ? '<i class="fas fa-chevron-up me-1"></i>Collapse'
+      : '<i class="fas fa-chevron-down me-1"></i>Expand');
+  }
+  let filterOpen = true;
+  $('#filter-panel-toggle').on('click', function () {
+    filterOpen = !filterOpen;
+    setFilterPanelState(filterOpen);
+  });
+});
+</script>
+{% endblock %}

@@ -98,6 +98,8 @@ urlpatterns = [
     path('bird-sale-receipt/balance-lookup/', views.bird_sale_receipt_balance_lookup, name='bird_sale_receipt_balance_lookup'),
 
     path('broiler-report/', views.broiler_batch_report, name='broiler_batch_report'),
+    path('chicks-placement-report/', views.chicks_placement_report, name='chicks_placement_report'),
+    path('feed-dispatch-stock-report/', views.feed_dispatch_stock_report, name='feed_dispatch_stock_report'),
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),

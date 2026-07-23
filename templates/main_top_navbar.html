@@ -132,6 +132,12 @@
               {% if 'broiler_batch_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'broiler_batch_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-file-alt"></i>Batch History Report
               </a></li>{% endif %}
+              {% if 'chicks_placement_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chicks_placement_report' %}" target="_blank" rel="noopener">
+                <i class="fa-solid fa-kiwi-bird"></i>Chicks Placement Report
+              </a></li>{% endif %}
+              {% if 'feed_dispatch_stock_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'feed_dispatch_stock_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-wheat-awn"></i>Feed Dispatch &amp; Stock Report
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

@@ -94,7 +94,7 @@
       <div class="bs-ctrl-col bs-col-head">Age<span class="text-danger">*</span></div>
       <div class="flex-fill bs-col-head">Body Wt.<span class="text-danger">*</span></div>
       <div class="flex-fill bs-col-head">Feed Intake (gms)<span class="text-danger">*</span></div>
-      <div class="flex-fill bs-col-head">Avg. Daily Gain<span class="text-danger">*</span></div>
+      <div class="flex-fill bs-col-head">Avg. Daily Gain <small class="text-muted fw-normal">(auto · editable)</small></div>
       <div class="flex-fill bs-col-head">FCR <small class="text-muted fw-normal">(auto · editable)</small></div>
       <div class="flex-fill bs-col-head">Cum. Feed <small class="text-muted fw-normal">(auto · editable)</small></div>
       <div class="bs-ctrl-col"></div>
@@ -114,7 +114,7 @@
   <div class="bs-ctrl-col"><input type="number" step="1" min="1" class="form-control bs-age" data-f="age" value=""></div>
   <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="body_weight" placeholder="0.00"></div>
   <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="feed_intake" placeholder="0.00"></div>
-  <div class="flex-fill"><input type="number" step="0.01" class="form-control" data-f="avg_daily_gain" placeholder="0.00"></div>
+  <div class="flex-fill"><input type="number" step="0.01" class="form-control bs-auto" data-f="avg_daily_gain" placeholder="0.00"></div>
   <div class="flex-fill"><input type="number" step="0.001" class="form-control bs-auto" data-f="fcr" placeholder="0.00"></div>
   <div class="flex-fill"><input type="number" step="0.01" class="form-control bs-auto" data-f="cum_feed" placeholder="0.00"></div>
   <div class="bs-ctrl-col bs-row-ctrl d-flex gap-2 align-items-center justify-content-center"><span class="bs-ctrl add" title="Add row"><i class="fas fa-plus"></i></span><span class="bs-ctrl sub" title="Remove row"><i class="fas fa-minus"></i></span></div>
@@ -143,18 +143,23 @@ $(document).ready(function () {
     return ages.length ? Math.max(...ages) + 1 : 1;
   }
 
-  // Cum. Feed = previous cumulative + this row's feed intake; FCR = cum feed / body weight.
-  // Both are auto-filled but user-editable: a cell the user typed into is flagged
+  // Cum. Feed = previous cumulative + this row's feed intake; FCR = cum feed / body weight;
+  // Avg. Daily Gain = this row's body weight - previous row's body weight (the first row
+  // has no previous weight to diff against, so it's left for manual entry).
+  // All three are auto-filled but user-editable: a cell the user typed into is flagged
   // [data-manual] and is left untouched by the auto-calc (until it is cleared).
   function recalc() {
     let cum = 0;
+    let prevBody = null;
     $('#bs-rows .bs-drow').each(function () {
       const $r = $(this);
-      const body = parseFloat($r.find('[data-f="body_weight"]').val()) || 0;
+      const bodyRaw = $r.find('[data-f="body_weight"]').val();
+      const body = parseFloat(bodyRaw) || 0;
       const intakeRaw = $r.find('[data-f="feed_intake"]').val();
       const intake = parseFloat(intakeRaw) || 0;
       const $cum = $r.find('[data-f="cum_feed"]');
       const $fcr = $r.find('[data-f="fcr"]');
+      const $gain = $r.find('[data-f="avg_daily_gain"]');
 
       if ($cum.attr('data-manual')) {
         cum = parseFloat($cum.val()) || cum;          // manual value drives the running total
@@ -167,6 +172,11 @@ $(document).ready(function () {
         const cumVal = parseFloat($cum.val());
         $fcr.val((body > 0 && Number.isFinite(cumVal)) ? fmtNum(cumVal / body) : '');
       }
+      if (!$gain.attr('data-manual')) {
+        if (prevBody !== null && bodyRaw !== '') $gain.val(fmtNum(body - prevBody));
+        else if (bodyRaw === '') $gain.val('');
+      }
+      if (bodyRaw !== '') prevBody = body;
     });
   }
 
@@ -178,9 +188,9 @@ $(document).ready(function () {
         const f = $(this).data('f');
         if (data[f] !== undefined && data[f] !== null) $(this).val(data[f]);
       });
-      // Loaded rows keep their stored Cum. Feed / FCR (treated as manual so the
-      // auto-calc doesn't overwrite them on load).
-      $node.find('[data-f="cum_feed"], [data-f="fcr"]').each(function () {
+      // Loaded rows keep their stored Cum. Feed / FCR / Avg. Daily Gain (treated
+      // as manual so the auto-calc doesn't overwrite them on load).
+      $node.find('[data-f="cum_feed"], [data-f="fcr"], [data-f="avg_daily_gain"]').each(function () {
         if ($(this).val() !== '') $(this).attr('data-manual', '1');
       });
     } else {
@@ -193,8 +203,9 @@ $(document).ready(function () {
 
   // Auto-recompute when Body Wt. / Feed Intake change.
   $(document).on('input', '#bs-rows [data-f="body_weight"], #bs-rows [data-f="feed_intake"]', recalc);
-  // Flag Cum. Feed / FCR as manual when the user types into them (clearing reverts to auto).
-  $(document).on('input', '#bs-rows [data-f="cum_feed"], #bs-rows [data-f="fcr"]', function () {
+  // Flag Cum. Feed / FCR / Avg. Daily Gain as manual when the user types into
+  // them directly (clearing the cell reverts it to auto).
+  $(document).on('input', '#bs-rows [data-f="cum_feed"], #bs-rows [data-f="fcr"], #bs-rows [data-f="avg_daily_gain"]', function () {
     if ($(this).val() === '') $(this).removeAttr('data-manual'); else $(this).attr('data-manual', '1');
     recalc();
   });

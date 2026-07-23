@@ -7,7 +7,7 @@
 
 <style>
   body { background: #eef2f5; }
-  .report-doc { width: 98%; max-width: 1900px; margin: 0 auto; background: #fff; }
+  .report-doc { width: 98%; max-width: 1900px; margin: 0 auto; }
   .report-letterhead {
     display: flex; align-items: center;
     background: #cfe3ec; border: 1px solid #9fc3d6; padding: .75rem 1.25rem;
@@ -29,18 +29,6 @@
   /* Keep the whole bar on one row: field columns shrink to fit, buttons don't. */
   .report-filter-bar form > [class*="col-md-"] { flex-shrink: 1; min-width: 0; }
   .report-filter-bar .col-auto { white-space: nowrap; }
-  .report-batch-info {
-    background: #e2efda; border: 1px solid #b6d7a8; padding: .5rem 1rem;
-    font-weight: 700; font-size: .82rem;
-    white-space: nowrap; overflow-x: auto;
-  }
-  .report-batch-info > span { margin-right: 1.1rem; white-space: nowrap; }
-  .report-batch-info .k { color: #2e7d32; }   /* label — green */
-  .report-batch-info .v { color: #c0392b; }   /* value — red */
-  .report-section-title {
-    text-align: center; color: #0d5f8a; font-weight: 700; font-size: 1.05rem;
-    padding: .5rem 0 .25rem;
-  }
   .report-table { border: 1px solid #9fc3d6; }
   .report-table th {
     background: #cfe3ec; border-color: #9fc3d6 !important; font-size: .8rem;
@@ -64,9 +52,112 @@
   .report-costing td.lbl { background: #eaf3f8; font-weight: 700; white-space: nowrap; }
   .report-costing td.val { text-align: right; }
   .report-costing td.hl { color: #b02a2a; font-weight: 700; text-align: right; }
+
+  /* ---- Growing Charge dashboard: the whole statement below the letterhead is
+     one consistent card-based layout — a light gray canvas (body bg) with
+     white rounded-card sections, rather than a single flat printed sheet. ---- */
+  .gc-info-bar {
+    display: flex; flex-wrap: wrap; gap: .5rem 1.25rem;
+    background: #fff; border: 1px solid #e1e0d9; border-radius: .5rem;
+    padding: .75rem 1rem; margin-bottom: 1rem;
+  }
+  .gc-info-chip { display: flex; align-items: center; gap: .5rem; font-size: .78rem; }
+  .gc-info-chip i { color: #0d5f8a; font-size: .9rem; flex: 0 0 auto; }
+  .gc-info-chip .k { display: block; font-size: .62rem; color: #898781; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+  .gc-info-chip b { font-weight: 700; color: #222; }
+
+  .gc-page { padding: 1.1rem 1.25rem 1.5rem; }
+
+  .gc-kpi-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .6rem; margin-bottom: 1rem;
+  }
+  .gc-kpi {
+    display: flex; align-items: center; gap: .6rem;
+    background: #fff; border: 1px solid #e1e0d9; border-radius: .5rem; padding: .6rem .7rem;
+  }
+  .gc-kpi-icon {
+    flex: 0 0 34px; height: 34px; width: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--kpi-bg); color: var(--kpi-accent); font-size: .95rem;
+  }
+  .gc-kpi-label { font-size: .68rem; color: #52514e; font-weight: 600; }
+  .gc-kpi-value { font-size: 1.05rem; font-weight: 700; color: #0b0b0b; line-height: 1.2; }
+  .gc-kpi-sub { font-size: .62rem; color: #898781; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+  .gc-kpi-sub .gc-status { font-size: .58rem; padding: .05rem .35rem; }
+
+  .gc-layout { display: flex; gap: 1rem; align-items: flex-start; }
+  .gc-col-left { flex: 1.6; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+  .gc-col-right {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem;
+    position: sticky; top: 1rem; align-self: flex-start;
+    max-height: calc(100vh - 2rem); overflow-y: auto;
+  }
+  @media (max-width: 1100px) {
+    .gc-layout { flex-direction: column; }
+    .gc-col-right { position: static; max-height: none; overflow-y: visible; }
+  }
+  @media print {
+    .gc-col-right { position: static; max-height: none; overflow-y: visible; }
+  }
+  .gc-full { margin-top: 1rem; }
+
+  .gc-card { background: #fff; border: 1px solid #e1e0d9; border-radius: .5rem; padding: .85rem 1rem; }
+  .gc-card-header {
+    display: flex; align-items: center; gap: .55rem; font-weight: 700; font-size: .85rem;
+    color: #222; margin-bottom: .65rem; padding-bottom: .55rem; border-bottom: 1px solid #eee;
+  }
+  .gc-card-icon {
+    flex: 0 0 26px; height: 26px; width: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--ci-bg); color: var(--ci-accent); font-size: .72rem;
+  }
+
+  .gc-donut-wrap { display: flex; align-items: center; gap: 1rem; }
+  .gc-donut-canvas { position: relative; flex: 0 0 140px; height: 140px; }
+  .gc-donut-center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; pointer-events: none;
+  }
+  .gc-donut-total-label { font-size: .62rem; color: #898781; }
+  .gc-donut-total-value { font-size: .8rem; font-weight: 700; color: #0b0b0b; }
+  .gc-legend { list-style: none; margin: 0; padding: 0; font-size: .74rem; flex: 1; min-width: 0; }
+  .gc-legend li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .2rem 0; }
+  .gc-legend li .name { display: flex; align-items: center; min-width: 0; }
+  .gc-legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: .4rem; flex: 0 0 9px; }
+  .gc-legend li b { font-weight: 700; white-space: nowrap; }
+
+  .gc-perf-table th, .gc-perf-table td { font-size: .74rem; padding: .3rem .45rem; white-space: nowrap; }
+  .gc-status { font-size: .68rem; font-weight: 700; padding: .1rem .45rem; border-radius: .8rem; }
+  .gc-status-good { background: rgba(12,163,12,.12); color: #0ca30c; }
+  .gc-status-medium { background: rgba(250,178,25,.2); color: #8a5f00; }
+  .gc-status-high { background: rgba(208,59,59,.12); color: #d03b3b; }
+  .gc-status-no-target { background: #eee; color: #898781; }
+
+  .gc-summary-list { list-style: none; margin: 0; padding: 0; font-size: .78rem; }
+  .gc-summary-list li { display: flex; justify-content: space-between; gap: .5rem; padding: .32rem 0; border-bottom: 1px dashed #eee; }
+  .gc-summary-list li:last-child { border-bottom: none; }
+  .gc-summary-list b { font-weight: 700; white-space: nowrap; }
+  .gc-summary-list .text-muted { font-weight: 600; font-size: .72rem; }
+  .gc-summary-total { background: #f4f8fc; margin: .3rem -1rem -.85rem; padding: .55rem 1rem !important; border-bottom: none !important; }
+  .gc-summary-total b { color: #0d5f8a; font-size: .85rem; }
+
+  .gc-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .gc-mini-grid-6 { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  .gc-mini-tile { text-align: center; background: #f8fafc; border-radius: .4rem; padding: .5rem .3rem; }
+  .gc-mini-tile i { color: #1baf7a; margin-bottom: .2rem; display: block; }
+  .gc-mini-label { font-size: .62rem; color: #898781; }
+  .gc-mini-value { font-size: .85rem; font-weight: 700; }
+
+  .gc-trend-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+  .gc-trend-mini { flex: 1; min-width: 180px; height: 150px; }
+  .gc-trend-mini-label { font-size: .68rem; color: #52514e; font-weight: 600; margin-bottom: .2rem; }
+
   @media print {
     .no-print { display: none !important; }
     body { background: #fff; }
+    .gc-layout { display: block; }
+    .gc-card { break-inside: avoid; }
   }
 </style>
 
@@ -145,441 +236,592 @@
   </div>
 
 {% if batch %}
-  <div class="report-batch-info">
-    <span><span class="k">Branch:</span> <span class="v">{{ batch.broiler_farm.branch.branch_name }}</span></span>
-    <span><span class="k">Line:</span> <span class="v">{{ batch.broiler_farm.line }}</span></span>
-    <span><span class="k">Farm:</span> <span class="v">{{ batch.broiler_farm.farm_name }}</span></span>
-    <span><span class="k">Supervisor:</span> <span class="v">{{ batch.broiler_farm.supervisor.name }}</span></span>
-    <span><span class="k">Farmer:</span> <span class="v">{{ batch.broiler_farm.farmer.farmer_name }}</span></span>
-    <span><span class="k">Batch No.:</span> <span class="v">{{ batch.batch_name }}</span></span>
-    {% if batch.book_number %}<span><span class="k">Book No.:</span> <span class="v">{{ batch.book_number }}</span></span>{% endif %}
-    <span><span class="k">Report Type:</span> <span class="v">{{ fetch_type_label }}</span></span>
-  </div>
+  {% with c=report.batch_costing d=report.dashboard %}
+  <div class="gc-page">
 
-  <div class="report-section-title">Chick Placement</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.chick_placement %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No chick placement transfers for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Feed Purchase</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Warehouse</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.feed_purchase %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed purchases at this farm's branch during the batch window</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Feed Transfer-In</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Cumulative</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.feed_transfer_in %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td>
-          <td class="text-end">{{ r.amount }}</td><td class="text-end">{{ r.cumulative }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="9" class="text-center text-muted">No feed transfers for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Feed Return</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.feed_return %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed returned for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Feed Transfer to Other Farms</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.feed_transfer_out %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed transferred to other farms for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Feed Summary</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Feed Name</th><th>Purchase</th><th>Transfer In</th><th>Consumed</th><th>Return</th><th>Transfer to Other Farms</th><th>Balance</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.feed_summary %}
-        <tr>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.purchased }}</td><td class="text-end">{{ r.transfer_in }}</td><td class="text-end">{{ r.consumed }}</td>
-          <td class="text-end">{{ r.returned }}</td><td class="text-end">{{ r.transferred_out }}</td><td class="text-end">{{ r.balance }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="7" class="text-center text-muted">No feed movement for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Medicine and Vaccine Transfer In</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.medicine_transfer_in %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transfers for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Medicine and Vaccine Return</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.medicine_return %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine returned for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Medicine and Vaccine Transfer to Other Farms</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.medicine_transfer_out %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
-          <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transferred to other farms for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Medicine and Vaccine Consumption</div>
-  <div class="table-responsive">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr><th>Date</th><th>Age</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Stock</th><th>Remarks</th></tr>
-      </thead>
-      <tbody>
-        {% for r in report.medicine_consumption %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.age }}</td><td>{{ r.item }}</td>
-          <td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.stock }}</td><td>{{ r.remarks }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="6" class="text-center text-muted">No medicine/vaccine consumption for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Mortality And Feed Consumption Details</div>
-  <div class="report-scroll">
-    <table class="table table-bordered mb-0 report-table report-dense">
-      <thead>
-        <tr>
-          <th colspan="2"></th><th>Opening</th><th colspan="2">Mortality</th><th></th><th colspan="2"></th>
-          <th>Sold</th><th>Closing</th><th colspan="2"></th>
-          <th colspan="3">Feed 1</th><th colspan="3">Feed 2</th>
-          <th colspan="2">Cumulative</th><th colspan="2">Balance Feed</th><th></th>
-        </tr>
-        <tr>
-          <th>Date</th><th>Age</th><th>Birds</th><th>Count</th><th>%</th><th>Culls</th><th>Cum Mort</th><th>Cum Mort%</th>
-          <th>Birds</th><th>Birds</th><th>Avg.Bw</th><th>FCR</th>
-          <th>Name</th><th>Kgs</th><th>Bags</th><th>Name</th><th>Kgs</th><th>Bags</th>
-          <th>Feed</th><th>Feed/Bird</th><th>In Kgs</th><th>In Bags</th><th>Remarks</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in report.mortality %}
-        {% if r.is_total %}
-        <tr class="report-total-row">
-          <td colspan="2">{{ r.label }}</td>
-          <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
-          <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
-          <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
-          <td class="text-end">{{ r.avg_weight_kg }}</td><td class="text-end">{{ r.fcr }}</td>
-          <td></td><td class="text-end">{{ r.feed_1_kg }}</td><td class="text-end">{{ r.feed_1_bags }}</td>
-          <td></td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
-          <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
-          <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
-          <td></td>
-        </tr>
-        {% else %}
-        <tr>
-          <td>{{ r.date|date:"d.m.y" }}</td><td>{{ r.age }}</td>
-          <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
-          <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
-          <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
-          <td class="text-end">{{ r.avg_weight_kg }}</td><td class="text-end">{{ r.fcr }}</td>
-          <td>{{ r.feed_1_name }}</td><td class="text-end">{{ r.feed_1_kg }}</td><td class="text-end">{{ r.feed_1_bags }}</td>
-          <td>{{ r.feed_2_name }}</td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
-          <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
-          <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
-          <td class="report-wrap">{{ r.remarks }}</td>
-        </tr>
-        {% endif %}
-        {% empty %}<tr><td colspan="23" class="text-center text-muted">No daily entries for this batch</td></tr>{% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title">Bird Sales</div>
-  <div class="table-responsive mb-4">
-    <table class="table table-bordered mb-0 report-table">
-      <thead>
-        <tr>
-          <th>Date</th><th>Sale No.</th><th>Doc No.</th><th>Customer/Farmer</th><th>Birds</th>
-          <th>Net Weight</th><th>Avg Wt</th><th>Rate</th><th>RoundOff</th><th>Amount</th><th>Vehicle</th><th>Driver</th><th>Remarks</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in report.bird_sales %}
-        <tr>
-          <td>{{ r.date }}</td><td>{{ r.sale_no }}</td><td>{{ r.doc_no }}</td><td>{{ r.buyer_name }}</td>
-          <td class="text-end">{{ r.birds }}</td><td class="text-end">{{ r.net_weight }}</td><td class="text-end">{{ r.avg_weight }}</td>
-          <td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.round_off }}</td><td class="text-end">{{ r.amount }}</td>
-          <td>{{ r.vehicle }}</td><td>{{ r.driver }}</td><td>{{ r.remarks }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="13" class="text-center text-muted">No bird sales for this batch</td></tr>{% endfor %}
-      </tbody>
-      {% if report.bird_sales %}
-      <tfoot>
-        <tr>
-          <td colspan="4">Total</td>
-          <td class="text-end">{{ report.totals.birds }}</td>
-          <td class="text-end">{{ report.totals.net_weight }}</td>
-          <td class="text-end">{{ report.totals.avg_weight }}</td>
-          <td class="text-end">{{ report.totals.avg_sale_rate }}</td>
-          <td></td>
-          <td class="text-end">{{ report.totals.amount }}</td>
-          <td colspan="3"></td>
-        </tr>
-      </tfoot>
-      {% endif %}
-    </table>
-  </div>
-
-  {% with c=report.batch_costing %}
-  <div class="report-section-title">Batch Costing Information and Summary</div>
-  <div class="table-responsive mb-4">
-    <table class="table table-bordered mb-0 report-costing">
-      <tbody>
-        <tr>
-          <td class="lbl">Placement Date</td><td class="val">{{ c.placement_date|date:"d.m.Y" }}</td>
-          <td class="lbl">1st week Mort%</td><td class="val">{{ c.first_week_mort_pct }}</td>
-          <td class="lbl">Sale Start Date</td><td class="val">{{ c.sale_start_date|date:"d.m.Y" }}</td>
-          <td class="lbl">Feed Sent</td><td class="val">{{ c.feed_sent }}</td>
-          <td class="lbl">Med/Vac Sent</td><td class="val">{{ c.med_sent }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Chicks Placed</td><td class="val">{{ c.chicks_placed }}</td>
-          <td class="lbl">Upto 30days Mort%</td><td class="val">{{ c.upto_30_mort_pct }}</td>
-          <td class="lbl">Sold Birds</td><td class="val">{{ c.sold_birds }}</td>
-          <td class="lbl">Feed Consumed</td><td class="val">{{ c.feed_consumed }}</td>
-          <td class="lbl">Med/Vac Consumed</td><td class="val">{{ c.med_consumed }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Mortality</td><td class="val">{{ c.mortality }}</td>
-          <td class="lbl">After 30days Mort%</td><td class="val">{{ c.after_30_mort_pct }}</td>
-          <td class="lbl">Sold Weight</td><td class="val">{{ c.sold_weight }}</td>
-          <td class="lbl">Feed Return</td><td class="val">{{ c.feed_return }}</td>
-          <td class="lbl">Med/Vac Return</td><td class="val">{{ c.med_return }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Culls</td><td class="val">{{ c.culls }}</td>
-          <td class="lbl">Avg.Body Weight</td><td class="val">{{ c.avg_body_weight }}</td>
-          <td class="lbl">Sold Amount</td><td class="val">{{ c.sold_amount }}</td>
-          <td class="lbl">Feed Cost</td><td class="val">{{ c.feed_cost }}</td>
-          <td class="lbl">Med/Vac Cost</td><td class="val">{{ c.med_cost }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Excess Birds</td><td class="val">{{ c.excess_birds }}</td>
-          <td class="lbl">Mean Age</td><td class="val">{{ c.mean_age }}</td>
-          <td class="lbl">Avg. Sale Rate</td><td class="val">{{ c.avg_sale_rate }}</td>
-          <td class="lbl">Chick Cost</td><td class="val">{{ c.chick_cost }}</td>
-          <td class="lbl">Admin Cost</td><td class="val">{{ c.admin_cost }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Shortage Birds</td><td class="val">{{ c.shortage_birds }}</td>
-          <td class="lbl">Day Gain</td><td class="val">{{ c.day_gain }}</td>
-          <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
-          <td class="lbl">Total Production Cost</td><td class="hl">{{ c.total_production_cost }}</td>
-          <td class="lbl"></td><td class="val"></td>
-        </tr>
-        <tr>
-          <td class="lbl">Grade</td><td class="val">{{ c.grade }}</td>
-          <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
-          <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
-          <td class="lbl">Production Cost Per Kg</td><td class="hl">{{ c.production_cost_per_kg }}</td>
-          <td class="lbl"></td><td class="val"></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- ================= MANAGEMENT DASHBOARD (management report only) ================= -->
-  <div class="report-section-title" data-role="management">Management KPI</div>
-  <div class="table-responsive mb-4" data-role="management">
-    <table class="table table-bordered mb-0 report-costing">
-      <tbody>
-        <tr>
-          <td class="lbl">Total Birds Placed</td><td class="val">{{ c.chicks_placed }}</td>
-          <td class="lbl">Birds Sold</td><td class="val">{{ c.sold_birds }}</td>
-          <td class="lbl">Mortality</td><td class="val">{{ c.mortality }}</td>
-          <td class="lbl">Livability</td><td class="val">{{ c.livability_pct }}%</td>
-        </tr>
-        <tr>
-          <td class="lbl">Average Weight</td><td class="val">{{ c.avg_body_weight }}</td>
-          <td class="lbl">Feed Consumed</td><td class="val">{{ c.feed_consumed }}</td>
-          <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
-          <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
-          <td class="lbl">Production Cost / Bird</td><td class="val">{{ c.prod_cost_per_bird }}</td>
-          <td class="lbl">Production Cost / Kg</td><td class="val">{{ c.production_cost_per_kg }}</td>
-          <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Gross Margin</td><td class="hl">{{ c.gross_profit }}</td>
-          <td class="lbl">Net Margin</td><td class="hl">{{ c.net_profit }}</td>
-          <td class="lbl"></td><td class="val"></td>
-          <td class="lbl"></td><td class="val"></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title" data-role="management">Actual Cost Analysis</div>
-  <div class="table-responsive mb-4" data-role="management">
-    <table class="table table-bordered mb-0 report-table">
-      <thead><tr><th>Cost Head</th><th class="text-end">Amount</th><th>Source</th></tr></thead>
-      <tbody>
-        <tr><td>Actual Chick Cost</td><td class="text-end">{{ c.chick_cost }}</td><td class="text-muted">Chick placement</td></tr>
-        <tr><td>Actual Feed Cost</td><td class="text-end">{{ c.feed_cost }}</td><td class="text-muted">Feed consumed &times; transfer rate</td></tr>
-        <tr><td>Actual Medicine Cost</td><td class="text-end">{{ c.med_cost }}</td><td class="text-muted">Medicine consumed</td></tr>
-        <tr><td>Actual Vaccine Cost</td><td class="text-end">&mdash;</td><td class="text-muted">not separated from medicine</td></tr>
-        <tr><td>Labour Cost</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr><td>Electricity</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr><td>Fuel</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr><td>Transport</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr><td>Litter</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr><td>Repair</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr><td>Growing Charges Paid</td><td class="text-end">{{ c.admin_cost }}</td><td class="text-muted">Admin (Growing Charge Master)</td></tr>
-        <tr><td>Overheads</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
-        <tr class="report-total-row"><td>Total Production Cost</td><td class="text-end">{{ c.total_production_cost }}</td><td>tracked heads only</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title" data-role="management">Variance Analysis</div>
-  <div class="table-responsive mb-4" data-role="management">
-    <table class="table table-bordered mb-0 report-table">
-      <thead><tr><th>Metric</th><th class="text-end">Standard</th><th class="text-end">Actual</th><th class="text-end">Variance</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>Production Cost / Kg</td>
-          <td class="text-end">{{ c.std_prod_per_kg }}</td>
-          <td class="text-end">{{ c.production_cost_per_kg }}</td>
-          <td class="text-end">{{ c.prod_cost_variance_kg }}</td>
-        </tr>
-        <tr>
-          <td>Total Production Cost</td>
-          <td class="text-end">{{ c.std_prod_total }}</td>
-          <td class="text-end">{{ c.total_production_cost }}</td>
-          <td class="text-end">{{ c.prod_cost_variance_total }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title" data-role="management">Financial Summary</div>
-  <div class="table-responsive mb-4" data-role="management">
-    <table class="table table-bordered mb-0 report-costing">
-      <tbody>
-        <tr>
-          <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>
-          <td class="lbl">Total Cost</td><td class="val">{{ c.total_production_cost }}</td>
-          <td class="lbl">Gross Profit</td><td class="hl">{{ c.gross_profit }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">Net Profit</td><td class="hl">{{ c.net_profit }}</td>
-          <td class="lbl">Margin / Bird</td><td class="val">{{ c.margin_per_bird }}</td>
-          <td class="lbl">Margin / Kg</td><td class="val">{{ c.margin_per_kg }}</td>
-        </tr>
-        <tr>
-          <td class="lbl">ROI %</td><td class="val">{{ c.roi }}</td>
-          <td class="lbl"></td><td class="val"></td>
-          <td class="lbl"></td><td class="val"></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="report-section-title" data-role="management">Comparison &amp; Charts</div>
-  <div class="mb-4" data-role="management">
-    <div class="alert alert-info mb-0">
-      Target vs Actual, Farm / Company averages, Breed-Standard &amp; Previous-Batch comparison, and
-      trend charts (Weight / Feed / Mortality / FCR / Profit) need cross-batch aggregation, a
-      breed link on the batch, and a charting library — not yet available in this system.
-      These will populate once those data sources are added.
+    <div class="gc-info-bar">
+      <div class="gc-info-chip"><i class="fas fa-code-branch"></i><div><span class="k">Branch</span><b>{{ batch.broiler_farm.branch.branch_name }}</b></div></div>
+      <div class="gc-info-chip"><i class="fas fa-diagram-project"></i><div><span class="k">Line</span><b>{{ batch.broiler_farm.line }}</b></div></div>
+      <div class="gc-info-chip"><i class="fas fa-house-chimney"></i><div><span class="k">Farm</span><b>{{ batch.broiler_farm.farm_name }}</b></div></div>
+      <div class="gc-info-chip"><i class="fas fa-user-tie"></i><div><span class="k">Supervisor</span><b>{{ batch.broiler_farm.supervisor.name }}</b></div></div>
+      <div class="gc-info-chip"><i class="fas fa-user"></i><div><span class="k">Farmer</span><b>{{ batch.broiler_farm.farmer.farmer_name }}</b></div></div>
+      <div class="gc-info-chip"><i class="fas fa-hashtag"></i><div><span class="k">Batch No.</span><b>{{ batch.batch_name }}</b></div></div>
+      {% if batch.book_number %}<div class="gc-info-chip"><i class="fas fa-book"></i><div><span class="k">Book No.</span><b>{{ batch.book_number }}</b></div></div>{% endif %}
+      <div class="gc-info-chip"><i class="fas fa-file-lines"></i><div><span class="k">Report Type</span><b>{{ fetch_type_label }}</b></div></div>
     </div>
+
+    <div class="gc-kpi-row">
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#2a78d6;--kpi-bg:#eaf2fc"><i class="fas fa-kiwi-bird"></i></div>
+        <div><div class="gc-kpi-label">Total Birds Placed</div><div class="gc-kpi-value">{{ c.chicks_placed }}</div><div class="gc-kpi-sub">Day Old Chicks</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#008300;--kpi-bg:#e0f0e0"><i class="fas fa-dove"></i></div>
+        <div><div class="gc-kpi-label">Current Live Birds</div><div class="gc-kpi-value">{{ d.current_live_birds }}</div><div class="gc-kpi-sub">After Mortality &amp; Culling</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#e34948;--kpi-bg:#fbe9e9"><i class="fas fa-heart-crack"></i></div>
+        <div><div class="gc-kpi-label">Total Mortality</div><div class="gc-kpi-value">{{ c.mortality }}</div>
+          <div class="gc-kpi-sub">{{ c.total_mort_pct }}% Mortality <span class="gc-status gc-status-{{ c.mortality_status|slugify }}">{{ c.mortality_status }}</span></div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#4a3aa7;--kpi-bg:#ece9f8"><i class="fas fa-weight-hanging"></i></div>
+        <div><div class="gc-kpi-label">Avg. Live Weight</div><div class="gc-kpi-value">{{ d.avg_live_weight_kg }} kg</div><div class="gc-kpi-sub">As on {{ d.as_of_date|date:"d M Y" }}</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#eb6834;--kpi-bg:#fdece5"><i class="fas fa-utensils"></i></div>
+        <div><div class="gc-kpi-label">Total Feed Consumed</div><div class="gc-kpi-value">{{ c.feed_consumed }} kg</div><div class="gc-kpi-sub">{{ c.fcr }} kg / Bird</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#1baf7a;--kpi-bg:#e6f7f1"><i class="fas fa-chart-line"></i></div>
+        <div><div class="gc-kpi-label">FCR</div><div class="gc-kpi-value">{{ c.fcr }}</div>
+          <div class="gc-kpi-sub">Feed Conversion Ratio <span class="gc-status gc-status-{{ c.fcr_status|slugify }}">{{ c.fcr_status }}</span></div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#eda100;--kpi-bg:#fdf1da"><i class="fas fa-dollar-sign"></i></div>
+        <div><div class="gc-kpi-label">Total Cost</div><div class="gc-kpi-value">&#8377;{{ c.total_production_cost }}</div>
+          <div class="gc-kpi-sub">Cost/Kg: &#8377;{{ c.production_cost_per_kg }} <span class="gc-status gc-status-{{ c.cost_status|slugify }}">{{ c.cost_status }}</span></div></div></div>
+    </div>
+
+    <div class="gc-layout">
+      <div class="gc-col-left">
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#2a78d6;--ci-bg:#eaf2fc"><i class="fas fa-kiwi-bird"></i></span>Chick Placement</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.chick_placement %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No chick placement transfers for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-cart-shopping"></i></span>Feed Purchase</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Warehouse</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.feed_purchase %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed purchases at this farm's branch during the batch window</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-truck-ramp-box"></i></span>Feed Transfer-In</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Cumulative</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.feed_transfer_in %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td>
+                  <td class="text-end">{{ r.amount }}</td><td class="text-end">{{ r.cumulative }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="9" class="text-center text-muted">No feed transfers for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eda100;--ci-bg:#fdf1da"><i class="fas fa-rotate-left"></i></span>Feed Return</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.feed_return %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed returned for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#4a3aa7;--ci-bg:#ece9f8"><i class="fas fa-right-left"></i></span>Feed Transfer to Other Farms</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.feed_transfer_out %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No feed transferred to other farms for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-boxes-stacked"></i></span>Feed Summary</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Feed Name</th><th>Purchase</th><th>Transfer In</th><th>Consumed</th><th>Return</th><th>Transfer to Other Farms</th><th>Balance</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.feed_summary %}
+                <tr>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.purchased }}</td><td class="text-end">{{ r.transfer_in }}</td><td class="text-end">{{ r.consumed }}</td>
+                  <td class="text-end">{{ r.returned }}</td><td class="text-end">{{ r.transferred_out }}</td><td class="text-end">{{ r.balance }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="7" class="text-center text-muted">No feed movement for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e87ba4;--ci-bg:#fceff4"><i class="fas fa-syringe"></i></span>Medicine and Vaccine Transfer In</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.medicine_transfer_in %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.from_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transfers for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eda100;--ci-bg:#fdf1da"><i class="fas fa-rotate-left"></i></span>Medicine and Vaccine Return</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.medicine_return %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine returned for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#4a3aa7;--ci-bg:#ece9f8"><i class="fas fa-right-left"></i></span>Medicine and Vaccine Transfer to Other Farms</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.medicine_transfer_out %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.trnum }}</td><td>{{ r.dc_no }}</td><td>{{ r.to_location }}</td>
+                  <td>{{ r.item }}</td><td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.amount }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted">No medicine/vaccine transferred to other farms for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e87ba4;--ci-bg:#fceff4"><i class="fas fa-pills"></i></span>Medicine and Vaccine Consumption</div>
+          <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table">
+              <thead>
+                <tr><th>Date</th><th>Age</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Stock</th><th>Remarks</th></tr>
+              </thead>
+              <tbody>
+                {% for r in report.medicine_consumption %}
+                <tr>
+                  <td>{{ r.date }}</td><td>{{ r.age }}</td><td>{{ r.item }}</td>
+                  <td class="text-end">{{ r.quantity }}</td><td class="text-end">{{ r.stock }}</td><td>{{ r.remarks }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="6" class="text-center text-muted">No medicine/vaccine consumption for this batch</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="gc-col-right">
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#2a78d6;--ci-bg:#eaf2fc"><i class="fas fa-chart-pie"></i></span>Cost Distribution</div>
+          <div class="gc-donut-wrap">
+            <div class="gc-donut-canvas">
+              <canvas id="gcCostDonut"></canvas>
+              <div class="gc-donut-center">
+                <div class="gc-donut-total-label">Total Cost</div>
+                <div class="gc-donut-total-value">&#8377;{{ c.total_production_cost }}</div>
+              </div>
+            </div>
+            <ul class="gc-legend">
+              {% if c.cost_breakdown.feed_cost %}<li><span class="name"><span class="dot" style="background:#2a78d6"></span>Feed Cost</span><b>&#8377;{{ c.feed_cost }} <small class="text-muted">({{ c.cost_breakdown.feed_cost_pct }}%)</small></b></li>{% endif %}
+              {% if c.cost_breakdown.chick_cost %}<li><span class="name"><span class="dot" style="background:#eb6834"></span>Chick Cost</span><b>&#8377;{{ c.chick_cost }} <small class="text-muted">({{ c.cost_breakdown.chick_cost_pct }}%)</small></b></li>{% endif %}
+              {% if c.cost_breakdown.admin_cost %}<li><span class="name"><span class="dot" style="background:#1baf7a"></span>Admin Cost</span><b>&#8377;{{ c.admin_cost }} <small class="text-muted">({{ c.cost_breakdown.admin_cost_pct }}%)</small></b></li>{% endif %}
+              {% if c.cost_breakdown.med_cost %}<li><span class="name"><span class="dot" style="background:#eda100"></span>Medicine Cost</span><b>&#8377;{{ c.med_cost }} <small class="text-muted">({{ c.cost_breakdown.med_cost_pct }}%)</small></b></li>{% endif %}
+            </ul>
+          </div>
+          <div class="text-muted mt-2" style="font-size:.68rem;">Growing Charges (Growing Charge Master settlement) not included — calculation engine not yet built.</div>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#2a78d6;--ci-bg:#eaf2fc"><i class="fas fa-gauge-high"></i></span>Performance Overview</div>
+          <table class="table table-bordered mb-0 report-table gc-perf-table">
+            <thead><tr><th>KPI</th><th>Actual</th><th>Target</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for p in c.performance_overview %}
+              <tr>
+                <td>{{ p.kpi }}</td>
+                <td class="text-end">{{ p.actual }}</td>
+                <td class="text-end">{{ p.target|default:"—" }}</td>
+                <td><span class="gc-status gc-status-{{ p.status|slugify }}">{{ p.status }}</span></td>
+              </tr>
+              {% empty %}<tr><td colspan="4" class="text-center text-muted">No Growing Charge Scheme matched — targets unavailable</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#008300;--ci-bg:#e0f0e0"><i class="fas fa-calculator"></i></span>Batch Costing Summary</div>
+          <ul class="gc-summary-list">
+            <li><span>Total Chick Cost</span><b>&#8377;{{ c.chick_cost }}</b></li>
+            <li><span>Total Feed Cost (Transfer-In − Return)</span><b>&#8377;{{ c.feed_cost }}</b></li>
+            <li><span>Medicine Cost</span><b>&#8377;{{ c.med_cost }}</b></li>
+            <li><span>Admin Cost</span><b>&#8377;{{ c.admin_cost }}</b></li>
+            <li><span>Growing Charges</span><b class="text-muted">Not Yet Calculated</b></li>
+            <li><span>Other Expenses</span><b class="text-muted">Not Tracked</b></li>
+            <li class="gc-summary-total"><span>Total Production Cost</span><b>&#8377;{{ c.total_production_cost }}</b></li>
+            <li><span>Production Cost / Kg</span><b>&#8377;{{ c.production_cost_per_kg }}</b></li>
+          </ul>
+        </div>
+
+        <div class="gc-card">
+          <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-hand-holding-dollar"></i></span>Bird Sales Summary</div>
+          <div class="gc-mini-grid">
+            <div class="gc-mini-tile"><i class="fas fa-dove"></i><div class="gc-mini-label">Birds Sold</div><div class="gc-mini-value">{{ report.totals.birds }}</div></div>
+            <div class="gc-mini-tile"><i class="fas fa-weight-hanging"></i><div class="gc-mini-label">Net Weight</div><div class="gc-mini-value">{{ report.totals.net_weight }} kg</div></div>
+            <div class="gc-mini-tile"><i class="fas fa-scale-balanced"></i><div class="gc-mini-label">Avg. Weight</div><div class="gc-mini-value">{{ report.totals.avg_weight }} kg</div></div>
+            <div class="gc-mini-tile"><i class="fas fa-dollar-sign"></i><div class="gc-mini-label">Revenue</div><div class="gc-mini-value">&#8377;{{ report.totals.amount }}</div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="gc-card gc-full">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e34948;--ci-bg:#fbe9e9"><i class="fas fa-chart-line"></i></span>Mortality &amp; Feed Consumption Trend</div>
+      <div class="gc-mini-grid gc-mini-grid-6 mb-3">
+        <div class="gc-mini-tile"><div class="gc-mini-label">Opening Birds</div><div class="gc-mini-value">{{ c.chicks_placed }}</div></div>
+        <div class="gc-mini-tile"><div class="gc-mini-label">Total Mortality</div><div class="gc-mini-value">{{ c.mortality }}</div></div>
+        <div class="gc-mini-tile"><div class="gc-mini-label">Mortality %</div><div class="gc-mini-value">{{ c.total_mort_pct }}%</div></div>
+        <div class="gc-mini-tile"><div class="gc-mini-label">Total Feed Consumed</div><div class="gc-mini-value">{{ c.feed_consumed }} kg</div></div>
+        <div class="gc-mini-tile"><div class="gc-mini-label">Avg. Feed / Bird</div><div class="gc-mini-value">{{ d.feed_per_bird_g }} g</div></div>
+        <div class="gc-mini-tile"><div class="gc-mini-label">FCR</div><div class="gc-mini-value">{{ c.fcr }}</div></div>
+      </div>
+      <div class="gc-trend-row">
+        <div class="gc-trend-mini"><div class="gc-trend-mini-label">Daily Mortality (%)</div><canvas id="gcMortDaily"></canvas></div>
+        <div class="gc-trend-mini"><div class="gc-trend-mini-label">Cumulative Mortality (%)</div><canvas id="gcMortCum"></canvas></div>
+        <div class="gc-trend-mini"><div class="gc-trend-mini-label">FCR Trend</div><canvas id="gcFcrTrend"></canvas></div>
+      </div>
+      <div class="gc-trend-row mt-3">
+        <div class="gc-trend-mini"><div class="gc-trend-mini-label">Daily Feed (kg)</div><canvas id="gcFeedDaily"></canvas></div>
+        <div class="gc-trend-mini"><div class="gc-trend-mini-label">Cumulative Feed (kg)</div><canvas id="gcFeedCum"></canvas></div>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e34948;--ci-bg:#fbe9e9"><i class="fas fa-table-list"></i></span>Mortality And Feed Consumption Details</div>
+      <div class="report-scroll">
+        <table class="table table-bordered mb-0 report-table report-dense">
+          <thead>
+            <tr>
+              <th colspan="2"></th><th>Opening</th><th colspan="2">Mortality</th><th></th><th colspan="2"></th>
+              <th>Sold</th><th>Closing</th><th colspan="2"></th>
+              <th colspan="3">Feed 1</th><th colspan="3">Feed 2</th>
+              <th colspan="2">Cumulative</th><th colspan="2">Balance Feed</th><th></th>
+            </tr>
+            <tr>
+              <th>Date</th><th>Age</th><th>Birds</th><th>Count</th><th>%</th><th>Culls</th><th>Cum Mort</th><th>Cum Mort%</th>
+              <th>Birds</th><th>Birds</th><th>Avg.Bw</th><th>FCR</th>
+              <th>Name</th><th>Kgs</th><th>Bags</th><th>Name</th><th>Kgs</th><th>Bags</th>
+              <th>Feed</th><th>Feed/Bird</th><th>In Kgs</th><th>In Bags</th><th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in report.mortality %}
+            {% if r.is_total %}
+            <tr class="report-total-row">
+              <td colspan="2">{{ r.label }}</td>
+              <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
+              <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
+              <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
+              <td class="text-end">{{ r.avg_weight_kg }}</td><td class="text-end">{{ r.fcr }}</td>
+              <td></td><td class="text-end">{{ r.feed_1_kg }}</td><td class="text-end">{{ r.feed_1_bags }}</td>
+              <td></td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
+              <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
+              <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
+              <td></td>
+            </tr>
+            {% else %}
+            <tr>
+              <td>{{ r.date|date:"d.m.y" }}</td><td>{{ r.age }}</td>
+              <td class="text-end">{{ r.opening_birds }}</td><td class="text-end">{{ r.mortality }}</td><td class="text-end">{{ r.mortality_pct }}</td>
+              <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.cum_mortality }}</td><td class="text-end">{{ r.cum_mortality_pct }}</td>
+              <td class="text-end">{{ r.sold_birds }}</td><td class="text-end">{{ r.closing_birds }}</td>
+              <td class="text-end">{{ r.avg_weight_kg }}</td><td class="text-end">{{ r.fcr }}</td>
+              <td>{{ r.feed_1_name }}</td><td class="text-end">{{ r.feed_1_kg }}</td><td class="text-end">{{ r.feed_1_bags }}</td>
+              <td>{{ r.feed_2_name }}</td><td class="text-end">{{ r.feed_2_kg }}</td><td class="text-end">{{ r.feed_2_bags }}</td>
+              <td class="text-end">{{ r.cum_feed_kg }}</td><td class="text-end">{{ r.feed_per_bird_g }}</td>
+              <td class="text-end">{{ r.balance_feed_kg }}</td><td class="text-end">{{ r.balance_feed_bags }}</td>
+              <td class="report-wrap">{{ r.remarks }}</td>
+            </tr>
+            {% endif %}
+            {% empty %}<tr><td colspan="23" class="text-center text-muted">No daily entries for this batch</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-hand-holding-dollar"></i></span>Bird Sales</div>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Sale No.</th><th>Doc No.</th><th>Customer/Farmer</th><th>Birds</th>
+              <th>Net Weight</th><th>Avg Wt</th><th>Rate</th><th>RoundOff</th><th>Amount</th><th>Vehicle</th><th>Driver</th><th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in report.bird_sales %}
+            <tr>
+              <td>{{ r.date }}</td><td>{{ r.sale_no }}</td><td>{{ r.doc_no }}</td><td>{{ r.buyer_name }}</td>
+              <td class="text-end">{{ r.birds }}</td><td class="text-end">{{ r.net_weight }}</td><td class="text-end">{{ r.avg_weight }}</td>
+              <td class="text-end">{{ r.rate }}</td><td class="text-end">{{ r.round_off }}</td><td class="text-end">{{ r.amount }}</td>
+              <td>{{ r.vehicle }}</td><td>{{ r.driver }}</td><td>{{ r.remarks }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="13" class="text-center text-muted">No bird sales for this batch</td></tr>{% endfor %}
+          </tbody>
+          {% if report.bird_sales %}
+          <tfoot>
+            <tr>
+              <td colspan="4">Total</td>
+              <td class="text-end">{{ report.totals.birds }}</td>
+              <td class="text-end">{{ report.totals.net_weight }}</td>
+              <td class="text-end">{{ report.totals.avg_weight }}</td>
+              <td class="text-end">{{ report.totals.avg_sale_rate }}</td>
+              <td></td>
+              <td class="text-end">{{ report.totals.amount }}</td>
+              <td colspan="3"></td>
+            </tr>
+          </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#0d5f8a;--ci-bg:#eaf3f8"><i class="fas fa-file-invoice-dollar"></i></span>Batch Costing Information and Summary</div>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-costing">
+          <tbody>
+            <tr>
+              <td class="lbl">Placement Date</td><td class="val">{{ c.placement_date|date:"d.m.Y" }}</td>
+              <td class="lbl">1st week Mort%</td><td class="val">{{ c.first_week_mort_pct }}</td>
+              <td class="lbl">Sale Start Date</td><td class="val">{{ c.sale_start_date|date:"d.m.Y" }}</td>
+              <td class="lbl">Feed Sent</td><td class="val">{{ c.feed_sent }}</td>
+              <td class="lbl">Med/Vac Sent</td><td class="val">{{ c.med_sent }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Chicks Placed</td><td class="val">{{ c.chicks_placed }}</td>
+              <td class="lbl">Upto 30days Mort%</td><td class="val">{{ c.upto_30_mort_pct }}</td>
+              <td class="lbl">Sold Birds</td><td class="val">{{ c.sold_birds }}</td>
+              <td class="lbl">Feed Consumed</td><td class="val">{{ c.feed_consumed }}</td>
+              <td class="lbl">Med/Vac Consumed</td><td class="val">{{ c.med_consumed }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Mortality</td><td class="val">{{ c.mortality }}</td>
+              <td class="lbl">After 30days Mort%</td><td class="val">{{ c.after_30_mort_pct }}</td>
+              <td class="lbl">Sold Weight</td><td class="val">{{ c.sold_weight }}</td>
+              <td class="lbl">Feed Return</td><td class="val">{{ c.feed_return }}</td>
+              <td class="lbl">Med/Vac Return</td><td class="val">{{ c.med_return }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Culls</td><td class="val">{{ c.culls }}</td>
+              <td class="lbl">Avg.Body Weight</td><td class="val">{{ c.avg_body_weight }}</td>
+              <td class="lbl">Sold Amount</td><td class="val">{{ c.sold_amount }}</td>
+              <td class="lbl">Feed Cost</td><td class="val">{{ c.feed_cost }}</td>
+              <td class="lbl">Med/Vac Cost</td><td class="val">{{ c.med_cost }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Excess Birds</td><td class="val">{{ c.excess_birds }}</td>
+              <td class="lbl">Mean Age</td><td class="val">{{ c.mean_age }}</td>
+              <td class="lbl">Avg. Sale Rate</td><td class="val">{{ c.avg_sale_rate }}</td>
+              <td class="lbl">Chick Cost</td><td class="val">{{ c.chick_cost }}</td>
+              <td class="lbl">Admin Cost</td><td class="val">{{ c.admin_cost }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Shortage Birds</td><td class="val">{{ c.shortage_birds }}</td>
+              <td class="lbl">Day Gain</td><td class="val">{{ c.day_gain }}</td>
+              <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
+              <td class="lbl">Total Production Cost</td><td class="hl">{{ c.total_production_cost }}</td>
+              <td class="lbl"></td><td class="val"></td>
+            </tr>
+            <tr>
+              <td class="lbl">Grade</td><td class="val">{{ c.grade }}</td>
+              <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
+              <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
+              <td class="lbl">Production Cost Per Kg</td><td class="hl">{{ c.production_cost_per_kg }}</td>
+              <td class="lbl"></td><td class="val"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ================= MANAGEMENT DASHBOARD (management report only) ================= -->
+    <div class="gc-card gc-full" data-role="management">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#0d5f8a;--ci-bg:#eaf3f8"><i class="fas fa-briefcase"></i></span>Management KPI</div>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-costing">
+          <tbody>
+            <tr>
+              <td class="lbl">Total Birds Placed</td><td class="val">{{ c.chicks_placed }}</td>
+              <td class="lbl">Birds Sold</td><td class="val">{{ c.sold_birds }}</td>
+              <td class="lbl">Mortality</td><td class="val">{{ c.mortality }}</td>
+              <td class="lbl">Livability</td><td class="val">{{ c.livability_pct }}%</td>
+            </tr>
+            <tr>
+              <td class="lbl">Average Weight</td><td class="val">{{ c.avg_body_weight }}</td>
+              <td class="lbl">Feed Consumed</td><td class="val">{{ c.feed_consumed }}</td>
+              <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
+              <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
+              <td class="lbl">Production Cost / Bird</td><td class="val">{{ c.prod_cost_per_bird }}</td>
+              <td class="lbl">Production Cost / Kg</td><td class="val">{{ c.production_cost_per_kg }}</td>
+              <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Gross Margin</td><td class="hl">{{ c.gross_profit }}</td>
+              <td class="lbl">Net Margin</td><td class="hl">{{ c.net_profit }}</td>
+              <td class="lbl"></td><td class="val"></td>
+              <td class="lbl"></td><td class="val"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full" data-role="management">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-receipt"></i></span>Actual Cost Analysis</div>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-table">
+          <thead><tr><th>Cost Head</th><th class="text-end">Amount</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Actual Chick Cost</td><td class="text-end">{{ c.chick_cost }}</td><td class="text-muted">Chick placement</td></tr>
+            <tr><td>Actual Feed Cost</td><td class="text-end">{{ c.feed_cost }}</td><td class="text-muted">Feed consumed &times; transfer rate</td></tr>
+            <tr><td>Actual Medicine Cost</td><td class="text-end">{{ c.med_cost }}</td><td class="text-muted">Medicine consumed</td></tr>
+            <tr><td>Actual Vaccine Cost</td><td class="text-end">&mdash;</td><td class="text-muted">not separated from medicine</td></tr>
+            <tr><td>Labour Cost</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr><td>Electricity</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr><td>Fuel</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr><td>Transport</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr><td>Litter</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr><td>Repair</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr><td>Growing Charges Paid</td><td class="text-end">{{ c.admin_cost }}</td><td class="text-muted">Admin (Growing Charge Master)</td></tr>
+            <tr><td>Overheads</td><td class="text-end">&mdash;</td><td class="text-muted">not tracked</td></tr>
+            <tr class="report-total-row"><td>Total Production Cost</td><td class="text-end">{{ c.total_production_cost }}</td><td>tracked heads only</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full" data-role="management">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#4a3aa7;--ci-bg:#ece9f8"><i class="fas fa-scale-balanced"></i></span>Variance Analysis</div>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-table">
+          <thead><tr><th>Metric</th><th class="text-end">Standard</th><th class="text-end">Actual</th><th class="text-end">Variance</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Production Cost / Kg</td>
+              <td class="text-end">{{ c.std_prod_per_kg }}</td>
+              <td class="text-end">{{ c.production_cost_per_kg }}</td>
+              <td class="text-end">{{ c.prod_cost_variance_kg }}</td>
+            </tr>
+            <tr>
+              <td>Total Production Cost</td>
+              <td class="text-end">{{ c.std_prod_total }}</td>
+              <td class="text-end">{{ c.total_production_cost }}</td>
+              <td class="text-end">{{ c.prod_cost_variance_total }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full" data-role="management">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#008300;--ci-bg:#e0f0e0"><i class="fas fa-dollar-sign"></i></span>Financial Summary</div>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-costing">
+          <tbody>
+            <tr>
+              <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>
+              <td class="lbl">Total Cost</td><td class="val">{{ c.total_production_cost }}</td>
+              <td class="lbl">Gross Profit</td><td class="hl">{{ c.gross_profit }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">Net Profit</td><td class="hl">{{ c.net_profit }}</td>
+              <td class="lbl">Margin / Bird</td><td class="val">{{ c.margin_per_bird }}</td>
+              <td class="lbl">Margin / Kg</td><td class="val">{{ c.margin_per_kg }}</td>
+            </tr>
+            <tr>
+              <td class="lbl">ROI %</td><td class="val">{{ c.roi }}</td>
+              <td class="lbl"></td><td class="val"></td>
+              <td class="lbl"></td><td class="val"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-card gc-full" data-role="management">
+      <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#898781;--ci-bg:#eee"><i class="fas fa-chart-column"></i></span>Comparison &amp; Charts</div>
+      <div class="alert alert-info mb-0">
+        Target vs Actual, Farm / Company averages, Breed-Standard &amp; Previous-Batch comparison, and
+        trend charts (Weight / Profit) need cross-batch aggregation and a breed link on the batch —
+        not yet available in this system. These will populate once those data sources are added.
+      </div>
+    </div>
+
   </div>
+  {{ d.chart|json_script:"gc-chart-data" }}
+  {{ c.cost_breakdown|json_script:"gc-cost-data" }}
   {% endwith %}
 
 {% elif batch_requested %}
@@ -637,4 +879,89 @@ $(function () {
   {% if batch and export == 'pdf' %}window.print();{% endif %}
 });
 </script>
+{% if batch %}
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>
+(function () {
+  const chartData = JSON.parse(document.getElementById('gc-chart-data').textContent);
+  const costData = JSON.parse(document.getElementById('gc-cost-data').textContent);
+
+  Chart.defaults.font.family = "system-ui, -apple-system, 'Segoe UI', sans-serif";
+  Chart.defaults.color = '#52514e';
+
+  const inr = (v) => '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const donutEl = document.getElementById('gcCostDonut');
+  if (donutEl) {
+    const labels = ['Feed Cost', 'Chick Cost', 'Admin Cost', 'Medicine Cost'];
+    const values = [costData.feed_cost, costData.chick_cost, costData.admin_cost, costData.med_cost];
+    const colors = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100'];
+    // Zero-cost heads are dropped from the slice/color arrays together (Chart.js
+    // pairs them by index) so a hidden legend row can't desync from a stray slice.
+    const kept = labels.map((_, i) => i).filter((i) => values[i] > 0);
+    new Chart(donutEl, {
+      type: 'doughnut',
+      data: {
+        labels: kept.map((i) => labels[i]),
+        datasets: [{
+          data: kept.map((i) => values[i]),
+          backgroundColor: kept.map((i) => colors[i]),
+          borderColor: '#fff', borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '68%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const pct = costData.total ? (ctx.parsed / costData.total * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${inr(ctx.parsed)} (${pct}%)`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  function miniChart(canvasId, type, values, color, unit) {
+    const el = document.getElementById(canvasId);
+    if (!el) return;
+    new Chart(el, {
+      type: type,
+      data: {
+        labels: chartData.dates,
+        datasets: [{
+          data: values,
+          backgroundColor: type === 'bar' ? color + '99' : 'transparent',
+          borderColor: color, borderWidth: 2, pointRadius: 0, tension: .25, fill: false,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ' ' + ctx.parsed.y + (unit ? ' ' + unit : '') } },
+        },
+        scales: {
+          x: { ticks: { maxTicksLimit: 6, font: { size: 9 } }, grid: { display: false } },
+          y: {
+            ticks: { font: { size: 9 }, callback: (v) => unit === '%' ? v + '%' : v },
+            grid: { color: '#e1e0d9' },
+          },
+        },
+      },
+    });
+  }
+
+  miniChart('gcFeedDaily', 'bar', chartData.daily_feed_kg, '#2a78d6', 'kg');
+  miniChart('gcFeedCum', 'line', chartData.cum_feed_kg, '#184f95', 'kg');
+  miniChart('gcMortDaily', 'bar', chartData.daily_mortality_pct, '#e34948', '%');
+  miniChart('gcMortCum', 'line', chartData.cum_mortality_pct, '#a83232', '%');
+  miniChart('gcFcrTrend', 'line', chartData.fcr, '#1baf7a', '');
+})();
+</script>
+{% endif %}
 {% endblock %}
