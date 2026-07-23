@@ -10,7 +10,7 @@ from .models import (
     BroilerFarmShed, BroilerFarmImage, BroilerBatch, BroilerDisease,
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
-    GCFCRRecovery, GCFarmerClassification,
+    GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement,
 )
 
 
@@ -338,3 +338,15 @@ class GrowingChargeSchemeAdmin(admin.ModelAdmin):
         GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive, GCFCRRecovery,
         GCFarmerClassification,
     )]
+
+
+@admin.register(GrowingChargeSettlement)
+class GrowingChargeSettlementAdmin(admin.ModelAdmin):
+    """Read-mostly view of Farmer GC settlements (batch closings)."""
+    list_display = ('id', 'settlement_code', 'farm', 'batch', 'scheme', 'gc_date', 'farmer_payable')
+    search_fields = ('settlement_code', 'farm__farm_name', 'batch__batch_name')
+    list_filter = ('gc_date', 'scheme')
+    list_per_page = 20
+    ordering = ('-id',)
+    raw_id_fields = ('batch', 'farm', 'scheme', 'created_by')
+    readonly_fields = ('settlement_code',)

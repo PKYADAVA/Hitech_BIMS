@@ -331,6 +331,20 @@ class StockTransfer(models.Model):
         if self._location_key('from') == self._location_key('to'):
             raise ValidationError("From Location and To Location must be different.")
 
+        # Never let a warehouse's stock go negative on dispatch out (all items,
+        # new or edited). Farm sources are out of scope (feed is consumed by
+        # birds there, tracked differently). Seeds/admin that skip full_clean
+        # bypass this by design.
+        if (self.from_location_type == 'warehouse' and self.from_warehouse_id
+                and self.item_id and (self.quantity or 0) > 0):
+            available = warehouse_item_stock(
+                self.item_id, self.from_warehouse_id,
+                as_of_date=self.date, exclude_transfer_id=self.pk)
+            if self.quantity > available:
+                raise ValidationError(
+                    f"Not enough stock: only {available} of {self.item} available at "
+                    f"{self.from_warehouse} as of {self.date} — cannot transfer {self.quantity}.")
+
     def save(self, *args, **kwargs):
         is_new = self._state.adding
         super().save(*args, **kwargs)
@@ -809,3 +823,68 @@ class StockReceiveItem(models.Model):
     def save(self, *args, **kwargs):
         self.amount = self.quantity * self.rate
         super().save(*args, **kwargs)
+
+
+def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
+                         exclude_transfer_id=None, exclude_issue_id=None):
+    """True physical stock of an item at a Warehouse, reconciled across every
+    transaction type — none of which alone is a source of truth, since each
+    keeps its own isolated running balance.
+
+    Inflows : purchases received here + stock transferred IN + stock received
+              + inventory 'Add' adjustments.
+    Outflows: stock transferred OUT + stock issued + inventory 'Deduct'
+              adjustments.
+
+    Counts records dated on/before ``as_of_date`` when given. ``exclude_*``
+    drop a record being edited so it isn't counted against itself. Returns a
+    Decimal (can be negative for historical data that predates this check).
+    """
+    from decimal import Decimal
+    from django.db.models import Sum
+    from purchase.models import GeneralPurchaseItem
+
+    Z = Decimal("0")
+
+    def total(qs, field="quantity"):
+        return qs.aggregate(_t=Sum(field))["_t"] or Z
+
+    def dfilt(qs, date_field):
+        return qs.filter(**{f"{date_field}__lte": as_of_date}) if as_of_date else qs
+
+    # ---- inflows ----
+    purch = dfilt(GeneralPurchaseItem.objects.filter(
+        item_id=item_id, farm_warehouse_id=warehouse_id), "purchase__date")
+    inflow = total(purch, "rcv_qty") + total(purch, "free_qty")
+
+    tin = dfilt(StockTransfer.objects.filter(
+        item_id=item_id, to_location_type="warehouse", to_warehouse_id=warehouse_id), "date")
+    if exclude_transfer_id:
+        tin = tin.exclude(id=exclude_transfer_id)
+    inflow += total(tin)
+
+    inflow += total(dfilt(StockReceiveItem.objects.filter(
+        item_id=item_id, location_type="warehouse", warehouse_id=warehouse_id), "receive__date"))
+
+    inflow += total(dfilt(InventoryAdjustmentItem.objects.filter(
+        item_id=item_id, adjustment_type="Add",
+        adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id), "adjustment__date"))
+
+    # ---- outflows ----
+    tout = dfilt(StockTransfer.objects.filter(
+        item_id=item_id, from_location_type="warehouse", from_warehouse_id=warehouse_id), "date")
+    if exclude_transfer_id:
+        tout = tout.exclude(id=exclude_transfer_id)
+    outflow = total(tout)
+
+    issued = dfilt(StockIssueItem.objects.filter(
+        item_id=item_id, location_type="warehouse", warehouse_id=warehouse_id), "issue__date")
+    if exclude_issue_id:
+        issued = issued.exclude(issue_id=exclude_issue_id)
+    outflow += total(issued)
+
+    outflow += total(dfilt(InventoryAdjustmentItem.objects.filter(
+        item_id=item_id, adjustment_type="Deduct",
+        adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id), "adjustment__date"))
+
+    return inflow - outflow

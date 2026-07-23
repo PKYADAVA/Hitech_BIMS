@@ -122,6 +122,20 @@
           </li>
           {% endif %}
 
+          <!-- Farmer GC & Payment Submenu -->
+          {% if 'broiler_farmer_gc_and_payment' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="broilerFarmerGcDd">
+              <i class="fas fa-file-invoice-dollar"></i>Farmer GC &amp; Payment
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'gc_settlement' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'gc_settlement' %}">
+                <i class="fas fa-file-invoice-dollar"></i>Farmer GC &amp; Payment
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+
           <!-- Reports Submenu -->
           {% if 'broiler_reports' in allowed_sections %}
           <li class="dropdown-submenu">

@@ -786,10 +786,13 @@ class BroilerBatch(models.Model):
         help_text=_("Date when the batch was started")
     )
     end_date = models.DateField(
-        blank=True, 
+        blank=True,
         null=True,
         help_text=_("Expected end date for the batch")
     )
+    # Set when a Growing Charge Settlement closes the batch (batch closing).
+    is_closed = models.BooleanField(default=False, help_text=_("Closed by a Growing Charge settlement"))
+    closed_on = models.DateField(blank=True, null=True, help_text=_("Date the batch was closed/settled"))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1428,3 +1431,127 @@ class GCFarmerClassification(models.Model):
 
     class Meta:
         ordering = ['id']
+
+
+class GrowingChargeSettlement(models.Model):
+    """Farmer Growing Charge settlement / batch-closing transaction — the
+    "Add Rearing Charges" screen. One per Batch (closing it). Auto-loaded from
+    the batch's real records + the applicable scheme's slabs, then persisted as
+    a permanent snapshot of every figure shown on the form. Does NOT post to
+    accounting (deferred); it does close the batch (BroilerBatch.is_closed)."""
+
+    _M = dict(max_digits=14, decimal_places=2, default=0)   # money / weight
+    _P = dict(max_digits=8, decimal_places=2, default=0)    # percentages
+    _R = dict(max_digits=8, decimal_places=3, default=0)    # ratios (FCR/CFCR)
+
+    settlement_code = models.CharField(max_length=20, unique=True, editable=False, blank=True,
+                                       help_text=_("Auto-generated, e.g. GCST-0001"))
+    batch = models.OneToOneField(BroilerBatch, on_delete=models.CASCADE, related_name='gc_settlement')
+    farm = models.ForeignKey(BroilerFarm, on_delete=models.PROTECT, related_name='gc_settlements')
+    scheme = models.ForeignKey(GrowingChargeScheme, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name='settlements')
+
+    gc_date = models.DateField(default=now)
+    placement_date = models.DateField(null=True, blank=True)
+    liquidation_date = models.DateField(null=True, blank=True)
+
+    # --- Bird details ---
+    placed_birds = models.IntegerField(default=0)
+    mortality = models.IntegerField(default=0)
+    sold_birds = models.IntegerField(default=0)
+    sold_weight = models.DecimalField(**_M)
+    excess = models.IntegerField(default=0)
+    shortage = models.IntegerField(default=0)
+    sale_amount = models.DecimalField(**_M)
+    sale_rate = models.DecimalField(**_M)
+    age = models.DecimalField(**_P)
+
+    # --- Performance ---
+    first_week_mortality_pct = models.DecimalField(**_P)
+    days30_mortality_pct = models.DecimalField(**_P)
+    after30_mortality_pct = models.DecimalField(**_P)
+    total_mortality_pct = models.DecimalField(**_P)
+    fcr = models.DecimalField(**_R)
+    cfcr = models.DecimalField(**_R)
+    avg_weight = models.DecimalField(**_M)
+    mean_age = models.DecimalField(**_P)
+    day_gain = models.DecimalField(**_M)
+    eef = models.DecimalField(**_M)
+    grade = models.CharField(max_length=5, blank=True)
+
+    # --- Feed / medicine details (KGS; bags derived at display) ---
+    feed_in = models.DecimalField(**_M)
+    feed_consumption = models.DecimalField(**_M)
+    feed_out = models.DecimalField(**_M)
+    feed_balance = models.DecimalField(**_M)
+    med_transfer_in = models.DecimalField(**_M)
+    med_consumption = models.DecimalField(**_M)
+    med_transfer_out = models.DecimalField(**_M)
+    med_closing = models.DecimalField(**_M)
+
+    # --- Costing (amount + per-unit) ---
+    chick_cost = models.DecimalField(**_M)
+    chick_cost_per_unit = models.DecimalField(**_M)
+    feed_cost = models.DecimalField(**_M)
+    feed_cost_per_unit = models.DecimalField(**_M)
+    admin_cost = models.DecimalField(**_M)
+    admin_cost_per_unit = models.DecimalField(**_M)
+    medicine_cost = models.DecimalField(**_M)
+    medicine_cost_per_unit = models.DecimalField(**_M)
+    total_cost = models.DecimalField(**_M)
+    total_cost_per_unit = models.DecimalField(**_M)
+    standard_production_cost = models.DecimalField(**_M)
+    actual_production_cost = models.DecimalField(**_M)
+
+    # --- Rearing charges (incentives) ---
+    standard_growing_charges = models.DecimalField(**_M)
+    gc_incentive_decentive = models.DecimalField(**_M)   # Standard + this = Actual
+    actual_growing_charges = models.DecimalField(**_M)
+    gc_paid_per_kg = models.DecimalField(**_M)
+    sales_incentives = models.DecimalField(**_M)
+    mortality_incentives = models.DecimalField(**_M)
+    fcr_incentives = models.DecimalField(**_M)
+    summer_incentives = models.DecimalField(**_M)
+    other_incentives = models.DecimalField(**_M)
+    ifft_charges = models.DecimalField(**_M)
+    total_incentives = models.DecimalField(**_M)
+
+    # --- Decentives (deductions) ---
+    birds_shortage_rate = models.DecimalField(**_M)
+    birds_shortage_amount = models.DecimalField(**_M)
+    fcr_deduction = models.DecimalField(**_M)
+    mortality_deduction = models.DecimalField(**_M)
+    total_deduction = models.DecimalField(**_M)
+    amount_payable = models.DecimalField(**_M)
+    farmer_sales_deduction = models.DecimalField(**_M)
+    feed_transfer_charges = models.DecimalField(**_M)
+    vaccinator_charges = models.DecimalField(**_M)
+    transportation_charges = models.DecimalField(**_M)
+    other_deductions = models.DecimalField(**_M)
+    total_amount_payable = models.DecimalField(**_M)
+    tds = models.DecimalField(**_M)
+    equipment_charges = models.DecimalField(**_M)
+    advance_deductions = models.DecimalField(**_M)
+    farmer_payable = models.DecimalField(**_M)
+    per_bird_cost = models.DecimalField(**_M)
+    remarks = models.TextField(blank=True)
+
+    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='gc_settlements_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Growing Charge Settlement")
+        verbose_name_plural = _("Growing Charge Settlements")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.settlement_code} - {self.batch}"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.settlement_code:
+            self.settlement_code = f"GCST-{self.pk:04d}"
+            super().save(update_fields=['settlement_code'])

@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 from .models import (
     ItemCategory, Item, ItemPriceList, Mapping, Sector, UnitOfMeasurement, Warehouse, StockTransfer, MedicineTransfer,
     MedicineTransferItem, InventoryAdjustment, InventoryAdjustmentItem, StockIssue, StockIssueItem, StockReceive,
-    StockReceiveItem,
+    StockReceiveItem, warehouse_item_stock,
 )
 from hatchery_master.models import Hatchery
 from broiler.models import Branch, BroilerFarm, BroilerBatch
@@ -1824,8 +1824,15 @@ def _apply_stock_issue_header(instance, data, user):
 
 def _save_stock_issue_items(issue, items_data):
     """Replaces every line of ``issue`` with ``items_data``. Returns the
-    number of valid lines created."""
+    number of valid lines created. Rejects (ValidationError) any warehouse
+    line that would drive that item's warehouse stock negative — this issue's
+    own old lines are already deleted above, so they don't count against it,
+    and multiple lines drawing on the same warehouse+item within one
+    submission are tracked cumulatively via ``consumed``."""
+    from collections import defaultdict
+
     issue.items.all().delete()
+    consumed = defaultdict(lambda: Decimal("0"))  # (warehouse_id, item_id) -> qty taken so far this submission
     created = 0
     for row in items_data:
         location_type = row.get("location_type") or "warehouse"
@@ -1837,6 +1844,19 @@ def _save_stock_issue_items(issue, items_data):
         rate = Decimal(str(row.get("rate") or 0))
         remarks = row.get("remarks") or ""
         batch_id = row.get("batch") if location_type == "farm" else None
+
+        if location_type == "warehouse" and quantity > 0:
+            available = warehouse_item_stock(item_id, int(location_id), as_of_date=issue.date,
+                                             exclude_issue_id=issue.pk)
+            remaining = available - consumed[(int(location_id), item_id)]
+            if quantity > remaining:
+                item = Item.objects.get(id=item_id)
+                wh = Warehouse.objects.get(id=location_id)
+                raise ValidationError(
+                    f"Not enough stock: only {remaining} of {item} available at "
+                    f"{wh} as of {issue.date} — cannot issue {quantity}.")
+            consumed[(int(location_id), item_id)] += quantity
+
         StockIssueItem.objects.create(
             issue=issue, item_id=item_id, quantity=quantity, rate=rate, remarks=remarks,
             location_type=location_type,

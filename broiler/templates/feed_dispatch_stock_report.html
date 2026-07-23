@@ -54,6 +54,11 @@
   .ledger-table td.stock-cell.text-success, .ledger-table td.net-stock.text-success { color: #1a7f37 !important; }
   .ledger-table tr.receipt-row { background: #fff3cd; }
   .ledger-table tr.opening-row { background: #f8d7a3; font-weight: 700; }
+  /* Opening label spans visually via an absolute span (NOT colspan) — a
+     colspan in a DataTables tbody row breaks its column count and aborts
+     the toolbar buttons; every body row must have exactly one td per column. */
+  .ledger-table td.opening-label { position: relative; }
+  .ledger-table td.opening-label > span { position: absolute; left: .4rem; top: 50%; transform: translateY(-50%); white-space: nowrap; }
   .ledger-table tbody tr:not(.opening-row):hover td { box-shadow: inset 0 0 0 9999px rgba(13,110,253,.07); }
   .ledger-table tfoot td { background: #dbe9f0 !important; font-weight: 700; color: #2d6cdf; }
   .ledger-table td.net-stock { font-weight: 700; }
@@ -265,7 +270,10 @@
     {% endif %}
     <div class="dt-toolbar-row no-print">
       <input type="text" class="form-control form-control-sm" id="ledger-search" style="max-width:280px;" placeholder="Search challan no, name, vehicle...">
-      <div id="ledger-buttons-slot" class="d-flex gap-2"></div>
+      <div class="d-flex gap-2">
+        <button type="button" id="ledger-print-btn" class="btn btn-outline-secondary btn-sm"><i class="fas fa-print me-1"></i>Print</button>
+        <div id="ledger-buttons-slot" class="d-flex gap-2"></div>
+      </div>
     </div>
     <div class="ledger-legend no-print small mb-1">
       <span class="legend-chip grp-dispatch">Dispatch Feed (bags)</span>
@@ -301,8 +309,12 @@
           </tr>
         </thead>
         <tbody>
+          {% comment %}One <td> per column (no colspan) — DataTables requires uniform cell
+             counts across body rows; the banner label spans via CSS instead.
+             7 leading cols: Date, Txn No., Challan, Branch, Warehouse, Supplier, Batch.{% endcomment %}
           <tr class="opening-row">
-            <td colspan="{{ opening_label_colspan }}">OPENING STOCK {% if from_date %}{{ from_date }}{% else %}(all-time){% endif %}</td>
+            <td class="opening-label text-start"><span>OPENING STOCK {% if from_date %}{{ from_date }}{% else %}(all-time){% endif %}</span></td>
+            <td></td><td></td><td></td><td></td><td></td><td></td>
             {% for l in feed_labels %}<td></td>{% endfor %}
             <td></td><td></td>
             {% for l in feed_labels %}<td></td>{% endfor %}
@@ -329,8 +341,6 @@
             <td>{% if r.freight is not None %}{{ r.freight }}{% else %}-{% endif %}</td>
             <td class="text-start">{{ r.remarks|default:"" }}</td>
           </tr>
-          {% empty %}
-          <tr><td colspan="{{ total_columns }}" class="text-center text-muted">No feed dispatch/receipt transactions found for these filters</td></tr>
           {% endfor %}
         </tbody>
         {% if ledger_rows %}
@@ -350,6 +360,9 @@
       </table>
     </div>
     </div>
+    {% if not ledger_rows %}
+    <div class="alert alert-light border text-center text-muted my-2 py-2 small">No feed dispatch/receipt transactions found for these filters — only the opening balance is shown above.</div>
+    {% endif %}
     <div class="form-text mt-2 no-print">
       Feed columns are generated from every Item under a Feed category — adding a new feed Item automatically adds its column here, no report changes needed.
       Freight is only tracked on purchase receipts (Supplier deliveries) — Stock Transfer, Stock Received/Issued and Inventory Adjustment have no freight field, shown as &ldquo;-&rdquo;.
@@ -431,18 +444,72 @@ $(function () {
   $.fn.dataTable.defaults.buttons = [];
   const ledgerTable = $('#ledger-table').DataTable({
     ordering: false, paging: true, pageLength: 10, lengthMenu: [10, 25, 50, 100],
-    dom: 'frtip',
+    dom: 'rtip',   // no built-in search ('f') — the toolbar's #ledger-search box drives it instead
     language: { emptyTable: 'No data available in table' },
   });
   $.fn.dataTable.defaults.buttons = savedDefaultButtons;
+
+  // A4-landscape print of the *actual* styled ledger — clones the real table
+  // (grouped 2-row header + colour-coded cells preserved, unlike DataTables'
+  // own flattened print export) with every row across all pages, into a
+  // standalone print window whose @page is locked to A4 landscape and whose
+  // table is table-layout:fixed so all columns shrink to fit the paper width.
+  function printLedgerA4() {
+    const prevLen = ledgerTable.page.len();
+    ledgerTable.page.len(-1).draw(false);           // force every row into the DOM
+    const tableHtml = document.getElementById('ledger-table').outerHTML;
+    ledgerTable.page.len(prevLen).draw(false);      // restore on-screen paging
+
+    const title = "Feed Dispatch & Stock Report";
+    const sub = "{% if warehouse_obj %}{{ warehouse_obj.name|escapejs }}{% else %}All Warehouses (combined){% endif %}"
+      + " · Period: {% if from_date %}{{ from_date }}{% else %}All-time{% endif %} to {% if to_date %}{{ to_date }}{% else %}Today{% endif %}";
+
+    const css = `
+      @page { size: A4 landscape; margin: 8mm; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #000; }
+      .print-title { text-align: center; font-size: 15px; font-weight: 700; margin: 0 0 2px; }
+      .print-sub { text-align: center; font-size: 10px; color: #444; margin: 0 0 8px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #888; padding: 2px 3px; font-size: 7px; text-align: center;
+               vertical-align: middle; overflow-wrap: break-word; word-break: break-word; }
+      thead th { font-weight: 700; }
+      th.grp-date { background: #ffe699; }
+      th.grp-dispatch { background: #f8cbad; }
+      th.grp-received { background: #d9d2f0; }
+      th.grp-stock { background: #d9ead3; }
+      th.grp-other { background: #f4cccc; }
+      td.dispatch-cell { background: #cfe2ff; }
+      td.received-cell { background: #e6dff2; }
+      tr.opening-row td { background: #f8d7a3; font-weight: 700; }
+      tr.receipt-row td { background: #fff3cd; }
+      tfoot td { background: #dbe9f0; font-weight: 700; color: #2d6cdf; }
+      td.stock-cell, td.net-stock { font-weight: 700; }
+      .text-danger { color: #c0392b !important; }
+      .text-success { color: #1a7f37 !important; }
+    `;
+    const w = window.open('', '_blank');
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + title
+      + '</title><style>' + css + '</style></head><body>'
+      + '<div class="print-title">' + title + '</div>'
+      + '<div class="print-sub">' + sub + '</div>'
+      + tableHtml + '</body></html>');
+    w.document.close();
+    w.focus();
+    // Wait for layout before firing the print dialog.
+    setTimeout(function () { w.print(); }, 250);
+  }
+
   new $.fn.dataTable.Buttons(ledgerTable, {
     buttons: [
       { extend: 'collection', text: '<i class="fas fa-download me-1"></i>Export', className: 'btn btn-outline-secondary btn-sm', buttons: ['copy', 'csv', 'excel', 'pdf'] },
-      { extend: 'print', text: '<i class="fas fa-print me-1"></i>Print', className: 'btn btn-outline-secondary btn-sm' },
       { extend: 'colvis', text: '<i class="fas fa-sliders-h me-1"></i>Column Settings', className: 'btn btn-outline-secondary btn-sm' },
     ],
   });
   $('#ledger-buttons-slot').append(ledgerTable.buttons().container());
+  // Print is a plain toolbar button (always present in the DOM) rather than a
+  // DataTables Button, so it renders even if the Buttons API hiccups.
+  $('#ledger-print-btn').on('click', printLedgerA4);
   $('#ledger-search').on('input', function () { ledgerTable.search(this.value).draw(); });
   {% endif %}
 

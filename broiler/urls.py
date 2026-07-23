@@ -129,4 +129,15 @@ urlpatterns = [
     path('growing_charge/<int:id>/toggle-active/', views.toggle_growing_charge_active, name='growing_charge_toggle_active'),
     path('growing_charge/<int:id>/toggle-lock/', views.toggle_growing_charge_lock, name='growing_charge_toggle_lock'),
     path('growing_charge/<int:id>/duplicate/', views.growing_charge_duplicate, name='growing_charge_duplicate'),
+
+    # Farmer Growing Charge Settlement / Batch Closing
+    path('gc-settlement/', views.GCSettlementTemplateView.as_view(), name='gc_settlement'),
+    path('gc_settlement_batches/', views.gc_settlement_batches, name='gc_settlement_batches'),
+    path('gc_settlement_schemes/', views.gc_settlement_schemes, name='gc_settlement_schemes'),
+    path('gc_settlement_autofill/', views.gc_settlement_autofill_api, name='gc_settlement_autofill'),
+    path('gc_settlement_list/', views.GCSettlementAPI.as_view(), name='gc_settlement_list'),
+    path('create-gc-settlement/', views.GCSettlementAPI.as_view(), name='gc_settlement_create'),
+    path('gc_settlement/<int:id>/', views.GCSettlementAPI.as_view(), name='gc_settlement_detail'),
+    path('gc_settlement/<int:id>/delete/', views.GCSettlementAPI.as_view(), name='gc_settlement_delete'),
+    path('gc_settlement/<int:id>/print/', views.gc_settlement_print, name='gc_settlement_print'),
 ]

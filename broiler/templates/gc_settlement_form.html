@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}Farmer Growing Charge Settlement{% endblock %}
+
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+
+{% block content %}
+{% include '_broiler_farmer_gc_subnavbar.html' with active_tab='gc_settlement' %}
+
+<style>
+  html, body, .content, .container-cstm { background:#fff !important; }
+  #gcs-form { max-width:1080px; margin:0 auto; }
+  .gcs-title { color:#c0392b; font-weight:700; margin:1.5rem 0 1rem; }
+  .gcs-sub { color:#2d6cdf; font-weight:700; text-align:center; margin-bottom:.75rem; }
+  .gcs-form-label { font-weight:600; font-size:.85rem; }
+  .gcs-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem; }
+  .gcs-row label { flex:0 0 46%; text-align:right; font-weight:600; font-size:.82rem; margin:0; }
+  .gcs-row .gcs-inputs { flex:1; display:flex; gap:.4rem; }
+  .gcs-row input, .gcs-row textarea { font-size:.82rem; }
+  input.gcs-ro { background:#eef0f4 !important; }
+  .gcs-colhead { text-align:center; font-weight:700; color:#2d6cdf; font-size:.8rem; }
+  .gcs-total input { font-weight:700; }
+</style>
+
+<!-- ============================ LIST VIEW ============================ -->
+<div id="gcs-list-view">
+  <div class="card mb-3"><div class="card-body">
+    <div class="d-flex align-items-end gap-3 flex-wrap">
+      <div><label class="gcs-form-label d-block">From Date:</label><input type="date" id="flt-from" class="form-control form-control-sm"></div>
+      <div><label class="gcs-form-label d-block">To Date:</label><input type="date" id="flt-to" class="form-control form-control-sm"></div>
+      <button class="btn btn-success btn-sm" id="gcs-filter-btn">Submit</button>
+      {% if page_perms.add %}<button class="btn btn-primary btn-sm ms-auto" id="gcs-add-btn"><i class="fas fa-bars me-1"></i>ADD</button>{% endif %}
+    </div>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="gcs-table" style="width:100%">
+        <thead><tr>
+          <th>Date</th><th>Invoice</th><th>Farm</th><th>Batch</th>
+          <th>Start Date</th><th>End Date</th><th class="text-center">Action</th>
+        </tr></thead>
+        <tbody id="gcs-table-body"></tbody>
+      </table>
+    </div>
+  </div></div>
+</div>
+
+<!-- ============================ FORM VIEW ============================ -->
+<div id="gcs-form" class="pb-5" style="display:none;">
+  <div class="d-flex justify-content-between align-items-center">
+    <h5 class="gcs-title mb-0">Add Rearing Charges</h5>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="gcs-back-btn"><i class="fas fa-arrow-left me-1"></i>Back to list</button>
+  </div>
+
+  <!-- Header -->
+  <div class="row g-3 mb-2">
+    <div class="col-md-3">
+      <label class="gcs-form-label">Farm <span class="text-danger">*</span></label>
+      <select id="f-farm" class="form-select form-select-sm">
+        <option value="">select</option>
+        {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="gcs-form-label">Scheme Name <span class="text-danger">*</span></label>
+      <select id="f-scheme" class="form-select form-select-sm"><option value="">select</option></select>
+    </div>
+    <div class="col-md-3">
+      <label class="gcs-form-label">Batch <span class="text-danger">*</span></label>
+      <select id="f-batch" class="form-select form-select-sm"><option value="">select</option></select>
+    </div>
+  </div>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3"><label class="gcs-form-label">Branch</label><input id="f-branch" class="form-control form-control-sm gcs-ro" readonly></div>
+    <div class="col-md-3"><label class="gcs-form-label">Line</label><input id="f-line" class="form-control form-control-sm gcs-ro" readonly></div>
+    <div class="col-md-3"><label class="gcs-form-label">Supervisor</label><input id="f-supervisor" class="form-control form-control-sm gcs-ro" readonly></div>
+  </div>
+
+  <!-- Placement -->
+  <h6 class="gcs-sub">Placement Details</h6>
+  <div class="row g-3 mb-3 justify-content-center">
+    <div class="col-md-3"><label class="gcs-form-label">Placement Date</label><input type="date" id="f-placement_date" class="form-control form-control-sm gcs-ro" readonly></div>
+    <div class="col-md-3"><label class="gcs-form-label">GC Date</label><input type="date" id="f-gc_date" class="form-control form-control-sm" value="{{ today }}"></div>
+  </div>
+
+  <!-- Bird Details + Performance -->
+  <div class="row">
+    <div class="col-md-6">
+      <h6 class="gcs-sub">Bird Details</h6>
+      <div class="gcs-row"><label>Placed Birds</label><div class="gcs-inputs"><input id="f-placed_birds" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Mortality</label><div class="gcs-inputs"><input id="f-mortality" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Sold Birds</label><div class="gcs-inputs"><input id="f-sold_birds" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Sold Weight</label><div class="gcs-inputs"><input id="f-sold_weight" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Excess</label><div class="gcs-inputs"><input id="f-excess" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Shortage</label><div class="gcs-inputs"><input id="f-shortage" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Liquidation Date</label><div class="gcs-inputs"><input type="date" id="f-liquidation_date" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Sale Amount</label><div class="gcs-inputs"><input id="f-sale_amount" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Sale Rate</label><div class="gcs-inputs"><input id="f-sale_rate" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Age</label><div class="gcs-inputs"><input id="f-age" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    </div>
+    <div class="col-md-6">
+      <h6 class="gcs-sub">Performance</h6>
+      <div class="gcs-row"><label>1st Week Mortality%</label><div class="gcs-inputs"><input id="f-first_week_mortality_pct" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>30 Days Mortality %</label><div class="gcs-inputs"><input id="f-days30_mortality_pct" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>After 30 Days Mortality %</label><div class="gcs-inputs"><input id="f-after30_mortality_pct" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Total Mortality %</label><div class="gcs-inputs"><input id="f-total_mortality_pct" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>FCR</label><div class="gcs-inputs"><input id="f-fcr" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>CFCR</label><div class="gcs-inputs"><input id="f-cfcr" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Avg.wt</label><div class="gcs-inputs"><input id="f-avg_weight" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Mean Age</label><div class="gcs-inputs"><input id="f-mean_age" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Day Gain</label><div class="gcs-inputs"><input id="f-day_gain" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>EEF</label><div class="gcs-inputs"><input id="f-eef" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Grade</label><div class="gcs-inputs"><input id="f-grade" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    </div>
+  </div>
+
+  <!-- Feed Details -->
+  <h6 class="gcs-sub mt-3">Feed Details</h6>
+  <div class="row">
+    <div class="col-md-6">
+      <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">KGS</span><span class="gcs-colhead flex-fill">BAGS</span></div></div>
+      <div class="gcs-row"><label>Feed In</label><div class="gcs-inputs"><input id="f-feed_in" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_in_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Feed Consumption</label><div class="gcs-inputs"><input id="f-feed_consumption" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_consumption_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Feed Out</label><div class="gcs-inputs"><input id="f-feed_out" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_out_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Feed Balance</label><div class="gcs-inputs"><input id="f-feed_balance" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_balance_bags" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    </div>
+    <div class="col-md-6">
+      <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Med/Vaccine Details</span><span class="gcs-colhead flex-fill">Quantity</span></div></div>
+      <div class="gcs-row"><label>Transfer In</label><div class="gcs-inputs"><input id="f-med_transfer_in" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Consumption</label><div class="gcs-inputs"><input id="f-med_consumption" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Transfer Out</label><div class="gcs-inputs"><input id="f-med_transfer_out" class="form-control form-control-sm gcs-ro" readonly></div></div>
+      <div class="gcs-row"><label>Closing</label><div class="gcs-inputs"><input id="f-med_closing" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    </div>
+  </div>
+
+  <!-- Costing -->
+  <h6 class="gcs-sub mt-3">Costing Details</h6>
+  <div class="row justify-content-center"><div class="col-md-8">
+    <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Amount</span><span class="gcs-colhead flex-fill">Per unit</span></div></div>
+    <div class="gcs-row"><label>Chick Cost</label><div class="gcs-inputs"><input id="f-chick_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-chick_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Feed Cost</label><div class="gcs-inputs"><input id="f-feed_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-feed_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Admin Cost</label><div class="gcs-inputs"><input id="f-admin_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-admin_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Medicine Cost</label><div class="gcs-inputs"><input id="f-medicine_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-medicine_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row gcs-total"><label>Total Cost</label><div class="gcs-inputs"><input id="f-total_cost" class="form-control form-control-sm gcs-ro" readonly><input id="f-total_cost_per_unit" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Standard Production Cost</label><div class="gcs-inputs"><input id="f-standard_production_cost" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Actual Production Cost</label><div class="gcs-inputs"><input id="f-actual_production_cost" class="form-control form-control-sm gcs-ro" readonly></div></div>
+  </div></div>
+
+  <!-- Rearing Charges -->
+  <h6 class="gcs-sub mt-3">Rearing Charges</h6>
+  <div class="row justify-content-center"><div class="col-md-8">
+    <div class="gcs-row"><label></label><div class="gcs-inputs"><span class="gcs-colhead flex-fill">Rs.</span><span class="gcs-colhead flex-fill">Amount</span></div></div>
+    <div class="gcs-row"><label>Standard Growing Charges</label><div class="gcs-inputs"><input id="f-std_gc_rate" class="form-control form-control-sm gcs-ro" readonly><input id="f-standard_growing_charges" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Growing Charge Incentive/Decentive</label><div class="gcs-inputs"><input id="f-gc_incdec_rate" class="form-control form-control-sm gcs-ro" readonly><input id="f-gc_incentive_decentive" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Actual Growing Charges &amp; Expenses Paid/kg of Live Weight</label><div class="gcs-inputs"><input id="f-actual_gc_rate" class="form-control form-control-sm gcs-ro" readonly><input id="f-actual_growing_charges" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Sales Incentives</label><div class="gcs-inputs"><input id="f-sales_incentives" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Mortality Incentives</label><div class="gcs-inputs"><input id="f-mortality_incentives" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>FCR Incentives</label><div class="gcs-inputs"><input id="f-fcr_incentives" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Summer Incentives</label><div class="gcs-inputs"><input id="f-summer_incentives" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Other Incentives</label><div class="gcs-inputs"><input id="f-other_incentives" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>IFFT Charges</label><div class="gcs-inputs"><input id="f-ifft_charges" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row gcs-total"><label>Total Incentives</label><div class="gcs-inputs"><input id="f-total_incentives" class="form-control form-control-sm gcs-ro" readonly></div></div>
+  </div></div>
+
+  <!-- Decentives -->
+  <h6 class="gcs-sub mt-3">Decentives</h6>
+  <div class="row justify-content-center"><div class="col-md-8">
+    <div class="gcs-row"><label>Birds Shortage Amount</label><div class="gcs-inputs"><input id="f-birds_shortage_rate" class="form-control form-control-sm gcs-edit" type="number" step="0.01" placeholder="Rate"><input id="f-birds_shortage_amount" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>FCR Deduction</label><div class="gcs-inputs"><input id="f-fcr_deduction" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Mortality Deduction</label><div class="gcs-inputs"><input id="f-mortality_deduction" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row gcs-total"><label>Total Deduction</label><div class="gcs-inputs"><input id="f-total_deduction" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row gcs-total"><label>Amount Payable</label><div class="gcs-inputs"><input id="f-amount_payable" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Farmer sales deduction</label><div class="gcs-inputs"><input id="f-farmer_sales_deduction" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Feed Transfer Charges</label><div class="gcs-inputs"><input id="f-feed_transfer_charges" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Vaccinator Charges</label><div class="gcs-inputs"><input id="f-vaccinator_charges" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Transportation Charges Addition</label><div class="gcs-inputs"><input id="f-transportation_charges" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Other Deductions</label><div class="gcs-inputs"><input id="f-other_deductions" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row gcs-total"><label>Total Amount Payable</label><div class="gcs-inputs"><input id="f-total_amount_payable" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row gcs-total"><label>Tds@1.00%</label><div class="gcs-inputs"><input id="f-tds" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Equipment Charges</label><div class="gcs-inputs"><input id="f-equipment_charges" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row"><label>Advance Deductions</label><div class="gcs-inputs"><input id="f-advance_deductions" class="form-control form-control-sm gcs-edit" type="number" step="0.01"></div></div>
+    <div class="gcs-row gcs-total"><label>Farmer Payable</label><div class="gcs-inputs"><input id="f-farmer_payable" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row gcs-total"><label>Per Bird Cost</label><div class="gcs-inputs"><input id="f-per_bird_cost" class="form-control form-control-sm gcs-ro" readonly></div></div>
+    <div class="gcs-row"><label>Remarks</label><div class="gcs-inputs"><textarea id="f-remarks" class="form-control form-control-sm" rows="1"></textarea></div></div>
+  </div></div>
+
+  <div class="text-center mt-4">
+    <button id="gcs-submit" class="btn btn-primary px-4">Submit</button>
+    <button type="button" id="gcs-cancel" class="btn btn-danger px-4">Cancel</button>
+  </div>
+</div>
+
+<script>
+const csrfToken = '{{ csrf_token }}';
+// escapeHtml is provided globally by static/js/main.js (window.escapeHtml).
+
+// ---- list view ----
+let gcsTable = null;
+function showForm() { $('#gcs-list-view').hide(); $('#gcs-form').show(); window.scrollTo(0, 0); }
+function showList() { $('#gcs-form').hide(); $('#gcs-list-view').show(); }
+function loadList() {
+  const from = document.getElementById('flt-from').value;
+  const to = document.getElementById('flt-to').value;
+  $.getJSON(`/gc_settlement_list/?from_date=${from}&to_date=${to}`, function (rows) {
+    if (gcsTable) { gcsTable.destroy(); gcsTable = null; }
+    const body = $('#gcs-table-body').empty();
+    rows.forEach(s => body.append(`
+      <tr>
+        <td>${escapeHtml(s.gc_date)}</td>
+        <td>${escapeHtml(s.settlement_code)}</td>
+        <td>${escapeHtml(s.farm_name)}</td>
+        <td>${escapeHtml(s.batch_name)}</td>
+        <td>${escapeHtml(s.start_date)}</td>
+        <td>${escapeHtml(s.end_date)}</td>
+        <td><div class="d-flex gap-1 justify-content-center flex-nowrap">
+          {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm gcs-edit" data-id="${s.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+          <a class="btn btn-outline-secondary btn-sm" href="/gc_settlement/${s.id}/print/" target="_blank" title="Print report"><i class="fas fa-print"></i></a>
+          {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm gcs-del" data-id="${s.id}" title="Delete (reopens batch)"><i class="fas fa-trash"></i></button>{% endif %}
+        </div></td>
+      </tr>`));
+    gcsTable = $('#gcs-table').DataTable({
+      responsive: true, order: [[0, 'desc']],
+      dom: 'Bfrtip', buttons: ['copy','csv','excel','pdf','print','colvis'],
+      columnDefs: [{ orderable: false, targets: [-1] }],
+      language: { emptyTable: 'No settlements yet — click ADD to create one.' },
+    });
+  });
+}
+let editId = null;
+function setSelectOption(id, val, label) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (![...el.options].some(o => o.value == val)) el.add(new Option(label, val));
+  el.value = val;
+  $(el).trigger('change.select2');
+}
+$('#gcs-add-btn').on('click', function () { editId = null; showForm(); });
+$('#gcs-back-btn, #gcs-cancel').on('click', function () { editId = null; showList(); loadList(); });
+$('#gcs-filter-btn').on('click', loadList);
+$(document).on('click', '.gcs-del', function () {
+  if (!confirm('Delete this settlement? The batch will be reopened.')) return;
+  const id = $(this).data('id');
+  $.ajax({ url: `/gc_settlement/${id}/delete/`, method: 'DELETE', headers: { 'X-CSRFToken': csrfToken },
+    success: loadList, error: xhr => alert(xhr.responseJSON?.error || 'Delete failed') });
+});
+$(document).on('click', '.gcs-edit', function () {
+  $.getJSON(`/gc_settlement/${$(this).data('id')}/`, function (d) {
+    editId = d.id;
+    document.getElementById('f-branch').value = d.branch || '';
+    document.getElementById('f-line').value = d.line || '';
+    document.getElementById('f-supervisor').value = d.supervisor || '';
+    setSelectOption('f-farm', d.farm_id, d.farm_name);
+    setSelectOption('f-batch', d.batch_id, d.batch_name);
+    setSelectOption('f-scheme', d.scheme_id, d.scheme_name);
+    soldWeight = parseFloat(d.sold_weight) || 0; soldBirds = parseFloat(d.sold_birds) || 0; shortage = parseFloat(d.shortage) || 0;
+    Object.keys(d).forEach(k => { if ($v(k) !== null) set(k, d[k]); });
+    set('std_gc_rate', money(soldWeight ? d.standard_growing_charges / soldWeight : 0));
+    set('gc_incdec_rate', money(soldWeight ? d.gc_incentive_decentive / soldWeight : 0));
+    set('actual_gc_rate', money(soldWeight ? d.actual_growing_charges / soldWeight : 0));
+    ['feed_in','feed_consumption','feed_out','feed_balance'].forEach(k => set(k + '_bags', money((parseFloat(d[k]) || 0) / 50)));
+    document.getElementById('f-gc_date').value = d.gc_date || '';
+    document.getElementById('f-remarks').value = d.remarks || '';
+    recalc();
+    showForm();
+  });
+});
+$(loadList);
+const EDIT_FIELDS = ['mortality_incentives','fcr_incentives','summer_incentives','other_incentives','ifft_charges',
+  'birds_shortage_rate','fcr_deduction','mortality_deduction','farmer_sales_deduction','feed_transfer_charges',
+  'vaccinator_charges','transportation_charges','other_deductions','equipment_charges','advance_deductions'];
+let kgPerBag = 50, soldBirds = 0, soldWeight = 0, shortage = 0;
+
+const $v = id => document.getElementById('f-' + id);
+const num = id => parseFloat($v(id) && $v(id).value) || 0;
+const set = (id, val) => { const el = $v(id); if (el) el.value = (val === null || val === undefined || val === '') ? '' : val; };
+const money = v => (Math.round((v + Number.EPSILON) * 100) / 100).toFixed(2);
+
+function recalc() {
+  // mirror server _gc_settlement_totals
+  set('birds_shortage_amount', money(num('birds_shortage_rate') * shortage));
+  const totalIncentives = num('sales_incentives') + num('mortality_incentives') + num('fcr_incentives')
+    + num('summer_incentives') + num('other_incentives') + num('ifft_charges');
+  set('total_incentives', money(totalIncentives));
+  const totalDeduction = num('birds_shortage_amount') + num('fcr_deduction') + num('mortality_deduction');
+  set('total_deduction', money(totalDeduction));
+  const amountPayable = num('actual_growing_charges') + totalIncentives - totalDeduction;
+  set('amount_payable', money(amountPayable));
+  const totalAmountPayable = amountPayable - num('farmer_sales_deduction') - num('feed_transfer_charges')
+    - num('vaccinator_charges') - num('other_deductions') + num('transportation_charges');
+  set('total_amount_payable', money(totalAmountPayable));
+  const tds = totalAmountPayable * 0.01;
+  set('tds', money(tds));
+  const farmerPayable = totalAmountPayable - tds - num('equipment_charges') - num('advance_deductions');
+  set('farmer_payable', money(farmerPayable));
+  set('per_bird_cost', money(soldBirds ? farmerPayable / soldBirds : 0));
+  set('gc_paid_per_kg', money(soldWeight ? num('actual_growing_charges') / soldWeight : 0));
+}
+
+function populate(d) {
+  soldBirds = parseFloat(d.sold_birds) || 0;
+  soldWeight = parseFloat(d.sold_weight) || 0;
+  shortage = parseFloat(d.shortage) || 0;
+  kgPerBag = parseFloat(d.kg_per_bag) || 50;
+  document.getElementById('f-branch').value = d.branch || '';
+  document.getElementById('f-line').value = d.line || '';
+  document.getElementById('f-supervisor').value = d.supervisor || '';
+  // GC closing date auto = day after the last sale date (still editable)
+  if (d.gc_date_default) document.getElementById('f-gc_date').value = d.gc_date_default;
+  // every returned key that maps to an f-<key> input
+  Object.keys(d).forEach(k => { if ($v(k) !== null) set(k, d[k]); });
+  // bags = kgs / kgPerBag
+  ['feed_in','feed_consumption','feed_out','feed_balance'].forEach(k => {
+    const kg = parseFloat(d[k]) || 0;
+    set(k + '_bags', money(kgPerBag ? kg / kgPerBag : 0));
+  });
+  recalc();
+}
+
+async function loadAutofill() {
+  const batch = document.getElementById('f-batch').value;
+  const scheme = document.getElementById('f-scheme').value;
+  if (!batch) return;
+  const res = await fetch(`/gc_settlement_autofill/?batch=${batch}&scheme=${scheme}`);
+  const d = await res.json();
+  if (!res.ok) { alert(d.error || 'Could not load batch data'); return; }
+  populate(d);
+}
+
+// Farm / Batch / Scheme are .form-select, which this project globally upgrades
+// to Select2 — Select2 emits changes via jQuery .trigger('change'), which a
+// native addEventListener('change') would NOT hear, so these MUST be bound with
+// jQuery .on('change'). After repopulating a select's <option>s we notify
+// Select2 with .trigger('change.select2') so its rendered list/value refreshes.
+$('#f-farm').on('change', async function () {
+  const farm = this.value;
+  const batchSel = document.getElementById('f-batch');
+  const schemeSel = document.getElementById('f-scheme');
+  batchSel.innerHTML = '<option value="">select</option>';
+  schemeSel.innerHTML = '<option value="">select</option>';
+  $(batchSel).trigger('change.select2'); $(schemeSel).trigger('change.select2');
+  if (!farm) return;
+  const res = await fetch(`/gc_settlement_batches/?farm=${farm}`);
+  (await res.json()).forEach(b => batchSel.add(new Option(b.batch_name, b.id)));
+  $(batchSel).trigger('change.select2');
+});
+
+$('#f-batch').on('change', async function () {
+  const batch = this.value;
+  const schemeSel = document.getElementById('f-scheme');
+  schemeSel.innerHTML = '<option value="">select</option>';
+  if (!batch) { $(schemeSel).trigger('change.select2'); return; }
+  const res = await fetch(`/gc_settlement_schemes/?batch=${batch}`);
+  const d = await res.json();
+  d.schemes.forEach(s => schemeSel.add(new Option(s.name, s.id)));
+  if (d.selected) schemeSel.value = d.selected;
+  $(schemeSel).trigger('change.select2');  // refresh Select2 UI without firing our handler
+  loadAutofill();
+});
+
+$('#f-scheme').on('change', loadAutofill);
+EDIT_FIELDS.forEach(k => { const el = $v(k); if (el) el.addEventListener('input', recalc); });
+
+document.getElementById('gcs-submit').addEventListener('click', async function () {
+  const batch = document.getElementById('f-batch').value;
+  const scheme = document.getElementById('f-scheme').value;
+  if (!batch) { alert('Select a Farm, Batch and Scheme first.'); return; }
+  recalc();
+  const payload = { batch, scheme, gc_date: document.getElementById('f-gc_date').value,
+                    remarks: document.getElementById('f-remarks').value };
+  EDIT_FIELDS.forEach(k => payload[k] = num(k));
+  this.disabled = true;
+  const url = editId ? `/gc_settlement/${editId}/` : '/create-gc-settlement/';
+  const res = await fetch(url, {
+    method: editId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify(payload),
+  });
+  const d = await res.json();
+  this.disabled = false;
+  if (res.ok) {
+    alert(d.message + ' (' + d.code + ')');
+    editId = null;
+    // reset the form selects and return to the refreshed list
+    ['f-farm','f-batch','f-scheme'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    $('#f-farm,#f-batch,#f-scheme').trigger('change.select2');
+    showList(); loadList();
+  } else { alert(d.error || 'Could not save settlement'); }
+});
+</script>
+{% endblock %}

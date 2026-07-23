@@ -1,0 +1,203 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Growing Charges — {{ s.settlement_code }}</title>
+<style>
+  @page { size: A4 portrait; margin: 9mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #1f2937; font-size: 11.5px; background: #fff; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 10px; }
+  .toolbar { text-align: right; margin-bottom: 8px; }
+  .toolbar button { font-size: 12px; padding: 6px 14px; border: 0; border-radius: 6px; cursor: pointer; }
+  .btn-print { background: #2d6cdf; color: #fff; }
+  .btn-close { background: #e5e7eb; color: #111; }
+  .card { border: 1px solid #e5e7eb; border-radius: 8px; }
+  .muted { color: #6b7280; }
+  .sec-title { font-weight: 700; color: #2d6cdf; letter-spacing: .03em; font-size: 12.5px; margin: 9px 0 5px; }
+  .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #2d6cdf; padding-bottom: 10px; }
+  .hdr .co { font-size: 22px; font-weight: 800; color: #2d6cdf; }
+  .hdr .co small { display: block; font-size: 10px; color: #6b7280; font-weight: 600; }
+  .hdr .rpt { text-align: right; }
+  .hdr .rpt h1 { font-size: 17px; color: #2d6cdf; margin: 0; line-height: 1.2; }
+  .pagepill { display: inline-block; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 9px; font-size: 9px; margin-top: 5px; }
+  .info { display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 8px 16px; margin: 12px 0; align-items: center; }
+  .info .lbl { font-size: 9px; color: #6b7280; text-transform: uppercase; }
+  .info .val { font-weight: 700; }
+  .status { text-align: center; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 8px; padding: 7px 14px; }
+  .status .s { color: #16a34a; font-weight: 800; font-size: 14px; }
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 9px; }
+  .kpi { border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 6px; text-align: center; }
+  .kpi .ic { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .kpi .v { font-size: 16px; font-weight: 800; }
+  .kpi .l { font-size: 9px; color: #6b7280; }
+  .kpi .sub { font-size: 8px; color: #9ca3af; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pad { padding: 8px 12px; }
+  .kv { display: flex; justify-content: space-between; padding: 2.3px 0; border-bottom: 1px solid #f1f5f9; }
+  .kv:last-child { border-bottom: 0; }
+  .kv b { font-weight: 700; }
+  .net { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 7px 11px; display: flex; justify-content: space-between; font-weight: 800; color: #1e40af; margin-top: 6px; font-size: 12px; }
+  .signs { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-top: 16px; text-align: center; font-size: 10px; }
+  .signs .line { border-top: 1px dotted #9ca3af; margin: 18px 8px 4px; }
+  .foot { display: flex; justify-content: space-between; border-top: 1px solid #e5e7eb; margin-top: 10px; padding-top: 6px; font-size: 9px; color: #6b7280; }
+  @media print { .no-print { display: none !important; } .wrap { max-width: none; padding: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toolbar no-print">
+    <button class="btn-print" onclick="window.print()">🖨 Print</button>
+    <button class="btn-close" onclick="window.close()">Close</button>
+  </div>
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="co">{{ company.name|default:"Hi Tech Farms" }}<small>Poultry Division</small>
+      <div class="muted" style="font-weight:400; margin-top:4px; font-size:9px;">
+        {{ company.address }}{% if company.state %}, {{ company.state }}{% endif %}<br>
+        {% if company.gstin %}GSTIN: {{ company.gstin }}{% endif %} {% if company.mobile %}&nbsp; ☎ {{ company.mobile }}{% endif %}
+      </div>
+    </div>
+    <div class="rpt">
+      <h1>GROWING CHARGES<br>BATCH CLOSING REPORT</h1>
+      <span class="pagepill">GC No: {{ s.settlement_code }}</span>
+    </div>
+  </div>
+
+  <!-- Info / Farm Details -->
+  <div class="info">
+    <div><div class="lbl">Farmer Branch</div><div class="val">{{ branch.branch_name }}</div>
+         <div class="lbl" style="margin-top:6px;">Line</div><div class="val">{{ farm.line|default:"-" }}</div></div>
+    <div><div class="lbl">Farm Name</div><div class="val">{{ farm.farm_name }}</div>
+         <div class="lbl" style="margin-top:6px;">Supervisor</div><div class="val">{{ supervisor }}</div></div>
+    <div><div class="lbl">Farmer Name</div><div class="val">{{ farmer.farmer_name }}</div>
+         <div class="lbl" style="margin-top:6px;">Farmer Mob No.</div><div class="val">{{ farmer.mobile_no|default:farmer.phone_no|default:"-" }}</div></div>
+    <div><div class="lbl">Batch No.</div><div class="val">{{ batch.batch_name }}</div>
+         <div class="lbl" style="margin-top:6px;">Scheme</div><div class="val" style="font-size:9px;">{{ scheme.schema_name|default:"-" }}</div></div>
+    <div class="status"><div class="lbl">Batch Status</div><div class="s">CLOSED</div>
+         <div class="muted" style="font-size:8px;">Date: {{ s.gc_date|date:"d M Y" }}</div></div>
+  </div>
+
+  <!-- Performance KPIs (no revenue/profit) -->
+  <div class="kpis">
+    <div class="kpi"><div class="ic" style="background:#2d6cdf;">🐤</div><div class="l">Birds Placed</div><div class="v">{{ s.placed_birds }}</div><div class="sub">{{ s.placement_date|date:"d M Y" }}</div></div>
+    <div class="kpi"><div class="ic" style="background:#16a34a;">🐔</div><div class="l">Birds Sold</div><div class="v">{{ s.sold_birds }}</div><div class="sub">wt {{ s.sold_weight|floatformat:2 }} kg</div></div>
+    <div class="kpi"><div class="ic" style="background:#dc2626;">☠</div><div class="l">Mortality</div><div class="v">{{ s.mortality }}</div><div class="sub">{{ s.total_mortality_pct|floatformat:2 }}%</div></div>
+    <div class="kpi"><div class="ic" style="background:#7c3aed;">⚖</div><div class="l">Avg Weight</div><div class="v">{{ s.avg_weight|floatformat:2 }}</div><div class="sub">kg</div></div>
+    <div class="kpi"><div class="ic" style="background:#ea580c;">📦</div><div class="l">Feed Consumed</div><div class="v">{{ s.feed_consumption|floatformat:0 }}</div><div class="sub">kg</div></div>
+    <div class="kpi"><div class="ic" style="background:#0891b2;">📊</div><div class="l">FCR</div><div class="v">{{ s.fcr|floatformat:3 }}</div><div class="sub">CFCR {{ s.cfcr|floatformat:2 }}</div></div>
+  </div>
+
+  <!-- Batch Information | Batch Sales Info -->
+  <div class="two" style="margin-top:8px;">
+    <div>
+      <div class="sec-title">BATCH INFORMATION</div>
+      <div class="card pad">
+        <div class="kv"><span>Chicks Place Date</span><b>{{ s.placement_date|date:"d/m/y"|default:"-" }}</b></div>
+        <div class="kv"><span>Final Liquidation Date</span><b>{{ s.liquidation_date|date:"d/m/y"|default:"-" }}</b></div>
+        <div class="kv"><span>Age at Liquidation</span><b>{{ s.age|floatformat:0 }}</b></div>
+        <div class="kv"><span>Avg. Lifting Age</span><b>{{ s.mean_age|floatformat:2 }}</b></div>
+        <div class="kv"><span>Day Gain (g)</span><b>{{ s.day_gain|floatformat:2 }}</b></div>
+        <div class="kv"><span>EEF</span><b>{{ s.eef|floatformat:2 }}</b></div>
+        <div class="kv"><span>Prod Grade</span><b>{{ s.grade|default:"-" }}</b></div>
+      </div>
+    </div>
+    <div>
+      <div class="sec-title">BATCH SALES INFO</div>
+      <div class="card pad">
+        <div class="kv"><span>Total Birds Sold</span><b>{{ s.sold_birds }}</b></div>
+        <div class="kv"><span>Total Weight of Birds (kg)</span><b>{{ s.sold_weight|floatformat:2 }}</b></div>
+        <div class="kv"><span>Avg. Weight of Birds (kg)</span><b>{{ s.avg_weight|floatformat:3 }}</b></div>
+        <div class="kv"><span>Avg. Selling Rate / Kg</span><b>{{ s.sale_rate|floatformat:2 }}</b></div>
+        <div class="kv"><span>F.C.R (Std. F.C.R)</span><b>{{ s.fcr|floatformat:3 }} ({{ d.std_fcr|floatformat:3 }})</b></div>
+        <div class="kv"><span>Converted F.C.R</span><b>{{ s.cfcr|floatformat:2 }}</b></div>
+        <div class="kv"><span>1st Week Mortality %</span><b>{{ s.first_week_mortality_pct|floatformat:2 }}</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Expenses -->
+  <div class="sec-title">BATCH EXPENSES</div>
+  <div class="two">
+    <div class="card pad">
+      <div class="kv"><span>Net Chicks</span><b>{{ s.placed_birds }}</b></div>
+      <div class="kv"><span>Chicks Cost</span><b>{{ s.chick_cost|floatformat:2 }}</b></div>
+      <div class="kv"><span>Cum. Mortality</span><b>{{ s.mortality }}</b></div>
+      <div class="kv"><span>Total Mortality %</span><b>{{ s.total_mortality_pct|floatformat:3 }}</b></div>
+      <div class="kv"><span>Feed Consumed (Kg)</span><b>{{ s.feed_consumption|floatformat:2 }}</b></div>
+      <div class="kv"><span>Feed Cost (Per Kg)</span><b>{{ s.feed_cost|floatformat:2 }} ({{ s.feed_cost_per_unit|floatformat:2 }})</b></div>
+    </div>
+    <div class="card pad">
+      <div class="kv"><span>Medicine Cost</span><b>{{ s.medicine_cost|floatformat:2 }}</b></div>
+      <div class="kv"><span>Medicine Cost / Bird</span><b>{{ s.medicine_cost_per_unit|floatformat:2 }}</b></div>
+      <div class="kv"><span>Admin Cost</span><b>{{ s.admin_cost|floatformat:2 }}</b></div>
+      <div class="kv"><span>Gross Production Cost</span><b>{{ s.total_cost|floatformat:2 }}</b></div>
+      <div class="kv"><span>Act. Production Cost / Kg</span><b>{{ s.actual_production_cost|floatformat:2 }}</b></div>
+      <div class="kv"><span>Std. Production Cost / Kg</span><b>{{ s.standard_production_cost|floatformat:2 }}</b></div>
+    </div>
+  </div>
+
+  <!-- Rearing Charges (the farmer's payment breakdown) -->
+  <div class="sec-title">REARING CHARGES</div>
+  <div class="two">
+    <div class="card pad">
+      <div class="kv"><span>Rearing Charges / Kg</span><b>{{ d.rc_per_kg|floatformat:3 }}</b></div>
+      <div class="kv"><span>Std. Rearing Charges / Kg</span><b>{{ d.std_rc_per_kg|floatformat:2 }}</b></div>
+      <div class="kv"><span>Prod. Cost Incentive / Kg</span><b>{{ d.prod_cost_incentive_rate|floatformat:3 }}</b></div>
+      <div class="kv"><span>Rearing Charges / Bird</span><b>{{ d.rc_per_bird|floatformat:2 }}</b></div>
+      <div class="kv"><span>Total Rearing Charges</span><b>{{ s.actual_growing_charges|floatformat:2 }}</b></div>
+      <div class="kv"><span>Sales Incentives</span><b>{{ s.sales_incentives|floatformat:2 }}</b></div>
+      <div class="kv"><span>F.C.R Incentives</span><b>{{ s.fcr_incentives|floatformat:2 }}</b></div>
+      <div class="kv"><span>Mortality Incentives</span><b>{{ s.mortality_incentives|floatformat:2 }}</b></div>
+      <div class="kv"><span>Summer / Other Incentives</span><b>{{ s.summer_incentives|floatformat:2 }} / {{ s.other_incentives|floatformat:2 }}</b></div>
+      <div class="kv"><span>Total Incentives</span><b>{{ s.total_incentives|floatformat:2 }}</b></div>
+    </div>
+    <div class="card pad">
+      <div class="kv"><span>F.C.R Dedn / Earning</span><b>{{ d.fcr_net|floatformat:2 }}</b></div>
+      <div class="kv"><span>Mortality Dedn / Earning</span><b>{{ d.mortality_net|floatformat:2 }}</b></div>
+      <div class="kv"><span>Birds Shortage Cost</span><b>{{ s.birds_shortage_amount|floatformat:2 }}</b></div>
+      <div class="kv"><span>Other Deduction</span><b>{{ s.other_deductions|floatformat:2 }}</b></div>
+      <div class="kv"><span>Feed Transfer / Vaccinator</span><b>{{ s.feed_transfer_charges|floatformat:2 }} / {{ s.vaccinator_charges|floatformat:2 }}</b></div>
+      <div class="kv"><span>Equipment / Advance</span><b>{{ s.equipment_charges|floatformat:2 }} / {{ s.advance_deductions|floatformat:2 }}</b></div>
+      <div class="kv"><span>Total Deduction</span><b>{{ s.total_deduction|floatformat:2 }}</b></div>
+      <div class="kv"><span>Charges Payable</span><b>{{ s.total_amount_payable|floatformat:2 }}</b></div>
+      <div class="kv"><span>T.D.S @1% (194C)</span><b>{{ s.tds|floatformat:2 }}</b></div>
+      <div class="net"><span>NET GROWING CHARGES (Farmer Payable)</span><span>₹ {{ s.farmer_payable|floatformat:2 }}</span></div>
+    </div>
+  </div>
+
+  {% if s.remarks %}<div class="muted" style="margin-top:6px;"><b>Remark:</b> {{ s.remarks }}</div>{% endif %}
+
+  <!-- Bank Details -->
+  <div class="sec-title">BANK DETAILS</div>
+  <div class="card pad two" style="gap:0 24px;">
+    <div>
+      <div class="kv"><span>Farm / Farmer Name</span><b>{{ farmer.account_holder_name|default:farmer.farmer_name }}</b></div>
+      <div class="kv"><span>Bank Name</span><b>{{ farmer.bank_name|default:"-" }}</b></div>
+      <div class="kv"><span>Branch / City</span><b>{{ farmer.bank_branch|default:"-" }}</b></div>
+      <div class="kv"><span>PAN No.</span><b>{{ farmer.pan_no|default:"-" }}</b></div>
+    </div>
+    <div>
+      <div class="kv"><span>A/C No.</span><b>{{ farmer.acc_no|default:"-" }}</b></div>
+      <div class="kv"><span>IFSC / RTGS Code</span><b>{{ farmer.ifsc_code|default:"-" }}</b></div>
+      <div class="kv"><span>Farmer USC</span><b>{{ farmer.usc|default:"-" }}</b></div>
+      <div class="kv"><span>Service No.</span><b>{{ farmer.service_no|default:"-" }}</b></div>
+    </div>
+  </div>
+
+  <!-- Signatures -->
+  <div class="signs">
+    <div><div class="line"></div>Prepared By</div>
+    <div><div class="line"></div>Sanctioned By</div>
+    <div><div class="line"></div>Receiver's Signature</div>
+    <div><div class="line"></div>Authorized Signatory</div>
+  </div>
+
+  <div class="foot">
+    <span>System generated report — does not require physical signature.</span>
+    <span>For {{ company.name|default:"Hi Tech Farms" }}</span>
+  </div>
+</div>
+</body>
+</html>

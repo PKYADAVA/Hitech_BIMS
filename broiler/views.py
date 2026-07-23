@@ -1,7 +1,7 @@
 #pylint: disable=no-member
 
 from typing import Dict, List, Optional, Union
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -17,7 +17,7 @@ from .models import (
     BroilerFarmShed, BroilerLine, DailyEntry, Farmer, FarmerGroup,
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
-    GCFCRRecovery, GCFarmerClassification, MedicineVaccineEntry,
+    GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
     Region, Supervisor,
 )
 from account.models import ChartOfAccount
@@ -3860,3 +3860,579 @@ def toggle_growing_charge_lock(request, id):
         return JsonResponse({"message": "Scheme updated", "is_locked": scheme.is_locked})
     except GrowingChargeScheme.DoesNotExist:
         return JsonResponse({"error": "Scheme not found."}, status=404)
+
+
+# ---------------------------------------------------------------------------
+# Farmer Growing Charge Settlement / Batch Closing (Broiler > Growing Charges)
+# ---------------------------------------------------------------------------
+# The "Add Rearing Charges" transaction. Auto-loads a batch's computed figures
+# from the same engine the Growing Charge Statement report uses
+# (_build_batch_report), applies the scheme's incentive/deduction slabs to
+# arrive at a Farmer Payable, and — on save — closes the batch. Every field is
+# override-able, so the slab units/chain below are sensible defaults, not a
+# hard contract (see the plan's Notes/risks).
+
+FEED_KG_PER_BAG = Decimal("50")  # feed items are 50kg/bag across this system
+
+# Manual-entry fields (not slab-derived): default 0 on autofill, user fills.
+GC_SETTLEMENT_MANUAL_FIELDS = [
+    "other_incentives", "ifft_charges", "farmer_sales_deduction", "feed_transfer_charges",
+    "vaccinator_charges", "transportation_charges", "other_deductions", "equipment_charges",
+    "advance_deductions",
+]
+# Every persisted numeric field the POST accepts (the client sends final values;
+# the server recomputes the authoritative running totals from them on save).
+GC_SETTLEMENT_INPUT_FIELDS = GC_SETTLEMENT_MANUAL_FIELDS + [
+    "standard_growing_charges", "actual_growing_charges", "sales_incentives",
+    "mortality_incentives", "fcr_incentives", "summer_incentives",
+    "birds_shortage_rate", "birds_shortage_amount", "fcr_deduction", "mortality_deduction",
+]
+
+
+def _num(x):
+    """Coerce a batch_costing value (Decimal, int, or the 'No Data' string used
+    when no scheme matches) to a Decimal — 'No Data'/blank become 0."""
+    if x is None or x == "No Data" or x == "":
+        return Decimal("0")
+    return x if isinstance(x, Decimal) else Decimal(str(x))
+
+
+def _slab_match(rows, value, lo_attr, hi_attr, val_attr):
+    """First row whose [lo, hi] band contains ``value`` → its ``val_attr`` (0 if none)."""
+    v = _num(value)
+    for r in rows:
+        if _num(getattr(r, lo_attr)) <= v <= _num(getattr(r, hi_attr)):
+            return _num(getattr(r, val_attr))
+    return Decimal("0")
+
+
+def _actual_gc_rate(scheme, std_cost, actual_cost, base_rate):
+    """Actual Growing Charge rate (Rs./kg): the standard GC rate adjusted by the
+    gap between the batch's actual production cost/kg and the scheme's standard
+    production cost, spread PROGRESSIVELY across the per-rupee Production-Cost
+    slab bands (tax-bracket style).
+
+    actual > std -> decentive bands (ascending, keyed on to_production_cost):
+        each ₹ segment of the excess above std, up to that band's ceiling, is
+        multiplied by band.rate_pct/100 and SUBTRACTED.
+    actual < std -> incentive bands (descending, keyed on from_production_cost):
+        each ₹ segment of the shortfall below std is multiplied by rate_pct/100
+        and ADDED.
+
+    e.g. std=90, actual=91.89, both bands 50%: (1.00 + 0.89) tiered ->
+        1.00*0.5 + 0.89*0.5 = 0.945 subtracted, so 7.50 -> 6.555.
+    """
+    if not scheme or std_cost <= 0:
+        return base_rate
+    adj = Decimal("0")
+    if actual_cost > std_cost:
+        decentives = sorted(scheme.production_cost_decentives.all(),
+                            key=lambda r: _num(r.to_production_cost))
+        # Beyond the highest defined decentive slab, the growing charge is
+        # wiped entirely (production cost too high -> no GC).
+        if decentives and actual_cost > _num(decentives[-1].to_production_cost):
+            return Decimal("0")
+        prev = std_cost
+        for band in decentives:
+            top = _num(band.to_production_cost)
+            if top <= std_cost:
+                continue
+            seg = min(actual_cost, top) - prev
+            if seg <= 0:
+                break
+            adj -= seg * _num(band.rate_pct) / Decimal("100")
+            prev = top
+            if prev >= actual_cost:
+                break
+    elif actual_cost < std_cost:
+        # Incentive accrues only through the defined slabs; below the lowest
+        # one the bonus is capped at the first slab (no further increase).
+        prev = std_cost
+        for band in sorted(scheme.production_cost_incentives.all(),
+                           key=lambda r: _num(r.from_production_cost), reverse=True):
+            bottom = _num(band.from_production_cost)
+            if bottom >= std_cost:
+                continue
+            seg = prev - max(actual_cost, bottom)
+            if seg <= 0:
+                break
+            adj += seg * _num(band.rate_pct) / Decimal("100")
+            prev = bottom
+            if prev <= actual_cost:
+                break
+    # GC rate never goes negative.
+    return max(Decimal("0"), base_rate + adj)
+
+
+def _sales_incentive_per_kg(scheme, avg_sale_rate):
+    """Sales incentive per kg of sold weight. The slab's ``sales_incentive`` is
+    a rate PER RUPEE of sale rate above the band floor, accrued progressively
+    across bands (like the growing-charge tiers): e.g. band 105-140 @ 0.10 and
+    a ₹115 sale rate -> (115-105) x 0.10 = ₹1.00/kg. Below the lowest band's
+    floor there is no incentive; above the highest band's ceiling it caps."""
+    if not scheme:
+        return Decimal("0")
+    v = _num(avg_sale_rate)
+    per_kg = Decimal("0")
+    for band in sorted(scheme.sales_incentives.all(), key=lambda r: _num(r.sale_rate_from)):
+        lo, hi, rate = _num(band.sale_rate_from), _num(band.sale_rate_to), _num(band.sales_incentive)
+        if v <= lo:
+            break
+        per_kg += (min(v, hi) - lo) * rate
+        if v <= hi:
+            break
+    return per_kg
+
+
+def _shortage_rate(scheme, bc):
+    """Per-bird shortage recovery rate per the scheme's shortage_basis."""
+    if not scheme:
+        return Decimal("0")
+    basis = scheme.shortage_basis
+    prod = _num(bc.get("production_cost_per_kg"))
+    std_prod = _num(bc.get("std_prod_per_kg"))
+    avg_rate = _num(bc.get("avg_sale_rate"))
+    B = GrowingChargeScheme.ShortageBasis
+    if basis == B.STD_PRODUCTION_COST:
+        return std_prod
+    if basis == B.PRODUCTION_COST:
+        return prod
+    if basis == B.AVG_SALE_RATE:
+        return avg_rate
+    if basis == B.MAX_SALE_RATE:
+        return avg_rate  # no per-sale max tracked; avg is the best available proxy
+    return max(std_prod, prod, avg_rate)  # WHICH_IS_HIGHER
+
+
+def _gc_settlement_autofill(batch, scheme):
+    """All settlement field defaults for a batch, keyed by the model's field
+    names. Read-only figures come from _build_batch_report; incentive/deduction
+    defaults from the scheme's slab tables. Returns Decimals."""
+    report = _build_batch_report(batch, fetch_type="farmer", scheme_override=scheme)
+    bc = report["batch_costing"]
+    q2 = Decimal("0.01")
+
+    # Final liquidation = the LAST bird-sale date; GC closing defaults to the
+    # day after it (editable in the form).
+    sale_dates = [r["date"] for r in report.get("bird_sales", []) if r.get("date")]
+    last_sale_date = max(sale_dates) if sale_dates else bc.get("sale_start_date")
+    gc_date_default = (last_sale_date + timedelta(days=1)) if last_sale_date else None
+
+    sold_weight = _num(bc.get("sold_weight"))
+    sold_birds = _num(bc.get("sold_birds"))
+    placed = _num(bc.get("chicks_placed"))
+    live_birds = placed - _num(bc.get("mortality")) - _num(bc.get("culls"))
+
+    # ---- slab-derived incentives (treated as per-kg of sold live weight,
+    #      except summer which is per-bird on its `incentive_on` basis) ----
+    if scheme:
+        sales_rate = _sales_incentive_per_kg(scheme, bc.get("avg_sale_rate"))
+        mort_rate = _slab_match(scheme.mortality_incentives.all(), bc.get("total_mort_pct"),
+                                "from_mortality_pct", "to_mortality_pct", "incentive_value")
+        fcr_rate = _slab_match(scheme.fcr_incentives.all(), bc.get("cfcr"),
+                               "cfcr_limit", "cfcr_limit", "incentive_value") \
+            if scheme.fcr_incentives.exists() else Decimal("0")
+        # FCR incentive slab is a limit, not a band: reward when CFCR <= limit.
+        fcr_rate = Decimal("0")
+        for r in scheme.fcr_incentives.all().order_by("cfcr_limit"):
+            if _num(bc.get("cfcr")) <= _num(r.cfcr_limit):
+                fcr_rate = _num(r.incentive_value)
+                break
+
+        summer_amount = Decimal("0")
+        for r in scheme.summer_incentives.all():
+            if _num(r.from_production_cost) <= _num(bc.get("production_cost_per_kg")) <= _num(r.to_production_cost):
+                basis_birds = {"sold_birds": sold_birds, "placed_birds": placed,
+                               "live_birds": live_birds}.get(r.incentive_on, sold_birds)
+                summer_amount = _num(r.incentive_rate) * basis_birds
+                break
+
+        sales_incentives = (sales_rate * sold_weight)
+        mortality_incentives = (mort_rate * sold_weight)
+        fcr_incentives = (fcr_rate * sold_weight)
+        summer_incentives = summer_amount
+
+        # ---- slab-derived deductions ----
+        fcr_recovery_rate = Decimal("0")
+        for r in scheme.fcr_recoveries.all().order_by("cfcr_limit"):
+            if _num(bc.get("cfcr")) >= _num(r.cfcr_limit):
+                fcr_recovery_rate = _num(r.recovery_rate)
+        fcr_deduction = fcr_recovery_rate * sold_weight
+        mort_dec_rate = _slab_match(scheme.mortality_decentives.all(), bc.get("total_mort_pct"),
+                                    "from_mortality_pct", "to_mortality_pct", "decentive_value")
+        mortality_deduction = mort_dec_rate * sold_weight
+
+        # ---- Standard vs Actual GC ----
+        # Standard GC rate (Rs./kg) comes from the master; the Actual GC rate
+        # adjusts it by how far the batch's actual production cost/kg is from the
+        # scheme's standard production cost, distributed PROGRESSIVELY across the
+        # per-rupee Production-Cost slab bands (like tax brackets):
+        #   actual > std  -> walk the decentive bands upward, subtract each
+        #                    segment x (band rate/100) from the GC rate
+        #   actual < std  -> walk the incentive bands downward, add each segment
+        # Amounts are rate x sold weight.
+        std_gc_rate = _num(bc.get("base_gc_rate"))               # scheme.standard_gc_cost
+        std_cost = _num(bc.get("std_prod_per_kg"))               # scheme.std_production_cost
+        actual_cost = _num(bc.get("production_cost_per_kg"))
+        actual_gc_rate = _actual_gc_rate(scheme, std_cost, actual_cost, std_gc_rate)
+        # Standard + Incentive/Decentive = Actual (the net the farmer is paid).
+        incdec_rate = actual_gc_rate - std_gc_rate               # +ve incentive, -ve decentive
+        standard_gc = std_gc_rate * sold_weight
+        gc_incdec = incdec_rate * sold_weight
+        actual_gc = actual_gc_rate * sold_weight
+    else:
+        sales_incentives = mortality_incentives = fcr_incentives = summer_incentives = Decimal("0")
+        fcr_deduction = mortality_deduction = standard_gc = actual_gc = Decimal("0")
+        std_gc_rate = incdec_rate = actual_gc_rate = gc_incdec = Decimal("0")
+
+    shortage_birds = _num(bc.get("shortage_birds"))
+    shortage_rate = _shortage_rate(scheme, bc)
+    shortage_amount = shortage_rate * shortage_birds
+
+    data = {
+        "placement_date": bc.get("placement_date"),
+        "liquidation_date": last_sale_date,
+        "gc_date_default": gc_date_default,
+        # Bird details
+        "placed_birds": placed, "mortality": _num(bc.get("mortality")),
+        "sold_birds": sold_birds, "sold_weight": sold_weight,
+        "excess": _num(bc.get("excess_birds")), "shortage": shortage_birds,
+        "sale_amount": _num(bc.get("sold_amount")), "sale_rate": _num(bc.get("avg_sale_rate")),
+        "age": _num(bc.get("mean_age")),
+        # Performance
+        "first_week_mortality_pct": _num(bc.get("first_week_mort_pct")),
+        "days30_mortality_pct": _num(bc.get("upto_30_mort_pct")),
+        "after30_mortality_pct": _num(bc.get("after_30_mort_pct")),
+        "total_mortality_pct": _num(bc.get("total_mort_pct")),
+        "fcr": _num(bc.get("fcr")), "cfcr": _num(bc.get("cfcr")),
+        "avg_weight": _num(bc.get("avg_body_weight")), "mean_age": _num(bc.get("mean_age")),
+        "day_gain": _num(bc.get("day_gain")), "eef": _num(bc.get("eef")),
+        "grade": bc.get("grade") if bc.get("grade") not in (None, "No Data") else "",
+        # Feed / medicine
+        "feed_in": _num(bc.get("feed_sent")), "feed_consumption": _num(bc.get("feed_consumed")),
+        "feed_out": _num(bc.get("feed_return")),
+        "feed_balance": _num(bc.get("feed_sent")) - _num(bc.get("feed_consumed")) - _num(bc.get("feed_return")),
+        "med_transfer_in": _num(bc.get("med_sent")), "med_consumption": _num(bc.get("med_consumed")),
+        "med_transfer_out": _num(bc.get("med_return")),
+        "med_closing": _num(bc.get("med_sent")) - _num(bc.get("med_consumed")) - _num(bc.get("med_return")),
+        # Costing (per-unit = per kg of sold live weight)
+        "chick_cost": _num(bc.get("chick_cost")), "chick_cost_per_unit": _div(_num(bc.get("chick_cost")), sold_weight),
+        "feed_cost": _num(bc.get("feed_cost")), "feed_cost_per_unit": _div(_num(bc.get("feed_cost")), sold_weight),
+        "admin_cost": _num(bc.get("admin_cost")), "admin_cost_per_unit": _div(_num(bc.get("admin_cost")), sold_weight),
+        "medicine_cost": _num(bc.get("med_cost")), "medicine_cost_per_unit": _div(_num(bc.get("med_cost")), sold_weight),
+        "total_cost": _num(bc.get("total_production_cost")),
+        "total_cost_per_unit": _num(bc.get("production_cost_per_kg")),
+        # Production Cost is quoted per kg of live weight (Rs./kg) — standard
+        # comes from the scheme's per-kg rate, actual is this batch's own
+        # per-kg cost (== Total Cost's per-unit).
+        "standard_production_cost": _num(bc.get("std_prod_per_kg")),
+        "actual_production_cost": _num(bc.get("production_cost_per_kg")),
+        # Rearing charges (incentives) — Standard + Incentive/Decentive = Actual
+        "standard_growing_charges": standard_gc, "gc_incentive_decentive": gc_incdec,
+        "actual_growing_charges": actual_gc,
+        # per-kg rates for the "Rs." column of the three GC rows
+        "std_gc_rate": std_gc_rate, "gc_incdec_rate": incdec_rate, "actual_gc_rate": actual_gc_rate,
+        "sales_incentives": sales_incentives, "mortality_incentives": mortality_incentives,
+        "fcr_incentives": fcr_incentives, "summer_incentives": summer_incentives,
+        # Deductions (slab-derived)
+        "birds_shortage_rate": shortage_rate, "birds_shortage_amount": shortage_amount,
+        "fcr_deduction": fcr_deduction, "mortality_deduction": mortality_deduction,
+    }
+    for f in GC_SETTLEMENT_MANUAL_FIELDS:
+        data[f] = Decimal("0")
+
+    # Farmer sales deduction: birds this farmer bought from the batch
+    # (sale_type='farmer') that are still UNPAID — i.e. the batch's farmer
+    # bird-sale amount capped by the farmer's overall unpaid balance
+    # (total farmer sales minus receipts; receipts aren't batch-scoped).
+    # Auto-picked here; still editable on the form.
+    from django.db.models import Sum
+    farmer = batch.broiler_farm.farmer
+    Z = Decimal("0")
+
+    def _sum(qs):
+        return qs.aggregate(t=Sum("amount"))["t"] or Z
+
+    batch_farmer_sales = _sum(BirdSale.objects.filter(batch=batch, sale_type="farmer", farmer=farmer))
+    total_farmer_sales = _sum(BirdSale.objects.filter(sale_type="farmer", farmer=farmer))
+    total_farmer_receipts = _sum(BirdSaleReceipt.objects.filter(sale_type="farmer", farmer=farmer))
+    unpaid = total_farmer_sales - total_farmer_receipts
+    data["farmer_sales_deduction"] = max(Z, min(batch_farmer_sales, unpaid))
+
+    # Running totals (recomputed identically on save from whatever values stand).
+    data.update(_gc_settlement_totals(data, sold_birds, sold_weight))
+    return {k: (v.quantize(q2) if isinstance(v, Decimal) else v) for k, v in data.items()}
+
+
+def _gc_settlement_totals(d, sold_birds, sold_weight):
+    """The dependent running totals of the settlement, from the current field
+    values — the single source of truth used by both autofill and save."""
+    g = lambda k: _num(d.get(k))
+    total_incentives = (g("sales_incentives") + g("mortality_incentives") + g("fcr_incentives")
+                        + g("summer_incentives") + g("other_incentives") + g("ifft_charges"))
+    total_deduction = g("birds_shortage_amount") + g("fcr_deduction") + g("mortality_deduction")
+    amount_payable = g("actual_growing_charges") + total_incentives - total_deduction
+    total_amount_payable = (amount_payable - g("farmer_sales_deduction") - g("feed_transfer_charges")
+                            - g("vaccinator_charges") - g("other_deductions") + g("transportation_charges"))
+    tds = (total_amount_payable * Decimal("0.01"))
+    farmer_payable = total_amount_payable - tds - g("equipment_charges") - g("advance_deductions")
+    return {
+        "total_incentives": total_incentives,
+        "gc_paid_per_kg": _div(g("actual_growing_charges"), _num(sold_weight)),
+        "total_deduction": total_deduction,
+        "amount_payable": amount_payable,
+        "total_amount_payable": total_amount_payable,
+        "tds": tds,
+        "farmer_payable": farmer_payable,
+        "per_bird_cost": _div(farmer_payable, _num(sold_birds)),
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class GCSettlementTemplateView(View):
+    """Renders the Farmer GC Settlement / batch-closing form page."""
+
+    def get(self, request):
+        return render(request, "gc_settlement_form.html", {
+            "farms": BroilerFarm.objects.select_related("branch", "supervisor").order_by("farm_name"),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@login_required
+def gc_settlement_batches(request):
+    """Open (not-yet-closed) batches for a farm, for the Batch dropdown."""
+    farm_id = (request.GET.get("farm") or "").strip()
+    if not farm_id:
+        return JsonResponse([], safe=False)
+    batches = (BroilerBatch.objects.filter(broiler_farm_id=farm_id, is_closed=False)
+               .order_by("-start_date", "-id"))
+    return JsonResponse([{"id": b.id, "batch_name": b.batch_name} for b in batches], safe=False)
+
+
+@login_required
+def gc_settlement_schemes(request):
+    """Schemes whose date range covers the batch's placement date (region
+    matched), plus the auto-matched one — for the Scheme Name dropdown."""
+    batch_id = (request.GET.get("batch") or "").strip()
+    batch = BroilerBatch.objects.select_related("broiler_farm__branch").filter(id=batch_id).first()
+    if not batch:
+        return JsonResponse({"schemes": [], "selected": None}, safe=False)
+    placement = batch.start_date
+    region_id = batch.broiler_farm.branch.region_id
+    qs = GrowingChargeScheme.objects.filter(region_id=region_id, is_active=True)
+    if placement:
+        qs = qs.filter(from_date__lte=placement, to_date__gte=placement)
+    matched = _match_growing_charge_scheme(batch, placement)
+    return JsonResponse({
+        "schemes": [{"id": s.id, "name": f"{s.scheme_code} - {s.schema_name}"}
+                    for s in qs.order_by("schema_name")],
+        "selected": matched.id if matched else None,
+    })
+
+
+@login_required
+def gc_settlement_autofill_api(request):
+    """All auto-computed settlement figures for a batch + scheme, as JSON."""
+    batch_id = (request.GET.get("batch") or "").strip()
+    scheme_id = (request.GET.get("scheme") or "").strip()
+    batch = (BroilerBatch.objects
+             .select_related("broiler_farm__branch", "broiler_farm__supervisor")
+             .filter(id=batch_id).first())
+    if not batch:
+        return JsonResponse({"error": "Batch not found"}, status=404)
+    if batch.is_closed:
+        return JsonResponse({"error": "This batch is already closed/settled."}, status=400)
+    scheme = GrowingChargeScheme.objects.filter(id=scheme_id).first() if scheme_id.isdigit() else \
+        _match_growing_charge_scheme(batch, batch.start_date)
+
+    farm = batch.broiler_farm
+    data = _gc_settlement_autofill(batch, scheme)
+    out = {}
+    for k, v in data.items():
+        if hasattr(v, "isoformat"):
+            out[k] = v.isoformat()
+        elif isinstance(v, Decimal):
+            out[k] = str(v)
+        else:
+            out[k] = v
+    out.update({
+        "branch": farm.branch.branch_name if farm.branch_id else "",
+        "line": farm.line or "",
+        "supervisor": str(farm.supervisor) if farm.supervisor_id else "",
+        "batch_name": batch.batch_name,
+        "scheme_id": scheme.id if scheme else None,
+        "scheme_name": (f"{scheme.scheme_code} - {scheme.schema_name}") if scheme else "",
+        "kg_per_bag": str(FEED_KG_PER_BAG),
+    })
+    return JsonResponse(out)
+
+
+@method_decorator(login_required, name="dispatch")
+class GCSettlementAPI(View):
+    """List / retrieve / create / delete Farmer GC settlements."""
+
+    def get(self, request, id=None):
+        if id:
+            s = get_object_or_404(GrowingChargeSettlement.objects.select_related(
+                "batch__broiler_farm", "farm", "scheme"), id=id)
+            return JsonResponse(_gc_settlement_detail(s))
+        rows = (GrowingChargeSettlement.objects
+                .select_related("batch__broiler_farm", "farm", "scheme").order_by("-gc_date", "-id"))
+        from_date = (request.GET.get("from_date") or "").strip()
+        to_date = (request.GET.get("to_date") or "").strip()
+        if from_date:
+            rows = rows.filter(gc_date__gte=from_date)
+        if to_date:
+            rows = rows.filter(gc_date__lte=to_date)
+        return JsonResponse([{
+            "id": s.id, "settlement_code": s.settlement_code,
+            "gc_date": s.gc_date.strftime("%d.%m.%Y") if s.gc_date else "",
+            "farm_name": s.farm.farm_name, "batch_name": s.batch.batch_name,
+            "start_date": s.placement_date.strftime("%d.%m.%Y") if s.placement_date else (
+                s.batch.start_date.strftime("%d.%m.%Y") if s.batch.start_date else ""),
+            "end_date": (s.batch.closed_on or s.gc_date).strftime("%d.%m.%Y") if (s.batch.closed_on or s.gc_date) else "",
+            "farmer_payable": str(s.farmer_payable),
+        } for s in rows], safe=False)
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        batch = (BroilerBatch.objects.select_related("broiler_farm")
+                 .filter(id=data.get("batch")).first())
+        if not batch:
+            return JsonResponse({"error": "Select a Batch."}, status=400)
+        if batch.is_closed or GrowingChargeSettlement.objects.filter(batch=batch).exists():
+            return JsonResponse({"error": "This batch is already settled/closed."}, status=400)
+
+        scheme = GrowingChargeScheme.objects.filter(id=data.get("scheme")).first()
+        gc_date = timezone.datetime.fromisoformat(data["gc_date"]).date() if data.get("gc_date") \
+            else timezone.localdate()
+
+        # Start from a fresh autofill (authoritative read-only figures), then
+        # overlay the user's editable inputs, then recompute the running totals.
+        fields = _gc_settlement_autofill(batch, scheme)
+        for f in GC_SETTLEMENT_INPUT_FIELDS:
+            if f in data and data[f] not in (None, ""):
+                fields[f] = Decimal(str(data[f]))
+        sold_birds = fields.get("sold_birds") or Decimal("0")
+        sold_weight = fields.get("sold_weight") or Decimal("0")
+        fields.update(_gc_settlement_totals(fields, sold_birds, sold_weight))
+
+        settlement = GrowingChargeSettlement(
+            batch=batch, farm=batch.broiler_farm, scheme=scheme,
+            gc_date=gc_date, remarks=data.get("remarks") or "", created_by=request.user,
+        )
+        model_field_names = {f.name for f in GrowingChargeSettlement._meta.get_fields()}
+        for k, v in fields.items():
+            if k in model_field_names:
+                setattr(settlement, k, v)
+        settlement.save()
+
+        # Close the batch.
+        batch.is_closed = True
+        batch.closed_on = gc_date
+        if not batch.end_date:
+            batch.end_date = gc_date
+        batch.save(update_fields=["is_closed", "closed_on", "end_date"])
+
+        return JsonResponse({"message": "Settlement saved and batch closed",
+                             "id": settlement.id, "code": settlement.settlement_code}, status=201)
+
+    @transaction.atomic
+    def put(self, request, id):
+        s = get_object_or_404(GrowingChargeSettlement, id=id)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        # Editing only touches the manual/override inputs + gc_date/remarks; the
+        # auto-computed read-only figures stay as stored. Totals recompute from
+        # the current stored values overlaid with the edited inputs.
+        fields = {f.name: getattr(s, f.name) for f in GrowingChargeSettlement._meta.fields}
+        for f in GC_SETTLEMENT_INPUT_FIELDS:
+            if f in data and data[f] not in (None, ""):
+                fields[f] = Decimal(str(data[f]))
+        totals = _gc_settlement_totals(fields, s.sold_birds, s.sold_weight)
+        for k, v in {**{f: fields[f] for f in GC_SETTLEMENT_INPUT_FIELDS}, **totals}.items():
+            setattr(s, k, v)
+        if data.get("gc_date"):
+            s.gc_date = timezone.datetime.fromisoformat(data["gc_date"]).date()
+        s.remarks = data.get("remarks", s.remarks) or ""
+        s.save()
+        return JsonResponse({"message": "Settlement updated", "id": s.id, "code": s.settlement_code})
+
+    @transaction.atomic
+    def delete(self, request, id):
+        s = get_object_or_404(GrowingChargeSettlement.objects.select_related("batch"), id=id)
+        batch = s.batch
+        s.delete()
+        batch.is_closed = False
+        batch.closed_on = None
+        batch.save(update_fields=["is_closed", "closed_on"])
+        return JsonResponse({"message": "Settlement deleted and batch reopened"})
+
+
+def _gc_settlement_detail(s):
+    """Full field dict of a saved settlement (all numeric fields as strings)."""
+    farm = s.farm
+    out = {"id": s.id, "settlement_code": s.settlement_code,
+           "farm_id": s.farm_id, "batch_id": s.batch_id, "scheme_id": s.scheme_id,
+           "farm_name": farm.farm_name, "batch_name": s.batch.batch_name,
+           "scheme_name": (f"{s.scheme.scheme_code} - {s.scheme.schema_name}") if s.scheme_id else "",
+           "branch": farm.branch.branch_name if farm.branch_id else "",
+           "line": farm.line or "", "supervisor": str(farm.supervisor) if farm.supervisor_id else "",
+           "gc_date": s.gc_date.isoformat() if s.gc_date else "",
+           "placement_date": s.placement_date.isoformat() if s.placement_date else "",
+           "liquidation_date": s.liquidation_date.isoformat() if s.liquidation_date else "",
+           "grade": s.grade, "remarks": s.remarks}
+    for f in GrowingChargeSettlement._meta.get_fields():
+        val = getattr(s, f.name, None)
+        if isinstance(val, Decimal):
+            out[f.name] = str(val)
+        elif isinstance(val, int) and not isinstance(val, bool):
+            out[f.name] = val
+    return out
+
+
+@login_required
+def gc_settlement_print(request, id):
+    """Farmer-facing printable Growing Charges / Batch Closing report for a
+    saved settlement (the "Shalimar" field set). Shows performance + the
+    farmer's growing-charge payment breakdown ONLY — no company revenue,
+    profitability or margin (in contract growing the company owns/sells the
+    birds; the farmer is paid growing charges)."""
+    from account.models import CompanyProfile
+    s = get_object_or_404(GrowingChargeSettlement.objects.select_related(
+        "batch__broiler_farm__branch", "batch__broiler_farm__supervisor",
+        "batch__broiler_farm__farmer", "scheme"), id=id)
+    batch = s.batch
+    farm = batch.broiler_farm
+
+    sw = s.sold_weight or Decimal("0")
+    sb = Decimal(str(s.sold_birds or 0))
+    q3 = Decimal("0.001")
+
+    def rate(amount, by):
+        return (Decimal(str(amount)) / by).quantize(q3) if by else Decimal("0")
+
+    # Derived per-kg / per-bird rearing-charge rates (not stored on the model).
+    d = {
+        "rc_per_kg": rate(s.actual_growing_charges, sw),           # Rearing Charges/Kg
+        "std_rc_per_kg": rate(s.standard_growing_charges, sw),     # Std Rearing Charges/Kg
+        "prod_cost_incentive_rate": rate(s.gc_incentive_decentive, sw),  # Prod Cost Incentives
+        "rc_per_bird": rate(s.actual_growing_charges, sb),         # Rearing Charges/Bird
+        "std_fcr": s.scheme.standard_fcr if s.scheme_id else None,
+        # net earning (+) / deduction (-) for the FCR & mortality lines
+        "fcr_net": s.fcr_incentives - s.fcr_deduction,
+        "mortality_net": s.mortality_incentives - s.mortality_deduction,
+    }
+    return render(request, "gc_settlement_print.html", {
+        "s": s, "batch": batch, "farm": farm, "farmer": farm.farmer,
+        "supervisor": farm.supervisor, "branch": farm.branch, "scheme": s.scheme,
+        "company": CompanyProfile.get_solo(), "d": d,
+    })

@@ -63,6 +63,12 @@ MODULE_REGISTRY = [
                 ],
             },
             {
+                "label": "Farmer GC & Payment",
+                "tabs": [
+                    ("gc_settlement", "Farmer GC & Payment", ("gc_settlement_list",)),
+                ],
+            },
+            {
                 "label": "Reports",
                 "tabs": [
                     ("broiler_batch_report", "Batch History Report"),
@@ -445,6 +451,7 @@ _ACTION_BASE_TO_TAB = {
     "broiler_farm": "branch_farm",
     "broiler_batch": "broiler_batch",
     "growing_charge": "growing_charge",
+    "gc_settlement": "gc_settlement",
     "breed": "breed",
     "breed_standard": "breed_standard",
     "broiler_disease": "broiler_disease",
