@@ -69,10 +69,7 @@ const broilerResources: ResourceConfig[] = [
     searchKeys: ["entry_no", "remarks"],
     card: (r) => ({
       title: pick(r, ["entry_no"], `Entry #${r.id}`),
-      subtitle: joinParts([
-        formatDate(r.date),
-        !isBlank(r.age_days) ? `Age ${r.age_days}d` : "",
-      ]),
+      subtitle: joinParts([pick(r, ["farm_label"]), formatDate(r.date)]),
       trailing: !isBlank(r.avg_weight_gms)
         ? { value: `${formatNumber(r.avg_weight_gms)} g`, caption: "avg wt" }
         : undefined,
@@ -94,7 +91,7 @@ const broilerResources: ResourceConfig[] = [
     searchKeys: ["entry_no", "remarks"],
     card: (r) => ({
       title: pick(r, ["entry_no"], `Entry #${r.id}`),
-      subtitle: joinParts([formatDate(r.date), !isBlank(r.age_days) ? `Age ${r.age_days}d` : ""]),
+      subtitle: joinParts([pick(r, ["farm_label", "item_label"]), formatDate(r.date)]),
       trailing: !isBlank(r.qty) ? { value: formatNumber(r.qty), caption: "qty" } : undefined,
     }),
   },
@@ -111,6 +108,7 @@ const broilerResources: ResourceConfig[] = [
     card: (r) => ({
       title: pick(r, ["sale_no"], `Sale #${r.id}`),
       subtitle: joinParts([
+        pick(r, ["customer_label", "farmer_label"]),
         formatDate(r.date),
         !isBlank(r.birds) ? `${formatNumber(r.birds)} birds` : "",
       ]),
@@ -132,7 +130,7 @@ const broilerResources: ResourceConfig[] = [
     searchKeys: ["receipt_no", "reference_no"],
     card: (r) => ({
       title: pick(r, ["receipt_no"], `Receipt #${r.id}`),
-      subtitle: joinParts([formatDate(r.date), pick(r, ["mode"])]),
+      subtitle: joinParts([pick(r, ["customer_label", "farmer_label"]), formatDate(r.date), pick(r, ["mode"])]),
       trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
     }),
   },
@@ -166,7 +164,7 @@ const broilerResources: ResourceConfig[] = [
     searchKeys: ["batch_name", "lot_no", "book_number"],
     card: (r) => ({
       title: pick(r, ["batch_name"], `Batch #${r.id}`),
-      subtitle: joinParts([pick(r, ["lot_no"]) && `Lot ${r.lot_no}`, formatDate(r.start_date)]),
+      subtitle: joinParts([pick(r, ["broiler_farm_label"]), formatDate(r.start_date)]),
       badge: r.is_closed
         ? { label: "Closed", tone: "neutral" }
         : { label: "Active", tone: "success" },
@@ -366,7 +364,7 @@ const hatcheryResources: ResourceConfig[] = [
     searchKeys: ["transaction_no", "dc_no", "vehicle", "driver"],
     card: (r) => ({
       title: pick(r, ["transaction_no"], `Purchase #${r.id}`),
-      subtitle: joinParts([formatDate(r.date), pick(r, ["dc_no"]) && `DC ${r.dc_no}`]),
+      subtitle: joinParts([pick(r, ["supplier_label"]), formatDate(r.date)]),
       trailing: !isBlank(r.freight_amount)
         ? { value: formatMoney(r.freight_amount), caption: "freight" }
         : undefined,
@@ -388,6 +386,7 @@ const hatcheryResources: ResourceConfig[] = [
     card: (r) => ({
       title: pick(r, ["transaction_no"], `Grading #${r.id}`),
       subtitle: joinParts([
+        pick(r, ["supplier_label"]),
         formatDate(r.date),
         !isBlank(r.broken_eggs) ? `${formatNumber(r.broken_eggs)} broken` : "",
       ]),
@@ -408,7 +407,7 @@ const hatcheryResources: ResourceConfig[] = [
     searchKeys: ["challan_no", "vehicle_no", "driver_name", "eway_bill_no"],
     card: (r) => ({
       title: pick(r, ["challan_no"], `Challan #${r.id}`),
-      subtitle: joinParts([formatDate(r.date), pick(r, ["vehicle_no"])]),
+      subtitle: joinParts([pick(r, ["customer_label"]), formatDate(r.date), pick(r, ["vehicle_no"])]),
       badge: !isBlank(r.transport_mode)
         ? { label: String(r.transport_mode), tone: "info" }
         : undefined,
@@ -447,7 +446,7 @@ const hatcheryResources: ResourceConfig[] = [
     searchKeys: ["bill_no", "vehicle", "driver"],
     card: (r) => ({
       title: pick(r, ["bill_no"], `Bill #${r.id}`),
-      subtitle: joinParts([formatDate(r.date), pick(r, ["vehicle"])]),
+      subtitle: joinParts([pick(r, ["customer_label"]), formatDate(r.date)]),
       trailing: !isBlank(r.final_amount) ? { value: formatMoney(r.final_amount) } : undefined,
       badge: !isBlank(r.payment_mode)
         ? { label: String(r.payment_mode), tone: "brand" }
@@ -470,6 +469,106 @@ const hatcheryResources: ResourceConfig[] = [
       trailing: !isBlank(r.setting_qty)
         ? { value: formatNumber(r.setting_qty), caption: "set" }
         : undefined,
+    }),
+  },
+  {
+    key: "hatchery-tray-settings",
+    module: "hatchery",
+    path: "/hatchery/tray-settings/",
+    title: "Tray Settings",
+    singular: "Tray Setting",
+    icon: "🧺",
+    accent: H,
+    emptyMessage: "No tray settings yet.",
+    searchKeys: ["setting_no", "loaded_by"],
+    card: (r) => ({
+      title: pick(r, ["setting_no"], `Tray #${r.id}`),
+      subtitle: joinParts([formatDate(r.setting_date), pick(r, ["loaded_by"])]),
+    }),
+  },
+  {
+    key: "hatchery-expenses",
+    module: "hatchery",
+    path: "/hatchery/expenses/",
+    title: "Hatchery Expenses",
+    singular: "Hatchery Expense",
+    icon: "💸",
+    accent: H,
+    emptyMessage: "No expenses yet.",
+    searchKeys: ["stage"],
+    card: (r) => ({
+      title: pick(r, ["expense_type_label", "stage"], `Expense #${r.id}`),
+      subtitle: joinParts([pick(r, ["hatchery_label"]), pick(r, ["stage"]), formatDate(r.date)]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+  {
+    key: "hatchery-hatcheries",
+    module: "hatchery",
+    path: "/hatchery/hatcheries/",
+    title: "Hatcheries",
+    singular: "Hatchery",
+    icon: "🏭",
+    accent: H,
+    emptyMessage: "No hatcheries found.",
+    searchKeys: ["hatchery_name", "owner_name", "state"],
+    card: (r) => ({
+      title: pick(r, ["hatchery_name"], `Hatchery #${r.id}`),
+      subtitle: joinParts([pick(r, ["owner_name"]), pick(r, ["operation_type"])]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "hatchery-setters",
+    module: "hatchery",
+    path: "/hatchery/setters/",
+    title: "Setters",
+    singular: "Setter",
+    icon: "🌡️",
+    accent: H,
+    emptyMessage: "No setters found.",
+    searchKeys: ["setter_no"],
+    card: (r) => ({
+      title: pick(r, ["setter_no"], `Setter #${r.id}`),
+      subtitle: pick(r, ["hatchery_label"]),
+      trailing: !isBlank(r.capacity)
+        ? { value: formatNumber(r.capacity), caption: "cap" }
+        : undefined,
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "hatchery-hatchers",
+    module: "hatchery",
+    path: "/hatchery/hatchers/",
+    title: "Hatchers",
+    singular: "Hatcher",
+    icon: "♨️",
+    accent: H,
+    emptyMessage: "No hatchers found.",
+    searchKeys: ["hatcher_no"],
+    card: (r) => ({
+      title: pick(r, ["hatcher_no"], `Hatcher #${r.id}`),
+      subtitle: pick(r, ["hatchery_label"]),
+      trailing: !isBlank(r.capacity)
+        ? { value: formatNumber(r.capacity), caption: "cap" }
+        : undefined,
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "hatchery-expense-types",
+    module: "hatchery",
+    path: "/hatchery/expense-types/",
+    title: "Expense Types",
+    singular: "Expense Type",
+    icon: "🏷️",
+    accent: H,
+    emptyMessage: "No expense types found.",
+    searchKeys: ["name"],
+    card: (r) => ({
+      title: pick(r, ["name"], `Type #${r.id}`),
+      badge: activeBadge(r),
     }),
   },
 ];
@@ -541,12 +640,21 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         resourceKeys: [
           "hatchery-egg-purchases",
           "hatchery-egg-gradings",
+          "hatchery-hatch-settings",
+          "hatchery-tray-settings",
           "hatchery-hatch-entries",
           "hatchery-chick-sales",
           "hatchery-delivery-challans",
         ],
       },
-      { title: "Settings", resourceKeys: ["hatchery-hatch-settings"] },
+      {
+        title: "Expenses",
+        resourceKeys: ["hatchery-expenses", "hatchery-expense-types"],
+      },
+      {
+        title: "Infrastructure",
+        resourceKeys: ["hatchery-hatcheries", "hatchery-setters", "hatchery-hatchers"],
+      },
     ],
   },
 };

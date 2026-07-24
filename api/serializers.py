@@ -27,6 +27,16 @@ _FORCE_READ_ONLY = frozenset(
 )
 
 
+def _make_label_getter(fk_name: str):
+    """A ``get_<fk>_label`` method returning the related object's ``str()``."""
+
+    def getter(self, obj):
+        rel = getattr(obj, fk_name, None)
+        return str(rel) if rel is not None else None
+
+    return getter
+
+
 def serializer_factory(
     model,
     *,
@@ -51,5 +61,19 @@ def serializer_factory(
     if forced:
         meta_attrs["read_only_fields"] = sorted(forced)
 
-    meta = type("Meta", (), meta_attrs)
-    return type(f"{model.__name__}Serializer", (serializers.ModelSerializer,), {"Meta": meta})
+    namespace: dict = {"Meta": type("Meta", (), meta_attrs)}
+
+    # Human-readable companion for every FK/O2O: alongside the raw id (`farm`)
+    # emit `farm_label` = str(related). Fixes "FK shows as id" on the client
+    # for *all* relations, including ones with no endpoint of their own (feed
+    # items, users, customers). Only when the field set isn't an explicit list
+    # (DRF would reject declared fields not named in an explicit `fields`).
+    if fields is None:
+        for f in model._meta.get_fields():
+            is_rel = getattr(f, "many_to_one", False) or getattr(f, "one_to_one", False)
+            if is_rel and getattr(f, "concrete", False):
+                label = f"{f.name}_label"
+                namespace[label] = serializers.SerializerMethodField()
+                namespace[f"get_{label}"] = _make_label_getter(f.name)
+
+    return type(f"{model.__name__}Serializer", (serializers.ModelSerializer,), namespace)

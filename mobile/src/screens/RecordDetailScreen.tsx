@@ -34,8 +34,15 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     navigation.setOptions({ title: config.singular });
   }, [navigation, config.singular]);
 
+  // FKs come back as raw ids plus a `<fk>_label` companion (str of the related
+  // row). Show the label as the value and hide the standalone `_label` field.
+  const valueFor = (k: string, v: unknown): string => {
+    const lbl = row[`${k}_label`];
+    return isEmpty(lbl) ? formatValue(k, v) : String(lbl);
+  };
+
   const entries = Object.entries(row).filter(
-    ([k, v]) => !HIDDEN.test(k) && !isEmpty(v)
+    ([k, v]) => !HIDDEN.test(k) && !k.endsWith("_label") && !isEmpty(v)
   );
   const main = entries.filter(([k]) => !AUDIT.has(k));
   const audit = entries.filter(([k]) => AUDIT.has(k));
@@ -61,7 +68,7 @@ export function RecordDetailScreen({ route, navigation }: Props) {
         {main.map(([k, v], i) => (
           <View key={k}>
             {i > 0 ? <Divider /> : null}
-            <DetailRow label={humanizeKey(k)} value={formatValue(k, v)} />
+            <DetailRow label={humanizeKey(k)} value={valueFor(k, v)} />
           </View>
         ))}
       </Card>
@@ -72,7 +79,7 @@ export function RecordDetailScreen({ route, navigation }: Props) {
           {audit.map(([k, v], i) => (
             <View key={k}>
               {i > 0 ? <Divider /> : null}
-              <DetailRow label={humanizeKey(k)} value={formatValue(k, v)} />
+              <DetailRow label={humanizeKey(k)} value={valueFor(k, v)} />
             </View>
           ))}
         </Card>
