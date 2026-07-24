@@ -18,6 +18,7 @@ from .models import (
     BirdSale,
     BirdSaleReceipt,
     Breed,
+    BreedStandard,
     BroilerBatch,
     BroilerDisease,
     BroilerFarm,
@@ -26,6 +27,7 @@ from .models import (
     DailyEntry,
     Farmer,
     FarmerGroup,
+    GrowingChargeScheme,
     MedicineVaccineEntry,
     Region,
     Supervisor,
@@ -40,6 +42,10 @@ def register(router) -> None:
                    search_fields=["code", "description"], ordering=["code"])
     register_model(router, "broiler/breeds", Breed, read_only=True,
                    search_fields=["code", "description"], ordering=["code"])
+    register_model(router, "broiler/breed-standards", BreedStandard, read_only=True,
+                   search_fields=["code"], ordering=["breed", "age"])
+    register_model(router, "broiler/growing-charges", GrowingChargeScheme, read_only=True,
+                   search_fields=["scheme_code", "schema_name"], ordering=["-id"])
     register_model(router, "broiler/branches", Branch, read_only=True,
                    search_fields=["code", "branch_name"], ordering=["branch_name"])
     register_model(router, "broiler/supervisors", Supervisor, read_only=True,

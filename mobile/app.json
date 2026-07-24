@@ -16,7 +16,8 @@
       "bundleIdentifier": "com.hitechfarms.bims"
     },
     "android": {
-      "package": "com.hitechfarms.bims"
+      "package": "com.hitechfarms.bims",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "extra": {
       "apiBaseUrl": "http://localhost:8000/api/v1"

@@ -187,6 +187,166 @@ const broilerResources: ResourceConfig[] = [
       subtitle: joinParts([pick(r, ["mobile_no", "phone_no"]), pick(r, ["usc"])]),
     }),
   },
+  {
+    key: "broiler-farmer-groups",
+    module: "broiler",
+    path: "/broiler/farmer-groups/",
+    title: "Farmer Groups",
+    singular: "Farmer Group",
+    icon: "👥",
+    accent: B,
+    emptyMessage: "No farmer groups found.",
+    searchKeys: ["code", "description"],
+    card: (r) => ({
+      title: pick(r, ["code", "description"], `Group #${r.id}`),
+      subtitle: pick(r, ["description"]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "broiler-sheds",
+    module: "broiler",
+    path: "/broiler/sheds/",
+    title: "Farm Sheds",
+    singular: "Farm Shed",
+    icon: "🏘️",
+    accent: B,
+    emptyMessage: "No sheds found.",
+    searchKeys: ["shed_code", "shed_name", "shed_type"],
+    card: (r) => ({
+      title: pick(r, ["shed_name", "shed_code"], `Shed #${r.id}`),
+      subtitle: joinParts([pick(r, ["shed_type"]), pick(r, ["unit_no"]) && `Unit ${pick(r, ["unit_no"])}`]),
+      trailing: !isBlank(r.sq_feet) ? { value: formatNumber(r.sq_feet), caption: "sq ft" } : undefined,
+    }),
+  },
+  {
+    key: "broiler-regions",
+    module: "broiler",
+    path: "/broiler/regions/",
+    title: "Regions",
+    singular: "Region",
+    icon: "🗺️",
+    accent: B,
+    emptyMessage: "No regions found.",
+    searchKeys: ["code", "description"],
+    card: (r) => ({
+      title: pick(r, ["code", "description"], `Region #${r.id}`),
+      subtitle: pick(r, ["description"]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "broiler-branches",
+    module: "broiler",
+    path: "/broiler/branches/",
+    title: "Branches",
+    singular: "Branch",
+    icon: "🏢",
+    accent: B,
+    emptyMessage: "No branches found.",
+    searchKeys: ["code", "branch_name", "prefix"],
+    card: (r) => ({
+      title: pick(r, ["branch_name", "code"], `Branch #${r.id}`),
+      subtitle: joinParts([pick(r, ["code"]), pick(r, ["prefix"]) && `Prefix ${pick(r, ["prefix"])}`]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "broiler-lines",
+    module: "broiler",
+    path: "/broiler/lines/",
+    title: "Broiler Lines",
+    singular: "Broiler Line",
+    icon: "🧭",
+    accent: B,
+    emptyMessage: "No lines found.",
+    searchKeys: ["code", "description"],
+    card: (r) => ({
+      title: pick(r, ["code", "description"], `Line #${r.id}`),
+      subtitle: pick(r, ["description"]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "broiler-supervisors",
+    module: "broiler",
+    path: "/broiler/supervisors/",
+    title: "Supervisors",
+    singular: "Supervisor",
+    icon: "🧑‍💼",
+    accent: B,
+    emptyMessage: "No supervisors found.",
+    searchKeys: ["name", "phone_no", "email"],
+    card: (r) => ({
+      title: pick(r, ["name"], `Supervisor #${r.id}`),
+      subtitle: joinParts([pick(r, ["phone_no"]), pick(r, ["email"])]),
+    }),
+  },
+  {
+    key: "broiler-breeds",
+    module: "broiler",
+    path: "/broiler/breeds/",
+    title: "Breeds",
+    singular: "Breed",
+    icon: "🐣",
+    accent: B,
+    emptyMessage: "No breeds found.",
+    searchKeys: ["code", "description"],
+    card: (r) => ({
+      title: pick(r, ["code", "description"], `Breed #${r.id}`),
+      subtitle: pick(r, ["description"]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "broiler-breed-standards",
+    module: "broiler",
+    path: "/broiler/breed-standards/",
+    title: "Breed Standards",
+    singular: "Breed Standard",
+    icon: "📈",
+    accent: B,
+    emptyMessage: "No breed standards found.",
+    searchKeys: ["code"],
+    card: (r) => ({
+      title: joinParts([pick(r, ["code"], `Standard #${r.id}`), !isBlank(r.age) ? `Age ${formatNumber(r.age)}` : ""]),
+      subtitle: joinParts([
+        !isBlank(r.body_weight) ? `${formatNumber(r.body_weight)} g` : "",
+        !isBlank(r.feed_intake) ? `Feed ${formatNumber(r.feed_intake)}` : "",
+      ]),
+      trailing: !isBlank(r.fcr) ? { value: formatNumber(r.fcr), caption: "fcr" } : undefined,
+    }),
+  },
+  {
+    key: "broiler-diseases",
+    module: "broiler",
+    path: "/broiler/diseases/",
+    title: "Diseases",
+    singular: "Disease",
+    icon: "🦠",
+    accent: B,
+    emptyMessage: "No diseases found.",
+    searchKeys: ["disease_code", "disease_name", "symptoms"],
+    card: (r) => ({
+      title: pick(r, ["disease_name", "disease_code"], `Disease #${r.id}`),
+      subtitle: joinParts([pick(r, ["disease_code"]), formatDate(r.diagnosed_date)]),
+    }),
+  },
+  {
+    key: "broiler-growing-charges",
+    module: "broiler",
+    path: "/broiler/growing-charges/",
+    title: "Growing Charges",
+    singular: "Growing Charge Scheme",
+    icon: "💵",
+    accent: B,
+    emptyMessage: "No growing charge schemes found.",
+    searchKeys: ["scheme_code", "schema_name"],
+    card: (r) => ({
+      title: pick(r, ["schema_name", "scheme_code"], `Scheme #${r.id}`),
+      subtitle: joinParts([pick(r, ["scheme_code"]), rangeText(r.from_date, r.to_date)]),
+    }),
+  },
 ];
 
 /* ----------------------------- Hatchery --------------------------------- */
@@ -339,8 +499,32 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         ],
       },
       {
-        title: "Master Data",
-        resourceKeys: ["broiler-farms", "broiler-batches", "broiler-farmers"],
+        title: "Farms & Batches",
+        resourceKeys: [
+          "broiler-farms",
+          "broiler-sheds",
+          "broiler-batches",
+          "broiler-farmers",
+          "broiler-farmer-groups",
+        ],
+      },
+      {
+        title: "Organization",
+        resourceKeys: [
+          "broiler-regions",
+          "broiler-branches",
+          "broiler-lines",
+          "broiler-supervisors",
+        ],
+      },
+      {
+        title: "Breeds & Charges",
+        resourceKeys: [
+          "broiler-breeds",
+          "broiler-breed-standards",
+          "broiler-diseases",
+          "broiler-growing-charges",
+        ],
       },
     ],
   },
@@ -375,4 +559,20 @@ export function moduleResources(module: ModuleKey): ResourceConfig[] {
 
 function isBlank(v: unknown): boolean {
   return v === null || v === undefined || v === "";
+}
+
+/** Standard Active/Inactive badge for masters that carry `is_active`. */
+function activeBadge(r: Row): CardView["badge"] {
+  if (r.is_active === undefined) return undefined;
+  return r.is_active
+    ? { label: "Active", tone: "success" }
+    : { label: "Inactive", tone: "neutral" };
+}
+
+/** "12 Jul 2026 → 30 Sep 2026" from a date range, skipping blanks. */
+function rangeText(from: unknown, to: unknown): string {
+  const a = formatDate(from);
+  const b = formatDate(to);
+  if (a && b) return `${a} → ${b}`;
+  return a || b || "";
 }
