@@ -1,0 +1,14 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+
+# Local env overrides
+.env
+.env.local
+
+# Native build output (managed workflow regenerates these)
+/ios
+/android

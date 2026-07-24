@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Hitech BIMS",
+    "slug": "hitech-bims-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "hitechbims",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hitechfarms.bims"
+    },
+    "android": {
+      "package": "com.hitechfarms.bims"
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:8000/api/v1"
+    }
+  }
+}

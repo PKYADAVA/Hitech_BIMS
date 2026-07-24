@@ -94,6 +94,8 @@ INSTALLED_APPS = [
     "picklist",
     "alerts",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
+    "api",
 ]
 
 MIDDLEWARE = [
@@ -382,15 +384,38 @@ if not DEBUG:
 # Clickjacking protection - safe to apply in both DEBUG and production.
 X_FRAME_OPTIONS = "DENY"
 
-# Django REST Framework — session-auth by default so the alerts API reuses the
-# existing login. Kept minimal; the alerts viewsets set their own permissions.
+# Django REST Framework.
+# Both auth classes are enabled so the two consumers coexist without conflict:
+#   * JWTAuthentication   -> mobile clients (/api/v1/, bearer tokens, CSRF-exempt)
+#   * SessionAuthentication -> the web app / alerts UI (session cookie + CSRF)
+# JWT is listed first so bearer tokens win when both are present. The v1 API
+# sets its own renderer/exception-handler per-view (see api/viewsets.py), so
+# these globals do not change the alerts API's response shape.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Backs the login/refresh rate limit (api/auth.py). LocMemCache is per-process
+    # for now; move throttle + cache to Redis when scaling to multiple workers.
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": os.getenv("API_AUTH_THROTTLE_RATE", "10/min"),
+    },
+}
+
+# SimpleJWT — short-lived access tokens with rotating, blacklistable refresh
+# tokens so a stolen refresh token can be revoked (per-device logout).
+from datetime import timedelta  # noqa: E402  (local import keeps settings grouped)
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "30"))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "14"))),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
 }
 
 # Alert & Audit module configuration (see alerts/conf.py for all keys/defaults).
@@ -407,7 +432,22 @@ ALERT_SETTINGS = {
     "ENABLE_WEBSOCKET": env_bool("ALERTS_ENABLE_WEBSOCKET", False),
     "ENABLE_SLACK": env_bool("ALERTS_ENABLE_SLACK", False),
     "SLACK_WEBHOOK_URL": os.getenv("ALERTS_SLACK_WEBHOOK_URL", ""),
-    # High-churn detail/line-item tables that would flood the feed. Add freely;
-    # these are audited in the DB but excluded from noisy alerting if desired.
-    "IGNORE_MODELS": env_list("ALERTS_IGNORE_MODELS"),
+    # High-churn detail/line-item tables that would flood the feed. Add freely.
+    # The tracking sync pipeline rewrites these rows every cycle (raw GPS pings,
+    # derived daily route summaries + legs, live location, sync-run bookkeeping,
+    # plumbing locks) — pure machine churn with no human-audit value. Excluded
+    # from the alert/audit system entirely. Provider *config* changes are still
+    # audited; only the per-sync timestamp/status bumps are dropped (below).
+    "IGNORE_MODELS": [
+        "tracking.TrackingSync",
+        "tracking.EmployeeRoute",
+        "tracking.EmployeeRoutePoint",
+        "tracking.EmployeeLiveLocation",
+        "tracking.EmployeeLocationHistory",
+        "tracking.SyncLock",
+        "tracking.TrackingLog",
+    ] + env_list("ALERTS_IGNORE_MODELS"),
+    # Field-level noise dropped across all models (merged with the built-in
+    # defaults). last_synced_at/last_sync_status bump on every provider sync.
+    "IGNORE_FIELDS": ["last_synced_at", "last_sync_status"],
 }

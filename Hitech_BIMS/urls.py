@@ -25,6 +25,8 @@ urlpatterns = [
     path("", include("picklist.urls")),
     # Alert & Audit module: /alerts/center/ page + /api/alerts/ REST API.
     path("", include("alerts.urls")),
+    # Mobile API v1 (JWT-authenticated; additive, does not affect the web app).
+    path("api/v1/", include("api.urls")),
 ]
 
 # Serve media files in development
