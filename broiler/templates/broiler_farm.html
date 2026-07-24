@@ -427,18 +427,33 @@
                 <div class="form-section-label"><i class="fas fa-warehouse"></i>Shed Information</div>
                 <div id="shed-rows"></div>
                 <template id="shed-row-template">
-                    <div class="row g-3 shed-row align-items-end mb-2">
-                        <div class="col-md-4">
-                            <label class="form-label">Shed No</label>
-                            <input type="text" class="form-control shed-no" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Dimentions</label>
-                            <input type="text" class="form-control shed-dimensions" />
-                        </div>
+                    <div class="row g-2 shed-row align-items-end mb-2">
+                        <input type="hidden" class="shed-id" />
                         <div class="col-md-3">
-                            <label class="form-label">Sq Feet</label>
-                            <input type="text" class="form-control shed-sqfeet" />
+                            <label class="form-label">Shed Name <small class="text-muted">(auto)</small></label>
+                            <input type="text" class="form-control shed-name" placeholder="Auto: Farm + Shed no" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Type</label>
+                            <select class="form-select shed-type">
+                                {% for val, label in shed_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label">Length</label>
+                            <input type="number" min="0" step="0.01" class="form-control shed-length" />
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label">Width</label>
+                            <input type="number" min="0" step="0.01" class="form-control shed-width" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Sq. Feet <small class="text-muted">(auto)</small></label>
+                            <input type="text" class="form-control shed-sqfeet" placeholder="L × W" readonly />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Capacity</label>
+                            <input type="number" min="0" class="form-control shed-capacity" />
                         </div>
                         <div class="col-md-1">
                             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm remove-shed-row"><i class="fas fa-times"></i></button>{% endif %}
@@ -479,9 +494,13 @@ $(document).ready(function () {
     function addShedRow(shed) {
         shed = shed || {};
         const $row = $($("#shed-row-template").html());
-        $row.find(".shed-no").val(shed.shed_no || "");
-        $row.find(".shed-dimensions").val(shed.dimensions || "");
+        $row.find(".shed-id").val(shed.id || "");
+        $row.find(".shed-name").val(shed.shed_name || "");
+        $row.find(".shed-type").val(shed.shed_type || "broiler");
+        $row.find(".shed-length").val(shed.length != null ? shed.length : "");
+        $row.find(".shed-width").val(shed.width != null ? shed.width : "");
         $row.find(".shed-sqfeet").val(shed.sq_feet || "");
+        $row.find(".shed-capacity").val(shed.capacity != null ? shed.capacity : "");
         $("#shed-rows").append($row);
     }
 
@@ -493,15 +512,32 @@ $(document).ready(function () {
         $(this).closest(".shed-row").remove();
     });
 
+    // Auto Sq. Feet = Length x Width, per row
+    $(document).on("input", ".shed-length, .shed-width", function () {
+        const $r = $(this).closest(".shed-row");
+        const l = parseFloat($r.find(".shed-length").val()) || 0;
+        const w = parseFloat($r.find(".shed-width").val()) || 0;
+        const area = l * w;
+        $r.find(".shed-sqfeet").val(area ? (Number.isInteger(area) ? area : area.toFixed(2)) : "");
+    });
+
     function collectSheds() {
         const sheds = [];
         $("#shed-rows .shed-row").each(function () {
-            const shed_no = $(this).find(".shed-no").val();
-            if (!shed_no) return;
+            const id = $(this).find(".shed-id").val();
+            const name = $(this).find(".shed-name").val();
+            const length = $(this).find(".shed-length").val();
+            const width = $(this).find(".shed-width").val();
+            const capacity = $(this).find(".shed-capacity").val();
+            // skip a blank new row (no id and nothing entered)
+            if (!id && !name && !length && !width && !capacity) return;
             sheds.push({
-                shed_no: shed_no,
-                dimensions: $(this).find(".shed-dimensions").val(),
-                sq_feet: $(this).find(".shed-sqfeet").val(),
+                id: id || null,
+                shed_name: name,
+                shed_type: $(this).find(".shed-type").val(),
+                length: length,
+                width: width,
+                capacity: capacity,
             });
         });
         return sheds;

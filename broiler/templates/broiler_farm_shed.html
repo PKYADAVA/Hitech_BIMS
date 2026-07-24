@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+{% block title %}Farm Shed Master{% endblock %}
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock nav %}
+{% block content %}
+{% include '_broiler_subnavbar.html' with active_tab='broiler_farm_shed' %}
+
+<style>
+  .shed-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; margin-bottom:.85rem; }
+  @media (max-width:900px){ .shed-kpis { grid-template-columns:repeat(2,1fr); } }
+  .shed-kpi { border-radius:.6rem; padding:.55rem .8rem; color:#fff; display:flex;
+              align-items:center; justify-content:space-between; box-shadow:0 3px 8px rgba(0,0,0,.08); }
+  .shed-kpi .kpi-num { font-size:1.25rem; font-weight:700; line-height:1; }
+  .shed-kpi .kpi-label { font-size:.72rem; opacity:.92; margin-top:.15rem; }
+  .shed-kpi .kpi-icon { font-size:.95rem; background:rgba(255,255,255,.22); width:1.9rem; height:1.9rem;
+                        border-radius:.5rem; display:flex; align-items:center; justify-content:center; }
+  .kpi-blue   { background:linear-gradient(135deg,#3b6fd4,#4b7fe0); }
+  .kpi-green  { background:linear-gradient(135deg,#17a673,#20c07d); }
+  .kpi-teal   { background:linear-gradient(135deg,#12a3b8,#18b6c9); }
+  .kpi-amber  { background:linear-gradient(135deg,#e0a41c,#eab52b); }
+  .util-wrap { display:flex; align-items:center; gap:.5rem; min-width:120px; }
+  .util-bar { flex:1; height:8px; background:#e9ecef; border-radius:6px; overflow:hidden; }
+  .util-fill { height:100%; border-radius:6px; background:#20c07d; }
+  .util-fill.mid { background:#e0a41c; } .util-fill.high { background:#e4574c; }
+  .pill { display:inline-block; min-width:34px; text-align:center; font-weight:600;
+          padding:.2em .55em; border-radius:1rem; font-size:.78rem; }
+  .pill-occ { background:#e6f7ea; color:#1a7f4b; } .pill-free { background:#e2f1fb; color:#1f74c4; }
+  .shed-group-row td { background:#eef3f8 !important; font-weight:700; color:#2b4a6b; cursor:pointer; user-select:none; }
+  .shed-group-row:hover td { background:#e3ebf4 !important; }
+  .shed-toolbar { display:flex; flex-wrap:nowrap; gap:.6rem; align-items:center; }
+  .shed-toolbar #search-name { flex:1 1 auto; min-width:180px; }
+  .shed-toolbar .form-select { flex:0 0 190px; width:190px; }
+  @media (max-width:640px){ .shed-toolbar { flex-wrap:wrap; } .shed-toolbar .form-select{ flex:1 1 auto; width:auto; } }
+  .badge-type { font-weight:600; padding:.35em .6em; border-radius:.4rem; text-transform:capitalize; }
+  .bt-broiler{ background:#e7f0ff; color:#2b62c9; } .bt-breeder{ background:#f0e7ff; color:#7d3ec9; }
+  .bt-layer{ background:#e2f7f4; color:#12a3b8; } .bt-grower{ background:#e6f7ea; color:#1a7f4b; }
+  .bt-quarantine{ background:#ffe9e0; color:#c0562a; }
+  .shed-tbl td, .shed-tbl th { vertical-align:middle; }
+  .btn-act { width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:.5rem; }
+  .btn-edit { background:#f4b731; border:none; color:#fff; } .btn-edit:hover{ background:#e0a41c; color:#fff; }
+  .btn-del  { background:#e4574c; border:none; color:#fff; } .btn-del:hover{ background:#d23b30; color:#fff; }
+</style>
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-warehouse"></i>Farm Shed Master</div>
+      <div class="page-header-subtitle">Add and manage sheds for each broiler farm</div>
+    </div>
+    <div class="page-header-right">
+        {% if page_perms.add %}<button id="add-shed-btn" class="btn btn-primary"
+            data-bs-toggle="modal" data-bs-target="#shedFormModal">
+        <i class="fas fa-plus"></i> Add New Shed
+        </button>{% endif %}
+    </div>
+</div>
+
+<!-- KPI cards -->
+<div class="shed-kpis">
+  <div class="shed-kpi kpi-blue">
+    <div><div class="kpi-num" id="kpi-total">0</div><div class="kpi-label">Total Sheds</div></div>
+    <div class="kpi-icon"><i class="fas fa-warehouse"></i></div>
+  </div>
+  <div class="shed-kpi kpi-green">
+    <div><div class="kpi-num" id="kpi-capacity">0</div><div class="kpi-label">Total Capacity</div></div>
+    <div class="kpi-icon"><i class="fas fa-layer-group"></i></div>
+  </div>
+  <div class="shed-kpi kpi-teal">
+    <div><div class="kpi-num" id="kpi-occupied">0</div><div class="kpi-label">Total Occupied</div></div>
+    <div class="kpi-icon"><i class="fas fa-users"></i></div>
+  </div>
+  <div class="shed-kpi kpi-amber">
+    <div><div class="kpi-num" id="kpi-free">0</div><div class="kpi-label">Total Free Space</div></div>
+    <div class="kpi-icon"><i class="fas fa-minus-circle"></i></div>
+  </div>
+</div>
+
+<div class="row g-4">
+    <!-- Modal -->
+    <div class="modal fade" id="shedFormModal" tabindex="-1" aria-labelledby="shedFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="shedFormModalLabel">Add New Shed</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="shed-form">
+                        {% csrf_token %}
+                        <input type="hidden" id="shed-id">
+                        <div class="fw-semibold text-muted small mb-2">1. Basic Information</div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="shed_code" class="form-label">Shed Code</label>
+                                <input type="text" id="shed_code" class="form-control" value="Auto" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="shed_name" class="form-label">Shed Name <small class="text-muted">(auto, editable)</small></label>
+                                <input type="text" id="shed_name" class="form-control" placeholder="Auto: Farm name + Shed no">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="farm" class="form-label">Farm <span class="text-danger">*</span></label>
+                                <select id="farm" class="form-select" required>
+                                    <option value="">Select farm</option>
+                                    {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="org_centre" class="form-label">Organization Centre</label>
+                                <input type="text" id="org_centre" class="form-control" placeholder="Auto from farm" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="branch" class="form-label">Branch</label>
+                                <input type="text" id="branch" class="form-control" placeholder="Auto from farm" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="company" class="form-label">Company</label>
+                                <input type="text" id="company" class="form-control" placeholder="Auto" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="shed_type" class="form-label">Shed Type <span class="text-danger">*</span></label>
+                                <select id="shed_type" class="form-select" required>
+                                    {% for val, label in shed_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="unit_no" class="form-label">Unit No.</label>
+                                <input type="text" id="unit_no" class="form-control" value="Auto" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="status_display" class="form-label">Status <small class="text-muted">(auto: Active when chicks placed)</small></label>
+                                <input type="text" id="status_display" class="form-control" value="Inactive" readonly>
+                            </div>
+                        </div>
+
+                        <div class="fw-semibold text-muted small mt-4 mb-2">2. Dimensions &amp; Capacity</div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="length" class="form-label">Length (ft)</label>
+                                <input type="number" min="0" step="0.01" id="length" class="form-control" placeholder="e.g. 100">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="width" class="form-label">Width (ft)</label>
+                                <input type="number" min="0" step="0.01" id="width" class="form-control" placeholder="e.g. 40">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="sq_feet" class="form-label">Sq. Feet <small class="text-muted">(auto)</small></label>
+                                <input type="text" id="sq_feet" class="form-control" placeholder="Length × Width" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="capacity" class="form-label">Capacity (birds)</label>
+                                <input type="number" min="0" id="capacity" class="form-control" placeholder="e.g. 5000">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="occupied" class="form-label">Occupied (birds) <small class="text-muted">(auto from chicks placement)</small></label>
+                                <input type="number" min="0" id="occupied" class="form-control" placeholder="0" readonly>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" id="shed-submit-btn" class="btn btn-primary">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- List -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="fas fa-table me-2"></i>Shed List</h5></div>
+            <div class="p-3 border-bottom">
+                <div class="shed-toolbar">
+                    <input type="text" id="search-name" class="form-control form-control-sm" placeholder="Search by name…">
+                    <select id="filter-type" class="form-select form-select-sm">
+                        <option value="">All Types</option>
+                        {% for val, label in shed_types %}<option value="{{ label }}">{{ label }}</option>{% endfor %}
+                    </select>
+                    <select id="filter-status" class="form-select form-select-sm">
+                        <option value="">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 shed-tbl" id="shed-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Shed Code</th>
+                                <th>Shed Name</th>
+                                <th>Farm</th>
+                                <th>Org Centre</th>
+                                <th>Branch</th>
+                                <th>Type</th>
+                                <th>Unit</th>
+                                <th>Dimensions</th>
+                                <th>Sq.Ft</th>
+                                <th>Capacity</th>
+                                <th>Occupied</th>
+                                <th>Free</th>
+                                <th>Utilization</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const FARM_META = {
+        {% for f in farms %}"{{ f.id }}": { name: "{{ f.farm_name|escapejs }}", branch: "{{ f.branch_name|escapejs }}", org: "{{ f.org_centre_name|escapejs }}", company: "{{ f.company_name|escapejs }}" }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    };
+
+    $(document).ready(function () {
+        const CSRF = "{{ csrf_token }}";
+        const LIST_URL = "{% url 'broiler_farm_shed_list' %}";
+        const CREATE_URL = "{% url 'broiler_farm_shed_create' %}";
+        let shedTable = null;
+        let allSheds = [];
+        let collapsedGroups = {};   // farm label -> collapsed?
+
+        function applyFarmMeta() {
+            const meta = FARM_META[$("#farm").val()] || { name: "", branch: "", org: "", company: "" };
+            $("#org_centre").val(meta.org);
+            $("#branch").val(meta.branch);
+            $("#company").val(meta.company);
+        }
+        // Suggest "<Farm> Shed <next no>" in add mode (editable). Only overwrites
+        // an empty or previously-suggested name, never a user-typed one.
+        function suggestShedName() {
+            if ($("#shed-id").val()) return;                 // edit mode: leave as-is
+            const meta = FARM_META[$("#farm").val()];
+            if (!meta) return;
+            const current = ($("#shed_name").val() || "").trim();
+            if (current && current !== $("#shed_name").data("suggested")) return;  // user edited it
+            const n = allSheds.filter(s => String(s.farm_id) === String($("#farm").val())).length + 1;
+            const name = `${meta.name} Shed ${n}`;
+            $("#shed_name").val(name).data("suggested", name);
+        }
+        $("#farm").on("change", function () { applyFarmMeta(); suggestShedName(); });
+
+        // Auto-calculate Sq. Feet = Length x Width
+        function calcSqFeet() {
+            const l = parseFloat($("#length").val()) || 0;
+            const w = parseFloat($("#width").val()) || 0;
+            const area = l * w;
+            $("#sq_feet").val(area ? (Number.isInteger(area) ? area : area.toFixed(2)) : "");
+        }
+        $("#length, #width").on("input", calcSqFeet);
+
+        function utilBar(pct) {
+            const cls = pct >= 90 ? "high" : pct >= 70 ? "mid" : "";
+            return `<div class="util-wrap"><div class="util-bar"><div class="util-fill ${cls}" style="width:${Math.min(pct,100)}%"></div></div><span class="small text-muted">${pct}%</span></div>`;
+        }
+
+        function updateKpis() {
+            const cap = allSheds.reduce((a, s) => a + (s.capacity || 0), 0);
+            const occ = allSheds.reduce((a, s) => a + (s.occupied || 0), 0);
+            $("#kpi-total").text(allSheds.length);
+            $("#kpi-capacity").text(cap);
+            $("#kpi-occupied").text(occ);
+            $("#kpi-free").text(Math.max(cap - occ, 0));
+        }
+
+        function loadShedList() {
+            $.ajax({
+                url: LIST_URL, type: "GET",
+                success: function (response) {
+                    allSheds = response;
+                    // start every farm group collapsed (expand on click)
+                    collapsedGroups = {};
+                    response.forEach(function (s) {
+                        collapsedGroups[(s.farm_code || "") + " — " + (s.farm_name || "")] = true;
+                    });
+                    const table = $("#shed-table");
+                    if ($.fn.DataTable.isDataTable(table)) table.DataTable().clear().destroy();
+                    let rows = "";
+                    response.forEach(function (item) {
+                        const status = item.is_active
+                            ? '<span class="badge bg-success">Active</span>'
+                            : '<span class="badge bg-secondary">Inactive</span>';
+                        const typeBadge = `<span class="badge-type bt-${item.shed_type}">${window.escapeHtml(item.shed_type_display || "")}</span>`;
+                        rows += `
+                        <tr>
+                            <td>${window.escapeHtml(item.shed_code || "")}</td>
+                            <td>${window.escapeHtml(item.shed_name || "")}</td>
+                            <td>${window.escapeHtml((item.farm_code || "") + " — " + (item.farm_name || ""))}</td>
+                            <td>${window.escapeHtml(item.org_centre_name || "")}</td>
+                            <td>${window.escapeHtml(item.branch_name || "")}</td>
+                            <td>${typeBadge}</td>
+                            <td>${item.unit_no || ""}</td>
+                            <td>${window.escapeHtml(item.dimensions || "-")}</td>
+                            <td>${window.escapeHtml(item.sq_feet || "-")}</td>
+                            <td>${item.capacity || 0}</td>
+                            <td><span class="pill pill-occ">${item.occupied || 0}</span></td>
+                            <td><span class="pill pill-free">${item.free_space || 0}</span></td>
+                            <td>${utilBar(item.utilization_pct || 0)}</td>
+                            <td>${status}</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                {% if page_perms.edit %}<button class="btn btn-act btn-edit edit-button" data-id="${item.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+                                {% if page_perms.delete %}<button class="btn btn-act btn-del delete-button" data-id="${item.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+                                </div>
+                            </td>
+                        </tr>`;
+                    });
+                    table.find("tbody").html(rows);
+                    shedTable = table.DataTable({
+                        destroy: true, responsive: true, paging: true, searching: true,
+                        info: true, lengthChange: true,
+                        dom: "lrtip",   // no built-in search box (we use our own toolbar)
+                        order: [[2, "asc"], [6, "asc"]],   // group by Farm, then Unit
+                        columnDefs: [{ orderable: false, targets: [12, 14] }],
+                        drawCallback: function () {
+                            const api = this.api();
+                            const rows = api.rows({ page: "current" }).nodes();
+                            let last = null, gid = 0;
+                            api.column(2, { page: "current" }).data().each(function (group, i) {
+                                if (last !== group) {
+                                    gid++;
+                                    const collapsed = !!collapsedGroups[group];
+                                    const count = allSheds.filter(s =>
+                                        ((s.farm_code || "") + " — " + (s.farm_name || "")) === group).length;
+                                    const caret = collapsed ? "fa-chevron-right" : "fa-chevron-down";
+                                    $(rows).eq(i).before(
+                                        '<tr class="shed-group-row" data-grp="' + gid + '" data-group="' + window.escapeHtml(group) + '">' +
+                                        '<td colspan="15"><i class="fas ' + caret + ' me-2 grp-caret"></i>' +
+                                        '<i class="fas fa-tractor me-2"></i>' + window.escapeHtml(group) +
+                                        ' <span class="text-muted fw-normal">(' + count + ' shed' + (count === 1 ? '' : 's') + ')</span></td></tr>'
+                                    );
+                                    last = group;
+                                }
+                                $(rows).eq(i).attr("data-grp", gid);
+                                if (collapsedGroups[group]) $(rows).eq(i).hide();
+                            });
+                        }
+                    });
+                    applyFilters();
+                    updateKpis();
+                },
+                error: function () { window.showToast('danger', "Error loading shed list. Please try again."); }
+            });
+        }
+        loadShedList();
+
+        // Filters (name / type / status) via DataTable column search
+        function applyFilters() {
+            if (!shedTable) return;
+            const name = $("#search-name").val();
+            const type = $("#filter-type").val();
+            const status = $("#filter-status").val();
+            shedTable.column(1).search(name || "", false, true);
+            shedTable.column(5).search(type ? "^" + type + "$" : "", true, false);
+            shedTable.column(13).search(status ? "^" + status + "$" : "", true, false);
+            shedTable.draw();
+        }
+        $("#search-name").on("keyup", applyFilters);
+        $("#filter-type, #filter-status").on("change", applyFilters);
+
+        // Expand / collapse a farm group
+        $("#shed-table tbody").on("click", ".shed-group-row", function () {
+            const group = $(this).data("group");
+            const gid = $(this).data("grp");
+            collapsedGroups[group] = !collapsedGroups[group];
+            $('#shed-table tbody tr[data-grp="' + gid + '"]').not(".shed-group-row")
+                .toggle(!collapsedGroups[group]);
+            $(this).find(".grp-caret").toggleClass("fa-chevron-down fa-chevron-right");
+        });
+
+        function resetForm() {
+            $("#shed-form").trigger("reset");
+            $("#shed-id").val("");
+            $("#shed_name").data("suggested", "");
+            $("#shed_code").val("Auto");
+            $("#unit_no").val("Auto");
+            $("#status_display").val("Inactive");
+            $("#farm").val("").trigger("change.select2");
+            applyFarmMeta();
+        }
+
+        $("#add-shed-btn").on("click", function () {
+            $("#shedFormModalLabel").text("Add New Shed");
+            $("#shed-submit-btn").text("Save");
+            resetForm();
+        });
+
+        $("#shed-form").on("submit", function (e) {
+            e.preventDefault();
+            const id = $("#shed-id").val();
+            const payload = {
+                farm: $("#farm").val(),
+                shed_name: $("#shed_name").val(),
+                shed_type: $("#shed_type").val(),
+                length: $("#length").val() || "",
+                width: $("#width").val() || "",
+                capacity: $("#capacity").val() || 0,
+                occupied: $("#occupied").val() || 0,
+            };
+            if (!payload.farm) { window.showToast('warning', "Select a farm."); return; }
+            if (parseInt(payload.occupied || 0) > parseInt(payload.capacity || 0)) {
+                window.showToast('warning', "Occupied cannot exceed capacity."); return;
+            }
+
+            if (id) {
+                $.ajax({
+                    url: `/broiler_farm_shed/${id}/`, type: "PUT",
+                    headers: { "X-CSRFToken": CSRF }, contentType: "application/json",
+                    data: JSON.stringify(payload),
+                    success: function () {
+                        $("#shedFormModal").modal("hide");
+                        window.showToast("success", "Shed updated successfully!");
+                        loadShedList();
+                    },
+                    error: function (xhr) {
+                        window.showToast("danger", (xhr.responseJSON && xhr.responseJSON.error) || "An error occurred while updating the shed.");
+                    }
+                });
+            } else {
+                const formData = new FormData();
+                Object.keys(payload).forEach(k => formData.append(k, payload[k]));
+                formData.append("csrfmiddlewaretoken", CSRF);
+                $.ajax({
+                    url: CREATE_URL, type: "POST",
+                    processData: false, contentType: false, data: formData,
+                    success: function () {
+                        $("#shedFormModal").modal("hide");
+                        window.showToast("success", "Shed created successfully!");
+                        loadShedList();
+                    },
+                    error: function (xhr) {
+                        window.showToast("danger", (xhr.responseJSON && xhr.responseJSON.error) || "An error occurred while adding the shed.");
+                    }
+                });
+            }
+        });
+
+        $(document).on("click", ".edit-button", function () {
+            const id = $(this).data("id");
+            const s = allSheds.find(x => String(x.id) === String(id));
+            if (!s) return;
+            $("#shedFormModalLabel").text("Edit Shed");
+            $("#shed-submit-btn").text("Update");
+            $("#shed-id").val(s.id);
+            $("#shed_code").val(s.shed_code || "Auto");
+            $("#shed_name").val(s.shed_name || "");
+            $("#farm").val(String(s.farm_id)).trigger("change.select2");
+            $("#shed_type").val(s.shed_type);
+            $("#unit_no").val(s.unit_no || "Auto");
+            $("#status_display").val(s.is_active ? "Active" : "Inactive");
+            $("#length").val(s.length || "");
+            $("#width").val(s.width || "");
+            $("#sq_feet").val(s.sq_feet || "");
+            $("#capacity").val(s.capacity || 0);
+            $("#occupied").val(s.occupied || 0);
+            applyFarmMeta();
+            $("#shedFormModal").modal("show");
+        });
+
+        $(document).on("click", ".delete-button", function () {
+            const id = $(this).data("id");
+            window.bimsConfirm("Are you sure you want to delete this shed?", {
+                title: "Delete shed", confirmText: "Delete"
+            }).then(function (ok) {
+                if (!ok) return;
+                $.ajax({
+                    url: `/broiler_farm_shed/${id}/delete/`, type: "DELETE",
+                    headers: { "X-CSRFToken": CSRF },
+                    success: function () {
+                        window.showToast("success", "Shed deleted successfully!");
+                        loadShedList();
+                    },
+                    error: function () { window.showToast("danger", "An error occurred while deleting the shed."); }
+                });
+            });
+        });
+    });
+</script>
+{% endblock content %}

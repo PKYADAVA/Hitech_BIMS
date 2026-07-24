@@ -2,7 +2,7 @@
 from django.urls import path
 from . import views
 
-from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmTemplateView, BroilerLineAPI, BroilerLineTemplateView, FarmerAPI, FarmerGroupAPI, FarmerGroupTemplateView, RegionAPI, RegionTemplateView, SupervisorAPI, SupervisorTemplateView
+from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmShedAPI, BroilerFarmShedTemplateView, BroilerFarmTemplateView, BroilerLineAPI, BroilerLineTemplateView, FarmerAPI, FarmerGroupAPI, FarmerGroupTemplateView, RegionAPI, RegionTemplateView, SupervisorAPI, SupervisorTemplateView
 
 urlpatterns = [
     path('farmer-group/', FarmerGroupTemplateView.as_view(), name='farmer_group'),
@@ -56,6 +56,12 @@ urlpatterns = [
     path('broiler_disease/<int:id>/', BroilerDiseaseAPI.as_view(), name='broiler_disease_detail'),
     path('create-broiler-disease/', BroilerDiseaseAPI.as_view(), name='broiler_disease_create'),  # For creating new broiler disease    
     path('broiler_disease/<int:id>/delete/', BroilerDiseaseAPI.as_view(), name='broiler_disease_delete'), # For deleting broiler disease
+
+    path('broiler-farm-shed/', BroilerFarmShedTemplateView.as_view(), name='broiler_farm_shed'),
+    path('broiler_farm_shed/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_list'),
+    path('create-broiler-farm-shed/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_create'),
+    path('broiler_farm_shed/<int:id>/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_detail'),
+    path('broiler_farm_shed/<int:id>/delete/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_delete'),
     path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch'),
     path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
     path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
@@ -100,6 +106,8 @@ urlpatterns = [
     path('broiler-report/', views.broiler_batch_report, name='broiler_batch_report'),
     path('chicks-placement-report/', views.chicks_placement_report, name='chicks_placement_report'),
     path('feed-dispatch-stock-report/', views.feed_dispatch_stock_report, name='feed_dispatch_stock_report'),
+    path('live-flock-summary/', views.live_flock_summary_report, name='live_flock_summary_report'),
+    path('day-record-report/', views.day_record_report, name='day_record_report'),
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),

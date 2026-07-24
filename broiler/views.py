@@ -24,7 +24,7 @@ from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
 from sales.models import Customer
 from hatchery_master.models import Hatchery
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from datetime import timedelta
 from django.utils import timezone
 import json
@@ -804,6 +804,7 @@ class BroilerFarmTemplateView(View):
             "regions": Region.objects.filter(is_active=True),
             "farmers": farmers,
             "farmer_groups": FarmerGroup.objects.filter(is_active=True),
+            "shed_types": BroilerFarmShed.SHED_TYPE_CHOICES,
         }
         return render(request, "broiler_farm.html", context)
 
@@ -817,7 +818,10 @@ class BroilerBatchTemplateView(View):
         if not broiler_farms:
             broiler_farms = list(BroilerFarm.objects.values())
             cache.set(cache_key, broiler_farms)
-        context = {"broiler_farms": broiler_farms}
+        context = {
+            "broiler_farms": broiler_farms,
+            "breeds": Breed.objects.filter(is_active=True).order_by("description"),
+        }
         return render(request, "broiler_batch.html", context)
 
 @method_decorator(login_required, name="dispatch")
@@ -1152,6 +1156,7 @@ class BroilerBatchAPI(BaseAPIView):
                     "name": broiler_batch.batch_name,
                     "book_number": broiler_batch.book_number,
                     "lot_no": broiler_batch.lot_no,
+                    "breed_id": broiler_batch.breed_id,
                     "broiler_farm_name": broiler_batch.broiler_farm.farm_name,
                 })
 
@@ -1161,9 +1166,11 @@ class BroilerBatchAPI(BaseAPIView):
                 return JsonResponse(cached_data, safe=False)
 
             broiler_batches = list(
-                BroilerBatch.objects.select_related("broiler_farm")
-                .annotate(broiler_farm_name=F("broiler_farm__farm_name"))
-                .values("id", "batch_name", "book_number", "lot_no", "broiler_farm_name")
+                BroilerBatch.objects.select_related("broiler_farm", "breed")
+                .annotate(broiler_farm_name=F("broiler_farm__farm_name"),
+                          breed_name=F("breed__description"))
+                .values("id", "batch_name", "book_number", "lot_no", "broiler_farm_name",
+                        "breed_id", "breed_name")
             )
             self.set_cached_data(cache_key, broiler_batches)
             return JsonResponse(broiler_batches, safe=False)
@@ -1182,6 +1189,7 @@ class BroilerBatchAPI(BaseAPIView):
                     broiler_farm=farm_obj,
                     book_number=data.get("book_number") or "",
                     lot_no=data.get("lot_no") or "",
+                    breed_id=data.get("breed") or None,
                 )
                 cache.delete("broiler_batch_list")
             return JsonResponse({"message": "BroilerBatch created", "batch_name": batch.batch_name}, status=201)
@@ -1199,6 +1207,8 @@ class BroilerBatchAPI(BaseAPIView):
                     broiler_batch.book_number = data["book_number"] or ""
                 if "lot_no" in data:
                     broiler_batch.lot_no = data["lot_no"] or ""
+                if "breed" in data:
+                    broiler_batch.breed_id = data["breed"] or None
                 broiler_batch.save()
                 cache.delete("broiler_batch_list")
             return JsonResponse({"message": "BroilerBatch updated"})
@@ -1297,6 +1307,165 @@ class BroilerDiseaseAPI(BaseAPIView):
             return self.handle_exception(e)
 
 @method_decorator(login_required, name="dispatch")
+class BroilerFarmShedTemplateView(View):
+    """Broiler > Master > Farm Shed — manage the sheds that belong to each farm.
+    Organization Centre / Branch / Company auto-fill from the chosen farm."""
+
+    def get(self, request):
+        from account.models import OrganizationCentre, CompanyProfile
+        company_name = CompanyProfile.get_solo().name
+        oc_by_branch = {oc.branch_id: oc for oc
+                        in OrganizationCentre.objects.select_related("company").all()
+                        if oc.branch_id}
+        farms = []
+        for f in BroilerFarm.objects.select_related("branch").order_by("farm_code"):
+            oc = oc_by_branch.get(f.branch_id)
+            farms.append({
+                "id": f.id, "farm_code": f.farm_code, "farm_name": f.farm_name,
+                "branch_name": f.branch.branch_name if f.branch_id else "",
+                "org_centre_name": oc.name if oc else "",
+                "company_name": (oc.company.name if oc and oc.company_id else company_name),
+            })
+        return render(request, "broiler_farm_shed.html", {
+            "farms": farms,
+            "shed_types": BroilerFarmShed.SHED_TYPE_CHOICES,
+        })
+
+
+def _farm_shed_to_dict(s: BroilerFarmShed) -> dict:
+    from account.models import CompanyProfile
+    oc = s.organization_centre
+    if oc and oc.company_id:
+        company_name = oc.company.name
+    else:
+        company_name = CompanyProfile.get_solo().name
+    return {
+        "id": s.id,
+        "shed_code": s.shed_code,
+        "shed_name": s.shed_name or "",
+        "farm_id": s.farm_id,
+        "farm_code": s.farm.farm_code if s.farm_id else "",
+        "farm_name": s.farm.farm_name if s.farm_id else "",
+        "org_centre_id": s.organization_centre_id,
+        "org_centre_name": oc.name if oc else "",
+        "branch_name": s.farm.branch.branch_name if s.farm_id and s.farm.branch_id else "",
+        "company_name": company_name,
+        "shed_type": s.shed_type,
+        "shed_type_display": s.get_shed_type_display(),
+        "unit_no": s.unit_no,
+        "is_active": s.is_active,
+        "length": str(s.length) if s.length is not None else "",
+        "width": str(s.width) if s.width is not None else "",
+        "dimensions": s.dimensions or "",
+        "sq_feet": s.sq_feet or "",
+        "capacity": s.capacity,
+        "occupied": s.occupied,
+        "free_space": s.free_space,
+        "utilization_pct": s.utilization_pct,
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class BroilerFarmShedAPI(BaseAPIView):
+    """CRUD for BroilerFarmShed (Broiler > Master > Farm Shed)."""
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                s = BroilerFarmShed.objects.select_related("farm").get(id=id)
+                return JsonResponse(_farm_shed_to_dict(s))
+            sheds = (BroilerFarmShed.objects.select_related("farm")
+                     .order_by("farm__farm_code", "shed_no"))
+            return JsonResponse([_farm_shed_to_dict(s) for s in sheds], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    _VALID_TYPES = {c[0] for c in BroilerFarmShed.SHED_TYPE_CHOICES}
+
+    def _clean(self, data):
+        farm = BroilerFarm.objects.filter(id=data.get("farm")).first()
+        if not farm:
+            return None, "Select a valid farm."
+        shed_name = (data.get("shed_name") or "").strip()  # blank -> auto in model.save()
+        shed_type = (data.get("shed_type") or "broiler").strip()
+        if shed_type not in self._VALID_TYPES:
+            return None, "Select a valid shed type."
+
+        def _int(v):
+            try:
+                return max(int(float(v)), 0)
+            except (TypeError, ValueError):
+                return 0
+
+        def _dec(v):
+            v = (str(v) if v is not None else "").strip()
+            if not v:
+                return None
+            try:
+                return max(Decimal(v), Decimal("0"))
+            except (InvalidOperation, ValueError):
+                return None
+        capacity = _int(data.get("capacity"))
+        occupied = _int(data.get("occupied"))
+        if occupied > capacity:
+            return None, "Occupied cannot exceed capacity."
+        return {"farm": farm, "shed_name": shed_name, "shed_type": shed_type,
+                "is_active": str(data.get("is_active", "true")).lower() in ("true", "1", "on", "yes"),
+                "length": _dec(data.get("length")), "width": _dec(data.get("width")),
+                "capacity": capacity, "occupied": occupied}, None
+
+    def post(self, request) -> JsonResponse:
+        try:
+            vals, err = self._clean(request.POST)
+            if err:
+                return JsonResponse({"error": err}, status=400)
+            with transaction.atomic():
+                # shed_code, unit_no, organization_centre are auto-set in .save()
+                BroilerFarmShed.objects.create(
+                    farm=vals["farm"], shed_name=vals["shed_name"],
+                    shed_no=vals["shed_name"], shed_type=vals["shed_type"],
+                    is_active=vals["is_active"], length=vals["length"],
+                    width=vals["width"], capacity=vals["capacity"],
+                    occupied=vals["occupied"])
+            return JsonResponse({"message": "Shed created"}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            s = BroilerFarmShed.objects.get(id=id)
+            vals, err = self._clean(json.loads(request.body.decode("utf-8")))
+            if err:
+                return JsonResponse({"error": err}, status=400)
+            with transaction.atomic():
+                farm_changed = s.farm_id != vals["farm"].id
+                s.farm = vals["farm"]
+                s.shed_name = vals["shed_name"]
+                s.shed_no = vals["shed_name"]
+                s.shed_type = vals["shed_type"]
+                s.is_active = vals["is_active"]
+                s.length = vals["length"]
+                s.width = vals["width"]
+                s.capacity = vals["capacity"]
+                s.occupied = vals["occupied"]
+                if farm_changed:  # re-derive centre for the new farm's branch
+                    s.organization_centre = None
+                s.save()
+            return JsonResponse({"message": "Shed updated"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            s = BroilerFarmShed.objects.get(id=id)
+            with transaction.atomic():
+                s.delete()
+            return JsonResponse({"message": "Shed deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@method_decorator(login_required, name="dispatch")
 class BroilerFarmAPI(BaseAPIView):
     """API endpoints for BroilerFarm operations."""
 
@@ -1328,7 +1497,9 @@ class BroilerFarmAPI(BaseAPIView):
                     "farmer_id": broiler_farm.farmer_id,
                     "agreement_start_date": broiler_farm.agreement_start_date.isoformat() if broiler_farm.agreement_start_date else None,
                     "agreement_end_date": broiler_farm.agreement_end_date.isoformat() if broiler_farm.agreement_end_date else None,
-                    "sheds": list(broiler_farm.sheds.values("id", "shed_no", "dimensions", "sq_feet")),
+                    "sheds": list(broiler_farm.sheds.values(
+                        "id", "shed_code", "shed_name", "shed_type",
+                        "length", "width", "capacity", "sq_feet")),
                     "images": [{"id": img.id, "url": img.image.url} for img in broiler_farm.images.all()],
                 })
                 for field in self.FILE_FIELDS:
@@ -1357,18 +1528,50 @@ class BroilerFarmAPI(BaseAPIView):
             return self.handle_exception(e)
 
     def _save_sheds(self, broiler_farm, sheds_json: str) -> None:
-        """Replace this farm's sheds with the rows submitted from the form."""
+        """Upsert this farm's sheds from the form rows, sharing the Farm Shed
+        master's model logic (auto code / unit / name / org-centre / sq-ft /
+        status). Existing rows are matched by id so master-only fields (occupied,
+        organization centre) are preserved; rows removed from the editor are
+        deleted. Non-destructive to sheds the editor still shows."""
         sheds = json.loads(sheds_json) if sheds_json else []
-        broiler_farm.sheds.all().delete()
+        valid_types = {c[0] for c in BroilerFarmShed.SHED_TYPE_CHOICES}
+
+        def _dec(v):
+            v = (str(v) if v is not None else "").strip()
+            if not v:
+                return None
+            try:
+                return max(Decimal(v), Decimal("0"))
+            except (InvalidOperation, ValueError):
+                return None
+
+        def _int(v):
+            try:
+                return max(int(float(v)), 0)
+            except (TypeError, ValueError):
+                return 0
+
+        kept_ids = []
         for shed in sheds:
-            if not shed.get("shed_no"):
-                continue
-            BroilerFarmShed.objects.create(
-                farm=broiler_farm,
-                shed_no=shed.get("shed_no", ""),
-                dimensions=shed.get("dimensions", ""),
-                sq_feet=shed.get("sq_feet", ""),
-            )
+            shed_name = (shed.get("shed_name") or "").strip()
+            length, width = _dec(shed.get("length")), _dec(shed.get("width"))
+            capacity = _int(shed.get("capacity"))
+            shed_type = shed.get("shed_type") or "broiler"
+            if shed_type not in valid_types:
+                shed_type = "broiler"
+            sid = shed.get("id")
+            if not sid and not (shed_name or length or width or capacity):
+                continue  # skip a blank new row
+            obj = broiler_farm.sheds.filter(id=sid).first() if sid else None
+            if obj is None:
+                obj = BroilerFarmShed(farm=broiler_farm)
+            obj.shed_name = shed_name
+            obj.shed_type = shed_type
+            obj.length, obj.width = length, width
+            obj.capacity = capacity
+            obj.save()  # auto: shed_code, unit_no, shed_name, org centre, sq_ft, status
+            kept_ids.append(obj.id)
+        broiler_farm.sheds.exclude(id__in=kept_ids).delete()
 
     def post(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
@@ -2941,6 +3144,484 @@ def broiler_batch_report(request):
     })
 
 
+# ---------------------------------------------------------------------------
+# Live Flock Summary Report (Broiler > Reports)
+# ---------------------------------------------------------------------------
+
+def _breed_standard_at(breed_id, age):
+    """The breed's standard row at `age` — exact, else the nearest row at/below
+    that age (curve carried forward). If the breed's curve doesn't reach that
+    low, fall back to its earliest defined row so the Std columns still show a
+    value rather than blank. None only when the breed has no standard rows."""
+    if not breed_id or age is None:
+        return None
+    std = (BreedStandard.objects.filter(breed_id=breed_id, age__lte=age)
+           .order_by("-age").first())
+    if std:
+        return std
+    return (BreedStandard.objects.filter(breed_id=breed_id, age__gt=age)
+            .order_by("age").first())
+
+
+def _interp_standard(breed_id, key_field, target, out_field):
+    """Read the breed's standard curve at a *value* of `key_field` instead of at
+    an age — e.g. "what's the standard cum_feed when body_weight = X", or the
+    reverse. Walks the curve ordered by age (both body_weight and cum_feed rise
+    with age) and linearly interpolates `out_field` where `key_field` crosses
+    `target`; clamps to the end rows outside the curve. Returns a Decimal, or
+    None when the breed has no usable rows."""
+    if not breed_id or target is None:
+        return None
+    rows = [(Decimal(str(k)), Decimal(str(v)))
+            for k, v in BreedStandard.objects.filter(breed_id=breed_id)
+            .order_by("age").values_list(key_field, out_field)
+            if k is not None and v is not None]
+    if not rows:
+        return None
+    target = Decimal(str(target))
+    if target <= rows[0][0]:
+        return rows[0][1]
+    if target >= rows[-1][0]:
+        return rows[-1][1]
+    for (k0, v0), (k1, v1) in zip(rows, rows[1:]):
+        if k0 <= target <= k1:
+            if k1 == k0:
+                return v0
+            return v0 + (v1 - v0) * (target - k0) / (k1 - k0)
+    return rows[-1][1]
+
+
+def _flock_valuation_remark(*, not_started, avg_bwt, std_bwt, fcr, std_fcr,
+                            feed_con, std_feed_at_bwt, mort_pct, gap_days):
+    """Auto-compose a one-line valuation of a live flock from its own numbers:
+    an overall verdict (On Track / Watch / Behind / Critical) plus the drivers
+    (weight vs std, feed vs the standard-for-that-weight, FCR vs std, mortality,
+    data freshness). Purely derived — no stored field."""
+    if not_started:
+        return "Not Started — chicks placed, no daily entry yet"
+
+    f = lambda x: float(x) if x is not None else None
+    avg_bwt, std_bwt, fcr, std_fcr = f(avg_bwt), f(std_bwt), f(fcr), f(std_fcr)
+    feed_con, std_feed_at_bwt, mort_pct = f(feed_con), f(std_feed_at_bwt), f(mort_pct)
+
+    parts, penalty = [], 0
+    # Body weight vs the age-standard
+    if std_bwt and avg_bwt:
+        dev = (avg_bwt - std_bwt) / std_bwt * 100
+        if dev <= -20:
+            parts.append(f"B.Wt {abs(dev):.0f}% below std"); penalty += 3
+        elif dev <= -10:
+            parts.append(f"B.Wt {abs(dev):.0f}% below std"); penalty += 2
+        elif dev >= 10:
+            parts.append(f"B.Wt {dev:.0f}% above std")
+        else:
+            parts.append("B.Wt on target")
+    # Feed used vs what the standard bird eats to reach the SAME weight
+    if std_feed_at_bwt and feed_con:
+        fe = (feed_con - std_feed_at_bwt) / std_feed_at_bwt * 100
+        if fe >= 15:
+            parts.append(f"over-fed {fe:.0f}% for weight"); penalty += 2
+        elif fe >= 8:
+            parts.append(f"over-fed {fe:.0f}% for weight"); penalty += 1
+        elif fe <= -10:
+            parts.append(f"under-fed {abs(fe):.0f}% for weight")
+    # FCR vs std
+    if std_fcr and fcr:
+        if fcr > std_fcr * 1.10:
+            parts.append("FCR well above std"); penalty += 2
+        elif fcr > std_fcr * 1.03:
+            parts.append("FCR above std"); penalty += 1
+        elif fcr < std_fcr * 0.97:
+            parts.append("FCR better than std")
+    # Mortality
+    if mort_pct is not None:
+        if mort_pct >= 8:
+            parts.append(f"high mortality {mort_pct:.1f}%"); penalty += 3
+        elif mort_pct >= 5:
+            parts.append(f"mortality {mort_pct:.1f}%"); penalty += 1
+    # Data freshness
+    if gap_days and gap_days >= 2:
+        parts.append(f"entries {gap_days}d stale"); penalty += 1
+
+    verdict = ("Critical" if penalty >= 5 else "Behind" if penalty >= 3
+               else "Watch" if penalty >= 1 else "On Track")
+    return f"{verdict} — " + ("; ".join(parts) if parts else "all metrics near standard")
+
+
+def _live_flock_row(batch, today):
+    """One report row for a live flock, reusing the batch report engine plus
+    the age/feed-outlook columns the fleet view needs."""
+    from inventory.models import StockTransfer
+
+    report = _build_batch_report(batch, fetch_type="management")
+    bc = report["batch_costing"]
+    farm = batch.broiler_farm
+
+    placed = _num(bc.get("chicks_placed"))
+    mort = _num(bc.get("mortality"))
+    culls = _num(bc.get("culls"))
+    sold = _num(bc.get("sold_birds"))
+    placement_date = bc.get("placement_date") or batch.start_date
+    actual_age = (today - placement_date).days if placement_date else 0
+
+    # latest daily entry + gap
+    entries = list(DailyEntry.objects.filter(batch=batch).order_by("-date")[:3])
+    latest = entries[0].date if entries else None
+    gap_days = (today - latest).days if latest else None
+
+    # last *body-weight* reading (skip days with no weight taken) + its gap
+    last_wt = (DailyEntry.objects.filter(batch=batch, avg_weight_gms__gt=0)
+               .order_by("-date").first())
+    avg_bwt = last_wt.avg_weight_gms if last_wt else Decimal("0")
+    last_bwt_date = last_wt.date if last_wt else None
+    last_bwt_gap = (today - last_bwt_date).days if last_bwt_date else None
+
+    # recent daily feed rate (last <=3 entries), fallback to overall
+    feed_consumed = _num(bc.get("feed_consumed"))
+    recent = sum((_num(e.feed_1_qty) + _num(e.feed_2_qty)) for e in entries)
+    daily_rate = (recent / len(entries)) if entries else (
+        feed_consumed / actual_age if actual_age else Decimal("0"))
+
+    # farm<->farm feed movements (subset of the engine's in/out)
+    feed_item_ids = list(Item.objects.filter(category__name__icontains="feed").values_list("id", flat=True))
+    transfer_in_farms = StockTransfer.objects.filter(
+        to_batch=batch, from_location_type="farm", item_id__in=feed_item_ids
+    ).aggregate(t=Sum("quantity"))["t"] or Decimal("0")
+    transfer_out_farms = sum((_num(r["quantity"]) for r in report.get("feed_transfer_out", [])), Decimal("0"))
+
+    feed_sent = _num(bc.get("feed_sent"))
+    feed_return = _num(bc.get("feed_return"))
+    feed_balance = feed_sent - feed_consumed - feed_return - transfer_out_farms
+
+    std = _breed_standard_at(batch.breed_id, actual_age)
+    std_bwt = std.body_weight if std else None   # grams (matches Avg B.Wt in grams)
+    std_fcr = std.fcr if std else None
+    # cum_feed is per-bird grams -> total kg = cum_feed(g) x birds / 1000 (matches Feed Con in kg)
+    std_feed_con = (std.cum_feed * placed / Decimal("1000")) if std else None
+
+    # Weight-adjusted (age-independent) standards: read the curve at the flock's
+    # ACTUAL weight/feed rather than its age. "Std Feed @ B.Wt" = the cum_feed a
+    # standard bird eats to reach the birds' current body weight; "Std B.Wt @
+    # Feed" = the body weight a standard bird has after eating the feed actually
+    # consumed per bird. Lets you judge feed efficiency independent of how far
+    # the flock is ahead/behind on age.
+    actual_feed_per_bird = (feed_consumed * Decimal("1000") / placed) if placed else None  # g/bird
+    std_feed_at_bwt_g = _interp_standard(batch.breed_id, "body_weight", avg_bwt, "cum_feed")   # g/bird
+    std_feed_at_bwt = (std_feed_at_bwt_g * placed / Decimal("1000")) if std_feed_at_bwt_g is not None else None  # total kg
+    std_bwt_at_feed = _interp_standard(batch.breed_id, "cum_feed", actual_feed_per_bird, "body_weight")  # g/bird
+
+    # Live-flock metrics on the CURRENT weight on hand (sold weight + current
+    # live weight = available birds x last body weight), not the sale-only
+    # weight — so a still-growing flock shows real FCR/CFCR/PC/Kg instead of 0
+    # (no sales) or a blown-up CFCR (feed / tiny mortality weight). For a sold-
+    # out flock live_weight is 0, so this reduces to the sale-based figures.
+    available = placed - mort - culls - sold
+    live_weight_kg = available * (avg_bwt / Decimal("1000"))
+    sold_weight = _num(bc.get("sold_weight"))
+    mortality_weight = _num(bc.get("mortality_weight"))
+    total_weight_now = sold_weight + live_weight_kg
+    total_prod_cost = _num(bc.get("total_production_cost"))
+
+    m_pc_kg = (_div(total_prod_cost, total_weight_now) if total_weight_now > 0
+               else _num(bc.get("production_cost_per_kg"))).quantize(Decimal("0.01"))
+    fcr_val = _div(feed_consumed, total_weight_now).quantize(Decimal("0.001")) if total_weight_now > 0 else Decimal("0")
+    cfcr_val = (_div(feed_consumed, total_weight_now + mortality_weight).quantize(Decimal("0.01"))
+                if (total_weight_now + mortality_weight) > 0 else Decimal("0"))
+
+    # EEF: keep the engine's sale-based value once the flock has sales (uses
+    # mean lifting age); for a still-growing flock compute it on current values.
+    if sold_weight > 0:
+        eef_val = _num(bc.get("eef"))
+    elif actual_age and fcr_val:
+        surviving = sold + available
+        livability = _div(surviving * 100, placed)
+        avg_wt_kg = _div(total_weight_now, surviving)
+        eef_val = _div(livability * avg_wt_kg * 100, Decimal(str(actual_age)) * fcr_val).quantize(Decimal("0.01"))
+    else:
+        eef_val = Decimal("0")
+
+    q2 = Decimal("0.01")
+    remark = _flock_valuation_remark(
+        not_started=bool(placed > 0 and latest is None),
+        avg_bwt=avg_bwt, std_bwt=std_bwt, fcr=fcr_val, std_fcr=std_fcr,
+        feed_con=feed_consumed, std_feed_at_bwt=std_feed_at_bwt,
+        mort_pct=_num(bc.get("total_mort_pct")), gap_days=gap_days)
+    return {
+        "branch": farm.branch.branch_name if farm.branch_id else "",
+        "line": farm.line or "",
+        "supervisor": str(farm.supervisor) if farm.supervisor_id else "",
+        "farmer": farm.farmer.farmer_name if farm.farmer_id else "",
+        "batch": batch.batch_name,
+        "book_no": batch.book_number or "",
+        "actual_age": actual_age,
+        "placement_date": placement_date,
+        "lifting_start": bc.get("sale_start_date"),
+        "mean_age": bc.get("mean_age"),
+        "latest_entry": latest, "gap_days": gap_days,
+        "not_started": bool(placed > 0 and latest is None),
+        "housed": placed, "mort": mort,
+        "mort_pct": _num(bc.get("total_mort_pct")),
+        "cull": culls, "cull_pct": _div(culls * 100, placed).quantize(q2),
+        "sold_birds": sold, "sold_weight": _num(bc.get("sold_weight")),
+        "available": available, "available_weight": live_weight_kg.quantize(q2),
+        "std_bwt": std_bwt, "avg_bwt": avg_bwt,
+        "std_bwt_at_feed": std_bwt_at_feed.quantize(q2) if std_bwt_at_feed is not None else None,
+        "last_bwt_date": last_bwt_date, "last_bwt_gap": last_bwt_gap,
+        "std_fcr": std_fcr, "fcr": fcr_val, "cfcr": cfcr_val, "eef": eef_val,
+        "m_pc_kg": m_pc_kg,
+        "m_pc_bird": bc.get("prod_cost_per_bird"),
+        "feed_transferred": feed_sent, "transfer_in_farms": transfer_in_farms,
+        "std_feed_con": std_feed_con, "std_feed_con_bird": std.cum_feed if std else None,
+        "feed_con": feed_consumed,
+        "feed_con_bird": actual_feed_per_bird.quantize(q2) if actual_feed_per_bird is not None else None,
+        "std_feed_at_bwt": std_feed_at_bwt.quantize(q2) if std_feed_at_bwt is not None else None,
+        "std_feed_at_bwt_bird": std_feed_at_bwt_g.quantize(q2) if std_feed_at_bwt_g is not None else None,
+        "transfer_out_farms": transfer_out_farms, "feed_balance": feed_balance,
+        "feed_balance_days": _div(feed_balance, daily_rate).quantize(q2) if daily_rate else Decimal("0"),
+        "next_3_days_feed": (daily_rate * 3).quantize(q2),
+        "remark": remark, "remark_verdict": remark.split(" — ")[0],
+    }
+
+
+@login_required
+def live_flock_summary_report(request):
+    """Broiler > Reports > Live Flock Summary — one row per live/ongoing flock."""
+    from account.models import CompanyProfile
+
+    region_id = (request.GET.get("region") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    breed_id = (request.GET.get("breed") or "").strip()
+
+    batches = (BroilerBatch.objects.filter(end_date__isnull=True, is_closed=False)
+               .select_related("broiler_farm__branch", "broiler_farm__supervisor",
+                               "broiler_farm__farmer", "breed")
+               .order_by("broiler_farm__branch__branch_name", "batch_name"))
+    if branch_id.isdigit():
+        batches = batches.filter(broiler_farm__branch_id=branch_id)
+    elif region_id.isdigit():
+        batches = batches.filter(broiler_farm__branch__region_id=region_id)
+    if supervisor_id.isdigit():
+        batches = batches.filter(broiler_farm__supervisor_id=supervisor_id)
+    if breed_id.isdigit():
+        batches = batches.filter(breed_id=breed_id)
+
+    today = timezone.localdate()
+    rows = [_live_flock_row(b, today) for b in batches]
+
+    return render(request, "live_flock_summary_report.html", {
+        "rows": rows,
+        "regions": Region.objects.order_by("description"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "supervisors": Supervisor.objects.order_by("name"),
+        "breeds": Breed.objects.filter(is_active=True).order_by("description"),
+        "region_id": region_id, "branch_id": branch_id,
+        "supervisor_id": supervisor_id, "breed_id": breed_id,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    """Great-circle distance in km between two lat/long points; None if any
+    coordinate is missing."""
+    if None in (lat1, lon1, lat2, lon2):
+        return None
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return r * 2 * math.asin(math.sqrt(a))
+
+
+def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale):
+    """One Day Record row for a single DailyEntry `e` recorded on `sel_date`.
+    Everything on the day (mort/cull/sold/feed) plus the cumulative figures to
+    that date and the breed-standard comparison. Image/disease/entry-geo columns
+    are returned blank — not yet captured on the daily entry."""
+    from django.db.models import Sum as _Sum
+    batch, farm = e.batch, e.farm
+    q2 = Decimal("0.01")
+
+    # chicks placed for this batch (chick-category stock transfers into it)
+    if batch and batch.id not in placed_cache:
+        placed_cache[batch.id] = _num(StockTransfer.objects.filter(
+            to_batch_id=batch.id, item_id__in=chick_ids).aggregate(t=_Sum("quantity"))["t"])
+    placed = placed_cache.get(batch.id, Decimal("0")) if batch else Decimal("0")
+
+    def _de_agg(flt):
+        r = DailyEntry.objects.filter(**flt).aggregate(
+            m=_Sum("mortality"), c=_Sum("culls"),
+            f1=_Sum("feed_1_qty"), f2=_Sum("feed_2_qty"))
+        return _num(r["m"]), _num(r["c"]), _num(r["f1"]) + _num(r["f2"])
+
+    def _sale_agg(flt):
+        r = BirdSale.objects.filter(**flt).aggregate(b=_Sum("birds"), w=_Sum("net_weight"))
+        return _num(r["b"]), _num(r["w"])
+
+    mort_before, cull_before, _feed_before = _de_agg({"batch": batch, "date__lt": sel_date})
+    _mort_upto, _cull_upto, feed_upto = _de_agg({"batch": batch, "date__lte": sel_date})
+    sold_before, _soldw_before = _sale_agg({"batch": batch, "date__lt": sel_date})
+    sold_today, soldw_today = _sale_agg({"batch": batch, "date": sel_date})
+    sold_upto, soldw_upto = _sale_agg({"batch": batch, "date__lte": sel_date})
+
+    mort_today = _num(e.mortality)
+    cull_today = _num(e.culls)
+    cum_mort = mort_before + mort_today          # cumulative mortality to date
+    cum_cull = cull_before + cull_today
+
+    opening = placed - mort_before - cull_before - sold_before   # birds alive at day start
+    balance = opening - mort_today - cull_today - sold_today      # closing birds for the day
+
+    avg_bwt = _num(e.avg_weight_gms)
+    age = e.age_days
+    std = _breed_standard_at(batch.breed_id if batch else None, age)
+    std_bwt = std.body_weight if std else None
+    std_fcr = std.fcr if std else None
+
+    # feed movement on the day
+    feed_con = _num(e.feed_1_qty) + _num(e.feed_2_qty)
+    feed_stock = _num(e.feed_1_stock) + _num(e.feed_2_stock)     # closing stock
+    prev = (DailyEntry.objects.filter(batch=batch, date__lt=sel_date)
+            .order_by("-date", "-id").first())
+    feed_ob = (_num(prev.feed_1_stock) + _num(prev.feed_2_stock)) if prev else Decimal("0")
+    feed_in = _num(StockTransfer.objects.filter(
+        to_batch=batch, item_id__in=feed_ids, date=sel_date).aggregate(t=_Sum("quantity"))["t"])
+    feed_out = _num(StockTransfer.objects.filter(
+        from_batch=batch, item_id__in=feed_ids, date=sel_date).aggregate(t=_Sum("quantity"))["t"])
+
+    # FCR / CFCR on weight produced to date (live + sold), like the live report
+    live_weight = balance * avg_bwt / Decimal("1000")
+    total_weight = live_weight + soldw_upto
+    mort_weight = cum_mort * avg_bwt / Decimal("1000")          # approx (birds ~current wt)
+    fcr = _div(feed_upto, total_weight).quantize(Decimal("0.001")) if total_weight > 0 else Decimal("0")
+    cfcr = (_div(feed_upto, total_weight + mort_weight).quantize(q2)
+            if (total_weight + mort_weight) > 0 else Decimal("0"))
+
+    farmer = farm.farmer if farm and farm.farmer_id else None
+    batch_no = ""
+    if batch and batch.batch_name and "-" in batch.batch_name:
+        tail = batch.batch_name.rsplit("-", 1)[-1]
+        batch_no = tail if tail.isdigit() else ""
+
+    # field-captured attachments / geo (mobile app populates; may be blank)
+    from broiler.models import BroilerDisease
+    diseases = list(BroilerDisease.objects.filter(batch=batch, diagnosed_date=sel_date)
+                    .exclude(disease_name="").values_list("disease_name", flat=True)) if batch else []
+    farm_lat = farm.farm_latitude if farm else None
+    farm_lon = farm.farm_longitude if farm else None
+    diff_km = _haversine_km(farm_lat, farm_lon, e.entry_latitude, e.entry_longitude)
+
+    return {
+        "farm_code": farm.farm_code if farm else "",
+        "farmer": farmer.farmer_name if farmer else "",
+        "batch": batch.batch_name if batch else "",
+        "batch_no": batch_no,
+        "supervisor": (str(e.supervisor) if e.supervisor_id
+                       else str(farm.supervisor) if farm and farm.supervisor_id else ""),
+        "age": age,
+        "placed": placed, "opening": opening,
+        "mort": mort_today,
+        "mort_pct": _div(mort_today * 100, opening).quantize(q2),
+        "mort_image": e.mort_image.url if e.mort_image else "",
+        "cum_mort": cum_mort,
+        "cum_mort_pct": _div(cum_mort * 100, placed).quantize(q2),
+        "culls": cull_today, "cull_image": e.cull_image.url if e.cull_image else "",
+        "sold": sold_today, "sold_wt": soldw_today.quantize(q2),
+        "balance": balance,
+        "std_bwt": std_bwt, "avg_bwt": avg_bwt,
+        "std_fcr": std_fcr, "fcr": fcr, "cfcr": cfcr,
+        "feed_ob": feed_ob.quantize(q2), "feed_in": feed_in.quantize(q2),
+        "feed_out": feed_out.quantize(q2), "feed_con": feed_con.quantize(q2),
+        "feed_stock": feed_stock.quantize(q2),
+        "cum_feed": feed_upto.quantize(q2),
+        "feed_images": e.feed_image.url if e.feed_image else "",
+        "line": farm.line if farm else "",
+        "branch": farm.branch.branch_name if farm and farm.branch_id else "",
+        "farmer_contact": (farmer.mobile_no or farmer.phone_no or "") if farmer else "",
+        "entry_time": e.entry_time,
+        "entry_by": str(e.entry_by) if e.entry_by_id else "",
+        "remarks": e.remarks or "",
+        "diseases_name": ", ".join(diseases),
+        "farm_location": (f"{farm_lat}, {farm_lon}"
+                          if farm_lat is not None and farm_lon is not None else ""),
+        "entry_location": (f"{e.entry_latitude}, {e.entry_longitude}"
+                           if e.entry_latitude is not None and e.entry_longitude is not None else ""),
+        "diff_km": round(diff_km, 3) if diff_km is not None else "",
+    }
+
+
+@login_required
+def day_record_report(request):
+    """Broiler > Reports > Day Record Report — one row per daily entry recorded
+    on the selected date across all farms: that day's mortality/culls/sales,
+    body weight vs breed standard, and feed movement (opening/in/out/consumed/
+    stock/cumulative), with a Total footer. Image, disease and entry-location
+    columns are shown but not yet captured on the daily entry (blank for now)."""
+    from account.models import CompanyProfile
+    from django.utils.dateparse import parse_date
+    from inventory.models import StockTransfer, Item
+    from broiler.models import BirdSale
+
+    region_id = (request.GET.get("region") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    line = (request.GET.get("line") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    date_str = (request.GET.get("date") or "").strip()
+
+    if date_str:
+        sel_date = parse_date(date_str) or timezone.localdate()
+    else:  # default to the most recent day that actually has entries
+        sel_date = (DailyEntry.objects.order_by("-date")
+                    .values_list("date", flat=True).first()) or timezone.localdate()
+
+    entries = (DailyEntry.objects.filter(date=sel_date)
+               .select_related("farm__branch", "farm__supervisor", "farm__farmer",
+                               "batch__breed", "supervisor", "entry_by")
+               .order_by("farm__farm_code", "batch__batch_name", "id"))
+    if region_id:
+        entries = entries.filter(farm__branch__region_id=region_id)
+    if branch_id:
+        entries = entries.filter(farm__branch_id=branch_id)
+    if line:
+        entries = entries.filter(farm__line=line)
+    if supervisor_id:
+        entries = entries.filter(Q(supervisor_id=supervisor_id) | Q(farm__supervisor_id=supervisor_id))
+    if farm_id:
+        entries = entries.filter(farm_id=farm_id)
+
+    feed_ids = list(Item.objects.filter(category__name__icontains="feed").values_list("id", flat=True))
+    chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+    placed_cache = {}
+
+    rows = [_day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale)
+            for e in entries]
+
+    # Total footer over the summable columns
+    tkeys = ["placed", "opening", "mort", "cum_mort", "culls", "sold", "sold_wt",
+             "balance", "feed_ob", "feed_in", "feed_out", "feed_con", "feed_stock", "cum_feed"]
+    totals = {k: sum((_num(r[k]) for r in rows), Decimal("0")) for k in tkeys}
+    totals["mort_pct"] = _div(totals["mort"] * 100, totals["opening"]).quantize(Decimal("0.01"))
+    totals["cum_mort_pct"] = _div(totals["cum_mort"] * 100, totals["placed"]).quantize(Decimal("0.01"))
+
+    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+             .values_list("line", flat=True).distinct())
+
+    return render(request, "day_record_report.html", {
+        "rows": rows, "totals": totals, "sel_date": sel_date,
+        "regions": Region.objects.order_by("description"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "lines": lines,
+        "supervisors": Supervisor.objects.order_by("name"),
+        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "region_id": region_id, "branch_id": branch_id, "line": line,
+        "supervisor_id": supervisor_id, "farm_id": farm_id,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
 @login_required
 def chicks_placement_report(request):
     """Register of every Chicks Placement transaction (Warehouse -> Farm/Batch
@@ -4285,14 +4966,18 @@ class GCSettlementAPI(View):
             rows = rows.filter(gc_date__gte=from_date)
         if to_date:
             rows = rows.filter(gc_date__lte=to_date)
+        def fmt(d):
+            return d.strftime("%d.%m.%Y") if d else ""
         return JsonResponse([{
-            "id": s.id, "settlement_code": s.settlement_code,
-            "gc_date": s.gc_date.strftime("%d.%m.%Y") if s.gc_date else "",
+            "id": s.id,
+            "closed_date": fmt(timezone.localtime(s.created_at).date() if s.created_at else None),
+            "settlement_code": s.settlement_code,
+            "gc_date": fmt(s.gc_date),
             "farm_name": s.farm.farm_name, "batch_name": s.batch.batch_name,
-            "start_date": s.placement_date.strftime("%d.%m.%Y") if s.placement_date else (
-                s.batch.start_date.strftime("%d.%m.%Y") if s.batch.start_date else ""),
-            "end_date": (s.batch.closed_on or s.gc_date).strftime("%d.%m.%Y") if (s.batch.closed_on or s.gc_date) else "",
-            "farmer_payable": str(s.farmer_payable),
+            "start_date": fmt(s.placement_date or s.batch.start_date),
+            "liquidation_date": fmt(s.liquidation_date),
+            "gc_amount": str(s.farmer_payable),
+            "grade": s.grade or "-",
         } for s in rows], safe=False)
 
     @transaction.atomic
@@ -4370,10 +5055,13 @@ class GCSettlementAPI(View):
     def delete(self, request, id):
         s = get_object_or_404(GrowingChargeSettlement.objects.select_related("batch"), id=id)
         batch = s.batch
+        # Reopen the batch — clear the end/closed marks the settlement set so
+        # the flock counts as live again.
         s.delete()
         batch.is_closed = False
         batch.closed_on = None
-        batch.save(update_fields=["is_closed", "closed_on"])
+        batch.end_date = None
+        batch.save(update_fields=["is_closed", "closed_on", "end_date"])
         return JsonResponse({"message": "Settlement deleted and batch reopened"})
 
 

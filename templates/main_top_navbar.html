@@ -63,6 +63,9 @@
               {% if 'branch_farm' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'branch_farm' %}">
                 <i class="fas fa-tractor"></i>Broiler Farm
               </a></li>{% endif %}
+              {% if 'broiler_farm_shed' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'broiler_farm_shed' %}">
+                <i class="fas fa-warehouse"></i>Farm Shed
+              </a></li>{% endif %}
               {% if 'broiler_batch' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'broiler_batch' %}">
                 <i class="fas fa-layer-group"></i>Broiler Batch
               </a></li>{% endif %}
@@ -151,6 +154,12 @@
               </a></li>{% endif %}
               {% if 'feed_dispatch_stock_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'feed_dispatch_stock_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-wheat-awn"></i>Feed Dispatch &amp; Stock Report
+              </a></li>{% endif %}
+              {% if 'live_flock_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'live_flock_summary_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-kiwi-bird"></i>Live Flock Summary Report
+              </a></li>{% endif %}
+              {% if 'day_record_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'day_record_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-calendar-day"></i>Day Record Report
               </a></li>{% endif %}
             </ul>
           </li>

@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Live Flock Summary Report — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='live_flock_summary_report' %}
+
+<style>
+  .lfs-breadcrumb { font-size:.85rem; color:#6c757d; margin:.25rem 0 .75rem; }
+  .lfs-title { font-weight:700; margin-bottom:1rem; }
+  .lfs-filter .form-label { font-size:.78rem; font-weight:600; margin-bottom:.2rem; }
+  .lfs-table { font-size:.72rem; }
+  .lfs-table th, .lfs-table td { white-space:nowrap; vertical-align:middle; text-align:center; padding:.3rem .45rem; }
+  .lfs-table thead th { background:#f1f3f5; position:sticky; top:0; }
+  .lfs-table td.num { text-align:right; }
+  .lfs-table td.txt { text-align:left; }
+  .warn { color:#c0392b; font-weight:700; }
+  .ok { background:#d9f2df; color:#1a7f37; font-weight:700; border-radius:.3rem; padding:0 .4rem; }
+  .gap-ok  { background:#d9f2df !important; color:#1a7f37; font-weight:700; }
+  .gap-bad { background:#fdecea !important; color:#c0392b; font-weight:700; }
+  .badge-ns { background:#fff3cd; color:#8a6d00; font-weight:700; border-radius:.3rem; padding:.05rem .45rem; font-size:.7rem; }
+  .lfs-remark { white-space:normal !important; min-width:220px; max-width:300px; text-align:left !important; }
+  .lfs-remark .rm-detail { font-size:.72rem; color:#212529; font-weight:500; line-height:1.25; }
+  .vb { display:inline-block; font-weight:700; border-radius:.3rem; padding:0 .4rem; margin-bottom:.15rem; font-size:.68rem; }
+  .vb-ontrack  { background:#d9f2df; color:#1a7f37; }
+  .vb-watch    { background:#fff3cd; color:#8a6d00; }
+  .vb-behind   { background:#ffe3d1; color:#b4530f; }
+  .vb-critical { background:#fdecea; color:#c0392b; }
+  .vb-ns       { background:#e9ecef; color:#495057; }
+  .lfs-scroll { max-height:72vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+</style>
+
+<div class="lfs-breadcrumb no-print">Reports <span class="mx-1">&rsaquo;</span> Live Flock Summary Report</div>
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+  <h3 class="lfs-title mb-0">Live Flock Summary Report</h3>
+  <div class="text-muted small">{{ rows|length }} live flock(s)</div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3 no-print lfs-filter"><div class="card-body">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2"><label class="form-label">Region</label>
+      <select name="region" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for r in regions %}<option value="{{ r.id }}" {% if region_id == r.id|stringformat:'s' %}selected{% endif %}>{{ r.description }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Supervisor</label>
+      <select name="supervisor" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Breed</label>
+      <select name="breed" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for b in breeds %}<option value="{{ b.id }}" {% if breed_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.description }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-4 d-flex gap-2">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Search</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'live_flock_summary_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div></div>
+
+<div class="card"><div class="card-body p-2">
+  <div class="lfs-scroll">
+    <table class="table table-bordered table-hover lfs-table mb-0" style="width:max-content; min-width:100%;">
+      <thead><tr>
+        <th>Sl.No.</th><th>Branch</th><th>Line</th><th>Supervisor</th><th>Farmer</th><th>Batch</th><th>Book No</th>
+        <th>Actual Age</th><th>Placement Date</th><th>Lifting Start Date</th><th>Mean Age</th>
+        <th>Latest Entry Date</th><th>Gap Days</th><th>Housed Chicks</th><th>Mort</th><th>Mort%</th>
+        <th>Cull</th><th>Cull%</th><th>Sold Birds</th><th>Sold Weight</th><th>Available Birds</th><th>Available Weight</th>
+        <th>Std B.Wt</th><th>Avg B.Wt</th><th>Std B.Wt @ Feed<br><small class="text-muted">g/Bird</small></th><th>Last B.Wt Date</th><th>B.Wt Gap Days</th><th>Std FCR</th><th>FCR</th><th>CFCR</th><th>EEF</th><th>M PC/Kg</th><th>PC/Bird</th>
+        <th>Feed Transferred</th><th>Transfer In From Other Farms</th>
+        <th>Std Feed Con<br><small class="text-muted">KG/Batch</small></th><th>Std Feed Con<br><small class="text-muted">g/Bird</small></th>
+        <th>Actual Feed Con<br><small class="text-muted">KG/Batch</small></th><th>Actual Feed Con<br><small class="text-muted">g/Bird</small></th>
+        <th>Std Feed @ B.Wt<br><small class="text-muted">KG/Batch</small></th><th>Std Feed @ B.Wt<br><small class="text-muted">g/Bird</small></th>
+        <th>Transfer Out to Farms</th><th>Feed Balance</th><th>Feed Balance Days</th><th>Next 3 Days Feed</th>
+        <th>Auto Valuation Remark</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td class="txt">{{ r.branch|default:"-" }}</td>
+          <td class="txt">{{ r.line|default:"-" }}</td>
+          <td class="txt">{{ r.supervisor|default:"-" }}</td>
+          <td class="txt">{{ r.farmer|default:"-" }}</td>
+          <td class="txt">{{ r.batch }}</td>
+          <td>{{ r.book_no|default:"-" }}</td>
+          <td class="num">{{ r.actual_age }}</td>
+          <td>{{ r.placement_date|date:"d.m.Y"|default:"-" }}</td>
+          <td>{{ r.lifting_start|date:"d.m.Y"|default:"-" }}</td>
+          <td class="num">{{ r.mean_age|floatformat:2 }}</td>
+          <td>{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.latest_entry|date:"d.m.Y"|default:"-" }}{% endif %}</td>
+          <td class="num {% if not r.not_started and r.gap_days is not None %}{% if r.gap_days >= 2 %}gap-bad{% else %}gap-ok{% endif %}{% endif %}">{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.gap_days|default:"-" }}{% endif %}</td>
+          <td class="num">{{ r.housed|floatformat:0 }}</td>
+          <td class="num">{{ r.mort|floatformat:0 }}</td>
+          <td class="num">{{ r.mort_pct|floatformat:2 }}</td>
+          <td class="num">{{ r.cull|floatformat:0 }}</td>
+          <td class="num">{{ r.cull_pct|floatformat:2 }}</td>
+          <td class="num">{{ r.sold_birds|floatformat:0 }}</td>
+          <td class="num">{{ r.sold_weight|floatformat:2 }}</td>
+          <td class="num">{{ r.available|floatformat:0 }}</td>
+          <td class="num">{{ r.available_weight|floatformat:2 }}</td>
+          <td class="num">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{{ r.avg_bwt|floatformat:2 }}</td>
+          <td class="num">{% if r.std_bwt_at_feed is not None %}{{ r.std_bwt_at_feed|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td>{{ r.last_bwt_date|date:"d.m.Y"|default:"-" }}</td>
+          <td class="num {% if r.last_bwt_gap is not None %}{% if r.last_bwt_gap >= 2 %}gap-bad{% else %}gap-ok{% endif %}{% endif %}">{{ r.last_bwt_gap|default:"-" }}</td>
+          <td class="num">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:3 }}{% else %}-{% endif %}</td>
+          <td class="num">{{ r.fcr|floatformat:3 }}</td>
+          <td class="num">{{ r.cfcr|floatformat:2 }}</td>
+          <td class="num">{{ r.eef|floatformat:2 }}</td>
+          <td class="num">{{ r.m_pc_kg|floatformat:2 }}</td>
+          <td class="num">{{ r.m_pc_bird|floatformat:2 }}</td>
+          <td class="num">{{ r.feed_transferred|floatformat:2 }}</td>
+          <td class="num">{{ r.transfer_in_farms|floatformat:2 }}</td>
+          <td class="num">{% if r.std_feed_con is not None %}{{ r.std_feed_con|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{% if r.std_feed_con_bird is not None %}{{ r.std_feed_con_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{{ r.feed_con|floatformat:2 }}</td>
+          <td class="num">{% if r.feed_con_bird is not None %}{{ r.feed_con_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{% if r.std_feed_at_bwt is not None %}{{ r.std_feed_at_bwt|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{% if r.std_feed_at_bwt_bird is not None %}{{ r.std_feed_at_bwt_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{{ r.transfer_out_farms|floatformat:2 }}</td>
+          <td class="num">{{ r.feed_balance|floatformat:2 }}</td>
+          <td class="num {% if r.feed_balance_days <= 1 %}warn{% endif %}">{{ r.feed_balance_days|floatformat:2 }}</td>
+          <td class="num">{{ r.next_3_days_feed|floatformat:2 }}</td>
+          <td class="lfs-remark">
+            <span class="vb {% if r.remark_verdict == 'Critical' %}vb-critical{% elif r.remark_verdict == 'Behind' %}vb-behind{% elif r.remark_verdict == 'Watch' %}vb-watch{% elif r.remark_verdict == 'Not Started' %}vb-ns{% else %}vb-ontrack{% endif %}">{{ r.remark_verdict }}</span><br>
+            <span class="rm-detail">{{ r.remark|cut:r.remark_verdict|cut:" — " }}</span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="46" class="text-center text-muted py-4">No live flocks found for these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+{% endblock %}

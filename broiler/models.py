@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
@@ -694,40 +695,139 @@ class BroilerFarm(models.Model):
 
 class BroilerFarmShed(models.Model):
     """
-    Represents a shed within a broiler farm.
+    Represents a shed within a broiler farm (Broiler > Master > Farm Shed).
+    Organization Centre / Branch / Company are auto-derived from the farm.
     """
+
+    SHED_TYPE_CHOICES = [
+        ("broiler", _("Broiler")),
+        ("breeder", _("Breeder")),
+        ("layer", _("Layer")),
+        ("grower", _("Grower")),
+        ("quarantine", _("Quarantine")),
+    ]
+
     farm = models.ForeignKey(
         BroilerFarm,
         on_delete=models.CASCADE,
         related_name='sheds',
         help_text=_("Farm this shed belongs to")
     )
+    shed_code = models.CharField(
+        max_length=30, unique=True, editable=False, blank=True,
+        help_text=_("Auto-generated code, e.g. SHED-0001")
+    )
+    shed_name = models.CharField(
+        max_length=100, blank=True,
+        help_text=_("Descriptive name of the shed")
+    )
+    shed_type = models.CharField(
+        max_length=20, choices=SHED_TYPE_CHOICES, default="broiler",
+        help_text=_("Type of shed")
+    )
+    unit_no = models.PositiveIntegerField(
+        default=0, editable=False,
+        help_text=_("Auto-assigned running unit number within the farm (1,2,3…)")
+    )
+    organization_centre = models.ForeignKey(
+        'account.OrganizationCentre', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='farm_sheds',
+        help_text=_("Cost/Organization Centre — auto-set from the farm's branch")
+    )
+    is_active = models.BooleanField(default=True)
+
     shed_no = models.CharField(
-        max_length=50,
-        help_text=_("Shed number/identifier")
+        max_length=50, blank=True,
+        help_text=_("Legacy shed number/identifier")
+    )
+    length = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text=_("Shed length in feet")
+    )
+    width = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text=_("Shed width in feet")
     )
     dimensions = models.CharField(
         max_length=100,
         blank=True,
         null=True,
-        help_text=_("Dimensions of the shed")
+        help_text=_("Auto-composed 'L x W ft' from length & width")
     )
     sq_feet = models.CharField(
         max_length=20,
         blank=True,
         null=True,
-        help_text=_("Area of the shed in square feet")
+        help_text=_("Auto-calculated area (length x width) in square feet")
+    )
+    capacity = models.PositiveIntegerField(
+        default=0, help_text=_("Bird holding capacity of the shed")
+    )
+    occupied = models.PositiveIntegerField(
+        default=0, help_text=_("Birds currently housed in the shed")
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    @property
+    def free_space(self):
+        return max(self.capacity - self.occupied, 0)
+
+    @property
+    def utilization_pct(self):
+        return round(self.occupied / self.capacity * 100) if self.capacity else 0
+
     class Meta:
         verbose_name = _("Broiler Farm Shed")
         verbose_name_plural = _("Broiler Farm Sheds")
-        ordering = ['shed_no']
+        ordering = ['farm__farm_code', 'unit_no', 'shed_no']
 
     def __str__(self):
-        return f"Shed {self.shed_no} ({self.farm.farm_name})"
+        return f"{self.shed_code or self.shed_name or self.shed_no} ({self.farm.farm_name})"
+
+    @staticmethod
+    def _next_shed_code():
+        prefix = "SHED-"
+        max_num = 0
+        for code in (BroilerFarmShed.objects
+                     .filter(shed_code__startswith=prefix)
+                     .values_list("shed_code", flat=True)):
+            m = re.match(rf"^{re.escape(prefix)}(\d+)$", code or "")
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if not self.shed_code:
+            self.shed_code = self._next_shed_code()
+        if not self.unit_no:
+            existing = (BroilerFarmShed.objects.filter(farm=self.farm)
+                        .exclude(pk=self.pk).aggregate(m=models.Max("unit_no"))["m"] or 0)
+            self.unit_no = existing + 1
+        # Shed name defaults to "<Farm Name> Shed <unit no>" but stays editable —
+        # only auto-filled when left blank.
+        if self.farm_id and not (self.shed_name or "").strip():
+            self.shed_name = f"{self.farm.farm_name} Shed {self.unit_no}"
+        if self.shed_name:
+            self.shed_no = self.shed_name
+        # Auto-derive the cost/organization centre from the farm's branch.
+        if self.farm_id and not self.organization_centre_id:
+            from account.models import OrganizationCentre
+            self.organization_centre = (OrganizationCentre.objects
+                                        .filter(branch_id=self.farm.branch_id).first())
+        # Status is occupancy-driven: a shed is Active once chicks are placed in
+        # it (occupied > 0), otherwise inactive/vacant. Occupied itself is filled
+        # from chicks placement, so Status follows automatically.
+        self.is_active = (self.occupied or 0) > 0
+        # Auto-calculate area & dimension string from length x width.
+        if self.length and self.width:
+            def _fmt(v):
+                v = Decimal(str(v))
+                return str(v.quantize(Decimal("1")) if v == v.to_integral_value() else v.normalize())
+            area = (Decimal(str(self.length)) * Decimal(str(self.width)))
+            self.sq_feet = _fmt(area)
+            self.dimensions = f"{_fmt(self.length)} x {_fmt(self.width)} ft"
+        super().save(*args, **kwargs)
 
 
 class BroilerFarmImage(models.Model):
@@ -780,8 +880,16 @@ class BroilerBatch(models.Model):
         blank=True,
         help_text=_("Lot number for this batch")
     )
+    breed = models.ForeignKey(
+        'Breed',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='batches',
+        help_text=_("Breed of this flock — used for standard performance comparison"),
+    )
     start_date = models.DateField(
-        blank=True, 
+        blank=True,
         null=True,
         help_text=_("Date when the batch was started")
     )
@@ -914,6 +1022,19 @@ class DailyEntry(models.Model):
 
     avg_weight_gms = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     remarks = models.CharField(max_length=255, blank=True)
+
+    # Field-capture attachments & geo-tag — populated by the mobile app when a
+    # supervisor records the day at the farm; optional (blank until captured).
+    mort_image = models.ImageField(upload_to='daily_entry/mort/', null=True, blank=True,
+                                   help_text="Photo evidence of the day's mortality")
+    cull_image = models.ImageField(upload_to='daily_entry/cull/', null=True, blank=True,
+                                   help_text="Photo evidence of the day's culls")
+    feed_image = models.ImageField(upload_to='daily_entry/feed/', null=True, blank=True,
+                                   help_text="Photo of feed stock/consumption")
+    entry_latitude = models.FloatField(null=True, blank=True,
+                                       help_text="GPS latitude where the entry was recorded")
+    entry_longitude = models.FloatField(null=True, blank=True,
+                                        help_text="GPS longitude where the entry was recorded")
 
     entry_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='broiler_daily_entries')

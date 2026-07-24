@@ -38,8 +38,9 @@
     <div class="table-responsive">
       <table class="table table-hover table-bordered mb-0" id="gcs-table" style="width:100%">
         <thead><tr>
-          <th>Date</th><th>Invoice</th><th>Farm</th><th>Batch</th>
-          <th>Start Date</th><th>End Date</th><th class="text-center">Action</th>
+          <th>GC Closed Date</th><th>Transaction No.</th><th>GC Date</th>
+          <th>Farm</th><th>Batch</th><th>Start Date</th><th>Liquidation Date</th>
+          <th class="text-end">GC Amount</th><th>Grade</th><th class="text-center">Action</th>
         </tr></thead>
         <tbody id="gcs-table-body"></tbody>
       </table>
@@ -64,12 +65,12 @@
       </select>
     </div>
     <div class="col-md-3">
-      <label class="gcs-form-label">Scheme Name <span class="text-danger">*</span></label>
-      <select id="f-scheme" class="form-select form-select-sm"><option value="">select</option></select>
-    </div>
-    <div class="col-md-3">
       <label class="gcs-form-label">Batch <span class="text-danger">*</span></label>
       <select id="f-batch" class="form-select form-select-sm"><option value="">select</option></select>
+    </div>
+    <div class="col-md-3">
+      <label class="gcs-form-label">Scheme Name <span class="text-danger">*</span></label>
+      <select id="f-scheme" class="form-select form-select-sm"><option value="">select</option></select>
     </div>
   </div>
   <div class="row g-3 mb-3">
@@ -208,12 +209,15 @@ function loadList() {
     const body = $('#gcs-table-body').empty();
     rows.forEach(s => body.append(`
       <tr>
-        <td>${escapeHtml(s.gc_date)}</td>
+        <td>${escapeHtml(s.closed_date)}</td>
         <td>${escapeHtml(s.settlement_code)}</td>
+        <td>${escapeHtml(s.gc_date)}</td>
         <td>${escapeHtml(s.farm_name)}</td>
         <td>${escapeHtml(s.batch_name)}</td>
         <td>${escapeHtml(s.start_date)}</td>
-        <td>${escapeHtml(s.end_date)}</td>
+        <td>${escapeHtml(s.liquidation_date)}</td>
+        <td class="text-end">${escapeHtml(s.gc_amount)}</td>
+        <td>${escapeHtml(s.grade)}</td>
         <td><div class="d-flex gap-1 justify-content-center flex-nowrap">
           {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm gcs-edit" data-id="${s.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
           <a class="btn btn-outline-secondary btn-sm" href="/gc_settlement/${s.id}/print/" target="_blank" title="Print report"><i class="fas fa-print"></i></a>
