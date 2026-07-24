@@ -2,10 +2,12 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
-import { Text } from "react-native";
+import { Pressable, Text } from "react-native";
 
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
+import { isEditable } from "@/config/forms";
+import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
 import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
@@ -45,9 +47,25 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen
         name="List"
         component={ResourceListScreen}
-        options={({ route }) => ({ title: RESOURCES[route.params.resourceKey].title })}
+        options={({ route, navigation }) => {
+          const key = route.params.resourceKey;
+          return {
+            title: RESOURCES[key].title,
+            headerRight: isEditable(key)
+              ? () => (
+                  <Pressable
+                    hitSlop={12}
+                    onPress={() => navigation.navigate("Form", { resourceKey: key, mode: "create" })}
+                  >
+                    <Text style={{ color: colors.onDark, fontSize: 26, fontWeight: "700" }}>＋</Text>
+                  </Pressable>
+                )
+              : undefined,
+          };
+        }}
       />
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
+      <ModuleStack.Screen name="Form" component={FormScreen} />
     </ModuleStack.Navigator>
   );
 }

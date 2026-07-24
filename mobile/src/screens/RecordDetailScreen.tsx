@@ -1,10 +1,11 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Row } from "@/api/types";
 import { Badge, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
+import { isEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { colors, spacing, type } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
@@ -31,8 +32,22 @@ export function RecordDetailScreen({ route, navigation }: Props) {
   const view = config.card(row);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: config.singular });
-  }, [navigation, config.singular]);
+    navigation.setOptions({
+      title: config.singular,
+      headerRight: isEditable(config.key)
+        ? () => (
+            <Pressable
+              hitSlop={12}
+              onPress={() =>
+                navigation.navigate("Form", { resourceKey: config.key, mode: "edit", row })
+              }
+            >
+              <Text style={{ color: colors.onDark, ...type.title }}>Edit</Text>
+            </Pressable>
+          )
+        : undefined,
+    });
+  }, [navigation, config.singular, config.key, row]);
 
   // FKs come back as raw ids plus a `<fk>_label` companion (str of the related
   // row). Show the label as the value and hide the standalone `_label` field.

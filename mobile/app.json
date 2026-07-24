@@ -21,6 +21,9 @@
     },
     "extra": {
       "apiBaseUrl": "http://localhost:8000/api/v1"
-    }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }
