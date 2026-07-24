@@ -9,6 +9,7 @@ no per-endpoint URL wiring.
 from __future__ import annotations
 
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from broiler.api import register as register_broiler
@@ -33,6 +34,9 @@ auth_patterns = [
 urlpatterns = [
     path("health", HealthView.as_view(), name="health"),
     path("ready", ReadyView.as_view(), name="ready"),
+    # OpenAPI schema + interactive docs (source of the generated mobile client).
+    path("schema", SpectacularAPIView.as_view(), name="schema"),
+    path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("", include(router.urls)),
 ]

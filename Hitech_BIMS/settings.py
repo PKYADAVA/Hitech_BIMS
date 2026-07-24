@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "alerts",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",
     "api",
 ]
 
@@ -404,6 +405,22 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": os.getenv("API_AUTH_THROTTLE_RATE", "10/min"),
     },
+    # OpenAPI schema generation for the mobile client (drf-spectacular).
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# drf-spectacular — powers /api/v1/schema and /api/v1/docs, and the generated
+# TypeScript client in mobile/. Only v1 paths are documented (see PREPROCESSING
+# hook) so the schema stays focused on the mobile surface.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Hitech BIMS Mobile API",
+    "DESCRIPTION": "JWT-authenticated REST API (v1) consumed by the mobile app.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "PREPROCESSING_HOOKS": ["api.schema.only_v1_endpoints"],
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
 }
 
 # SimpleJWT — short-lived access tokens with rotating, blacklistable refresh

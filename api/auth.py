@@ -14,6 +14,7 @@ Endpoints (all under ``/api/v1/auth/``):
 """
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -25,6 +26,43 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .envelope import EnvelopeJSONRenderer
 from .exceptions import api_exception_handler
+
+
+# --- schema-only serializers (document the auth responses for the client) --- #
+class UserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    email = serializers.CharField()
+    full_name = serializers.CharField()
+    is_staff = serializers.BooleanField()
+    is_superuser = serializers.BooleanField()
+    role = serializers.CharField()
+    department = serializers.CharField()
+    groups = serializers.ListField(child=serializers.CharField())
+
+
+class LoginRequestSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField()
+
+
+class TokenPairSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    user = UserSerializer()
+
+
+class RefreshRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+
+class AccessSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField(required=False)
+
+
+class DetailSerializer(serializers.Serializer):
+    detail = serializers.CharField()
 
 
 def _user_payload(user) -> dict:
