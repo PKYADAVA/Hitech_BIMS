@@ -1,45 +1,79 @@
-import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { Text } from "react-native";
 
 import { Loading } from "@/components/ui";
-import { DailyEntriesScreen } from "@/screens/DailyEntriesScreen";
-import { EggPurchasesScreen } from "@/screens/EggPurchasesScreen";
+import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
+import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
+import { ProfileScreen } from "@/screens/ProfileScreen";
+import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
+import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { useAuthStore } from "@/store/authStore";
-import { colors } from "@/theme";
+import { colors, shadow } from "@/theme";
+import { ModuleStackParams, TabParams } from "./types";
 
-const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+const Root = createNativeStackNavigator();
+const Tab = createBottomTabNavigator<TabParams>();
+const ModuleStack = createNativeStackNavigator<ModuleStackParams>();
 
-/** Emoji tab icons keep the first build dependency-free (swap for vector icons later). */
 function tabIcon(icon: string) {
-  return ({ color }: { color: string }) => <Text style={{ fontSize: 18, color }}>{icon}</Text>;
+  return ({ focused }: { focused: boolean }) => (
+    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{icon}</Text>
+  );
 }
+
+/** One native stack per module (Hub → List → Detail), branded in the module color. */
+function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
+  const mod = MODULES[moduleKey];
+  return (
+    <ModuleStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: mod.color },
+        headerTintColor: colors.onDark,
+        headerTitleStyle: { fontWeight: "800" },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
+      <ModuleStack.Screen name="Hub" options={{ title: mod.title }}>
+        {(props) => <ModuleHubScreen {...props} moduleKey={moduleKey} />}
+      </ModuleStack.Screen>
+      <ModuleStack.Screen
+        name="List"
+        component={ResourceListScreen}
+        options={({ route }) => ({ title: RESOURCES[route.params.resourceKey].title })}
+      />
+      <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
+    </ModuleStack.Navigator>
+  );
+}
+
+const BroilerStack = () => <ModuleStackScreen moduleKey="broiler" />;
+const HatcheryStack = () => <ModuleStackScreen moduleKey="hatchery" />;
 
 function AppTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.primary },
-        headerTintColor: "#fff",
+        headerShown: false,
         tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textFaint,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          ...shadow(1),
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: tabIcon("🏠") }} />
-      <Tab.Screen
-        name="DailyEntries"
-        component={DailyEntriesScreen}
-        options={{ title: "Daily Entries", tabBarLabel: "Broiler", tabBarIcon: tabIcon("🐔") }}
-      />
-      <Tab.Screen
-        name="EggPurchases"
-        component={EggPurchasesScreen}
-        options={{ title: "Egg Purchases", tabBarLabel: "Hatchery", tabBarIcon: tabIcon("🥚") }}
-      />
+      <Tab.Screen name="Broiler" component={BroilerStack} options={{ tabBarIcon: tabIcon("🐔") }} />
+      <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚") }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: tabIcon("👤") }} />
     </Tab.Navigator>
   );
 }
@@ -51,13 +85,13 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Root.Navigator screenOptions={{ headerShown: false }}>
         {status === "signedIn" ? (
-          <Stack.Screen name="App" component={AppTabs} />
+          <Root.Screen name="App" component={AppTabs} />
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <Root.Screen name="Login" component={LoginScreen} />
         )}
-      </Stack.Navigator>
+      </Root.Navigator>
     </NavigationContainer>
   );
 }

@@ -1,0 +1,378 @@
+/**
+ * Resource catalog — the single source of truth that maps the web app's
+ * broiler & hatchery modules onto the mobile API.
+ *
+ * Each entry declares how a resource is listed (icon, accent, the card view for
+ * one row) and searched. List + detail screens are fully generic and read from
+ * here, so adding a screen is a config entry — no new component.
+ *
+ * FKs come back from the `__all__` serializers as raw ids (no `_name` fields),
+ * so cards lead with each record's own rich scalar data (numbers, dates,
+ * amounts) — the meaningful, self-contained parts of a transaction.
+ */
+import { Row } from "@/api/types";
+import { BadgeTone } from "@/components/ui";
+import { colors } from "@/theme";
+import { formatDate, formatMoney, formatNumber, joinParts, pick } from "@/utils/format";
+
+export type ModuleKey = "broiler" | "hatchery";
+
+export interface CardView {
+  title: string;
+  subtitle?: string;
+  trailing?: { value: string; caption?: string };
+  badge?: { label: string; tone: BadgeTone };
+}
+
+export interface ResourceConfig {
+  key: string;
+  module: ModuleKey;
+  path: string;
+  title: string; // plural, e.g. "Daily Entries"
+  singular: string;
+  icon: string;
+  accent: string;
+  emptyMessage: string;
+  searchKeys: string[];
+  card: (row: Row) => CardView;
+}
+
+export interface ModuleSection {
+  title: string;
+  resourceKeys: string[];
+}
+
+export interface ModuleConfig {
+  key: ModuleKey;
+  title: string;
+  tagline: string;
+  icon: string;
+  color: string;
+  colorLight: string;
+  sections: ModuleSection[];
+}
+
+/* ----------------------------- Broiler ---------------------------------- */
+
+const B = colors.broiler;
+
+const broilerResources: ResourceConfig[] = [
+  {
+    key: "broiler-daily-entries",
+    module: "broiler",
+    path: "/broiler/daily-entries/",
+    title: "Daily Entries",
+    singular: "Daily Entry",
+    icon: "📋",
+    accent: B,
+    emptyMessage: "No daily entries yet.",
+    searchKeys: ["entry_no", "remarks"],
+    card: (r) => ({
+      title: pick(r, ["entry_no"], `Entry #${r.id}`),
+      subtitle: joinParts([
+        formatDate(r.date),
+        !isBlank(r.age_days) ? `Age ${r.age_days}d` : "",
+      ]),
+      trailing: !isBlank(r.avg_weight_gms)
+        ? { value: `${formatNumber(r.avg_weight_gms)} g`, caption: "avg wt" }
+        : undefined,
+      badge:
+        Number(r.mortality) > 0
+          ? { label: `${r.mortality} mort`, tone: "danger" }
+          : { label: "0 mort", tone: "success" },
+    }),
+  },
+  {
+    key: "broiler-medicine-vaccine",
+    module: "broiler",
+    path: "/broiler/medicine-vaccine-entries/",
+    title: "Medicine & Vaccine",
+    singular: "Medicine / Vaccine Entry",
+    icon: "💉",
+    accent: B,
+    emptyMessage: "No medicine / vaccine entries yet.",
+    searchKeys: ["entry_no", "remarks"],
+    card: (r) => ({
+      title: pick(r, ["entry_no"], `Entry #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), !isBlank(r.age_days) ? `Age ${r.age_days}d` : ""]),
+      trailing: !isBlank(r.qty) ? { value: formatNumber(r.qty), caption: "qty" } : undefined,
+    }),
+  },
+  {
+    key: "broiler-bird-sales",
+    module: "broiler",
+    path: "/broiler/bird-sales/",
+    title: "Bird Sales",
+    singular: "Bird Sale",
+    icon: "🚚",
+    accent: B,
+    emptyMessage: "No bird sales yet.",
+    searchKeys: ["sale_no", "doc_no", "vehicle", "driver"],
+    card: (r) => ({
+      title: pick(r, ["sale_no"], `Sale #${r.id}`),
+      subtitle: joinParts([
+        formatDate(r.date),
+        !isBlank(r.birds) ? `${formatNumber(r.birds)} birds` : "",
+      ]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+      badge: !isBlank(r.sale_type)
+        ? { label: String(r.sale_type), tone: "info" }
+        : undefined,
+    }),
+  },
+  {
+    key: "broiler-sale-receipts",
+    module: "broiler",
+    path: "/broiler/bird-sale-receipts/",
+    title: "Sale Receipts",
+    singular: "Bird Sale Receipt",
+    icon: "🧾",
+    accent: B,
+    emptyMessage: "No sale receipts yet.",
+    searchKeys: ["receipt_no", "reference_no"],
+    card: (r) => ({
+      title: pick(r, ["receipt_no"], `Receipt #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["mode"])]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+  {
+    key: "broiler-farms",
+    module: "broiler",
+    path: "/broiler/farms/",
+    title: "Farms",
+    singular: "Farm",
+    icon: "🏠",
+    accent: B,
+    emptyMessage: "No farms found.",
+    searchKeys: ["farm_name", "farm_code", "district", "area"],
+    card: (r) => ({
+      title: pick(r, ["farm_name", "farm_code"], `Farm #${r.id}`),
+      subtitle: joinParts([pick(r, ["district"]), pick(r, ["area"]), pick(r, ["line"])]),
+      trailing: !isBlank(r.farm_capacity)
+        ? { value: formatNumber(r.farm_capacity), caption: "capacity" }
+        : undefined,
+    }),
+  },
+  {
+    key: "broiler-batches",
+    module: "broiler",
+    path: "/broiler/batches/",
+    title: "Batches",
+    singular: "Batch",
+    icon: "📦",
+    accent: B,
+    emptyMessage: "No batches found.",
+    searchKeys: ["batch_name", "lot_no", "book_number"],
+    card: (r) => ({
+      title: pick(r, ["batch_name"], `Batch #${r.id}`),
+      subtitle: joinParts([pick(r, ["lot_no"]) && `Lot ${r.lot_no}`, formatDate(r.start_date)]),
+      badge: r.is_closed
+        ? { label: "Closed", tone: "neutral" }
+        : { label: "Active", tone: "success" },
+    }),
+  },
+  {
+    key: "broiler-farmers",
+    module: "broiler",
+    path: "/broiler/farmers/",
+    title: "Farmers",
+    singular: "Farmer",
+    icon: "👨‍🌾",
+    accent: B,
+    emptyMessage: "No farmers found.",
+    searchKeys: ["farmer_name", "mobile_no", "phone_no"],
+    card: (r) => ({
+      title: pick(r, ["farmer_name"], `Farmer #${r.id}`),
+      subtitle: joinParts([pick(r, ["mobile_no", "phone_no"]), pick(r, ["usc"])]),
+    }),
+  },
+];
+
+/* ----------------------------- Hatchery --------------------------------- */
+
+const H = colors.hatchery;
+
+const hatcheryResources: ResourceConfig[] = [
+  {
+    key: "hatchery-egg-purchases",
+    module: "hatchery",
+    path: "/hatchery/egg-purchases/",
+    title: "Egg Purchases",
+    singular: "Egg Purchase",
+    icon: "🥚",
+    accent: H,
+    emptyMessage: "No egg purchases yet.",
+    searchKeys: ["transaction_no", "dc_no", "vehicle", "driver"],
+    card: (r) => ({
+      title: pick(r, ["transaction_no"], `Purchase #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["dc_no"]) && `DC ${r.dc_no}`]),
+      trailing: !isBlank(r.freight_amount)
+        ? { value: formatMoney(r.freight_amount), caption: "freight" }
+        : undefined,
+      badge: !isBlank(r.payment_mode)
+        ? { label: String(r.payment_mode), tone: "brand" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hatchery-egg-gradings",
+    module: "hatchery",
+    path: "/hatchery/egg-gradings/",
+    title: "Egg Grading",
+    singular: "Egg Grading",
+    icon: "🔬",
+    accent: H,
+    emptyMessage: "No egg gradings yet.",
+    searchKeys: ["transaction_no"],
+    card: (r) => ({
+      title: pick(r, ["transaction_no"], `Grading #${r.id}`),
+      subtitle: joinParts([
+        formatDate(r.date),
+        !isBlank(r.broken_eggs) ? `${formatNumber(r.broken_eggs)} broken` : "",
+      ]),
+      trailing: !isBlank(r.quantity)
+        ? { value: formatNumber(r.quantity), caption: "eggs" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hatchery-delivery-challans",
+    module: "hatchery",
+    path: "/hatchery/delivery-challans/",
+    title: "Delivery Challans",
+    singular: "Delivery Challan",
+    icon: "🚚",
+    accent: H,
+    emptyMessage: "No delivery challans yet.",
+    searchKeys: ["challan_no", "vehicle_no", "driver_name", "eway_bill_no"],
+    card: (r) => ({
+      title: pick(r, ["challan_no"], `Challan #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["vehicle_no"])]),
+      badge: !isBlank(r.transport_mode)
+        ? { label: String(r.transport_mode), tone: "info" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hatchery-hatch-entries",
+    module: "hatchery",
+    path: "/hatchery/hatch-entries/",
+    title: "Hatch Entries",
+    singular: "Hatch Entry",
+    icon: "🐣",
+    accent: H,
+    emptyMessage: "No hatch entries yet.",
+    searchKeys: ["transaction_no", "remarks"],
+    card: (r) => ({
+      title: pick(r, ["transaction_no"], `Hatch #${r.id}`),
+      subtitle: joinParts([
+        formatDate(r.hatch_date),
+        !isBlank(r.eggs_total) ? `${formatNumber(r.eggs_total)} eggs` : "",
+      ]),
+      trailing: !isBlank(r.chicks_total)
+        ? { value: formatNumber(r.chicks_total), caption: "chicks" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hatchery-chick-sales",
+    module: "hatchery",
+    path: "/hatchery/chick-sales/",
+    title: "Chick Sales",
+    singular: "Chick Sale",
+    icon: "🐥",
+    accent: H,
+    emptyMessage: "No chick sales yet.",
+    searchKeys: ["bill_no", "vehicle", "driver"],
+    card: (r) => ({
+      title: pick(r, ["bill_no"], `Bill #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["vehicle"])]),
+      trailing: !isBlank(r.final_amount) ? { value: formatMoney(r.final_amount) } : undefined,
+      badge: !isBlank(r.payment_mode)
+        ? { label: String(r.payment_mode), tone: "brand" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hatchery-hatch-settings",
+    module: "hatchery",
+    path: "/hatchery/hatch-settings/",
+    title: "Hatch Settings",
+    singular: "Hatch Setting",
+    icon: "⚙️",
+    accent: H,
+    emptyMessage: "No hatch settings yet.",
+    searchKeys: ["setting_no", "batch_flock_no", "supplier_name"],
+    card: (r) => ({
+      title: pick(r, ["setting_no"], `Setting #${r.id}`),
+      subtitle: joinParts([formatDate(r.setting_date), pick(r, ["batch_flock_no"])]),
+      trailing: !isBlank(r.setting_qty)
+        ? { value: formatNumber(r.setting_qty), caption: "set" }
+        : undefined,
+    }),
+  },
+];
+
+/* ----------------------------- Modules ---------------------------------- */
+
+export const RESOURCES: Record<string, ResourceConfig> = Object.fromEntries(
+  [...broilerResources, ...hatcheryResources].map((r) => [r.key, r])
+);
+
+export const MODULES: Record<ModuleKey, ModuleConfig> = {
+  broiler: {
+    key: "broiler",
+    title: "Broiler",
+    tagline: "Poultry farm operations",
+    icon: "🐔",
+    color: colors.broiler,
+    colorLight: colors.broilerLight,
+    sections: [
+      {
+        title: "Transactions",
+        resourceKeys: [
+          "broiler-daily-entries",
+          "broiler-medicine-vaccine",
+          "broiler-bird-sales",
+          "broiler-sale-receipts",
+        ],
+      },
+      {
+        title: "Master Data",
+        resourceKeys: ["broiler-farms", "broiler-batches", "broiler-farmers"],
+      },
+    ],
+  },
+  hatchery: {
+    key: "hatchery",
+    title: "Hatchery",
+    tagline: "Egg intake to chick dispatch",
+    icon: "🥚",
+    color: colors.hatchery,
+    colorLight: colors.hatcheryLight,
+    sections: [
+      {
+        title: "Transactions",
+        resourceKeys: [
+          "hatchery-egg-purchases",
+          "hatchery-egg-gradings",
+          "hatchery-hatch-entries",
+          "hatchery-chick-sales",
+          "hatchery-delivery-challans",
+        ],
+      },
+      { title: "Settings", resourceKeys: ["hatchery-hatch-settings"] },
+    ],
+  },
+};
+
+export function moduleResources(module: ModuleKey): ResourceConfig[] {
+  return MODULES[module].sections.flatMap((s) =>
+    s.resourceKeys.map((k) => RESOURCES[k])
+  );
+}
+
+function isBlank(v: unknown): boolean {
+  return v === null || v === undefined || v === "";
+}
