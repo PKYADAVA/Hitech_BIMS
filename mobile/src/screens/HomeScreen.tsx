@@ -3,11 +3,15 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Badge, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
+import { Badge, Card, Screen, SectionHeader, StatTile, withAlpha } from "@/components/ui";
 import { colors, radius, shadow, spacing, type } from "@/theme";
 import { TabParams } from "@/navigation/types";
 import { AuthUser } from "@/api/types";
+import { useOverview } from "@/api/stats";
+import { BarChart } from "@/components/BarChart";
 import { useAuthStore } from "@/store/authStore";
+
+const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
 
 type Props = BottomTabScreenProps<TabParams, "Home">;
 
@@ -96,6 +100,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
+  const { data: ov } = useOverview();
 
   return (
     <Screen edges={["left", "right"]}>
@@ -103,6 +108,22 @@ export function HomeScreen({ navigation }: Props) {
         <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
 
         <View style={styles.body}>
+          <SectionHeader title="Today" />
+          <View style={styles.kpiRow}>
+            <StatTile label="Entries" value={kpi(ov?.broiler.entries_today)} icon="📋" accent={colors.broiler} />
+            <StatTile label="Mortality" value={kpi(ov?.broiler.mortality_today)} icon="⚠️" accent={colors.danger} />
+            <StatTile label="Batches" value={kpi(ov?.broiler.active_batches)} icon="📦" accent={colors.primary} />
+          </View>
+          <View style={styles.kpiRow}>
+            <StatTile label="Egg buys" value={kpi(ov?.hatchery.egg_purchases_today)} icon="🥚" accent={colors.hatchery} />
+            <StatTile label="Chicks" value={kpi(ov?.hatchery.chicks_today)} icon="🐥" accent={colors.hatchery} />
+            <StatTile label="SMS sent" value={kpi(ov?.sms.sent_today)} icon="💬" accent={colors.sms} />
+          </View>
+          <Card style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Mortality · last 7 days</Text>
+            <BarChart data={ov?.broiler.mortality_7d ?? []} color={colors.broiler} />
+          </Card>
+
           <SectionHeader title="Modules" />
           <View style={styles.grid}>
             {TILES.map((t) => {
@@ -196,6 +217,9 @@ const styles = StyleSheet.create({
   roleText: { ...type.caption, color: colors.onDark, fontWeight: "600" },
 
   body: { padding: spacing.md, gap: spacing.sm },
+  kpiRow: { flexDirection: "row", gap: spacing.sm },
+  chartCard: { marginTop: spacing.sm },
+  chartTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: GAP },
   tile: {

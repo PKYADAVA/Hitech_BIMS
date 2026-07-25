@@ -1,14 +1,29 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
+import { biometricsAvailable } from "@/components/LockGate";
 import { Button, Card, DetailRow, Divider, Screen } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
 import { colors, radius, spacing, type } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
+import { useSettingsStore } from "@/store/settingsStore";
 
 export function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const appLock = useSettingsStore((s) => s.appLockEnabled);
+  const setAppLock = useSettingsStore((s) => s.setAppLock);
+
+  const onToggleLock = async (v: boolean) => {
+    if (v && !(await biometricsAvailable())) {
+      Alert.alert(
+        "Not available",
+        "Set up Face ID / fingerprint (or a device passcode) first, then enable App Lock."
+      );
+      return;
+    }
+    await setAppLock(v);
+  };
   const initials = (user?.full_name || user?.username || "?")
     .split(" ")
     .map((p) => p[0])
@@ -35,6 +50,14 @@ export function ProfileScreen() {
           <DetailRow label="Department" value={user?.department || "—"} />
           <Divider />
           <DetailRow label="Access" value={user?.is_superuser ? "Administrator" : user?.is_staff ? "Staff" : "Standard"} />
+        </Card>
+
+        <Card style={styles.securityRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.secTitle}>App Lock</Text>
+            <Text style={styles.secSub}>Require Face ID / fingerprint to open</Text>
+          </View>
+          <Switch value={appLock} onValueChange={onToggleLock} trackColor={{ true: colors.primary }} />
         </Card>
 
         <Card>
@@ -66,6 +89,9 @@ const styles = StyleSheet.create({
   avatarText: { ...type.h1, color: colors.onDark },
   name: { ...type.h2, color: colors.text },
   sub: { ...type.body, color: colors.textMuted },
+  securityRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  secTitle: { ...type.title, color: colors.text },
+  secSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   apiLabel: { ...type.label, color: colors.textFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
   api: { ...type.mono, color: colors.text },
   version: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },

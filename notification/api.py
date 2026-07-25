@@ -17,7 +17,8 @@ from rest_framework.views import APIView
 from api.viewsets import V1ViewMixin
 
 from .comm_sources import sms_metrics
-from .models import SmsMessage, SmsSettings, SmsTemplate
+from .models import DeviceToken, SmsMessage, SmsSettings, SmsTemplate
+from .push import send_push
 from .services import get_sms_service
 from .services.template_service import extract_placeholders
 
@@ -145,3 +146,35 @@ class SmsMessageRetryView(V1ViewMixin, APIView):
             "sent": result.success, "status": log.status, "log_id": log.id,
             "error": result.error,
         })
+
+
+class DeviceRegisterView(V1ViewMixin, APIView):
+    """POST /devices/register — upsert this device's Expo push token for the user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        token = str(request.data.get("token") or "").strip()
+        if not token:
+            raise ValidationError({"token": ["Push token is required."]})
+        platform = str(request.data.get("platform") or "")[:20]
+        # Reassign the token to the current user (device may switch accounts).
+        obj, _ = DeviceToken.objects.update_or_create(
+            token=token, defaults={"user": request.user, "platform": platform}
+        )
+        return Response({"registered": True, "id": obj.id})
+
+
+class DeviceTestView(V1ViewMixin, APIView):
+    """POST /devices/test — send a test push to all of the user's devices."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        tokens = list(
+            DeviceToken.objects.filter(user=request.user).values_list("token", flat=True)
+        )
+        result = send_push(
+            tokens, "Hitech BIMS", "Test notification ✓", data={"type": "test"}
+        )
+        return Response(result)

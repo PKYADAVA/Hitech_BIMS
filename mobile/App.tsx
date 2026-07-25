@@ -1,29 +1,45 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { LockGate } from "@/components/LockGate";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { queryClient } from "@/query/queryClient";
 import { useAuthStore } from "@/store/authStore";
+import { useSettingsStore } from "@/store/settingsStore";
+
+// Persist the React Query cache to disk so lists/details show last-known data
+// offline (read cache). Cursor/page feeds restore instantly on next launch.
+const persister = createAsyncStoragePersister({ storage: AsyncStorage });
 
 /**
- * App root: hydrate persisted tokens (deciding Login vs. app tabs) once on
- * mount, then render the navigator inside the Query + SafeArea providers.
+ * App root: hydrate persisted tokens + local settings once on mount, then render
+ * the navigator inside the (persisted) Query + SafeArea providers, gated by the
+ * optional biometric App Lock.
  */
 export default function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
+  const hydrateSettings = useSettingsStore((s) => s.hydrate);
 
   useEffect(() => {
     bootstrap();
-  }, [bootstrap]);
+    hydrateSettings();
+  }, [bootstrap, hydrateSettings]);
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}
+      >
         <StatusBar style="light" />
-        <RootNavigator />
-      </QueryClientProvider>
+        <LockGate>
+          <RootNavigator />
+        </LockGate>
+      </PersistQueryClientProvider>
     </SafeAreaProvider>
   );
 }

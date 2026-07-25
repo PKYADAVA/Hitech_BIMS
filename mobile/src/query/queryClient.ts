@@ -11,7 +11,9 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      gcTime: 5 * 60_000,
+      // Keep cached data long enough for the offline read-cache (persisted to
+      // disk) to survive relaunches; 24h matches the persister's maxAge.
+      gcTime: 1000 * 60 * 60 * 24,
       retry: (failureCount, error) => {
         if (error instanceof ApiError && [400, 401, 403, 404].includes(error.status ?? 0)) {
           return false;

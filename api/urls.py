@@ -17,6 +17,8 @@ from broiler.api import register as register_broiler
 from hatchery.api import register as register_hatchery
 from inventory.models import Item, Warehouse
 from notification.api import (
+    DeviceRegisterView,
+    DeviceTestView,
     SmsMessageRetryView,
     SmsSettingsSerializer,
     SmsTemplateSendView,
@@ -27,6 +29,7 @@ from sales.models import Customer
 
 from .auth import LoginView, LogoutView, MeView, RefreshView
 from .health import HealthView, ReadyView
+from .stats import StatsOverviewView
 from .viewsets import register_model
 
 app_name = "api"
@@ -80,6 +83,7 @@ urlpatterns = [
     path("schema", SpectacularAPIView.as_view(), name="schema"),
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
+    path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
