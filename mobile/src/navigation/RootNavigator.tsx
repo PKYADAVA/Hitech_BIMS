@@ -29,8 +29,12 @@ function tabIcon(icon: string) {
   );
 }
 
-/** One native stack per module (Hub → List → Detail), branded in the module color. */
-function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
+/**
+ * One native stack per module (Hub → List → Detail), branded in the module
+ * color. `presented` marks a module opened as a Root card (Accounts, Inventory)
+ * rather than a bottom tab — its Hub then shows a close control to return.
+ */
+function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; presented?: boolean }) {
   const mod = MODULES[moduleKey];
   return (
     <ModuleStack.Navigator
@@ -42,7 +46,19 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
-      <ModuleStack.Screen name="Hub" options={{ title: mod.title }}>
+      <ModuleStack.Screen
+        name="Hub"
+        options={({ navigation }) => ({
+          title: mod.title,
+          headerLeft: presented
+            ? () => (
+                <Pressable hitSlop={12} onPress={() => navigation.getParent()?.goBack()}>
+                  <Text style={{ color: colors.onDark, fontSize: 26, fontWeight: "700" }}>‹</Text>
+                </Pressable>
+              )
+            : undefined,
+        })}
+      >
         {(props) => <ModuleHubScreen {...props} moduleKey={moduleKey} />}
       </ModuleStack.Screen>
       <ModuleStack.Screen
@@ -75,6 +91,8 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
 const BroilerStack = () => <ModuleStackScreen moduleKey="broiler" />;
 const HatcheryStack = () => <ModuleStackScreen moduleKey="hatchery" />;
 const SmsStack = () => <ModuleStackScreen moduleKey="sms" />;
+const AccountStack = () => <ModuleStackScreen moduleKey="account" presented />;
+const InventoryStack = () => <ModuleStackScreen moduleKey="inventory" presented />;
 
 function AppTabs() {
   return (
@@ -109,7 +127,12 @@ export function RootNavigator() {
     <NavigationContainer>
       <Root.Navigator screenOptions={{ headerShown: false }}>
         {status === "signedIn" ? (
-          <Root.Screen name="App" component={AppTabs} />
+          <>
+            <Root.Screen name="App" component={AppTabs} />
+            {/* Modules reached from Home tiles (not bottom tabs) — presented as cards. */}
+            <Root.Screen name="AccountModule" component={AccountStack} />
+            <Root.Screen name="InventoryModule" component={InventoryStack} />
+          </>
         ) : (
           <Root.Screen name="Login" component={LoginScreen} />
         )}

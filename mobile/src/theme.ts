@@ -22,6 +22,10 @@ export const colors = {
   hatcheryLight: "#fef3c7",
   sms: "#2563eb", // blue-600
   smsLight: "#dbeafe",
+  account: "#4f46e5", // indigo-600
+  accountLight: "#e0e7ff",
+  inventory: "#0891b2", // cyan-600
+  inventoryLight: "#cffafe",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",

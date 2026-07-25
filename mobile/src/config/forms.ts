@@ -396,6 +396,44 @@ export const FORMS: Record<string, FormSchema> = {
       text("default_country_code", "Default Country Code"),
     ],
   },
+
+  /* -------------------------- Account masters --------------------------- */
+  "account-financial-years": {
+    fields: [
+      date("start_date", "Start Date", true),
+      date("end_date", "End Date", true),
+      active(),
+    ],
+  },
+  "account-terms": {
+    fields: [
+      text("type", "Type", true),
+      text("party_type", "Party Type"),
+      area("condition", "Condition"),
+    ],
+  },
+
+  /* ------------------------- Inventory masters -------------------------- */
+  "inventory-item-categories": { fields: [text("name", "Name", true)] },
+  "inventory-uom": {
+    fields: [text("name", "Name", true), text("symbol", "Symbol")],
+  },
+  "inventory-sectors": { fields: [text("name", "Name", true)] },
+  "inventory-warehouses": {
+    fields: [
+      text("name", "Name", true),
+      sel("sector", "Sector", "/inventory/sectors/", ["name"]),
+      area("address", "Address"),
+      text("location", "Location"),
+    ],
+  },
+  "inventory-price-list": {
+    fields: [
+      sel("item", "Item", "/inventory/items/", ["description", "item_code"], true),
+      dec("price", "Price", true),
+      date("effective_date", "Effective Date", true),
+    ],
+  },
 };
 
 /** Whether a resource supports create/edit (has a schema + a CRUD endpoint). */

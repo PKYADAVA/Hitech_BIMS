@@ -28,6 +28,7 @@ from .models import (
     Farmer,
     FarmerGroup,
     GrowingChargeScheme,
+    GrowingChargeSettlement,
     MedicineVaccineEntry,
     Region,
     Supervisor,
@@ -68,3 +69,7 @@ def register(router) -> None:
     register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry, cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, cursor=True)
     register_model(router, "broiler/bird-sale-receipts", BirdSaleReceipt, cursor=True)
+
+    # --- Growing-charge settlement / batch closing (read-only) ----------
+    register_model(router, "broiler/gc-settlements", GrowingChargeSettlement, read_only=True,
+                   search_fields=["settlement_code"], ordering=["-id"])

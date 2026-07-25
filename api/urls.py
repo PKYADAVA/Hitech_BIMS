@@ -12,9 +12,12 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from account.api import register as register_account
 from account.models import ChartOfAccount
 from broiler.api import register as register_broiler
+from hatchery.api import ChangeRequestReviewView
 from hatchery.api import register as register_hatchery
+from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
 from notification.api import (
     DeviceRegisterView,
@@ -37,6 +40,8 @@ app_name = "api"
 router = DefaultRouter()
 register_broiler(router)
 register_hatchery(router)
+register_account(router)
+register_inventory(router)
 
 
 def register_shared(router: DefaultRouter) -> None:
@@ -90,5 +95,7 @@ urlpatterns = [
     # Push notifications: device registration + a user-triggered test.
     path("devices/register", DeviceRegisterView.as_view(), name="device-register"),
     path("devices/test", DeviceTestView.as_view(), name="device-test"),
+    path("hatchery/change-requests/<int:pk>/<str:decision>",
+         ChangeRequestReviewView.as_view(), name="change-request-review"),
     path("", include(router.urls)),
 ]

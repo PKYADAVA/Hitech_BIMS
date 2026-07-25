@@ -2,15 +2,49 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { reviewChangeRequest } from "@/api/changeRequests";
 import { retryMessage } from "@/api/sms";
 import { Row } from "@/api/types";
+import { RecordCard } from "@/components/RecordCard";
 import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
-import { RESOURCES } from "@/config/catalog";
+import { ChildConfig, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
+import { useResourceList } from "@/query/useResourceList";
 import { colors, spacing, type } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
+
+/** Line-items of a parent record, fetched by FK and shown inside its detail. */
+function ChildSection({
+  child,
+  parentId,
+  onOpen,
+}: {
+  child: ChildConfig;
+  parentId: number | string;
+  onOpen: (resourceKey: string, row: Row) => void;
+}) {
+  const cfg = RESOURCES[child.resourceKey];
+  const list = useResourceList<Row>(cfg.path, { [child.fkParam]: parentId });
+  if (list.isLoading || list.items.length === 0) return null;
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text style={styles.childTitle}>
+        {cfg.title} ({list.items.length})
+      </Text>
+      {list.items.map((item) => (
+        <RecordCard
+          key={String(item.id)}
+          view={cfg.card(item)}
+          icon={cfg.icon}
+          accent={cfg.accent}
+          onPress={() => onOpen(cfg.key, item)}
+        />
+      ))}
+    </View>
+  );
+}
 
 const RETRYABLE = /fail|reject|expire|invalid|unknown/i;
 
@@ -80,6 +114,36 @@ export function RecordDetailScreen({ route, navigation }: Props) {
 
   const canRetry = config.key === "sms-messages" && RETRYABLE.test(String(row.status ?? ""));
 
+  const [reviewing, setReviewing] = useState(false);
+  const canReview =
+    config.key === "hatchery-change-requests" &&
+    String(row.status ?? "").toLowerCase() === "pending";
+
+  const onReview = (decision: "approve" | "reject") => {
+    const verb = decision === "approve" ? "Approve" : "Reject";
+    Alert.alert(verb, `${verb} this change request?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: verb,
+        style: decision === "reject" ? "destructive" : "default",
+        onPress: async () => {
+          setReviewing(true);
+          try {
+            const res = await reviewChangeRequest(row.id, decision);
+            queryClient.invalidateQueries({ queryKey: ["list", "/hatchery/change-requests/"] });
+            Alert.alert("Done", `Request ${res.status}.`, [
+              { text: "OK", onPress: () => navigation.goBack() },
+            ]);
+          } catch (e) {
+            Alert.alert("Failed", (e as Error)?.message ?? "Could not review request.");
+          } finally {
+            setReviewing(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const entries = Object.entries(row).filter(
     ([k, v]) => !HIDDEN.test(k) && !k.endsWith("_label") && !isEmpty(v)
   );
@@ -106,6 +170,16 @@ export function RecordDetailScreen({ route, navigation }: Props) {
         <Button title="Send SMS" onPress={() => navigation.navigate("SmsSend", { row })} />
       ) : null}
       {canRetry ? <Button title="Retry send" loading={retrying} onPress={onRetry} /> : null}
+      {canReview ? (
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Button title="Approve" loading={reviewing} onPress={() => onReview("approve")} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button title="Reject" variant="danger" onPress={() => onReview("reject")} />
+          </View>
+        </View>
+      ) : null}
 
       <Card>
         <Text style={styles.groupTitle}>Details</Text>
@@ -129,6 +203,15 @@ export function RecordDetailScreen({ route, navigation }: Props) {
         </Card>
       ) : null}
 
+      {config.children?.map((child) => (
+        <ChildSection
+          key={child.resourceKey}
+          child={child}
+          parentId={row.id}
+          onOpen={(resourceKey, item) => navigation.navigate("Detail", { resourceKey, row: item })}
+        />
+      ))}
+
       <Text style={styles.footnote}>Record #{row.id}</Text>
     </ScrollView>
   );
@@ -147,5 +230,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: spacing.xs,
   },
+  childTitle: { ...type.h3, color: colors.text, marginTop: spacing.xs },
   footnote: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
 });
