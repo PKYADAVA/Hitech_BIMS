@@ -4,6 +4,7 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
 import { biometricsAvailable } from "@/components/LockGate";
 import { Button, Card, DetailRow, Divider, Screen } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
+import { sendTestPush } from "@/push";
 import { colors, radius, spacing, type } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -23,6 +24,20 @@ export function ProfileScreen() {
       return;
     }
     await setAppLock(v);
+  };
+
+  const onTestPush = async () => {
+    try {
+      const res = await sendTestPush();
+      Alert.alert(
+        res.sent > 0 ? "Sent ✓" : "No devices",
+        res.sent > 0
+          ? `Push sent to ${res.sent} device(s).`
+          : res.error || "This device isn't registered for push yet (needs the installed app, not Expo Go)."
+      );
+    } catch (e) {
+      Alert.alert("Failed", (e as Error)?.message ?? "Could not send test push.");
+    }
   };
   const initials = (user?.full_name || user?.username || "?")
     .split(" ")
@@ -67,6 +82,7 @@ export function ProfileScreen() {
           </Text>
         </Card>
 
+        <Button title="Send test notification" variant="ghost" onPress={onTestPush} />
         <Button title="Log out" variant="danger" onPress={logout} />
         <Text style={styles.version}>Hitech BIMS · v0.1.0</Text>
       </ScrollView>

@@ -87,5 +87,8 @@ urlpatterns = [
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
+    # Push notifications: device registration + a user-triggered test.
+    path("devices/register", DeviceRegisterView.as_view(), name="device-register"),
+    path("devices/test", DeviceTestView.as_view(), name="device-test"),
     path("", include(router.urls)),
 ]

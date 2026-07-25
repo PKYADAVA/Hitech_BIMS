@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { LockGate } from "@/components/LockGate";
 import { RootNavigator } from "@/navigation/RootNavigator";
+import { registerForPush } from "@/push";
 import { queryClient } from "@/query/queryClient";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -23,11 +24,17 @@ const persister = createAsyncStoragePersister({ storage: AsyncStorage });
 export default function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
+  const status = useAuthStore((s) => s.status);
 
   useEffect(() => {
     bootstrap();
     hydrateSettings();
   }, [bootstrap, hydrateSettings]);
+
+  // Register this device for push once signed in (no-op on Expo Go / simulators).
+  useEffect(() => {
+    if (status === "signedIn") registerForPush();
+  }, [status]);
 
   return (
     <SafeAreaProvider>
