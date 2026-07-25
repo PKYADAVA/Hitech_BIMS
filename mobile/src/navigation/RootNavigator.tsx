@@ -7,6 +7,7 @@ import { Pressable, Text, View } from "react-native";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
@@ -82,7 +83,11 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
               ? () => (
                   <Pressable
                     hitSlop={12}
-                    onPress={() => navigation.navigate("Form", { resourceKey: key, mode: "create" })}
+                    onPress={() =>
+                      key === "broiler-bird-sales"
+                        ? navigation.navigate("BirdSaleForm", { mode: "create" })
+                        : navigation.navigate("Form", { resourceKey: key, mode: "create" })
+                    }
                   >
                     <Text style={{ color: colors.onDark, fontSize: 26, fontWeight: "700" }}>＋</Text>
                   </Pressable>
@@ -93,6 +98,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       />
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
+      <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />
     </ModuleStack.Navigator>

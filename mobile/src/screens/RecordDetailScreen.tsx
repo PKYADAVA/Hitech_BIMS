@@ -100,7 +100,9 @@ export function RecordDetailScreen({ route, navigation }: Props) {
             <Pressable
               hitSlop={12}
               onPress={() =>
-                navigation.navigate("Form", { resourceKey: config.key, mode: "edit", row })
+                config.key === "broiler-bird-sales"
+                  ? navigation.navigate("BirdSaleForm", { mode: "edit", row })
+                  : navigation.navigate("Form", { resourceKey: config.key, mode: "edit", row })
               }
             >
               <Text style={{ color: colors.onDark, ...type.title }}>Edit</Text>

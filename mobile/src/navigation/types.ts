@@ -19,6 +19,8 @@ export type ModuleStackParams = {
   };
   SmsSend: { row: Row };
   Report: { title: string; path: string };
+  /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
+  BirdSaleForm: { mode: "create" | "edit"; row?: Row };
 };
 
 export type TabParams = {

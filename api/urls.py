@@ -14,6 +14,7 @@ from rest_framework.routers import DefaultRouter
 
 from account.api import register as register_account
 from account.models import ChartOfAccount
+from broiler.api import BirdSaleFarmLookupView
 from broiler.api import register as register_broiler
 from hatchery.api import ChangeRequestReviewView
 from hatchery.api import register as register_hatchery
@@ -95,6 +96,8 @@ urlpatterns = [
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    # Bird Sale form: farm → active batch + owning farmer (declared before router).
+    path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),
     path("reports/mortality-trend", MortalityTrendReportView.as_view(), name="report-mortality-trend"),
     path("reports/hatch-performance", HatchPerformanceReportView.as_view(), name="report-hatch-performance"),
