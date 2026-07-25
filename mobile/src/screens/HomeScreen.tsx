@@ -4,15 +4,86 @@ import React, { useCallback } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Badge, Card, Screen, SectionHeader, StatTile, withAlpha } from "@/components/ui";
+import { Badge, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
 import { colors, radius, shadow, spacing, type } from "@/theme";
 import { TabParams } from "@/navigation/types";
 import { AuthUser } from "@/api/types";
-import { useOverview } from "@/api/stats";
-import { BarChart } from "@/components/BarChart";
+import { Overview, useOverview } from "@/api/stats";
+import { IndicatorCarousel, Indicator } from "@/components/IndicatorCarousel";
 import { useAuthStore } from "@/store/authStore";
 
 const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
+
+/** Cross-module headline indicators for the Home carousel. */
+function buildIndicators(ov?: Overview): Indicator[] {
+  return [
+    {
+      key: "mortality",
+      label: "Mortality",
+      value: kpi(ov?.broiler.mortality_today),
+      caption: "birds today · 7-day trend",
+      icon: "⚠️",
+      accent: colors.danger,
+      trend: ov?.broiler.mortality_7d,
+    },
+    {
+      key: "entries",
+      label: "Daily Entries",
+      value: kpi(ov?.broiler.entries_today),
+      caption: "logged today",
+      icon: "📋",
+      accent: colors.broiler,
+    },
+    {
+      key: "batches",
+      label: "Active Batches",
+      value: kpi(ov?.broiler.active_batches),
+      caption: "in production",
+      icon: "📦",
+      accent: colors.primary,
+    },
+    {
+      key: "eggs",
+      label: "Egg Purchases",
+      value: kpi(ov?.hatchery.egg_purchases_today),
+      caption: "today",
+      icon: "🥚",
+      accent: colors.hatchery,
+    },
+    {
+      key: "chicks",
+      label: "Chicks Hatched",
+      value: kpi(ov?.hatchery.chicks_today),
+      caption: "today",
+      icon: "🐥",
+      accent: colors.hatchery,
+    },
+    {
+      key: "sms",
+      label: "SMS Sent",
+      value: kpi(ov?.sms.sent_today),
+      caption: `${kpi(ov?.sms.failed_today)} failed today`,
+      icon: "💬",
+      accent: colors.sms,
+    },
+    {
+      key: "items",
+      label: "Inventory Items",
+      value: kpi(ov?.inventory?.items),
+      caption: `${kpi(ov?.inventory?.transfers_today)} transfers today`,
+      icon: "📦",
+      accent: colors.inventory,
+    },
+    {
+      key: "vouchers",
+      label: "Vouchers",
+      value: kpi(ov?.account?.vouchers_today),
+      caption: "posted today",
+      icon: "📒",
+      accent: colors.account,
+    },
+  ];
+}
 
 type Props = BottomTabScreenProps<TabParams, "Home">;
 
@@ -22,17 +93,25 @@ interface Tile {
   subtitle: string;
   icon: string;
   color: string;
-  target?: keyof TabParams;
+  /** Route to navigate to — a bottom tab or a Root-presented module screen. */
+  target?:
+    | keyof TabParams
+    | "AccountModule"
+    | "InventoryModule"
+    | "SalesModule"
+    | "PurchaseModule"
+    | "HrModule";
 }
 
 const TILES: Tile[] = [
+  { key: "account", title: "Accounts", subtitle: "Books, masters & vouchers", icon: "📒", color: colors.account, target: "AccountModule" },
   { key: "broiler", title: "Broiler", subtitle: "Farm operations", icon: "🐔", color: colors.broiler, target: "Broiler" },
   { key: "hatchery", title: "Hatchery", subtitle: "Egg to chick", icon: "🥚", color: colors.hatchery, target: "Hatchery" },
+  { key: "hr", title: "HR", subtitle: "People & payroll", icon: "👥", color: colors.hr, target: "HrModule" },
+  { key: "inventory", title: "Inventory", subtitle: "Items, stock & movements", icon: "📦", color: colors.inventory, target: "InventoryModule" },
+  { key: "purchase", title: "Purchase", subtitle: "Suppliers & purchases", icon: "🛒", color: colors.purchase, target: "PurchaseModule" },
+  { key: "sales", title: "Sales", subtitle: "Customers & invoices", icon: "💰", color: colors.sales, target: "SalesModule" },
   { key: "sms", title: "SMS", subtitle: "Templates & history", icon: "💬", color: colors.sms, target: "SMS" },
-  { key: "inventory", title: "Inventory", subtitle: "Coming soon", icon: "📦", color: "#0891b2" },
-  { key: "sales", title: "Sales", subtitle: "Coming soon", icon: "💰", color: "#16a34a" },
-  { key: "purchase", title: "Purchase", subtitle: "Coming soon", icon: "🛒", color: "#7c3aed" },
-  { key: "hr", title: "HR", subtitle: "Coming soon", icon: "👥", color: "#db2777" },
 ];
 
 function initialsOf(user: AuthUser | null): string {
@@ -123,22 +202,11 @@ export function HomeScreen({ navigation }: Props) {
         <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
 
         <View style={styles.body}>
-          <SectionHeader title="Today" />
-          <View style={styles.kpiRow}>
-            <StatTile label="Entries" value={kpi(ov?.broiler.entries_today)} icon="📋" accent={colors.broiler} />
-            <StatTile label="Mortality" value={kpi(ov?.broiler.mortality_today)} icon="⚠️" accent={colors.danger} />
-            <StatTile label="Batches" value={kpi(ov?.broiler.active_batches)} icon="📦" accent={colors.primary} />
-          </View>
-          <View style={styles.kpiRow}>
-            <StatTile label="Egg buys" value={kpi(ov?.hatchery.egg_purchases_today)} icon="🥚" accent={colors.hatchery} />
-            <StatTile label="Chicks" value={kpi(ov?.hatchery.chicks_today)} icon="🐥" accent={colors.hatchery} />
-            <StatTile label="SMS sent" value={kpi(ov?.sms.sent_today)} icon="💬" accent={colors.sms} />
-          </View>
-          <Card style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Mortality · last 7 days</Text>
-            <BarChart data={ov?.broiler.mortality_7d ?? []} color={colors.broiler} />
-          </Card>
+          <SectionHeader title="At a glance" />
+        </View>
+        <IndicatorCarousel indicators={buildIndicators(ov)} />
 
+        <View style={styles.body}>
           <SectionHeader title="Modules" />
           <View style={styles.grid}>
             {TILES.map((t) => {

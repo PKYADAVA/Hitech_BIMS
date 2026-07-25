@@ -197,6 +197,52 @@ export const FORMS: Record<string, FormSchema> = {
     ],
   },
 
+  /* ---------------------- Hatchery line items --------------------------- */
+  // Parent FK (egg_purchase / sale / challan) is injected via the form `preset`.
+  "hatchery-egg-purchase-items": {
+    fields: [
+      ITEM("item", "Item", true),
+      dec("sent_qty", "Sent Qty"),
+      dec("rcv_qty", "Received Qty"),
+      dec("free_qty", "Free Qty"),
+      dec("no_of_boxes", "No. of Boxes"),
+      dec("rate", "Rate"),
+      dec("discount_percent", "Discount %"),
+      dec("discount_amount", "Discount Amount"),
+      dec("amount", "Amount"),
+      dec("total_amount", "Total Amount"),
+    ],
+  },
+  "hatchery-chick-sale-items": {
+    fields: [
+      ITEM("item", "Item", true),
+      text("farm", "Farm"),
+      dec("total_qty", "Total Qty"),
+      dec("mortality", "Mortality"),
+      dec("culls", "Culls"),
+      dec("sale_qty", "Sale Qty"),
+      dec("free_qty", "Free Qty"),
+      dec("net_qty", "Net Qty"),
+      dec("sale_rate", "Sale Rate"),
+      dec("discount_percent", "Discount %"),
+      dec("discount_amount", "Discount Amount"),
+      dec("amount", "Amount"),
+    ],
+  },
+  "hatchery-delivery-challan-items": {
+    fields: [
+      ITEM("item", "Item", true),
+      dec("packing_size", "Packing Size"),
+      dec("units", "Units"),
+      dec("quantity", "Quantity"),
+      text("unit", "Unit"),
+      dec("price", "Price"),
+      dec("discount_percent", "Discount %"),
+      dec("tax_percent", "Tax %"),
+      dec("amount", "Amount"),
+    ],
+  },
+
   /* ------------------------- Broiler master data ------------------------ */
   "broiler-regions": { fields: [text("code", "Code", true), text("description", "Description"), active()] },
   "broiler-branches": {
@@ -394,6 +440,193 @@ export const FORMS: Record<string, FormSchema> = {
       text("entity_id", "Entity ID"),
       text("api_key", "API Key (leave blank to keep)"),
       text("default_country_code", "Default Country Code"),
+    ],
+  },
+
+  /* -------------------------- Account masters --------------------------- */
+  "account-financial-years": {
+    fields: [
+      date("start_date", "Start Date", true),
+      date("end_date", "End Date", true),
+      active(),
+    ],
+  },
+  "account-terms": {
+    fields: [
+      text("type", "Type", true),
+      text("party_type", "Party Type"),
+      area("condition", "Condition"),
+    ],
+  },
+
+  /* ------------------------- Inventory masters -------------------------- */
+  "inventory-item-categories": { fields: [text("name", "Name", true)] },
+  "inventory-uom": {
+    fields: [text("name", "Name", true), text("symbol", "Symbol")],
+  },
+  "inventory-sectors": { fields: [text("name", "Name", true)] },
+  "inventory-warehouses": {
+    fields: [
+      text("name", "Name", true),
+      sel("sector", "Sector", "/inventory/sectors/", ["name"]),
+      area("address", "Address"),
+      text("location", "Location"),
+    ],
+  },
+  "inventory-price-list": {
+    fields: [
+      sel("item", "Item", "/inventory/items/", ["description", "item_code"], true),
+      dec("price", "Price", true),
+      date("effective_date", "Effective Date", true),
+    ],
+  },
+
+  /* ------------------------------- Sales -------------------------------- */
+  "sales-customer-groups": {
+    fields: [
+      text("code", "Code", true),
+      text("description", "Description"),
+      text("currency", "Currency"),
+      ACCOUNT("control_account", "Control Account"),
+      ACCOUNT("advance_account", "Advance Account"),
+    ],
+  },
+  "sales-customers": {
+    fields: [
+      text("code", "Code"),
+      text("name", "Name", true),
+      text("mobile", "Mobile"),
+      text("phone", "Phone"),
+      text("email", "Email"),
+      sel("customer_group", "Customer Group", "/sales/customer-groups/", ["code", "description"]),
+      text("gstin", "GSTIN"),
+      text("pan_tin", "PAN / TIN"),
+      text("place", "Place"),
+      text("state", "State"),
+      area("address", "Address"),
+      dec("credit_limit", "Credit Limit"),
+      num("credit_period", "Credit Period (days)"),
+      dec("opening_balance", "Opening Balance"),
+      text("note", "Note"),
+    ],
+  },
+  "sales-prices": {
+    fields: [
+      sel("item_category", "Item Category", "/inventory/item-categories/", ["code", "name"]),
+      ITEM("item", "Item"),
+      dec("price", "Price", true),
+      date("date", "Date", true),
+    ],
+  },
+  "sales-shipping-addresses": {
+    fields: [
+      CUSTOMER(),
+      text("label", "Label", true),
+      area("address", "Address"),
+      text("contact_person", "Contact Person"),
+      text("mobile", "Mobile"),
+      bool("is_default", "Default address"),
+    ],
+  },
+
+  /* ------------------------------ Purchase ------------------------------ */
+  "purchase-vendor-groups": {
+    fields: [
+      text("code", "Code", true),
+      text("description", "Description"),
+      text("currency", "Currency"),
+      ACCOUNT("control_account", "Control Account"),
+      ACCOUNT("prepayment_account", "Prepayment Account"),
+    ],
+  },
+  "purchase-suppliers": {
+    fields: [
+      text("code", "Code"),
+      text("name", "Name", true),
+      text("mobile", "Mobile"),
+      text("email", "Email"),
+      text("supplier_group", "Supplier Group"),
+      text("gstin", "GSTIN"),
+      text("pan", "PAN"),
+      text("place", "Place"),
+      text("state", "State"),
+      area("address", "Address"),
+      dec("credit_limit", "Credit Limit"),
+      dec("opening_balance", "Opening Balance"),
+      text("note", "Note"),
+    ],
+  },
+  "purchase-credit-terms": {
+    fields: [text("term", "Term", true)],
+  },
+  "purchase-tax-masters": {
+    fields: [
+      text("tax_code", "Tax Code", true),
+      text("description", "Description"),
+      dec("tax_percentage", "Tax %"),
+      text("rule", "Rule"),
+      text("coa", "COA"),
+    ],
+  },
+  "purchase-shipping-addresses": {
+    fields: [
+      SUPPLIER(),
+      text("label", "Label", true),
+      area("address", "Address"),
+      text("contact_person", "Contact Person"),
+      text("mobile", "Mobile"),
+      bool("is_default", "Default address"),
+    ],
+  },
+  "purchase-debit-notes": {
+    fields: [
+      text("note_no", "Note No.", true),
+      date("date", "Date", true),
+      SUPPLIER(),
+      text("against_bill", "Against Bill"),
+      text("reason", "Reason"),
+      dec("amount", "Amount", true),
+      ACCOUNT("account", "Account"),
+      text("remarks", "Remarks"),
+    ],
+  },
+  "purchase-credit-notes": {
+    fields: [
+      text("note_no", "Note No.", true),
+      date("date", "Date", true),
+      SUPPLIER(),
+      text("against_bill", "Against Bill"),
+      text("reason", "Reason"),
+      dec("amount", "Amount", true),
+      ACCOUNT("account", "Account"),
+      text("remarks", "Remarks"),
+    ],
+  },
+
+  /* -------------------------------- HR ---------------------------------- */
+  "hr-departments": {
+    fields: [text("code", "Code", true), text("name", "Name", true), active()],
+  },
+  "hr-designations": {
+    fields: [
+      text("code", "Code", true),
+      text("title", "Title", true),
+      text("description", "Description"),
+      dec("base_salary", "Base Salary"),
+    ],
+  },
+  "hr-shifts": {
+    fields: [
+      text("name", "Name", true),
+      text("start_time", "Start Time (HH:MM)"),
+      text("end_time", "End Time (HH:MM)"),
+      active(),
+    ],
+  },
+  "hr-groups": {
+    fields: [
+      text("name", "Name", true),
+      WAREHOUSE("warehouse", "Warehouse"),
     ],
   },
 };

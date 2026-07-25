@@ -78,6 +78,54 @@ default/Dev tier), this doesn't apply. If you scale up, consider moving
 `migrate` to a dedicated "Pre-Deploy Job" component instead (App Platform
 runs those once, before any web instance starts).
 
+### `migrate` isn't running on deploy?
+
+Symptom: you push, the app restarts, but new migrations were never applied
+(schema is stale / you get `ProgrammingError: relation ... does not exist`).
+
+Cause, almost always: a **dashboard-configured Run Command overrides the
+`Procfile`** and that override is `gunicorn ...` only (no `migrate`). App
+Platform does **not** have a Heroku-style automatic `release` phase, so if the
+run command doesn't run `migrate`, nothing does.
+
+Two ways to fix it — pick one:
+
+1. **Quick:** App → Settings → your `web` component → **Run Command**, and make
+   it exactly the `Procfile` line (with `migrate --noinput && ... && gunicorn`),
+   or clear the override so the `Procfile` is used.
+
+2. **Robust (recommended):** move migrations into a dedicated **PRE_DEPLOY job**
+   so they run once, before any web instance starts, and can't be skipped by the
+   web run command. A ready spec is in [`.do/app.yaml`](.do/app.yaml) — fill in
+   your repo/region/envs and apply with:
+   ```bash
+   doctl apps update <APP_ID> --spec .do/app.yaml
+   ```
+   With the job in place, the `web` run command becomes `gunicorn ...` only.
+
+Either way, no application code needs to change — migrations are the deploy
+step, not part of the app.
+
+### Can't log in on a fresh deploy? (no users yet)
+
+`migrate` creates the *tables* but no *users*, so a brand-new database has
+nobody to log in as — the API correctly answers `401 "No active account found
+with the given credentials"`. You don't need the DigitalOcean console for this:
+the deploy command runs `python manage.py ensure_admin`, which creates (and
+keeps active) a superuser from these env vars — set them in **App → Settings →
+Environment Variables**, then redeploy:
+
+| Variable | Example |
+|---|---|
+| `DJANGO_SUPERUSER_USERNAME` | `admin` |
+| `DJANGO_SUPERUSER_PASSWORD` | a strong password |
+| `DJANGO_SUPERUSER_EMAIL` | `admin@hitechfarms.co.in` (optional) |
+
+It's idempotent and self-healing — if you forget the password, change the env
+var and redeploy to reset it. **Security:** it re-applies the password on every
+deploy, so once you're in and have created real accounts, clear
+`DJANGO_SUPERUSER_PASSWORD` (or remove all three) so deploys stop resetting it.
+
 ## A2. Environment Variables
 
 App Platform env vars are set in the dashboard: **App → Settings →

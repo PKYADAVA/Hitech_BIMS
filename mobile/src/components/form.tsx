@@ -177,6 +177,7 @@ function SelectControl({
             data={filtered}
             keyExtractor={(o) => o.value}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
             ListHeaderComponent={
               !field.required ? (
                 <Pressable

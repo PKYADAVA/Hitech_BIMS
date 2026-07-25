@@ -8,8 +8,19 @@ export type ModuleStackParams = {
   Hub: undefined;
   List: { resourceKey: string };
   Detail: { resourceKey: string; row: Row };
-  Form: { resourceKey: string; mode: "create" | "edit"; row?: Row };
+  Form: {
+    resourceKey: string;
+    mode: "create" | "edit";
+    row?: Row;
+    /** Values merged into the payload (e.g. a parent FK for line items). */
+    preset?: Record<string, string>;
+    /** Return to the previous screen after save/delete instead of the List. */
+    onDoneGoBack?: boolean;
+  };
   SmsSend: { row: Row };
+  Report: { title: string; path: string };
+  /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
+  BirdSaleForm: { mode: "create" | "edit"; row?: Row };
 };
 
 export type TabParams = {

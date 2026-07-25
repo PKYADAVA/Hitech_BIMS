@@ -12,10 +12,17 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
+from account.api import register as register_account
 from account.models import ChartOfAccount
+from broiler.api import BirdSaleFarmLookupView
 from broiler.api import register as register_broiler
+from hatchery.api import ChangeRequestReviewView
 from hatchery.api import register as register_hatchery
+from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
+from hr.api import register as register_hr
+from purchase.api import register as register_purchase
+from sales.api import register as register_sales
 from notification.api import (
     DeviceRegisterView,
     DeviceTestView,
@@ -27,8 +34,14 @@ from notification.models import SmsMessage, SmsSettings, SmsTemplate
 from purchase.models import Supplier
 from sales.models import Customer
 
-from .auth import LoginView, LogoutView, MeView, RefreshView
+from .auth import ChangePasswordView, LoginView, LogoutView, MeView, RefreshView
 from .health import HealthView, ReadyView
+from .reports import (
+    EggIntakeReportView,
+    HatchPerformanceReportView,
+    LiveFlockReportView,
+    MortalityTrendReportView,
+)
 from .stats import StatsOverviewView
 from .viewsets import register_model
 
@@ -37,6 +50,11 @@ app_name = "api"
 router = DefaultRouter()
 register_broiler(router)
 register_hatchery(router)
+register_account(router)
+register_inventory(router)
+register_sales(router)
+register_purchase(router)
+register_hr(router)
 
 
 def register_shared(router: DefaultRouter) -> None:
@@ -74,6 +92,7 @@ auth_patterns = [
     path("refresh", RefreshView.as_view(), name="refresh"),
     path("logout", LogoutView.as_view(), name="logout"),
     path("me", MeView.as_view(), name="me"),
+    path("change-password", ChangePasswordView.as_view(), name="change-password"),
 ]
 
 urlpatterns = [
@@ -84,11 +103,19 @@ urlpatterns = [
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    # Bird Sale form: farm → active batch + owning farmer (declared before router).
+    path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
+    path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),
+    path("reports/mortality-trend", MortalityTrendReportView.as_view(), name="report-mortality-trend"),
+    path("reports/hatch-performance", HatchPerformanceReportView.as_view(), name="report-hatch-performance"),
+    path("reports/egg-intake", EggIntakeReportView.as_view(), name="report-egg-intake"),
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
     # Push notifications: device registration + a user-triggered test.
     path("devices/register", DeviceRegisterView.as_view(), name="device-register"),
     path("devices/test", DeviceTestView.as_view(), name="device-test"),
+    path("hatchery/change-requests/<int:pk>/<str:decision>",
+         ChangeRequestReviewView.as_view(), name="change-request-review"),
     path("", include(router.urls)),
 ]

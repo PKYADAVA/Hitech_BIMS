@@ -1,11 +1,11 @@
-import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { createResource, deleteResource, updateResource } from "@/api/resources";
 import { ApiError, Row } from "@/api/types";
 import { FormControl } from "@/components/form";
+import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { FORMS } from "@/config/forms";
@@ -17,9 +17,12 @@ import { isEmpty } from "@/utils/format";
 type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
 
 export function FormScreen({ route, navigation }: Props) {
-  const { resourceKey, mode, row } = route.params;
+  const { resourceKey, mode, row, preset, onDoneGoBack } = route.params;
   const config = RESOURCES[resourceKey];
   const schema = FORMS[resourceKey];
+
+  const finish = () =>
+    onDoneGoBack ? navigation.goBack() : navigation.navigate("List", { resourceKey });
 
   const initial = useMemo(() => {
     const v: Record<string, string> = {};
@@ -50,7 +53,7 @@ export function FormScreen({ route, navigation }: Props) {
     setValues((prev) => ({ ...prev, [name]: val }));
 
   const buildPayload = () => {
-    const payload: Record<string, unknown> = {};
+    const payload: Record<string, unknown> = { ...(preset ?? {}) };
     for (const f of schema.fields) {
       const val = values[f.name];
       if (f.type === "boolean") payload[f.name] = val === "true";
@@ -76,7 +79,7 @@ export function FormScreen({ route, navigation }: Props) {
       if (mode === "create") await createResource(config.path, buildPayload());
       else await updateResource(config.path, (row as Row).id, buildPayload());
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
-      navigation.navigate("List", { resourceKey });
+      finish();
     } catch (e) {
       handleApiError(e);
     } finally {
@@ -116,20 +119,8 @@ export function FormScreen({ route, navigation }: Props) {
     }
   };
 
-  const headerHeight = useHeaderHeight();
-
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={headerHeight}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
         {schema.fields.map((f) => (
@@ -154,8 +145,7 @@ export function FormScreen({ route, navigation }: Props) {
           </View>
         ) : null}
         <View style={{ height: spacing.xxl }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 

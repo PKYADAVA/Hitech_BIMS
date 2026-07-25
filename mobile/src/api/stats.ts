@@ -23,6 +23,9 @@ export interface Overview {
     chicks_today: number;
   };
   sms: { total_today: number; sent_today: number; failed_today: number };
+  // Optional: only present once the extended /stats/overview backend is deployed.
+  inventory?: { items: number; transfers_today: number };
+  account?: { vouchers_today: number; accounts: number };
 }
 
 export async function fetchOverview(): Promise<Overview> {
