@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Hitech BIMS",
+    "slug": "hitech-bims-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "hitechbims",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hitechfarms.bims"
+    },
+    "android": {
+      "package": "com.hitechfarms.bims",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "extra": {
+      "apiBaseUrl": "https://hitechfarms.co.in/api/v1"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}

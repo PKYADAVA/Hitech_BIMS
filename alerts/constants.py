@@ -98,6 +98,10 @@ DEFAULT_IGNORE_FIELDS: frozenset[str] = frozenset(
         "created_at",
         "date_created",
         "search_vector",
+        # Derived map-replay geometry regenerated on every tracking sync — a
+        # huge encoded string that is meaningless in an audit diff and floods
+        # the message. Never worth auditing.
+        "polyline",
     }
 )
 

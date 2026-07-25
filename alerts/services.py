@@ -65,6 +65,20 @@ DEFAULT_SEVERITY: dict[str, str] = {
 }
 
 
+# A single field's value in a change clause is capped well below the full
+# message limit so one long value (encoded polylines, blobs, long remarks)
+# can't blow the message up into a wall of gibberish.
+_CHANGE_VALUE_MAX = 60
+
+
+def _short_repr(value: Any) -> str:
+    """repr() of a value, truncated so huge text fields stay readable."""
+    text = repr(value)
+    if len(text) > _CHANGE_VALUE_MAX:
+        text = text[: _CHANGE_VALUE_MAX - 1] + "…"
+    return text
+
+
 def _format_changes(changed_fields: dict) -> str:
     """Render a compact, human ``Status changed from Pending to Approved`` clause."""
     if not changed_fields:
@@ -72,9 +86,9 @@ def _format_changes(changed_fields: dict) -> str:
     parts = []
     for info in changed_fields.values():
         label = info.get("label", "field")
-        old = info.get("old")
-        new = info.get("new")
-        parts.append(f"{label} from {old!r} to {new!r}")
+        old = _short_repr(info.get("old"))
+        new = _short_repr(info.get("new"))
+        parts.append(f"{label} from {old} to {new}")
     return " (" + "; ".join(parts) + ")"
 
 

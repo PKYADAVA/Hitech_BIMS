@@ -1,0 +1,6519 @@
+openapi: 3.0.3
+info:
+  title: Hitech BIMS Mobile API
+  version: 1.0.0
+  description: JWT-authenticated REST API (v1) consumed by the mobile app.
+paths:
+  /api/v1/auth/login:
+    post:
+      operationId: auth_login_create
+      description: Shared v1 wiring for the SimpleJWT views (envelope + error shape).
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout_create
+      description: Blacklist a refresh token → logs out that one device/session.
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me:
+    get:
+      operationId: auth_me_retrieve
+      description: Return the authenticated user's profile.
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/refresh:
+    post:
+      operationId: auth_refresh_create
+      description: Shared v1 wiring for the SimpleJWT views (envelope + error shape).
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/broiler/batches/:
+    get:
+      operationId: broiler_batches_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBroilerBatchList'
+          description: ''
+  /api/v1/broiler/batches/{id}/:
+    get:
+      operationId: broiler_batches_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Broiler Batch.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroilerBatch'
+          description: ''
+  /api/v1/broiler/bird-sale-receipts/:
+    get:
+      operationId: broiler_bird_sale_receipts_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBirdSaleReceiptList'
+          description: ''
+    post:
+      operationId: broiler_bird_sale_receipts_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BirdSaleReceiptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BirdSaleReceiptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BirdSaleReceiptRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSaleReceipt'
+          description: ''
+  /api/v1/broiler/bird-sale-receipts/{id}/:
+    get:
+      operationId: broiler_bird_sale_receipts_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale Receipt.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSaleReceipt'
+          description: ''
+    put:
+      operationId: broiler_bird_sale_receipts_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale Receipt.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BirdSaleReceiptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BirdSaleReceiptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BirdSaleReceiptRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSaleReceipt'
+          description: ''
+    patch:
+      operationId: broiler_bird_sale_receipts_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale Receipt.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBirdSaleReceiptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBirdSaleReceiptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBirdSaleReceiptRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSaleReceipt'
+          description: ''
+    delete:
+      operationId: broiler_bird_sale_receipts_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale Receipt.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/broiler/bird-sales/:
+    get:
+      operationId: broiler_bird_sales_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBirdSaleList'
+          description: ''
+    post:
+      operationId: broiler_bird_sales_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BirdSaleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BirdSaleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BirdSaleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSale'
+          description: ''
+  /api/v1/broiler/bird-sales/{id}/:
+    get:
+      operationId: broiler_bird_sales_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSale'
+          description: ''
+    put:
+      operationId: broiler_bird_sales_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BirdSaleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BirdSaleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BirdSaleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSale'
+          description: ''
+    patch:
+      operationId: broiler_bird_sales_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBirdSaleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBirdSaleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBirdSaleRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BirdSale'
+          description: ''
+    delete:
+      operationId: broiler_bird_sales_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Bird Sale.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/broiler/branches/:
+    get:
+      operationId: broiler_branches_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBranchList'
+          description: ''
+  /api/v1/broiler/branches/{id}/:
+    get:
+      operationId: broiler_branches_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Branch.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Branch'
+          description: ''
+  /api/v1/broiler/breeds/:
+    get:
+      operationId: broiler_breeds_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBreedList'
+          description: ''
+  /api/v1/broiler/breeds/{id}/:
+    get:
+      operationId: broiler_breeds_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Breed.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Breed'
+          description: ''
+  /api/v1/broiler/daily-entries/:
+    get:
+      operationId: broiler_daily_entries_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDailyEntryList'
+          description: ''
+    post:
+      operationId: broiler_daily_entries_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntry'
+          description: ''
+  /api/v1/broiler/daily-entries/{id}/:
+    get:
+      operationId: broiler_daily_entries_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Daily Entry.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntry'
+          description: ''
+    put:
+      operationId: broiler_daily_entries_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Daily Entry.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntry'
+          description: ''
+    patch:
+      operationId: broiler_daily_entries_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Daily Entry.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyEntryRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntry'
+          description: ''
+    delete:
+      operationId: broiler_daily_entries_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Daily Entry.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/broiler/diseases/:
+    get:
+      operationId: broiler_diseases_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBroilerDiseaseList'
+          description: ''
+  /api/v1/broiler/diseases/{id}/:
+    get:
+      operationId: broiler_diseases_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Broiler Disease.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroilerDisease'
+          description: ''
+  /api/v1/broiler/farmer-groups/:
+    get:
+      operationId: broiler_farmer_groups_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFarmerGroupList'
+          description: ''
+  /api/v1/broiler/farmer-groups/{id}/:
+    get:
+      operationId: broiler_farmer_groups_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Farmer Group.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FarmerGroup'
+          description: ''
+  /api/v1/broiler/farmers/:
+    get:
+      operationId: broiler_farmers_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFarmerList'
+          description: ''
+  /api/v1/broiler/farmers/{id}/:
+    get:
+      operationId: broiler_farmers_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Farmer.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Farmer'
+          description: ''
+  /api/v1/broiler/farms/:
+    get:
+      operationId: broiler_farms_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBroilerFarmList'
+          description: ''
+  /api/v1/broiler/farms/{id}/:
+    get:
+      operationId: broiler_farms_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Broiler Farm.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroilerFarm'
+          description: ''
+  /api/v1/broiler/lines/:
+    get:
+      operationId: broiler_lines_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBroilerLineList'
+          description: ''
+  /api/v1/broiler/lines/{id}/:
+    get:
+      operationId: broiler_lines_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Broiler Line.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroilerLine'
+          description: ''
+  /api/v1/broiler/medicine-vaccine-entries/:
+    get:
+      operationId: broiler_medicine_vaccine_entries_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineVaccineEntryList'
+          description: ''
+    post:
+      operationId: broiler_medicine_vaccine_entries_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicineVaccineEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MedicineVaccineEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MedicineVaccineEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineVaccineEntry'
+          description: ''
+  /api/v1/broiler/medicine-vaccine-entries/{id}/:
+    get:
+      operationId: broiler_medicine_vaccine_entries_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Medicine/Vaccine Entry.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineVaccineEntry'
+          description: ''
+    put:
+      operationId: broiler_medicine_vaccine_entries_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Medicine/Vaccine Entry.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicineVaccineEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MedicineVaccineEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MedicineVaccineEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineVaccineEntry'
+          description: ''
+    patch:
+      operationId: broiler_medicine_vaccine_entries_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Medicine/Vaccine Entry.
+        required: true
+      tags:
+      - broiler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineVaccineEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineVaccineEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineVaccineEntryRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineVaccineEntry'
+          description: ''
+    delete:
+      operationId: broiler_medicine_vaccine_entries_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Medicine/Vaccine Entry.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/broiler/regions/:
+    get:
+      operationId: broiler_regions_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRegionList'
+          description: ''
+  /api/v1/broiler/regions/{id}/:
+    get:
+      operationId: broiler_regions_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Region.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Region'
+          description: ''
+  /api/v1/broiler/sheds/:
+    get:
+      operationId: broiler_sheds_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBroilerFarmShedList'
+          description: ''
+  /api/v1/broiler/sheds/{id}/:
+    get:
+      operationId: broiler_sheds_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Broiler Farm Shed.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BroilerFarmShed'
+          description: ''
+  /api/v1/broiler/supervisors/:
+    get:
+      operationId: broiler_supervisors_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSupervisorList'
+          description: ''
+  /api/v1/broiler/supervisors/{id}/:
+    get:
+      operationId: broiler_supervisors_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Supervisor.
+        required: true
+      tags:
+      - broiler
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Supervisor'
+          description: ''
+  /api/v1/hatchery/chick-sale-items/:
+    get:
+      operationId: hatchery_chick_sale_items_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChickSaleItemList'
+          description: ''
+    post:
+      operationId: hatchery_chick_sale_items_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChickSaleItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChickSaleItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChickSaleItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSaleItem'
+          description: ''
+  /api/v1/hatchery/chick-sale-items/{id}/:
+    get:
+      operationId: hatchery_chick_sale_items_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale item.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSaleItem'
+          description: ''
+    put:
+      operationId: hatchery_chick_sale_items_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale item.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChickSaleItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChickSaleItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChickSaleItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSaleItem'
+          description: ''
+    patch:
+      operationId: hatchery_chick_sale_items_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale item.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedChickSaleItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedChickSaleItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedChickSaleItemRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSaleItem'
+          description: ''
+    delete:
+      operationId: hatchery_chick_sale_items_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale item.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/chick-sales/:
+    get:
+      operationId: hatchery_chick_sales_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChickSaleList'
+          description: ''
+    post:
+      operationId: hatchery_chick_sales_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChickSaleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChickSaleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChickSaleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSale'
+          description: ''
+  /api/v1/hatchery/chick-sales/{id}/:
+    get:
+      operationId: hatchery_chick_sales_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSale'
+          description: ''
+    put:
+      operationId: hatchery_chick_sales_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChickSaleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChickSaleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChickSaleRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSale'
+          description: ''
+    patch:
+      operationId: hatchery_chick_sales_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedChickSaleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedChickSaleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedChickSaleRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChickSale'
+          description: ''
+    delete:
+      operationId: hatchery_chick_sales_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chick sale.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/delivery-challan-items/:
+    get:
+      operationId: hatchery_delivery_challan_items_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeliveryChallanItemList'
+          description: ''
+    post:
+      operationId: hatchery_delivery_challan_items_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallanItem'
+          description: ''
+  /api/v1/hatchery/delivery-challan-items/{id}/:
+    get:
+      operationId: hatchery_delivery_challan_items_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan item.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallanItem'
+          description: ''
+    put:
+      operationId: hatchery_delivery_challan_items_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan item.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallanItem'
+          description: ''
+    patch:
+      operationId: hatchery_delivery_challan_items_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan item.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDeliveryChallanItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDeliveryChallanItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDeliveryChallanItemRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallanItem'
+          description: ''
+    delete:
+      operationId: hatchery_delivery_challan_items_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan item.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/delivery-challans/:
+    get:
+      operationId: hatchery_delivery_challans_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeliveryChallanList'
+          description: ''
+    post:
+      operationId: hatchery_delivery_challans_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallan'
+          description: ''
+  /api/v1/hatchery/delivery-challans/{id}/:
+    get:
+      operationId: hatchery_delivery_challans_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallan'
+          description: ''
+    put:
+      operationId: hatchery_delivery_challans_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeliveryChallanRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallan'
+          description: ''
+    patch:
+      operationId: hatchery_delivery_challans_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDeliveryChallanRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDeliveryChallanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDeliveryChallanRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryChallan'
+          description: ''
+    delete:
+      operationId: hatchery_delivery_challans_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this delivery challan.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/egg-gradings/:
+    get:
+      operationId: hatchery_egg_gradings_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEggGradingList'
+          description: ''
+    post:
+      operationId: hatchery_egg_gradings_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggGradingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EggGradingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EggGradingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggGrading'
+          description: ''
+  /api/v1/hatchery/egg-gradings/{id}/:
+    get:
+      operationId: hatchery_egg_gradings_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Grading.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggGrading'
+          description: ''
+    put:
+      operationId: hatchery_egg_gradings_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Grading.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggGradingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EggGradingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EggGradingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggGrading'
+          description: ''
+    patch:
+      operationId: hatchery_egg_gradings_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Grading.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEggGradingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEggGradingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEggGradingRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggGrading'
+          description: ''
+    delete:
+      operationId: hatchery_egg_gradings_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Grading.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/egg-purchase-items/:
+    get:
+      operationId: hatchery_egg_purchase_items_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEggPurchaseItemList'
+          description: ''
+    post:
+      operationId: hatchery_egg_purchase_items_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchaseItem'
+          description: ''
+  /api/v1/hatchery/egg-purchase-items/{id}/:
+    get:
+      operationId: hatchery_egg_purchase_items_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase Item.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchaseItem'
+          description: ''
+    put:
+      operationId: hatchery_egg_purchase_items_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase Item.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseItemRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchaseItem'
+          description: ''
+    patch:
+      operationId: hatchery_egg_purchase_items_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase Item.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEggPurchaseItemRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEggPurchaseItemRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEggPurchaseItemRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchaseItem'
+          description: ''
+    delete:
+      operationId: hatchery_egg_purchase_items_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase Item.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/egg-purchases/:
+    get:
+      operationId: hatchery_egg_purchases_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEggPurchaseList'
+          description: ''
+    post:
+      operationId: hatchery_egg_purchases_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchase'
+          description: ''
+  /api/v1/hatchery/egg-purchases/{id}/:
+    get:
+      operationId: hatchery_egg_purchases_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchase'
+          description: ''
+    put:
+      operationId: hatchery_egg_purchases_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EggPurchaseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchase'
+          description: ''
+    patch:
+      operationId: hatchery_egg_purchases_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEggPurchaseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEggPurchaseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEggPurchaseRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EggPurchase'
+          description: ''
+    delete:
+      operationId: hatchery_egg_purchases_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Egg Purchase.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/hatch-entries/:
+    get:
+      operationId: hatchery_hatch_entries_list
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHatchEntryList'
+          description: ''
+    post:
+      operationId: hatchery_hatch_entries_create
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HatchEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HatchEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HatchEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HatchEntry'
+          description: ''
+  /api/v1/hatchery/hatch-entries/{id}/:
+    get:
+      operationId: hatchery_hatch_entries_retrieve
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this hatch entry.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HatchEntry'
+          description: ''
+    put:
+      operationId: hatchery_hatch_entries_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this hatch entry.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HatchEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HatchEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HatchEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HatchEntry'
+          description: ''
+    patch:
+      operationId: hatchery_hatch_entries_partial_update
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this hatch entry.
+        required: true
+      tags:
+      - hatchery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedHatchEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedHatchEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedHatchEntryRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HatchEntry'
+          description: ''
+    delete:
+      operationId: hatchery_hatch_entries_destroy
+      description: Full CRUD resource (list/retrieve/create/update/partial_update/destroy).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this hatch entry.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/hatchery/hatch-settings/:
+    get:
+      operationId: hatchery_hatch_settings_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHatchSettingList'
+          description: ''
+  /api/v1/hatchery/hatch-settings/{id}/:
+    get:
+      operationId: hatchery_hatch_settings_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Hatch Setting.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HatchSetting'
+          description: ''
+  /api/v1/hatchery/tray-settings/:
+    get:
+      operationId: hatchery_tray_settings_list
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTraySettingList'
+          description: ''
+  /api/v1/hatchery/tray-settings/{id}/:
+    get:
+      operationId: hatchery_tray_settings_retrieve
+      description: List + retrieve only — for master/reference data used as mobile
+        pickers.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this tray setting.
+        required: true
+      tags:
+      - hatchery
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraySetting'
+          description: ''
+  /api/v1/health:
+    get:
+      operationId: health_retrieve
+      tags:
+      - health
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/ready:
+    get:
+      operationId: ready_retrieve
+      tags:
+      - ready
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    BirdSale:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        sale_no:
+          type: string
+          readOnly: true
+          description: Auto-generated transaction number, e.g. BS-2627-0001
+        date:
+          type: string
+          format: date
+        doc_no:
+          type: string
+          description: External/reference document number
+          maxLength: 100
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        birds:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        net_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Net weight in Kgs
+        avg_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          description: Net weight / Birds
+        rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Rate per Kg
+        round_off:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+          description: Net weight x Rate + RoundOff
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        remarks:
+          type: string
+          maxLength: 255
+        entry_time:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+          nullable: true
+        farmer:
+          type: integer
+          nullable: true
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of sale
+        lifting_supervisor:
+          type: integer
+          nullable: true
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - amount
+      - avg_weight
+      - entry_time
+      - farm
+      - id
+      - sale_no
+    BirdSaleReceipt:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        receipt_no:
+          type: string
+          readOnly: true
+          description: Auto-generated transaction number, e.g. RC-2627-0001
+        date:
+          type: string
+          format: date
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        reference_no:
+          type: string
+          maxLength: 100
+        remarks:
+          type: string
+          maxLength: 255
+        entry_time:
+          type: string
+          format: date-time
+          readOnly: true
+        location:
+          type: integer
+        customer:
+          type: integer
+          nullable: true
+        farmer:
+          type: integer
+          nullable: true
+        receipt_account:
+          type: integer
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - entry_time
+      - id
+      - location
+      - receipt_account
+      - receipt_no
+    BirdSaleReceiptRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        reference_no:
+          type: string
+          maxLength: 100
+        remarks:
+          type: string
+          maxLength: 255
+        location:
+          type: integer
+        customer:
+          type: integer
+          nullable: true
+        farmer:
+          type: integer
+          nullable: true
+        receipt_account:
+          type: integer
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - location
+      - receipt_account
+    BirdSaleRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        doc_no:
+          type: string
+          description: External/reference document number
+          maxLength: 100
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        birds:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        net_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Net weight in Kgs
+        rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Rate per Kg
+        round_off:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        remarks:
+          type: string
+          maxLength: 255
+        customer:
+          type: integer
+          nullable: true
+        farmer:
+          type: integer
+          nullable: true
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of sale
+        lifting_supervisor:
+          type: integer
+          nullable: true
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - farm
+    Branch:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+          description: Auto-generated code for this branch
+        branch_name:
+          type: string
+          description: Name of the branch
+          maxLength: 100
+        prefix:
+          type: string
+          description: Short prefix code for this branch
+          maxLength: 10
+        is_active:
+          type: boolean
+          description: Inactive branches are hidden from selection elsewhere
+        is_locked:
+          type: boolean
+          readOnly: true
+          description: Locked records can't be edited or deleted
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        region:
+          type: integer
+          description: Region this branch belongs to
+      required:
+      - branch_name
+      - code
+      - created_at
+      - id
+      - is_locked
+      - prefix
+      - region
+      - updated_at
+    Breed:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+          description: Auto-generated code for this breed
+        description:
+          type: string
+          description: Name of the breed
+          maxLength: 100
+        is_active:
+          type: boolean
+          description: Inactive breeds are hidden from selection elsewhere
+        is_locked:
+          type: boolean
+          readOnly: true
+          description: Locked records can't be edited or deleted
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - code
+      - created_at
+      - description
+      - id
+      - is_locked
+      - updated_at
+    BroilerBatch:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        batch_name:
+          type: string
+          description: Auto-generated per farm, e.g. BAH-0201-1
+          maxLength: 50
+        book_number:
+          type: string
+          description: Grower book number for this batch
+          maxLength: 50
+        lot_no:
+          type: string
+          description: Lot number for this batch
+          maxLength: 50
+        start_date:
+          type: string
+          format: date
+          nullable: true
+          description: Date when the batch was started
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Expected end date for the batch
+        is_closed:
+          type: boolean
+          description: Closed by a Growing Charge settlement
+        closed_on:
+          type: string
+          format: date
+          nullable: true
+          description: Date the batch was closed/settled
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        broiler_farm:
+          type: integer
+          description: Farm this batch belongs to
+        breed:
+          type: integer
+          nullable: true
+          description: Breed of this flock — used for standard performance comparison
+      required:
+      - batch_name
+      - broiler_farm
+      - created_at
+      - id
+      - updated_at
+    BroilerDisease:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        disease_code:
+          type: string
+          description: Code or identifier for the disease
+          maxLength: 50
+        disease_name:
+          type: string
+          description: Name of the disease
+          maxLength: 100
+        symptoms:
+          type: string
+          description: Symptoms observed
+        diagnosis:
+          type: string
+          description: Diagnosis and treatment details
+        image:
+          type: string
+          format: uri
+          nullable: true
+          description: Image related to the disease
+        diagnosed_date:
+          type: string
+          format: date
+          readOnly: true
+          description: Date when the disease was diagnosed
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        batch:
+          type: integer
+          nullable: true
+          description: Batch affected by this disease
+      required:
+      - created_at
+      - diagnosed_date
+      - diagnosis
+      - disease_code
+      - disease_name
+      - id
+      - symptoms
+      - updated_at
+    BroilerFarm:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        region:
+          type: string
+          description: Region of the farm
+          maxLength: 100
+        line:
+          type: string
+          description: Line for this farm
+          maxLength: 100
+        farm_code:
+          type: string
+          readOnly: true
+          description: Auto-generated code, e.g. AKB-0203 — <branch prefix>-<branch
+            code suffix><farm serial>
+        farm_name:
+          type: string
+          description: Name of the farm
+          maxLength: 100
+        farm_pincode:
+          type: string
+          nullable: true
+          description: Pincode of the farm
+          maxLength: 10
+        farm_capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Bird capacity of the farm
+        farm_type:
+          allOf:
+          - $ref: '#/components/schemas/FarmTypeEnum'
+          description: |-
+            Type of farm operation
+
+            * `own` - Own
+            * `ec_shed` - Ec Shed
+            * `integration` - Integration
+        state:
+          type: string
+          nullable: true
+          description: State where the farm is located
+          maxLength: 100
+        district:
+          type: string
+          nullable: true
+          description: District where the farm is located
+          maxLength: 100
+        area:
+          type: string
+          nullable: true
+          description: Area where the farm is located
+          maxLength: 100
+        farm_address:
+          type: string
+          nullable: true
+          description: Detailed address of the farm
+        farm_latitude:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+          nullable: true
+          description: Latitude coordinate of the farm
+        farm_longitude:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+          nullable: true
+          description: Longitude coordinate of the farm
+        agreement_start_date:
+          type: string
+          format: date
+          nullable: true
+          description: Agreement start date
+        agreement_end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Agreement end date
+        agreement_months:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: Duration of the agreement in months
+        agreement_copy:
+          type: string
+          format: uri
+          nullable: true
+          description: Uploaded copy of the agreement
+        other_documents:
+          type: string
+          format: uri
+          nullable: true
+          description: Other supporting documents
+        farm_sqft:
+          type: string
+          nullable: true
+          description: Farm area in square feet
+          maxLength: 20
+        cheque_1_no:
+          type: string
+          description: Security cheque 1 number
+          maxLength: 30
+        cheque_1_file:
+          type: string
+          format: uri
+          nullable: true
+          description: Security cheque 1 scan
+        cheque_2_no:
+          type: string
+          description: Security cheque 2 number
+          maxLength: 30
+        cheque_2_file:
+          type: string
+          format: uri
+          nullable: true
+          description: Security cheque 2 scan
+        cheque_3_no:
+          type: string
+          description: Security cheque 3 number
+          maxLength: 30
+        cheque_3_file:
+          type: string
+          format: uri
+          nullable: true
+          description: Security cheque 3 scan
+        cheque_4_no:
+          type: string
+          description: Security cheque 4 number
+          maxLength: 30
+        cheque_4_file:
+          type: string
+          format: uri
+          nullable: true
+          description: Security cheque 4 scan
+        remarks:
+          type: string
+          nullable: true
+          description: Additional remarks about the farm/shed information
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        branch:
+          type: integer
+          description: Branch this farm belongs to
+        supervisor:
+          type: integer
+          description: Supervisor managing this farm
+        farmer:
+          type: integer
+          description: Farmer who owns/operates this farm
+      required:
+      - branch
+      - created_at
+      - farm_capacity
+      - farm_code
+      - farm_name
+      - farmer
+      - id
+      - line
+      - region
+      - supervisor
+      - updated_at
+    BroilerFarmShed:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        shed_code:
+          type: string
+          readOnly: true
+          description: Auto-generated code, e.g. SHED-0001
+        shed_name:
+          type: string
+          description: Descriptive name of the shed
+          maxLength: 100
+        shed_type:
+          allOf:
+          - $ref: '#/components/schemas/ShedTypeEnum'
+          description: |-
+            Type of shed
+
+            * `broiler` - Broiler
+            * `breeder` - Breeder
+            * `layer` - Layer
+            * `grower` - Grower
+            * `quarantine` - Quarantine
+        unit_no:
+          type: integer
+          readOnly: true
+          description: Auto-assigned running unit number within the farm (1,2,3…)
+        is_active:
+          type: boolean
+        shed_no:
+          type: string
+          description: Legacy shed number/identifier
+          maxLength: 50
+        length:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Shed length in feet
+        width:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Shed width in feet
+        dimensions:
+          type: string
+          nullable: true
+          description: Auto-composed 'L x W ft' from length & width
+          maxLength: 100
+        sq_feet:
+          type: string
+          nullable: true
+          description: Auto-calculated area (length x width) in square feet
+          maxLength: 20
+        capacity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Bird holding capacity of the shed
+        occupied:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Birds currently housed in the shed
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        farm:
+          type: integer
+          description: Farm this shed belongs to
+        organization_centre:
+          type: integer
+          nullable: true
+          description: Cost/Organization Centre — auto-set from the farm's branch
+      required:
+      - created_at
+      - farm
+      - id
+      - shed_code
+      - unit_no
+      - updated_at
+    BroilerLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+          description: Auto-generated code for this line
+        description:
+          type: string
+          description: Name of the line
+          maxLength: 100
+        is_active:
+          type: boolean
+          description: Inactive lines are hidden from selection elsewhere
+        is_locked:
+          type: boolean
+          readOnly: true
+          description: Locked records can't be edited or deleted
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        region:
+          type: integer
+          description: Region this line belongs to
+        branch:
+          type: integer
+          description: Branch this line belongs to
+      required:
+      - branch
+      - code
+      - created_at
+      - description
+      - id
+      - is_locked
+      - region
+      - updated_at
+    ChickSale:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        bill_no:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+        shipping_address:
+          type: string
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        freight_type:
+          $ref: '#/components/schemas/ChickSaleFreightTypeEnum'
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        freight_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        final_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        avg_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Average realised rate per bird
+        profit_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Sale value minus chick cost (latest hatch entry net rate)
+        terms:
+          type: string
+        remarks:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+        warehouse:
+          type: integer
+          description: Stock point / feed mill the chicks are sold from
+        delivery_challan:
+          type: integer
+          nullable: true
+          description: Delivery challan this sale was converted from
+        pay_account:
+          type: integer
+          nullable: true
+        freight_account:
+          type: integer
+          nullable: true
+      required:
+      - bill_no
+      - created_at
+      - customer
+      - date
+      - id
+      - updated_at
+      - warehouse
+    ChickSaleFreightTypeEnum:
+      enum:
+      - Paid by Customer
+      - Include in Bill
+      type: string
+      description: |-
+        * `Paid by Customer` - Paid by Customer
+        * `Include in Bill` - Include in Bill
+    ChickSaleItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        farm:
+          type: string
+          maxLength: 150
+        total_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        mortality:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        culls:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        sale_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        discount_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        free_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        net_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Billed quantity
+        sale_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        sale:
+          type: integer
+        item:
+          type: integer
+      required:
+      - id
+      - item
+      - sale
+    ChickSaleItemRequest:
+      type: object
+      properties:
+        farm:
+          type: string
+          maxLength: 150
+        total_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        mortality:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        culls:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        sale_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        discount_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        free_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        net_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Billed quantity
+        sale_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        sale:
+          type: integer
+        item:
+          type: integer
+      required:
+      - item
+      - sale
+    ChickSaleRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        shipping_address:
+          type: string
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        freight_type:
+          $ref: '#/components/schemas/ChickSaleFreightTypeEnum'
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        freight_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        final_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        avg_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Average realised rate per bird
+        profit_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Sale value minus chick cost (latest hatch entry net rate)
+        terms:
+          type: string
+        remarks:
+          type: string
+        customer:
+          type: integer
+        warehouse:
+          type: integer
+          description: Stock point / feed mill the chicks are sold from
+        delivery_challan:
+          type: integer
+          nullable: true
+          description: Delivery challan this sale was converted from
+        pay_account:
+          type: integer
+          nullable: true
+        freight_account:
+          type: integer
+          nullable: true
+      required:
+      - customer
+      - date
+      - warehouse
+    DailyEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entry_no:
+          type: string
+          readOnly: true
+          description: Auto-generated transaction number, e.g. DE-2627-0001
+        date:
+          type: string
+          format: date
+        age_days:
+          type: integer
+          readOnly: true
+          description: Days since the batch's start date
+        mortality:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        culls:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        feed_1_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Kgs fed
+        feed_1_stock:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          description: Running closing stock after this entry
+        feed_2_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Kgs fed
+        feed_2_stock:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          description: Running closing stock after this entry
+        avg_weight_gms:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+          maxLength: 255
+        mort_image:
+          type: string
+          format: uri
+          nullable: true
+          description: Photo evidence of the day's mortality
+        cull_image:
+          type: string
+          format: uri
+          nullable: true
+          description: Photo evidence of the day's culls
+        feed_image:
+          type: string
+          format: uri
+          nullable: true
+          description: Photo of feed stock/consumption
+        entry_latitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS latitude where the entry was recorded
+        entry_longitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS longitude where the entry was recorded
+        entry_time:
+          type: string
+          format: date-time
+          readOnly: true
+        supervisor:
+          type: integer
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of entry
+        feed_1:
+          type: integer
+          nullable: true
+        feed_2:
+          type: integer
+          nullable: true
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - age_days
+      - entry_no
+      - entry_time
+      - farm
+      - feed_1_stock
+      - feed_2_stock
+      - id
+      - supervisor
+    DailyEntryRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        mortality:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        culls:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        feed_1_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Kgs fed
+        feed_2_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Kgs fed
+        avg_weight_gms:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+          maxLength: 255
+        mort_image:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo evidence of the day's mortality
+        cull_image:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo evidence of the day's culls
+        feed_image:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo of feed stock/consumption
+        entry_latitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS latitude where the entry was recorded
+        entry_longitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS longitude where the entry was recorded
+        supervisor:
+          type: integer
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of entry
+        feed_1:
+          type: integer
+          nullable: true
+        feed_2:
+          type: integer
+          nullable: true
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - farm
+      - supervisor
+    DeliveryChallan:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        challan_no:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+        place_of_supply:
+          type: string
+          maxLength: 50
+        overall_discount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        shipping_address:
+          type: string
+        transport_mode:
+          type: string
+          maxLength: 20
+        vehicle_no:
+          type: string
+          maxLength: 50
+        driver_name:
+          type: string
+          maxLength: 100
+        driver_mobile:
+          type: string
+          maxLength: 20
+        transporter_name:
+          type: string
+          maxLength: 150
+        transport_document_no:
+          type: string
+          maxLength: 50
+        transport_document_date:
+          type: string
+          format: date
+          nullable: true
+        eway_bill_no:
+          type: string
+          maxLength: 50
+        eway_bill_date:
+          type: string
+          format: date
+          nullable: true
+        print_price_details:
+          type: boolean
+        terms:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+      required:
+      - challan_no
+      - created_at
+      - customer
+      - date
+      - id
+      - updated_at
+    DeliveryChallanItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        packing_size:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        units:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit:
+          type: string
+          maxLength: 30
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        tax_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        challan:
+          type: integer
+        item:
+          type: integer
+      required:
+      - challan
+      - id
+      - item
+    DeliveryChallanItemRequest:
+      type: object
+      properties:
+        packing_size:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        units:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit:
+          type: string
+          maxLength: 30
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        tax_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        challan:
+          type: integer
+        item:
+          type: integer
+      required:
+      - challan
+      - item
+    DeliveryChallanRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        place_of_supply:
+          type: string
+          maxLength: 50
+        overall_discount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        shipping_address:
+          type: string
+        transport_mode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        vehicle_no:
+          type: string
+          maxLength: 50
+        driver_name:
+          type: string
+          maxLength: 100
+        driver_mobile:
+          type: string
+          maxLength: 20
+        transporter_name:
+          type: string
+          maxLength: 150
+        transport_document_no:
+          type: string
+          maxLength: 50
+        transport_document_date:
+          type: string
+          format: date
+          nullable: true
+        eway_bill_no:
+          type: string
+          maxLength: 50
+        eway_bill_date:
+          type: string
+          format: date
+          nullable: true
+        print_price_details:
+          type: boolean
+        terms:
+          type: string
+        customer:
+          type: integer
+      required:
+      - customer
+      - date
+    EggGrading:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        transaction_no:
+          type: string
+          readOnly: true
+          description: Auto-generated transaction number for this egg grading
+        date:
+          type: string
+          format: date
+          description: Date of grading/receiving
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Quantity taken for grading
+        broken_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        damage_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        misshapped_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        dirty_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        storage_location:
+          type: integer
+          description: Storage location the graded eggs are received into
+        supplier:
+          type: integer
+          description: Supplier of the eggs being graded
+        purchase_invoice:
+          type: integer
+          description: Egg purchase invoice these eggs are being graded from
+        item:
+          type: integer
+          description: Item being graded
+      required:
+      - created_at
+      - date
+      - id
+      - item
+      - purchase_invoice
+      - storage_location
+      - supplier
+      - transaction_no
+      - updated_at
+    EggGradingRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of grading/receiving
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Quantity taken for grading
+        broken_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        damage_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        misshapped_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        dirty_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        storage_location:
+          type: integer
+          description: Storage location the graded eggs are received into
+        supplier:
+          type: integer
+          description: Supplier of the eggs being graded
+        purchase_invoice:
+          type: integer
+          description: Egg purchase invoice these eggs are being graded from
+        item:
+          type: integer
+          description: Item being graded
+      required:
+      - date
+      - item
+      - purchase_invoice
+      - storage_location
+      - supplier
+    EggPurchase:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        transaction_no:
+          type: string
+          readOnly: true
+          description: Auto-generated transaction number for this egg purchase
+        date:
+          type: string
+          format: date
+          description: Date of purchase
+        dc_no:
+          type: string
+          description: Delivery challan number
+          maxLength: 50
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        freight_type:
+          $ref: '#/components/schemas/EggPurchaseFreightTypeEnum'
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        freight_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        tcs_applicable:
+          type: boolean
+          description: Whether TCS applies to this purchase
+        tcs_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        supplier:
+          type: integer
+          description: Supplier the eggs were purchased from
+        warehouse:
+          type: integer
+          description: Farm/Warehouse the eggs were received at
+        pay_account:
+          type: integer
+          description: Account this purchase is paid from
+        freight_account:
+          type: integer
+          nullable: true
+          description: Account freight is booked against
+      required:
+      - created_at
+      - date
+      - id
+      - pay_account
+      - supplier
+      - transaction_no
+      - updated_at
+      - warehouse
+    EggPurchaseFreightTypeEnum:
+      enum:
+      - Include
+      - Exclude
+      type: string
+      description: |-
+        * `Include` - Include
+        * `Exclude` - Exclude
+    EggPurchaseItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        sent_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        rcv_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        free_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        no_of_boxes:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Rate per unit (Rcv Qty, or Sent Qty if none received) — Amount
+            is derived from this
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        discount_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        total_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        egg_purchase:
+          type: integer
+          description: Egg purchase this item row belongs to
+        item:
+          type: integer
+      required:
+      - amount
+      - egg_purchase
+      - id
+      - item
+      - total_amount
+    EggPurchaseItemRequest:
+      type: object
+      properties:
+        sent_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        rcv_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        free_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        no_of_boxes:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Rate per unit (Rcv Qty, or Sent Qty if none received) — Amount
+            is derived from this
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        discount_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        egg_purchase:
+          type: integer
+          description: Egg purchase this item row belongs to
+        item:
+          type: integer
+      required:
+      - egg_purchase
+      - item
+    EggPurchaseRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of purchase
+        dc_no:
+          type: string
+          description: Delivery challan number
+          maxLength: 50
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        freight_type:
+          $ref: '#/components/schemas/EggPurchaseFreightTypeEnum'
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        freight_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        tcs_applicable:
+          type: boolean
+          description: Whether TCS applies to this purchase
+        tcs_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+        supplier:
+          type: integer
+          description: Supplier the eggs were purchased from
+        warehouse:
+          type: integer
+          description: Farm/Warehouse the eggs were received at
+        pay_account:
+          type: integer
+          description: Account this purchase is paid from
+        freight_account:
+          type: integer
+          nullable: true
+          description: Account freight is booked against
+      required:
+      - date
+      - pay_account
+      - supplier
+      - warehouse
+    FarmTypeEnum:
+      enum:
+      - own
+      - ec_shed
+      - integration
+      type: string
+      description: |-
+        * `own` - Own
+        * `ec_shed` - Ec Shed
+        * `integration` - Integration
+    Farmer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        farmer_name:
+          type: string
+          description: Full name of the farmer
+          maxLength: 150
+        phone_no:
+          type: string
+          nullable: true
+          description: Landline/phone number of the farmer
+          maxLength: 15
+        mobile_no:
+          type: string
+          nullable: true
+          description: Primary mobile number of the farmer
+          maxLength: 15
+        mobile_2:
+          type: string
+          nullable: true
+          description: Secondary mobile number of the farmer
+          maxLength: 15
+        farmer_photo:
+          type: string
+          format: uri
+          nullable: true
+          description: Photograph of the farmer
+        pan_no:
+          type: string
+          nullable: true
+          description: PAN number of the farmer
+          maxLength: 10
+        aadhar_no:
+          type: string
+          nullable: true
+          description: Aadhar number of the farmer
+          maxLength: 12
+        national_id:
+          type: string
+          nullable: true
+          description: National ID of the farmer
+          maxLength: 50
+        pan_upload:
+          type: string
+          format: uri
+          nullable: true
+          description: Uploaded copy of PAN card
+        aadhar_upload_front:
+          type: string
+          format: uri
+          nullable: true
+          description: Uploaded copy of Aadhar card (front)
+        aadhar_upload_back:
+          type: string
+          format: uri
+          nullable: true
+          description: Uploaded copy of Aadhar card (back)
+        usc:
+          type: string
+          nullable: true
+          description: USC of the farmer
+          maxLength: 50
+        service_no:
+          type: string
+          nullable: true
+          description: Service number of the farmer
+          maxLength: 50
+        tds_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+          description: TDS percentage applicable to the farmer
+        account_holder_name:
+          type: string
+          nullable: true
+          description: Name on the bank account
+          maxLength: 150
+        acc_no:
+          type: string
+          nullable: true
+          description: Bank account number
+          maxLength: 30
+        ifsc_code:
+          type: string
+          nullable: true
+          description: Bank IFSC code
+          maxLength: 15
+        bank_name:
+          type: string
+          nullable: true
+          description: Name of the bank
+          maxLength: 100
+        bank_branch:
+          type: string
+          nullable: true
+          description: Bank branch
+          maxLength: 100
+        address:
+          type: string
+          nullable: true
+          description: Residential address of the farmer
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        farmer_group:
+          type: integer
+          nullable: true
+          description: Group the farmer belongs to
+      required:
+      - created_at
+      - farmer_name
+      - id
+      - updated_at
+    FarmerGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+          description: Auto-generated code for this farmer group
+        description:
+          type: string
+          description: Name of the farmer group
+          maxLength: 150
+        is_active:
+          type: boolean
+          description: Inactive groups are hidden from selection elsewhere
+        is_locked:
+          type: boolean
+          readOnly: true
+          description: Locked records can't be edited or deleted
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        pay_account:
+          type: integer
+          description: Payable account for this group
+        advance_account:
+          type: integer
+          description: Advance account for this group
+      required:
+      - advance_account
+      - code
+      - created_at
+      - description
+      - id
+      - is_locked
+      - pay_account
+      - updated_at
+    HatchEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        transaction_no:
+          type: string
+          readOnly: true
+        hatch_date:
+          type: string
+          format: date
+          nullable: true
+          description: Actual hatch date; may differ from the tray setting's expected
+            date
+        eggs_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: No. of eggs set (snapshot from tray setting)
+        egg_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        eggs_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        chicks_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Saleable chicks hatched
+        chick_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        chicks_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        net_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Net cost per chick
+        net_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Eggs amount + vaccine consumption
+        remarks:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        tray_setting:
+          type: integer
+      required:
+      - created_at
+      - id
+      - transaction_no
+      - tray_setting
+      - updated_at
+    HatchEntryRequest:
+      type: object
+      properties:
+        hatch_date:
+          type: string
+          format: date
+          nullable: true
+          description: Actual hatch date; may differ from the tray setting's expected
+            date
+        eggs_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: No. of eggs set (snapshot from tray setting)
+        egg_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        eggs_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        chicks_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Saleable chicks hatched
+        chick_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        chicks_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        net_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Net cost per chick
+        net_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Eggs amount + vaccine consumption
+        remarks:
+          type: string
+        tray_setting:
+          type: integer
+      required:
+      - tray_setting
+    HatchSetting:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        setting_no:
+          type: string
+          description: Batch id for this hatch setting (e.g. 44)
+          maxLength: 50
+        batch_flock_no:
+          type: string
+          readOnly: true
+          description: 'Auto-generated batch/flock number: DDMM of today, plus today''s
+            sequence (e.g. 0806/01)'
+        supplier_name:
+          type: string
+          description: Supplier of the eggs for this setting
+          maxLength: 150
+        primary_machine_nos:
+          type: string
+          description: Primary setter machine numbers (e.g. 39,40,41,42)
+          maxLength: 100
+        avg_egg_weight:
+          type: string
+          description: e.g. EGG WT 55-58 GM
+          maxLength: 50
+        received_date:
+          type: string
+          format: date
+          description: Date eggs were received
+        received_time:
+          type: string
+          format: time
+          nullable: true
+          description: Time eggs were received
+        setting_date:
+          type: string
+          format: date
+          description: Date eggs were set
+        transfer_date:
+          type: string
+          format: date
+          nullable: true
+          description: Date of hatcher transfer
+        hatch_date:
+          type: string
+          format: date
+          nullable: true
+          description: Date of hatch
+        push_time:
+          type: string
+          format: time
+          nullable: true
+          description: Chick pull/push time
+        received_qty:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Total eggs received for this lot
+        breakage_qty:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Total broken eggs for this lot
+        crack_qty:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Total cracked eggs for this lot
+        setting_qty:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Net eggs actually set (received minus breakage/crack)
+        setter_temperature:
+          type: string
+          description: e.g. 99F
+          maxLength: 20
+        setter_humidity:
+          type: string
+          description: e.g. 60%
+          maxLength: 20
+        hatcher_temperature:
+          type: string
+          description: e.g. 98.5F
+          maxLength: 20
+        hatcher_humidity:
+          type: string
+          description: e.g. 70%
+          maxLength: 20
+        avg_chick_weight:
+          type: string
+          description: Avg Chicks Weight, e.g. CHICKS WT 38-40 GM
+          maxLength: 50
+        medicine_vaccine:
+          type: string
+          maxLength: 150
+        packing_boxes_used:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        remarks:
+          type: string
+        prepared_by:
+          type: string
+          description: Operator name
+          maxLength: 100
+        verified_by:
+          type: string
+          description: Hatchery Manager name
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - batch_flock_no
+      - created_at
+      - id
+      - received_date
+      - setting_date
+      - setting_no
+      - supplier_name
+      - updated_at
+    LoginRequest:
+      type: object
+      description: Adds the user block to the standard ``{access, refresh}`` response.
+      properties:
+        username:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - password
+      - username
+    MedicineVaccineEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entry_no:
+          type: string
+          readOnly: true
+          description: Auto-generated transaction number, e.g. MV-2627-0001
+        date:
+          type: string
+          format: date
+        age_days:
+          type: integer
+          readOnly: true
+          description: Days since the batch's start date
+        qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        stock:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+          description: Running closing stock after this entry
+        remarks:
+          type: string
+          maxLength: 255
+        entry_time:
+          type: string
+          format: date-time
+          readOnly: true
+        supervisor:
+          type: integer
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of entry
+        item:
+          type: integer
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - age_days
+      - entry_no
+      - entry_time
+      - farm
+      - id
+      - item
+      - stock
+      - supervisor
+    MedicineVaccineEntryRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+          maxLength: 255
+        supervisor:
+          type: integer
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of entry
+        item:
+          type: integer
+        entry_by:
+          type: integer
+          nullable: true
+      required:
+      - farm
+      - item
+      - supervisor
+    ModeEnum:
+      enum:
+      - Cash
+      - Bank Transfer
+      - Cheque
+      - UPI
+      - Card
+      type: string
+      description: |-
+        * `Cash` - Cash
+        * `Bank Transfer` - Bank Transfer
+        * `Cheque` - Cheque
+        * `UPI` - UPI
+        * `Card` - Card
+    PaginatedBirdSaleList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BirdSale'
+    PaginatedBirdSaleReceiptList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BirdSaleReceipt'
+    PaginatedBranchList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Branch'
+    PaginatedBreedList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Breed'
+    PaginatedBroilerBatchList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BroilerBatch'
+    PaginatedBroilerDiseaseList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BroilerDisease'
+    PaginatedBroilerFarmList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BroilerFarm'
+    PaginatedBroilerFarmShedList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BroilerFarmShed'
+    PaginatedBroilerLineList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BroilerLine'
+    PaginatedChickSaleItemList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChickSaleItem'
+    PaginatedChickSaleList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChickSale'
+    PaginatedDailyEntryList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyEntry'
+    PaginatedDeliveryChallanItemList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryChallanItem'
+    PaginatedDeliveryChallanList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryChallan'
+    PaginatedEggGradingList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EggGrading'
+    PaginatedEggPurchaseItemList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EggPurchaseItem'
+    PaginatedEggPurchaseList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EggPurchase'
+    PaginatedFarmerGroupList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FarmerGroup'
+    PaginatedFarmerList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Farmer'
+    PaginatedHatchEntryList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/HatchEntry'
+    PaginatedHatchSettingList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/HatchSetting'
+    PaginatedMedicineVaccineEntryList:
+      type: object
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineVaccineEntry'
+    PaginatedRegionList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Region'
+    PaginatedSupervisorList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supervisor'
+    PaginatedTraySettingList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraySetting'
+    PatchedBirdSaleReceiptRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        reference_no:
+          type: string
+          maxLength: 100
+        remarks:
+          type: string
+          maxLength: 255
+        location:
+          type: integer
+        customer:
+          type: integer
+          nullable: true
+        farmer:
+          type: integer
+          nullable: true
+        receipt_account:
+          type: integer
+        entry_by:
+          type: integer
+          nullable: true
+    PatchedBirdSaleRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        doc_no:
+          type: string
+          description: External/reference document number
+          maxLength: 100
+        sale_type:
+          $ref: '#/components/schemas/SaleTypeEnum'
+        birds:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        net_weight:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Net weight in Kgs
+        rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Rate per Kg
+        round_off:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        remarks:
+          type: string
+          maxLength: 255
+        customer:
+          type: integer
+          nullable: true
+        farmer:
+          type: integer
+          nullable: true
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of sale
+        lifting_supervisor:
+          type: integer
+          nullable: true
+        entry_by:
+          type: integer
+          nullable: true
+    PatchedChickSaleItemRequest:
+      type: object
+      properties:
+        farm:
+          type: string
+          maxLength: 150
+        total_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        mortality:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        culls:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        sale_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        discount_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        free_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        net_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Billed quantity
+        sale_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        sale:
+          type: integer
+        item:
+          type: integer
+    PatchedChickSaleRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        shipping_address:
+          type: string
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        freight_type:
+          $ref: '#/components/schemas/ChickSaleFreightTypeEnum'
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        freight_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        final_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        avg_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Average realised rate per bird
+        profit_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Sale value minus chick cost (latest hatch entry net rate)
+        terms:
+          type: string
+        remarks:
+          type: string
+        customer:
+          type: integer
+        warehouse:
+          type: integer
+          description: Stock point / feed mill the chicks are sold from
+        delivery_challan:
+          type: integer
+          nullable: true
+          description: Delivery challan this sale was converted from
+        pay_account:
+          type: integer
+          nullable: true
+        freight_account:
+          type: integer
+          nullable: true
+    PatchedDailyEntryRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        mortality:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        culls:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        feed_1_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Kgs fed
+        feed_2_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Kgs fed
+        avg_weight_gms:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+          maxLength: 255
+        mort_image:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo evidence of the day's mortality
+        cull_image:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo evidence of the day's culls
+        feed_image:
+          type: string
+          format: binary
+          nullable: true
+          description: Photo of feed stock/consumption
+        entry_latitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS latitude where the entry was recorded
+        entry_longitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS longitude where the entry was recorded
+        supervisor:
+          type: integer
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of entry
+        feed_1:
+          type: integer
+          nullable: true
+        feed_2:
+          type: integer
+          nullable: true
+        entry_by:
+          type: integer
+          nullable: true
+    PatchedDeliveryChallanItemRequest:
+      type: object
+      properties:
+        packing_size:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        units:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        unit:
+          type: string
+          maxLength: 30
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        tax_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        challan:
+          type: integer
+        item:
+          type: integer
+    PatchedDeliveryChallanRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        place_of_supply:
+          type: string
+          maxLength: 50
+        overall_discount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        shipping_address:
+          type: string
+        transport_mode:
+          type: string
+          minLength: 1
+          maxLength: 20
+        vehicle_no:
+          type: string
+          maxLength: 50
+        driver_name:
+          type: string
+          maxLength: 100
+        driver_mobile:
+          type: string
+          maxLength: 20
+        transporter_name:
+          type: string
+          maxLength: 150
+        transport_document_no:
+          type: string
+          maxLength: 50
+        transport_document_date:
+          type: string
+          format: date
+          nullable: true
+        eway_bill_no:
+          type: string
+          maxLength: 50
+        eway_bill_date:
+          type: string
+          format: date
+          nullable: true
+        print_price_details:
+          type: boolean
+        terms:
+          type: string
+        customer:
+          type: integer
+    PatchedEggGradingRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of grading/receiving
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Quantity taken for grading
+        broken_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        damage_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        misshapped_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        dirty_eggs:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        storage_location:
+          type: integer
+          description: Storage location the graded eggs are received into
+        supplier:
+          type: integer
+          description: Supplier of the eggs being graded
+        purchase_invoice:
+          type: integer
+          description: Egg purchase invoice these eggs are being graded from
+        item:
+          type: integer
+          description: Item being graded
+    PatchedEggPurchaseItemRequest:
+      type: object
+      properties:
+        sent_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        rcv_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        free_qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        no_of_boxes:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Rate per unit (Rcv Qty, or Sent Qty if none received) — Amount
+            is derived from this
+        discount_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        discount_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        egg_purchase:
+          type: integer
+          description: Egg purchase this item row belongs to
+        item:
+          type: integer
+    PatchedEggPurchaseRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of purchase
+        dc_no:
+          type: string
+          description: Delivery challan number
+          maxLength: 50
+        vehicle:
+          type: string
+          maxLength: 50
+        driver:
+          type: string
+          maxLength: 100
+        freight_type:
+          $ref: '#/components/schemas/EggPurchaseFreightTypeEnum'
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        freight_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        tcs_applicable:
+          type: boolean
+          description: Whether TCS applies to this purchase
+        tcs_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+        supplier:
+          type: integer
+          description: Supplier the eggs were purchased from
+        warehouse:
+          type: integer
+          description: Farm/Warehouse the eggs were received at
+        pay_account:
+          type: integer
+          description: Account this purchase is paid from
+        freight_account:
+          type: integer
+          nullable: true
+          description: Account freight is booked against
+    PatchedHatchEntryRequest:
+      type: object
+      properties:
+        hatch_date:
+          type: string
+          format: date
+          nullable: true
+          description: Actual hatch date; may differ from the tray setting's expected
+            date
+        eggs_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: No. of eggs set (snapshot from tray setting)
+        egg_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        eggs_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        chicks_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Saleable chicks hatched
+        chick_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        chicks_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+        net_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Net cost per chick
+        net_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Eggs amount + vaccine consumption
+        remarks:
+          type: string
+        tray_setting:
+          type: integer
+    PatchedMedicineVaccineEntryRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        qty:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        remarks:
+          type: string
+          maxLength: 255
+        supervisor:
+          type: integer
+        farm:
+          type: integer
+        batch:
+          type: integer
+          nullable: true
+          description: Auto-set to the farm's active batch at the time of entry
+        item:
+          type: integer
+        entry_by:
+          type: integer
+          nullable: true
+    PaymentModeEnum:
+      enum:
+      - pay_later
+      - pay_in_bill
+      type: string
+      description: |-
+        * `pay_later` - Pay Later
+        * `pay_in_bill` - Pay In Bill
+    Region:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          readOnly: true
+          description: Auto-generated code for this region
+        description:
+          type: string
+          description: Name of the region (state)
+          maxLength: 100
+        is_active:
+          type: boolean
+          description: Inactive regions are hidden from selection elsewhere
+        is_locked:
+          type: boolean
+          readOnly: true
+          description: Locked records can't be edited or deleted
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - code
+      - created_at
+      - description
+      - id
+      - is_locked
+      - updated_at
+    SaleTypeEnum:
+      enum:
+      - customer
+      - farmer
+      type: string
+      description: |-
+        * `customer` - Customer Sale
+        * `farmer` - Farmer Sale
+    ShedTypeEnum:
+      enum:
+      - broiler
+      - breeder
+      - layer
+      - grower
+      - quarantine
+      type: string
+      description: |-
+        * `broiler` - Broiler
+        * `breeder` - Breeder
+        * `layer` - Layer
+        * `grower` - Grower
+        * `quarantine` - Quarantine
+    Supervisor:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Full name of the supervisor
+          maxLength: 100
+        phone_no:
+          type: string
+          description: Contact number of the supervisor
+          pattern: ^\+?1?\d{9,15}$
+          maxLength: 15
+        address:
+          type: string
+          description: Residential address of the supervisor
+        email:
+          type: string
+          format: email
+          nullable: true
+          description: Email address of the supervisor
+          maxLength: 254
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        branch:
+          type: integer
+          description: Branch this supervisor belongs to
+        employee:
+          type: integer
+          nullable: true
+          description: HR employee record this supervisor is — name/phone/address
+            are copied from here
+      required:
+      - branch
+      - created_at
+      - id
+      - name
+      - updated_at
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TraySetting:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        setting_no:
+          type: string
+          readOnly: true
+        setting_date:
+          type: string
+          format: date
+        transfer_date:
+          type: string
+          format: date
+          nullable: true
+          description: Hatcher transfer date, typically setting date + 18 days
+        hatch_date:
+          type: string
+          format: date
+          description: Expected hatch date, typically setting date + 21 days
+        setting_time:
+          type: string
+          format: time
+          nullable: true
+        loaded_by:
+          type: string
+          description: Who loaded the trays; pick an employee or type any name
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        hatchery:
+          type: integer
+        grading:
+          type: integer
+      required:
+      - created_at
+      - grading
+      - hatch_date
+      - hatchery
+      - id
+      - setting_date
+      - setting_no
+      - updated_at
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
