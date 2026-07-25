@@ -705,7 +705,7 @@ def customer_ledger_report(request):
                     "type": "Bird Sale", "type_slug": "bird-sale",
                     "item": "Broiler Birds",
                     "birds": obj.birds or "", "quantity": _si_num(obj.net_weight),
-                    "avg_weight": _si_num(obj.avg_weight), "rate": _si_num(obj.rate),
+                    "avg_weight": _si_num(obj.avg_weight), "free": "", "rate": _si_num(obj.rate),
                     "amount": amt.quantize(q2), "debit": amt.quantize(q2), "credit": "",
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
                     "sector": obj.farm.farm_name if obj.farm_id else "",
@@ -732,7 +732,8 @@ def customer_ledger_report(request):
                         "type_slug": "sales-invoice" if first else "",
                         "item": it.item.description if it and it.item_id else "",
                         "birds": "", "quantity": _si_num(it.quantity) if it else "",
-                        "avg_weight": "", "rate": _si_num(it.rate) if it else "",
+                        "avg_weight": "", "free": _si_num(it.free_qty) if it else "",
+                        "rate": _si_num(it.rate) if it else "",
                         "amount": _si_num(it.amount) if it else "",
                         "debit": amt.quantize(q2) if first else "", "credit": "",
                         "balance": abs(running).quantize(q2) if first else "",
@@ -761,7 +762,8 @@ def customer_ledger_report(request):
                         "type_slug": "chick-sale" if first else "",
                         "item": it.item.description if it and it.item_id else "Chicks",
                         "birds": "", "quantity": _si_num(it.net_qty) if it else "",
-                        "avg_weight": "", "rate": _si_num(it.sale_rate) if it else "",
+                        "avg_weight": "", "free": _si_num(it.free_qty) if it else "",
+                        "rate": _si_num(it.sale_rate) if it else "",
                         "amount": _si_num(it.amount) if it else "",
                         "debit": amt.quantize(q2) if first else "", "credit": "",
                         "balance": abs(running).quantize(q2) if first else "",
@@ -784,7 +786,7 @@ def customer_ledger_report(request):
                     "date": d, "trnum": obj.receipt_no, "doc_no": obj.reference_no or "",
                     "type": type_label, "type_slug": "receipt",
                     "item": f"{obj.get_mode_display()}{(' - ' + acct) if acct else ''}",
-                    "birds": "", "quantity": "", "avg_weight": "", "rate": "", "amount": "",
+                    "birds": "", "quantity": "", "avg_weight": "", "free": "", "rate": "", "amount": "",
                     "debit": "", "credit": amt.quantize(q2),
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
                     "sector": "", "vehicle": "", "remarks": obj.remarks or "", "overdue": "",
@@ -978,7 +980,7 @@ def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, 
     head_font = Font(bold=True, color="FFFFFF")
     bold = Font(bold=True)
     headers = ["Date", "Transaction No.", "Doc No.", "Type", "Item", "Birds", "Quantity",
-               "Avg.Weight", "Rate", "Amount", "Debit", "Credit", "Balance", "Sector",
+               "Avg.Weight", "Free", "Rate", "Amount", "Debit", "Credit", "Balance", "Sector",
                "Vehicle", "Remarks", "Over Due By Days"]
 
     ws.append([company.name if company else ""])
@@ -991,28 +993,28 @@ def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, 
         c.font = head_font
         c.alignment = Alignment(horizontal="center")
 
-    prev = ["", "", "", "", "", "", "", "", "", "", "", "", f"{prev_balance} {prev_cr_dr}",
+    prev = ["", "", "", "", "", "", "", "", "", "", "", "", "", f"{prev_balance} {prev_cr_dr}",
             "Previous Balance", "", "", ""]
     ws.append(prev)
     for g in groups:
-        ws.append([g["label"], f"{g['count']} transaction(s)", "", "", "", "", "", "", "", "",
+        ws.append([g["label"], f"{g['count']} transaction(s)", "", "", "", "", "", "", "", "", "",
                    float(g["debit"]), float(g["credit"]), f"{g['closing']} {g['cr_dr']}", "", "", "", ""])
         for c in ws[ws.max_row]:
             c.font = bold
         for r in g["rows"]:
             ws.append([
                 r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["trnum"], r["doc_no"],
-                r["type"], r["item"], r["birds"], r["quantity"], r["avg_weight"], r["rate"],
+                r["type"], r["item"], r["birds"], r["quantity"], r["avg_weight"], r["free"], r["rate"],
                 r["amount"], r["debit"], r["credit"],
                 f"{r['balance']} {r['cr_dr']}" if r["balance"] != "" else "",
                 r["sector"], r["vehicle"], r["remarks"], r["overdue"],
             ])
-    ws.append(["Grand Total", "", "", "", "", "", "", "", "", "", float(totals["debit"]),
+    ws.append(["Grand Total", "", "", "", "", "", "", "", "", "", "", float(totals["debit"]),
                float(totals["credit"]), f"{closing} {closing_cr_dr}", "", "", "", ""])
     for c in ws[ws.max_row]:
         c.font = bold
 
-    widths = [11, 18, 14, 14, 22, 8, 11, 10, 9, 14, 14, 14, 16, 18, 14, 20, 10]
+    widths = [11, 18, 14, 14, 22, 8, 11, 10, 9, 9, 14, 14, 14, 16, 18, 14, 20, 10]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 

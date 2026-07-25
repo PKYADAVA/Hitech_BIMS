@@ -121,7 +121,7 @@
         <th>Date</th><th>Transaction No.</th><th>Doc No.</th>
         <th>Type</th><th>Item</th>
         <th class="num">Birds</th><th class="num">Quantity</th>
-        <th class="num">Avg.Weight</th><th class="num">Rate</th><th class="num">Amount</th>
+        <th class="num">Avg.Weight</th><th class="num">Free</th><th class="num">Rate</th><th class="num">Amount</th>
         <th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th>
         <th>Sector</th><th>Vehicle</th><th>Remarks</th>
         <th class="num">Over Due By Days</th>
@@ -129,13 +129,13 @@
       <tbody>
         {% if customer %}
         <tr class="cl-prev">
-          <td colspan="12" class="text-end">Previous Balance</td>
+          <td colspan="13" class="text-end">Previous Balance</td>
           <td class="num {% if prev_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ prev_balance|indian_currency }} {{ prev_cr_dr }}</td>
           <td colspan="4"></td>
         </tr>
         {% for g in groups %}
         <tr class="grp-row">
-          <td colspan="10"><i class="fas fa-calendar-day me-2"></i>{{ g.label }} <span class="text-muted fw-normal">({{ g.count }} transaction{{ g.count|pluralize }})</span></td>
+          <td colspan="11"><i class="fas fa-calendar-day me-2"></i>{{ g.label }} <span class="text-muted fw-normal">({{ g.count }} transaction{{ g.count|pluralize }})</span></td>
           <td class="num">{{ g.debit|indian_currency }}</td>
           <td class="num">{{ g.credit|indian_currency }}</td>
           <td class="num {% if g.cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ g.closing|indian_currency }} {{ g.cr_dr }}</td>
@@ -151,6 +151,7 @@
           <td class="num">{% if r.birds != "" %}{{ r.birds }}{% endif %}</td>
           <td class="num">{% if r.quantity != "" %}{{ r.quantity|floatformat:2 }}{% endif %}</td>
           <td class="num">{% if r.avg_weight != "" %}{{ r.avg_weight|floatformat:2 }}{% endif %}</td>
+          <td class="num">{% if r.free != "" %}{{ r.free|floatformat:2 }}{% endif %}</td>
           <td class="num">{% if r.rate != "" %}{{ r.rate|floatformat:2 }}{% endif %}</td>
           <td class="num">{% if r.amount != "" %}{{ r.amount|indian_currency }}{% endif %}</td>
           <td class="num">{% if r.debit != "" %}{{ r.debit|indian_currency }}{% endif %}</td>
@@ -164,14 +165,14 @@
         {% endfor %}
         {% endfor %}
         <tr class="cl-grand">
-          <td colspan="10" class="text-end">Grand Total</td>
+          <td colspan="11" class="text-end">Grand Total</td>
           <td class="num">{{ totals.debit|indian_currency }}</td>
           <td class="num">{{ totals.credit|indian_currency }}</td>
           <td class="num {% if closing_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ closing|indian_currency }} {{ closing_cr_dr }}</td>
           <td colspan="4"></td>
         </tr>
         {% else %}
-        <tr><td colspan="17" class="text-center text-muted py-4">Select a customer and click Submit.</td></tr>
+        <tr><td colspan="18" class="text-center text-muted py-4">Select a customer and click Submit.</td></tr>
         {% endif %}
       </tbody>
     </table>
