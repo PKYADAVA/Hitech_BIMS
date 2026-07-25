@@ -197,6 +197,52 @@ export const FORMS: Record<string, FormSchema> = {
     ],
   },
 
+  /* ---------------------- Hatchery line items --------------------------- */
+  // Parent FK (egg_purchase / sale / challan) is injected via the form `preset`.
+  "hatchery-egg-purchase-items": {
+    fields: [
+      ITEM("item", "Item", true),
+      dec("sent_qty", "Sent Qty"),
+      dec("rcv_qty", "Received Qty"),
+      dec("free_qty", "Free Qty"),
+      dec("no_of_boxes", "No. of Boxes"),
+      dec("rate", "Rate"),
+      dec("discount_percent", "Discount %"),
+      dec("discount_amount", "Discount Amount"),
+      dec("amount", "Amount"),
+      dec("total_amount", "Total Amount"),
+    ],
+  },
+  "hatchery-chick-sale-items": {
+    fields: [
+      ITEM("item", "Item", true),
+      text("farm", "Farm"),
+      dec("total_qty", "Total Qty"),
+      dec("mortality", "Mortality"),
+      dec("culls", "Culls"),
+      dec("sale_qty", "Sale Qty"),
+      dec("free_qty", "Free Qty"),
+      dec("net_qty", "Net Qty"),
+      dec("sale_rate", "Sale Rate"),
+      dec("discount_percent", "Discount %"),
+      dec("discount_amount", "Discount Amount"),
+      dec("amount", "Amount"),
+    ],
+  },
+  "hatchery-delivery-challan-items": {
+    fields: [
+      ITEM("item", "Item", true),
+      dec("packing_size", "Packing Size"),
+      dec("units", "Units"),
+      dec("quantity", "Quantity"),
+      text("unit", "Unit"),
+      dec("price", "Price"),
+      dec("discount_percent", "Discount %"),
+      dec("tax_percent", "Tax %"),
+      dec("amount", "Amount"),
+    ],
+  },
+
   /* ------------------------- Broiler master data ------------------------ */
   "broiler-regions": { fields: [text("code", "Code", true), text("description", "Description"), active()] },
   "broiler-branches": {

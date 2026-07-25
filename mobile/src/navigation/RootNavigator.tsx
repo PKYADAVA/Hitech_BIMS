@@ -2,7 +2,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
@@ -13,6 +13,7 @@ import { LoginScreen } from "@/screens/LoginScreen";
 import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
+import { ReportScreen } from "@/screens/ReportScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
 import { useAuthStore } from "@/store/authStore";
@@ -26,6 +27,16 @@ const ModuleStack = createNativeStackNavigator<ModuleStackParams>();
 function tabIcon(icon: string) {
   return ({ focused }: { focused: boolean }) => (
     <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{icon}</Text>
+  );
+}
+
+/** Native header title that leads with the screen's icon, then its name. */
+function headerTitleWithIcon(icon: string, title: string) {
+  return () => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Text style={{ fontSize: 18 }}>{icon}</Text>
+      <Text style={{ color: colors.onDark, fontSize: 17, fontWeight: "800" }}>{title}</Text>
+    </View>
   );
 }
 
@@ -50,6 +61,7 @@ function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; pre
         name="Hub"
         options={({ navigation }) => ({
           title: mod.title,
+          headerTitle: headerTitleWithIcon(mod.icon, mod.title),
           headerLeft: presented
             ? () => (
                 <Pressable hitSlop={12} onPress={() => navigation.getParent()?.goBack()}>
@@ -68,6 +80,7 @@ function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; pre
           const key = route.params.resourceKey;
           return {
             title: RESOURCES[key].title,
+            headerTitle: headerTitleWithIcon(RESOURCES[key].icon, RESOURCES[key].title),
             headerRight: isEditable(key)
               ? () => (
                   <Pressable
@@ -84,6 +97,7 @@ function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; pre
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
+      <ModuleStack.Screen name="Report" component={ReportScreen} />
     </ModuleStack.Navigator>
   );
 }

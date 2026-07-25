@@ -14,9 +14,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from account.models import ChartOfAccount, Voucher
 from api.viewsets import V1ViewMixin
 from broiler.models import BroilerBatch, BroilerFarm, DailyEntry
 from hatchery.models import EggPurchase, HatchEntry
+from inventory.models import Item, StockTransfer
 from notification.models import SmsMessage
 
 _OK = ["sent", "delivered", "mocked"]
@@ -66,4 +68,21 @@ class StatsOverviewView(V1ViewMixin, APIView):
             "failed_today": sms_today.filter(status__in=_FAIL).count(),
         }
 
-        return Response({"date": str(today), "broiler": broiler, "hatchery": hatchery, "sms": sms})
+        inventory = {
+            "items": Item.objects.count(),
+            "transfers_today": StockTransfer.objects.filter(date=today).count(),
+        }
+
+        account = {
+            "vouchers_today": Voucher.objects.filter(date=today).count(),
+            "accounts": ChartOfAccount.objects.count(),
+        }
+
+        return Response({
+            "date": str(today),
+            "broiler": broiler,
+            "hatchery": hatchery,
+            "sms": sms,
+            "inventory": inventory,
+            "account": account,
+        })

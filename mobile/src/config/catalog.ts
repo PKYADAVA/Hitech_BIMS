@@ -49,6 +49,14 @@ export interface ModuleSection {
   resourceKeys: string[];
 }
 
+/** A report the module exposes — a tile in the hub that opens a data report. */
+export interface ReportLink {
+  key: string;
+  title: string;
+  icon: string;
+  path: string;
+}
+
 export interface ModuleConfig {
   key: ModuleKey;
   title: string;
@@ -57,6 +65,7 @@ export interface ModuleConfig {
   color: string;
   colorLight: string;
   sections: ModuleSection[];
+  reports?: ReportLink[];
 }
 
 /* ----------------------------- Broiler ---------------------------------- */
@@ -1115,6 +1124,10 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         resourceKeys: ["broiler-gc-settlements"],
       },
     ],
+    reports: [
+      { key: "live-flock", title: "Live Flock Summary", icon: "📊", path: "/reports/live-flock" },
+      { key: "mortality-trend", title: "Mortality Trend", icon: "📉", path: "/reports/mortality-trend" },
+    ],
   },
   hatchery: {
     key: "hatchery",
@@ -1148,6 +1161,10 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         title: "Approvals",
         resourceKeys: ["hatchery-change-requests"],
       },
+    ],
+    reports: [
+      { key: "hatch-performance", title: "Hatch Performance", icon: "📊", path: "/reports/hatch-performance" },
+      { key: "egg-intake", title: "Egg Intake", icon: "🥚", path: "/reports/egg-intake" },
     ],
   },
   sms: {

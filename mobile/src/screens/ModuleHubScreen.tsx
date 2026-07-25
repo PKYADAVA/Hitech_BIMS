@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-n
 import { Card, IconCircle, SectionHeader } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { ModuleStackParams } from "@/navigation/types";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { colors, shadow, spacing, type } from "@/theme";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Hub"> & { moduleKey: ModuleKey };
 
@@ -19,20 +19,16 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {/* Branded header banner */}
-      <View style={[styles.banner, { backgroundColor: mod.color }, shadow(2)]}>
-        <Text style={styles.bannerIcon}>{mod.icon}</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bannerTitle}>{mod.title}</Text>
-          <Text style={styles.bannerTagline}>{mod.tagline}</Text>
-        </View>
-      </View>
+      {/* Header already shows the module name — only its tagline adds context. */}
+      <Text style={styles.tagline}>{mod.tagline}</Text>
 
       {mod.sections.map((section) => (
         <View key={section.title}>
           <SectionHeader title={section.title} />
           <View style={styles.grid}>
-            {section.resourceKeys.map((key) => {
+            {[...section.resourceKeys]
+              .sort((a, b) => RESOURCES[a].title.localeCompare(RESOURCES[b].title))
+              .map((key) => {
               const r = RESOURCES[key];
               return (
                 <Card
@@ -51,6 +47,27 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
           </View>
         </View>
       ))}
+
+      {mod.reports && mod.reports.length > 0 ? (
+        <View>
+          <SectionHeader title="Reports" />
+          <View style={styles.grid}>
+            {mod.reports.map((rep) => (
+              <Card
+                key={rep.key}
+                padded={false}
+                style={{ ...styles.tile, width: tileW }}
+                onPress={() => navigation.navigate("Report", { title: rep.title, path: rep.path })}
+              >
+                <IconCircle icon={rep.icon} color={mod.color} size={40} />
+                <Text style={styles.tileTitle} numberOfLines={2}>
+                  {rep.title}
+                </Text>
+              </Card>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -58,16 +75,7 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xxl },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-  },
-  bannerIcon: { fontSize: 40 },
-  bannerTitle: { ...type.h1, color: colors.onDark },
-  bannerTagline: { ...type.body, color: "rgba(255,255,255,0.85)", marginTop: 2 },
+  tagline: { ...type.caption, color: colors.textMuted, marginBottom: spacing.xs, paddingHorizontal: spacing.xs },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   tile: {

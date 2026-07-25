@@ -17,9 +17,12 @@ import { isEmpty } from "@/utils/format";
 type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
 
 export function FormScreen({ route, navigation }: Props) {
-  const { resourceKey, mode, row } = route.params;
+  const { resourceKey, mode, row, preset, onDoneGoBack } = route.params;
   const config = RESOURCES[resourceKey];
   const schema = FORMS[resourceKey];
+
+  const finish = () =>
+    onDoneGoBack ? navigation.goBack() : navigation.navigate("List", { resourceKey });
 
   const initial = useMemo(() => {
     const v: Record<string, string> = {};
@@ -50,7 +53,7 @@ export function FormScreen({ route, navigation }: Props) {
     setValues((prev) => ({ ...prev, [name]: val }));
 
   const buildPayload = () => {
-    const payload: Record<string, unknown> = {};
+    const payload: Record<string, unknown> = { ...(preset ?? {}) };
     for (const f of schema.fields) {
       const val = values[f.name];
       if (f.type === "boolean") payload[f.name] = val === "true";
@@ -76,7 +79,7 @@ export function FormScreen({ route, navigation }: Props) {
       if (mode === "create") await createResource(config.path, buildPayload());
       else await updateResource(config.path, (row as Row).id, buildPayload());
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
-      navigation.navigate("List", { resourceKey });
+      finish();
     } catch (e) {
       handleApiError(e);
     } finally {

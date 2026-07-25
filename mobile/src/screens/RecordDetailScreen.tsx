@@ -15,31 +15,54 @@ import { useResourceList } from "@/query/useResourceList";
 import { colors, spacing, type } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
 
-/** Line-items of a parent record, fetched by FK and shown inside its detail. */
+/** Line-items of a parent record, fetched by FK and shown (add/edit) in detail. */
 function ChildSection({
   child,
   parentId,
-  onOpen,
+  navigation,
 }: {
   child: ChildConfig;
   parentId: number | string;
-  onOpen: (resourceKey: string, row: Row) => void;
+  navigation: Props["navigation"];
 }) {
   const cfg = RESOURCES[child.resourceKey];
+  const editable = isEditable(cfg.key);
   const list = useResourceList<Row>(cfg.path, { [child.fkParam]: parentId });
-  if (list.isLoading || list.items.length === 0) return null;
+  if (list.isLoading) return null;
+  if (!editable && list.items.length === 0) return null;
+
+  const openForm = (mode: "create" | "edit", item?: Row) =>
+    navigation.navigate("Form", {
+      resourceKey: cfg.key,
+      mode,
+      row: item,
+      preset: mode === "create" ? { [child.fkParam]: String(parentId) } : undefined,
+      onDoneGoBack: true,
+    });
+
   return (
     <View style={{ gap: spacing.sm }}>
-      <Text style={styles.childTitle}>
-        {cfg.title} ({list.items.length})
-      </Text>
+      <View style={styles.childHeader}>
+        <Text style={styles.childTitle}>
+          {cfg.title} ({list.items.length})
+        </Text>
+        {editable ? (
+          <Pressable hitSlop={8} onPress={() => openForm("create")}>
+            <Text style={styles.addLink}>＋ Add</Text>
+          </Pressable>
+        ) : null}
+      </View>
       {list.items.map((item) => (
         <RecordCard
           key={String(item.id)}
           view={cfg.card(item)}
           icon={cfg.icon}
           accent={cfg.accent}
-          onPress={() => onOpen(cfg.key, item)}
+          onPress={() =>
+            editable
+              ? openForm("edit", item)
+              : navigation.navigate("Detail", { resourceKey: cfg.key, row: item })
+          }
         />
       ))}
     </View>
@@ -204,12 +227,7 @@ export function RecordDetailScreen({ route, navigation }: Props) {
       ) : null}
 
       {config.children?.map((child) => (
-        <ChildSection
-          key={child.resourceKey}
-          child={child}
-          parentId={row.id}
-          onOpen={(resourceKey, item) => navigation.navigate("Detail", { resourceKey, row: item })}
-        />
+        <ChildSection key={child.resourceKey} child={child} parentId={row.id} navigation={navigation} />
       ))}
 
       <Text style={styles.footnote}>Record #{row.id}</Text>
@@ -230,6 +248,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: spacing.xs,
   },
-  childTitle: { ...type.h3, color: colors.text, marginTop: spacing.xs },
+  childHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs },
+  childTitle: { ...type.h3, color: colors.text },
+  addLink: { ...type.title, color: colors.primary },
   footnote: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
 });

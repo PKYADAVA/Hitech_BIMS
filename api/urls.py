@@ -32,6 +32,12 @@ from sales.models import Customer
 
 from .auth import LoginView, LogoutView, MeView, RefreshView
 from .health import HealthView, ReadyView
+from .reports import (
+    EggIntakeReportView,
+    HatchPerformanceReportView,
+    LiveFlockReportView,
+    MortalityTrendReportView,
+)
 from .stats import StatsOverviewView
 from .viewsets import register_model
 
@@ -89,6 +95,10 @@ urlpatterns = [
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),
+    path("reports/mortality-trend", MortalityTrendReportView.as_view(), name="report-mortality-trend"),
+    path("reports/hatch-performance", HatchPerformanceReportView.as_view(), name="report-hatch-performance"),
+    path("reports/egg-intake", EggIntakeReportView.as_view(), name="report-egg-intake"),
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
