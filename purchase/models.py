@@ -560,3 +560,64 @@ class SupplierPaymentLine(models.Model):
 
     def __str__(self):
         return f"{self.mode} {self.amount} ({self.payment.payment_no})"
+
+
+class SupplierNoteBase(models.Model):
+    """Shared base for supplier Debit / Credit Notes — a single-supplier note
+    with an amount and reason (Purchase > Transactions). Subclasses set
+    NOTE_PREFIX for the auto number series."""
+
+    NOTE_PREFIX = "XN"
+
+    note_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                               help_text="Auto-generated, e.g. DN-2627-0001 / CN-2627-0001")
+    date = models.DateField(default=now)
+    supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="%(class)ss")
+    against_bill = models.CharField(max_length=50, blank=True,
+                                    help_text="Related purchase bill/invoice no.")
+    reason = models.CharField(max_length=150, blank=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True,
+                                blank=True, related_name="+")
+    remarks = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.note_no or f"(unsaved {self.NOTE_PREFIX})"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.note_no:
+            self.note_no = self._next_no(self.date)
+            super().save(update_fields=["note_no"])
+
+    @classmethod
+    def _next_no(cls, on_date=None):
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"{cls.NOTE_PREFIX}-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(note_no__startswith=prefix).values_list("note_no", flat=True):
+            m = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+
+class DebitNote(SupplierNoteBase):
+    """Debit note against a supplier (rate difference, purchase return, etc.) —
+    raises the payable (Debit side) in the supplier ledger."""
+    NOTE_PREFIX = "DN"
+
+
+class CreditNote(SupplierNoteBase):
+    """Credit note from a supplier — reduces the payable (Credit side) in the
+    supplier ledger."""
+    NOTE_PREFIX = "CN"

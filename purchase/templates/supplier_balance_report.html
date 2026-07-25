@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Supplier Balance Report — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='purchase' %}{% endblock nav %}
+{% block content %}
+{% include '_purchase_report_subnavbar.html' with active_tab='supplier_balance' %}
+
+<style>
+  .sb-head { text-align:center; margin-bottom:.5rem; }
+  .sb-head h5 { font-weight:700; margin:.1rem 0; }
+  .sb-company { font-size:.78rem; color:#444; }
+  .sb-filter { background:#fff; border:1px solid #eef0f4; border-radius:.55rem; padding:.5rem .8rem; margin:.5rem 0; }
+  .sb-filter .form-label { font-size:.68rem; font-weight:600; margin-bottom:.1rem; }
+  .sb-filter .form-control-sm, .sb-filter .form-select-sm { width:180px; }
+  .sb-kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:.5rem; margin-bottom:.6rem; }
+  @media (max-width:1200px){ .sb-kpis { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:640px){ .sb-kpis { grid-template-columns:repeat(2,1fr); } }
+  .sb-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.5rem; padding:.5rem .6rem;
+            display:flex; align-items:center; gap:.55rem; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .sb-kpi .k-label { font-size:.63rem; color:#6c757d; font-weight:600; white-space:nowrap; }
+  .sb-kpi .k-num { font-size:1rem; font-weight:800; line-height:1.1; white-space:nowrap; }
+  .sb-kpi .k-ico { flex:0 0 auto; width:2.5rem; height:2.5rem; border-radius:.5rem; display:flex; align-items:center; justify-content:center; font-size:1.2rem; }
+  .k-sup .k-ico{ background:#e7f0ff; color:#3b6fd4; }   .k-sup .k-num{ color:#1b3a6b; }
+  .k-op  .k-ico{ background:#ece9fb; color:#6a5acd; }   .k-op .k-num{ color:#5346a8; }
+  .k-am  .k-ico{ background:#eef1f6; color:#334a72; }   .k-am .k-num{ color:#1b3a6b; }
+  .k-rc  .k-ico{ background:#e6f7ea; color:#20a56a; }   .k-rc .k-num{ color:#178a53; }
+  .k-cr  .k-ico{ background:#e2f7f4; color:#12a3b8; }   .k-cr .k-num{ color:#0e8698; }
+  .k-dr  .k-ico{ background:#ffe9e0; color:#e0693a; }   .k-dr .k-num{ color:#d8592a; }
+  .sb-table { font-size:.75rem; }
+  .sb-table th, .sb-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem; }
+  .sb-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center; font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .sb-table td.num, .sb-table th.num { text-align:right; }
+  .sb-table td.name a { color:#2b62c9; text-decoration:none; font-weight:600; }
+  .sb-table td.name a:hover { text-decoration:underline; }
+  .sb-table tbody tr:hover td { background:#f4f8fc; }
+  .sb-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; position:sticky; bottom:0; }
+  .sb-scroll { max-height:72vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .neg { color:#c0392b; }
+  .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
+  .gap-hi { color:#c0392b; font-weight:700; }
+</style>
+
+<div class="sb-head">
+  <h4 style="font-weight:800;">{{ company.name|default:"Company" }}</h4>
+  <div class="sb-company">{{ company.address }}{% if company.gstin %} &middot; GSTIN: {{ company.gstin }}{% endif %}</div>
+  <h5 class="mt-2">Supplier Balance Report</h5>
+</div>
+
+<div class="sb-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div class="col-auto"><label class="form-label">Supplier Group</label>
+      <select name="supplier_group" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for g in supplier_groups %}<option value="{{ g }}" {% if group == g %}selected{% endif %}>{{ g }}</option>{% endfor %}
+      </select></div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'supplier_balance' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+{% if rows %}
+<div class="sb-kpis">
+  <div class="sb-kpi k-sup"><div class="k-ico"><i class="fas fa-users"></i></div>
+    <div><div class="k-label">Suppliers</div><div class="k-num">{{ rows|length }}</div></div></div>
+  <div class="sb-kpi k-op"><div class="k-ico"><i class="fas fa-wallet"></i></div>
+    <div><div class="k-label">Opening Balance</div><div class="k-num">₹ {{ totals.opening|indian_currency }}</div></div></div>
+  <div class="sb-kpi k-am"><div class="k-ico"><i class="fas fa-cart-shopping"></i></div>
+    <div><div class="k-label">Total Purchases</div><div class="k-num">₹ {{ totals.amount|indian_currency }}</div></div></div>
+  <div class="sb-kpi k-rc"><div class="k-ico"><i class="fas fa-arrow-down"></i></div>
+    <div><div class="k-label">Total Receipt</div><div class="k-num">₹ {{ totals.receipt|indian_currency }}</div></div></div>
+  <div class="sb-kpi k-cr"><div class="k-ico"><i class="fas fa-scale-balanced"></i></div>
+    <div><div class="k-label">Total Payable (Cr)</div><div class="k-num">₹ {{ totals.credit|indian_currency }}</div></div></div>
+  <div class="sb-kpi k-dr"><div class="k-ico"><i class="fas fa-hand-holding-dollar"></i></div>
+    <div><div class="k-label">Total Advance (Dr)</div><div class="k-num">₹ {{ totals.debit|indian_currency }}</div></div></div>
+</div>
+{% endif %}
+
+<div class="card"><div class="card-body p-2">
+  <div class="sb-scroll">
+    <table class="table table-bordered table-hover sb-table mb-0">
+      <thead>
+        <tr>
+          <th rowspan="2">Name</th>
+          <th rowspan="2" class="num">Opening Balance</th>
+          <th colspan="3">Selected Period</th>
+          <th colspan="2">Balance</th>
+          <th rowspan="2" class="num">Last Payment gap Days</th>
+        </tr>
+        <tr>
+          <th class="num">Amount</th><th class="num">Receipt</th><th class="num">B/w days balance</th>
+          <th class="num">Credit</th><th class="num">Debit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="name"><a href="{% url 'supplier_ledger' %}?supplier={{ r.id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.name }}</a></td>
+          <td class="num {% if r.opening < 0 %}neg{% endif %}">{{ r.opening|indian_currency }}</td>
+          <td class="num">{{ r.amount|indian_currency }}</td>
+          <td class="num">{{ r.receipt|indian_currency }}</td>
+          <td class="num">{{ r.bw|indian_currency }}</td>
+          <td class="num {% if r.credit %}cr{% endif %}">{% if r.credit %}{{ r.credit|indian_currency }}{% else %}0.00{% endif %}</td>
+          <td class="num {% if r.debit %}dr{% endif %}">{% if r.debit %}{{ r.debit|indian_currency }}{% else %}0.00{% endif %}</td>
+          <td class="num {% if r.gap >= 90 %}gap-hi{% endif %}">{{ r.gap }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No suppliers found.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot><tr>
+        <td class="text-center">Total</td>
+        <td class="num {% if totals.opening < 0 %}neg{% endif %}">{{ totals.opening|indian_currency }}</td>
+        <td class="num">{{ totals.amount|indian_currency }}</td>
+        <td class="num">{{ totals.receipt|indian_currency }}</td>
+        <td class="num">{{ totals.bw|indian_currency }}</td>
+        <td class="num cr">{{ totals.credit|indian_currency }}</td>
+        <td class="num dr">{{ totals.debit|indian_currency }}</td>
+        <td></td>
+      </tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div></div>
+{% endblock %}

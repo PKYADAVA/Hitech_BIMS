@@ -11,9 +11,15 @@ from inventory.models import Warehouse
 
 
 class Group(models.Model):
-    """Represents a group an employee belongs to."""
+    """Represents a group an employee belongs to. Scoped to one branch
+    (Warehouse) — a group holds employees of a single branch."""
 
     name = models.CharField(max_length=100, unique=True)
+    warehouse = models.ForeignKey(
+        "inventory.Warehouse", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="employee_groups",
+        help_text="Branch this group belongs to",
+    )
 
     def __str__(self):
         return self.name

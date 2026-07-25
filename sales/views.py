@@ -4,6 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -375,3 +376,190 @@ class SalesPriceMasterAPI(View):
 
         sales_price.delete()
         return JsonResponse({"message": "Sales price deleted"}, status=204)    
+
+
+# ---------------------------------------------------------------------------
+# Sales Invoice (Sales > Transactions)
+# ---------------------------------------------------------------------------
+from decimal import Decimal
+from sales.models import SalesInvoice, SalesInvoiceItem
+from inventory.models import Warehouse
+
+
+def _si_num(v):
+    try:
+        return Decimal(str(v)) if v not in (None, "") else Decimal("0")
+    except Exception:
+        return Decimal("0")
+
+
+def _sales_invoice_list_dict(inv):
+    return {
+        "id": inv.id, "date": inv.date.isoformat(), "invoice_no": inv.invoice_no,
+        "transaction_type": inv.transaction_type,
+        "customer_name": inv.customer.name if inv.customer_id else "",
+        "reference_no": inv.reference_no,
+        "total_items": inv.total_items(),
+        "amount": str(inv.net_amount),
+        "is_active": inv.is_active,
+    }
+
+
+def _sales_invoice_item_dict(row):
+    return {
+        "item": row.item_id, "item_code": row.item.item_code,
+        "item_name": row.item.description, "batch_no": row.batch_no,
+        "hsn_sac": row.hsn_sac, "uom": row.uom,
+        "quantity": str(row.quantity), "free_qty": str(row.free_qty), "rate": str(row.rate),
+        "discount_percent": str(row.discount_percent),
+        "taxable_amount": str(row.taxable_amount),
+        "gst_percent": str(row.gst_percent), "gst_amount": str(row.gst_amount),
+        "amount": str(row.amount),
+    }
+
+
+def _sales_invoice_form_context(inv=None):
+    from account.models import TermsConditions, BankCashMaster, CompanyProfile
+    items = list(Item.objects.order_by("item_code").values(
+        "id", "item_code", "description", "hsn_code", "storage_uom", "standard_cost_per_unit"))
+    return {
+        "invoice": inv,
+        "next_no": SalesInvoice._next_no() if not inv else None,
+        "customers": Customer.objects.order_by("name"),
+        "branches": Warehouse.objects.order_by("name"),
+        "org_centres": __import__("account.models", fromlist=["OrganizationCentre"]).OrganizationCentre.objects.order_by("name"),
+        "items_json": json.dumps(items, default=str),
+        "transaction_types": SalesInvoice.TRANSACTION_TYPE_CHOICES,
+        "today": timezone.localdate().isoformat(),
+        "existing_items_json": json.dumps(
+            [_sales_invoice_item_dict(r) for r in inv.items.select_related("item")]) if inv else "[]",
+        "terms_list": list(TermsConditions.objects.order_by("type").values("id", "type", "party_type", "condition")),
+        "banks": list(BankCashMaster.objects.order_by("name").values("id", "code", "name", "micr", "address", "contact_person", "is_cash")),
+        "company": CompanyProfile.get_solo(),
+        "states_and_union_territories": states_and_union_territories,
+        "terms_json": json.dumps({t.id: t.condition for t in TermsConditions.objects.all()}),
+        "banks_json": json.dumps({b["id"]: b for b in BankCashMaster.objects.values("id", "code", "name", "micr", "address", "contact_person")}, default=str),
+    }
+
+
+def _apply_posted_invoice(instance, request):
+    d = request.POST
+    instance.transaction_type = d.get("transaction_type") or "Sales Invoice"
+    instance.date = d.get("date") or timezone.localdate()
+    instance.customer_id = d.get("customer") or None
+    instance.billing_address = d.get("billing_address") or ""
+    instance.shipping_address = d.get("shipping_address") or ""
+    instance.gstin = d.get("gstin") or ""
+    instance.reference_no = d.get("reference_no") or ""
+    instance.reference_date = d.get("reference_date") or None
+    instance.transportation = d.get("transportation") or ""
+    instance.vehicle_no = d.get("vehicle_no") or ""
+    instance.place_of_supply = d.get("place_of_supply") or ""
+    instance.eway_bill_no = d.get("eway_bill_no") or ""
+    instance.branch_id = d.get("branch") or None
+    instance.organization_centre_id = d.get("organization_centre") or None
+    instance.sales_person = d.get("sales_person") or ""
+    instance.payment_terms = d.get("payment_terms") or ""
+    instance.due_date = d.get("due_date") or None
+    instance.remarks = d.get("remarks") or ""
+    instance.terms_conditions_id = d.get("terms_conditions") or None
+    instance.bank_account_id = d.get("bank_account") or None
+    instance.print_bank_details = bool(d.get("print_bank_details"))
+    instance.other_charges_amount = _si_num(d.get("other_charges_amount"))
+    instance.round_off = _si_num(d.get("round_off"))
+
+
+def _save_invoice_items(instance, request):
+    try:
+        rows = json.loads(request.POST.get("items_json") or "[]")
+    except json.JSONDecodeError:
+        rows = []
+    instance.items.all().delete()
+    for r in rows:
+        if not r.get("item"):
+            continue
+        qty = _si_num(r.get("quantity"))
+        free = _si_num(r.get("free_qty"))
+        rate = _si_num(r.get("rate"))
+        disc = _si_num(r.get("discount_percent"))
+        gross = qty * rate
+        taxable = gross - (gross * disc / Decimal("100"))
+        gst_pct = _si_num(r.get("gst_percent"))
+        gst_amt = taxable * gst_pct / Decimal("100")
+        SalesInvoiceItem.objects.create(
+            invoice=instance, item_id=r["item"], batch_no=r.get("batch_no") or "",
+            hsn_sac=r.get("hsn_sac") or "", uom=r.get("uom") or "",
+            quantity=qty, free_qty=free, rate=rate, discount_percent=disc,
+            taxable_amount=taxable.quantize(Decimal("0.01")),
+            gst_percent=gst_pct, gst_amount=gst_amt.quantize(Decimal("0.01")),
+            amount=(taxable + gst_amt).quantize(Decimal("0.01")),
+        )
+    instance.net_amount = instance.compute_net_amount()
+    instance.save(update_fields=["net_amount"])
+
+
+@login_required(login_url="login")
+def sales_invoice_list(request):
+    return render(request, "sales_invoice_list.html")
+
+
+@login_required(login_url="login")
+def sales_invoice_api_list(request):
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    qs = SalesInvoice.objects.select_related("customer")
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    return JsonResponse([_sales_invoice_list_dict(i) for i in qs.order_by("-date", "-id")], safe=False)
+
+
+@login_required(login_url="login")
+def create_sales_invoice(request):
+    if request.method == "POST":
+        instance = SalesInvoice(created_by=request.user if request.user.is_authenticated else None)
+        try:
+            _apply_posted_invoice(instance, request)
+            if not instance.customer_id:
+                raise ValidationError("Select a customer.")
+            instance.full_clean(exclude=["invoice_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_invoice_items(instance, request)
+                if not instance.items.exists():
+                    raise ValidationError("Add at least one item.")
+            messages.success(request, "Sales Invoice created successfully.")
+            return redirect("sales_invoice_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+    return render(request, "sales_invoice_form.html", _sales_invoice_form_context())
+
+
+@login_required(login_url="login")
+def edit_sales_invoice(request, id):
+    instance = get_object_or_404(SalesInvoice, id=id)
+    if request.method == "POST":
+        try:
+            _apply_posted_invoice(instance, request)
+            if not instance.customer_id:
+                raise ValidationError("Select a customer.")
+            instance.full_clean(exclude=["invoice_no"])
+            with transaction.atomic():
+                instance.save()
+                _save_invoice_items(instance, request)
+                if not instance.items.exists():
+                    raise ValidationError("Add at least one item.")
+            messages.success(request, "Sales Invoice updated successfully.")
+            return redirect("sales_invoice_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+    return render(request, "sales_invoice_form.html", _sales_invoice_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_sales_invoice(request, id):
+    get_object_or_404(SalesInvoice, id=id).delete()
+    messages.success(request, "Sales Invoice deleted successfully.")
+    return redirect("sales_invoice_list")

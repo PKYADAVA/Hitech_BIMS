@@ -1,0 +1,606 @@
+{% extends "base.html" %}
+{% block title %}{% if invoice %}Edit{% else %}New{% endif %} Sales Invoice - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock %}
+{% block content %}
+{% include '_sales_transaction_subnavbar.html' with active_tab='sales_invoice' %}
+
+<style>
+  .si-page { color:#17233b; --si-blue:#2563eb; --si-line:#e4ecf7; --si-muted:#718096; max-width:none; margin:0; }
+  .si-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:2px 2px 9px; border-bottom:1px solid var(--si-line); margin-bottom:9px; }
+  .si-crumb { font-size:.66rem; color:var(--si-muted); margin-top:2px; }.si-crumb span { color:#2563eb; }.si-title { font-size:1.04rem; font-weight:750; margin:0; letter-spacing:-.02em; }.si-title i { color:var(--si-blue); }
+  .si-toolbar .btn { font-size:.72rem; font-weight:600; padding:.34rem .6rem; border-radius:4px; }.si-action-primary { background:linear-gradient(135deg,#2563eb,#1d4ed8); border:0; }
+  .si-action-btn { font-size:.82rem; font-weight:600; padding:.42rem 1rem; border-radius:5px; }
+  .si-card { border:1px solid var(--si-line); border-radius:6px; box-shadow:none; }.si-card .card-body { padding:14px; }.si-section-label { display:flex; align-items:center; gap:7px; text-transform:uppercase; letter-spacing:.05em; color:#577096; font-size:.61rem; font-weight:750; margin-bottom:11px; }.si-section-label i { color:var(--si-blue); }
+  /* Reference column layout via named areas: Billing spans two rows, Payment
+     Terms + Due Date share a cell, columns fill top-to-bottom. */
+  .si-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:13px 15px; margin:0;
+    grid-template-areas:
+      "ttype invno invdate branch"
+      "cust  refno refdate orgc"
+      "bill  ship  place   sp"
+      "bill  ship  gstin   paydue"
+      "transp vehicle eway remarks"; }
+  .si-fields > .sif { width:auto; max-width:none; padding:0; margin:0; }
+  .a-ttype{grid-area:ttype}.a-invno{grid-area:invno}.a-invdate{grid-area:invdate}.a-branch{grid-area:branch}.a-cust{grid-area:cust}.a-refno{grid-area:refno}.a-refdate{grid-area:refdate}.a-orgc{grid-area:orgc}.a-bill{grid-area:bill;display:flex;flex-direction:column}.a-ship{grid-area:ship;display:flex;flex-direction:column}.a-transp{grid-area:transp}.a-vehicle{grid-area:vehicle}.a-sp{grid-area:sp}.a-place{grid-area:place}.a-eway{grid-area:eway}.a-paydue{grid-area:paydue}.a-gstin{grid-area:gstin}.a-remarks{grid-area:remarks}
+  .a-bill textarea, .a-ship textarea { flex:1; min-height:60px; }
+  .paydue-wrap { display:flex; gap:10px; }.paydue-wrap > div { flex:1; }
+  .si-page .form-label { font-size:.69rem; color:#52627a; margin-bottom:4px; font-weight:650; }.si-page .form-control,.si-page .form-select { min-height:33px; border-color:#dce6f2; font-size:.79rem; }.si-page textarea.form-control { min-height:60px; }.si-page .form-control:focus,.si-page .form-select:focus { border-color:#91b4f7; box-shadow:0 0 0 .16rem rgba(37,99,235,.1); }
+  .si-tot { background:linear-gradient(180deg,#f9fbff,#f2f7ff); border:1px solid #dce8fa; border-radius:6px; padding:12px 13px; position:sticky; top:12px; }.si-tot-title { font-size:.63rem; text-transform:uppercase; letter-spacing:.05em; font-weight:750; color:#49698f; padding-bottom:8px; margin-bottom:3px; border-bottom:1px solid #dce8fa; }.si-tot .row-t { display:flex; justify-content:space-between; align-items:center; gap:9px; padding:.25rem 0; font-size:.72rem; color:#52627a; }.si-tot .row-t strong { color:#233653; }.si-tot .grand { font-size:.9rem; font-weight:800; color:#2563eb; border-top:1px solid #cfe0f5; padding-top:.6rem; margin-top:.35rem; }
+  .si-sumbar { display:flex; flex-wrap:wrap; gap:6px 24px; align-items:flex-end; background:linear-gradient(180deg,#f9fbff,#f2f7ff); border:1px solid #dce8fa; border-radius:6px; padding:10px 16px; margin-top:12px; }
+  .si-sumbar-title { font-size:.6rem; text-transform:uppercase; letter-spacing:.05em; color:#49698f; font-weight:750; width:100%; margin-bottom:2px; }
+  .si-sumbar .ss { display:flex; flex-direction:column; min-width:110px; }
+  .si-sumbar .ss span { font-size:.6rem; text-transform:uppercase; letter-spacing:.03em; color:#6a7d97; font-weight:650; }
+  .si-sumbar .ss b { font-size:.85rem; color:#233653; font-weight:700; }
+  .si-sumbar .ss input { width:100px; margin-top:3px; }
+  .si-sumbar .ss.grand { margin-left:auto; text-align:right; }
+  .si-sumbar .ss.grand b { font-size:1rem; color:#2563eb; font-weight:800; }
+  .si-invoice { color:#1a2233; font-size:.78rem; }
+  .si-invoice .inv-head { display:flex; justify-content:space-between; border-bottom:2px solid #1b3a6b; padding-bottom:8px; margin-bottom:10px; }
+  .si-invoice .inv-co h3 { margin:0 0 3px; font-size:1.1rem; color:#1b3a6b; }
+  .si-invoice .inv-title { font-size:1.1rem; font-weight:800; color:#1b3a6b; align-self:center; }
+  .si-invoice .inv-details { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:10px; }
+  .si-invoice .inv-dcol { border:1px solid #e3ebf5; border-radius:5px; padding:8px 10px; font-size:.73rem; line-height:1.7; }
+  .si-invoice .inv-meta, .si-invoice .inv-parties { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:10px; }
+  .si-invoice .inv-parties > div { border:1px solid #e3ebf5; border-radius:5px; padding:8px; }
+  .si-invoice table.inv-items { width:100%; border-collapse:collapse; margin-bottom:10px; }
+  .si-invoice table.inv-items th, .si-invoice table.inv-items td { border:1px solid #d7e1ee; padding:4px 6px; }
+  .si-invoice table.inv-items th { background:#eef3fb; font-size:.7rem; text-align:left; }
+  .si-invoice table.inv-items td.r { text-align:right; }
+  .si-invoice .inv-foot { display:flex; justify-content:space-between; gap:16px; margin-bottom:10px; }
+  .si-invoice .inv-words { flex:1; }
+  .si-invoice table.inv-totals { border-collapse:collapse; min-width:260px; }
+  .si-invoice table.inv-totals td { padding:3px 8px; }
+  .si-invoice table.inv-totals td:last-child { text-align:right; font-weight:600; }
+  .si-invoice table.inv-totals tr.grand td { border-top:2px solid #1b3a6b; font-size:.95rem; color:#1b3a6b; font-weight:800; }
+  .si-invoice .inv-bottom { display:grid; grid-template-columns:1.3fr 1fr .8fr; gap:14px; border-top:1px solid #e3ebf5; padding-top:8px; }
+  .si-invoice .inv-sign { text-align:right; }
+  .si-invoice .sign-line { margin-top:34px; border-top:1px solid #444; display:inline-block; padding-top:2px; }
+  @media print {
+    body * { visibility:hidden; }
+    #si-invoice-preview, #si-invoice-preview * { visibility:visible; }
+    #si-invoice-preview { position:absolute; left:0; top:0; width:100%; padding:6px; }
+    #previewModal { position:absolute; inset:0; background:#fff; overflow:visible; }
+    #previewModal .modal-dialog { max-width:100%; margin:0; }
+    .modal-backdrop { display:none !important; }
+  }
+  .si-item-tabs { display:flex; gap:24px; align-items:center; border-bottom:1px solid var(--si-line); margin:15px 0 0; padding:0 12px; overflow:auto; }.si-item-tab { display:block; border:0; border-bottom:2px solid transparent; background:transparent; color:#65748b; padding:8px 0 7px; font-size:.68rem; white-space:nowrap; }.si-item-tab.active { color:#2563eb; border-color:#2563eb; font-weight:700; }
+  .si-grid tfoot td { font-weight:800; background:#f2f7ff; border-top:2px solid #cdddf3; }
+  .si-item-card { border:1px solid var(--si-line); border-radius:6px; overflow:hidden; }.si-item-card .card-header { background:#fff; border-bottom:1px solid var(--si-line); padding:9px 12px; font-size:.75rem; font-weight:700; }.si-grid th, .si-grid td { padding:.36rem .34rem; vertical-align:middle; font-size:.69rem; }.si-grid .form-control, .si-grid .form-select { font-size:.69rem; min-height:27px; }.si-grid input[readonly] { background:#f7f9fc; }.si-grid thead th { color:#536680!important; background:#f7faff!important; }.req::after { content:" *"; color:#dc3545; }
+  .si-bottom { display:grid; grid-template-columns:1.3fr .8fr .8fr .95fr; gap:10px; margin-top:10px; }.si-bottom-card { padding:11px 13px; border:1px solid var(--si-line); border-radius:5px; background:#fff; min-height:104px; font-size:.8rem; color:#22314a; }.si-bottom-title { color:#1b3a6b; font-size:.74rem; font-weight:750; margin-bottom:8px; letter-spacing:.02em; }.si-bottom-copy { font-size:.8rem; color:#22314a; margin:0; }.si-bottom .muted { color:#5a6b82; font-size:.8rem; }.si-bank-row { display:flex; justify-content:space-between; border-top:1px solid #edf2f8; padding:4px 0; color:#3a4a63; font-size:.8rem; }
+  .si-bank-row span:last-child { color:#1b2a44; font-weight:600; }
+  .si-bank-row input { width:120px !important; height:26px; min-height:26px; padding:2px 8px; font-size:.8rem; }
+  .si-audit { display:flex; gap:25px; padding:8px 10px 0; margin-top:9px; border-top:1px solid var(--si-line); font-size:.62rem; color:#6a7890; }
+  @media (max-width:1199.98px){ .si-fields { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-areas:none; } .si-fields > .sif { grid-area:auto !important; } .a-bill, .a-ship{ display:block; } }
+  @media (max-width:991.98px){ .si-tot { position:static; } .si-bottom { grid-template-columns:1fr; } .si-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:575.98px){ .si-toolbar { align-items:flex-start; flex-direction:column; } .si-toolbar .d-flex { flex-wrap:wrap; } .si-fields { grid-template-columns:1fr; } }
+</style>
+
+<div class="si-page">
+<div class="si-toolbar">
+  <div><h4 class="si-title"><i class="fas fa-file-invoice-dollar me-2"></i>{% if invoice %}Edit{% else %}New{% endif %} Sales Invoice</h4><div class="si-crumb"><span>Home</span> &nbsp;/&nbsp; Sales &nbsp;/&nbsp; Sales Transaction</div></div>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+<form id="si-form" method="post">
+  {% csrf_token %}
+  <input type="hidden" name="items_json" id="items_json">
+
+  <div class="row g-3">
+    <div class="col-lg-12">
+      <div class="card si-card"><div class="card-body">
+        <div class="si-section-label"><i class="fas fa-circle-info"></i> Transaction information</div>
+        <div class="row g-3 si-fields">
+          <div class="sif a-ttype">
+            <label class="form-label req">Transaction Type</label>
+            <select name="transaction_type" class="form-select">
+              {% for v,l in transaction_types %}<option value="{{ v }}" {% if invoice and invoice.transaction_type == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="sif a-invno">
+            <label class="form-label">Invoice No.</label>
+            <input type="text" class="form-control bg-light" value="{% if invoice %}{{ invoice.invoice_no }}{% else %}{{ next_no }}{% endif %}" readonly>
+          </div>
+          <div class="sif a-invdate">
+            <label class="form-label req">Invoice Date</label>
+            <input type="date" name="date" class="form-control" value="{% if invoice %}{{ invoice.date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}" required>
+          </div>
+
+          <div class="sif a-cust">
+            <label class="form-label req">Customer</label>
+            <select name="customer" id="customer" class="form-select" required>
+              <option value="">Select customer</option>
+              {% for c in customers %}<option value="{{ c.id }}" data-address="{{ c.address|default:'' }}" data-place="{{ c.place|default:'' }}" data-gstin="{{ c.gstin|default:'' }}" data-state="{{ c.state|default:'' }}" data-mobile="{{ c.mobile|default:'' }}" {% if invoice and invoice.customer_id == c.id %}selected{% endif %}>{{ c.code }} - {{ c.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="sif a-refno">
+            <label class="form-label">Reference No.</label>
+            <input type="text" name="reference_no" class="form-control" value="{% if invoice %}{{ invoice.reference_no }}{% endif %}">
+          </div>
+          <div class="sif a-refdate">
+            <label class="form-label">Reference Date</label>
+            <input type="date" name="reference_date" class="form-control" value="{% if invoice and invoice.reference_date %}{{ invoice.reference_date|date:'Y-m-d' }}{% endif %}">
+          </div>
+
+          <div class="sif a-bill">
+            <label class="form-label">Billing Address</label>
+            <div class="form-control bg-light" id="billing_address_view" style="min-height:58px;white-space:pre-line;flex:1;overflow:auto;">{% if invoice %}{{ invoice.billing_address }}{% endif %}</div>
+            <input type="hidden" name="billing_address" id="billing_address" value="{% if invoice %}{{ invoice.billing_address }}{% endif %}">
+          </div>
+          <div class="sif a-ship">
+            <label class="form-label">Shipping Address</label>
+            <div class="d-flex justify-content-between align-items-start border rounded p-2 bg-light" style="flex:1;">
+              <div id="shipping_address_summary" class="flex-grow-1" style="font-size:.76rem;">Select a customer first.</div>
+              <button type="button" class="btn btn-sm btn-outline-primary ms-2 text-nowrap" id="change_shipping_address" disabled>Change Shipping Address</button>
+            </div>
+            <input type="hidden" name="shipping_address" id="shipping_address" value="{% if invoice %}{{ invoice.shipping_address }}{% endif %}">
+          </div>
+          <div class="sif a-gstin">
+            <label class="form-label">GSTIN</label>
+            <input type="text" name="gstin" id="gstin" class="form-control" value="{% if invoice %}{{ invoice.gstin }}{% endif %}">
+          </div>
+
+          <div class="sif a-transp">
+            <label class="form-label">Transportation</label>
+            <input type="text" name="transportation" class="form-control" value="{% if invoice %}{{ invoice.transportation }}{% endif %}">
+          </div>
+          <div class="sif a-vehicle">
+            <label class="form-label">Vehicle No.</label>
+            <input type="text" name="vehicle_no" class="form-control" value="{% if invoice %}{{ invoice.vehicle_no }}{% endif %}">
+          </div>
+          <div class="sif a-place">
+            <label class="form-label">Place of Supply</label>
+            <input type="text" name="place_of_supply" id="place_of_supply" class="form-control" value="{% if invoice %}{{ invoice.place_of_supply }}{% endif %}">
+          </div>
+
+          <div class="sif a-eway">
+            <label class="form-label">E-Way Bill No.</label>
+            <input type="text" name="eway_bill_no" class="form-control" value="{% if invoice %}{{ invoice.eway_bill_no }}{% endif %}">
+          </div>
+          <div class="sif a-branch">
+            <label class="form-label">Branch</label>
+            <select name="branch" class="form-select">
+              <option value="">Select branch</option>
+              {% for b in branches %}<option value="{{ b.id }}" {% if invoice and invoice.branch_id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="sif a-orgc">
+            <label class="form-label">Organization Centre</label>
+            <select name="organization_centre" class="form-select">
+              <option value="">Select centre</option>
+              {% for o in org_centres %}<option value="{{ o.id }}" {% if invoice and invoice.organization_centre_id == o.id %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+            </select>
+          </div>
+
+          <div class="sif a-sp">
+            <label class="form-label">Sales Person</label>
+            <input type="text" name="sales_person" class="form-control" value="{% if invoice %}{{ invoice.sales_person }}{% endif %}">
+          </div>
+          <div class="sif a-paydue"><div class="paydue-wrap"><div><label class="form-label">Payment Terms</label><input type="text" name="payment_terms" class="form-control" value="{% if invoice %}{{ invoice.payment_terms }}{% endif %}" placeholder="e.g. 15 Days"></div><div><label class="form-label">Due Date</label><input type="date" name="due_date" class="form-control" value="{% if invoice and invoice.due_date %}{{ invoice.due_date|date:'Y-m-d' }}{% endif %}"></div></div></div>
+          <div class="sif a-remarks">
+            <label class="form-label">Remarks</label>
+            <input type="text" name="remarks" class="form-control" value="{% if invoice %}{{ invoice.remarks }}{% endif %}">
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+
+  <!-- Item Details -->
+  <div class="card mt-3 si-item-card"><div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="fas fa-boxes-stacked me-2"></i>Item Details</span>
+    <button type="button" class="btn btn-outline-primary btn-sm" id="add-item"><i class="fas fa-plus me-1"></i>Add Item</button>
+  </div>
+  <div class="card-body p-0"><div class="table-responsive">
+    <table class="table table-bordered mb-0 si-grid">
+      <thead class="table-light"><tr>
+        <th style="width:32px;">#</th><th style="min-width:120px;">Item Code</th><th style="min-width:170px;">Item Name</th><th>Batch No.</th><th>HSN/SAC</th><th>UOM</th>
+        <th class="text-end">Quantity</th><th class="text-end">Free Qty</th><th class="text-end">Rate</th><th class="text-end">Disc %</th>
+        <th class="text-end">Taxable Amt</th><th class="text-end">GST %</th><th class="text-end">GST Amt</th><th class="text-end">Amount</th>
+        <th style="width:88px;">Action</th>
+      </tr></thead>
+      <tbody id="item-rows"></tbody>
+      <tfoot><tr class="si-grid-total">
+        <td colspan="6" class="text-end">Total</td>
+        <td class="text-end" id="g-qty">0.000</td>
+        <td class="text-end" id="g-free">0.000</td>
+        <td></td><td></td>
+        <td class="text-end" id="g-taxable">0.00</td>
+        <td></td>
+        <td class="text-end" id="g-gst">0.00</td>
+        <td class="text-end" id="g-amount">0.00</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+  </div></div></div>
+
+  <div class="si-bottom-card" style="margin-top:10px;"><div class="d-flex justify-content-between align-items-center mb-2"><div class="si-bottom-title mb-0">TERMS &amp; CONDITIONS</div><select name="terms_conditions" id="terms-select" class="form-select form-select-sm" style="max-width:300px;"><option value="">Select terms</option>{% for t in terms_list %}<option value="{{ t.id }}" {% if invoice and invoice.terms_conditions_id == t.id %}selected{% endif %}>{{ t.type }}{% if t.party_type %} &mdash; {{ t.party_type }}{% endif %}</option>{% endfor %}</select></div><div id="terms-text" class="si-bottom-copy" style="white-space:pre-line;"></div></div>
+
+  <div class="si-bottom">
+    <div class="si-bottom-card"><div class="si-bottom-title">AMOUNT IN WORDS</div><p class="si-bottom-copy" id="si-words">Calculated automatically when the invoice is saved.</p></div>
+    <div class="si-bottom-card"><div class="d-flex justify-content-between align-items-center mb-1"><div class="si-bottom-title mb-0">BANK DETAILS</div><div class="form-check form-switch mb-0" title="Print bank details on the invoice"><input class="form-check-input" type="checkbox" name="print_bank_details" id="print_bank" {% if not invoice or invoice.print_bank_details %}checked{% endif %}><label class="form-check-label" for="print_bank" style="font-size:.6rem;color:#6a7d97;">Print</label></div></div><div class="si-bank-row"><span>Bank Name</span><span>{{ company.bank_name|default:"&mdash;" }}</span></div><div class="si-bank-row"><span>A/C No.</span><span>{{ company.bank_account_no|default:"&mdash;" }}</span></div><div class="si-bank-row"><span>IFSC Code</span><span>{{ company.ifsc_code|default:"&mdash;" }}</span></div><div class="si-bank-row"><span>Branch</span><span>{{ company.bank_branch|default:"&mdash;" }}</span></div></div>
+    <div class="si-bottom-card"><div class="si-bottom-title">ITEM SUMMARY</div><div class="si-bank-row"><span>No. of Items</span><span id="t-items">0</span></div><div class="si-bank-row"><span>Total Quantity</span><span id="t-qty">0.000</span></div></div>
+    <div class="si-bottom-card"><div class="si-bottom-title">PRICE SUMMARY</div><div class="si-bank-row"><span>Total Before Tax</span><span>&#8377; <span id="p-before">0.00</span></span></div><div class="si-bank-row"><span>Add : Other Charges</span><input type="number" step="0.01" name="other_charges_amount" id="t-other" class="form-control form-control-sm text-end" style="width:120px" value="{% if invoice %}{{ invoice.other_charges_amount }}{% else %}0{% endif %}"></div><div class="si-bank-row"><span>Taxable Amount</span><span>&#8377; <span id="p-taxable">0.00</span></span></div><div class="si-bank-row"><span>Total GST</span><span>&#8377; <span id="p-gst">0.00</span></span></div><div class="si-bank-row"><span>Round Off</span><input type="number" step="0.01" name="round_off" id="t-round" class="form-control form-control-sm text-end bg-light" style="width:120px" readonly value="{% if invoice %}{{ invoice.round_off }}{% else %}0{% endif %}"></div><div class="si-bank-row" style="font-weight:800;color:#2563eb;border-top:1px solid #cfe0f5;margin-top:2px;padding-top:5px;"><span>Grand Total</span><span>&#8377; <span id="p-grand">0.00</span></span></div></div>
+  <div class="d-flex gap-2 justify-content-center my-4 no-print">
+    <button type="button" class="btn btn-outline-primary si-action-btn" id="preview-btn"><i class="fas fa-eye me-1"></i>Preview</button>
+    <button type="submit" class="btn btn-primary si-action-primary si-action-btn px-4"><i class="fas fa-save me-1"></i>Save</button>
+    <a class="btn btn-outline-danger si-action-btn" href="{% url 'sales_invoice_list' %}"><i class="fas fa-times me-1"></i>Cancel</a>
+  </div>
+</form>
+</div>
+
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header no-print">
+        <h5 class="modal-title">Invoice Preview</h5>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-primary btn-sm" id="preview-print"><i class="fas fa-print me-1"></i>Print</button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="si-invoice-preview" class="si-invoice">
+          <div class="inv-head">
+            <div class="inv-co">
+              <h3>{{ company.name }}</h3>
+              <div>{{ company.address|linebreaksbr }}</div>
+              <div>Mobile: {{ company.mobile }} | Email: {{ company.email }}</div>
+              <div>GSTIN: {{ company.gstin }} | PAN: {{ company.pan }}</div>
+            </div>
+            <div class="inv-title">TAX INVOICE</div>
+          </div>
+          <div class="inv-details">
+            <div class="inv-dcol">
+              <div><b>Transaction Type:</b> <span id="pv-type"></span></div>
+              <div><b>Invoice No:</b> <span id="pv-no"></span></div>
+              <div><b>Invoice Date:</b> <span id="pv-date"></span></div>
+              <div><b>Reference No:</b> <span id="pv-ref"></span></div>
+              <div><b>Reference Date:</b> <span id="pv-refdate"></span></div>
+              <div><b>Sales Person:</b> <span id="pv-sp"></span></div>
+            </div>
+            <div class="inv-dcol">
+              <div><b>Place of Supply:</b> <span id="pv-pos"></span></div>
+              <div><b>E-Way Bill:</b> <span id="pv-eway"></span></div>
+              <div><b>Payment Terms:</b> <span id="pv-pay"></span></div>
+              <div><b>Due Date:</b> <span id="pv-due"></span></div>
+              <div><b>Transportation:</b> <span id="pv-transp"></span></div>
+              <div><b>Vehicle No:</b> <span id="pv-vehicle"></span></div>
+              <div><b>Remarks:</b> <span id="pv-remarks"></span></div>
+            </div>
+          </div>
+          <div class="inv-parties">
+            <div><b>Bill To</b><br><span id="pv-cust"></span><br>GSTIN: <span id="pv-gstin"></span><br><span id="pv-billing"></span></div>
+            <div><b>Ship To</b><br><span id="pv-shipping"></span></div>
+          </div>
+          <table class="inv-items">
+            <thead><tr><th>#</th><th>Item Code</th><th>Item Name</th><th>HSN</th><th>UOM</th><th>Qty</th><th>Free</th><th>Rate</th><th>Disc%</th><th>Taxable</th><th>GST%</th><th>GST Amt</th><th>Amount</th></tr></thead>
+            <tbody id="pv-items"></tbody>
+          </table>
+          <div class="inv-foot">
+            <div class="inv-words"><b>Amount in Words:</b> <span id="pv-words"></span></div>
+            <table class="inv-totals">
+              <tr><td>Total Before Tax</td><td id="pv-before"></td></tr>
+              <tr><td>Total GST</td><td id="pv-gst"></td></tr>
+              <tr><td>Other Charges</td><td id="pv-other"></td></tr>
+              <tr><td>Round Off</td><td id="pv-round"></td></tr>
+              <tr class="grand"><td>Grand Total</td><td id="pv-grand"></td></tr>
+            </table>
+          </div>
+          <div class="inv-bottom">
+            <div><b>Terms &amp; Conditions</b><br><span id="pv-terms" style="white-space:pre-line;"></span></div>
+            <div id="pv-bank-box"><b>Bank Details</b><br>Bank: {{ company.bank_name }}<br>A/c: {{ company.bank_account_no }}<br>IFSC: {{ company.ifsc_code }}<br>Branch: {{ company.bank_branch }}</div>
+            <div class="inv-sign">For {{ company.name }}<div class="sign-line">Authorised Signatory</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="changeShippingModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">Change Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="d-flex justify-content-between align-items-center mb-2"><div class="form-text mb-0">Addresses are saved in the Customer master.</div>
+      <button type="button" class="btn btn-sm btn-success" id="open-add-ship"><i class="fas fa-plus"></i> Add New Address</button></div>
+    <table class="table align-middle mb-0"><thead><tr><th>Address</th><th class="text-center" style="width:70px">Select</th></tr></thead><tbody id="ship-addr-list"></tbody></table>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-primary" id="confirm-ship">Done</button></div>
+</div></div></div>
+
+<div class="modal fade" id="addShippingModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><form class="modal-content" id="add-ship-form">
+  <div class="modal-header"><h5 class="modal-title">Add Shipping Address</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-3"><label class="form-label">Street Address <span class="text-danger">*</span></label><textarea class="form-control" id="ship_street" rows="3" required></textarea></div>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">State</label><select class="form-select" id="ship_state"><option value="">Enter State</option>{% for st in states_and_union_territories %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select></div>
+      <div class="col-md-6"><label class="form-label">Pincode</label><input class="form-control" id="ship_pincode" maxlength="10"></div>
+    </div>
+    <div class="mb-3 mt-3"><label class="form-label">City</label><input class="form-control" id="ship_city"></div>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" id="ship_contact"></div>
+      <div class="col-md-6"><label class="form-label">Mobile</label><input class="form-control" id="ship_mobile"></div>
+    </div>
+    <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="ship_default"><label class="form-check-label" for="ship_default">Set as default shipping address</label></div>
+  </div>
+  <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Address</button></div>
+</form></div></div>
+
+<template id="item-row-tpl">
+  <tr class="item-row">
+    <td class="row-idx text-center"></td>
+    <td><input type="text" class="form-control form-control-sm it-code" readonly></td>
+    <td>
+      <select class="form-select form-select-sm it-item">
+        <option value="">Select item</option>
+      </select>
+    </td>
+    <td><input type="text" class="form-control form-control-sm it-batch"></td>
+    <td><input type="text" class="form-control form-control-sm it-hsn"></td>
+    <td><input type="text" class="form-control form-control-sm it-uom" style="width:70px;"></td>
+    <td><input type="number" step="0.001" class="form-control form-control-sm text-end it-qty"></td>
+    <td><input type="number" step="0.001" class="form-control form-control-sm text-end it-free"></td>
+    <td><input type="number" step="0.01" class="form-control form-control-sm text-end it-rate"></td>
+    <td><input type="number" step="0.01" class="form-control form-control-sm text-end it-disc" value="0"></td>
+    <td><input type="text" class="form-control form-control-sm text-end it-taxable" readonly></td>
+    <td><input type="number" step="0.01" class="form-control form-control-sm text-end it-gstp" value="0"></td>
+    <td><input type="text" class="form-control form-control-sm text-end it-gsta" readonly></td>
+    <td><input type="text" class="form-control form-control-sm text-end it-amount" readonly></td>
+    <td><div class="d-flex gap-1 justify-content-center flex-nowrap"><button type="button" class="btn btn-outline-primary btn-sm add-item-row" title="Add row"><i class="fas fa-plus"></i></button><button type="button" class="btn btn-outline-danger btn-sm rm-item" title="Delete"><i class="fas fa-trash"></i></button></div></td>
+  </tr>
+</template>
+{% endblock %}
+{% block js %}
+<script>
+const ITEMS = {{ items_json|safe }};
+const EXISTING = {{ existing_items_json|safe }};
+const TERMS = {{ terms_json|safe }};
+
+function toWordsIndian(num) {
+  num = Math.round(Number(num) || 0);
+  if (num === 0) return "Zero Only";
+  const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+    "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const two = n => n < 20 ? a[n] : (b[Math.floor(n / 10)] + (n % 10 ? " " + a[n % 10] : ""));
+  const three = n => (n >= 100 ? a[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " : "") : "") + (n % 100 ? two(n % 100) : "");
+  let res = "";
+  const crore = Math.floor(num / 10000000); num %= 10000000;
+  const lakh = Math.floor(num / 100000); num %= 100000;
+  const thousand = Math.floor(num / 1000); num %= 1000;
+  if (crore) res += three(crore) + " Crore ";
+  if (lakh) res += two(lakh) + " Lakh ";
+  if (thousand) res += two(thousand) + " Thousand ";
+  if (num) res += three(num) + " ";
+  return res.replace(/\s+/g, " ").trim() + " Only";
+}
+
+$(function () {
+  const $tbody = $("#item-rows");
+  const fmt = n => Number(n||0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  function itemOptions(selected) {
+    let s = '<option value="">Select item</option>';
+    ITEMS.forEach(it => { s += `<option value="${it.id}" ${String(selected)===String(it.id)?'selected':''}>${it.description || it.item_code}</option>`; });
+    return s;
+  }
+
+  function addRow(data) {
+    data = data || {};
+    const $r = $($("#item-row-tpl").html());
+    $r.find(".it-item").html(itemOptions(data.item));
+    $r.find(".it-batch").val(data.batch_no || "");
+    $r.find(".it-hsn").val(data.hsn_sac || "");
+    $r.find(".it-uom").val(data.uom || "");
+    $r.find(".it-qty").val(data.quantity || "");
+    $r.find(".it-free").val(data.free_qty || "");
+    $r.find(".it-rate").val(data.rate || "");
+    $r.find(".it-disc").val(data.discount_percent || 0);
+    $r.find(".it-gstp").val(data.gst_percent || 0);
+    $r.find(".it-code").val((ITEMS.find(x => String(x.id) === String(data.item)) || {}).item_code || "");
+    $tbody.append($r);
+    recalcRow($r);
+    renumber();
+  }
+
+  function renumber() {
+    $tbody.find(".item-row").each(function (i) { $(this).find(".row-idx").text(i + 1); });
+  }
+
+  function recalcRow($r) {
+    const qty = parseFloat($r.find(".it-qty").val()) || 0;
+    const rate = parseFloat($r.find(".it-rate").val()) || 0;
+    const disc = parseFloat($r.find(".it-disc").val()) || 0;
+    const gstp = parseFloat($r.find(".it-gstp").val()) || 0;
+    const gross = qty * rate;
+    const taxable = gross - (gross * disc / 100);
+    const gsta = taxable * gstp / 100;
+    $r.find(".it-taxable").val(taxable.toFixed(2));
+    $r.find(".it-gsta").val(gsta.toFixed(2));
+    $r.find(".it-amount").val((taxable + gsta).toFixed(2));
+    recalcTotals();
+  }
+
+  function recalcTotals() {
+    let items = 0, qty = 0, free = 0, before = 0, gst = 0;
+    $tbody.find(".item-row").each(function () {
+      const $r = $(this);
+      if (!$r.find(".it-item").val()) return;
+      items += 1;
+      qty += parseFloat($r.find(".it-qty").val()) || 0;
+      free += parseFloat($r.find(".it-free").val()) || 0;
+      before += parseFloat($r.find(".it-taxable").val()) || 0;
+      gst += parseFloat($r.find(".it-gsta").val()) || 0;
+    });
+    const other = parseFloat($("#t-other").val()) || 0;
+    $("#t-items").text(items);
+    $("#t-qty").text(qty.toLocaleString('en-IN',{minimumFractionDigits:3,maximumFractionDigits:3}));
+    $("#t-before").text(fmt(before));
+    $("#t-gst").text(fmt(gst));
+    $("#g-qty").text(qty.toLocaleString('en-IN',{minimumFractionDigits:3,maximumFractionDigits:3}));
+    $("#g-free").text(free.toLocaleString('en-IN',{minimumFractionDigits:3,maximumFractionDigits:3}));
+    $("#g-taxable").text(fmt(before)); $("#g-gst").text(fmt(gst)); $("#g-amount").text(fmt(before + gst));
+    const raw = before + gst + other;
+    const grand = Math.round(raw);
+    const round = +(grand - raw).toFixed(2);
+    $("#t-round").val(round.toFixed(2));
+    $("#t-grand").text(fmt(grand));
+    const taxable = before + other;
+    $("#p-before").text(fmt(before)); $("#p-taxable").text(fmt(taxable));
+    $("#p-gst").text(fmt(gst)); $("#p-grand").text(fmt(grand));
+    $("#si-words").text(grand > 0 ? toWordsIndian(grand) : "Calculated automatically when the invoice is saved.");
+  }
+
+  // events
+  $("#add-item").on("click", () => addRow());
+  $tbody.on("click", ".add-item-row", () => addRow());
+  $tbody.on("click", ".rm-item", function () { $(this).closest(".item-row").remove(); renumber(); recalcTotals(); });
+  $tbody.on("change", ".it-item", function () {
+    const it = ITEMS.find(x => String(x.id) === String($(this).val()));
+    const $r = $(this).closest(".item-row");
+    $r.find(".it-code").val(it ? (it.item_code || "") : "");
+    if (it) {
+      if (!$r.find(".it-hsn").val()) $r.find(".it-hsn").val(it.hsn_code || "");
+      if (!$r.find(".it-uom").val()) $r.find(".it-uom").val(it.storage_uom || "");
+      if (!$r.find(".it-rate").val()) $r.find(".it-rate").val(it.standard_cost_per_unit || "");
+    }
+    recalcRow($r);
+  });
+  $tbody.on("input", ".it-qty,.it-free,.it-rate,.it-disc,.it-gstp", function () { recalcRow($(this).closest(".item-row")); });
+  $("#t-other").on("input", recalcTotals);
+  $("[name='payment_terms']").on("input", function () { $("#si-payment-view").text($(this).val().trim() || "Not specified"); });
+  $("[name='vehicle_no']").on("input", function () { $("#si-vehicle-view").text($(this).val().trim() || "Not specified"); });
+
+  // ---- Billing (read-only) + Shipping picker, chick-sale style ----
+  let shipAddrs = [], selShipId = null, pendShipId = null;
+  const changeModal = new bootstrap.Modal(document.getElementById('changeShippingModal'));
+  const addModal = new bootstrap.Modal(document.getElementById('addShippingModal'));
+  const esc = t => window.escapeHtml ? window.escapeHtml(String(t == null ? '' : t)) : t;
+  function addressCard(a){
+    const heading = a.label || (a.address || '').split(',')[0] || 'Address';
+    return '<b>' + esc(heading) + '</b><br>' + esc(a.address).replace(/\n/g, '<br>') +
+      (a.contact_person ? '<br>' + esc(a.contact_person) + (a.mobile ? ' - ' + esc(a.mobile) : '') : '');
+  }
+  function billingFallback(){ const b = ($("#billing_address").val() || '').trim(); return b ? { label:'Billing Address', address:b } : null; }
+  function showShipping(a){
+    const shown = a || billingFallback();
+    $("#shipping_address").val(shown ? shown.address : '');
+    $("#shipping_address_summary").html(shown ? addressCard(shown) : 'No shipping address selected.');
+  }
+  function loadShipping(preferId){
+    const cid = $("#customer").val();
+    if(!cid){ shipAddrs=[]; selShipId=null; $("#change_shipping_address").prop('disabled',true); $("#shipping_address_summary").text('Select a customer first.'); return; }
+    $.getJSON('/customer/'+cid+'/shipping-addresses/', function(list){
+      shipAddrs = list || []; $("#change_shipping_address").prop('disabled', false);
+      const existing = $("#shipping_address").val();
+      const a = shipAddrs.find(x=>String(x.id)===String(preferId)) || shipAddrs.find(x=>x.address===existing) || shipAddrs.find(x=>x.is_default) || shipAddrs[0];
+      selShipId = a ? a.id : null; showShipping(a);
+    }).fail(function(){ $("#change_shipping_address").prop('disabled', false); showShipping(null); });
+  }
+  function renderShipList(){
+    const $b = $("#ship-addr-list");
+    if(!shipAddrs.length){ $b.html('<tr><td colspan="2" class="text-center text-muted">No saved shipping address. Click "Add New Address".</td></tr>'); return; }
+    $b.html(shipAddrs.map(a=>'<tr><td>'+addressCard(a)+'</td><td class="text-center"><input type="radio" class="form-check-input sel-addr" name="ship_radio" value="'+a.id+'" '+(String(a.id)===String(pendShipId)?'checked':'')+'></td></tr>').join(''));
+  }
+  $("#change_shipping_address").on('click', function(){ if(!$("#customer").val()) return; pendShipId=selShipId; renderShipList(); changeModal.show(); });
+  $("#ship-addr-list").on('change', '.sel-addr', function(){ pendShipId = $(this).val(); });
+  $("#confirm-ship").on('click', function(){ selShipId=pendShipId; showShipping(shipAddrs.find(a=>String(a.id)===String(selShipId))); changeModal.hide(); });
+  $("#open-add-ship").on('click', function(){ $("#add-ship-form")[0].reset(); const o=$("#customer")[0].selectedOptions[0]; $("#ship_mobile").val(o?(o.getAttribute('data-mobile')||''):''); changeModal.hide(); addModal.show(); });
+  document.getElementById('addShippingModal').addEventListener('hidden.bs.modal', function(){ if($("#customer").val()) changeModal.show(); });
+  $("#add-ship-form").on('submit', function(e){
+    e.preventDefault(); const cid=$("#customer").val(); if(!cid) return;
+    const addr=[$("#ship_street").val(),$("#ship_city").val(),$("#ship_state").val(),$("#ship_pincode").val()].map(x=>(x||'').trim()).filter(Boolean).join(', ');
+    const data={label:addr.slice(0,100),address:addr,contact_person:$("#ship_contact").val(),mobile:$("#ship_mobile").val(),is_default:$("#ship_default").is(':checked')};
+    $.ajax({url:'/customer/'+cid+'/shipping-addresses/',method:'POST',contentType:'application/json',headers:{'X-CSRFToken':$("input[name=csrfmiddlewaretoken]").first().val()},data:JSON.stringify(data),
+      success:function(res){ loadShipping(res.id); pendShipId=res.id; addModal.hide(); },
+      error:function(x){ (window.showToast||function(t,m){alert(m);})('danger',(x.responseJSON&&x.responseJSON.error)||'Unable to save address.'); }});
+  });
+
+  // customer -> billing (read-only) + gstin + place + shipping
+  $("#customer").on("change", function () {
+    const opt = this.options[this.selectedIndex];
+    const addr = opt ? [opt.getAttribute("data-address"), opt.getAttribute("data-place")].filter(Boolean).join(", ") : "";
+    $("#billing_address_view").text(addr); $("#billing_address").val(addr);
+    if (opt) $("#gstin").val(opt.getAttribute("data-gstin") || "");
+    if (opt && !$("#place_of_supply").val().trim()) $("#place_of_supply").val(opt.getAttribute("data-state") || "");
+    selShipId = null; $("#shipping_address").val(''); loadShipping();
+  });
+  loadShipping();
+
+  // terms & conditions / bank details (from account master)
+  $("#terms-select").on("change", function () { $("#terms-text").text(TERMS[$(this).val()] || ""); }).trigger("change");
+
+  // ---- Invoice preview modal ----
+  const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+  function buildPreview(){
+    recalcTotals();
+    const g = id => document.getElementById(id);
+    const set = (id, v) => { const e = g(id); if (e) e.textContent = (v == null ? '' : v); };
+    const custSel = document.getElementById('customer');
+    const custText = custSel.options[custSel.selectedIndex] ? custSel.options[custSel.selectedIndex].text : '';
+    set('pv-no', $(".a-invno input").val());
+    set('pv-date', $("[name='date']").val());
+    set('pv-ref', $("[name='reference_no']").val());
+    set('pv-refdate', $("[name='reference_date']").val());
+    set('pv-type', $("[name='transaction_type']").val());
+    set('pv-pos', $("#place_of_supply").val());
+    set('pv-eway', $("[name='eway_bill_no']").val());
+    set('pv-cust', custText);
+    set('pv-gstin', $("#gstin").val());
+    set('pv-billing', $("#billing_address").val());
+    set('pv-shipping', $("#shipping_address").val());
+    const selText = q => { const e = document.querySelector(q); if (!e || !e.value) return ''; return (e.options && e.options[e.selectedIndex]) ? e.options[e.selectedIndex].text : e.value; };
+    set('pv-sp', $("[name='sales_person']").val());
+    set('pv-pay', $("[name='payment_terms']").val());
+    set('pv-due', $("[name='due_date']").val());
+    set('pv-transp', $("[name='transportation']").val());
+    set('pv-vehicle', $("[name='vehicle_no']").val());
+    set('pv-remarks', $("[name='remarks']").val());
+    let rows = '';
+    $("#item-rows .item-row").each(function (i) {
+      const $r = $(this); if (!$r.find(".it-item").val()) return;
+      const sel = $r.find(".it-item")[0]; const nm = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+      const v = c => $r.find(c).val() || '';
+      rows += '<tr><td>' + (i + 1) + '</td><td>' + esc(v('.it-code')) + '</td><td>' + esc(nm) + '</td><td>' + esc(v('.it-hsn')) +
+        '</td><td>' + esc(v('.it-uom')) + '</td><td class="r">' + esc(v('.it-qty')) + '</td><td class="r">' + esc(v('.it-free')) +
+        '</td><td class="r">' + esc(v('.it-rate')) + '</td><td class="r">' + esc(v('.it-disc')) + '</td><td class="r">' + esc(v('.it-taxable')) +
+        '</td><td class="r">' + esc(v('.it-gstp')) + '</td><td class="r">' + esc(v('.it-gsta')) + '</td><td class="r">' + esc(v('.it-amount')) + '</td></tr>';
+    });
+    g('pv-items').innerHTML = rows || '<tr><td colspan="13" class="text-center text-muted">No items</td></tr>';
+    set('pv-before', '₹ ' + ($("#g-taxable").text() || '0.00'));
+    set('pv-gst', '₹ ' + ($("#g-gst").text() || '0.00'));
+    set('pv-other', '₹ ' + fmt($("#t-other").val() || 0));
+    set('pv-round', '₹ ' + fmt($("#t-round").val() || 0));
+    set('pv-grand', '₹ ' + ($("#t-grand").text() || '0.00'));
+    set('pv-words', $("#si-words").text());
+    set('pv-terms', $("#terms-text").text());
+    g('pv-bank-box').style.display = $("#print_bank").is(':checked') ? '' : 'none';
+  }
+  $("#preview-btn").on('click', function () { buildPreview(); previewModal.show(); });
+  $("#preview-print").on('click', function () { window.print(); });
+
+  // submit -> serialize items
+  $("#si-form").on("submit", function (e) {
+    const rows = [];
+    $tbody.find(".item-row").each(function () {
+      const $r = $(this);
+      const item = $r.find(".it-item").val();
+      if (!item) return;
+      rows.push({
+        item: item, batch_no: $r.find(".it-batch").val(), hsn_sac: $r.find(".it-hsn").val(),
+        uom: $r.find(".it-uom").val(), quantity: $r.find(".it-qty").val(), free_qty: $r.find(".it-free").val() || 0, rate: $r.find(".it-rate").val(),
+        discount_percent: $r.find(".it-disc").val() || 0, gst_percent: $r.find(".it-gstp").val() || 0,
+      });
+    });
+    if (!rows.length) { e.preventDefault(); window.showToast ? window.showToast('warning','Add at least one item.') : alert('Add at least one item.'); return; }
+    $("#items_json").val(JSON.stringify(rows));
+  });
+
+  // init
+  if (EXISTING.length) EXISTING.forEach(addRow); else addRow();
+  $("#si-payment-view").text($("[name='payment_terms']").val().trim() || "Not specified");
+  $("#si-vehicle-view").text($("[name='vehicle_no']").val().trim() || "Not specified");
+});
+</script>
+{% endblock %}

@@ -886,3 +886,534 @@ def payment_api_list(request):
         qs = qs.filter(date__lte=to_date)
     qs = qs.order_by("-date", "-id")
     return JsonResponse([_payment_list_dict(p) for p in qs], safe=False)
+
+
+# ---------------------------------------------------------------------------
+# Debit / Credit Notes (Purchase > Transactions)
+# ---------------------------------------------------------------------------
+from .models import DebitNote, CreditNote
+
+
+def _note_list_dict(n):
+    return {
+        "id": n.id, "date": n.date.isoformat(), "note_no": n.note_no,
+        "supplier_name": n.supplier.name if n.supplier_id else "",
+        "against_bill": n.against_bill, "reason": n.reason,
+        "amount": str(n.amount), "remarks": n.remarks,
+    }
+
+
+def _note_form_context(model, instance=None):
+    return {
+        "note": instance,
+        "next_no": model._next_no() if not instance else None,
+        "note_kind": "Debit Note" if model is DebitNote else "Credit Note",
+        "suppliers": Supplier.objects.order_by("name"),
+        "accounts": ChartOfAccount.objects.order_by("code"),
+        "today": timezone.localdate().isoformat(),
+    }
+
+
+def _apply_note_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.supplier_id = request.POST.get("supplier") or None
+    instance.against_bill = request.POST.get("against_bill") or ""
+    instance.reason = request.POST.get("reason") or ""
+    instance.amount = Decimal(str(request.POST.get("amount") or 0))
+    instance.account_id = request.POST.get("account") or None
+    instance.remarks = request.POST.get("remarks") or ""
+
+
+def _save_note(request, model, instance, kind, template, redirect_name):
+    if request.method == "POST":
+        try:
+            _apply_note_fields(instance, request)
+            if not instance.supplier_id:
+                raise ValidationError("Select a supplier.")
+            if instance.amount <= 0:
+                raise ValidationError("Enter an amount greater than zero.")
+            instance.full_clean(exclude=["note_no"])
+            was_edit = bool(instance.pk)
+            with transaction.atomic():
+                instance.save()
+            messages.success(request, f"{kind} {'updated' if was_edit else 'added'} successfully.")
+            return redirect(redirect_name)
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+    return render(request, template, _note_form_context(model, instance if instance.pk else None))
+
+
+def _note_api(request, model):
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    supplier_id = (request.GET.get("supplier") or "").strip()
+    qs = model.objects.select_related("supplier")
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    if supplier_id.isdigit():
+        qs = qs.filter(supplier_id=supplier_id)
+    return JsonResponse([_note_list_dict(n) for n in qs.order_by("-date", "-id")], safe=False)
+
+
+# --- Debit Note ---
+@login_required(login_url="login")
+def debit_note_list(request):
+    return render(request, "debit_note_list.html")
+
+
+@login_required(login_url="login")
+def create_debit_note(request):
+    return _save_note(request, DebitNote, DebitNote(), "Debit Note", "debit_note_form.html", "debit_note_list")
+
+
+@login_required(login_url="login")
+def edit_debit_note(request, id):
+    return _save_note(request, DebitNote, get_object_or_404(DebitNote, id=id), "Debit Note", "debit_note_form.html", "debit_note_list")
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_debit_note(request, id):
+    get_object_or_404(DebitNote, id=id).delete()
+    messages.success(request, "Debit Note deleted successfully.")
+    return redirect("debit_note_list")
+
+
+@login_required
+def debit_note_api_list(request):
+    return _note_api(request, DebitNote)
+
+
+# --- Credit Note ---
+@login_required(login_url="login")
+def credit_note_list(request):
+    return render(request, "credit_note_list.html")
+
+
+@login_required(login_url="login")
+def create_credit_note(request):
+    return _save_note(request, CreditNote, CreditNote(), "Credit Note", "credit_note_form.html", "credit_note_list")
+
+
+@login_required(login_url="login")
+def edit_credit_note(request, id):
+    return _save_note(request, CreditNote, get_object_or_404(CreditNote, id=id), "Credit Note", "credit_note_form.html", "credit_note_list")
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_credit_note(request, id):
+    get_object_or_404(CreditNote, id=id).delete()
+    messages.success(request, "Credit Note deleted successfully.")
+    return redirect("credit_note_list")
+
+
+@login_required
+def credit_note_api_list(request):
+    return _note_api(request, CreditNote)
+
+
+def _sl_num(v):
+    """Decimal-safe coercion for ledger math."""
+    try:
+        return Decimal(str(v)) if v is not None else Decimal("0")
+    except Exception:
+        return Decimal("0")
+
+
+def _purchase_credit(obj, kind):
+    """Invoice value owed to the supplier: the stored net_amount when set, else
+    the purchase's own compute_net_amount() (same definition the purchase form
+    persists), so the ledger matches the rest of the system."""
+    net = _sl_num(obj.net_amount)
+    if net > 0:
+        return net
+    try:
+        return _sl_num(obj.compute_net_amount())
+    except Exception:
+        return Decimal("0")
+
+
+@login_required
+def supplier_ledger_report(request):
+    """Purchase > Reports > Supplier Ledger (Statement) — a supplier's running
+    account: purchases (General + Chicks) are credits (payable rises), payments
+    are debits (payable falls), carried forward from an opening/previous balance.
+    One detail row per purchase item; payments are single rows."""
+    from account.models import CompanyProfile
+    from django.utils.dateparse import parse_date
+
+    q2 = Decimal("0.01")
+    supplier_id = (request.GET.get("supplier") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    export = (request.GET.get("export") or "").strip().lower()
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+
+    supplier = Supplier.objects.filter(id=supplier_id).first() if supplier_id.isdigit() else None
+    groups, totals = [], {"credit": Decimal("0"), "debit": Decimal("0")}
+    prev_balance = Decimal("0")
+    running = Decimal("0")
+    purchase_count = payment_count = dn_count = cn_count = 0
+    purchases_total = payments_total = dn_total = cn_total = Decimal("0")
+
+    if supplier:
+        # opening balance — payable (to pay) counts as credit (Cr)
+        opening = _sl_num(supplier.opening_balance)
+        if str(supplier.to_pay_to_receive or "").lower().startswith("receive"):
+            opening = -opening
+
+        gps = list(GeneralPurchase.objects.filter(supplier=supplier)
+                   .prefetch_related("items__item", "items__farm_warehouse").order_by("date", "id"))
+        cps = list(ChicksPurchase.objects.filter(supplier=supplier)
+                   .select_related("item").prefetch_related("items__farm_warehouse").order_by("date", "id"))
+        pay_lines = list(SupplierPaymentLine.objects.filter(supplier=supplier)
+                         .select_related("payment").order_by("payment__date", "id"))
+        dns = list(DebitNote.objects.filter(supplier=supplier).order_by("date", "id"))
+        cns = list(CreditNote.objects.filter(supplier=supplier).order_by("date", "id"))
+
+        # previous balance = opening + (purchases+debit notes) - (payments+credit
+        # notes) strictly before the window
+        prev_balance = opening
+        for g in gps:
+            if fd and g.date and g.date < fd:
+                prev_balance += _purchase_credit(g, "GP")
+        for ch in cps:
+            if fd and ch.date and ch.date < fd:
+                prev_balance += _purchase_credit(ch, "CP")
+        for dn in dns:
+            if fd and dn.date and dn.date < fd:
+                prev_balance += _sl_num(dn.amount)
+        for pl in pay_lines:
+            d = pl.payment.date
+            if fd and d and d < fd:
+                prev_balance -= _sl_num(pl.amount)
+        for cn in cns:
+            if fd and cn.date and cn.date < fd:
+                prev_balance -= _sl_num(cn.amount)
+
+        events = []
+        for g in gps:
+            if g.date and ((fd and g.date < fd) or (td and g.date > td)):
+                continue
+            events.append((g.date, 0, "GP", g))
+        for ch in cps:
+            if ch.date and ((fd and ch.date < fd) or (td and ch.date > td)):
+                continue
+            events.append((ch.date, 1, "CP", ch))
+        for pl in pay_lines:
+            d = pl.payment.date
+            if d and ((fd and d < fd) or (td and d > td)):
+                continue
+            events.append((d, 2, "PAY", pl))
+        for dn in dns:
+            if dn.date and ((fd and dn.date < fd) or (td and dn.date > td)):
+                continue
+            events.append((dn.date, 3, "DN", dn))
+        for cn in cns:
+            if cn.date and ((fd and cn.date < fd) or (td and cn.date > td)):
+                continue
+            events.append((cn.date, 4, "CN", cn))
+        events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1]))
+
+        from collections import OrderedDict
+        month_groups = OrderedDict()
+
+        def _grp(d):
+            key = d.strftime("%B %Y") if d else "Undated"
+            if key not in month_groups:
+                month_groups[key] = {"label": key, "rows": [], "debit": Decimal("0"),
+                                     "credit": Decimal("0"), "closing": Decimal("0"), "vouchers": 0}
+            return month_groups[key]
+
+        running = prev_balance
+        purchase_count = payment_count = dn_count = cn_count = 0
+        for d, _o, kind, obj in events:
+            grp = _grp(d)
+            grp["vouchers"] += 1
+            if kind in ("GP", "CP"):
+                purchase_count += 1
+                amt = _purchase_credit(obj, kind)
+                running += amt                 # a purchase raises what we owe (Dr)
+                grp["debit"] += amt
+                type_label = "Purchase Invoice" if kind == "GP" else "Chicks Purchase"
+                type_slug = "purchase-invoice" if kind == "GP" else "chicks-purchase"
+                items = list(obj.items.all()) or [None]
+                for i, it in enumerate(items):
+                    first = i == 0
+                    if kind == "GP":
+                        item_name = it.item.description if it and it.item_id else ""
+                        gst_amt = (_sl_num(it.amount) * _sl_num(it.gst_percent) / 100).quantize(q2) if it else Decimal("0")
+                    else:
+                        item_name = obj.item.description if obj.item_id else "Chicks"
+                        gst_amt = Decimal("0")
+                    grp["rows"].append({
+                        "date": d if first else None,
+                        "trnum": obj.purchase_no if first else "",
+                        "doc_no": (obj.bill_no or "") if first else "",
+                        "type": type_label if first else "", "type_slug": type_slug if first else "",
+                        "item": item_name,
+                        "boxes_bags": _sl_num(obj.no_of_bags) if first else "",
+                        "sent_qty": _sl_num(it.sent_qty) if it else "",
+                        "rcv_qty": _sl_num(it.rcv_qty) if it else "",
+                        "free_qty": _sl_num(it.free_qty) if it else "",
+                        "rate": _sl_num(it.rate) if it else "",
+                        "amount": _sl_num(it.amount) if it else "",
+                        "freight": _sl_num(obj.freight_amount).quantize(q2) if first else "",
+                        "gst": gst_amt,
+                        "tds": _sl_num(obj.tds_amount).quantize(q2) if first else "",
+                        "debit": amt.quantize(q2) if first else "",
+                        "credit": "",
+                        "balance": abs(running).quantize(q2) if first else "",
+                        "cr_dr": ("Dr" if running >= 0 else "Cr") if first else "",
+                        "sector": it.farm_warehouse.name if it and it.farm_warehouse_id else "",
+                        "farm_code": "",
+                        "remarks": (obj.remarks or "") if first else "",
+                        "vehicle": (obj.vehicle_no or "") if first else "",
+                    })
+                totals["debit"] += amt
+                purchases_total += amt
+            elif kind == "PAY":
+                payment_count += 1
+                amt = _sl_num(obj.amount)
+                running -= amt                 # a payment lowers what we owe
+                grp["credit"] += amt
+                grp["rows"].append({
+                    "date": d, "trnum": obj.payment.payment_no, "doc_no": obj.reference_no or "",
+                    "type": "Payment", "type_slug": "payment", "item": "", "boxes_bags": "",
+                    "sent_qty": "", "rcv_qty": "", "free_qty": "", "rate": "", "amount": "", "freight": "", "gst": "", "tds": "",
+                    "debit": "", "credit": amt.quantize(q2),
+                    "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
+                    "sector": "", "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
+                })
+                totals["credit"] += amt
+                payments_total += amt
+            elif kind in ("DN", "CN"):
+                amt = _sl_num(obj.amount)
+                is_dn = kind == "DN"
+                if is_dn:
+                    dn_count += 1
+                    running += amt             # debit note raises payable (Dr)
+                    grp["debit"] += amt
+                    totals["debit"] += amt
+                    dn_total += amt
+                else:
+                    cn_count += 1
+                    running -= amt             # credit note lowers payable
+                    grp["credit"] += amt
+                    totals["credit"] += amt
+                    cn_total += amt
+                grp["rows"].append({
+                    "date": d, "trnum": obj.note_no, "doc_no": obj.against_bill or "",
+                    "type": "Debit Note" if is_dn else "Credit Note",
+                    "type_slug": "debit-note" if is_dn else "credit-note",
+                    "item": obj.reason or "", "boxes_bags": "",
+                    "sent_qty": "", "rcv_qty": "", "free_qty": "", "rate": "", "amount": "", "freight": "", "gst": "", "tds": "",
+                    "debit": amt.quantize(q2) if is_dn else "",
+                    "credit": "" if is_dn else amt.quantize(q2),
+                    "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
+                    "sector": "", "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
+                })
+            grp["closing"] = running  # running after the latest event in the month
+
+        for g in month_groups.values():
+            groups.append({
+                "label": g["label"], "count": g["vouchers"],
+                "debit": g["debit"].quantize(q2), "credit": g["credit"].quantize(q2),
+                "closing": abs(g["closing"]).quantize(q2),
+                "cr_dr": "Dr" if g["closing"] >= 0 else "Cr",
+                "rows": g["rows"],
+            })
+
+    kpi = {
+        "opening": abs(prev_balance).quantize(q2), "opening_cr_dr": "Dr" if prev_balance >= 0 else "Cr",
+        "purchases": purchases_total.quantize(q2), "purchase_count": purchase_count,
+        "payments": payments_total.quantize(q2), "payment_count": payment_count,
+        "debit_notes": dn_total.quantize(q2), "debit_note_count": dn_count,
+        "credit_notes": cn_total.quantize(q2), "credit_note_count": cn_count,
+        "closing": abs(running).quantize(q2), "closing_cr_dr": "Dr" if running >= 0 else "Cr",
+    }
+    company = CompanyProfile.get_solo()
+    ctx = {
+        "suppliers": Supplier.objects.order_by("name"),
+        "supplier": supplier, "supplier_id": supplier_id,
+        "from_date": from_date, "to_date": to_date,
+        "groups": groups,
+        "totals": {"credit": totals["credit"].quantize(q2), "debit": totals["debit"].quantize(q2)},
+        "prev_balance": abs(prev_balance).quantize(q2), "prev_cr_dr": "Dr" if prev_balance >= 0 else "Cr",
+        "closing": abs(running).quantize(q2), "closing_cr_dr": "Dr" if running >= 0 else "Cr",
+        "kpi": kpi, "company": company,
+    }
+    if export == "excel" and supplier:
+        return _ledger_excel(company, supplier, from_date, to_date, ctx["prev_balance"],
+                             ctx["prev_cr_dr"], groups, ctx["totals"], ctx["closing"], ctx["closing_cr_dr"])
+    return render(request, "supplier_ledger_report.html", ctx)
+
+
+def _ledger_excel(company, supplier, from_date, to_date, prev_balance, prev_cr_dr,
+                  groups, totals, closing, closing_cr_dr):
+    """Stream the Supplier Ledger as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    headers = ["Date", "Transaction No.", "Transaction Type", "Purchase Bill No.", "Item",
+               "Boxes/bags", "Sent Qty", "Received Qty", "Free", "Rate", "Amount", "Freight",
+               "GST", "TDS", "Debit", "Credit", "Balance", "Sector", "Farm Code", "Vehicle", "Remarks"]
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None if v in (None, "") else v
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Supplier Ledger"
+    ws.append([company.name if company else ""])
+    ws.append(["Supplier Statement Report"])
+    ws.append([f"Supplier: {supplier.name}", "",
+               f"Period: {from_date or '—'} to {to_date or '—'}"])
+    ws.append([])
+    ws.append(headers)
+    hdr = ws.max_row
+    for c in range(1, len(headers) + 1):
+        cell = ws.cell(hdr, c)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1B3A6B")
+        cell.alignment = Alignment(horizontal="center")
+
+    ws.append(["Previous Balance"] + [""] * 15 + [f"{prev_balance} {prev_cr_dr}"] + [""] * 4)
+    for g in groups:
+        ws.append([f"{g['label']} ({g['count']} txn)"] + [""] * 13
+                  + [num(g["debit"]), num(g["credit"]), f"{g['closing']} {g['cr_dr']}"] + [""] * 4)
+        for r in g["rows"]:
+            ws.append([
+                r["date"].strftime("%d.%m.%Y") if r["date"] else "",
+                r["trnum"], r["type"], r["doc_no"], r["item"],
+                num(r["boxes_bags"]), num(r["sent_qty"]), num(r["rcv_qty"]), num(r["free_qty"]),
+                num(r["rate"]), num(r["amount"]), num(r["freight"]), num(r["gst"]), num(r["tds"]),
+                num(r["debit"]), num(r["credit"]),
+                (f"{r['balance']} {r['cr_dr']}" if r["balance"] != "" else ""),
+                r["sector"], r["farm_code"], r["vehicle"], r["remarks"],
+            ])
+    ws.append(["Grand Total"] + [""] * 13
+              + [num(totals["debit"]), num(totals["credit"]), f"{closing} {closing_cr_dr}"] + [""] * 4)
+
+    for i in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 15
+
+    resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp["Content-Disposition"] = f'attachment; filename="supplier_ledger_{supplier.code or supplier.id}.xlsx"'
+    wb.save(resp)
+    return resp
+
+
+def _supplier_balance_row(sup, fd, td, ref_date):
+    """One Supplier Balance row: opening (signed payable before the window),
+    period Amount (purchases + debit notes) and Receipt (payments + credit
+    notes), the between-days movement, the closing split into Credit (payable)
+    / Debit (advance), and days since the last payment."""
+    q2 = Decimal("0.01")
+    signed = _sl_num(sup.opening_balance)
+    if str(sup.to_pay_to_receive or "").lower().startswith("receive"):
+        signed = -signed
+
+    gps = list(GeneralPurchase.objects.filter(supplier=sup).prefetch_related("items"))
+    cps = list(ChicksPurchase.objects.filter(supplier=sup).prefetch_related("items"))
+    pays = list(SupplierPaymentLine.objects.filter(supplier=sup).select_related("payment"))
+    dns = list(DebitNote.objects.filter(supplier=sup))
+    cns = list(CreditNote.objects.filter(supplier=sup))
+
+    def before(d):
+        return d and fd and d < fd
+
+    def within(d):
+        return d and (not fd or d >= fd) and (not td or d <= td)
+
+    opening = signed
+    amount = Decimal("0")   # payable-raising in period (purchases + debit notes)
+    receipt = Decimal("0")  # payable-lowering in period (payments + credit notes)
+    for g in gps:
+        v = _purchase_credit(g, "GP")
+        opening += v if before(g.date) else 0
+        amount += v if within(g.date) else 0
+    for ch in cps:
+        v = _purchase_credit(ch, "CP")
+        opening += v if before(ch.date) else 0
+        amount += v if within(ch.date) else 0
+    for dn in dns:
+        v = _sl_num(dn.amount)
+        opening += v if before(dn.date) else 0
+        amount += v if within(dn.date) else 0
+    for pl in pays:
+        d = pl.payment.date
+        v = _sl_num(pl.amount)
+        opening -= v if before(d) else 0
+        receipt += v if within(d) else 0
+    for cn in cns:
+        v = _sl_num(cn.amount)
+        opening -= v if before(cn.date) else 0
+        receipt += v if within(cn.date) else 0
+
+    bw = amount - receipt
+    closing = opening + bw
+
+    pay_dates = [pl.payment.date for pl in pays if pl.payment.date and (not td or pl.payment.date <= td)]
+    if pay_dates:
+        gap = (ref_date - max(pay_dates)).days
+    else:
+        txn_dates = [g.date for g in gps if g.date] + [ch.date for ch in cps if ch.date]
+        base = min(txn_dates) if txn_dates else sup.as_on_date
+        gap = (ref_date - base).days if base else 0
+
+    return {
+        "id": sup.id, "name": sup.name,
+        "opening": opening.quantize(q2), "amount": amount.quantize(q2),
+        "receipt": receipt.quantize(q2), "bw": bw.quantize(q2),
+        "credit": closing.quantize(q2) if closing >= 0 else Decimal("0.00"),
+        "debit": (-closing).quantize(q2) if closing < 0 else Decimal("0.00"),
+        "gap": max(gap, 0),
+        "has_activity": bool(opening or amount or receipt or closing),
+    }
+
+
+@login_required
+def supplier_balance_report(request):
+    """Purchase > Reports > Supplier Balance — every supplier's payable position:
+    opening, this period's Amount/Receipt movement, and closing Credit (payable)
+    / Debit (advance), with the last-payment gap."""
+    from account.models import CompanyProfile
+    from django.utils.dateparse import parse_date
+
+    q2 = Decimal("0.01")
+    group = (request.GET.get("supplier_group") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    ref_date = td or timezone.localdate()
+
+    suppliers = Supplier.objects.order_by("name")
+    if group:
+        suppliers = suppliers.filter(supplier_group=group)
+
+    rows = [_supplier_balance_row(s, fd, td, ref_date) for s in suppliers]
+
+    tkeys = ["opening", "amount", "receipt", "bw", "credit", "debit"]
+    totals = {k: sum((r[k] for r in rows), Decimal("0")).quantize(q2) for k in tkeys}
+
+    groups = list(Supplier.objects.exclude(supplier_group__isnull=True)
+                  .exclude(supplier_group="").values_list("supplier_group", flat=True)
+                  .distinct().order_by("supplier_group"))
+
+    return render(request, "supplier_balance_report.html", {
+        "rows": rows, "totals": totals,
+        "supplier_groups": groups, "group": group,
+        "from_date": from_date, "to_date": to_date,
+        "company": CompanyProfile.get_solo(),
+    })

@@ -36,10 +36,37 @@
   .home-trk-meta { font-size:.75rem; opacity:.7; }
 </style>
 {% endif %}
+<style>
+  .dashboard-shell { padding:8px 0 18px; color:#15233b; }
+  .bims-hero, .quick-access-grid, .legacy-calendar, .home-cal-card:not(.dash-calendar .home-cal-card), .section-heading, .feature-card { display:none; }
+  .dash-calendar .home-cal-card { display:block !important; }
+  .dash-welcome { position:relative; overflow:hidden; padding:18px 32px; border-radius:20px; color:#fff; background:linear-gradient(118deg,#102a56,#1d4f94 56%,#197c8a); box-shadow:0 14px 35px rgba(22,59,113,.19); }
+  .dash-welcome:after { content:""; position:absolute; width:310px; height:310px; right:-85px; top:-170px; border-radius:50%; background:rgba(255,255,255,.09); }.dash-welcome > * { position:relative; z-index:1; }
+  .dash-eyebrow { color:#bfdbfe; letter-spacing:.1em; text-transform:uppercase; font-size:.71rem; font-weight:700; }.dash-welcome h1 { font-size:clamp(1.45rem,2.2vw,2rem); margin:.35rem 0 .5rem; font-weight:700; }.dash-welcome p { margin:0; max-width:590px; color:#dbeafe; font-size:.91rem; }
+  .dash-date { display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid rgba(255,255,255,.2); border-radius:10px; background:rgba(8,27,59,.18); font-size:.8rem; color:#eff6ff; white-space:nowrap; }
+  .dash-section-title { font-size:1rem; font-weight:700; margin:0; }.dash-section-copy { color:#6b7890; font-size:.79rem; margin:.15rem 0 0; }
+  .dash-module { display:flex; align-items:center; gap:13px; height:100%; padding:15px; background:#fff; border:1px solid #e7edf5; border-radius:14px; color:#15233b; text-decoration:none; transition:.18s ease; }.dash-module:hover { color:#15233b; transform:translateY(-3px); border-color:#cdddf5; box-shadow:0 9px 20px rgba(22,42,79,.09); }.dash-module-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; font-size:1rem; flex:0 0 42px; }.dash-module-name { display:block; font-size:.87rem; font-weight:700; }.dash-module-action { display:block; margin-top:2px; color:#6b7890; font-size:.72rem; }.dash-module-arrow { margin-left:auto; color:#a3afc2; font-size:.75rem; }
+  .dash-icon-blue{background:#e8f0ff;color:#2563eb}.dash-icon-green{background:#e6f7f3;color:#078b75}.dash-icon-orange{background:#fff1df;color:#d97706}.dash-icon-purple{background:#f1ebff;color:#7c3aed}.dash-icon-red{background:#ffecee;color:#dc465b}.dash-icon-cyan{background:#e5f7fb;color:#0087a5}
+  .dash-panel { background:#fff; border:1px solid #e7edf5; border-radius:16px; padding:20px; height:100%; }.dash-panel-head { margin-bottom:17px; }.dash-activity { display:flex; align-items:flex-start; gap:11px; padding:12px 0; border-bottom:1px solid #edf1f6; }.dash-activity:last-child { border-bottom:0; padding-bottom:0; }.dash-activity-icon { width:31px; height:31px; border-radius:9px; background:#f2f6fd; color:#4370b6; display:grid; place-items:center; flex:0 0 31px; font-size:.75rem; }.dash-activity b { font-size:.8rem; display:block; }.dash-activity span { display:block; margin-top:2px; font-size:.73rem; color:#6b7890; }
+  .dash-mini-stat { padding:13px; border:1px solid #eaf0f7; border-radius:12px; background:#fbfdff; }.dash-mini-stat span { color:#6b7890; display:block; font-size:.72rem; }.dash-mini-stat b { display:block; font-size:1rem; margin-top:4px; }.dash-mini-stat i { float:right; color:#93a4bd; }.dashboard-shell .home-cal-card { max-width:none; border:0; box-shadow:none; }.dashboard-shell .home-cal-card .card-header { padding:0 0 14px; border:0; background:transparent; font-weight:700; color:#15233b; }.dashboard-shell .home-cal-card .card-body { padding:0; }.dashboard-shell .home-cal-grid { gap:4px; }.dashboard-shell .home-cal-grid .home-cal-day { padding:.34rem 0; font-size:.74rem; color:#475569; }.dashboard-shell .home-cal-grid .home-cal-day.is-today { background:#2563eb; box-shadow:0 3px 8px rgba(37,99,235,.25); }
+  @media (max-width:767.98px) { .dash-welcome { padding:23px 20px; border-radius:16px; }.dash-date { margin-top:16px; }.dash-panel { padding:16px; } }
+  .home-cal-card { max-width: 260px; }
+  .home-cal-card .card-header { display:flex; align-items:center; justify-content:space-between; padding:.4rem .6rem; font-size:.8rem; }
+  .home-cal-card .card-body { padding:.5rem; }
+  .home-cal-nav { display:flex; align-items:center; gap:.25rem; }
+  .home-cal-nav button { border:none; background:transparent; color:inherit; opacity:.7; cursor:pointer; font-size:.75rem; line-height:1; padding:.1rem .2rem; }
+  .home-cal-nav button:hover { opacity:1; }
+  .home-cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:1px; text-align:center; }
+  .home-cal-grid .home-cal-dow { font-size:.58rem; font-weight:600; text-transform:uppercase; opacity:.6; padding:.15rem 0; }
+  .home-cal-grid .home-cal-day { font-size:.68rem; padding:.2rem 0; border-radius:.25rem; }
+  .home-cal-grid .home-cal-day.is-blank { visibility:hidden; }
+  .home-cal-grid .home-cal-day.is-today { background:#0d6efd; color:#fff; font-weight:600; }
+  .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-0">
+<div class="container-fluid px-0 dashboard-shell">
 
   <!-- Hero Banner -->
   <div class="bims-hero mb-4">
@@ -89,6 +116,37 @@
         <div class="quick-label">Hatchery</div>
       </a>
     </div>
+
+    <!-- Calendar -->
+    <div class="row g-3 mb-4 legacy-calendar">
+      <div class="col-lg-3 col-md-4">
+        <div class="card home-cal-card h-100">
+          <div class="card-header">
+            <span><i class="fas fa-calendar-days"></i> <span id="home-cal-label">Calendar</span></span>
+            <div class="home-cal-nav">
+              <button type="button" id="home-cal-prev" title="Previous month"><i class="fas fa-chevron-left"></i></button>
+              <button type="button" id="home-cal-today" title="Jump to today">Today</button>
+              <button type="button" id="home-cal-next" title="Next month"><i class="fas fa-chevron-right"></i></button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="home-cal-grid" id="home-cal-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-welcome mb-4"><div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"><div><div class="dash-eyebrow">Hi Tech Farms · Operations Centre</div><h1>Good day, {{ request.user.get_full_name|default:request.user.username }}.</h1><p>Everything you need to keep farm operations moving—organised in one place.</p></div></div></div>
+    <div class="mb-3"><h2 class="dash-section-title">Workspace</h2><p class="dash-section-copy">Jump straight into the area you need.</p></div>
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-4 col-xl"><a href="{% url 'branch_template' %}" class="dash-module"><div class="dash-module-icon dash-icon-blue"><i class="fa-solid fa-egg"></i></div><div><span class="dash-module-name">Broiler</span><span class="dash-module-action">Farm operations</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+      <div class="col-6 col-md-4 col-xl"><a href="{% url 'hatchery_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-purple"><i class="fa-solid fa-kiwi-bird"></i></div><div><span class="dash-module-name">Hatchery</span><span class="dash-module-action">Hatch &amp; grading</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+      <div class="col-6 col-md-4 col-xl"><a href="{% url 'supplier' %}" class="dash-module"><div class="dash-module-icon dash-icon-orange"><i class="fas fa-cart-shopping"></i></div><div><span class="dash-module-name">Purchase</span><span class="dash-module-action">Suppliers &amp; orders</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+      <div class="col-6 col-md-4 col-xl"><a href="{% url 'customer_groups' %}" class="dash-module"><div class="dash-module-icon dash-icon-green"><i class="fa-solid fa-indian-rupee-sign"></i></div><div><span class="dash-module-name">Sales</span><span class="dash-module-action">Customers &amp; pricing</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+      <div class="col-6 col-md-4 col-xl"><a href="{% url 'item_category' %}" class="dash-module"><div class="dash-module-icon dash-icon-red"><i class="fas fa-boxes-stacked"></i></div><div><span class="dash-module-name">Inventory</span><span class="dash-module-action">Items &amp; warehouses</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+      <div class="col-6 col-md-4 col-xl"><a href="{% url 'employee_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-cyan"><i class="fas fa-users"></i></div><div><span class="dash-module-name">HR</span><span class="dash-module-action">People &amp; payroll</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+    </div>
+    <div class="row g-3 mb-4"><div class="col-12"><div class="dash-panel"><div class="dash-panel-head"><h2 class="dash-section-title">Getting started</h2><p class="dash-section-copy">Use these core areas to set up and run daily operations.</p></div><div class="row g-2 mb-2"><div class="col-sm-4"><div class="dash-mini-stat"><i class="fa-solid fa-warehouse"></i><span>Inventory</span><b>Manage stock</b></div></div><div class="col-sm-4"><div class="dash-mini-stat"><i class="fa-solid fa-file-lines"></i><span>Transactions</span><b>Record activity</b></div></div><div class="col-sm-4"><div class="dash-mini-stat"><i class="fa-solid fa-chart-pie"></i><span>Reports</span><b>Review insights</b></div></div></div><div class="dash-activity"><div class="dash-activity-icon"><i class="fa-solid fa-egg"></i></div><div><b>Start a hatchery transaction</b><span>Record egg purchase, grading or update the hatch register.</span></div></div><div class="dash-activity"><div class="dash-activity-icon"><i class="fa-solid fa-box"></i></div><div><b>Keep inventory current</b><span>Maintain item masters and warehouse information for accurate operations.</span></div></div><div class="dash-activity"><div class="dash-activity-icon"><i class="fa-solid fa-user-group"></i></div><div><b>Manage your team</b><span>Access employee records, attendance and payroll from HR.</span></div></div></div></div></div>
 
     {% if 'tracking_dashboard' in allowed_tabs %}
     {% csrf_token %}
@@ -184,7 +242,7 @@
     {% endif %}
 
     <!-- Features Section -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-3 legacy-calendar">
       <h2 class="section-heading">BIMS Key Features</h2>
     </div>
 
@@ -264,6 +322,78 @@
 {% endblock %}
 
 {% block js %}
+<script>
+(function () {
+  "use strict";
+  const MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+  const DOW_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+  const today = new Date();
+  let viewYear = today.getFullYear();
+  let viewMonth = today.getMonth(); // 0-11
+
+  const grid = document.getElementById("home-cal-grid");
+  const label = document.getElementById("home-cal-label");
+  const dashboardGrid = document.getElementById("home-cal-grid-new");
+  const dashboardLabel = document.getElementById("home-cal-label-new");
+  const dashboardToday = document.getElementById("dashboard-today");
+
+  if (dashboardToday) {
+    dashboardToday.textContent = today.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function render() {
+    label.textContent = MONTH_NAMES[viewMonth] + " " + viewYear;
+    grid.innerHTML = "";
+
+    DOW_NAMES.forEach(function (d) {
+      const cell = document.createElement("div");
+      cell.className = "home-cal-dow";
+      cell.textContent = d;
+      grid.appendChild(cell);
+    });
+
+    const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+    for (let i = 0; i < firstWeekday; i++) {
+      const blank = document.createElement("div");
+      blank.className = "home-cal-day is-blank";
+      grid.appendChild(blank);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const cell = document.createElement("div");
+      const weekday = new Date(viewYear, viewMonth, day).getDay();
+      const isToday = viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
+      cell.className = "home-cal-day" + (isToday ? " is-today" : "") + ((weekday === 0 || weekday === 6) ? " is-weekend" : "");
+      cell.textContent = day;
+      grid.appendChild(cell);
+    }
+    if (dashboardGrid) dashboardGrid.innerHTML = grid.innerHTML;
+    if (dashboardLabel) dashboardLabel.textContent = MONTH_NAMES[viewMonth] + " " + viewYear;
+  }
+
+  document.getElementById("home-cal-prev").addEventListener("click", function () {
+    viewMonth -= 1;
+    if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
+    render();
+  });
+  document.getElementById("home-cal-next").addEventListener("click", function () {
+    viewMonth += 1;
+    if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
+    render();
+  });
+  document.getElementById("home-cal-today").addEventListener("click", function () {
+    viewYear = today.getFullYear();
+    viewMonth = today.getMonth();
+    render();
+  });
+
+  render();
+})();
+</script>
 {% if 'tracking_dashboard' in allowed_tabs %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>

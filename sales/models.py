@@ -151,3 +151,130 @@ class CustomerShippingAddress(models.Model):
 
     def __str__(self):
         return f"{self.customer} - {self.label}"
+
+
+# ---------------------------------------------------------------------------
+# Sales Invoice (Sales > Transactions)
+# ---------------------------------------------------------------------------
+from django.utils.timezone import now as _now
+
+
+class SalesInvoice(models.Model):
+    """A Sales Invoice header with GST item lines (Sales > Transactions)."""
+
+    TRANSACTION_TYPE_CHOICES = [
+        ("Sales Invoice", "Sales Invoice"),
+        ("Delivery Challan", "Delivery Challan"),
+        ("Quotation", "Quotation"),
+    ]
+
+    invoice_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                                  help_text="Auto-generated, e.g. INV-2627-0001")
+    transaction_type = models.CharField(max_length=30, choices=TRANSACTION_TYPE_CHOICES,
+                                        default="Sales Invoice")
+    date = models.DateField(default=_now)
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="sales_invoices")
+    billing_address = models.TextField(blank=True)
+    shipping_address = models.TextField(blank=True)
+    gstin = models.CharField(max_length=20, blank=True)
+
+    reference_no = models.CharField(max_length=100, blank=True)
+    reference_date = models.DateField(null=True, blank=True)
+    transportation = models.CharField(max_length=100, blank=True)
+    vehicle_no = models.CharField(max_length=50, blank=True)
+    place_of_supply = models.CharField(max_length=100, blank=True)
+    eway_bill_no = models.CharField(max_length=50, blank=True)
+
+    branch = models.ForeignKey("inventory.Warehouse", on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="sales_invoices")
+    organization_centre = models.ForeignKey("account.OrganizationCentre", on_delete=models.SET_NULL,
+                                            null=True, blank=True, related_name="sales_invoices")
+    sales_person = models.CharField(max_length=100, blank=True)
+    payment_terms = models.CharField(max_length=50, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    remarks = models.TextField(blank=True)
+    terms_conditions = models.ForeignKey("account.TermsConditions", on_delete=models.SET_NULL,
+                                         null=True, blank=True, related_name="sales_invoices")
+    bank_account = models.ForeignKey("account.BankCashMaster", on_delete=models.SET_NULL,
+                                     null=True, blank=True, related_name="sales_invoices")
+
+    other_charges_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    round_off = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    net_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    print_bank_details = models.BooleanField(default=True, help_text="Print the company bank details on the invoice")
+
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="sales_invoices")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.invoice_no
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.invoice_no:
+            self.invoice_no = self._next_no(self.date)
+            super().save(update_fields=["invoice_no"])
+
+    @classmethod
+    def _next_no(cls, on_date=None):
+        current = on_date or _now().date()
+        start_year = current.year if current.month >= 4 else current.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"INV-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(invoice_no__startswith=prefix).values_list("invoice_no", flat=True):
+            m = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    def _sum(self, field):
+        return self.items.aggregate(t=models.Sum(field))["t"] or 0
+
+    def total_items(self):
+        return self.items.count()
+
+    def total_quantity(self):
+        return self._sum("quantity")
+
+    def total_before_tax(self):
+        return self._sum("taxable_amount")
+
+    def total_gst(self):
+        return self._sum("gst_amount")
+
+    def compute_net_amount(self):
+        from decimal import Decimal
+        base = Decimal(str(self.total_before_tax())) + Decimal(str(self.total_gst()))
+        base += Decimal(str(self.other_charges_amount or 0)) + Decimal(str(self.round_off or 0))
+        return base
+
+
+class SalesInvoiceItem(models.Model):
+    """One GST line on a Sales Invoice."""
+    invoice = models.ForeignKey(SalesInvoice, on_delete=models.CASCADE, related_name="items")
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="sales_invoice_items")
+    batch_no = models.CharField(max_length=100, blank=True)
+    hsn_sac = models.CharField(max_length=20, blank=True)
+    uom = models.CharField(max_length=50, blank=True)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    free_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    taxable_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    gst_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.item.item_code} ({self.invoice.invoice_no})"
