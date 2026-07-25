@@ -9,6 +9,7 @@ import { RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { useResourceList } from "@/query/useResourceList";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, shadow, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
@@ -19,6 +20,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
+  const canAdd = usePermissionsStore((s) => s.canAction)(config.module, "add");
 
   // Server feeds have no search_fields, so filter the loaded rows client-side.
   const data = useMemo(() => {
@@ -77,7 +79,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
         )}
       />
 
-      {isEditable(config.key) ? (
+      {isEditable(config.key) && canAdd ? (
         <Pressable
           style={({ pressed }) => [
             styles.fab,

@@ -1,11 +1,14 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import {
+  createRole,
+  deleteRole,
   fetchRolesAccess,
   NAV_LABEL,
+  renameRole,
   RoleAccess,
   setRoleModule,
   setUserRoles,
@@ -49,8 +52,61 @@ function RolesPanel() {
   const q = useQuery({ queryKey: ["access-roles"], queryFn: fetchRolesAccess });
   const [roles, setRoles] = useState<RoleAccess[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [newRole, setNewRole] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [renameDraft, setRenameDraft] = useState<Record<number, string>>({});
   useEffect(() => setRoles(q.data?.roles ?? []), [q.data]);
   const navs = q.data?.navs ?? [];
+
+  const doRename = async (role: RoleAccess) => {
+    const name = (renameDraft[role.id] ?? role.name).trim();
+    if (!name || name === role.name) return;
+    try {
+      await renameRole(role.id, name);
+      setRoles((prev) =>
+        prev.map((r) => (r.id === role.id ? { ...r, name } : r)).sort((a, b) => a.name.localeCompare(b.name))
+      );
+    } catch (e) {
+      Alert.alert("Failed", (e as Error)?.message ?? "Could not rename role.");
+    }
+  };
+
+  const doDelete = (role: RoleAccess) => {
+    Alert.alert("Delete role", `Delete "${role.name}"? Users lose the access it grants.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteRole(role.id);
+            setRoles((prev) => prev.filter((r) => r.id !== role.id));
+            setExpanded(null);
+          } catch (e) {
+            Alert.alert("Failed", (e as Error)?.message ?? "Could not delete role.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const addRole = async () => {
+    const name = newRole.trim();
+    if (!name) return;
+    setAdding(true);
+    try {
+      const role = await createRole(name);
+      setRoles((prev) =>
+        prev.some((r) => r.id === role.id) ? prev : [...prev, role].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setNewRole("");
+      setExpanded(role.id);
+    } catch (e) {
+      Alert.alert("Failed", (e as Error)?.message ?? "Could not create role.");
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const toggle = async (role: RoleAccess, nav: string, val: boolean) => {
     setRoles((prev) =>
@@ -69,12 +125,34 @@ function RolesPanel() {
   if (q.isLoading) return <Loading label="Loading roles…" />;
   if (q.isError)
     return <EmptyOrError icon="⚠️" message={(q.error as Error)?.message ?? "Failed."} onRetry={q.refetch} />;
-  if (roles.length === 0)
-    return <EmptyOrError icon="🛡️" message="No roles yet. Create roles in the web app, then assign module access here." />;
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.hint}>Turn a module on/off for a role. Users inherit access from their roles.</Text>
+
+      <View style={styles.addRow}>
+        <TextInput
+          value={newRole}
+          onChangeText={setNewRole}
+          placeholder="New role name"
+          placeholderTextColor={colors.textFaint}
+          style={styles.addInput}
+          onSubmitEditing={addRole}
+          returnKeyType="done"
+        />
+        <Pressable
+          style={[styles.addBtn, (!newRole.trim() || adding) && { opacity: 0.5 }]}
+          onPress={addRole}
+          disabled={!newRole.trim() || adding}
+        >
+          <Text style={styles.addBtnText}>Add role</Text>
+        </Pressable>
+      </View>
+
+      {roles.length === 0 ? (
+        <Text style={styles.warn}>No roles yet — add one above to start granting module access.</Text>
+      ) : null}
+
       {roles.map((role) => {
         const on = navs.filter((n) => role.modules[n]).length;
         const open = expanded === role.id;
@@ -99,6 +177,21 @@ function RolesPanel() {
                     />
                   </View>
                 ))}
+                <View style={styles.roleFooter}>
+                  <TextInput
+                    value={renameDraft[role.id] ?? role.name}
+                    onChangeText={(t) => setRenameDraft((p) => ({ ...p, [role.id]: t }))}
+                    style={styles.renameInput}
+                    placeholder="Role name"
+                    placeholderTextColor={colors.textFaint}
+                  />
+                  <Pressable style={styles.smallBtn} onPress={() => doRename(role)}>
+                    <Text style={styles.smallBtnText}>Rename</Text>
+                  </Pressable>
+                </View>
+                <Pressable style={styles.deleteRow} onPress={() => doDelete(role)}>
+                  <Text style={styles.deleteLink}>Delete role</Text>
+                </Pressable>
               </View>
             ) : null}
           </Card>
@@ -205,6 +298,27 @@ const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingTop: 0, gap: spacing.sm, paddingBottom: spacing.xxl },
   hint: { ...type.caption, color: colors.textMuted, marginBottom: spacing.xs },
   warn: { ...type.caption, color: colors.warning, marginBottom: spacing.xs },
+  addRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm },
+  addInput: {
+    flex: 1,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    ...type.body,
+  },
+  addBtn: {
+    height: 44,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addBtnText: { ...type.title, color: colors.onDark },
   card: { padding: 0, overflow: "hidden" },
   cardHead: { flexDirection: "row", alignItems: "center", padding: spacing.lg },
   roleName: { ...type.title, color: colors.text },
@@ -220,4 +334,27 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowLabel: { ...type.body, color: colors.text },
+  roleFooter: { flexDirection: "row", gap: spacing.sm, paddingVertical: spacing.md },
+  renameInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    ...type.body,
+  },
+  smallBtn: {
+    height: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smallBtnText: { ...type.label, color: colors.text },
+  deleteRow: { paddingBottom: spacing.md },
+  deleteLink: { ...type.label, color: colors.danger },
 });

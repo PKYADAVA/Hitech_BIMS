@@ -82,7 +82,9 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           return {
             title: RESOURCES[key].title,
             headerTitle: headerTitleWithIcon(RESOURCES[key].icon, RESOURCES[key].title),
-            headerRight: isEditable(key)
+            headerRight:
+              isEditable(key) &&
+              usePermissionsStore.getState().canAction(RESOURCES[key].module, "add")
               ? () => (
                   <Pressable
                     hitSlop={12}

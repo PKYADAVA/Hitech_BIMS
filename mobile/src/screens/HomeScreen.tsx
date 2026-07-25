@@ -309,10 +309,9 @@ const styles = StyleSheet.create({
   chartCard: { marginTop: spacing.sm },
   chartTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
 
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: GAP },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
   tile: {
-    width: "47.8%",
-    overflow: "hidden",
+    width: "48%",
     ...shadow(1),
   },
   tileInner: { padding: spacing.lg, gap: spacing.xs, minHeight: 128, justifyContent: "flex-start" },
@@ -327,5 +326,10 @@ const styles = StyleSheet.create({
   tileTitle: { ...type.h3, color: colors.text },
   tileSub: { ...type.caption, color: colors.textMuted },
   soon: { position: "absolute", top: spacing.md, right: spacing.md },
-  tileBar: { height: 4, width: "100%" },
+  tileBar: {
+    height: 4,
+    width: "100%",
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
 });

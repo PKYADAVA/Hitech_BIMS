@@ -11,6 +11,7 @@ import { RESOURCES } from "@/config/catalog";
 import { FORMS } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
@@ -19,6 +20,7 @@ type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
 export function FormScreen({ route, navigation }: Props) {
   const { resourceKey, mode, row, preset, onDoneGoBack } = route.params;
   const config = RESOURCES[resourceKey];
+  const canDelete = usePermissionsStore((s) => s.canAction)(config.module, "delete");
   const schema = FORMS[resourceKey];
 
   const finish = () =>
@@ -139,7 +141,7 @@ export function FormScreen({ route, navigation }: Props) {
           onPress={onSave}
           loading={saving}
         />
-        {mode === "edit" ? (
+        {mode === "edit" && canDelete ? (
           <View style={{ marginTop: spacing.sm }}>
             <Button title="Delete" variant="danger" onPress={onDelete} />
           </View>

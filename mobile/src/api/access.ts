@@ -16,6 +16,22 @@ export async function fetchRolesAccess(): Promise<RolesAccessResp> {
   return (await http.get<Envelope<RolesAccessResp>>("/user/access/roles")).data.data;
 }
 
+/** Create a new role (auth group). */
+export async function createRole(name: string): Promise<RoleAccess> {
+  return (await http.post<Envelope<RoleAccess>>("/user/access/roles", { name })).data.data;
+}
+
+/** Rename a role. */
+export async function renameRole(id: number, name: string): Promise<{ id: number; name: string }> {
+  return (await http.patch<Envelope<{ id: number; name: string }>>(`/user/roles/${id}`, { name }))
+    .data.data;
+}
+
+/** Delete a role (and its tab permissions). */
+export async function deleteRole(id: number): Promise<void> {
+  await http.delete(`/user/roles/${id}`);
+}
+
 /** Bulk grant/revoke a whole module's tabs for a role. */
 export async function setRoleModule(
   roleId: number,

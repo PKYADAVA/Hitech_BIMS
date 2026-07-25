@@ -22,7 +22,7 @@ from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
 from purchase.api import register as register_purchase
-from user.api import RoleModuleView, RolesAccessView, UserRolesView
+from user.api import RoleModuleView, RolesAccessView, RoleView, UserRolesView
 from user.api import register as register_user
 from sales.api import register as register_sales
 from notification.api import (
@@ -131,6 +131,7 @@ urlpatterns = [
     # Access management (admin): role module toggles + user role assignment.
     path("user/access/roles", RolesAccessView.as_view(), name="access-roles"),
     path("user/roles/<int:pk>/module", RoleModuleView.as_view(), name="role-module"),
+    path("user/roles/<int:pk>", RoleView.as_view(), name="role-detail"),
     path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
     path("", include(router.urls)),
 ]

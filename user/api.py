@@ -83,6 +83,16 @@ class RolesAccessView(V1ViewMixin, APIView):
         ]
         return Response({"navs": _MANAGED_NAVS, "roles": roles})
 
+    def post(self, request):
+        """Create a new role (auth group)."""
+        name = str(request.data.get("name") or "").strip()
+        if not name:
+            raise ValidationError({"name": ["Role name is required."]})
+        group, created = AuthGroup.objects.get_or_create(name=name)
+        return Response(
+            {"id": group.id, "name": group.name, "modules": _role_modules(group), "created": created}
+        )
+
 
 class RoleModuleView(V1ViewMixin, APIView):
     """POST /user/roles/<id>/module {module, enabled} — bulk grant/revoke a
@@ -123,3 +133,28 @@ class UserRolesView(V1ViewMixin, APIView):
             raise ValidationError({"group_ids": ["Must be a list of role ids."]})
         user.groups.set(AuthGroup.objects.filter(id__in=ids))
         return Response({"id": user.id, "group_ids": list(user.groups.values_list("id", flat=True))})
+
+
+class RoleView(V1ViewMixin, APIView):
+    """PATCH /user/roles/<id> {name} — rename;  DELETE — remove a role."""
+
+    permission_classes = _ADMIN
+
+    def patch(self, request, pk):
+        group = AuthGroup.objects.filter(pk=pk).first()
+        if not group:
+            raise NotFound("Role not found.")
+        name = str(request.data.get("name") or "").strip()
+        if not name:
+            raise ValidationError({"name": ["Role name is required."]})
+        group.name = name
+        group.save(update_fields=["name"])
+        return Response({"id": group.id, "name": group.name})
+
+    def delete(self, request, pk):
+        group = AuthGroup.objects.filter(pk=pk).first()
+        if not group:
+            raise NotFound("Role not found.")
+        GroupTabPermission.objects.filter(group=group).delete()
+        group.delete()
+        return Response({"deleted": True})
