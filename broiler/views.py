@@ -2282,7 +2282,7 @@ def _bird_sale_to_dict(row):
         "birds": row.birds, "net_weight": str(row.net_weight), "avg_weight": str(row.avg_weight),
         "rate": str(row.rate), "round_off": str(row.round_off), "amount": str(row.amount),
         "lifting_supervisor": row.lifting_supervisor_id,
-        "lifting_supervisor_name": row.lifting_supervisor.name if row.lifting_supervisor_id else "",
+        "lifting_supervisor_name": str(row.lifting_supervisor) if row.lifting_supervisor_id else "",
         "vehicle": row.vehicle, "driver": row.driver, "remarks": row.remarks,
     }
 
@@ -2326,12 +2326,14 @@ class BirdSaleListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleFormTemplateView(View):
     def get(self, request, id=None):
+        from hr.models import Employee
         return render(request, "bird_sale_form.html", {
             "instance": BirdSale.objects.filter(id=id).first() if id else None,
             "farms": BroilerFarm.objects.order_by("farm_name"),
             "customers": Customer.objects.order_by("name"),
             "farmers": Farmer.objects.order_by("farmer_name"),
-            "supervisors": Supervisor.objects.order_by("name"),
+            # Lifting supervisor can be any active employee.
+            "supervisors": Employee.objects.filter(relieve=False).order_by("full_name"),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -3410,7 +3412,7 @@ def _live_flock_row(batch, today):
     return {
         "branch": farm.branch.branch_name if farm.branch_id else "",
         "line": farm.line or "",
-        "supervisor": str(farm.supervisor) if farm.supervisor_id else "",
+        "supervisor": farm.supervisor.name if farm.supervisor_id else "",
         "farmer": farm.farmer.farmer_name if farm.farmer_id else "",
         "batch": batch.batch_name,
         "book_no": batch.book_number or "",
@@ -3579,8 +3581,8 @@ def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfe
         "farmer": farmer.farmer_name if farmer else "",
         "batch": batch.batch_name if batch else "",
         "batch_no": batch_no,
-        "supervisor": (str(e.supervisor) if e.supervisor_id
-                       else str(farm.supervisor) if farm and farm.supervisor_id else ""),
+        "supervisor": (e.supervisor.name if e.supervisor_id
+                       else farm.supervisor.name if farm and farm.supervisor_id else ""),
         "age": age,
         "placed": placed, "opening": opening,
         "mort": mort_today,
@@ -3693,6 +3695,7 @@ def lifting_report(request):
     from account.models import CompanyProfile
     from broiler.models import BirdSale, BirdSaleReceipt
     from sales.models import SalesInvoice
+    from hr.models import Employee
     from django.utils.dateparse import parse_date
 
     q2 = Decimal("0.01")
@@ -3725,7 +3728,7 @@ def lifting_report(request):
     if line:
         sales = sales.filter(farm__line=line)
     if supervisor_id.isdigit():
-        sales = sales.filter(Q(lifting_supervisor_id=supervisor_id) | Q(farm__supervisor_id=supervisor_id))
+        sales = sales.filter(lifting_supervisor_id=supervisor_id)
     if farm_id.isdigit():
         sales = sales.filter(farm_id=farm_id)
     if sale_type in ("customer", "farmer"):
@@ -3745,25 +3748,34 @@ def lifting_report(request):
     for rc in rcpt_qs:
         rcpt_by_key[(rc.customer_id, rc.date)] = rcpt_by_key.get((rc.customer_id, rc.date), Decimal("0")) + _num(rc.amount)
 
-    # Each customer's total ledger balance (all-time receivable up to the report
-    # end date) — the same closing the Customer Ledger shows. Computed once per
-    # customer and stamped on every one of their lifting rows. Dr = owes us.
+    # Per-customer ledger events, so each lifting row can show that customer's
+    # running balance as of its OWN sale date (all postings up to and including
+    # that day). opening is the signed receivable (Dr = owes us).
     from sales.models import Customer as _Customer
-    asof = td or timezone.localdate()
     cust_ids = {s.customer_id for s in sales if s.customer_id}
-    cust_balance = {}
+    cust_events = {}  # cust_id -> (opening_signed, [(date, delta), ...])
     if cust_ids:
         for cust in _Customer.objects.filter(id__in=cust_ids):
-            bal = _num(cust.opening_balance)
+            opening = _num(cust.opening_balance)
             if str(cust.to_pay_to_receive or "").lower().startswith("pay"):
-                bal = -bal
-            for bs in BirdSale.objects.filter(sale_type="customer", customer=cust, date__lte=asof):
-                bal += _num(bs.amount)
-            for inv in SalesInvoice.objects.filter(customer=cust, is_active=True, date__lte=asof):
-                bal += _num(inv.net_amount)
-            for rc in BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust, date__lte=asof):
-                bal -= _num(rc.amount)
-            cust_balance[cust.id] = bal
+                opening = -opening
+            events = []
+            for bs in BirdSale.objects.filter(sale_type="customer", customer=cust):
+                events.append((bs.date, _num(bs.amount)))
+            for inv in SalesInvoice.objects.filter(customer=cust, is_active=True):
+                events.append((inv.date, _num(inv.net_amount)))
+            for rc in BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust):
+                events.append((rc.date, -_num(rc.amount)))
+            cust_events[cust.id] = (opening, events)
+
+    def _balance_asof(cust_id, on_date):
+        """Customer's ledger balance up to (and including) on_date."""
+        opening, events = cust_events[cust_id]
+        bal = opening
+        for d, delta in events:
+            if d and on_date and d <= on_date:
+                bal += delta
+        return bal
 
     rows = []
     seen_rcpt_keys = set()
@@ -3788,17 +3800,19 @@ def lifting_report(request):
 
         party = s.customer.name if s.customer_id else (s.farmer.farmer_name if s.farmer_id else "")
         code = s.customer.code if s.customer_id else ""
-        if s.customer_id and s.customer_id in cust_balance:
-            bal = cust_balance[s.customer_id]
+        if s.customer_id and s.customer_id in cust_events:
+            bal = _balance_asof(s.customer_id, s.date)
             ledger_balance = abs(bal).quantize(q2)
             ledger_cr_dr = "Dr" if bal >= 0 else "Cr"
         else:
             ledger_balance, ledger_cr_dr = "", ""
-        supervisor = (str(s.lifting_supervisor) if s.lifting_supervisor_id
-                      else str(farm.supervisor) if farm and farm.supervisor_id else "")
+        # This column is the lifting / weighment supervisor recorded on the sale,
+        # not the farm's managing supervisor.
+        supervisor = str(s.lifting_supervisor) if s.lifting_supervisor_id else ""
 
         rows.append({
             "date": s.date, "code": code or "", "customer": party,
+            "customer_id": s.customer_id,
             "invoice": s.sale_no, "dc_no": s.doc_no or "",
             "birds": s.birds or 0, "weight": _num(s.net_weight).quantize(q2),
             "avg_wt": _num(s.avg_weight).quantize(q2), "rate": _num(s.rate).quantize(q2),
@@ -3830,7 +3844,7 @@ def lifting_report(request):
         "regions": Region.objects.order_by("description"),
         "branches": Branch.objects.order_by("branch_name"),
         "lines": lines,
-        "supervisors": Supervisor.objects.order_by("name"),
+        "supervisors": Employee.objects.filter(relieve=False).order_by("full_name"),
         "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
         "from_date": from_date, "to_date": to_date, "customer_id": customer_id,
         "region_id": region_id, "branch_id": branch_id, "line": line,
@@ -5157,7 +5171,7 @@ def gc_settlement_autofill_api(request):
     out.update({
         "branch": farm.branch.branch_name if farm.branch_id else "",
         "line": farm.line or "",
-        "supervisor": str(farm.supervisor) if farm.supervisor_id else "",
+        "supervisor": farm.supervisor.name if farm.supervisor_id else "",
         "batch_name": batch.batch_name,
         "scheme_id": scheme.id if scheme else None,
         "scheme_name": (f"{scheme.scheme_code} - {scheme.schema_name}") if scheme else "",
@@ -5296,7 +5310,7 @@ def _gc_settlement_detail(s):
            "farm_name": farm.farm_name, "batch_name": s.batch.batch_name,
            "scheme_name": (f"{s.scheme.scheme_code} - {s.scheme.schema_name}") if s.scheme_id else "",
            "branch": farm.branch.branch_name if farm.branch_id else "",
-           "line": farm.line or "", "supervisor": str(farm.supervisor) if farm.supervisor_id else "",
+           "line": farm.line or "", "supervisor": farm.supervisor.name if farm.supervisor_id else "",
            "gc_date": s.gc_date.isoformat() if s.gc_date else "",
            "placement_date": s.placement_date.isoformat() if s.placement_date else "",
            "liquidation_date": s.liquidation_date.isoformat() if s.liquidation_date else "",
@@ -5344,6 +5358,6 @@ def gc_settlement_print(request, id):
     }
     return render(request, "gc_settlement_print.html", {
         "s": s, "batch": batch, "farm": farm, "farmer": farm.farmer,
-        "supervisor": farm.supervisor, "branch": farm.branch, "scheme": s.scheme,
+        "supervisor": farm.supervisor.name if farm.supervisor_id else "", "branch": farm.branch, "scheme": s.scheme,
         "company": CompanyProfile.get_solo(), "d": d,
     })

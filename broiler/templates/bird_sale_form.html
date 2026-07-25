@@ -55,7 +55,7 @@
               <th style="min-width:65px">Rate <span class="text-danger">*</span></th>
               <th style="min-width:65px">RoundOff</th>
               <th style="min-width:80px">Amount</th>
-              <th style="min-width:110px">Supervisor</th>
+              <th style="min-width:130px">Lifting Supervisor</th>
               <th style="min-width:80px">Vehicle</th>
               <th style="min-width:80px">Driver</th>
               <th style="min-width:100px">Remarks</th>
@@ -82,7 +82,7 @@ const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
-const supervisorOptions = `<option value="">select</option>{% for s in supervisors %}<option value="{{ s.id }}">{{ s.name|escapejs }}</option>{% endfor %}`;
+const supervisorOptions = `<option value="">select</option>{% for s in supervisors %}<option value="{{ s.id }}">{{ s|escapejs }}</option>{% endfor %}`;
 const customerOptions = `<option value="">select</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.name|escapejs }}</option>{% endfor %}`;
 
 function isFarmerSale() {

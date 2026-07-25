@@ -31,8 +31,7 @@
   .k-close .k-ico{ background:#e7f0ff; color:#3b6fd4; }  .k-close .k-num{ color:#3b6fd4; }
 
   .cl-table { font-size:.74rem; }
-  .cl-table th, .cl-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem;
-                               overflow:hidden; text-overflow:ellipsis; }
+  .cl-table th, .cl-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem; }
   .cl-table thead th { background-color:#1b3a6b !important; color:#fff !important; position:sticky; top:0; z-index:3; text-align:center; font-weight:600; border-color:#274d84; }
   .cl-table td.num, .cl-table th.num { text-align:right; }
   .cl-scroll { max-height:76vh; overflow:auto; border:1px solid #eef0f4; border-radius:.6rem; }
@@ -115,15 +114,15 @@
     <div class="small text-muted"><i class="fas fa-layer-group me-1"></i>Grouped By: <strong>Month</strong></div>
   </div>
   <div class="cl-scroll">
-    <table class="table table-bordered table-hover cl-table mb-0" style="width:2160px; table-layout:fixed;">
+    <table class="table table-bordered table-hover cl-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
       <thead><tr>
-        <th style="width:90px">Date</th><th style="width:150px">Transaction No.</th><th style="width:120px">Doc No.</th>
-        <th style="width:120px">Type</th><th style="width:150px">Item</th>
-        <th class="num" style="width:80px">Birds</th><th class="num" style="width:100px">Quantity</th>
-        <th class="num" style="width:95px">Avg.Weight</th><th class="num" style="width:80px">Rate</th><th class="num" style="width:120px">Amount</th>
-        <th class="num" style="width:120px">Debit</th><th class="num" style="width:120px">Credit</th><th class="num" style="width:140px">Balance</th>
-        <th style="width:150px">Sector</th><th style="width:120px">Vehicle</th><th style="width:160px">Remarks</th>
-        <th class="num" style="width:110px">Over Due By Days</th>
+        <th>Date</th><th>Transaction No.</th><th>Doc No.</th>
+        <th>Type</th><th>Item</th>
+        <th class="num">Birds</th><th class="num">Quantity</th>
+        <th class="num">Avg.Weight</th><th class="num">Rate</th><th class="num">Amount</th>
+        <th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th>
+        <th>Sector</th><th>Vehicle</th><th>Remarks</th>
+        <th class="num">Over Due By Days</th>
       </tr></thead>
       <tbody>
         {% if customer %}
