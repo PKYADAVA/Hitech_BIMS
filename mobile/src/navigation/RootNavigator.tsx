@@ -42,10 +42,11 @@ function headerTitleWithIcon(icon: string, title: string) {
 
 /**
  * One native stack per module (Hub → List → Detail), branded in the module
- * color. `presented` marks a module opened as a Root card (Accounts, Inventory)
- * rather than a bottom tab — its Hub then shows a close control to return.
+ * color, with an icon-led header. Used both by bottom-tab modules and by the
+ * Root-presented ones (Accounts, Inventory), which return via the swipe/back
+ * gesture rather than a header button.
  */
-function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; presented?: boolean }) {
+function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
   const mod = MODULES[moduleKey];
   return (
     <ModuleStack.Navigator
@@ -59,17 +60,13 @@ function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; pre
     >
       <ModuleStack.Screen
         name="Hub"
-        options={({ navigation }) => ({
+        options={{
           title: mod.title,
           headerTitle: headerTitleWithIcon(mod.icon, mod.title),
-          headerLeft: presented
-            ? () => (
-                <Pressable hitSlop={12} onPress={() => navigation.getParent()?.goBack()}>
-                  <Text style={{ color: colors.onDark, fontSize: 26, fontWeight: "700" }}>‹</Text>
-                </Pressable>
-              )
-            : undefined,
-        })}
+          // Root-presented modules (Accounts/Inventory) otherwise get a native
+          // back button on this first screen — hide it; return via swipe/back.
+          headerBackVisible: false,
+        }}
       >
         {(props) => <ModuleHubScreen {...props} moduleKey={moduleKey} />}
       </ModuleStack.Screen>
@@ -105,8 +102,8 @@ function ModuleStackScreen({ moduleKey, presented }: { moduleKey: ModuleKey; pre
 const BroilerStack = () => <ModuleStackScreen moduleKey="broiler" />;
 const HatcheryStack = () => <ModuleStackScreen moduleKey="hatchery" />;
 const SmsStack = () => <ModuleStackScreen moduleKey="sms" />;
-const AccountStack = () => <ModuleStackScreen moduleKey="account" presented />;
-const InventoryStack = () => <ModuleStackScreen moduleKey="inventory" presented />;
+const AccountStack = () => <ModuleStackScreen moduleKey="account" />;
+const InventoryStack = () => <ModuleStackScreen moduleKey="inventory" />;
 
 function AppTabs() {
   return (
