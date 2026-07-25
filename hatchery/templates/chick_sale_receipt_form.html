@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{% if instance %}Edit{% else %}Add{% endif %} Chick Sale Receipt — BIMS{% endblock %}
+{% block title %}{% if instance %}Edit{% else %}Add{% endif %} Chick Receipt — BIMS{% endblock %}
 
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
 
@@ -15,7 +15,7 @@
 </style>
 
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-receipt"></i> {% if instance %}Edit{% else %}Add{% endif %} Chick Sale Receipt</div>
+  <div class="page-header-title"><i class="fas fa-receipt"></i> {% if instance %}Edit{% else %}Add{% endif %} Chick Receipt</div>
   <div class="page-header-right"><a href="{% url 'chick_sale_receipt_list' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> Register</a></div>
 </div>
 

@@ -59,7 +59,7 @@ MODULE_REGISTRY = [
                     ("medicine_entry_list", "Medicine Vaccine Consumption"),
                     ("daily_entry_single_list", "Single Batch Daily Entry"),
                     ("bird_sale_list", "Bird Sale"),
-                    ("bird_sale_receipt_list", "Receipt"),
+                    ("bird_sale_receipt_list", "Bird Receipt"),
                     ("chicks_placement_list", "Chicks Placement"),
                 ],
             },
@@ -106,7 +106,7 @@ MODULE_REGISTRY = [
                     ("hatchery_list", "Hatch Register"),
                     ("delivery_challan_list", "Delivery Challan"),
                     ("chick_sale_list", "Chick Sale"),
-                    ("chick_sale_receipt_list", "Chick Sale Receipt"),
+                    ("chick_sale_receipt_list", "Chick Receipt"),
                 ],
             },
             {

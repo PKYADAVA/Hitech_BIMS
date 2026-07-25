@@ -692,7 +692,7 @@ def customer_ledger_report(request):
                 sales_total += amt
                 grp["rows"].append({
                     "date": d, "trnum": obj.sale_no, "doc_no": obj.doc_no or "",
-                    "type": "Sales Invoice", "type_slug": "sales-invoice",
+                    "type": "Bird Sale", "type_slug": "bird-sale",
                     "item": "Broiler Birds",
                     "birds": obj.birds or "", "quantity": _si_num(obj.net_weight),
                     "avg_weight": _si_num(obj.avg_weight), "rate": _si_num(obj.rate),
@@ -769,7 +769,7 @@ def customer_ledger_report(request):
                 totals["credit"] += amt
                 receipts_total += amt
                 acct = obj.receipt_account.description if obj.receipt_account_id else ""
-                type_label = "Chick Receipt" if kind == "CRC" else "Receipts"
+                type_label = "Chick Receipt" if kind == "CRC" else "Bird Receipt"
                 grp["rows"].append({
                     "date": d, "trnum": obj.receipt_no, "doc_no": obj.reference_no or "",
                     "type": type_label, "type_slug": "receipt",
