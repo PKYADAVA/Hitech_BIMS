@@ -1133,8 +1133,48 @@ class SalesReceiptAPI(View):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+def _customer_current_balance(customer_id, exclude_sales_receipt_id=None,
+                              exclude_bird_receipt_id=None, exclude_chick_receipt_id=None):
+    """A customer's total outstanding balance across every module — the same
+    figure the Customer Ledger shows as its closing (opening + all Bird/Chick/
+    Invoice sales − all Bird/Chick/Sales receipts). Positive = customer owes us.
+    The per-module exclude_* ids drop the receipt currently being edited so its
+    own amount isn't double-counted in the balance shown on its edit form."""
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
+    from django.db.models import Sum
+
+    cust = Customer.objects.filter(id=customer_id).first() if customer_id else None
+    if not cust:
+        return Decimal("0")
+    bal = _si_num(cust.opening_balance)
+    if str(cust.to_pay_to_receive or "").lower().startswith("pay"):
+        bal = -bal
+    def _sum(qs, field):
+        return _si_num(qs.aggregate(t=Sum(field))["t"])
+    bal += _sum(BirdSale.objects.filter(sale_type="customer", customer=cust), "amount")
+    bal += _sum(SalesInvoice.objects.filter(customer=cust, is_active=True), "net_amount")
+    bal += _sum(ChickSale.objects.filter(customer=cust), "final_amount")
+
+    bird_rc = BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust)
+    if exclude_bird_receipt_id:
+        bird_rc = bird_rc.exclude(id=exclude_bird_receipt_id)
+    bal -= _sum(bird_rc, "amount")
+    chick_rc = ChickSaleReceipt.objects.filter(customer=cust)
+    if exclude_chick_receipt_id:
+        chick_rc = chick_rc.exclude(id=exclude_chick_receipt_id)
+    bal -= _sum(chick_rc, "amount")
+    sr = SalesReceipt.objects.filter(customer=cust)
+    if exclude_sales_receipt_id:
+        sr = sr.exclude(id=exclude_sales_receipt_id)
+    bal -= _sum(sr, "amount")
+    return bal
+
+
 @login_required(login_url="login")
 def sales_receipt_balance_lookup(request):
-    """Outstanding sales balance for a customer (invoices billed minus receipts)."""
-    balance = SalesReceipt.balance_due(request.GET.get("customer"), exclude_id=request.GET.get("exclude_id"))
+    """Customer's full outstanding balance (across all modules), matching the
+    Customer Ledger closing — not just the sales-invoice portion."""
+    balance = _customer_current_balance(request.GET.get("customer"),
+                                        exclude_sales_receipt_id=request.GET.get("exclude_id"))
     return JsonResponse({"balance": str(balance)})

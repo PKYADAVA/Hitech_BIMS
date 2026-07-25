@@ -2562,7 +2562,14 @@ def bird_sale_receipt_balance_lookup(request):
     customer_id = request.GET.get("customer")
     farmer_id = request.GET.get("farmer")
     exclude_id = request.GET.get("exclude_id")
-    balance = BirdSaleReceipt.balance_due(location_id, sale_type, customer_id, farmer_id, exclude_id=exclude_id)
+    if sale_type == "customer":
+        # Customer receipts show the full customer ledger balance (all modules),
+        # matching the Customer Ledger; farmer receipts keep the farm/branch
+        # cost-centre balance since farmers aren't customers.
+        from sales.views import _customer_current_balance
+        balance = _customer_current_balance(customer_id, exclude_bird_receipt_id=exclude_id)
+    else:
+        balance = BirdSaleReceipt.balance_due(location_id, sale_type, customer_id, farmer_id, exclude_id=exclude_id)
     return JsonResponse({"balance": str(balance)})
 
 

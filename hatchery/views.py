@@ -1954,11 +1954,11 @@ class ChickSaleReceiptAPI(BaseAPIView):
 
 @login_required
 def chick_sale_receipt_balance_lookup(request):
-    """Outstanding balance for a customer (total chick-sale billed minus
-    received), for the Add form's auto-filled Balance field."""
-    customer_id = request.GET.get("customer")
-    exclude_id = request.GET.get("exclude_id")
-    balance = ChickSaleReceipt.balance_due(customer_id, exclude_id=exclude_id)
+    """Customer's full outstanding balance across all modules (matches the
+    Customer Ledger closing), for the Add/Edit form's auto-filled Balance."""
+    from sales.views import _customer_current_balance
+    balance = _customer_current_balance(request.GET.get("customer"),
+                                        exclude_chick_receipt_id=request.GET.get("exclude_id"))
     return JsonResponse({"balance": str(balance)})
 
 

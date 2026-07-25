@@ -60,7 +60,7 @@
           <thead class="table-light">
             <tr>
               <th style="min-width:150px">Customer / Farmer <span class="text-danger">*</span></th>
-              <th style="min-width:90px">Balance</th>
+              <th style="min-width:90px">Ledger Balance</th>
               <th style="min-width:110px">Mode <span class="text-danger">*</span></th>
               <th style="min-width:160px">Code <span class="text-danger">*</span></th>
               <th style="min-width:90px">Amount <span class="text-danger">*</span></th>
@@ -154,7 +154,9 @@ function refreshRowBalance(tr) {
   const saleType = isFarmerReceipt() ? 'farmer' : 'customer';
   const buyerId = saleType === 'farmer' ? tr.querySelector('.farmer').value : tr.querySelector('.customer').value;
   const balanceInput = tr.querySelector('.balance');
-  if (!locationId || !buyerId) { balanceInput.value = '0.00'; return; }
+  // Customer balance = full customer ledger (location-independent); farmer
+  // balance is scoped to the location's branch, so it still needs a location.
+  if (!buyerId || (saleType === 'farmer' && !locationId)) { balanceInput.value = '0.00'; return; }
   const myToken = ++balanceToken;
   const params = new URLSearchParams({ location: locationId, sale_type: saleType });
   if (saleType === 'farmer') { params.set('farmer', buyerId); } else { params.set('customer', buyerId); }
