@@ -15,13 +15,15 @@
   .lr-filter .form-label { font-size:.68rem; font-weight:600; margin-bottom:.1rem; }
   .lr-filter .form-control-sm, .lr-filter .form-select-sm { font-size:.78rem; }
   .lr-table { font-size:.72rem; }
-  .lr-table th, .lr-table td { white-space:nowrap; vertical-align:middle; padding:.34rem .5rem; }
+  .lr-table th, .lr-table td { white-space:nowrap; vertical-align:middle; padding:.34rem .5rem;
+                               overflow:hidden; text-overflow:ellipsis; }
   .lr-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center; font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
   .lr-table td.num, .lr-table th.num { text-align:right; }
   .lr-table td.cust a, .lr-table td.cust { color:#2b62c9; font-weight:600; }
   .lr-table tbody tr:hover td { background:#f4f8fc; }
   .lr-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; position:sticky; bottom:0; }
   .lr-scroll { max-height:74vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
 </style>
 
 <div class="lr-head">
@@ -86,7 +88,7 @@
     <div class="small text-muted"><i class="fas fa-truck-loading me-1"></i>{{ rows|length }} lifting(s)</div>
   </div>
   <div class="lr-scroll">
-    <table class="table table-bordered table-hover lr-table mb-0" style="width:2600px; table-layout:fixed;">
+    <table class="table table-bordered table-hover lr-table mb-0" style="width:2740px; table-layout:fixed;">
       <thead><tr>
         <th style="width:80px">Date</th><th style="width:90px">Code</th><th style="width:190px">Customer</th>
         <th style="width:120px">Invoice</th><th style="width:70px">Dc No.</th>
@@ -94,6 +96,7 @@
         <th class="num" style="width:70px">Avg Wt</th><th class="num" style="width:70px">Rate</th>
         <th class="num" style="width:110px">Amount</th><th class="num" style="width:90px">TCS Amount</th>
         <th class="num" style="width:120px">Total Amount</th><th class="num" style="width:120px">Receipt Amount</th>
+        <th class="num" style="width:140px">Ledger Balance</th>
         <th style="width:140px">Branch</th><th style="width:130px">Line</th><th style="width:150px">Supervisor</th>
         <th style="width:170px">Farm</th><th style="width:110px">Batch</th><th class="num" style="width:90px">Mean Age</th>
         <th style="width:110px">Vehicle</th><th style="width:110px">Driver</th><th style="width:150px">Remarks</th>
@@ -114,6 +117,7 @@
           <td class="num">{{ r.tcs|indian_currency }}</td>
           <td class="num">{{ r.total|indian_currency }}</td>
           <td class="num">{% if r.receipt %}{{ r.receipt|indian_currency }}{% else %}0.00{% endif %}</td>
+          <td class="num {% if r.ledger_cr_dr == 'Cr' %}cr{% elif r.ledger_cr_dr == 'Dr' %}dr{% endif %}">{% if r.ledger_balance != "" %}{{ r.ledger_balance|indian_currency }} {{ r.ledger_cr_dr }}{% endif %}</td>
           <td title="{{ r.branch }}">{{ r.branch }}</td>
           <td title="{{ r.line }}">{{ r.line }}</td>
           <td title="{{ r.supervisor }}">{{ r.supervisor }}</td>
@@ -125,7 +129,7 @@
           <td title="{{ r.remarks }}">{{ r.remarks }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="22" class="text-center text-muted py-4">No liftings found for the selected filters.</td></tr>
+        <tr><td colspan="23" class="text-center text-muted py-4">No liftings found for the selected filters.</td></tr>
         {% endfor %}
       </tbody>
       {% if rows %}
@@ -139,7 +143,7 @@
         <td class="num">{{ totals.tcs|indian_currency }}</td>
         <td class="num">{{ totals.total|indian_currency }}</td>
         <td class="num">{{ totals.receipt|indian_currency }}</td>
-        <td colspan="9"></td>
+        <td colspan="10"></td>
       </tr></tfoot>
       {% endif %}
     </table>

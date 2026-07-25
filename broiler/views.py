@@ -3692,6 +3692,8 @@ def lifting_report(request):
     are attributed to the customer's first lifting on each date."""
     from account.models import CompanyProfile
     from broiler.models import BirdSale, BirdSaleReceipt
+    from sales.models import SalesInvoice
+    from django.utils.dateparse import parse_date
 
     q2 = Decimal("0.01")
     from_date = (request.GET.get("from_date") or "").strip()
@@ -3743,6 +3745,26 @@ def lifting_report(request):
     for rc in rcpt_qs:
         rcpt_by_key[(rc.customer_id, rc.date)] = rcpt_by_key.get((rc.customer_id, rc.date), Decimal("0")) + _num(rc.amount)
 
+    # Each customer's total ledger balance (all-time receivable up to the report
+    # end date) — the same closing the Customer Ledger shows. Computed once per
+    # customer and stamped on every one of their lifting rows. Dr = owes us.
+    from sales.models import Customer as _Customer
+    asof = td or timezone.localdate()
+    cust_ids = {s.customer_id for s in sales if s.customer_id}
+    cust_balance = {}
+    if cust_ids:
+        for cust in _Customer.objects.filter(id__in=cust_ids):
+            bal = _num(cust.opening_balance)
+            if str(cust.to_pay_to_receive or "").lower().startswith("pay"):
+                bal = -bal
+            for bs in BirdSale.objects.filter(sale_type="customer", customer=cust, date__lte=asof):
+                bal += _num(bs.amount)
+            for inv in SalesInvoice.objects.filter(customer=cust, is_active=True, date__lte=asof):
+                bal += _num(inv.net_amount)
+            for rc in BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust, date__lte=asof):
+                bal -= _num(rc.amount)
+            cust_balance[cust.id] = bal
+
     rows = []
     seen_rcpt_keys = set()
     for s in sales:
@@ -3766,6 +3788,12 @@ def lifting_report(request):
 
         party = s.customer.name if s.customer_id else (s.farmer.farmer_name if s.farmer_id else "")
         code = s.customer.code if s.customer_id else ""
+        if s.customer_id and s.customer_id in cust_balance:
+            bal = cust_balance[s.customer_id]
+            ledger_balance = abs(bal).quantize(q2)
+            ledger_cr_dr = "Dr" if bal >= 0 else "Cr"
+        else:
+            ledger_balance, ledger_cr_dr = "", ""
         supervisor = (str(s.lifting_supervisor) if s.lifting_supervisor_id
                       else str(farm.supervisor) if farm and farm.supervisor_id else "")
 
@@ -3775,6 +3803,7 @@ def lifting_report(request):
             "birds": s.birds or 0, "weight": _num(s.net_weight).quantize(q2),
             "avg_wt": _num(s.avg_weight).quantize(q2), "rate": _num(s.rate).quantize(q2),
             "amount": gross, "tcs": tcs, "total": total, "receipt": receipt,
+            "ledger_balance": ledger_balance, "ledger_cr_dr": ledger_cr_dr,
             "branch": farm.branch.branch_name if farm and farm.branch_id else "",
             "line": farm.line if farm else "",
             "supervisor": supervisor,
