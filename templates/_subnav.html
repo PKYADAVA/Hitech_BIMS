@@ -78,6 +78,8 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'sales_price_master' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sales_price_master' %}active{% endif %} activate" href="{% url 'sales_price_master' %}"><i class="fas fa-tag me-1"></i>Price Master</a></li>{% endif %}
       {% elif module == 'sales_transaction' %}
         {% if 'sales_invoice_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sales_invoice' %}active{% endif %} activate" href="{% url 'sales_invoice_list' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Sales Invoice</a></li>{% endif %}
+      {% elif module == 'sales_report' %}
+        {% if 'customer_ledger' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'customer_ledger' %}active{% endif %}" href="{% url 'customer_ledger' %}" target="_blank" rel="noopener"><i class="fas fa-book me-1"></i>Customer Ledger</a></li>{% endif %}
       {% elif module == 'account' %}
         {% if 'fin_year' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}"><i class="fas fa-calendar-alt me-1"></i>Financial Year</a></li>{% endif %}
         {% if 'coa' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'coa' %}active{% endif %} activate" href="{% url 'coa' %}"><i class="fas fa-sitemap me-1"></i>Chart of Accounts</a></li>{% endif %}

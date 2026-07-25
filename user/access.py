@@ -179,6 +179,12 @@ MODULE_REGISTRY = [
                     ("sales_invoice_list", "Sales Invoice", ("sales_invoice_api_list",)),
                 ],
             },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("customer_ledger", "Customer Ledger"),
+                ],
+            },
         ],
     },
     {

@@ -29,4 +29,6 @@ urlpatterns = [
     path('sales-invoice/<int:id>/edit/', views.edit_sales_invoice, name='sales_invoice_edit'),
     path('sales-invoice/<int:id>/delete/', views.delete_sales_invoice, name='sales_invoice_delete'),
     path('sales_invoice_api/', views.sales_invoice_api_list, name='sales_invoice_api_list'),
+
+    path('customer-ledger/', views.customer_ledger_report, name='customer_ledger'),
 ]

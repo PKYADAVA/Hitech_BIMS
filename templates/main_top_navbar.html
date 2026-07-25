@@ -412,6 +412,18 @@
             </ul>
           </li>
           {% endif %}
+          {% if 'sales_reports' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="salesReportsDd">
+              <i class="fas fa-chart-bar"></i>Reports
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'customer_ledger' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_ledger' %}" target="_blank" rel="noopener">
+                <i class="fas fa-book"></i>Customer Ledger
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
         </ul>
       </li>
       {% endif %}

@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Customer Ledger — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock nav %}
+{% block content %}
+{% include '_sales_report_subnavbar.html' with active_tab='customer_ledger' %}
+
+<style>
+  .cl-head { background:#dbeef2; border:1px solid #cdd9e0; border-radius:.55rem; padding:.6rem 1rem; margin-bottom:.6rem;
+             display:grid; grid-template-columns:1fr 1fr; align-items:center; }
+  .cl-head .co-name { font-weight:800; color:#c0392b; font-size:1rem; }
+  .cl-head .co-meta { font-size:.72rem; color:#333; line-height:1.35; }
+  .cl-head .co-title { text-align:right; font-size:1.35rem; font-weight:700; color:#1b3a6b; }
+  .cl-topbar { background:#fff; border:1px solid #eef0f4; border-radius:.55rem; padding:.5rem .8rem; margin-bottom:.55rem; }
+  .cl-cust-name { font-weight:800; font-size:.95rem; }
+  .cl-cust-sub { font-size:.7rem; color:#6c757d; }
+  .cl-topbar .form-label { font-size:.68rem; margin-bottom:.1rem; }
+  .cl-topbar .form-control-sm, .cl-topbar .form-select-sm { min-width:180px; }
+  .cl-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin-bottom:.6rem; }
+  @media (max-width:900px){ .cl-kpis { grid-template-columns:repeat(2,1fr); } }
+  .cl-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.5rem; padding:.5rem .6rem;
+            display:flex; align-items:center; gap:.55rem; box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .cl-kpi .k-label { font-size:.63rem; color:#6c757d; font-weight:600; white-space:nowrap; }
+  .cl-kpi .k-num { font-size:1rem; font-weight:800; line-height:1.1; white-space:nowrap; }
+  .cl-kpi .k-sub { font-size:.58rem; color:#adb5bd; }
+  .cl-kpi .k-ico { flex:0 0 auto; width:2.5rem; height:2.5rem; border-radius:.5rem; display:flex; align-items:center; justify-content:center; font-size:1.2rem; }
+  .k-open .k-ico{ background:#e7f0ff; color:#3b6fd4; }   .k-open .k-num{ color:#1b3a6b; }
+  .k-sale .k-ico{ background:#eef1f6; color:#334a72; }   .k-sale .k-num{ color:#1b3a6b; }
+  .k-rcpt .k-ico{ background:#e6f7ea; color:#20a56a; }   .k-rcpt .k-num{ color:#178a53; }
+  .k-close .k-ico{ background:#e7f0ff; color:#3b6fd4; }  .k-close .k-num{ color:#3b6fd4; }
+
+  .cl-table { font-size:.74rem; }
+  .cl-table th, .cl-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem;
+                               overflow:hidden; text-overflow:ellipsis; }
+  .cl-table thead th { background-color:#1b3a6b !important; color:#fff !important; position:sticky; top:0; z-index:3; text-align:center; font-weight:600; border-color:#274d84; }
+  .cl-table td.num, .cl-table th.num { text-align:right; }
+  .cl-scroll { max-height:76vh; overflow:auto; border:1px solid #eef0f4; border-radius:.6rem; }
+  .cl-prev td { background:#fbfbe6; font-weight:600; }
+  .cl-grand td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; }
+  .grp-row td { background:#eef3fb; font-weight:700; color:#1b3a6b; }
+  .cr { color:#1a7f37; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
+  .vb { display:inline-block; font-weight:600; font-size:.68rem; border-radius:.35rem; padding:.12em .5em; }
+  .vb-sales-invoice { background:#e7f0ff; color:#2b62c9; }
+  .vb-receipt       { background:#e6f7ea; color:#1a7f4b; }
+  .cl-legends { font-size:.75rem; color:#6c757d; display:flex; gap:1.1rem; flex-wrap:wrap; margin-top:.6rem; }
+  .cl-legends .dot { display:inline-block; width:.6rem; height:.6rem; border-radius:50%; margin-right:.3rem; }
+</style>
+
+<!-- Company header -->
+<div class="cl-head">
+  <div>
+    <div class="co-name">{{ company.name }}</div>
+    <div class="co-meta">
+      {{ company.address }}<br>
+      {% if company.gstin %}GSTIN : {{ company.gstin }}{% endif %}
+      {% if company.mobile %}&nbsp; Cont : {{ company.mobile }}{% endif %}
+    </div>
+  </div>
+  <div class="co-title">Customer History Report</div>
+</div>
+
+<!-- Customer + filters -->
+<div class="cl-topbar no-print">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="cl-cust-sub">Customer</div>
+      <div class="cl-cust-name">{{ customer.name|default:"Select a customer" }}</div>
+      <div class="cl-cust-sub">{% if customer %}{{ customer.code }}{% if customer.place %} &middot; {{ customer.place }}{% endif %}{% endif %}</div>
+    </div>
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto"><label class="form-label small mb-1">From Date</label>
+        <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+      <div class="col-auto"><label class="form-label small mb-1">To Date</label>
+        <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+      <div class="col-auto"><label class="form-label small mb-1">Customer</label>
+        <select name="customer" class="form-select form-select-sm" required>
+          <option value="">Select customer</option>
+          {% for c in customers %}<option value="{{ c.id }}" {% if customer_id == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select></div>
+      <div class="col-auto d-flex gap-1 flex-wrap">
+        <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-rotate me-1"></i>Submit</button>
+        {% if customer %}<a class="btn btn-outline-success btn-sm" href="{% url 'customer_ledger' %}?customer={{ customer_id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}&export=excel"><i class="fas fa-file-excel me-1"></i>Export Excel</a>{% endif %}
+        <button class="btn btn-outline-danger btn-sm" type="button" onclick="window.print()"><i class="fas fa-file-pdf me-1"></i>Export PDF</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if customer %}
+<!-- KPI cards -->
+<div class="cl-kpis">
+  <div class="cl-kpi k-open">
+    <div class="k-ico"><i class="fas fa-wallet"></i></div>
+    <div><div class="k-label">Opening Balance</div><div class="k-num">₹ {{ kpi.opening|indian_currency }} <span class="small {% if kpi.opening_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ kpi.opening_cr_dr }}</span></div><div class="k-sub">as on {{ from_date|default:"—" }}</div></div>
+  </div>
+  <div class="cl-kpi k-sale">
+    <div class="k-ico"><i class="fas fa-file-invoice-dollar"></i></div>
+    <div><div class="k-label">Total Sales</div><div class="k-num">₹ {{ kpi.sales|indian_currency }}</div><div class="k-sub">{{ kpi.sale_count }} transaction(s)</div></div>
+  </div>
+  <div class="cl-kpi k-rcpt">
+    <div class="k-ico"><i class="fas fa-arrow-down"></i></div>
+    <div><div class="k-label">Total Receipts</div><div class="k-num">₹ {{ kpi.receipts|indian_currency }}</div><div class="k-sub">{{ kpi.receipt_count }} transaction(s)</div></div>
+  </div>
+  <div class="cl-kpi k-close">
+    <div class="k-ico"><i class="fas fa-scale-balanced"></i></div>
+    <div><div class="k-label">Closing Balance</div><div class="k-num">₹ {{ kpi.closing|indian_currency }} <span class="small {% if kpi.closing_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ kpi.closing_cr_dr }}</span></div><div class="k-sub">as on {{ to_date|default:"—" }}</div></div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card"><div class="card-body p-2">
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas fa-layer-group me-1"></i>Grouped By: <strong>Month</strong></div>
+  </div>
+  <div class="cl-scroll">
+    <table class="table table-bordered table-hover cl-table mb-0" style="width:2160px; table-layout:fixed;">
+      <thead><tr>
+        <th style="width:90px">Date</th><th style="width:150px">Transaction No.</th><th style="width:120px">Doc No.</th>
+        <th style="width:120px">Type</th><th style="width:150px">Item</th>
+        <th class="num" style="width:80px">Birds</th><th class="num" style="width:100px">Quantity</th>
+        <th class="num" style="width:95px">Avg.Weight</th><th class="num" style="width:80px">Rate</th><th class="num" style="width:120px">Amount</th>
+        <th class="num" style="width:120px">Debit</th><th class="num" style="width:120px">Credit</th><th class="num" style="width:140px">Balance</th>
+        <th style="width:150px">Sector</th><th style="width:120px">Vehicle</th><th style="width:160px">Remarks</th>
+        <th class="num" style="width:110px">Over Due By Days</th>
+      </tr></thead>
+      <tbody>
+        {% if customer %}
+        <tr class="cl-prev">
+          <td colspan="12" class="text-end">Previous Balance</td>
+          <td class="num {% if prev_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ prev_balance|indian_currency }} {{ prev_cr_dr }}</td>
+          <td colspan="4"></td>
+        </tr>
+        {% for g in groups %}
+        <tr class="grp-row">
+          <td colspan="10"><i class="fas fa-calendar-day me-2"></i>{{ g.label }} <span class="text-muted fw-normal">({{ g.count }} transaction{{ g.count|pluralize }})</span></td>
+          <td class="num">{{ g.debit|indian_currency }}</td>
+          <td class="num">{{ g.credit|indian_currency }}</td>
+          <td class="num {% if g.cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ g.closing|indian_currency }} {{ g.cr_dr }}</td>
+          <td colspan="4"></td>
+        </tr>
+        {% for r in g.rows %}
+        <tr>
+          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td title="{{ r.trnum }}">{{ r.trnum }}</td>
+          <td title="{{ r.doc_no }}">{{ r.doc_no }}</td>
+          <td>{% if r.type %}<span class="vb vb-{{ r.type_slug }}">{{ r.type }}</span>{% endif %}</td>
+          <td title="{{ r.item }}">{{ r.item }}</td>
+          <td class="num">{% if r.birds != "" %}{{ r.birds }}{% endif %}</td>
+          <td class="num">{% if r.quantity != "" %}{{ r.quantity|floatformat:2 }}{% endif %}</td>
+          <td class="num">{% if r.avg_weight != "" %}{{ r.avg_weight|floatformat:2 }}{% endif %}</td>
+          <td class="num">{% if r.rate != "" %}{{ r.rate|floatformat:2 }}{% endif %}</td>
+          <td class="num">{% if r.amount != "" %}{{ r.amount|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.debit != "" %}{{ r.debit|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.credit != "" %}{{ r.credit|indian_currency }}{% endif %}</td>
+          <td class="num {% if r.cr_dr == 'Cr' %}cr{% elif r.cr_dr == 'Dr' %}dr{% endif %}">{% if r.balance != "" %}{{ r.balance|indian_currency }} {{ r.cr_dr }}{% endif %}</td>
+          <td title="{{ r.sector }}">{{ r.sector }}</td>
+          <td title="{{ r.vehicle }}">{{ r.vehicle }}</td>
+          <td title="{{ r.remarks }}">{{ r.remarks }}</td>
+          <td class="num">{% if r.overdue != "" %}{{ r.overdue }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        <tr class="cl-grand">
+          <td colspan="10" class="text-end">Grand Total</td>
+          <td class="num">{{ totals.debit|indian_currency }}</td>
+          <td class="num">{{ totals.credit|indian_currency }}</td>
+          <td class="num {% if closing_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ closing|indian_currency }} {{ closing_cr_dr }}</td>
+          <td colspan="4"></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="17" class="text-center text-muted py-4">Select a customer and click Submit.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <div class="cl-legends">
+    <span class="fw-semibold text-dark">Legends:</span>
+    <span><span class="dot" style="background:#2b62c9"></span>Sales Invoice</span>
+    <span><span class="dot" style="background:#1a7f4b"></span>Receipts</span>
+  </div>
+</div></div>
+{% endblock %}
