@@ -192,3 +192,32 @@ class ChangePasswordView(APIView):
         user.set_password(new)
         user.save(update_fields=["password"])
         return Response({"detail": "Password changed."})
+
+
+class PermissionsView(APIView):
+    """Return the authenticated user's effective module (nav) + tab access.
+
+    Drives per-user gating in the mobile app: `unrestricted` (superuser / no
+    matrix configured → sees everything), `nav_groups` (top-level modules the
+    user may open), and `tabs` (viewable tab codes for finer gating).
+    """
+
+    renderer_classes = [EnvelopeJSONRenderer]
+    permission_classes = [IsAuthenticated]
+
+    def get_exception_handler(self):
+        return api_exception_handler
+
+    def get(self, request):
+        from user.access import (
+            _user_is_unrestricted,
+            allowed_nav_groups,
+            allowed_view_tabs,
+        )
+
+        u = request.user
+        return Response({
+            "unrestricted": bool(_user_is_unrestricted(u)),
+            "nav_groups": sorted(allowed_nav_groups(u)),
+            "tabs": sorted(allowed_view_tabs(u)),
+        })

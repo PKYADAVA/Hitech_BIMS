@@ -19,6 +19,7 @@ export type ModuleStackParams = {
   };
   SmsSend: { row: Row };
   Report: { title: string; path: string };
+  ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
 };

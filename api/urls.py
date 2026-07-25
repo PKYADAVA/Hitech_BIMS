@@ -22,6 +22,8 @@ from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
 from purchase.api import register as register_purchase
+from user.api import RoleModuleView, RolesAccessView, UserRolesView
+from user.api import register as register_user
 from sales.api import register as register_sales
 from notification.api import (
     DeviceRegisterView,
@@ -34,7 +36,14 @@ from notification.models import SmsMessage, SmsSettings, SmsTemplate
 from purchase.models import Supplier
 from sales.models import Customer
 
-from .auth import ChangePasswordView, LoginView, LogoutView, MeView, RefreshView
+from .auth import (
+    ChangePasswordView,
+    LoginView,
+    LogoutView,
+    MeView,
+    PermissionsView,
+    RefreshView,
+)
 from .health import HealthView, ReadyView
 from .reports import (
     EggIntakeReportView,
@@ -55,6 +64,7 @@ register_inventory(router)
 register_sales(router)
 register_purchase(router)
 register_hr(router)
+register_user(router)
 
 
 def register_shared(router: DefaultRouter) -> None:
@@ -92,6 +102,7 @@ auth_patterns = [
     path("refresh", RefreshView.as_view(), name="refresh"),
     path("logout", LogoutView.as_view(), name="logout"),
     path("me", MeView.as_view(), name="me"),
+    path("permissions", PermissionsView.as_view(), name="permissions"),
     path("change-password", ChangePasswordView.as_view(), name="change-password"),
 ]
 
@@ -117,5 +128,9 @@ urlpatterns = [
     path("devices/test", DeviceTestView.as_view(), name="device-test"),
     path("hatchery/change-requests/<int:pk>/<str:decision>",
          ChangeRequestReviewView.as_view(), name="change-request-review"),
+    # Access management (admin): role module toggles + user role assignment.
+    path("user/access/roles", RolesAccessView.as_view(), name="access-roles"),
+    path("user/roles/<int:pk>/module", RoleModuleView.as_view(), name="role-module"),
+    path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
     path("", include(router.urls)),
 ]

@@ -11,6 +11,7 @@ import { AuthUser } from "@/api/types";
 import { Overview, useOverview } from "@/api/stats";
 import { IndicatorCarousel, Indicator } from "@/components/IndicatorCarousel";
 import { useAuthStore } from "@/store/authStore";
+import { usePermissionsStore } from "@/store/permissionsStore";
 
 const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
 
@@ -100,7 +101,8 @@ interface Tile {
     | "InventoryModule"
     | "SalesModule"
     | "PurchaseModule"
-    | "HrModule";
+    | "HrModule"
+    | "UserModule";
 }
 
 const TILES: Tile[] = [
@@ -112,6 +114,7 @@ const TILES: Tile[] = [
   { key: "purchase", title: "Purchase", subtitle: "Suppliers & purchases", icon: "🛒", color: colors.purchase, target: "PurchaseModule" },
   { key: "sales", title: "Sales", subtitle: "Customers & invoices", icon: "💰", color: colors.sales, target: "SalesModule" },
   { key: "sms", title: "SMS", subtitle: "Templates & history", icon: "💬", color: colors.sms, target: "SMS" },
+  { key: "user", title: "Users", subtitle: "Roles & permissions", icon: "👤", color: colors.user, target: "UserModule" },
 ];
 
 function initialsOf(user: AuthUser | null): string {
@@ -180,6 +183,8 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
+  const canModule = usePermissionsStore((s) => s.canModule);
+  const permsLoaded = usePermissionsStore((s) => s.loaded);
   const { data: ov, refetch, isFetching } = useOverview();
 
   // Re-pull KPIs whenever Home regains focus (e.g. after sending an SMS on
@@ -209,7 +214,7 @@ export function HomeScreen({ navigation }: Props) {
         <View style={styles.body}>
           <SectionHeader title="Modules" />
           <View style={styles.grid}>
-            {TILES.map((t) => {
+            {TILES.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
               const active = !!t.target;
               return (
                 <Card

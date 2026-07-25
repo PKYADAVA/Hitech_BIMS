@@ -23,7 +23,8 @@ export type ModuleKey =
   | "inventory"
   | "sales"
   | "purchase"
-  | "hr";
+  | "hr"
+  | "user";
 
 export interface CardView {
   title: string;
@@ -65,6 +66,14 @@ export interface ReportLink {
   path: string;
 }
 
+/** A tool the module exposes — a hub tile that opens a bespoke screen route. */
+export interface HubTool {
+  key: string;
+  title: string;
+  icon: string;
+  screen: "ManageAccess";
+}
+
 export interface ModuleConfig {
   key: ModuleKey;
   title: string;
@@ -74,6 +83,7 @@ export interface ModuleConfig {
   colorLight: string;
   sections: ModuleSection[];
   reports?: ReportLink[];
+  tools?: HubTool[];
 }
 
 /* ----------------------------- Broiler ---------------------------------- */
@@ -1565,6 +1575,105 @@ const hrResources: ResourceConfig[] = [
   },
 ];
 
+/* ------------------------------- User ----------------------------------- */
+
+const U = colors.user;
+
+const userResources: ResourceConfig[] = [
+  {
+    key: "user-users",
+    module: "user",
+    path: "/user/users/",
+    title: "Users",
+    singular: "User",
+    icon: "👤",
+    accent: U,
+    emptyMessage: "No users found.",
+    searchKeys: ["username", "email", "first_name", "last_name"],
+    card: (r) => ({
+      title: pick(r, ["username"], `User #${r.id}`),
+      subtitle: joinParts([joinParts([pick(r, ["first_name"]), pick(r, ["last_name"])], " "), pick(r, ["email"])]),
+      badge: r.is_active
+        ? r.is_superuser
+          ? { label: "Admin", tone: "brand" }
+          : r.is_staff
+          ? { label: "Staff", tone: "info" }
+          : { label: "Active", tone: "success" }
+        : { label: "Inactive", tone: "neutral" },
+    }),
+  },
+  {
+    key: "user-profiles",
+    module: "user",
+    path: "/user/profiles/",
+    title: "Profiles",
+    singular: "User Profile",
+    icon: "🪪",
+    accent: U,
+    emptyMessage: "No profiles found.",
+    searchKeys: ["department", "role"],
+    card: (r) => ({
+      title: pick(r, ["user_label"], `Profile #${r.id}`),
+      subtitle: joinParts([pick(r, ["role"]), pick(r, ["department"])]),
+    }),
+  },
+  {
+    key: "user-groups",
+    module: "user",
+    path: "/user/groups/",
+    title: "Roles",
+    singular: "Role",
+    icon: "🛡️",
+    accent: U,
+    emptyMessage: "No roles found.",
+    searchKeys: ["name"],
+    card: (r) => ({ title: pick(r, ["name"], `Role #${r.id}`) }),
+    children: [
+      { resourceKey: "user-group-permissions", fkParam: "group" },
+      { resourceKey: "user-group-access", fkParam: "group" },
+    ],
+  },
+  {
+    key: "user-group-permissions",
+    module: "user",
+    path: "/user/group-permissions/",
+    title: "Tab Permissions",
+    singular: "Tab Permission",
+    icon: "🔑",
+    accent: U,
+    emptyMessage: "No permissions.",
+    searchKeys: ["tab_code"],
+    card: (r) => ({
+      title: pick(r, ["tab_code"], `Perm #${r.id}`),
+      subtitle: joinParts(
+        [
+          r.can_view ? "view" : "",
+          r.can_add ? "add" : "",
+          r.can_edit ? "edit" : "",
+          r.can_delete ? "delete" : "",
+          r.can_print ? "print" : "",
+        ],
+        " · "
+      ),
+    }),
+  },
+  {
+    key: "user-group-access",
+    module: "user",
+    path: "/user/group-access/",
+    title: "Access Profiles",
+    singular: "Access Profile",
+    icon: "⚙️",
+    accent: U,
+    emptyMessage: "No access profiles.",
+    searchKeys: [],
+    card: (r) => ({
+      title: pick(r, ["group_label", "access_type"], `Access #${r.id}`),
+      subtitle: joinParts([pick(r, ["login_type"]), r.is_superuser ? "superuser" : ""]),
+    }),
+  },
+];
+
 /* ----------------------------- Modules ---------------------------------- */
 
 export const RESOURCES: Record<string, ResourceConfig> = Object.fromEntries(
@@ -1577,6 +1686,7 @@ export const RESOURCES: Record<string, ResourceConfig> = Object.fromEntries(
     ...salesResources,
     ...purchaseResources,
     ...hrResources,
+    ...userResources,
   ].map((r) => [r.key, r])
 );
 
@@ -1812,6 +1922,27 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         title: "Masters",
         resourceKeys: ["hr-departments", "hr-designations", "hr-shifts", "hr-groups"],
       },
+    ],
+  },
+  user: {
+    key: "user",
+    title: "Users",
+    tagline: "Users, roles & permissions",
+    icon: "👤",
+    color: colors.user,
+    colorLight: colors.userLight,
+    sections: [
+      {
+        title: "Users",
+        resourceKeys: ["user-users", "user-profiles"],
+      },
+      {
+        title: "Roles & Access",
+        resourceKeys: ["user-groups", "user-group-permissions", "user-group-access"],
+      },
+    ],
+    tools: [
+      { key: "manage-access", title: "Manage Access", icon: "🔐", screen: "ManageAccess" },
     ],
   },
 };

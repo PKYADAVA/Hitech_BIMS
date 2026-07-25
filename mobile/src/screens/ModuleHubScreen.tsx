@@ -68,6 +68,27 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
           </View>
         </View>
       ) : null}
+
+      {mod.tools && mod.tools.length > 0 ? (
+        <View>
+          <SectionHeader title="Tools" />
+          <View style={styles.grid}>
+            {mod.tools.map((tool) => (
+              <Card
+                key={tool.key}
+                padded={false}
+                style={{ ...styles.tile, width: tileW }}
+                onPress={() => navigation.navigate(tool.screen)}
+              >
+                <IconCircle icon={tool.icon} color={mod.color} size={40} />
+                <Text style={styles.tileTitle} numberOfLines={2}>
+                  {tool.title}
+                </Text>
+              </Card>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }

@@ -14,10 +14,12 @@ import { LoginScreen } from "@/screens/LoginScreen";
 import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
+import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
 import { useAuthStore } from "@/store/authStore";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, shadow } from "@/theme";
 import { ModuleStackParams, TabParams } from "./types";
 
@@ -102,6 +104,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />
+      <ModuleStack.Screen name="ManageAccess" component={ManageAccessScreen} />
     </ModuleStack.Navigator>
   );
 }
@@ -114,8 +117,12 @@ const InventoryStack = () => <ModuleStackScreen moduleKey="inventory" />;
 const SalesStack = () => <ModuleStackScreen moduleKey="sales" />;
 const PurchaseStack = () => <ModuleStackScreen moduleKey="purchase" />;
 const HrStack = () => <ModuleStackScreen moduleKey="hr" />;
+const UserStack = () => <ModuleStackScreen moduleKey="user" />;
 
 function AppTabs() {
+  const canModule = usePermissionsStore((s) => s.canModule);
+  const permsLoaded = usePermissionsStore((s) => s.loaded);
+  const show = (m: string) => !permsLoaded || canModule(m);
   return (
     <Tab.Navigator
       screenOptions={{
@@ -131,9 +138,15 @@ function AppTabs() {
       }}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: tabIcon("🏠") }} />
-      <Tab.Screen name="Broiler" component={BroilerStack} options={{ tabBarIcon: tabIcon("🐔") }} />
-      <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚") }} />
-      <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬") }} />
+      {show("broiler") && (
+        <Tab.Screen name="Broiler" component={BroilerStack} options={{ tabBarIcon: tabIcon("🐔") }} />
+      )}
+      {show("hatchery") && (
+        <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚") }} />
+      )}
+      {show("sms") && (
+        <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬") }} />
+      )}
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: tabIcon("👤") }} />
     </Tab.Navigator>
   );
@@ -156,6 +169,7 @@ export function RootNavigator() {
             <Root.Screen name="SalesModule" component={SalesStack} />
             <Root.Screen name="PurchaseModule" component={PurchaseStack} />
             <Root.Screen name="HrModule" component={HrStack} />
+            <Root.Screen name="UserModule" component={UserStack} />
           </>
         ) : (
           <Root.Screen name="Login" component={LoginScreen} />

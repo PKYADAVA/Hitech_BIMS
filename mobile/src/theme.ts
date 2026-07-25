@@ -32,6 +32,8 @@ export const colors = {
   purchaseLight: "#ede9fe",
   hr: "#db2777", // pink-600
   hrLight: "#fce7f3",
+  user: "#475569", // slate-600
+  userLight: "#e2e8f0",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",
