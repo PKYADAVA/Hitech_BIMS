@@ -236,6 +236,9 @@
               {% if 'chick_sale_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chick_sale_list' %}">
                 <i class="fas fa-cash-register"></i>Chick Sale
               </a></li>{% endif %}
+              {% if 'chick_sale_receipt_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chick_sale_receipt_list' %}">
+                <i class="fas fa-receipt"></i>Chick Sale Receipt
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

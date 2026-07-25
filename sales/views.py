@@ -590,6 +590,7 @@ def customer_ledger_report(request):
     from django.utils.dateparse import parse_date
     from account.models import CompanyProfile
     from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
 
     q2 = Decimal("0.01")
     customer_id = (request.GET.get("customer") or "").strip()
@@ -622,6 +623,10 @@ def customer_ledger_report(request):
                         .select_related("branch").prefetch_related("items__item").order_by("date", "id"))
         receipts = list(BirdSaleReceipt.objects.filter(sale_type="customer", customer=customer)
                         .select_related("receipt_account").order_by("date", "id"))
+        chick_sales = list(ChickSale.objects.filter(customer=customer)
+                           .select_related("warehouse").prefetch_related("items__item").order_by("date", "id"))
+        chick_receipts = list(ChickSaleReceipt.objects.filter(customer=customer)
+                              .select_related("receipt_account").order_by("date", "id"))
 
         # previous balance = opening + sales - receipts strictly before window
         prev_balance = opening
@@ -631,9 +636,15 @@ def customer_ledger_report(request):
         for inv in invoices:
             if fd and inv.date and inv.date < fd:
                 prev_balance += _si_num(inv.net_amount)
+        for cs in chick_sales:
+            if fd and cs.date and cs.date < fd:
+                prev_balance += _si_num(cs.final_amount)
         for rc in receipts:
             if fd and rc.date and rc.date < fd:
                 prev_balance -= _si_num(rc.amount)
+        for crc in chick_receipts:
+            if fd and crc.date and crc.date < fd:
+                prev_balance -= _si_num(crc.amount)
 
         # in-window events, ordered by (date, kind)
         events = []
@@ -645,10 +656,18 @@ def customer_ledger_report(request):
             if inv.date and ((fd and inv.date < fd) or (td and inv.date > td)):
                 continue
             events.append((inv.date, 1, "INV", inv))
+        for cs in chick_sales:
+            if cs.date and ((fd and cs.date < fd) or (td and cs.date > td)):
+                continue
+            events.append((cs.date, 1, "CS", cs))
         for rc in receipts:
             if rc.date and ((fd and rc.date < fd) or (td and rc.date > td)):
                 continue
             events.append((rc.date, 2, "RC", rc))
+        for crc in chick_receipts:
+            if crc.date and ((fd and crc.date < fd) or (td and crc.date > td)):
+                continue
+            events.append((crc.date, 2, "CRC", crc))
         events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1]))
 
         month_groups = OrderedDict()
@@ -713,17 +732,47 @@ def customer_ledger_report(request):
                         "remarks": (obj.remarks or "") if first else "",
                         "overdue": overdue if first else "",
                     })
-            else:  # RC — receipt
+            elif kind == "CS":  # hatchery chick sale — debit
+                sale_count += 1
+                amt = _si_num(obj.final_amount)
+                running += amt
+                grp["debit"] += amt
+                totals["debit"] += amt
+                sales_total += amt
+                overdue = _cl_overdue_days(as_of, d + timedelta(days=credit_period)) if d else ""
+                items = list(obj.items.all()) or [None]
+                for i, it in enumerate(items):
+                    first = i == 0
+                    grp["rows"].append({
+                        "date": d if first else None,
+                        "trnum": obj.bill_no if first else "",
+                        "doc_no": "",
+                        "type": "Chick Sale" if first else "",
+                        "type_slug": "chick-sale" if first else "",
+                        "item": it.item.description if it and it.item_id else "Chicks",
+                        "birds": "", "quantity": _si_num(it.net_qty) if it else "",
+                        "avg_weight": "", "rate": _si_num(it.sale_rate) if it else "",
+                        "amount": _si_num(it.amount) if it else "",
+                        "debit": amt.quantize(q2) if first else "", "credit": "",
+                        "balance": abs(running).quantize(q2) if first else "",
+                        "cr_dr": ("Dr" if running >= 0 else "Cr") if first else "",
+                        "sector": obj.warehouse.name if obj.warehouse_id else "",
+                        "vehicle": (obj.vehicle or "") if first else "",
+                        "remarks": (obj.remarks or "") if first else "",
+                        "overdue": overdue if first else "",
+                    })
+            else:  # RC / CRC — receipt (bird or chick)
                 receipt_count += 1
                 amt = _si_num(obj.amount)
                 running -= amt
                 grp["credit"] += amt
                 totals["credit"] += amt
                 receipts_total += amt
-                acct = obj.receipt_account.name if obj.receipt_account_id else ""
+                acct = obj.receipt_account.description if obj.receipt_account_id else ""
+                type_label = "Chick Receipt" if kind == "CRC" else "Receipts"
                 grp["rows"].append({
                     "date": d, "trnum": obj.receipt_no, "doc_no": obj.reference_no or "",
-                    "type": "Receipts", "type_slug": "receipt",
+                    "type": type_label, "type_slug": "receipt",
                     "item": f"{obj.get_mode_display()}{(' - ' + acct) if acct else ''}",
                     "birds": "", "quantity": "", "avg_weight": "", "rate": "", "amount": "",
                     "debit": "", "credit": amt.quantize(q2),
@@ -772,6 +821,7 @@ def _customer_balance_row(cust, fd, td, ref_date):
     the last receipt."""
     from decimal import Decimal
     from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
 
     q2 = Decimal("0.01")
     signed = _si_num(cust.opening_balance)
@@ -781,6 +831,8 @@ def _customer_balance_row(cust, fd, td, ref_date):
     bird_sales = list(BirdSale.objects.filter(sale_type="customer", customer=cust))
     invoices = list(SalesInvoice.objects.filter(customer=cust, is_active=True))
     receipts = list(BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust))
+    chick_sales = list(ChickSale.objects.filter(customer=cust))
+    chick_receipts = list(ChickSaleReceipt.objects.filter(customer=cust))
 
     def before(d):
         return d and fd and d < fd
@@ -804,10 +856,18 @@ def _customer_balance_row(cust, fd, td, ref_date):
         v = _si_num(inv.net_amount)
         opening += v if before(inv.date) else 0
         amount += v if within(inv.date) else 0
+    for cs in chick_sales:
+        v = _si_num(cs.final_amount)
+        opening += v if before(cs.date) else 0
+        amount += v if within(cs.date) else 0
     for rc in receipts:
         v = _si_num(rc.amount)
         opening -= v if before(rc.date) else 0
         receipt += v if within(rc.date) else 0
+    for crc in chick_receipts:
+        v = _si_num(crc.amount)
+        opening -= v if before(crc.date) else 0
+        receipt += v if within(crc.date) else 0
 
     bw = amount - receipt
     closing = opening + bw
@@ -816,11 +876,13 @@ def _customer_balance_row(cust, fd, td, ref_date):
     limit_exceeded = closing - credit_limit
     available = credit_limit - closing
 
-    rcpt_dates = [rc.date for rc in receipts if rc.date and (not td or rc.date <= td)]
+    rcpt_dates = [rc.date for rc in receipts if rc.date and (not td or rc.date <= td)] \
+        + [crc.date for crc in chick_receipts if crc.date and (not td or crc.date <= td)]
     if rcpt_dates:
         gap = (ref_date - max(rcpt_dates)).days
     else:
-        txn_dates = [bs.date for bs in bird_sales if bs.date] + [inv.date for inv in invoices if inv.date]
+        txn_dates = ([bs.date for bs in bird_sales if bs.date] + [inv.date for inv in invoices if inv.date]
+                     + [cs.date for cs in chick_sales if cs.date])
         base = min(txn_dates) if txn_dates else cust.as_on_date
         gap = (ref_date - base).days if base else 0
 

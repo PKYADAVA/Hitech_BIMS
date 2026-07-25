@@ -106,6 +106,7 @@ MODULE_REGISTRY = [
                     ("hatchery_list", "Hatch Register"),
                     ("delivery_challan_list", "Delivery Challan"),
                     ("chick_sale_list", "Chick Sale"),
+                    ("chick_sale_receipt_list", "Chick Sale Receipt"),
                 ],
             },
             {
