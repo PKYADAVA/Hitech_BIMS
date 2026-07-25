@@ -49,6 +49,12 @@
               </select>
             </div>
             <div class="col-md-6">
+              <label class="form-label" for="shed">Shed / Unit</label>
+              <select id="shed" class="form-select" disabled>
+                <option value="">Select a farm first</option>
+              </select>
+            </div>
+            <div class="col-md-6">
               <label class="form-label" for="batch_name">Batch No.</label>
               <input type="text" id="batch_name" class="form-control bg-light" readonly
                      placeholder="Auto-generated (e.g. BAH-0201-1)">
@@ -95,9 +101,13 @@
         <thead>
           <tr>
             <th>Broiler Farm</th>
+            <th>Shed / Unit</th>
             <th>Batch No.</th>
             <th>Book Number</th>
             <th>Lot No</th>
+            <th>Status</th>
+            <th>Created On</th>
+            <th>Closed On</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -111,7 +121,63 @@
 
 <script>
 const BREEDS = [{% for b in breeds %}{ id: {{ b.id }}, name: "{{ b.description|escapejs }}" },{% endfor %}];
+const SHEDS = [{% for s in sheds %}{ id: {{ s.id }}, farm_id: {{ s.farm_id }}, label: "{{ s.label|escapejs }}", occupied: {{ s.occupied|yesno:"true,false" }} },{% endfor %}];
+
+// Options for the sheds belonging to `farmId`, optionally pre-selecting `selectedId`.
+// Units already holding an active batch are disabled + tagged "(occupied)",
+// except `selectedId` itself so an edit can keep its current shed.
+function shedOptions(farmId, selectedId) {
+  return SHEDS
+    .filter(s => String(s.farm_id) === String(farmId))
+    .map(s => {
+      const isSelected = String(s.id) === String(selectedId);
+      const blocked = s.occupied && !isSelected;
+      return `<option value="${s.id}" ${isSelected ? 'selected' : ''} ${blocked ? 'disabled' : ''}>`
+           + `${escapeHtml(s.label)}${blocked ? ' (occupied)' : ''}</option>`;
+    })
+    .join('');
+}
+
+// Active = still growing (no end date, not settled); otherwise Closed.
+// This is why one unit can list several batches — only one is ever Active.
+function statusBadge(batch) {
+  const active = !batch.end_date && !batch.is_closed;
+  return active
+    ? '<span class="badge bg-success">Active</span>'
+    : '<span class="badge bg-secondary">Closed</span>';
+}
+
+// Format an ISO datetime into a readable "12 Jul 2026" date for the list.
+function fmtDate(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (isNaN(d)) return "-";
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+}
+
+// Label of a batch's shed for the list table (from the batch payload, fallback to SHEDS).
+function shedLabel(batch) {
+  if (!batch.shed_id) return "";
+  if (batch.shed_name || batch.shed_code) {
+    return (batch.shed_name || batch.shed_code) + (batch.shed_unit_no ? ` · Unit ${batch.shed_unit_no}` : "");
+  }
+  const s = SHEDS.find(x => String(x.id) === String(batch.shed_id));
+  return s ? s.label : "";
+}
+
 $(document).ready(function () {
+  // Repopulate the Add-modal Shed select whenever the farm changes.
+  $("#broiler_farm").on("change", function () {
+    const opts = shedOptions($(this).val(), null);
+    const $shed = $("#shed");
+    if (opts) {
+      $shed.html('<option value="">Select a shed / unit</option>' + opts).prop("disabled", false);
+    } else {
+      $shed.html('<option value="">No sheds for this farm</option>').prop("disabled", true);
+    }
+    $shed.trigger("change");
+  });
+
   function loadBatchList() {
     $.ajax({
       url: "{% url 'broiler_batch_list' %}",
@@ -135,9 +201,13 @@ $(document).ready(function () {
           const tableRow = `
             <tr>
               <td>${batch.broiler_farm_name}</td>
+              <td>${escapeHtml(shedLabel(batch)) || "-"}</td>
               <td>${batch.batch_name}</td>
               <td>${escapeHtml(batch.book_number) || "-"}</td>
               <td>${escapeHtml(batch.lot_no) || "-"}</td>
+              <td>${statusBadge(batch)}</td>
+              <td>${fmtDate(batch.created_at)}</td>
+              <td>${batch.closed_on ? fmtDate(batch.closed_on) : "-"}</td>
               <td>
                 <div class="d-flex gap-1">
                   {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm"
@@ -164,6 +234,13 @@ $(document).ready(function () {
                       <div class="mb-3">
                         <label class="form-label">Batch No.</label>
                         <input type="text" class="form-control bg-light" value="${escapeHtml(batch.batch_name)}" readonly>
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label">Shed / Unit</label>
+                        <select class="form-select" name="shed">
+                          <option value="">select</option>
+                          ${shedOptions(batch.broiler_farm_id, batch.shed_id)}
+                        </select>
                       </div>
                       <div class="mb-3">
                         <label class="form-label">Book Number</label>
@@ -203,6 +280,7 @@ $(document).ready(function () {
                 book_number: $(`#${formId} [name="book_number"]`).val(),
                 lot_no: $(`#${formId} [name="lot_no"]`).val(),
                 breed: $(`#${formId} [name="breed"]`).val() || null,
+                shed: $(`#${formId} [name="shed"]`).val() || null,
               }),
               success: function () {
                 loadBatchList();
@@ -241,18 +319,25 @@ $(document).ready(function () {
       headers: { "X-CSRFToken": "{{ csrf_token }}" },
       data: {
         broiler_farm_id: $("#broiler_farm").val(),
+        shed: $("#shed").val(),
         book_number: $("#book_number").val(),
         lot_no: $("#lot_no").val(),
         breed: $("#breed").val(),
       },
       success: function (resp) {
+        const usedShed = $("#shed").val();
+        if (usedShed) {
+          const s = SHEDS.find(x => String(x.id) === String(usedShed));
+          if (s) s.occupied = true;
+        }
         loadBatchList();
         $("#batchFormModal").modal("hide");
         $("#broiler-batch-form").trigger("reset");
+        $("#shed").html('<option value="">Select a farm first</option>').prop("disabled", true);
         window.showToast('success', `Batch ${resp.batch_name} created.`);
       },
-      error: function () {
-        window.showToast('danger', "Failed to add new batch.");
+      error: function (xhr) {
+        window.showToast('danger', xhr.responseJSON?.error || "Failed to add new batch.");
       },
     });
   });
