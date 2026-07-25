@@ -48,6 +48,12 @@ const CUSTOMER = () => sel("customer", "Customer", "/customers/", ["name", "code
 const SUPPLIER = () => sel("supplier", "Supplier", "/suppliers/", ["name", "code"]);
 const WAREHOUSE = (name: string, label: string) => sel(name, label, "/warehouses/", ["name", "code"]);
 const ACCOUNT = (name: string, label: string) => sel(name, label, "/accounts/", ["description", "code"]);
+const REGION = (r = false) => sel("region", "Region", "/broiler/regions/", ["code", "description"], r);
+const BRANCH = (r = false) => sel("branch", "Branch", "/broiler/branches/", ["branch_name", "code"], r);
+const BREED = (r = false) => sel("breed", "Breed", "/broiler/breeds/", ["code", "description"], r);
+const FARMER_GROUP = () => sel("farmer_group", "Farmer Group", "/broiler/farmer-groups/", ["code", "description"]);
+const HATCHERY = (r = false) => sel("hatchery", "Hatchery", "/hatchery/hatcheries/", ["hatchery_name"], r);
+const active = () => bool("is_active", "Active");
 
 export const FORMS: Record<string, FormSchema> = {
   /* ------------------------------- Broiler ------------------------------ */
@@ -190,6 +196,179 @@ export const FORMS: Record<string, FormSchema> = {
       dec("amount", "Amount", true),
     ],
   },
+
+  /* ------------------------- Broiler master data ------------------------ */
+  "broiler-regions": { fields: [text("code", "Code", true), text("description", "Description"), active()] },
+  "broiler-branches": {
+    fields: [text("code", "Code", true), text("branch_name", "Branch Name", true), REGION(), text("prefix", "Prefix"), active()],
+  },
+  "broiler-lines": {
+    fields: [text("code", "Code", true), text("description", "Description"), REGION(), BRANCH(), active()],
+  },
+  "broiler-supervisors": {
+    fields: [text("name", "Name", true), text("phone_no", "Phone"), text("email", "Email"), BRANCH(), area("address", "Address")],
+  },
+  "broiler-farmer-groups": { fields: [text("code", "Code", true), text("description", "Description"), active()] },
+  "broiler-farmers": {
+    fields: [
+      text("farmer_name", "Farmer Name", true),
+      text("mobile_no", "Mobile"),
+      text("phone_no", "Phone"),
+      FARMER_GROUP(),
+      text("pan_no", "PAN"),
+      text("aadhar_no", "Aadhar"),
+      text("account_holder_name", "A/C Holder"),
+      text("acc_no", "Account No."),
+      text("ifsc_code", "IFSC"),
+      text("bank_name", "Bank"),
+      area("address", "Address"),
+    ],
+  },
+  "broiler-farms": {
+    fields: [
+      text("farm_code", "Farm Code", true),
+      text("farm_name", "Farm Name", true),
+      BRANCH(),
+      SUPERVISOR(),
+      sel("farmer", "Farmer", "/broiler/farmers/", ["farmer_name"]),
+      text("region", "Region"),
+      text("line", "Line"),
+      num("farm_capacity", "Capacity"),
+      text("farm_type", "Farm Type"),
+      text("state", "State"),
+      text("district", "District"),
+      text("area", "Area"),
+      text("farm_pincode", "Pincode"),
+      area("farm_address", "Address"),
+      area("remarks", "Remarks"),
+    ],
+  },
+  "broiler-sheds": {
+    fields: [
+      sel("farm", "Farm", "/broiler/farms/", ["farm_name", "farm_code"], true),
+      text("shed_code", "Shed Code", true),
+      text("shed_name", "Shed Name"),
+      text("shed_type", "Shed Type"),
+      text("shed_no", "Shed No."),
+      num("unit_no", "Unit No."),
+      dec("length", "Length"),
+      dec("width", "Width"),
+      text("sq_feet", "Sq Feet"),
+      num("capacity", "Capacity"),
+      active(),
+    ],
+  },
+  "broiler-batches": {
+    fields: [
+      sel("broiler_farm", "Farm", "/broiler/farms/", ["farm_name", "farm_code"], true),
+      text("batch_name", "Batch Name", true),
+      text("book_number", "Book Number"),
+      text("lot_no", "Lot No."),
+      BREED(),
+      date("start_date", "Start Date"),
+      date("end_date", "End Date"),
+      bool("is_closed", "Closed"),
+    ],
+  },
+  "broiler-breeds": { fields: [text("code", "Code", true), text("description", "Description"), active()] },
+  "broiler-breed-standards": {
+    fields: [
+      text("code", "Code"),
+      BREED(true),
+      num("age", "Age (days)", true),
+      dec("body_weight", "Body Weight"),
+      dec("feed_intake", "Feed Intake"),
+      dec("avg_daily_gain", "Avg Daily Gain"),
+      dec("fcr", "FCR"),
+      dec("cum_feed", "Cum. Feed"),
+      active(),
+    ],
+  },
+  "broiler-diseases": {
+    fields: [
+      text("disease_code", "Disease Code", true),
+      text("disease_name", "Disease Name", true),
+      sel("batch", "Batch", "/broiler/batches/", ["batch_name", "lot_no"]),
+      area("symptoms", "Symptoms"),
+      area("diagnosis", "Diagnosis"),
+      date("diagnosed_date", "Diagnosed Date"),
+    ],
+  },
+  "broiler-growing-charges": {
+    fields: [
+      text("scheme_code", "Scheme Code", true),
+      text("schema_name", "Scheme Name"),
+      REGION(),
+      BRANCH(),
+      date("from_date", "From Date"),
+      date("to_date", "To Date"),
+      dec("chick_cost", "Chick Cost"),
+      dec("feed_cost", "Feed Cost"),
+      dec("medicine_cost", "Medicine Cost"),
+      dec("farmer_admin_cost", "Farmer Admin Cost"),
+      dec("management_admin_cost", "Mgmt Admin Cost"),
+      dec("standard_fcr", "Standard FCR"),
+      dec("standard_mortality", "Standard Mortality"),
+      active(),
+    ],
+  },
+
+  /* ------------------------ Hatchery master data ------------------------ */
+  "hatchery-hatch-settings": {
+    fields: [
+      text("setting_no", "Setting No.", true),
+      text("batch_flock_no", "Batch / Flock No."),
+      text("supplier_name", "Supplier Name"),
+      date("received_date", "Received Date"),
+      date("setting_date", "Setting Date"),
+      date("transfer_date", "Transfer Date"),
+      date("hatch_date", "Hatch Date"),
+      num("received_qty", "Received Qty"),
+      num("breakage_qty", "Breakage Qty"),
+      num("crack_qty", "Crack Qty"),
+      num("setting_qty", "Setting Qty"),
+      text("setter_temperature", "Setter Temp"),
+      text("setter_humidity", "Setter Humidity"),
+      text("hatcher_temperature", "Hatcher Temp"),
+      text("hatcher_humidity", "Hatcher Humidity"),
+      text("avg_chick_weight", "Avg Chick Weight"),
+      text("medicine_vaccine", "Medicine / Vaccine"),
+      num("packing_boxes_used", "Packing Boxes"),
+      area("remarks", "Remarks"),
+      text("prepared_by", "Prepared By"),
+      text("verified_by", "Verified By"),
+    ],
+  },
+  "hatchery-tray-settings": {
+    fields: [
+      text("setting_no", "Setting No.", true),
+      HATCHERY(),
+      date("setting_date", "Setting Date"),
+      date("transfer_date", "Transfer Date"),
+      date("hatch_date", "Hatch Date"),
+      text("loaded_by", "Loaded By"),
+      sel("grading", "Egg Grading", "/hatchery/egg-gradings/", ["transaction_no"]),
+    ],
+  },
+  "hatchery-hatcheries": {
+    fields: [
+      text("hatchery_name", "Hatchery Name", true),
+      text("operation_type", "Operation Type"),
+      text("owner_name", "Owner Name"),
+      text("contact", "Contact"),
+      text("email", "Email"),
+      text("state", "State"),
+      num("agreement_months", "Agreement Months"),
+      active(),
+    ],
+  },
+  "hatchery-setters": {
+    fields: [HATCHERY(true), text("setter_no", "Setter No.", true), num("capacity", "Capacity"), active()],
+  },
+  "hatchery-hatchers": {
+    fields: [HATCHERY(true), text("hatcher_no", "Hatcher No.", true), num("capacity", "Capacity"), active()],
+  },
+  "hatchery-expense-types": { fields: [text("name", "Name", true), active()] },
 };
 
 /** Whether a resource supports create/edit (has a schema + a CRUD endpoint). */
