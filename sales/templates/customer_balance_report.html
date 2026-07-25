@@ -95,7 +95,7 @@
           <th rowspan="2">Code</th>
           <th rowspan="2">Name</th>
           <th rowspan="2" class="num">Opening Balance</th>
-          <th colspan="5">Selected Period</th>
+          <th colspan="6">Selected Period</th>
           <th colspan="2">Balance</th>
           <th rowspan="2" class="num">Credit Limit</th>
           <th rowspan="2" class="num">Limit Exceeded</th>
@@ -103,7 +103,7 @@
           <th rowspan="2" class="num">Last Receipt Gap Days</th>
         </tr>
         <tr>
-          <th class="num">Birds</th><th class="num">Weight</th><th class="num">Amount</th>
+          <th class="num">Birds</th><th class="num">Weight</th><th class="num">Chicks</th><th class="num">Amount</th>
           <th class="num">Receipt</th><th class="num">B/w days balance</th>
           <th class="num">Credit</th><th class="num">Debit</th>
         </tr>
@@ -117,6 +117,7 @@
           <td class="num {% if r.opening < 0 %}neg{% endif %}">{{ r.opening|indian_currency }}</td>
           <td class="num">{{ r.birds }}</td>
           <td class="num">{{ r.weight|floatformat:2 }}</td>
+          <td class="num">{{ r.chicks|floatformat:0 }}</td>
           <td class="num">{{ r.amount|indian_currency }}</td>
           <td class="num">{{ r.receipt|indian_currency }}</td>
           <td class="num">{{ r.bw|indian_currency }}</td>
@@ -128,7 +129,7 @@
           <td class="num {% if r.gap >= 90 %}gap-hi{% endif %}">{{ r.gap }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="16" class="text-center text-muted py-4">No customers found.</td></tr>
+        <tr><td colspan="17" class="text-center text-muted py-4">No customers found.</td></tr>
         {% endfor %}
       </tbody>
       {% if rows %}
@@ -137,6 +138,7 @@
         <td class="num {% if totals.opening < 0 %}neg{% endif %}">{{ totals.opening|indian_currency }}</td>
         <td class="num">{{ totals.birds }}</td>
         <td class="num">{{ totals.weight|floatformat:2 }}</td>
+        <td class="num">{{ totals.chicks|floatformat:0 }}</td>
         <td class="num">{{ totals.amount|indian_currency }}</td>
         <td class="num">{{ totals.receipt|indian_currency }}</td>
         <td class="num">{{ totals.bw|indian_currency }}</td>

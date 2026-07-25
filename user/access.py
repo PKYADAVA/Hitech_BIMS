@@ -179,6 +179,7 @@ MODULE_REGISTRY = [
                 "label": "Transactions",
                 "tabs": [
                     ("sales_invoice_list", "Sales Invoice", ("sales_invoice_api_list",)),
+                    ("sales_receipt_list", "Sales Receipt", ("sales_receipt_api_list",)),
                 ],
             },
             {

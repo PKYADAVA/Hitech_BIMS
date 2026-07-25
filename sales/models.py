@@ -278,3 +278,74 @@ class SalesInvoiceItem(models.Model):
 
     def __str__(self):
         return f"{self.item.item_code} ({self.invoice.invoice_no})"
+
+
+class SalesReceipt(models.Model):
+    """A payment received from a customer against sales (Sales > Transactions >
+    Receipt). Reduces that customer's outstanding balance — not tied to one
+    specific Sales Invoice, mirroring the broiler Bird Sale / hatchery Chick
+    Sale receipts."""
+
+    MODE_CHOICES = [
+        ('Cash', 'Cash'), ('Bank Transfer', 'Bank Transfer'),
+        ('Cheque', 'Cheque'), ('UPI', 'UPI'), ('Card', 'Card'),
+    ]
+
+    receipt_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                                  help_text="Auto-generated transaction number, e.g. SR-2627-0001")
+    date = models.DateField(default=_now)
+    location = models.ForeignKey('inventory.Warehouse', on_delete=models.PROTECT,
+                                 related_name='sales_receipts', null=True, blank=True)
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='sales_receipts')
+
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='Cash')
+    receipt_account = models.ForeignKey('account.ChartOfAccount', on_delete=models.PROTECT,
+                                        related_name='sales_receipts')
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    reference_no = models.CharField(max_length=100, blank=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='sales_receipts')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Sales Receipt"
+        verbose_name_plural = "Sales Receipts"
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return self.receipt_no
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.receipt_no:
+            self.receipt_no = self._next_no(self.date)
+            super().save(update_fields=["receipt_no"])
+
+    @classmethod
+    def _next_no(cls, on_date=None):
+        current = on_date or _now().date()
+        start_year = current.year if current.month >= 4 else current.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"SR-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(receipt_no__startswith=prefix).values_list("receipt_no", flat=True):
+            m = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    @staticmethod
+    def balance_due(customer_id, exclude_id=None):
+        """Total sales-invoiced to this customer minus total sales receipts."""
+        if not customer_id:
+            return 0
+        total_sold = (SalesInvoice.objects.filter(customer_id=customer_id, is_active=True)
+                      .aggregate(t=models.Sum('net_amount'))['t'] or 0)
+        rcpts = SalesReceipt.objects.filter(customer_id=customer_id)
+        if exclude_id:
+            rcpts = rcpts.exclude(id=exclude_id)
+        total_received = rcpts.aggregate(t=models.Sum('amount'))['t'] or 0
+        return total_sold - total_received

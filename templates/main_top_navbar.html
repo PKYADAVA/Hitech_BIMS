@@ -415,6 +415,9 @@
               {% if 'sales_invoice_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sales_invoice_list' %}">
                 <i class="fas fa-file-invoice-dollar"></i>Sales Invoice
               </a></li>{% endif %}
+              {% if 'sales_receipt_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sales_receipt_list' %}">
+                <i class="fas fa-receipt"></i>Sales Receipt
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
