@@ -116,7 +116,7 @@
                 <i class="fas fa-truck-loading"></i>Bird Sale
               </a></li>{% endif %}
               {% if 'bird_sale_receipt_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'bird_sale_receipt_list' %}">
-                <i class="fas fa-receipt"></i>Receipt
+                <i class="fas fa-receipt"></i>Bird Receipt
               </a></li>{% endif %}
               {% if 'chicks_placement_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chicks_placement_list' %}">
                 <i class="fa-solid fa-kiwi-bird"></i>Chicks Placement
@@ -160,6 +160,9 @@
               </a></li>{% endif %}
               {% if 'day_record_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'day_record_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-calendar-day"></i>Day Record Report
+              </a></li>{% endif %}
+              {% if 'lifting_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'lifting_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-truck-loading"></i>Lifting Report
               </a></li>{% endif %}
             </ul>
           </li>
@@ -232,6 +235,9 @@
               </a></li>{% endif %}
               {% if 'chick_sale_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chick_sale_list' %}">
                 <i class="fas fa-cash-register"></i>Chick Sale
+              </a></li>{% endif %}
+              {% if 'chick_sale_receipt_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chick_sale_receipt_list' %}">
+                <i class="fas fa-receipt"></i>Chick Receipt
               </a></li>{% endif %}
             </ul>
           </li>
@@ -408,6 +414,24 @@
             <ul class="dropdown-menu">
               {% if 'sales_invoice_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sales_invoice_list' %}">
                 <i class="fas fa-file-invoice-dollar"></i>Sales Invoice
+              </a></li>{% endif %}
+              {% if 'sales_receipt_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sales_receipt_list' %}">
+                <i class="fas fa-receipt"></i>Sales Receipt
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+          {% if 'sales_reports' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="salesReportsDd">
+              <i class="fas fa-chart-bar"></i>Reports
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'customer_ledger' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_ledger' %}" target="_blank" rel="noopener">
+                <i class="fas fa-book"></i>Customer Ledger
+              </a></li>{% endif %}
+              {% if 'customer_balance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_balance' %}" target="_blank" rel="noopener">
+                <i class="fas fa-scale-balanced"></i>Customer Balance
               </a></li>{% endif %}
             </ul>
           </li>

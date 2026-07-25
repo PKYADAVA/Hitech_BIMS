@@ -59,7 +59,7 @@ MODULE_REGISTRY = [
                     ("medicine_entry_list", "Medicine Vaccine Consumption"),
                     ("daily_entry_single_list", "Single Batch Daily Entry"),
                     ("bird_sale_list", "Bird Sale"),
-                    ("bird_sale_receipt_list", "Receipt"),
+                    ("bird_sale_receipt_list", "Bird Receipt"),
                     ("chicks_placement_list", "Chicks Placement"),
                 ],
             },
@@ -77,6 +77,7 @@ MODULE_REGISTRY = [
                     ("feed_dispatch_stock_report", "Feed Dispatch & Stock Report"),
                     ("live_flock_summary_report", "Live Flock Summary Report"),
                     ("day_record_report", "Day Record Report"),
+                    ("lifting_report", "Lifting Report"),
                 ],
             },
         ],
@@ -105,6 +106,7 @@ MODULE_REGISTRY = [
                     ("hatchery_list", "Hatch Register"),
                     ("delivery_challan_list", "Delivery Challan"),
                     ("chick_sale_list", "Chick Sale"),
+                    ("chick_sale_receipt_list", "Chick Receipt"),
                 ],
             },
             {
@@ -177,6 +179,14 @@ MODULE_REGISTRY = [
                 "label": "Transactions",
                 "tabs": [
                     ("sales_invoice_list", "Sales Invoice", ("sales_invoice_api_list",)),
+                    ("sales_receipt_list", "Sales Receipt", ("sales_receipt_api_list",)),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("customer_ledger", "Customer Ledger"),
+                    ("customer_balance", "Customer Balance"),
                 ],
             },
         ],

@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Lifting Report — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='lifting_report' %}
+
+<style>
+  .lr-head { background:#dbeef2; border:1px solid #cdd9e0; border-radius:.55rem; padding:.6rem 1rem; margin-bottom:.6rem; text-align:center; }
+  .lr-head .co-name { font-weight:800; color:#c0392b; font-size:1rem; }
+  .lr-head .co-meta { font-size:.72rem; color:#333; line-height:1.35; }
+  .lr-head .co-title { font-size:1.3rem; font-weight:700; color:#1b3a6b; margin-top:.15rem; }
+  .lr-filter { background:#dbeef2; border:1px solid #cdd9e0; border-radius:.55rem; padding:.55rem .8rem; margin-bottom:.55rem; }
+  .lr-filter .form-label { font-size:.68rem; font-weight:600; margin-bottom:.1rem; }
+  .lr-filter .form-control-sm, .lr-filter .form-select-sm { font-size:.78rem; }
+  .lr-table { font-size:.72rem; }
+  .lr-table th, .lr-table td { white-space:nowrap; vertical-align:middle; padding:.34rem .5rem; }
+  .lr-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center; font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
+  .lr-table td.num, .lr-table th.num { text-align:right; }
+  .lr-table td.cust a, .lr-table td.cust { color:#2b62c9; font-weight:600; }
+  .lr-table tbody tr:hover td { background:#f4f8fc; }
+  .lr-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; position:sticky; bottom:0; }
+  .lr-scroll { max-height:74vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
+</style>
+
+<div class="lr-head">
+  <div class="co-name">{{ company.name }}</div>
+  <div class="co-meta">{{ company.address }}
+    {% if company.gstin %}<br>GSTIN : {{ company.gstin }}{% endif %}{% if company.mobile %} &nbsp; Cont : {{ company.mobile }}{% endif %}</div>
+  <div class="co-title">Lifting Report</div>
+</div>
+
+<div class="lr-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2 col-6"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2 col-6"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-3 col-12"><label class="form-label">Customer</label>
+      <select name="customer" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for c in customers %}<option value="{{ c.id }}" {% if customer_id == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2 col-6"><label class="form-label">Region</label>
+      <select name="region" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for r in regions %}<option value="{{ r.id }}" {% if region_id == r.id|stringformat:'s' %}selected{% endif %}>{{ r.description }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-6"><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2 col-6"><label class="form-label">Line</label>
+      <select name="line" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for l in lines %}<option value="{{ l }}" {% if line == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-6"><label class="form-label">Lifting Supervisor</label>
+      <select name="supervisor" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-12"><label class="form-label">Farm/Location</label>
+      <select name="farm" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2 col-6"><label class="form-label">Type</label>
+      <select name="type" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        <option value="customer" {% if sale_type == 'customer' %}selected{% endif %}>Customer Sale</option>
+        <option value="farmer" {% if sale_type == 'farmer' %}selected{% endif %}>Farmer Sale</option>
+      </select></div>
+    <div class="col-md-3 col-12 d-flex gap-1 flex-wrap">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'lifting_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas fa-truck-loading me-1"></i>{{ rows|length }} lifting(s)</div>
+  </div>
+  <div class="lr-scroll">
+    <table class="table table-bordered table-hover lr-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
+      <thead><tr>
+        <th>Date</th><th>Branch</th><th>Line</th>
+        <th>Farm</th><th>Batch</th><th>Cust Code</th>
+        <th>Customer</th><th>Invoice</th><th>Dc No.</th>
+        <th class="num">Mean Age</th><th class="num">Birds</th>
+        <th class="num">Weight</th><th class="num">Avg Wt</th>
+        <th class="num">Rate</th><th class="num">Amount</th>
+        <th class="num">TCS Amount</th><th class="num">Total Amount</th>
+        <th class="num">Receipt Amount</th><th class="num">Day Ledger Balance</th>
+        <th>Lifting Supervisor</th><th>Vehicle</th>
+        <th>Driver</th><th>Remarks</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td title="{{ r.branch }}">{{ r.branch }}</td>
+          <td title="{{ r.line }}">{{ r.line }}</td>
+          <td title="{{ r.farm }}">{{ r.farm }}</td>
+          <td title="{{ r.batch }}">{{ r.batch }}</td>
+          <td>{{ r.code }}</td>
+          <td class="cust" title="{{ r.customer }}">{% if r.customer_id %}<a href="{% url 'customer_ledger' %}?customer={{ r.customer_id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.customer }}</a>{% else %}{{ r.customer }}{% endif %}</td>
+          <td title="{{ r.invoice }}">{{ r.invoice }}</td>
+          <td>{{ r.dc_no }}</td>
+          <td class="num">{{ r.mean_age }}</td>
+          <td class="num">{{ r.birds }}</td>
+          <td class="num">{{ r.weight|floatformat:2 }}</td>
+          <td class="num">{{ r.avg_wt|floatformat:2 }}</td>
+          <td class="num">{{ r.rate|floatformat:2 }}</td>
+          <td class="num">{{ r.amount|indian_currency }}</td>
+          <td class="num">{{ r.tcs|indian_currency }}</td>
+          <td class="num">{{ r.total|indian_currency }}</td>
+          <td class="num">{% if r.receipt %}{{ r.receipt|indian_currency }}{% else %}0.00{% endif %}</td>
+          <td class="num {% if r.ledger_cr_dr == 'Cr' %}cr{% elif r.ledger_cr_dr == 'Dr' %}dr{% endif %}">{% if r.ledger_balance != "" %}{{ r.ledger_balance|indian_currency }} {{ r.ledger_cr_dr }}{% endif %}</td>
+          <td title="{{ r.supervisor }}">{{ r.supervisor }}</td>
+          <td title="{{ r.vehicle }}">{{ r.vehicle }}</td>
+          <td title="{{ r.driver }}">{{ r.driver }}</td>
+          <td title="{{ r.remarks }}">{{ r.remarks }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="23" class="text-center text-muted py-4">No liftings found for the selected filters.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot><tr>
+        <td colspan="10" class="text-center">Total</td>
+        <td class="num">{{ totals.birds }}</td>
+        <td class="num">{{ totals.weight|floatformat:2 }}</td>
+        <td class="num">{{ totals.avg_wt|floatformat:2 }}</td>
+        <td class="num">{{ totals.rate|floatformat:2 }}</td>
+        <td class="num">{{ totals.amount|indian_currency }}</td>
+        <td class="num">{{ totals.tcs|indian_currency }}</td>
+        <td class="num">{{ totals.total|indian_currency }}</td>
+        <td class="num">{{ totals.receipt|indian_currency }}</td>
+        <td colspan="5"></td>
+      </tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div></div>
+{% endblock %}

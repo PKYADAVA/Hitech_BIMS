@@ -29,8 +29,7 @@
   .k-close .k-ico{ background:#e7f0ff; color:#3b6fd4; }  .k-close .k-num{ color:#3b6fd4; }
 
   .sl-table { font-size:.74rem; }
-  .sl-table th, .sl-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem;
-                               overflow:hidden; text-overflow:ellipsis; }
+  .sl-table th, .sl-table td { white-space:nowrap; vertical-align:middle; padding:.4rem .55rem; }
   .sl-table thead th { background-color:#1b3a6b !important; color:#fff !important; position:sticky; top:0; z-index:3; text-align:center; font-weight:600; border-color:#274d84; }
   .sl-table td.num, .sl-table th.num { text-align:right; }
   .sl-scroll { max-height:78vh; overflow:auto; border:1px solid #eef0f4; border-radius:.6rem; }
@@ -41,6 +40,7 @@
   .vb { display:inline-block; font-weight:600; font-size:.68rem; border-radius:.35rem; padding:.12em .5em; }
   .vb-purchase-invoice { background:#e7f0ff; color:#2b62c9; }
   .vb-chicks-purchase  { background:#fff3cd; color:#8a6d00; }
+  .vb-egg-purchase     { background:#e5f7fb; color:#0087a5; }
   .vb-payment          { background:#e6f7ea; color:#1a7f4b; }
   .vb-debit-note       { background:#ffe9e0; color:#c0562a; }
   .vb-credit-note      { background:#f0e7ff; color:#7d3ec9; }
@@ -111,7 +111,7 @@
     <div class="small text-muted"><i class="fas fa-layer-group me-1"></i>Grouped By: <strong>Month</strong></div>
   </div>
   <div class="sl-scroll">
-    <table class="table table-bordered table-hover sl-table mb-0" style="width:2520px; table-layout:fixed;">
+    <table class="table table-bordered table-hover sl-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
       <thead><tr>
         <th>Date</th><th>Transaction No.</th><th>Transaction Type</th><th>Purchase Bill No.</th><th>Item</th><th>Boxes/bags</th>
         <th class="num">Sent Qty</th><th class="num">Received Qty</th><th class="num">Free</th><th class="num">Rate</th><th class="num">Amount</th>
@@ -176,6 +176,8 @@
   <div class="sl-legends">
     <span class="fw-semibold text-dark">Legends:</span>
     <span><span class="dot" style="background:#2b62c9"></span>Purchase Invoice</span>
+    <span><span class="dot" style="background:#8a6d00"></span>Chicks Purchase</span>
+    <span><span class="dot" style="background:#0087a5"></span>Egg Purchase</span>
     <span><span class="dot" style="background:#1a7f4b"></span>Payment</span>
     <span><span class="dot" style="background:#e0693a"></span>Debit Note</span>
     <span><span class="dot" style="background:#7d3ec9"></span>Credit Note</span>

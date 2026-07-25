@@ -29,4 +29,14 @@ urlpatterns = [
     path('sales-invoice/<int:id>/edit/', views.edit_sales_invoice, name='sales_invoice_edit'),
     path('sales-invoice/<int:id>/delete/', views.delete_sales_invoice, name='sales_invoice_delete'),
     path('sales_invoice_api/', views.sales_invoice_api_list, name='sales_invoice_api_list'),
+
+    path('customer-ledger/', views.customer_ledger_report, name='customer_ledger'),
+    path('customer-balance/', views.customer_balance_report, name='customer_balance'),
+
+    path('sales-receipt/', views.sales_receipt_list, name='sales_receipt_list'),
+    path('sales-receipt/add/', views.sales_receipt_form, name='sales_receipt_add'),
+    path('sales-receipt/<int:id>/edit/', views.sales_receipt_form, name='sales_receipt_edit'),
+    path('sales_receipt_api/', views.SalesReceiptAPI.as_view(), name='sales_receipt_api_list'),
+    path('sales_receipt_api/<int:id>/', views.SalesReceiptAPI.as_view(), name='sales_receipt_api'),
+    path('sales-receipt/balance-lookup/', views.sales_receipt_balance_lookup, name='sales_receipt_balance_lookup'),
 ]

@@ -25,6 +25,7 @@ from .models import (
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
     DeliveryChallan, DeliveryChallanItem, TraySetting, TraySettingLine,
     HatchEntry, HatchEntryHatcherOutput, HatchEntryVaccine, ChickSale, ChickSaleItem, ChangeRequest,
+    ChickSaleReceipt,
 )
 
 logger = logging.getLogger(__name__)
@@ -1835,6 +1836,130 @@ CHICK_SALE_REPORT_COLUMNS = [
     ("freight", "Freight", "money"),
     ("final_amount", "Final Amount", "money"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Chick Sale Receipt (Hatchery > Transactions) — customer payments against
+# chick sales, mirroring the broiler Bird Sale Receipt (customer-only).
+# ---------------------------------------------------------------------------
+def _chick_sale_receipt_to_dict(row):
+    return {
+        "id": row.id, "receipt_no": row.receipt_no, "date": row.date.isoformat(),
+        "location": row.location_id, "location_name": row.location.name if row.location_id else "",
+        "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
+        "mode": row.mode,
+        "receipt_account": row.receipt_account_id,
+        "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
+                                 if row.receipt_account_id else ""),
+        "amount": str(row.amount), "reference_no": row.reference_no, "remarks": row.remarks,
+    }
+
+
+def _apply_chick_sale_receipt(instance, data):
+    if data.get("date"):
+        instance.date = date.fromisoformat(data["date"])
+    instance.location_id = data.get("location") or None
+    instance.customer_id = data.get("customer") or None
+    instance.mode = data.get("mode") or "Cash"
+    instance.receipt_account_id = data.get("receipt_account") or None
+    instance.amount = Decimal(str(data.get("amount") or 0))
+    instance.reference_no = data.get("reference_no") or ""
+    instance.remarks = data.get("remarks") or ""
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleReceiptListTemplateView(View):
+    def get(self, request):
+        return render(request, "chick_sale_receipt_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleReceiptFormTemplateView(View):
+    def get(self, request, id=None):
+        return render(request, "chick_sale_receipt_form.html", {
+            "instance": ChickSaleReceipt.objects.filter(id=id).first() if id else None,
+            "locations": Warehouse.objects.order_by("name"),
+            "customers": Customer.objects.order_by("name"),
+            "accounts": ChartOfAccount.objects.order_by("code"),
+            "today": date.today().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class ChickSaleReceiptAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                row = ChickSaleReceipt.objects.select_related(
+                    "customer", "location", "receipt_account").get(id=id)
+                return JsonResponse(_chick_sale_receipt_to_dict(row))
+            qs = ChickSaleReceipt.objects.select_related("customer", "location", "receipt_account")
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            if from_date:
+                qs = qs.filter(date__gte=from_date)
+            if to_date:
+                qs = qs.filter(date__lte=to_date)
+            return JsonResponse([_chick_sale_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        except ChickSaleReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def post(self, request) -> JsonResponse:
+        try:
+            data = json.loads(request.body or "{}")
+            rows = data.get("rows") or []
+            if not rows:
+                return JsonResponse({"error": "Add at least one receipt row"}, status=400)
+            created = []
+            for row in rows:
+                if not row.get("location") or not row.get("customer"):
+                    continue
+                instance = ChickSaleReceipt(entry_by=request.user)
+                _apply_chick_sale_receipt(instance, row)
+                instance.full_clean(exclude=["receipt_no"])
+                instance.save()
+                created.append(instance.id)
+            if not created:
+                return JsonResponse({"error": "Add at least one receipt row with Location and Customer selected"}, status=400)
+            return JsonResponse({"message": "Receipt(s) created", "ids": created}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    @transaction.atomic
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            instance = ChickSaleReceipt.objects.get(id=id)
+            data = json.loads(request.body or "{}")
+            _apply_chick_sale_receipt(instance, data)
+            instance.full_clean(exclude=["receipt_no"])
+            instance.save()
+            return JsonResponse({"message": "Receipt updated"})
+        except ChickSaleReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            ChickSaleReceipt.objects.get(id=id).delete()
+            return JsonResponse({"message": "Receipt deleted"})
+        except ChickSaleReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def chick_sale_receipt_balance_lookup(request):
+    """Customer's full outstanding balance across all modules (matches the
+    Customer Ledger closing), for the Add/Edit form's auto-filled Balance."""
+    from sales.views import _customer_current_balance
+    balance = _customer_current_balance(request.GET.get("customer"),
+                                        exclude_chick_receipt_id=request.GET.get("exclude_id"))
+    return JsonResponse({"balance": str(balance)})
 
 
 @method_decorator(login_required, name="dispatch")

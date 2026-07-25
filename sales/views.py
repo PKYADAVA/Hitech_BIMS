@@ -563,3 +563,620 @@ def delete_sales_invoice(request, id):
     get_object_or_404(SalesInvoice, id=id).delete()
     messages.success(request, "Sales Invoice deleted successfully.")
     return redirect("sales_invoice_list")
+
+
+# ---------------------------------------------------------------------------
+# Sales > Reports > Customer Ledger (Customer History Report)
+# ---------------------------------------------------------------------------
+# A customer's running account: sales (Bird Sales + Sales Invoices) raise what
+# the customer owes us (Dr), receipts lower it (Cr), carried forward from an
+# opening/previous balance. Mirrors purchase.views.supplier_ledger_report but
+# from the receivables side. Bird-sale rows carry poultry columns (Birds /
+# Avg.Weight); Sales-Invoice rows carry one detail row per item.
+
+def _cl_overdue_days(as_of, due_date):
+    """Days a debit is past due as of the report end (0 when not overdue)."""
+    if not as_of or not due_date:
+        return ""
+    diff = (as_of - due_date).days
+    return diff if diff > 0 else 0
+
+
+@login_required(login_url="login")
+def customer_ledger_report(request):
+    from decimal import Decimal
+    from collections import OrderedDict
+    from datetime import date as _date, timedelta
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
+    from sales.models import SalesReceipt
+
+    q2 = Decimal("0.01")
+    customer_id = (request.GET.get("customer") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    export = (request.GET.get("export") or "").strip().lower()
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    as_of = td or _date.today()
+
+    customer = Customer.objects.filter(id=customer_id).first() if customer_id.isdigit() else None
+    groups = []
+    totals = {"debit": Decimal("0"), "credit": Decimal("0")}
+    prev_balance = Decimal("0")
+    running = Decimal("0")
+    sale_count = receipt_count = 0
+    sales_total = receipts_total = Decimal("0")
+
+    if customer:
+        # Opening balance — a receivable (customer owes us) is Dr.
+        opening = _si_num(customer.opening_balance)
+        if str(customer.to_pay_to_receive or "").lower().startswith("pay"):
+            opening = -opening  # we owe the customer (advance) → Cr
+
+        credit_period = int(customer.credit_period or 0)
+
+        bird_sales = list(BirdSale.objects.filter(sale_type="customer", customer=customer)
+                          .select_related("farm").order_by("date", "id"))
+        invoices = list(SalesInvoice.objects.filter(customer=customer, is_active=True)
+                        .select_related("branch").prefetch_related("items__item").order_by("date", "id"))
+        receipts = list(BirdSaleReceipt.objects.filter(sale_type="customer", customer=customer)
+                        .select_related("receipt_account").order_by("date", "id"))
+        chick_sales = list(ChickSale.objects.filter(customer=customer)
+                           .select_related("warehouse").prefetch_related("items__item").order_by("date", "id"))
+        chick_receipts = list(ChickSaleReceipt.objects.filter(customer=customer)
+                              .select_related("receipt_account").order_by("date", "id"))
+        sales_receipts = list(SalesReceipt.objects.filter(customer=customer)
+                              .select_related("receipt_account").order_by("date", "id"))
+
+        # previous balance = opening + sales - receipts strictly before window
+        prev_balance = opening
+        for bs in bird_sales:
+            if fd and bs.date and bs.date < fd:
+                prev_balance += _si_num(bs.amount)
+        for inv in invoices:
+            if fd and inv.date and inv.date < fd:
+                prev_balance += _si_num(inv.net_amount)
+        for cs in chick_sales:
+            if fd and cs.date and cs.date < fd:
+                prev_balance += _si_num(cs.final_amount)
+        for rc in receipts:
+            if fd and rc.date and rc.date < fd:
+                prev_balance -= _si_num(rc.amount)
+        for crc in chick_receipts:
+            if fd and crc.date and crc.date < fd:
+                prev_balance -= _si_num(crc.amount)
+        for sr in sales_receipts:
+            if fd and sr.date and sr.date < fd:
+                prev_balance -= _si_num(sr.amount)
+
+        # in-window events, ordered by (date, kind)
+        events = []
+        for bs in bird_sales:
+            if bs.date and ((fd and bs.date < fd) or (td and bs.date > td)):
+                continue
+            events.append((bs.date, 0, "BS", bs))
+        for inv in invoices:
+            if inv.date and ((fd and inv.date < fd) or (td and inv.date > td)):
+                continue
+            events.append((inv.date, 1, "INV", inv))
+        for cs in chick_sales:
+            if cs.date and ((fd and cs.date < fd) or (td and cs.date > td)):
+                continue
+            events.append((cs.date, 1, "CS", cs))
+        for rc in receipts:
+            if rc.date and ((fd and rc.date < fd) or (td and rc.date > td)):
+                continue
+            events.append((rc.date, 2, "RC", rc))
+        for crc in chick_receipts:
+            if crc.date and ((fd and crc.date < fd) or (td and crc.date > td)):
+                continue
+            events.append((crc.date, 2, "CRC", crc))
+        for sr in sales_receipts:
+            if sr.date and ((fd and sr.date < fd) or (td and sr.date > td)):
+                continue
+            events.append((sr.date, 2, "SR", sr))
+        events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1]))
+
+        month_groups = OrderedDict()
+
+        def _grp(d):
+            key = d.strftime("%B %Y") if d else "Undated"
+            if key not in month_groups:
+                month_groups[key] = {"label": key, "rows": [], "debit": Decimal("0"),
+                                     "credit": Decimal("0"), "closing": Decimal("0"), "count": 0}
+            return month_groups[key]
+
+        running = prev_balance
+        for d, _o, kind, obj in events:
+            grp = _grp(d)
+            grp["count"] += 1
+            if kind == "BS":
+                sale_count += 1
+                amt = _si_num(obj.amount)
+                running += amt
+                grp["debit"] += amt
+                totals["debit"] += amt
+                sales_total += amt
+                grp["rows"].append({
+                    "date": d, "trnum": obj.sale_no, "doc_no": obj.doc_no or "",
+                    "type": "Bird Sale", "type_slug": "bird-sale",
+                    "item": "Broiler Birds",
+                    "birds": obj.birds or "", "quantity": _si_num(obj.net_weight),
+                    "avg_weight": _si_num(obj.avg_weight), "free": "", "rate": _si_num(obj.rate),
+                    "amount": amt.quantize(q2), "debit": amt.quantize(q2), "credit": "",
+                    "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
+                    "sector": obj.farm.farm_name if obj.farm_id else "",
+                    "vehicle": obj.vehicle or "", "remarks": obj.remarks or "",
+                    "overdue": _cl_overdue_days(as_of, d + timedelta(days=credit_period)) if d else "",
+                })
+            elif kind == "INV":
+                sale_count += 1
+                amt = _si_num(obj.net_amount)
+                running += amt
+                grp["debit"] += amt
+                totals["debit"] += amt
+                sales_total += amt
+                due = obj.due_date or (d + timedelta(days=credit_period) if d else None)
+                overdue = _cl_overdue_days(as_of, due)
+                items = list(obj.items.all()) or [None]
+                for i, it in enumerate(items):
+                    first = i == 0
+                    grp["rows"].append({
+                        "date": d if first else None,
+                        "trnum": obj.invoice_no if first else "",
+                        "doc_no": (obj.reference_no or "") if first else "",
+                        "type": "Sales Invoice" if first else "",
+                        "type_slug": "sales-invoice" if first else "",
+                        "item": it.item.description if it and it.item_id else "",
+                        "birds": "", "quantity": _si_num(it.quantity) if it else "",
+                        "avg_weight": "", "free": _si_num(it.free_qty) if it else "",
+                        "rate": _si_num(it.rate) if it else "",
+                        "amount": _si_num(it.amount) if it else "",
+                        "debit": amt.quantize(q2) if first else "", "credit": "",
+                        "balance": abs(running).quantize(q2) if first else "",
+                        "cr_dr": ("Dr" if running >= 0 else "Cr") if first else "",
+                        "sector": obj.branch.name if obj.branch_id else "",
+                        "vehicle": (obj.vehicle_no or "") if first else "",
+                        "remarks": (obj.remarks or "") if first else "",
+                        "overdue": overdue if first else "",
+                    })
+            elif kind == "CS":  # hatchery chick sale — debit
+                sale_count += 1
+                amt = _si_num(obj.final_amount)
+                running += amt
+                grp["debit"] += amt
+                totals["debit"] += amt
+                sales_total += amt
+                overdue = _cl_overdue_days(as_of, d + timedelta(days=credit_period)) if d else ""
+                items = list(obj.items.all()) or [None]
+                for i, it in enumerate(items):
+                    first = i == 0
+                    grp["rows"].append({
+                        "date": d if first else None,
+                        "trnum": obj.bill_no if first else "",
+                        "doc_no": "",
+                        "type": "Chick Sale" if first else "",
+                        "type_slug": "chick-sale" if first else "",
+                        "item": it.item.description if it and it.item_id else "Chicks",
+                        "birds": "", "quantity": _si_num(it.net_qty) if it else "",
+                        "avg_weight": "", "free": _si_num(it.free_qty) if it else "",
+                        "rate": _si_num(it.sale_rate) if it else "",
+                        "amount": _si_num(it.amount) if it else "",
+                        "debit": amt.quantize(q2) if first else "", "credit": "",
+                        "balance": abs(running).quantize(q2) if first else "",
+                        "cr_dr": ("Dr" if running >= 0 else "Cr") if first else "",
+                        "sector": obj.warehouse.name if obj.warehouse_id else "",
+                        "vehicle": (obj.vehicle or "") if first else "",
+                        "remarks": (obj.remarks or "") if first else "",
+                        "overdue": overdue if first else "",
+                    })
+            else:  # RC / CRC / SR — receipt (bird / chick / sales)
+                receipt_count += 1
+                amt = _si_num(obj.amount)
+                running -= amt
+                grp["credit"] += amt
+                totals["credit"] += amt
+                receipts_total += amt
+                acct = obj.receipt_account.description if obj.receipt_account_id else ""
+                type_label = {"CRC": "Chick Receipt", "SR": "Sales Receipt"}.get(kind, "Bird Receipt")
+                grp["rows"].append({
+                    "date": d, "trnum": obj.receipt_no, "doc_no": obj.reference_no or "",
+                    "type": type_label, "type_slug": "receipt",
+                    "item": f"{obj.get_mode_display()}{(' - ' + acct) if acct else ''}",
+                    "birds": "", "quantity": "", "avg_weight": "", "free": "", "rate": "", "amount": "",
+                    "debit": "", "credit": amt.quantize(q2),
+                    "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
+                    "sector": "", "vehicle": "", "remarks": obj.remarks or "", "overdue": "",
+                })
+            grp["closing"] = running
+
+        for g in month_groups.values():
+            groups.append({
+                "label": g["label"], "count": g["count"],
+                "debit": g["debit"].quantize(q2), "credit": g["credit"].quantize(q2),
+                "closing": abs(g["closing"]).quantize(q2),
+                "cr_dr": "Dr" if g["closing"] >= 0 else "Cr",
+                "rows": g["rows"],
+            })
+
+    kpi = {
+        "opening": abs(prev_balance).quantize(q2), "opening_cr_dr": "Dr" if prev_balance >= 0 else "Cr",
+        "sales": sales_total.quantize(q2), "sale_count": sale_count,
+        "receipts": receipts_total.quantize(q2), "receipt_count": receipt_count,
+        "closing": abs(running).quantize(q2), "closing_cr_dr": "Dr" if running >= 0 else "Cr",
+    }
+    company = CompanyProfile.get_solo()
+    ctx = {
+        "customers": Customer.objects.order_by("name"),
+        "customer": customer, "customer_id": customer_id,
+        "from_date": from_date, "to_date": to_date,
+        "groups": groups,
+        "totals": {"debit": totals["debit"].quantize(q2), "credit": totals["credit"].quantize(q2)},
+        "prev_balance": abs(prev_balance).quantize(q2), "prev_cr_dr": "Dr" if prev_balance >= 0 else "Cr",
+        "closing": abs(running).quantize(q2), "closing_cr_dr": "Dr" if running >= 0 else "Cr",
+        "kpi": kpi, "company": company,
+    }
+    if export == "excel" and customer:
+        return _customer_ledger_excel(company, customer, from_date, to_date, ctx["prev_balance"],
+                                      ctx["prev_cr_dr"], groups, ctx["totals"], ctx["closing"], ctx["closing_cr_dr"])
+    return render(request, "customer_ledger_report.html", ctx)
+
+
+def _customer_balance_row(cust, fd, td, ref_date):
+    """One Customer Balance row: opening (signed receivable before the window),
+    period Birds/Weight/Amount (Bird Sales + Sales Invoices) and Receipt (Bird
+    Sale Receipts), the between-days movement, the closing split into Debit
+    (customer owes) / Credit (advance), credit-limit position, and days since
+    the last receipt."""
+    from decimal import Decimal
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
+    from sales.models import SalesReceipt
+
+    q2 = Decimal("0.01")
+    signed = _si_num(cust.opening_balance)
+    if str(cust.to_pay_to_receive or "").lower().startswith("pay"):
+        signed = -signed  # we owe the customer (advance) → Cr
+
+    bird_sales = list(BirdSale.objects.filter(sale_type="customer", customer=cust))
+    invoices = list(SalesInvoice.objects.filter(customer=cust, is_active=True))
+    receipts = list(BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust))
+    chick_sales = list(ChickSale.objects.filter(customer=cust).prefetch_related("items"))
+    chick_receipts = list(ChickSaleReceipt.objects.filter(customer=cust))
+    sales_receipts = list(SalesReceipt.objects.filter(customer=cust))
+
+    def before(d):
+        return d and fd and d < fd
+
+    def within(d):
+        return d and (not fd or d >= fd) and (not td or d <= td)
+
+    opening = signed
+    amount = Decimal("0")   # receivable-raising in period (sales)
+    receipt = Decimal("0")  # receivable-lowering in period (receipts)
+    birds = 0
+    weight = Decimal("0")
+    chicks = Decimal("0")
+    for bs in bird_sales:
+        v = _si_num(bs.amount)
+        opening += v if before(bs.date) else 0
+        if within(bs.date):
+            amount += v
+            birds += int(bs.birds or 0)
+            weight += _si_num(bs.net_weight)
+    for inv in invoices:
+        v = _si_num(inv.net_amount)
+        opening += v if before(inv.date) else 0
+        amount += v if within(inv.date) else 0
+    for cs in chick_sales:
+        v = _si_num(cs.final_amount)
+        opening += v if before(cs.date) else 0
+        if within(cs.date):
+            amount += v
+            chicks += _si_num(cs.total_net_qty())
+    for rc in receipts:
+        v = _si_num(rc.amount)
+        opening -= v if before(rc.date) else 0
+        receipt += v if within(rc.date) else 0
+    for crc in chick_receipts:
+        v = _si_num(crc.amount)
+        opening -= v if before(crc.date) else 0
+        receipt += v if within(crc.date) else 0
+    for sr in sales_receipts:
+        v = _si_num(sr.amount)
+        opening -= v if before(sr.date) else 0
+        receipt += v if within(sr.date) else 0
+
+    bw = amount - receipt
+    closing = opening + bw
+
+    credit_limit = _si_num(cust.credit_limit)
+    limit_exceeded = closing - credit_limit
+    available = credit_limit - closing
+
+    rcpt_dates = [rc.date for rc in receipts if rc.date and (not td or rc.date <= td)] \
+        + [crc.date for crc in chick_receipts if crc.date and (not td or crc.date <= td)] \
+        + [sr.date for sr in sales_receipts if sr.date and (not td or sr.date <= td)]
+    if rcpt_dates:
+        gap = (ref_date - max(rcpt_dates)).days
+    else:
+        txn_dates = ([bs.date for bs in bird_sales if bs.date] + [inv.date for inv in invoices if inv.date]
+                     + [cs.date for cs in chick_sales if cs.date])
+        base = min(txn_dates) if txn_dates else cust.as_on_date
+        gap = (ref_date - base).days if base else 0
+
+    return {
+        "id": cust.id, "code": cust.code or "", "name": cust.name,
+        "group": (cust.customer_group.description or cust.customer_group.code
+                  if cust.customer_group_id else "") or "Sundry Debtors",
+        "opening": opening.quantize(q2),
+        "birds": birds, "weight": weight.quantize(q2), "chicks": chicks.quantize(q2),
+        "amount": amount.quantize(q2), "receipt": receipt.quantize(q2), "bw": bw.quantize(q2),
+        "debit": closing.quantize(q2) if closing >= 0 else Decimal("0.00"),
+        "credit": (-closing).quantize(q2) if closing < 0 else Decimal("0.00"),
+        "credit_limit": credit_limit.quantize(q2),
+        "limit_exceeded": limit_exceeded.quantize(q2) if limit_exceeded > 0 else Decimal("0.00"),
+        "available": available.quantize(q2) if available > 0 else Decimal("0.00"),
+        "gap": max(gap, 0),
+        "has_activity": bool(opening or amount or receipt or closing),
+    }
+
+
+@login_required(login_url="login")
+def customer_balance_report(request):
+    """Sales > Reports > Customer Balance — every customer's receivable position:
+    opening, this period's Birds/Weight/Amount/Receipt movement, closing Debit
+    (customer owes) / Credit (advance), credit-limit position and last-receipt gap."""
+    from decimal import Decimal
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+
+    q2 = Decimal("0.01")
+    group = (request.GET.get("customer_group") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    ref_date = td or timezone.localdate()
+
+    customers = Customer.objects.select_related("customer_group").order_by("name")
+    if group.isdigit():
+        customers = customers.filter(customer_group_id=group)
+
+    rows = [_customer_balance_row(c, fd, td, ref_date) for c in customers]
+
+    tkeys = ["opening", "amount", "receipt", "bw", "debit", "credit",
+             "credit_limit", "limit_exceeded", "available"]
+    totals = {k: sum((r[k] for r in rows), Decimal("0")).quantize(q2) for k in tkeys}
+    totals["birds"] = sum((r["birds"] for r in rows), 0)
+    totals["weight"] = sum((r["weight"] for r in rows), Decimal("0")).quantize(q2)
+    totals["chicks"] = sum((r["chicks"] for r in rows), Decimal("0")).quantize(q2)
+
+    groups = [{"id": g.id, "name": g.description or g.code or f"Group {g.id}"}
+              for g in CustomerGroup.objects.order_by("description")]
+
+    return render(request, "customer_balance_report.html", {
+        "rows": rows, "totals": totals,
+        "customer_groups": groups, "group": group,
+        "from_date": from_date, "to_date": to_date,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, prev_cr_dr,
+                           groups, totals, closing, closing_cr_dr):
+    """Stream the Customer Ledger as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Customer Ledger"
+    head_fill = PatternFill("solid", fgColor="1B3A6B")
+    head_font = Font(bold=True, color="FFFFFF")
+    bold = Font(bold=True)
+    headers = ["Date", "Transaction No.", "Doc No.", "Type", "Item", "Birds", "Quantity",
+               "Avg.Weight", "Free", "Rate", "Amount", "Debit", "Credit", "Balance", "Sector",
+               "Vehicle", "Remarks", "Over Due By Days"]
+
+    ws.append([company.name if company else ""])
+    ws.append([f"Customer History Report — {customer.name}"])
+    ws.append([f"Period: {from_date or '—'} to {to_date or '—'}"])
+    ws.append([])
+    ws.append(headers)
+    for c in ws[ws.max_row]:
+        c.fill = head_fill
+        c.font = head_font
+        c.alignment = Alignment(horizontal="center")
+
+    prev = ["", "", "", "", "", "", "", "", "", "", "", "", "", f"{prev_balance} {prev_cr_dr}",
+            "Previous Balance", "", "", ""]
+    ws.append(prev)
+    for g in groups:
+        ws.append([g["label"], f"{g['count']} transaction(s)", "", "", "", "", "", "", "", "", "",
+                   float(g["debit"]), float(g["credit"]), f"{g['closing']} {g['cr_dr']}", "", "", "", ""])
+        for c in ws[ws.max_row]:
+            c.font = bold
+        for r in g["rows"]:
+            ws.append([
+                r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["trnum"], r["doc_no"],
+                r["type"], r["item"], r["birds"], r["quantity"], r["avg_weight"], r["free"], r["rate"],
+                r["amount"], r["debit"], r["credit"],
+                f"{r['balance']} {r['cr_dr']}" if r["balance"] != "" else "",
+                r["sector"], r["vehicle"], r["remarks"], r["overdue"],
+            ])
+    ws.append(["Grand Total", "", "", "", "", "", "", "", "", "", "", float(totals["debit"]),
+               float(totals["credit"]), f"{closing} {closing_cr_dr}", "", "", "", ""])
+    for c in ws[ws.max_row]:
+        c.font = bold
+
+    widths = [11, 18, 14, 14, 22, 8, 11, 10, 9, 9, 14, 14, 14, 16, 18, 14, 20, 10]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    resp = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp["Content-Disposition"] = f'attachment; filename="customer_ledger_{customer.code or customer.id}.xlsx"'
+    wb.save(resp)
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Sales Receipt (Sales > Transactions) — customer payments against sales,
+# mirroring the broiler Bird Receipt / hatchery Chick Receipt (customer-only).
+# ---------------------------------------------------------------------------
+from sales.models import SalesReceipt
+
+
+def _sales_receipt_to_dict(row):
+    return {
+        "id": row.id, "receipt_no": row.receipt_no, "date": row.date.isoformat(),
+        "location": row.location_id, "location_name": row.location.name if row.location_id else "",
+        "customer": row.customer_id, "customer_name": row.customer.name if row.customer_id else "",
+        "mode": row.mode,
+        "receipt_account": row.receipt_account_id,
+        "receipt_account_name": (f"{row.receipt_account.code} - {row.receipt_account.description}"
+                                 if row.receipt_account_id else ""),
+        "amount": str(row.amount), "reference_no": row.reference_no, "remarks": row.remarks,
+    }
+
+
+def _apply_sales_receipt(instance, data):
+    if data.get("date"):
+        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+    instance.location_id = data.get("location") or None
+    instance.customer_id = data.get("customer") or None
+    instance.mode = data.get("mode") or "Cash"
+    instance.receipt_account_id = data.get("receipt_account") or None
+    instance.amount = _si_num(data.get("amount"))
+    instance.reference_no = data.get("reference_no") or ""
+    instance.remarks = data.get("remarks") or ""
+
+
+@login_required(login_url="login")
+def sales_receipt_list(request):
+    return render(request, "sales_receipt_list.html")
+
+
+@login_required(login_url="login")
+def sales_receipt_form(request, id=None):
+    return render(request, "sales_receipt_form.html", {
+        "instance": SalesReceipt.objects.filter(id=id).first() if id else None,
+        "locations": Warehouse.objects.order_by("name"),
+        "customers": Customer.objects.order_by("name"),
+        "accounts": ChartOfAccount.objects.order_by("code"),
+        "today": timezone.localdate().isoformat(),
+    })
+
+
+@method_decorator(login_required, name="dispatch")
+class SalesReceiptAPI(View):
+    def get(self, request, id=None):
+        try:
+            if id:
+                row = SalesReceipt.objects.select_related("customer", "location", "receipt_account").get(id=id)
+                return JsonResponse(_sales_receipt_to_dict(row))
+            qs = SalesReceipt.objects.select_related("customer", "location", "receipt_account")
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            if from_date:
+                qs = qs.filter(date__gte=from_date)
+            if to_date:
+                qs = qs.filter(date__lte=to_date)
+            return JsonResponse([_sales_receipt_to_dict(r) for r in qs.order_by("-date", "-id")], safe=False)
+        except SalesReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body or "{}")
+            rows = data.get("rows") or []
+            created = []
+            with transaction.atomic():
+                for row in rows:
+                    if not row.get("customer"):
+                        continue
+                    instance = SalesReceipt(created_by=request.user if request.user.is_authenticated else None)
+                    _apply_sales_receipt(instance, row)
+                    instance.full_clean(exclude=["receipt_no"])
+                    instance.save()
+                    created.append(instance.id)
+            if not created:
+                return JsonResponse({"error": "Add at least one receipt row with a Customer selected"}, status=400)
+            return JsonResponse({"message": "Receipt(s) created", "ids": created}, status=201)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def put(self, request, id):
+        try:
+            instance = SalesReceipt.objects.get(id=id)
+            data = json.loads(request.body or "{}")
+            _apply_sales_receipt(instance, data)
+            instance.full_clean(exclude=["receipt_no"])
+            instance.save()
+            return JsonResponse({"message": "Receipt updated"})
+        except SalesReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    def delete(self, request, id):
+        try:
+            SalesReceipt.objects.get(id=id).delete()
+            return JsonResponse({"message": "Receipt deleted"})
+        except SalesReceipt.DoesNotExist:
+            raise Http404("Receipt not found")
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+
+def _customer_current_balance(customer_id, exclude_sales_receipt_id=None,
+                              exclude_bird_receipt_id=None, exclude_chick_receipt_id=None):
+    """A customer's total outstanding balance across every module — the same
+    figure the Customer Ledger shows as its closing (opening + all Bird/Chick/
+    Invoice sales − all Bird/Chick/Sales receipts). Positive = customer owes us.
+    The per-module exclude_* ids drop the receipt currently being edited so its
+    own amount isn't double-counted in the balance shown on its edit form."""
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from hatchery.models import ChickSale, ChickSaleReceipt
+    from django.db.models import Sum
+
+    cust = Customer.objects.filter(id=customer_id).first() if customer_id else None
+    if not cust:
+        return Decimal("0")
+    bal = _si_num(cust.opening_balance)
+    if str(cust.to_pay_to_receive or "").lower().startswith("pay"):
+        bal = -bal
+    def _sum(qs, field):
+        return _si_num(qs.aggregate(t=Sum(field))["t"])
+    bal += _sum(BirdSale.objects.filter(sale_type="customer", customer=cust), "amount")
+    bal += _sum(SalesInvoice.objects.filter(customer=cust, is_active=True), "net_amount")
+    bal += _sum(ChickSale.objects.filter(customer=cust), "final_amount")
+
+    bird_rc = BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust)
+    if exclude_bird_receipt_id:
+        bird_rc = bird_rc.exclude(id=exclude_bird_receipt_id)
+    bal -= _sum(bird_rc, "amount")
+    chick_rc = ChickSaleReceipt.objects.filter(customer=cust)
+    if exclude_chick_receipt_id:
+        chick_rc = chick_rc.exclude(id=exclude_chick_receipt_id)
+    bal -= _sum(chick_rc, "amount")
+    sr = SalesReceipt.objects.filter(customer=cust)
+    if exclude_sales_receipt_id:
+        sr = sr.exclude(id=exclude_sales_receipt_id)
+    bal -= _sum(sr, "amount")
+    return bal
+
+
+@login_required(login_url="login")
+def sales_receipt_balance_lookup(request):
+    """Customer's full outstanding balance (across all modules), matching the
+    Customer Ledger closing — not just the sales-invoice portion."""
+    balance = _customer_current_balance(request.GET.get("customer"),
+                                        exclude_sales_receipt_id=request.GET.get("exclude_id"))
+    return JsonResponse({"balance": str(balance)})

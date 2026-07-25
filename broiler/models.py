@@ -1217,8 +1217,11 @@ class BirdSale(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False,
                                  help_text="Net weight x Rate + RoundOff")
 
-    lifting_supervisor = models.ForeignKey(Supervisor, on_delete=models.SET_NULL, null=True, blank=True,
-                                           related_name='bird_sales')
+    # The person who supervised the lifting/weighment — any employee (branch
+    # manager, line supervisor, accountant, weighment operator, etc.), not
+    # restricted to the broiler Supervisor master.
+    lifting_supervisor = models.ForeignKey('hr.Employee', on_delete=models.SET_NULL, null=True, blank=True,
+                                           related_name='lifting_bird_sales')
     vehicle = models.CharField(max_length=50, blank=True)
     driver = models.CharField(max_length=100, blank=True)
     remarks = models.CharField(max_length=255, blank=True)

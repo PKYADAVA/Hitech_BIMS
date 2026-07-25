@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Receipt - BIMS{% endblock %}
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block title %}Chick Receipt - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='hatchery' %}{% endblock %}
 {% block content %}
-{% include '_broiler_transaction_subnavbar.html' with active_tab='bird_sale_receipt' %}
+{% include '_subnav.html' with module='hatchery_transaction' active_tab='chick_sale_receipt' %}
 
 <div class="page-header">
   <div class="page-header-main">
-    <div class="page-header-title"><i class="fas fa-receipt"></i> Bird Receipt</div>
-    <div class="page-header-subtitle">Payments received from Bird Sale customers/farmers at a Farm</div>
+    <div class="page-header-title"><i class="fas fa-receipt"></i> Chick Receipt</div>
+    <div class="page-header-subtitle">Payments received from Chick Sale customers</div>
   </div>
   <div class="page-header-right">
-    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'bird_sale_receipt_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'chick_sale_receipt_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
   </div>
 </div>
 
@@ -81,8 +81,6 @@ $(function () {
   $("#from-date").val(today);
   $("#to-date").val(today);
 
-  // escapeHtml() provided globally by main.js
-
   function renderRows(rows) {
     if (table) { table.destroy(); }
     const tbody = $("#receipt-table tbody");
@@ -91,13 +89,13 @@ $(function () {
       tbody.append(`<tr>
         <td>${escapeHtml(row.date)}</td>
         <td>${escapeHtml(row.receipt_no)}</td>
-        <td>${escapeHtml(row.buyer_name)}</td>
+        <td>${escapeHtml(row.customer_name)}</td>
         <td>${escapeHtml(row.mode)}</td>
         <td>${escapeHtml(row.receipt_account_name)}</td>
         <td>${Number(row.amount).toFixed(2)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
-            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/chick-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
           </div>
         </td>
@@ -112,7 +110,7 @@ $(function () {
   }
 
   function loadRows() {
-    $.getJSON("{% url 'bird_sale_receipt_api_list' %}", {
+    $.getJSON("{% url 'chick_sale_receipt_api_list' %}", {
       from_date: $("#from-date").val(), to_date: $("#to-date").val(),
     }, function (rows) {
       renderRows(rows);
@@ -131,7 +129,7 @@ $(function () {
   $("#confirm-delete-btn").on("click", function () {
     if (!pendingDeleteId) return;
     $.ajax({
-      url: `/bird_sale_receipt_api/${pendingDeleteId}/`,
+      url: `/chick_sale_receipt_api/${pendingDeleteId}/`,
       type: "DELETE",
       headers: { "X-CSRFToken": csrfToken },
       success: function () {

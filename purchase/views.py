@@ -1027,6 +1027,8 @@ def _purchase_credit(obj, kind):
     """Invoice value owed to the supplier: the stored net_amount when set, else
     the purchase's own compute_net_amount() (same definition the purchase form
     persists), so the ledger matches the rest of the system."""
+    if kind == "EP":  # hatchery Egg Purchase — net_amount() is a method
+        return _sl_num(obj.net_amount())
     net = _sl_num(obj.net_amount)
     if net > 0:
         return net
@@ -1045,6 +1047,7 @@ def supplier_ledger_report(request):
     from account.models import CompanyProfile
     from django.utils.dateparse import parse_date
 
+    from hatchery.models import EggPurchase
     q2 = Decimal("0.01")
     supplier_id = (request.GET.get("supplier") or "").strip()
     from_date = (request.GET.get("from_date") or "").strip()
@@ -1070,6 +1073,8 @@ def supplier_ledger_report(request):
                    .prefetch_related("items__item", "items__farm_warehouse").order_by("date", "id"))
         cps = list(ChicksPurchase.objects.filter(supplier=supplier)
                    .select_related("item").prefetch_related("items__farm_warehouse").order_by("date", "id"))
+        eps = list(EggPurchase.objects.filter(supplier=supplier)
+                   .select_related("warehouse").prefetch_related("items__item").order_by("date", "id"))
         pay_lines = list(SupplierPaymentLine.objects.filter(supplier=supplier)
                          .select_related("payment").order_by("payment__date", "id"))
         dns = list(DebitNote.objects.filter(supplier=supplier).order_by("date", "id"))
@@ -1084,6 +1089,9 @@ def supplier_ledger_report(request):
         for ch in cps:
             if fd and ch.date and ch.date < fd:
                 prev_balance += _purchase_credit(ch, "CP")
+        for ep in eps:
+            if fd and ep.date and ep.date < fd:
+                prev_balance += _purchase_credit(ep, "EP")
         for dn in dns:
             if fd and dn.date and dn.date < fd:
                 prev_balance += _sl_num(dn.amount)
@@ -1104,6 +1112,10 @@ def supplier_ledger_report(request):
             if ch.date and ((fd and ch.date < fd) or (td and ch.date > td)):
                 continue
             events.append((ch.date, 1, "CP", ch))
+        for ep in eps:
+            if ep.date and ((fd and ep.date < fd) or (td and ep.date > td)):
+                continue
+            events.append((ep.date, 1, "EP", ep))
         for pl in pay_lines:
             d = pl.payment.date
             if d and ((fd and d < fd) or (td and d > td)):
@@ -1134,45 +1146,66 @@ def supplier_ledger_report(request):
         for d, _o, kind, obj in events:
             grp = _grp(d)
             grp["vouchers"] += 1
-            if kind in ("GP", "CP"):
+            if kind in ("GP", "CP", "EP"):
                 purchase_count += 1
                 amt = _purchase_credit(obj, kind)
                 running += amt                 # a purchase raises what we owe (Dr)
                 grp["debit"] += amt
-                type_label = "Purchase Invoice" if kind == "GP" else "Chicks Purchase"
-                type_slug = "purchase-invoice" if kind == "GP" else "chicks-purchase"
+                type_label = {"GP": "Purchase Invoice", "CP": "Chicks Purchase", "EP": "Egg Purchase"}[kind]
+                type_slug = {"GP": "purchase-invoice", "CP": "chicks-purchase", "EP": "egg-purchase"}[kind]
+                # header fields differ across the three purchase sources
+                if kind == "EP":
+                    h_trnum, h_doc = obj.transaction_no, (obj.dc_no or "")
+                    h_freight, h_tds = _sl_num(obj.freight_amount), _sl_num(obj.tcs_amount())
+                    h_vehicle, h_boxes = (obj.vehicle or ""), None
+                else:
+                    h_trnum, h_doc = obj.purchase_no, (obj.bill_no or "")
+                    h_freight, h_tds = _sl_num(obj.freight_amount), _sl_num(obj.tds_amount)
+                    h_vehicle, h_boxes = (obj.vehicle_no or ""), _sl_num(obj.no_of_bags)
                 items = list(obj.items.all()) or [None]
                 for i, it in enumerate(items):
                     first = i == 0
                     if kind == "GP":
                         item_name = it.item.description if it and it.item_id else ""
                         gst_amt = (_sl_num(it.amount) * _sl_num(it.gst_percent) / 100).quantize(q2) if it else Decimal("0")
-                    else:
+                        it_amount = _sl_num(it.amount) if it else ""
+                        sector = it.farm_warehouse.name if it and it.farm_warehouse_id else ""
+                        boxes = h_boxes if first else ""
+                    elif kind == "CP":
                         item_name = obj.item.description if obj.item_id else "Chicks"
                         gst_amt = Decimal("0")
+                        it_amount = _sl_num(it.amount) if it else ""
+                        sector = it.farm_warehouse.name if it and it.farm_warehouse_id else ""
+                        boxes = h_boxes if first else ""
+                    else:  # EP — Egg Purchase
+                        item_name = it.item.description if it and it.item_id else "Hatching Eggs"
+                        gst_amt = Decimal("0")
+                        it_amount = _sl_num(it.total_amount) if it else ""
+                        sector = obj.warehouse.name if obj.warehouse_id else ""
+                        boxes = _sl_num(it.no_of_boxes) if it else ""
                     grp["rows"].append({
                         "date": d if first else None,
-                        "trnum": obj.purchase_no if first else "",
-                        "doc_no": (obj.bill_no or "") if first else "",
+                        "trnum": h_trnum if first else "",
+                        "doc_no": h_doc if first else "",
                         "type": type_label if first else "", "type_slug": type_slug if first else "",
                         "item": item_name,
-                        "boxes_bags": _sl_num(obj.no_of_bags) if first else "",
+                        "boxes_bags": boxes,
                         "sent_qty": _sl_num(it.sent_qty) if it else "",
                         "rcv_qty": _sl_num(it.rcv_qty) if it else "",
                         "free_qty": _sl_num(it.free_qty) if it else "",
                         "rate": _sl_num(it.rate) if it else "",
-                        "amount": _sl_num(it.amount) if it else "",
-                        "freight": _sl_num(obj.freight_amount).quantize(q2) if first else "",
+                        "amount": it_amount,
+                        "freight": h_freight.quantize(q2) if first else "",
                         "gst": gst_amt,
-                        "tds": _sl_num(obj.tds_amount).quantize(q2) if first else "",
+                        "tds": h_tds.quantize(q2) if first else "",
                         "debit": amt.quantize(q2) if first else "",
                         "credit": "",
                         "balance": abs(running).quantize(q2) if first else "",
                         "cr_dr": ("Dr" if running >= 0 else "Cr") if first else "",
-                        "sector": it.farm_warehouse.name if it and it.farm_warehouse_id else "",
+                        "sector": sector,
                         "farm_code": "",
                         "remarks": (obj.remarks or "") if first else "",
-                        "vehicle": (obj.vehicle_no or "") if first else "",
+                        "vehicle": h_vehicle if first else "",
                     })
                 totals["debit"] += amt
                 purchases_total += amt
@@ -1323,8 +1356,10 @@ def _supplier_balance_row(sup, fd, td, ref_date):
     if str(sup.to_pay_to_receive or "").lower().startswith("receive"):
         signed = -signed
 
+    from hatchery.models import EggPurchase
     gps = list(GeneralPurchase.objects.filter(supplier=sup).prefetch_related("items"))
     cps = list(ChicksPurchase.objects.filter(supplier=sup).prefetch_related("items"))
+    eps = list(EggPurchase.objects.filter(supplier=sup).prefetch_related("items"))
     pays = list(SupplierPaymentLine.objects.filter(supplier=sup).select_related("payment"))
     dns = list(DebitNote.objects.filter(supplier=sup))
     cns = list(CreditNote.objects.filter(supplier=sup))
@@ -1346,6 +1381,10 @@ def _supplier_balance_row(sup, fd, td, ref_date):
         v = _purchase_credit(ch, "CP")
         opening += v if before(ch.date) else 0
         amount += v if within(ch.date) else 0
+    for ep in eps:
+        v = _purchase_credit(ep, "EP")
+        opening += v if before(ep.date) else 0
+        amount += v if within(ep.date) else 0
     for dn in dns:
         v = _sl_num(dn.amount)
         opening += v if before(dn.date) else 0
@@ -1367,7 +1406,8 @@ def _supplier_balance_row(sup, fd, td, ref_date):
     if pay_dates:
         gap = (ref_date - max(pay_dates)).days
     else:
-        txn_dates = [g.date for g in gps if g.date] + [ch.date for ch in cps if ch.date]
+        txn_dates = ([g.date for g in gps if g.date] + [ch.date for ch in cps if ch.date]
+                     + [ep.date for ep in eps if ep.date])
         base = min(txn_dates) if txn_dates else sup.as_on_date
         gap = (ref_date - base).days if base else 0
 
