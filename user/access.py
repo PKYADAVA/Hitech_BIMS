@@ -148,6 +148,15 @@ MODULE_REGISTRY = [
                     ("general_purchase_list", "General Purchase"),
                     ("chicks_purchase_list", "Chicks Purchase"),
                     ("payment_list", "Payment"),
+                    ("debit_note_list", "Debit Note", ("debit_note_api_list",)),
+                    ("credit_note_list", "Credit Note", ("credit_note_api_list",)),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("supplier_ledger", "Supplier Ledger"),
+                    ("supplier_balance", "Supplier Balance"),
                 ],
             },
         ],
@@ -162,6 +171,12 @@ MODULE_REGISTRY = [
                     ("customer_groups", "Customer Groups"),
                     ("customer", "Customer"),
                     ("sales_price_master", "Price Master"),
+                ],
+            },
+            {
+                "label": "Transactions",
+                "tabs": [
+                    ("sales_invoice_list", "Sales Invoice", ("sales_invoice_api_list",)),
                 ],
             },
         ],
@@ -264,6 +279,9 @@ MODULE_REGISTRY = [
                 "label": "Employee Management",
                 "tabs": [
                     ("employee_list", "Employee List"),
+                    ("employee_group", "Employee Group", (
+                        "employee_group_list", "employee_group_detail",
+                    )),
                     ("designation", "Designation", (
                         "designation_list", "designation_detail",
                     )),

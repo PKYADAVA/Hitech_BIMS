@@ -33,4 +33,18 @@ urlpatterns = [
     path('tax_master/create/', views.TaxMasterAPI.as_view(), name='tax_master_create'),
     path('tax_master/<int:id>/', views.TaxMasterAPI.as_view(), name='tax_master_update'),
     path('tax_master/delete/<int:id>/delete/', views.TaxMasterAPI.as_view(), name='tax_master_delete'),
+    path("supplier-ledger/", views.supplier_ledger_report, name="supplier_ledger"),
+    path("supplier-balance/", views.supplier_balance_report, name="supplier_balance"),
+
+    path("debit-note/", views.debit_note_list, name="debit_note_list"),
+    path("debit-note/add/", views.create_debit_note, name="debit_note_add"),
+    path("debit-note/<int:id>/edit/", views.edit_debit_note, name="debit_note_edit"),
+    path("debit-note/<int:id>/delete/", views.delete_debit_note, name="debit_note_delete"),
+    path("debit_note_api/", views.debit_note_api_list, name="debit_note_api_list"),
+
+    path("credit-note/", views.credit_note_list, name="credit_note_list"),
+    path("credit-note/add/", views.create_credit_note, name="credit_note_add"),
+    path("credit-note/<int:id>/edit/", views.edit_credit_note, name="credit_note_edit"),
+    path("credit-note/<int:id>/delete/", views.delete_credit_note, name="credit_note_delete"),
+    path("credit_note_api/", views.credit_note_api_list, name="credit_note_api_list"),
 ]

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Sales Invoice - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock %}
+{% block content %}
+{% include '_sales_transaction_subnavbar.html' with active_tab='sales_invoice' %}
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-file-invoice-dollar"></i> Sales Invoice</div>
+  <div class="page-header-right"><div class="page-header-subtitle">Sales invoices to customers</div>{% if page_perms.add %}<a class="btn btn-primary" href="{% url 'sales_invoice_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}</div>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2"><label class="form-label">From Date:</label><input type="date" class="form-control" id="from-date"></div>
+    <div class="col-md-2"><label class="form-label">To Date:</label><input type="date" class="form-control" id="to-date"></div>
+    <div class="col-md-2"><button class="btn btn-primary" id="filter-submit">Submit</button></div>
+  </div>
+</div></div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-list"></i> Sales Invoice Register</div>
+  <div class="card-body p-0"><div class="table-responsive">
+    <table class="table table-hover table-bordered mb-0" id="si-table">
+      <thead class="table-dark"><tr>
+        <th>Date</th><th>Invoice No.</th><th>Type</th><th>Customer</th><th>Reference No.</th>
+        <th>Items</th><th>Grand Total</th><th class="text-center">Action</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div></div>
+</div>
+
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">Confirm Delete</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><p>Are you sure you want to delete this sales invoice?</p></div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+    <form id="confirmDeleteForm" method="post">{% csrf_token %}<button type="submit" class="btn btn-danger"><i class="fas fa-trash me-1"></i>Delete</button></form>
+  </div>
+</div></div></div>
+{% endblock %}
+{% block js %}
+<script>
+$(function () {
+  let table = null;
+  function esc(s){ return s==null?"":String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+  function renderRows(rows){
+    if (table) table.destroy();
+    const tb=$("#si-table tbody"); tb.empty();
+    rows.forEach(function(r){
+      const st = r.is_active ? '' : ' <span class="badge bg-secondary">Inactive</span>';
+      tb.append(`<tr>
+        <td>${esc(r.date)}</td><td>${esc(r.invoice_no)}</td><td>${esc(r.transaction_type)}</td>
+        <td>${esc(r.customer_name)}</td><td>${esc(r.reference_no)||"-"}</td>
+        <td class="text-center">${r.total_items}</td>
+        <td class="text-end">${Number(r.amount).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+        <td class="text-center"><div class="d-flex gap-1 justify-content-center">
+          {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/sales-invoice/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+          {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+        </div></td>
+      </tr>`);
+    });
+    table=$("#si-table").DataTable({ responsive:true, order:[[0,"desc"]],
+      dom:"Bfrtip", buttons:["copy","csv","excel","pdf","print","colvis"],
+      columnDefs:[{orderable:false,targets:-1}], language:{emptyTable:"No data available in table"} });
+  }
+  function loadRows(){ $.getJSON("{% url 'sales_invoice_api_list' %}", { from_date:$("#from-date").val(), to_date:$("#to-date").val() }, renderRows).fail(function(){ alert("Failed to load sales invoices."); }); }
+  $("#filter-submit").on("click", loadRows);
+  $(document).on("click", ".delete-button", function(){ $("#confirmDeleteForm").attr("action", `/sales-invoice/${$(this).data("id")}/delete/`); $("#deleteConfirmationModal").modal("show"); });
+  loadRows();
+});
+</script>
+{% endblock %}

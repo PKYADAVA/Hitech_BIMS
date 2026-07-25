@@ -20,6 +20,8 @@ from hr.views import (
     EmployeeAttendance,
     DesignationTemplateView,
     DesignationAPI,
+    EmployeeGroupTemplateView,
+    EmployeeGroupAPI,
     leave_calendar_holidays,
     daily_attendance,
     mark_attendance,
@@ -60,6 +62,13 @@ urlpatterns = [
     path("designation-create/", DesignationAPI.as_view(), name="designation_create"),
     path("designation/<int:id>/update/", DesignationAPI.as_view(), name="designation_update"),
     path("designation/<int:id>/delete/", DesignationAPI.as_view(), name="designation_delete"),
+
+    path("employee-group/", EmployeeGroupTemplateView.as_view(), name="employee_group"),
+    path("employee_group_list/", EmployeeGroupAPI.as_view(), name="employee_group_list"),
+    path("employee_group/<int:id>/", EmployeeGroupAPI.as_view(), name="employee_group_detail"),
+    path("employee-group-create/", EmployeeGroupAPI.as_view(), name="employee_group_create"),
+    path("employee_group/<int:id>/update/", EmployeeGroupAPI.as_view(), name="employee_group_update"),
+    path("employee_group/<int:id>/delete/", EmployeeGroupAPI.as_view(), name="employee_group_delete"),
 
     # Attendance workflow
     path("daily-attendance/", daily_attendance, name="daily_attendance"),

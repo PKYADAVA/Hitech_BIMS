@@ -1117,6 +1117,101 @@ class DesignationAPI(View):
             return self.handle_exception(e)
 
 
+class EmployeeGroupTemplateView(View):
+    """Renders the employee group master page (HR > Employee Management)."""
+
+    def get(self, request):
+        from inventory.models import Warehouse
+        employees = list(Employee.objects.filter(relieve=False)
+                         .order_by("full_name")
+                         .values("id", "employee_id", "full_name", "warehouse_id"))
+        return render(request, "employee_group.html", {
+            "employees": employees,
+            "branches": Warehouse.objects.order_by("name"),
+        })
+
+
+@method_decorator(login_required(login_url="login"), name="dispatch")
+class EmployeeGroupAPI(View):
+    """CRUD for Employee Group (the `Group` an employee belongs to)."""
+
+    def handle_exception(self, e):
+        logger.error(f"Error in {self.__class__.__name__}: {str(e)}", exc_info=True)
+        if isinstance(e, ValidationError):
+            if hasattr(e, "message_dict"):
+                message = "; ".join(
+                    f"{field}: {' '.join(msgs)}" for field, msgs in e.message_dict.items()
+                )
+            else:
+                message = "; ".join(e.messages)
+            return JsonResponse({"error": message}, status=400)
+        return JsonResponse({"error": "Internal server error"}, status=500)
+
+    def _to_dict(self, group):
+        return {
+            "id": group.id,
+            "name": group.name,
+            "warehouse_id": group.warehouse_id,
+            "warehouse_name": group.warehouse.name if group.warehouse_id else "",
+            "employee_count": group.employees.count(),
+        }
+
+    def get(self, request, id=None):
+        try:
+            if id:
+                group = Group.objects.get(id=id)
+                data = self._to_dict(group)
+                data["employee_ids"] = list(group.employees.values_list("id", flat=True))
+                return JsonResponse(data)
+            groups = Group.objects.all().order_by("name")
+            return JsonResponse([self._to_dict(g) for g in groups], safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request, id=None):
+        try:
+            data = request.POST
+            warehouse_id = (data.get("warehouse") or "").strip()
+            with transaction.atomic():
+                group = Group.objects.get(id=id) if id else Group()
+                group.name = (data.get("name") or "").strip()
+                group.warehouse_id = int(warehouse_id) if warehouse_id.isdigit() else None
+                group.full_clean()
+                group.save()
+                # Assign selected employees to this group; an employee has a
+                # single group, so selecting them here moves them into it and
+                # clearing the selection removes them from this group. A group
+                # holds one branch's employees, so only employees of the group's
+                # branch are eligible.
+                selected = [int(x) for x in data.getlist("employees") if str(x).isdigit()]
+                eligible = Employee.objects.filter(id__in=selected)
+                if group.warehouse_id:
+                    eligible = eligible.filter(warehouse_id=group.warehouse_id)
+                eligible_ids = list(eligible.values_list("id", flat=True))
+                Employee.objects.filter(id__in=eligible_ids).update(group=group)
+                Employee.objects.filter(group=group).exclude(id__in=eligible_ids).update(group=None)
+            return JsonResponse(
+                {"message": "Employee group updated" if id else "Employee group created", "id": group.id},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id):
+        try:
+            group = Group.objects.get(id=id)
+            employee_count = group.employees.count()
+            if employee_count:
+                return JsonResponse(
+                    {"error": f"Cannot delete: {employee_count} employee(s) belong to this group."},
+                    status=400,
+                )
+            group.delete()
+            return JsonResponse({"message": "Employee group deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
 # ---------------------------------------------------------------------------
 # Daily Attendance + Mark Attendance (HR > Attendance)
 # ---------------------------------------------------------------------------

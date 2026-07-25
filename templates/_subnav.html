@@ -53,6 +53,11 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'general_purchase_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'general_purchase' %}active{% endif %} activate" href="{% url 'general_purchase_list' %}"><i class="fas fa-file-invoice me-1"></i>General Purchase</a></li>{% endif %}
         {% if 'chicks_purchase_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'chicks_purchase' %}active{% endif %} activate" href="{% url 'chicks_purchase_list' %}"><i class="fa-solid fa-kiwi-bird me-1"></i>Chicks Purchase</a></li>{% endif %}
         {% if 'payment_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'payment' %}active{% endif %} activate" href="{% url 'payment_list' %}"><i class="fas fa-money-bill-wave me-1"></i>Payment</a></li>{% endif %}
+        {% if 'debit_note_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'debit_note' %}active{% endif %} activate" href="{% url 'debit_note_list' %}"><i class="fas fa-file-invoice me-1"></i>Debit Note</a></li>{% endif %}
+        {% if 'credit_note_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'credit_note' %}active{% endif %} activate" href="{% url 'credit_note_list' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Credit Note</a></li>{% endif %}
+      {% elif module == 'purchase_report' %}
+        {% if 'supplier_ledger' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'supplier_ledger' %}active{% endif %}" href="{% url 'supplier_ledger' %}" target="_blank" rel="noopener"><i class="fas fa-book me-1"></i>Supplier Ledger</a></li>{% endif %}
+        {% if 'supplier_balance' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'supplier_balance' %}active{% endif %}" href="{% url 'supplier_balance' %}" target="_blank" rel="noopener"><i class="fas fa-scale-balanced me-1"></i>Supplier Balance</a></li>{% endif %}
       {% elif module == 'hatchery_transaction' %}
         {% if 'egg_purchase_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'egg_purchase' %}active{% endif %} activate" href="{% url 'egg_purchase_list' %}"><i class="fas fa-shopping-basket me-1"></i>Egg Purchase</a></li>{% endif %}
         {% if 'egg_grading_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'egg_grading' %}active{% endif %} activate" href="{% url 'egg_grading_list' %}"><i class="fas fa-layer-group me-1"></i>Egg Grading</a></li>{% endif %}
@@ -71,6 +76,8 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'customer_groups' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'customer_groups' %}active{% endif %} activate" href="{% url 'customer_groups' %}"><i class="fas fa-layer-group me-1"></i>Customer Groups</a></li>{% endif %}
         {% if 'customer' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'customer' %}active{% endif %} activate" href="{% url 'customer' %}"><i class="fas fa-user me-1"></i>Customer</a></li>{% endif %}
         {% if 'sales_price_master' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sales_price_master' %}active{% endif %} activate" href="{% url 'sales_price_master' %}"><i class="fas fa-tag me-1"></i>Price Master</a></li>{% endif %}
+      {% elif module == 'sales_transaction' %}
+        {% if 'sales_invoice_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'sales_invoice' %}active{% endif %} activate" href="{% url 'sales_invoice_list' %}"><i class="fas fa-file-invoice-dollar me-1"></i>Sales Invoice</a></li>{% endif %}
       {% elif module == 'account' %}
         {% if 'fin_year' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'fin_year' %}active{% endif %} activate" href="{% url 'fin_year' %}"><i class="fas fa-calendar-alt me-1"></i>Financial Year</a></li>{% endif %}
         {% if 'coa' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'coa' %}active{% endif %} activate" href="{% url 'coa' %}"><i class="fas fa-sitemap me-1"></i>Chart of Accounts</a></li>{% endif %}
@@ -134,6 +141,7 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'field_bindings' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'field_bindings' %}active{% endif %} activate" href="{% url 'field_bindings' %}"><i class="fas fa-link me-1"></i>Field Bindings</a></li>{% endif %}
       {% elif module == 'hr_employee' %}
         {% if 'employee_list' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_list' %}active{% endif %} activate" href="{% url 'employee_list' %}"><i class="fas fa-users me-1"></i>Employee List</a></li>{% endif %}
+        {% if 'employee_group' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'employee_group' %}active{% endif %} activate" href="{% url 'employee_group' %}"><i class="fas fa-user-group me-1"></i>Employee Group</a></li>{% endif %}
         {% if 'designation' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'designation' %}active{% endif %} activate" href="{% url 'designation' %}"><i class="fas fa-id-badge me-1"></i>Designation</a></li>{% endif %}
       {% elif module == 'hr_attendance' %}
         {% if 'daily_attendance' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'daily_attendance' %}active{% endif %} activate" href="{% url 'daily_attendance' %}"><i class="fas fa-calendar-check me-1"></i>Daily Attendance</a></li>{% endif %}

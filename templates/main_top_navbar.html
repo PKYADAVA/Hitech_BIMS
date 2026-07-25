@@ -342,6 +342,27 @@
               {% if 'payment_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'payment_list' %}">
                 <i class="fas fa-money-bill-wave"></i>Payment
               </a></li>{% endif %}
+              {% if 'debit_note_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'debit_note_list' %}">
+                <i class="fas fa-file-invoice"></i>Debit Note
+              </a></li>{% endif %}
+              {% if 'credit_note_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'credit_note_list' %}">
+                <i class="fas fa-file-invoice-dollar"></i>Credit Note
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+          {% if 'purchase_reports' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="purchaseReportsDd">
+              <i class="fas fa-chart-bar"></i>Reports
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'supplier_ledger' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supplier_ledger' %}" target="_blank" rel="noopener">
+                <i class="fas fa-book"></i>Supplier Ledger
+              </a></li>{% endif %}
+              {% if 'supplier_balance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supplier_balance' %}" target="_blank" rel="noopener">
+                <i class="fas fa-scale-balanced"></i>Supplier Balance
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
@@ -375,6 +396,18 @@
               </a></li>{% endif %}
               {% if 'sales_price_master' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sales_price_master' %}">
                 <i class="fas fa-tag"></i>Price Master
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+          {% if 'sales_transactions' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="salesTransDd">
+              <i class="fas fa-exchange-alt"></i>Transactions
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'sales_invoice_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sales_invoice_list' %}">
+                <i class="fas fa-file-invoice-dollar"></i>Sales Invoice
               </a></li>{% endif %}
             </ul>
           </li>
@@ -564,6 +597,9 @@
             <ul class="dropdown-menu">
               {% if 'employee_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_list' %}">
                 <i class="fas fa-users"></i>Employee List
+              </a></li>{% endif %}
+              {% if 'employee_group' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'employee_group' %}">
+                <i class="fas fa-user-group"></i>Employee Group
               </a></li>{% endif %}
               {% if 'designation' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'designation' %}">
                 <i class="fas fa-id-badge"></i>Designation

@@ -24,4 +24,9 @@ urlpatterns = [
     path('sales_price_master/<int:id>/', views.SalesPriceMasterAPI.as_view(), name='sales_price_update'),
     path('sales_price_master/<int:id>/delete/', views.SalesPriceMasterAPI.as_view(), name='sales_price_delete'),
 
+    path('sales-invoice/', views.sales_invoice_list, name='sales_invoice_list'),
+    path('sales-invoice/add/', views.create_sales_invoice, name='sales_invoice_add'),
+    path('sales-invoice/<int:id>/edit/', views.edit_sales_invoice, name='sales_invoice_edit'),
+    path('sales-invoice/<int:id>/delete/', views.delete_sales_invoice, name='sales_invoice_delete'),
+    path('sales_invoice_api/', views.sales_invoice_api_list, name='sales_invoice_api_list'),
 ]
