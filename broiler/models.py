@@ -860,10 +860,18 @@ class BroilerBatch(models.Model):
     Represents a batch of broilers in a farm.
     """
     broiler_farm = models.ForeignKey(
-        BroilerFarm, 
+        BroilerFarm,
         on_delete=models.CASCADE,
         related_name='broiler_batches',
         help_text=_("Farm this batch belongs to")
+    )
+    shed = models.ForeignKey(
+        BroilerFarmShed,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='broiler_batches',
+        help_text=_("Shed / unit within the farm this batch is housed in")
     )
     batch_name = models.CharField(
         max_length=50,

@@ -3,6 +3,7 @@
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock %}
 {% block content %}
 {% include '_sales_transaction_subnavbar.html' with active_tab='sales_invoice' %}
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
 <div class="page-header">
   <div class="page-header-title"><i class="fas fa-file-invoice-dollar"></i> Sales Invoice</div>
   <div class="page-header-right"><div class="page-header-subtitle">Sales invoices to customers</div>{% if page_perms.add %}<a class="btn btn-primary" href="{% url 'sales_invoice_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}</div>

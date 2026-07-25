@@ -818,9 +818,28 @@ class BroilerBatchTemplateView(View):
         if not broiler_farms:
             broiler_farms = list(BroilerFarm.objects.values())
             cache.set(cache_key, broiler_farms)
+        # Sheds already holding an active/open batch — shown as occupied so a
+        # second batch can't be started on the same unit.
+        occupied_shed_ids = set(
+            BroilerBatch.objects.filter(
+                shed__isnull=False, end_date__isnull=True, is_closed=False
+            ).values_list("shed_id", flat=True)
+        )
+        sheds = [
+            {
+                "id": s.id,
+                "farm_id": s.farm_id,
+                "label": (s.shed_name or s.shed_code or f"Unit {s.unit_no}")
+                + (f" · Unit {s.unit_no}" if s.unit_no else ""),
+                "occupied": s.id in occupied_shed_ids,
+            }
+            for s in BroilerFarmShed.objects.filter(is_active=True)
+            .order_by("farm__farm_code", "unit_no")
+        ]
         context = {
             "broiler_farms": broiler_farms,
             "breeds": Breed.objects.filter(is_active=True).order_by("description"),
+            "sheds": sheds,
         }
         return render(request, "broiler_batch.html", context)
 
@@ -1143,10 +1162,25 @@ class FarmerAPI(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
+def _active_batch_on_shed(shed_id, exclude_batch_id=None):
+    """Return the open/active batch occupying `shed_id`, if any.
+    A batch is 'active' while it is still growing — end_date not set and not
+    yet closed by a growing-charge settlement. A shed can hold only one at a
+    time, so this gates creation / re-assignment onto an occupied unit."""
+    if not shed_id:
+        return None
+    qs = BroilerBatch.objects.filter(
+        shed_id=shed_id, end_date__isnull=True, is_closed=False
+    )
+    if exclude_batch_id:
+        qs = qs.exclude(id=exclude_batch_id)
+    return qs.first()
+
+
 @method_decorator(login_required, name="dispatch")
 class BroilerBatchAPI(BaseAPIView):
     """API endpoints for BroilerBatch operations."""
-    
+
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
@@ -1157,6 +1191,8 @@ class BroilerBatchAPI(BaseAPIView):
                     "book_number": broiler_batch.book_number,
                     "lot_no": broiler_batch.lot_no,
                     "breed_id": broiler_batch.breed_id,
+                    "shed_id": broiler_batch.shed_id,
+                    "broiler_farm_id": broiler_batch.broiler_farm_id,
                     "broiler_farm_name": broiler_batch.broiler_farm.farm_name,
                 })
 
@@ -1166,11 +1202,16 @@ class BroilerBatchAPI(BaseAPIView):
                 return JsonResponse(cached_data, safe=False)
 
             broiler_batches = list(
-                BroilerBatch.objects.select_related("broiler_farm", "breed")
+                BroilerBatch.objects.select_related("broiler_farm", "breed", "shed")
                 .annotate(broiler_farm_name=F("broiler_farm__farm_name"),
-                          breed_name=F("breed__description"))
+                          breed_name=F("breed__description"),
+                          shed_name=F("shed__shed_name"),
+                          shed_code=F("shed__shed_code"),
+                          shed_unit_no=F("shed__unit_no"))
                 .values("id", "batch_name", "book_number", "lot_no", "broiler_farm_name",
-                        "breed_id", "breed_name")
+                        "broiler_farm_id", "breed_id", "breed_name",
+                        "shed_id", "shed_name", "shed_code", "shed_unit_no",
+                        "created_at", "end_date", "is_closed", "closed_on")
             )
             self.set_cached_data(cache_key, broiler_batches)
             return JsonResponse(broiler_batches, safe=False)
@@ -1181,12 +1222,21 @@ class BroilerBatchAPI(BaseAPIView):
         try:
             data = request.POST
             farm_obj = BroilerFarm.objects.get(id=data["broiler_farm_id"])
+            shed_id = data.get("shed") or None
+            occupied_by = _active_batch_on_shed(shed_id)
+            if occupied_by:
+                return JsonResponse(
+                    {"error": f"This shed/unit already has an active batch "
+                              f"({occupied_by.batch_name}). Close it before starting a new one."},
+                    status=400,
+                )
             with transaction.atomic():
                 # batch_name is auto-generated (<farm code minus FRM/>-<n>,
                 # e.g. BAH-0201-1) in BroilerBatch.save() — never accepted
                 # from the form.
                 batch = BroilerBatch.objects.create(
                     broiler_farm=farm_obj,
+                    shed_id=shed_id,
                     book_number=data.get("book_number") or "",
                     lot_no=data.get("lot_no") or "",
                     breed_id=data.get("breed") or None,
@@ -1209,6 +1259,17 @@ class BroilerBatchAPI(BaseAPIView):
                     broiler_batch.lot_no = data["lot_no"] or ""
                 if "breed" in data:
                     broiler_batch.breed_id = data["breed"] or None
+                if "shed" in data:
+                    new_shed_id = data["shed"] or None
+                    if new_shed_id and str(new_shed_id) != str(broiler_batch.shed_id):
+                        occupied_by = _active_batch_on_shed(new_shed_id, exclude_batch_id=broiler_batch.id)
+                        if occupied_by:
+                            return JsonResponse(
+                                {"error": f"This shed/unit already has an active batch "
+                                          f"({occupied_by.batch_name}). Close it before moving a batch here."},
+                                status=400,
+                            )
+                    broiler_batch.shed_id = new_shed_id
                 broiler_batch.save()
                 cache.delete("broiler_batch_list")
             return JsonResponse({"message": "BroilerBatch updated"})
@@ -5024,6 +5085,9 @@ class GCSettlementAPI(View):
         if not batch.end_date:
             batch.end_date = gc_date
         batch.save(update_fields=["is_closed", "closed_on", "end_date"])
+        # The Batch tab caches this list; its Status/active-guard depend on the
+        # closed flag we just changed, so drop the stale snapshot.
+        cache.delete("broiler_batch_list")
 
         return JsonResponse({"message": "Settlement saved and batch closed",
                              "id": settlement.id, "code": settlement.settlement_code}, status=201)
@@ -5062,6 +5126,9 @@ class GCSettlementAPI(View):
         batch.closed_on = None
         batch.end_date = None
         batch.save(update_fields=["is_closed", "closed_on", "end_date"])
+        # Reopening flips the batch back to active — invalidate the Batch tab's
+        # cached list so it no longer shows the flock as Closed.
+        cache.delete("broiler_batch_list")
         return JsonResponse({"message": "Settlement deleted and batch reopened"})
 
 
