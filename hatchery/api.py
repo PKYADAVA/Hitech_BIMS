@@ -28,18 +28,20 @@ from .models import (
 
 
 def register(router) -> None:
-    # --- Settings / reference (read-only) -------------------------------
-    register_model(router, "hatchery/hatch-settings", HatchSetting, read_only=True)
-    register_model(router, "hatchery/tray-settings", TraySetting, read_only=True)
+    # --- Settings / operational records (full CRUD) ---------------------
+    register_model(router, "hatchery/hatch-settings", HatchSetting,
+                   search_fields=["setting_no", "batch_flock_no", "supplier_name"])
+    register_model(router, "hatchery/tray-settings", TraySetting,
+                   search_fields=["setting_no", "loaded_by"])
 
-    # --- Hatchery master data (read-only pickers) -----------------------
-    register_model(router, "hatchery/hatcheries", Hatchery, read_only=True,
+    # --- Hatchery master data (full CRUD; list also serves as pickers) --
+    register_model(router, "hatchery/hatcheries", Hatchery,
                    search_fields=["hatchery_name", "owner_name"], ordering=["hatchery_name"])
-    register_model(router, "hatchery/setters", Setter, read_only=True,
+    register_model(router, "hatchery/setters", Setter,
                    search_fields=["setter_no"], ordering=["setter_no"])
-    register_model(router, "hatchery/hatchers", Hatcher, read_only=True,
+    register_model(router, "hatchery/hatchers", Hatcher,
                    search_fields=["hatcher_no"], ordering=["hatcher_no"])
-    register_model(router, "hatchery/expense-types", ExpenseType, read_only=True,
+    register_model(router, "hatchery/expense-types", ExpenseType,
                    search_fields=["name"], ordering=["name"])
 
     # --- Transactions (full CRUD, cursor feeds) -------------------------

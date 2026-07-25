@@ -72,6 +72,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
 
 const BroilerStack = () => <ModuleStackScreen moduleKey="broiler" />;
 const HatcheryStack = () => <ModuleStackScreen moduleKey="hatchery" />;
+const SmsStack = () => <ModuleStackScreen moduleKey="sms" />;
 
 function AppTabs() {
   return (
@@ -91,6 +92,7 @@ function AppTabs() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: tabIcon("🏠") }} />
       <Tab.Screen name="Broiler" component={BroilerStack} options={{ tabBarIcon: tabIcon("🐔") }} />
       <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚") }} />
+      <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬") }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: tabIcon("👤") }} />
     </Tab.Navigator>
   );

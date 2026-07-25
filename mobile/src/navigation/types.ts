@@ -15,6 +15,7 @@ export type TabParams = {
   Home: undefined;
   Broiler: NavigatorScreenParams<ModuleStackParams>;
   Hatchery: NavigatorScreenParams<ModuleStackParams>;
+  SMS: NavigatorScreenParams<ModuleStackParams>;
   Profile: undefined;
 };
 

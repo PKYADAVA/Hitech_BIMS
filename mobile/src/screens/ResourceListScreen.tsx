@@ -1,14 +1,15 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Row } from "@/api/types";
 import { RecordCard } from "@/components/RecordCard";
 import { EmptyOrError, Loading, SearchBar } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
+import { isEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { useResourceList } from "@/query/useResourceList";
-import { colors, spacing } from "@/theme";
+import { colors, shadow, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "List">;
@@ -73,6 +74,25 @@ export function ResourceListScreen({ route, navigation }: Props) {
           />
         )}
       />
+
+      {isEditable(config.key) ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.fab,
+            { backgroundColor: config.accent },
+            shadow(3),
+            pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
+          ]}
+          onPress={() =>
+            navigation.navigate("Form", { resourceKey: config.key, mode: "create" })
+          }
+          accessibilityRole="button"
+          accessibilityLabel={`Add ${config.singular}`}
+        >
+          <Text style={styles.fabPlus}>＋</Text>
+          <Text style={styles.fabText}>New</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -81,5 +101,18 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   searchWrap: { padding: spacing.md, paddingBottom: spacing.sm },
   fill: { flexGrow: 1 },
-  content: { padding: spacing.md, paddingTop: spacing.xs, gap: spacing.sm },
+  content: { padding: spacing.md, paddingTop: spacing.xs, gap: spacing.sm, paddingBottom: 96 },
+  fab: {
+    position: "absolute",
+    right: spacing.lg,
+    bottom: spacing.xl,
+    height: 52,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 26,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  fabPlus: { color: "#fff", fontSize: 22, fontWeight: "700", marginTop: -2 },
+  fabText: { color: "#fff", ...type.title, fontWeight: "800" },
 });

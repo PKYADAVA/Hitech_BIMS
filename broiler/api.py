@@ -35,31 +35,32 @@ from .models import (
 
 
 def register(router) -> None:
-    # --- Master / reference data (read-only pickers) --------------------
-    register_model(router, "broiler/farmer-groups", FarmerGroup, read_only=True,
+    # --- Master data (full CRUD; list also serves as picker data) -------
+    register_model(router, "broiler/farmer-groups", FarmerGroup,
                    search_fields=["code", "description"], ordering=["code"])
-    register_model(router, "broiler/regions", Region, read_only=True,
+    register_model(router, "broiler/regions", Region,
                    search_fields=["code", "description"], ordering=["code"])
-    register_model(router, "broiler/breeds", Breed, read_only=True,
+    register_model(router, "broiler/breeds", Breed,
                    search_fields=["code", "description"], ordering=["code"])
-    register_model(router, "broiler/breed-standards", BreedStandard, read_only=True,
+    register_model(router, "broiler/breed-standards", BreedStandard,
                    search_fields=["code"], ordering=["breed", "age"])
-    register_model(router, "broiler/growing-charges", GrowingChargeScheme, read_only=True,
+    register_model(router, "broiler/growing-charges", GrowingChargeScheme,
                    search_fields=["scheme_code", "schema_name"], ordering=["-id"])
-    register_model(router, "broiler/branches", Branch, read_only=True,
+    register_model(router, "broiler/branches", Branch,
                    search_fields=["code", "branch_name"], ordering=["branch_name"])
-    register_model(router, "broiler/supervisors", Supervisor, read_only=True,
+    register_model(router, "broiler/supervisors", Supervisor,
                    search_fields=["name"], ordering=["name"])
-    register_model(router, "broiler/lines", BroilerLine, read_only=True,
+    register_model(router, "broiler/lines", BroilerLine,
                    search_fields=["code", "description"], ordering=["code"])
-    register_model(router, "broiler/farmers", Farmer, read_only=True,
+    register_model(router, "broiler/farmers", Farmer,
                    search_fields=["farmer_name"], ordering=["farmer_name"])
-    register_model(router, "broiler/farms", BroilerFarm, read_only=True,
-                   ordering=["-id"])
-    register_model(router, "broiler/sheds", BroilerFarmShed, read_only=True)
-    register_model(router, "broiler/batches", BroilerBatch, read_only=True,
-                   ordering=["-id"])
-    register_model(router, "broiler/diseases", BroilerDisease, read_only=True,
+    register_model(router, "broiler/farms", BroilerFarm,
+                   search_fields=["farm_name", "farm_code"], ordering=["-id"])
+    register_model(router, "broiler/sheds", BroilerFarmShed,
+                   search_fields=["shed_code", "shed_name"])
+    register_model(router, "broiler/batches", BroilerBatch,
+                   search_fields=["batch_name", "lot_no"], ordering=["-id"])
+    register_model(router, "broiler/diseases", BroilerDisease,
                    search_fields=["disease_code", "disease_name"], ordering=["disease_name"])
 
     # --- Transactions (full CRUD, cursor-paginated feeds) ---------------

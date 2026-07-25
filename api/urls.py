@@ -45,7 +45,18 @@ def register_shared(router: DefaultRouter) -> None:
                    search_fields=["code", "description"], ordering=["code"])
 
 
+def register_sms(router: DefaultRouter) -> None:
+    """SMS management (notification app): templates, message history, settings."""
+    register_model(router, "sms/templates", SmsTemplate, read_only=True,
+                   search_fields=["key", "name", "module", "transaction"],
+                   ordering=["module", "name"])
+    register_model(router, "sms/messages", SmsMessage, read_only=True,
+                   search_fields=["party_name", "mobile", "document_no"], cursor=True)
+    register_model(router, "sms/settings", SmsSettings, read_only=True)
+
+
 register_shared(router)
+register_sms(router)
 
 auth_patterns = [
     path("login", LoginView.as_view(), name="login"),

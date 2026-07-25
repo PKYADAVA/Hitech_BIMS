@@ -15,7 +15,7 @@ import { BadgeTone } from "@/components/ui";
 import { colors } from "@/theme";
 import { formatDate, formatMoney, formatNumber, joinParts, pick } from "@/utils/format";
 
-export type ModuleKey = "broiler" | "hatchery";
+export type ModuleKey = "broiler" | "hatchery" | "sms";
 
 export interface CardView {
   title: string;
@@ -573,10 +573,81 @@ const hatcheryResources: ResourceConfig[] = [
   },
 ];
 
+/* ------------------------------- SMS ------------------------------------ */
+
+const S = colors.sms;
+
+/** Map an SMS message status to a badge tone. */
+function smsStatusBadge(r: Row): CardView["badge"] {
+  const status = String(r.status ?? "").toLowerCase();
+  if (!status) return undefined;
+  const tone: BadgeTone = /deliver|sent|success/.test(status)
+    ? "success"
+    : /fail|error|reject/.test(status)
+    ? "danger"
+    : /pending|queue|submit/.test(status)
+    ? "warning"
+    : "neutral";
+  return { label: String(r.status), tone };
+}
+
+const smsResources: ResourceConfig[] = [
+  {
+    key: "sms-templates",
+    module: "sms",
+    path: "/sms/templates/",
+    title: "Templates",
+    singular: "SMS Template",
+    icon: "📝",
+    accent: S,
+    emptyMessage: "No SMS templates found.",
+    searchKeys: ["key", "name", "module", "transaction"],
+    card: (r) => ({
+      title: pick(r, ["name", "key"], `Template #${r.id}`),
+      subtitle: joinParts([pick(r, ["module"]), pick(r, ["transaction"]), pick(r, ["sms_type"])]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "sms-messages",
+    module: "sms",
+    path: "/sms/messages/",
+    title: "History",
+    singular: "SMS Message",
+    icon: "✉️",
+    accent: S,
+    emptyMessage: "No SMS sent yet.",
+    searchKeys: ["party_name", "mobile", "document_no", "template_name"],
+    card: (r) => ({
+      title: pick(r, ["party_name", "mobile"], `Message #${r.id}`),
+      subtitle: joinParts([pick(r, ["mobile"]), pick(r, ["document_no"]), pick(r, ["module"])]),
+      badge: smsStatusBadge(r),
+    }),
+  },
+  {
+    key: "sms-settings",
+    module: "sms",
+    path: "/sms/settings/",
+    title: "Settings",
+    singular: "SMS Settings",
+    icon: "⚙️",
+    accent: S,
+    emptyMessage: "SMS settings not configured.",
+    searchKeys: [],
+    card: (r) => ({
+      title: "SMS Gateway",
+      subtitle: joinParts([pick(r, ["sender_id"]) && `Sender ${pick(r, ["sender_id"])}`, pick(r, ["default_country_code"])]),
+      badge: r.enabled
+        ? { label: r.mock ? "Enabled · Mock" : "Enabled", tone: r.mock ? "warning" : "success" }
+        : { label: "Disabled", tone: "neutral" },
+    }),
+  },
+];
+
 /* ----------------------------- Modules ---------------------------------- */
 
 export const RESOURCES: Record<string, ResourceConfig> = Object.fromEntries(
-  [...broilerResources, ...hatcheryResources].map((r) => [r.key, r])
+  [...broilerResources, ...hatcheryResources, ...smsResources].map((r) => [r.key, r])
 );
 
 export const MODULES: Record<ModuleKey, ModuleConfig> = {
@@ -655,6 +726,19 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         title: "Infrastructure",
         resourceKeys: ["hatchery-hatcheries", "hatchery-setters", "hatchery-hatchers"],
       },
+    ],
+  },
+  sms: {
+    key: "sms",
+    title: "SMS",
+    tagline: "Templates, history & settings",
+    icon: "💬",
+    color: colors.sms,
+    colorLight: colors.smsLight,
+    sections: [
+      { title: "Templates", resourceKeys: ["sms-templates"] },
+      { title: "Activity", resourceKeys: ["sms-messages"] },
+      { title: "Configuration", resourceKeys: ["sms-settings"] },
     ],
   },
 };

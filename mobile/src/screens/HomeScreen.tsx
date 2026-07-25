@@ -23,6 +23,7 @@ interface Tile {
 const TILES: Tile[] = [
   { key: "broiler", title: "Broiler", subtitle: "Farm operations", icon: "🐔", color: colors.broiler, target: "Broiler" },
   { key: "hatchery", title: "Hatchery", subtitle: "Egg to chick", icon: "🥚", color: colors.hatchery, target: "Hatchery" },
+  { key: "sms", title: "SMS", subtitle: "Templates & history", icon: "💬", color: colors.sms, target: "SMS" },
   { key: "inventory", title: "Inventory", subtitle: "Coming soon", icon: "📦", color: "#0891b2" },
   { key: "sales", title: "Sales", subtitle: "Coming soon", icon: "💰", color: "#16a34a" },
   { key: "purchase", title: "Purchase", subtitle: "Coming soon", icon: "🛒", color: "#7c3aed" },

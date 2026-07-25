@@ -20,6 +20,8 @@ export const colors = {
   broilerLight: "#ffedd5",
   hatchery: "#d97706", // amber-600
   hatcheryLight: "#fef3c7",
+  sms: "#2563eb", // blue-600
+  smsLight: "#dbeafe",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",
