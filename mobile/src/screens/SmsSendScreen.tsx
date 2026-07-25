@@ -44,6 +44,8 @@ export function SmsSendScreen({ route, navigation }: Props) {
         context: vars,
       });
       queryClient.invalidateQueries({ queryKey: ["list", "/sms/messages/"] });
+      // Refresh the Home dashboard KPIs so "SMS sent · today" reflects this send.
+      queryClient.invalidateQueries({ queryKey: ["stats-overview"] });
       if (res.sent) {
         Alert.alert("Sent ✓", `Status: ${res.status}`, [
           { text: "OK", onPress: () => navigation.goBack() },

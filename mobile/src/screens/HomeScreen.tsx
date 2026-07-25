@@ -1,6 +1,7 @@
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
-import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import React, { useCallback } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Badge, Card, Screen, SectionHeader, StatTile, withAlpha } from "@/components/ui";
@@ -100,11 +101,25 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
-  const { data: ov } = useOverview();
+  const { data: ov, refetch, isFetching } = useOverview();
+
+  // Re-pull KPIs whenever Home regains focus (e.g. after sending an SMS on
+  // another tab) — the tab isn't remounted, so a mount-only fetch goes stale.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   return (
     <Screen edges={["left", "right"]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.primary} />
+        }
+      >
         <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
 
         <View style={styles.body}>
