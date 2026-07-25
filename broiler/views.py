@@ -3684,6 +3684,133 @@ def day_record_report(request):
 
 
 @login_required
+def lifting_report(request):
+    """Broiler > Reports > Lifting Report — a register of every Bird Sale
+    (bird "lifting") within a Region/Branch/Line/Supervisor/Farm/Customer/date
+    window: one row per lifting with weight, rate, amount, TCS, receipt and the
+    farm/batch/line/supervisor context. Receipts (not linked to a single sale)
+    are attributed to the customer's first lifting on each date."""
+    from account.models import CompanyProfile
+    from broiler.models import BirdSale, BirdSaleReceipt
+
+    q2 = Decimal("0.01")
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    customer_id = (request.GET.get("customer") or "").strip()
+    region_id = (request.GET.get("region") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    line = (request.GET.get("line") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    sale_type = (request.GET.get("type") or "").strip()
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+
+    sales = (BirdSale.objects
+             .select_related("customer", "farmer", "farm__branch", "farm__supervisor",
+                             "lifting_supervisor", "batch")
+             .order_by("date", "id"))
+    if fd:
+        sales = sales.filter(date__gte=fd)
+    if td:
+        sales = sales.filter(date__lte=td)
+    if customer_id.isdigit():
+        sales = sales.filter(customer_id=customer_id)
+    if region_id.isdigit():
+        sales = sales.filter(farm__branch__region_id=region_id)
+    if branch_id.isdigit():
+        sales = sales.filter(farm__branch_id=branch_id)
+    if line:
+        sales = sales.filter(farm__line=line)
+    if supervisor_id.isdigit():
+        sales = sales.filter(Q(lifting_supervisor_id=supervisor_id) | Q(farm__supervisor_id=supervisor_id))
+    if farm_id.isdigit():
+        sales = sales.filter(farm_id=farm_id)
+    if sale_type in ("customer", "farmer"):
+        sales = sales.filter(sale_type=sale_type)
+    sales = list(sales)
+
+    # Receipts summed per (customer, date), attributed to that customer's first
+    # lifting of the day (mirrors the reference report's receipt column).
+    rcpt_qs = BirdSaleReceipt.objects.filter(sale_type="customer")
+    if fd:
+        rcpt_qs = rcpt_qs.filter(date__gte=fd)
+    if td:
+        rcpt_qs = rcpt_qs.filter(date__lte=td)
+    if customer_id.isdigit():
+        rcpt_qs = rcpt_qs.filter(customer_id=customer_id)
+    rcpt_by_key = {}
+    for rc in rcpt_qs:
+        rcpt_by_key[(rc.customer_id, rc.date)] = rcpt_by_key.get((rc.customer_id, rc.date), Decimal("0")) + _num(rc.amount)
+
+    rows = []
+    seen_rcpt_keys = set()
+    for s in sales:
+        farm = s.farm
+        batch = s.batch
+        gross = (_num(s.net_weight) * _num(s.rate)).quantize(q2)
+        tcs = Decimal("0.00")
+        total = (_num(s.amount) + tcs).quantize(q2)
+
+        # attribute the day's receipts to the first lifting of this customer/date
+        receipt = Decimal("0.00")
+        if s.customer_id:
+            key = (s.customer_id, s.date)
+            if key not in seen_rcpt_keys:
+                seen_rcpt_keys.add(key)
+                receipt = rcpt_by_key.get(key, Decimal("0.00")).quantize(q2)
+
+        mean_age = ""
+        if batch and batch.start_date and s.date:
+            mean_age = (s.date - batch.start_date).days
+
+        party = s.customer.name if s.customer_id else (s.farmer.farmer_name if s.farmer_id else "")
+        code = s.customer.code if s.customer_id else ""
+        supervisor = (str(s.lifting_supervisor) if s.lifting_supervisor_id
+                      else str(farm.supervisor) if farm and farm.supervisor_id else "")
+
+        rows.append({
+            "date": s.date, "code": code or "", "customer": party,
+            "invoice": s.sale_no, "dc_no": s.doc_no or "",
+            "birds": s.birds or 0, "weight": _num(s.net_weight).quantize(q2),
+            "avg_wt": _num(s.avg_weight).quantize(q2), "rate": _num(s.rate).quantize(q2),
+            "amount": gross, "tcs": tcs, "total": total, "receipt": receipt,
+            "branch": farm.branch.branch_name if farm and farm.branch_id else "",
+            "line": farm.line if farm else "",
+            "supervisor": supervisor,
+            "farm": farm.farm_name if farm else "",
+            "batch": batch.batch_name if batch else "",
+            "mean_age": mean_age,
+            "vehicle": s.vehicle or "", "driver": s.driver or "", "remarks": s.remarks or "",
+        })
+
+    tkeys = ["birds", "weight", "amount", "tcs", "total", "receipt"]
+    totals = {k: sum((_num(r[k]) for r in rows), Decimal("0")) for k in tkeys}
+    totals["avg_wt"] = _div(totals["weight"], totals["birds"]).quantize(q2)
+    totals["rate"] = _div(totals["amount"], totals["weight"]).quantize(q2)
+    for k in ("weight", "amount", "tcs", "total", "receipt"):
+        totals[k] = totals[k].quantize(q2)
+    totals["birds"] = int(totals["birds"])
+
+    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+             .values_list("line", flat=True).distinct())
+
+    return render(request, "lifting_report.html", {
+        "rows": rows, "totals": totals,
+        "customers": Customer.objects.order_by("name"),
+        "regions": Region.objects.order_by("description"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "lines": lines,
+        "supervisors": Supervisor.objects.order_by("name"),
+        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "from_date": from_date, "to_date": to_date, "customer_id": customer_id,
+        "region_id": region_id, "branch_id": branch_id, "line": line,
+        "supervisor_id": supervisor_id, "farm_id": farm_id, "sale_type": sale_type,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+@login_required
 def chicks_placement_report(request):
     """Register of every Chicks Placement transaction (Warehouse -> Farm/Batch
     Stock Transfer of a chicks-category item) within a Branch/Farm/date window

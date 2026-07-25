@@ -108,6 +108,7 @@ urlpatterns = [
     path('feed-dispatch-stock-report/', views.feed_dispatch_stock_report, name='feed_dispatch_stock_report'),
     path('live-flock-summary/', views.live_flock_summary_report, name='live_flock_summary_report'),
     path('day-record-report/', views.day_record_report, name='day_record_report'),
+    path('lifting-report/', views.lifting_report, name='lifting_report'),
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),
