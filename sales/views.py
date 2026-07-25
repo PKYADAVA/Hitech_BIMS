@@ -681,7 +681,7 @@ def customer_ledger_report(request):
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
                     "sector": obj.farm.farm_name if obj.farm_id else "",
                     "vehicle": obj.vehicle or "", "remarks": obj.remarks or "",
-                    "overdue": _cl_overdue_days(as_of, d + timedelta(days=credit_period)) if credit_period and d else 0,
+                    "overdue": _cl_overdue_days(as_of, d + timedelta(days=credit_period)) if d else "",
                 })
             elif kind == "INV":
                 sale_count += 1
@@ -690,7 +690,8 @@ def customer_ledger_report(request):
                 grp["debit"] += amt
                 totals["debit"] += amt
                 sales_total += amt
-                overdue = _cl_overdue_days(as_of, obj.due_date)
+                due = obj.due_date or (d + timedelta(days=credit_period) if d else None)
+                overdue = _cl_overdue_days(as_of, due)
                 items = list(obj.items.all()) or [None]
                 for i, it in enumerate(items):
                     first = i == 0
@@ -761,6 +762,123 @@ def customer_ledger_report(request):
         return _customer_ledger_excel(company, customer, from_date, to_date, ctx["prev_balance"],
                                       ctx["prev_cr_dr"], groups, ctx["totals"], ctx["closing"], ctx["closing_cr_dr"])
     return render(request, "customer_ledger_report.html", ctx)
+
+
+def _customer_balance_row(cust, fd, td, ref_date):
+    """One Customer Balance row: opening (signed receivable before the window),
+    period Birds/Weight/Amount (Bird Sales + Sales Invoices) and Receipt (Bird
+    Sale Receipts), the between-days movement, the closing split into Debit
+    (customer owes) / Credit (advance), credit-limit position, and days since
+    the last receipt."""
+    from decimal import Decimal
+    from broiler.models import BirdSale, BirdSaleReceipt
+
+    q2 = Decimal("0.01")
+    signed = _si_num(cust.opening_balance)
+    if str(cust.to_pay_to_receive or "").lower().startswith("pay"):
+        signed = -signed  # we owe the customer (advance) → Cr
+
+    bird_sales = list(BirdSale.objects.filter(sale_type="customer", customer=cust))
+    invoices = list(SalesInvoice.objects.filter(customer=cust, is_active=True))
+    receipts = list(BirdSaleReceipt.objects.filter(sale_type="customer", customer=cust))
+
+    def before(d):
+        return d and fd and d < fd
+
+    def within(d):
+        return d and (not fd or d >= fd) and (not td or d <= td)
+
+    opening = signed
+    amount = Decimal("0")   # receivable-raising in period (sales)
+    receipt = Decimal("0")  # receivable-lowering in period (receipts)
+    birds = 0
+    weight = Decimal("0")
+    for bs in bird_sales:
+        v = _si_num(bs.amount)
+        opening += v if before(bs.date) else 0
+        if within(bs.date):
+            amount += v
+            birds += int(bs.birds or 0)
+            weight += _si_num(bs.net_weight)
+    for inv in invoices:
+        v = _si_num(inv.net_amount)
+        opening += v if before(inv.date) else 0
+        amount += v if within(inv.date) else 0
+    for rc in receipts:
+        v = _si_num(rc.amount)
+        opening -= v if before(rc.date) else 0
+        receipt += v if within(rc.date) else 0
+
+    bw = amount - receipt
+    closing = opening + bw
+
+    credit_limit = _si_num(cust.credit_limit)
+    limit_exceeded = closing - credit_limit
+    available = credit_limit - closing
+
+    rcpt_dates = [rc.date for rc in receipts if rc.date and (not td or rc.date <= td)]
+    if rcpt_dates:
+        gap = (ref_date - max(rcpt_dates)).days
+    else:
+        txn_dates = [bs.date for bs in bird_sales if bs.date] + [inv.date for inv in invoices if inv.date]
+        base = min(txn_dates) if txn_dates else cust.as_on_date
+        gap = (ref_date - base).days if base else 0
+
+    return {
+        "id": cust.id, "code": cust.code or "", "name": cust.name,
+        "group": (cust.customer_group.description or cust.customer_group.code
+                  if cust.customer_group_id else "") or "Sundry Debtors",
+        "opening": opening.quantize(q2),
+        "birds": birds, "weight": weight.quantize(q2),
+        "amount": amount.quantize(q2), "receipt": receipt.quantize(q2), "bw": bw.quantize(q2),
+        "debit": closing.quantize(q2) if closing >= 0 else Decimal("0.00"),
+        "credit": (-closing).quantize(q2) if closing < 0 else Decimal("0.00"),
+        "credit_limit": credit_limit.quantize(q2),
+        "limit_exceeded": limit_exceeded.quantize(q2) if limit_exceeded > 0 else Decimal("0.00"),
+        "available": available.quantize(q2) if available > 0 else Decimal("0.00"),
+        "gap": max(gap, 0),
+        "has_activity": bool(opening or amount or receipt or closing),
+    }
+
+
+@login_required(login_url="login")
+def customer_balance_report(request):
+    """Sales > Reports > Customer Balance — every customer's receivable position:
+    opening, this period's Birds/Weight/Amount/Receipt movement, closing Debit
+    (customer owes) / Credit (advance), credit-limit position and last-receipt gap."""
+    from decimal import Decimal
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+
+    q2 = Decimal("0.01")
+    group = (request.GET.get("customer_group") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    ref_date = td or timezone.localdate()
+
+    customers = Customer.objects.select_related("customer_group").order_by("name")
+    if group.isdigit():
+        customers = customers.filter(customer_group_id=group)
+
+    rows = [_customer_balance_row(c, fd, td, ref_date) for c in customers]
+
+    tkeys = ["opening", "amount", "receipt", "bw", "debit", "credit",
+             "credit_limit", "limit_exceeded", "available"]
+    totals = {k: sum((r[k] for r in rows), Decimal("0")).quantize(q2) for k in tkeys}
+    totals["birds"] = sum((r["birds"] for r in rows), 0)
+    totals["weight"] = sum((r["weight"] for r in rows), Decimal("0")).quantize(q2)
+
+    groups = [{"id": g.id, "name": g.description or g.code or f"Group {g.id}"}
+              for g in CustomerGroup.objects.order_by("description")]
+
+    return render(request, "customer_balance_report.html", {
+        "rows": rows, "totals": totals,
+        "customer_groups": groups, "group": group,
+        "from_date": from_date, "to_date": to_date,
+        "company": CompanyProfile.get_solo(),
+    })
 
 
 def _customer_ledger_excel(company, customer, from_date, to_date, prev_balance, prev_cr_dr,

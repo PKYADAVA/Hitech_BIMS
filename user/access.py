@@ -183,6 +183,7 @@ MODULE_REGISTRY = [
                 "label": "Reports",
                 "tabs": [
                     ("customer_ledger", "Customer Ledger"),
+                    ("customer_balance", "Customer Balance"),
                 ],
             },
         ],
