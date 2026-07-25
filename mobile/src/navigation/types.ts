@@ -9,6 +9,7 @@ export type ModuleStackParams = {
   List: { resourceKey: string };
   Detail: { resourceKey: string; row: Row };
   Form: { resourceKey: string; mode: "create" | "edit"; row?: Row };
+  SmsSend: { row: Row };
 };
 
 export type TabParams = {

@@ -7,9 +7,11 @@
     "scheme": "hitechbims",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f172a"
+      "backgroundColor": "#15803d"
     },
     "ios": {
       "supportsTablet": true,
@@ -17,13 +19,24 @@
     },
     "android": {
       "package": "com.hitechfarms.bims",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#15803d"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiBaseUrl": "https://hitechfarms.co.in/api/v1"
+      "apiBaseUrl": "https://hitechfarms.co.in/api/v1",
+      "eas": {
+        "projectId": "5d635b88-b87b-4998-97e9-818546c72b9e"
+      }
     },
     "plugins": [
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-notifications"
     ]
   }
 }

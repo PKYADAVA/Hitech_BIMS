@@ -16,12 +16,20 @@ from account.models import ChartOfAccount
 from broiler.api import register as register_broiler
 from hatchery.api import register as register_hatchery
 from inventory.models import Item, Warehouse
+from notification.api import (
+    DeviceRegisterView,
+    DeviceTestView,
+    SmsMessageRetryView,
+    SmsSettingsSerializer,
+    SmsTemplateSendView,
+)
 from notification.models import SmsMessage, SmsSettings, SmsTemplate
 from purchase.models import Supplier
 from sales.models import Customer
 
 from .auth import LoginView, LogoutView, MeView, RefreshView
 from .health import HealthView, ReadyView
+from .stats import StatsOverviewView
 from .viewsets import register_model
 
 app_name = "api"
@@ -47,12 +55,15 @@ def register_shared(router: DefaultRouter) -> None:
 
 def register_sms(router: DefaultRouter) -> None:
     """SMS management (notification app): templates, message history, settings."""
-    register_model(router, "sms/templates", SmsTemplate, read_only=True,
+    # Templates are fully manageable (create/edit/delete/toggle active).
+    register_model(router, "sms/templates", SmsTemplate,
                    search_fields=["key", "name", "module", "transaction"],
                    ordering=["module", "name"])
+    # History is a read-only log (writes happen via send/retry actions).
     register_model(router, "sms/messages", SmsMessage, read_only=True,
                    search_fields=["party_name", "mobile", "document_no"], cursor=True)
-    register_model(router, "sms/settings", SmsSettings, read_only=True)
+    # Gateway settings — editable; api_key is write-only (never returned on read).
+    register_model(router, "sms/settings", SmsSettings, serializer=SmsSettingsSerializer)
 
 
 register_shared(router)
@@ -72,5 +83,12 @@ urlpatterns = [
     path("schema", SpectacularAPIView.as_view(), name="schema"),
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
+    path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    # SMS actions (not plain CRUD) — declared before the router so they win.
+    path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
+    path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
+    # Push notifications: device registration + a user-triggered test.
+    path("devices/register", DeviceRegisterView.as_view(), name="device-register"),
+    path("devices/test", DeviceTestView.as_view(), name="device-test"),
     path("", include(router.urls)),
 ]

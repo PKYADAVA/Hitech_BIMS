@@ -6,6 +6,7 @@ operations staff adjust wording without a code deploy, while the code catalogue
 remains the seed and the fallback.
 """
 
+from django.conf import settings
 from django.db import models
 
 from .constants import SMS_MODULE_CHOICES
@@ -207,3 +208,21 @@ class SmsSettings(models.Model):
             "default_country_code": str(getattr(dj, "SMS_DEFAULT_COUNTRY_CODE", "91")),
         })
         return obj
+
+
+class DeviceToken(models.Model):
+    """An Expo push token for one device, so the server can push to a user."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="device_tokens"
+    )
+    token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=20, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user} · {self.platform or 'device'}"
