@@ -14,6 +14,7 @@ import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
+import { SmsSendScreen } from "@/screens/SmsSendScreen";
 import { useAuthStore } from "@/store/authStore";
 import { colors, shadow } from "@/theme";
 import { ModuleStackParams, TabParams } from "./types";
@@ -66,6 +67,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       />
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
+      <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
     </ModuleStack.Navigator>
   );
 }

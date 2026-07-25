@@ -369,6 +369,33 @@ export const FORMS: Record<string, FormSchema> = {
     fields: [HATCHERY(true), text("hatcher_no", "Hatcher No.", true), num("capacity", "Capacity"), active()],
   },
   "hatchery-expense-types": { fields: [text("name", "Name", true), active()] },
+
+  /* --------------------------- SMS module ------------------------------- */
+  "sms-templates": {
+    fields: [
+      text("key", "Key", true),
+      text("name", "Name", true),
+      { name: "body", label: "Message Body", type: "textarea", required: true },
+      text("module", "Module"),
+      text("transaction", "Transaction"),
+      text("category", "Category"),
+      text("sms_type", "SMS Type"),
+      text("sender_id", "Sender ID"),
+      text("dlt_template_id", "DLT Template ID"),
+      text("description", "Description"),
+      active(),
+    ],
+  },
+  "sms-settings": {
+    fields: [
+      bool("enabled", "Enabled"),
+      bool("mock", "Mock mode (no real SMS)"),
+      text("sender_id", "Sender ID"),
+      text("entity_id", "Entity ID"),
+      text("api_key", "API Key (leave blank to keep)"),
+      text("default_country_code", "Default Country Code"),
+    ],
+  },
 };
 
 /** Whether a resource supports create/edit (has a schema + a CRUD endpoint). */

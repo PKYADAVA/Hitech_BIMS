@@ -1,14 +1,18 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useLayoutEffect } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useLayoutEffect, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { retryMessage } from "@/api/sms";
 import { Row } from "@/api/types";
-import { Badge, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
+import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
+import { queryClient } from "@/query/queryClient";
 import { colors, spacing, type } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
+
+const RETRYABLE = /fail|reject|expire|invalid|unknown/i;
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Detail">;
 
@@ -56,6 +60,26 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     return isEmpty(lbl) ? formatValue(k, v) : String(lbl);
   };
 
+  const [retrying, setRetrying] = useState(false);
+
+  const onRetry = async () => {
+    setRetrying(true);
+    try {
+      const res = await retryMessage(row.id);
+      queryClient.invalidateQueries({ queryKey: ["list", "/sms/messages/"] });
+      Alert.alert(
+        res.sent ? "Retried ✓" : "Retry failed",
+        res.sent ? `Status: ${res.status}` : res.error || res.status
+      );
+    } catch (e) {
+      Alert.alert("Failed", (e as Error)?.message ?? "Retry failed.");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const canRetry = config.key === "sms-messages" && RETRYABLE.test(String(row.status ?? ""));
+
   const entries = Object.entries(row).filter(
     ([k, v]) => !HIDDEN.test(k) && !k.endsWith("_label") && !isEmpty(v)
   );
@@ -77,6 +101,11 @@ export function RecordDetailScreen({ route, navigation }: Props) {
           ) : null}
         </View>
       </Card>
+
+      {config.key === "sms-templates" ? (
+        <Button title="Send SMS" onPress={() => navigation.navigate("SmsSend", { row })} />
+      ) : null}
+      {canRetry ? <Button title="Retry send" loading={retrying} onPress={onRetry} /> : null}
 
       <Card>
         <Text style={styles.groupTitle}>Details</Text>
