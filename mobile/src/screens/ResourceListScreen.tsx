@@ -52,6 +52,8 @@ export function ResourceListScreen({ route, navigation }: Props) {
         onEndReachedThreshold={0.4}
         onEndReached={list.loadMore}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         ListEmptyComponent={
           <EmptyOrError
             icon={config.icon}

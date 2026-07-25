@@ -1,11 +1,11 @@
-import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { createResource, deleteResource, updateResource } from "@/api/resources";
 import { ApiError, Row } from "@/api/types";
 import { FormControl } from "@/components/form";
+import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { FORMS } from "@/config/forms";
@@ -119,20 +119,8 @@ export function FormScreen({ route, navigation }: Props) {
     }
   };
 
-  const headerHeight = useHeaderHeight();
-
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={headerHeight}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
         {schema.fields.map((f) => (
@@ -157,8 +145,7 @@ export function FormScreen({ route, navigation }: Props) {
           </View>
         ) : null}
         <View style={{ height: spacing.xxl }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 

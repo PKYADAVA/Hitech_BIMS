@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
+import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { biometricsAvailable } from "@/components/LockGate";
 import { Button, Card, DetailRow, Divider, Screen } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
@@ -12,6 +13,7 @@ import { useSettingsStore } from "@/store/settingsStore";
 export function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const [pwOpen, setPwOpen] = useState(false);
   const appLock = useSettingsStore((s) => s.appLockEnabled);
   const setAppLock = useSettingsStore((s) => s.setAppLock);
 
@@ -82,10 +84,13 @@ export function ProfileScreen() {
           </Text>
         </Card>
 
+        <Button title="Change password" variant="ghost" onPress={() => setPwOpen(true)} />
         <Button title="Send test notification" variant="ghost" onPress={onTestPush} />
         <Button title="Log out" variant="danger" onPress={logout} />
         <Text style={styles.version}>Hitech BIMS · v0.1.0</Text>
       </ScrollView>
+
+      <ChangePasswordModal visible={pwOpen} onClose={() => setPwOpen(false)} />
     </Screen>
   );
 }

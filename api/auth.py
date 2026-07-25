@@ -14,6 +14,8 @@ Endpoints (all under ``/api/v1/auth/``):
 """
 from __future__ import annotations
 
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -63,6 +65,11 @@ class AccessSerializer(serializers.Serializer):
 
 class DetailSerializer(serializers.Serializer):
     detail = serializers.CharField()
+
+
+class ChangePasswordRequestSerializer(serializers.Serializer):
+    current_password = serializers.CharField()
+    new_password = serializers.CharField()
 
 
 def _user_payload(user) -> dict:
@@ -145,3 +152,43 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(_user_payload(request.user))
+
+
+class ChangePasswordView(APIView):
+    """Change the authenticated user's password (checks the current one first).
+
+    Existing JWTs stay valid (JWT is stateless) so the user isn't logged out of
+    this or other devices — matching the web app's ``update_session_auth_hash``
+    behaviour of keeping the current session alive after a password change.
+    """
+
+    renderer_classes = [EnvelopeJSONRenderer]
+    permission_classes = [IsAuthenticated]
+
+    def get_exception_handler(self):
+        return api_exception_handler
+
+    @extend_schema(request=ChangePasswordRequestSerializer, responses=DetailSerializer)
+    def post(self, request):
+        current = request.data.get("current_password") or ""
+        new = request.data.get("new_password") or ""
+        user = request.user
+
+        if not user.check_password(current):
+            return Response(
+                {"code": "validation_error", "message": "Your current password is incorrect.",
+                 "fields": {"current_password": ["Incorrect password."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_password(new, user)
+        except DjangoValidationError as exc:
+            return Response(
+                {"code": "validation_error", "message": "Password does not meet the requirements.",
+                 "fields": {"new_password": list(exc.messages)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        return Response({"detail": "Password changed."})

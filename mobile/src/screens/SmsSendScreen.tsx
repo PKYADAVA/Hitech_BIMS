@@ -1,9 +1,9 @@
-import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { extractPlaceholders, sendTemplate } from "@/api/sms";
+import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button, Card, Field } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
@@ -60,20 +60,8 @@ export function SmsSendScreen({ route, navigation }: Props) {
     }
   };
 
-  const headerHeight = useHeaderHeight();
-
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={headerHeight}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <Card style={{ marginBottom: spacing.lg }}>
           <Text style={styles.tplName}>{String(template.name ?? template.key ?? "Template")}</Text>
           <Text style={styles.preview}>{preview}</Text>
@@ -104,8 +92,7 @@ export function SmsSendScreen({ route, navigation }: Props) {
 
         <Button title="Send SMS" onPress={onSend} loading={sending} />
         <View style={{ height: spacing.xxl }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 

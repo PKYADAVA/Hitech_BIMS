@@ -1,21 +1,12 @@
-import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { http } from "@/api/client";
 import { createResource, deleteResource, updateResource } from "@/api/resources";
 import { ApiError, Envelope, Row } from "@/api/types";
 import { FormControl } from "@/components/form";
+import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
@@ -57,7 +48,6 @@ const num = (v: string) => Number(v) || 0;
 
 export function BirdSaleFormScreen({ route, navigation }: Props) {
   const { mode, row } = route.params;
-  const headerHeight = useHeaderHeight();
 
   const [saleType, setSaleType] = useState<SaleType>(
     (row?.sale_type as SaleType) || "customer"
@@ -201,17 +191,7 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={headerHeight}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
         {/* Sale type toggle */}
@@ -278,8 +258,7 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
           </View>
         ) : null}
         <View style={{ height: spacing.xxl }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 

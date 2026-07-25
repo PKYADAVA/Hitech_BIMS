@@ -31,7 +31,7 @@ from notification.models import SmsMessage, SmsSettings, SmsTemplate
 from purchase.models import Supplier
 from sales.models import Customer
 
-from .auth import LoginView, LogoutView, MeView, RefreshView
+from .auth import ChangePasswordView, LoginView, LogoutView, MeView, RefreshView
 from .health import HealthView, ReadyView
 from .reports import (
     EggIntakeReportView,
@@ -86,6 +86,7 @@ auth_patterns = [
     path("refresh", RefreshView.as_view(), name="refresh"),
     path("logout", LogoutView.as_view(), name="logout"),
     path("me", MeView.as_view(), name="me"),
+    path("change-password", ChangePasswordView.as_view(), name="change-password"),
 ]
 
 urlpatterns = [

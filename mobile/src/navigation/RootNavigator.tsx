@@ -56,6 +56,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
         headerTintColor: colors.onDark,
         headerTitleStyle: { fontWeight: "800" },
         headerShadowVisible: false,
+        headerBackVisible: false,
         contentStyle: { backgroundColor: colors.bg },
       }}
     >
