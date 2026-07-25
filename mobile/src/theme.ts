@@ -26,6 +26,12 @@ export const colors = {
   accountLight: "#e0e7ff",
   inventory: "#0891b2", // cyan-600
   inventoryLight: "#cffafe",
+  sales: "#e11d48", // rose-600
+  salesLight: "#ffe4e6",
+  purchase: "#7c3aed", // violet-600
+  purchaseLight: "#ede9fe",
+  hr: "#db2777", // pink-600
+  hrLight: "#fce7f3",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",

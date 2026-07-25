@@ -1,0 +1,82 @@
+# DigitalOcean App Platform spec — REFERENCE / TEMPLATE.
+#
+# Purpose: make database migrations run automatically on every deploy via a
+# dedicated PRE_DEPLOY job, so they run exactly once BEFORE any web instance
+# starts and can never be silently skipped by a dashboard "Run Command" that
+# overrides the Procfile (the usual reason `migrate` "doesn't run").
+#
+# This file is NOT applied automatically by being in the repo. Apply it with:
+#     doctl apps list                       # find your APP_ID
+#     doctl apps update <APP_ID> --spec .do/app.yaml
+# or in the dashboard: App → Settings → "Edit your App Spec" → paste/merge.
+#
+# Fill in the <PLACEHOLDERS> to match your existing app (repo, region, envs).
+# The `migrate` job and the `web` service MUST share the same database env vars
+# so the job can reach the DB. Prefer binding the DB and using ${db.DATABASE_URL}.
+
+name: hitech-bims
+region: <YOUR_REGION>            # e.g. blr1, nyc, ams — match your current app
+
+# --- Managed Postgres (if attached as a bound component) -------------------
+# databases:
+#   - name: db
+#     engine: PG
+#     production: false          # Dev database
+
+# --- Migrations: run ONCE before the web service is (re)deployed -----------
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    github:
+      repo: <YOUR_GITHUB_ORG>/<YOUR_REPO>
+      branch: main
+      deploy_on_push: true
+    environment_slug: python
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    run_command: python manage.py migrate --noinput && (python manage.py seed_sms_templates || true)
+    envs:
+      - key: DEVELOPMENT_MODE
+        value: "False"
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}     # or paste the DO database URL (Encrypted)
+      - key: SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: <YOUR_SECRET_KEY>
+      - key: DB_SSLMODE
+        value: require
+
+# --- Web service: gunicorn ONLY (migrate now happens in the job above) -----
+services:
+  - name: web
+    github:
+      repo: <YOUR_GITHUB_ORG>/<YOUR_REPO>
+      branch: main
+      deploy_on_push: true
+    environment_slug: python
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    http_port: 8080
+    run_command: gunicorn --config gunicorn.conf.py --bind 0.0.0.0:$PORT Hitech_BIMS.wsgi:application
+    envs:
+      - key: DEVELOPMENT_MODE
+        value: "False"
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: <your-app>.ondigitalocean.app,hitechfarms.co.in
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://<your-app>.ondigitalocean.app,https://hitechfarms.co.in
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      - key: SECRET_KEY
+        scope: RUN_AND_BUILD_TIME       # collectstatic needs it at build time
+        type: SECRET
+        value: <YOUR_SECRET_KEY>
+      - key: DB_SSLMODE
+        value: require

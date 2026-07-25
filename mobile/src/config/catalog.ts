@@ -15,7 +15,15 @@ import { BadgeTone } from "@/components/ui";
 import { colors } from "@/theme";
 import { formatDate, formatMoney, formatNumber, joinParts, pick } from "@/utils/format";
 
-export type ModuleKey = "broiler" | "hatchery" | "sms" | "account" | "inventory";
+export type ModuleKey =
+  | "broiler"
+  | "hatchery"
+  | "sms"
+  | "account"
+  | "inventory"
+  | "sales"
+  | "purchase"
+  | "hr";
 
 export interface CardView {
   title: string;
@@ -1061,6 +1069,502 @@ const inventoryResources: ResourceConfig[] = [
   },
 ];
 
+/* ------------------------------- Sales ---------------------------------- */
+
+const SA = colors.sales;
+
+const salesResources: ResourceConfig[] = [
+  {
+    key: "sales-invoices",
+    module: "sales",
+    path: "/sales/invoices/",
+    title: "Sales Invoices",
+    singular: "Sales Invoice",
+    icon: "🧾",
+    accent: SA,
+    emptyMessage: "No invoices yet.",
+    searchKeys: ["invoice_no", "reference_no", "vehicle_no", "gstin"],
+    card: (r) => ({
+      title: pick(r, ["invoice_no"], `Invoice #${r.id}`),
+      subtitle: joinParts([pick(r, ["customer_label"]), formatDate(r.date)]),
+      trailing: !isBlank(r.other_charges_amount)
+        ? { value: formatMoney(r.other_charges_amount), caption: "charges" }
+        : undefined,
+      badge: !isBlank(r.transaction_type)
+        ? { label: String(r.transaction_type), tone: "info" }
+        : undefined,
+    }),
+    children: [{ resourceKey: "sales-invoice-items", fkParam: "invoice" }],
+  },
+  {
+    key: "sales-customers",
+    module: "sales",
+    path: "/sales/customers/",
+    title: "Customers",
+    singular: "Customer",
+    icon: "🧑‍💼",
+    accent: SA,
+    emptyMessage: "No customers found.",
+    searchKeys: ["name", "code", "mobile", "gstin", "place"],
+    card: (r) => ({
+      title: pick(r, ["name", "code"], `Customer #${r.id}`),
+      subtitle: joinParts([pick(r, ["mobile", "phone"]), pick(r, ["place"])]),
+      trailing: !isBlank(r.credit_limit)
+        ? { value: formatMoney(r.credit_limit), caption: "credit" }
+        : undefined,
+    }),
+  },
+  {
+    key: "sales-customer-groups",
+    module: "sales",
+    path: "/sales/customer-groups/",
+    title: "Customer Groups",
+    singular: "Customer Group",
+    icon: "👥",
+    accent: SA,
+    emptyMessage: "No customer groups found.",
+    searchKeys: ["code", "description"],
+    card: (r) => ({
+      title: pick(r, ["code", "description"], `Group #${r.id}`),
+      subtitle: joinParts([pick(r, ["description"]), pick(r, ["currency"])]),
+    }),
+  },
+  {
+    key: "sales-prices",
+    module: "sales",
+    path: "/sales/prices/",
+    title: "Sales Prices",
+    singular: "Sales Price",
+    icon: "🏷️",
+    accent: SA,
+    emptyMessage: "No price entries found.",
+    searchKeys: [],
+    card: (r) => ({
+      title: pick(r, ["item_label"], `Price #${r.id}`),
+      subtitle: formatDate(r.date),
+      trailing: !isBlank(r.price) ? { value: formatMoney(r.price) } : undefined,
+    }),
+  },
+  {
+    key: "sales-shipping-addresses",
+    module: "sales",
+    path: "/sales/shipping-addresses/",
+    title: "Shipping Addresses",
+    singular: "Shipping Address",
+    icon: "📍",
+    accent: SA,
+    emptyMessage: "No shipping addresses found.",
+    searchKeys: ["label", "contact_person", "mobile"],
+    card: (r) => ({
+      title: pick(r, ["label", "contact_person"], `Address #${r.id}`),
+      subtitle: joinParts([pick(r, ["customer_label"]), pick(r, ["mobile"])]),
+      badge: r.is_default ? { label: "Default", tone: "success" } : undefined,
+    }),
+  },
+  // Line items — rendered inside a sales invoice's detail.
+  {
+    key: "sales-invoice-items",
+    module: "sales",
+    path: "/sales/invoice-items/",
+    title: "Invoice Items",
+    singular: "Invoice Item",
+    icon: "🧾",
+    accent: SA,
+    emptyMessage: "No line items.",
+    searchKeys: [],
+    card: (r) => ({
+      title: pick(r, ["item_label"], `Item #${r.id}`),
+      subtitle: joinParts([
+        !isBlank(r.quantity) ? `Qty ${formatNumber(r.quantity)}` : "",
+        !isBlank(r.rate) ? `@ ${formatMoney(r.rate)}` : "",
+      ]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+];
+
+/* ----------------------------- Purchase --------------------------------- */
+
+const P = colors.purchase;
+
+const purchaseResources: ResourceConfig[] = [
+  {
+    key: "purchase-general-purchases",
+    module: "purchase",
+    path: "/purchase/general-purchases/",
+    title: "General Purchases",
+    singular: "General Purchase",
+    icon: "🛒",
+    accent: P,
+    emptyMessage: "No purchases yet.",
+    searchKeys: ["purchase_no", "bill_no", "vehicle_no"],
+    card: (r) => ({
+      title: pick(r, ["purchase_no"], `Purchase #${r.id}`),
+      subtitle: joinParts([pick(r, ["supplier_label"]), formatDate(r.date)]),
+      trailing: !isBlank(r.freight_amount)
+        ? { value: formatMoney(r.freight_amount), caption: "freight" }
+        : undefined,
+      badge: !isBlank(r.payment_mode) ? { label: String(r.payment_mode), tone: "brand" } : undefined,
+    }),
+    children: [{ resourceKey: "purchase-general-purchase-items", fkParam: "purchase" }],
+  },
+  {
+    key: "purchase-chicks-purchases",
+    module: "purchase",
+    path: "/purchase/chicks-purchases/",
+    title: "Chicks Purchases",
+    singular: "Chicks Purchase",
+    icon: "🐣",
+    accent: P,
+    emptyMessage: "No chicks purchases yet.",
+    searchKeys: ["purchase_no", "bill_no"],
+    card: (r) => ({
+      title: pick(r, ["purchase_no"], `Purchase #${r.id}`),
+      subtitle: joinParts([pick(r, ["supplier_label", "hatchery_label"]), formatDate(r.date)]),
+      trailing: !isBlank(r.no_of_bags)
+        ? { value: formatNumber(r.no_of_bags), caption: "bags" }
+        : undefined,
+    }),
+    children: [{ resourceKey: "purchase-chicks-purchase-items", fkParam: "purchase" }],
+  },
+  {
+    key: "purchase-supplier-payments",
+    module: "purchase",
+    path: "/purchase/supplier-payments/",
+    title: "Supplier Payments",
+    singular: "Supplier Payment",
+    icon: "💵",
+    accent: P,
+    emptyMessage: "No payments yet.",
+    searchKeys: ["payment_no"],
+    card: (r) => ({
+      title: pick(r, ["payment_no"], `Payment #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["location_label"])]),
+    }),
+    children: [{ resourceKey: "purchase-supplier-payment-lines", fkParam: "payment" }],
+  },
+  {
+    key: "purchase-debit-notes",
+    module: "purchase",
+    path: "/purchase/debit-notes/",
+    title: "Debit Notes",
+    singular: "Debit Note",
+    icon: "🧾",
+    accent: P,
+    emptyMessage: "No debit notes yet.",
+    searchKeys: ["note_no", "against_bill"],
+    card: (r) => ({
+      title: pick(r, ["note_no"], `Note #${r.id}`),
+      subtitle: joinParts([pick(r, ["supplier_label"]), formatDate(r.date)]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+  {
+    key: "purchase-credit-notes",
+    module: "purchase",
+    path: "/purchase/credit-notes/",
+    title: "Credit Notes",
+    singular: "Credit Note",
+    icon: "🧾",
+    accent: P,
+    emptyMessage: "No credit notes yet.",
+    searchKeys: ["note_no", "against_bill"],
+    card: (r) => ({
+      title: pick(r, ["note_no"], `Note #${r.id}`),
+      subtitle: joinParts([pick(r, ["supplier_label"]), formatDate(r.date)]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+  {
+    key: "purchase-suppliers",
+    module: "purchase",
+    path: "/purchase/suppliers/",
+    title: "Suppliers",
+    singular: "Supplier",
+    icon: "🏭",
+    accent: P,
+    emptyMessage: "No suppliers found.",
+    searchKeys: ["name", "code", "mobile", "gstin", "place"],
+    card: (r) => ({
+      title: pick(r, ["name", "code"], `Supplier #${r.id}`),
+      subtitle: joinParts([pick(r, ["mobile"]), pick(r, ["place"])]),
+      trailing: !isBlank(r.credit_limit)
+        ? { value: formatMoney(r.credit_limit), caption: "credit" }
+        : undefined,
+    }),
+  },
+  {
+    key: "purchase-vendor-groups",
+    module: "purchase",
+    path: "/purchase/vendor-groups/",
+    title: "Vendor Groups",
+    singular: "Vendor Group",
+    icon: "👥",
+    accent: P,
+    emptyMessage: "No vendor groups found.",
+    searchKeys: ["code", "description"],
+    card: (r) => ({
+      title: pick(r, ["code", "description"], `Group #${r.id}`),
+      subtitle: joinParts([pick(r, ["description"]), pick(r, ["currency"])]),
+    }),
+  },
+  {
+    key: "purchase-credit-terms",
+    module: "purchase",
+    path: "/purchase/credit-terms/",
+    title: "Credit Terms",
+    singular: "Credit Term",
+    icon: "📆",
+    accent: P,
+    emptyMessage: "No credit terms found.",
+    searchKeys: ["term"],
+    card: (r) => ({ title: pick(r, ["term"], `Term #${r.id}`) }),
+  },
+  {
+    key: "purchase-tax-masters",
+    module: "purchase",
+    path: "/purchase/tax-masters/",
+    title: "Tax Masters",
+    singular: "Tax Master",
+    icon: "🏷️",
+    accent: P,
+    emptyMessage: "No taxes found.",
+    searchKeys: ["tax_code", "description"],
+    card: (r) => ({
+      title: pick(r, ["tax_code"], `Tax #${r.id}`),
+      subtitle: pick(r, ["description"]),
+      trailing: !isBlank(r.tax_percentage)
+        ? { value: `${formatNumber(r.tax_percentage)}%`, caption: "rate" }
+        : undefined,
+    }),
+  },
+  {
+    key: "purchase-shipping-addresses",
+    module: "purchase",
+    path: "/purchase/shipping-addresses/",
+    title: "Shipping Addresses",
+    singular: "Shipping Address",
+    icon: "📍",
+    accent: P,
+    emptyMessage: "No shipping addresses found.",
+    searchKeys: ["label", "contact_person", "mobile"],
+    card: (r) => ({
+      title: pick(r, ["label", "contact_person"], `Address #${r.id}`),
+      subtitle: joinParts([pick(r, ["supplier_label"]), pick(r, ["mobile"])]),
+      badge: r.is_default ? { label: "Default", tone: "success" } : undefined,
+    }),
+  },
+  // Line items — rendered inside their parent transaction's detail.
+  {
+    key: "purchase-general-purchase-items",
+    module: "purchase",
+    path: "/purchase/general-purchase-items/",
+    title: "Purchase Items",
+    singular: "Purchase Item",
+    icon: "🛒",
+    accent: P,
+    emptyMessage: "No line items.",
+    searchKeys: [],
+    card: (r) => ({
+      title: pick(r, ["item_label"], `Item #${r.id}`),
+      subtitle: joinParts([
+        !isBlank(r.rcv_qty) ? `Rcv ${formatNumber(r.rcv_qty)}` : "",
+        !isBlank(r.rate) ? `@ ${formatMoney(r.rate)}` : "",
+      ]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+  {
+    key: "purchase-chicks-purchase-items",
+    module: "purchase",
+    path: "/purchase/chicks-purchase-items/",
+    title: "Chicks Items",
+    singular: "Chicks Item",
+    icon: "🐣",
+    accent: P,
+    emptyMessage: "No line items.",
+    searchKeys: [],
+    card: (r) => ({
+      title: `Batch ${pick(r, ["batch"], String(r.id))}`,
+      subtitle: joinParts([
+        !isBlank(r.rcv_qty) ? `Rcv ${formatNumber(r.rcv_qty)}` : "",
+        !isBlank(r.rate) ? `@ ${formatMoney(r.rate)}` : "",
+      ]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+  {
+    key: "purchase-supplier-payment-lines",
+    module: "purchase",
+    path: "/purchase/supplier-payment-lines/",
+    title: "Payment Lines",
+    singular: "Payment Line",
+    icon: "💵",
+    accent: P,
+    emptyMessage: "No lines.",
+    searchKeys: [],
+    card: (r) => ({
+      title: pick(r, ["supplier_label"], `Line #${r.id}`),
+      subtitle: joinParts([pick(r, ["mode"]), pick(r, ["reference_no"])]),
+      trailing: !isBlank(r.amount) ? { value: formatMoney(r.amount) } : undefined,
+    }),
+  },
+];
+
+/* -------------------------------- HR ------------------------------------ */
+
+const HR = colors.hr;
+
+const hrResources: ResourceConfig[] = [
+  {
+    key: "hr-employees",
+    module: "hr",
+    path: "/hr/employees/",
+    title: "Employees",
+    singular: "Employee",
+    icon: "🧑‍💼",
+    accent: HR,
+    emptyMessage: "No employees found.",
+    searchKeys: ["full_name", "pan_card", "aadhar_number"],
+    card: (r) => ({
+      title: pick(r, ["full_name"], `Employee #${r.id}`),
+      subtitle: joinParts([pick(r, ["designation_label", "title"]), pick(r, ["personal_contact"])]),
+    }),
+  },
+  {
+    key: "hr-attendance",
+    module: "hr",
+    path: "/hr/attendance/",
+    title: "Attendance",
+    singular: "Attendance",
+    icon: "🕒",
+    accent: HR,
+    emptyMessage: "No attendance records.",
+    searchKeys: ["status"],
+    card: (r) => ({
+      title: pick(r, ["employee_label"], `Record #${r.id}`),
+      subtitle: joinParts([formatDate(r.date), pick(r, ["check_in_time"]), pick(r, ["check_out_time"])]),
+      badge: !isBlank(r.status) ? { label: String(r.status), tone: "info" } : undefined,
+    }),
+  },
+  {
+    key: "hr-leaves",
+    module: "hr",
+    path: "/hr/leaves/",
+    title: "Leaves",
+    singular: "Leave Request",
+    icon: "🌴",
+    accent: HR,
+    emptyMessage: "No leave requests.",
+    searchKeys: ["reason", "leave_type", "status"],
+    card: (r) => ({
+      title: pick(r, ["employee_label"], `Leave #${r.id}`),
+      subtitle: joinParts([pick(r, ["leave_type"]), pick(r, ["reason"])]),
+      badge: changeStatusBadge(r),
+    }),
+    children: [{ resourceKey: "hr-leave-dates", fkParam: "leave_request" }],
+  },
+  {
+    key: "hr-payroll",
+    module: "hr",
+    path: "/hr/payroll/",
+    title: "Payroll",
+    singular: "Payroll",
+    icon: "💰",
+    accent: HR,
+    emptyMessage: "No payroll records.",
+    searchKeys: [],
+    card: (r) => ({
+      title: pick(r, ["employee_label"], `Payroll #${r.id}`),
+      subtitle: joinParts([
+        !isBlank(r.month) ? `${r.month}/${r.year}` : "",
+        !isBlank(r.total_working_days) ? `${formatNumber(r.total_working_days)} days` : "",
+      ]),
+      trailing: !isBlank(r.net_salary)
+        ? { value: formatMoney(r.net_salary), caption: "net" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hr-departments",
+    module: "hr",
+    path: "/hr/departments/",
+    title: "Departments",
+    singular: "Department",
+    icon: "🏢",
+    accent: HR,
+    emptyMessage: "No departments found.",
+    searchKeys: ["code", "name"],
+    card: (r) => ({
+      title: pick(r, ["name", "code"], `Dept #${r.id}`),
+      subtitle: pick(r, ["code"]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "hr-designations",
+    module: "hr",
+    path: "/hr/designations/",
+    title: "Designations",
+    singular: "Designation",
+    icon: "🎖️",
+    accent: HR,
+    emptyMessage: "No designations found.",
+    searchKeys: ["code", "title"],
+    card: (r) => ({
+      title: pick(r, ["title", "code"], `Designation #${r.id}`),
+      subtitle: pick(r, ["description"]),
+      trailing: !isBlank(r.base_salary)
+        ? { value: formatMoney(r.base_salary), caption: "base" }
+        : undefined,
+    }),
+  },
+  {
+    key: "hr-shifts",
+    module: "hr",
+    path: "/hr/shifts/",
+    title: "Shifts",
+    singular: "Shift",
+    icon: "⏰",
+    accent: HR,
+    emptyMessage: "No shifts found.",
+    searchKeys: ["name"],
+    card: (r) => ({
+      title: pick(r, ["name"], `Shift #${r.id}`),
+      subtitle: joinParts([pick(r, ["start_time"]), pick(r, ["end_time"])]),
+      badge: activeBadge(r),
+    }),
+  },
+  {
+    key: "hr-groups",
+    module: "hr",
+    path: "/hr/groups/",
+    title: "Groups",
+    singular: "Group",
+    icon: "👥",
+    accent: HR,
+    emptyMessage: "No groups found.",
+    searchKeys: ["name"],
+    card: (r) => ({
+      title: pick(r, ["name"], `Group #${r.id}`),
+      subtitle: pick(r, ["warehouse_label"]),
+    }),
+  },
+  // Line items — rendered inside a leave request's detail.
+  {
+    key: "hr-leave-dates",
+    module: "hr",
+    path: "/hr/leave-dates/",
+    title: "Leave Dates",
+    singular: "Leave Date",
+    icon: "📅",
+    accent: HR,
+    emptyMessage: "No dates.",
+    searchKeys: [],
+    card: (r) => ({ title: formatDate(r.date) || `Date #${r.id}` }),
+  },
+];
+
 /* ----------------------------- Modules ---------------------------------- */
 
 export const RESOURCES: Record<string, ResourceConfig> = Object.fromEntries(
@@ -1070,6 +1574,9 @@ export const RESOURCES: Record<string, ResourceConfig> = Object.fromEntries(
     ...smsResources,
     ...accountResources,
     ...inventoryResources,
+    ...salesResources,
+    ...purchaseResources,
+    ...hrResources,
   ].map((r) => [r.key, r])
 );
 
@@ -1233,6 +1740,77 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "inventory-stock-issues",
           "inventory-stock-receives",
         ],
+      },
+    ],
+  },
+  sales: {
+    key: "sales",
+    title: "Sales",
+    tagline: "Customers, pricing & invoices",
+    icon: "💰",
+    color: colors.sales,
+    colorLight: colors.salesLight,
+    sections: [
+      {
+        title: "Transactions",
+        resourceKeys: ["sales-invoices"],
+      },
+      {
+        title: "Masters",
+        resourceKeys: [
+          "sales-customers",
+          "sales-customer-groups",
+          "sales-prices",
+          "sales-shipping-addresses",
+        ],
+      },
+    ],
+  },
+  purchase: {
+    key: "purchase",
+    title: "Purchase",
+    tagline: "Suppliers, purchases & payments",
+    icon: "🛒",
+    color: colors.purchase,
+    colorLight: colors.purchaseLight,
+    sections: [
+      {
+        title: "Transactions",
+        resourceKeys: [
+          "purchase-general-purchases",
+          "purchase-chicks-purchases",
+          "purchase-supplier-payments",
+          "purchase-debit-notes",
+          "purchase-credit-notes",
+        ],
+      },
+      {
+        title: "Masters",
+        resourceKeys: [
+          "purchase-suppliers",
+          "purchase-vendor-groups",
+          "purchase-credit-terms",
+          "purchase-tax-masters",
+          "purchase-shipping-addresses",
+        ],
+      },
+    ],
+  },
+  hr: {
+    key: "hr",
+    title: "HR",
+    tagline: "People, attendance & payroll",
+    icon: "👥",
+    color: colors.hr,
+    colorLight: colors.hrLight,
+    sections: [
+      {
+        title: "People",
+        resourceKeys: ["hr-employees", "hr-attendance", "hr-leaves", "hr-payroll"],
+      },
+      {
+        title: "Masters",
+        resourceKeys: ["hr-departments", "hr-designations", "hr-shifts", "hr-groups"],
       },
     ],
   },

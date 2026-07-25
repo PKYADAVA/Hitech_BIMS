@@ -62,3 +62,29 @@ capture_output = True
 
 # --- Process naming ---
 proc_name = "hitech_bims"
+
+
+# --- Deploy-time database migrations -------------------------------------
+# Apply pending migrations ONCE, in the Gunicorn master, before any worker
+# forks. Gunicorn auto-loads this file, so migrations run on every deploy even
+# if the platform's run command is just `gunicorn ...` (no `manage.py migrate`)
+# — e.g. a DigitalOcean App Platform Run Command that overrides the Procfile.
+# Idempotent: a no-op when the schema is already up to date, so it's harmless to
+# also keep `migrate` in the Procfile. Set RUN_MIGRATIONS_ON_START=0 to disable.
+def on_starting(server):
+    if os.getenv("RUN_MIGRATIONS_ON_START", "1") not in ("1", "true", "True"):
+        return
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Hitech_BIMS.settings")
+    try:
+        import django
+        django.setup()
+        from django.core.management import call_command
+
+        server.log.info("on_starting: applying database migrations…")
+        call_command("migrate", interactive=False, verbosity=1)
+        server.log.info("on_starting: migrations up to date.")
+    except Exception:
+        # Fail the boot loudly rather than serve a half-migrated schema — the
+        # platform keeps the previous (healthy) deploy running on a failed one.
+        server.log.exception("on_starting: database migration failed")
+        raise

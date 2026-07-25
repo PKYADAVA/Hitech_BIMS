@@ -94,17 +94,23 @@ interface Tile {
   icon: string;
   color: string;
   /** Route to navigate to — a bottom tab or a Root-presented module screen. */
-  target?: keyof TabParams | "AccountModule" | "InventoryModule";
+  target?:
+    | keyof TabParams
+    | "AccountModule"
+    | "InventoryModule"
+    | "SalesModule"
+    | "PurchaseModule"
+    | "HrModule";
 }
 
 const TILES: Tile[] = [
   { key: "account", title: "Accounts", subtitle: "Books, masters & vouchers", icon: "📒", color: colors.account, target: "AccountModule" },
   { key: "broiler", title: "Broiler", subtitle: "Farm operations", icon: "🐔", color: colors.broiler, target: "Broiler" },
   { key: "hatchery", title: "Hatchery", subtitle: "Egg to chick", icon: "🥚", color: colors.hatchery, target: "Hatchery" },
-  { key: "hr", title: "HR", subtitle: "Coming soon", icon: "👥", color: "#db2777" },
+  { key: "hr", title: "HR", subtitle: "People & payroll", icon: "👥", color: colors.hr, target: "HrModule" },
   { key: "inventory", title: "Inventory", subtitle: "Items, stock & movements", icon: "📦", color: colors.inventory, target: "InventoryModule" },
-  { key: "purchase", title: "Purchase", subtitle: "Coming soon", icon: "🛒", color: "#7c3aed" },
-  { key: "sales", title: "Sales", subtitle: "Coming soon", icon: "💰", color: "#16a34a" },
+  { key: "purchase", title: "Purchase", subtitle: "Suppliers & purchases", icon: "🛒", color: colors.purchase, target: "PurchaseModule" },
+  { key: "sales", title: "Sales", subtitle: "Customers & invoices", icon: "💰", color: colors.sales, target: "SalesModule" },
   { key: "sms", title: "SMS", subtitle: "Templates & history", icon: "💬", color: colors.sms, target: "SMS" },
 ];
 

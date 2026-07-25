@@ -20,6 +20,9 @@ from hatchery.api import ChangeRequestReviewView
 from hatchery.api import register as register_hatchery
 from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
+from hr.api import register as register_hr
+from purchase.api import register as register_purchase
+from sales.api import register as register_sales
 from notification.api import (
     DeviceRegisterView,
     DeviceTestView,
@@ -49,6 +52,9 @@ register_broiler(router)
 register_hatchery(router)
 register_account(router)
 register_inventory(router)
+register_sales(router)
+register_purchase(router)
+register_hr(router)
 
 
 def register_shared(router: DefaultRouter) -> None:

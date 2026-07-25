@@ -111,6 +111,9 @@ const HatcheryStack = () => <ModuleStackScreen moduleKey="hatchery" />;
 const SmsStack = () => <ModuleStackScreen moduleKey="sms" />;
 const AccountStack = () => <ModuleStackScreen moduleKey="account" />;
 const InventoryStack = () => <ModuleStackScreen moduleKey="inventory" />;
+const SalesStack = () => <ModuleStackScreen moduleKey="sales" />;
+const PurchaseStack = () => <ModuleStackScreen moduleKey="purchase" />;
+const HrStack = () => <ModuleStackScreen moduleKey="hr" />;
 
 function AppTabs() {
   return (
@@ -150,6 +153,9 @@ export function RootNavigator() {
             {/* Modules reached from Home tiles (not bottom tabs) — presented as cards. */}
             <Root.Screen name="AccountModule" component={AccountStack} />
             <Root.Screen name="InventoryModule" component={InventoryStack} />
+            <Root.Screen name="SalesModule" component={SalesStack} />
+            <Root.Screen name="PurchaseModule" component={PurchaseStack} />
+            <Root.Screen name="HrModule" component={HrStack} />
           </>
         ) : (
           <Root.Screen name="Login" component={LoginScreen} />
