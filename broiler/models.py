@@ -1687,3 +1687,66 @@ class GrowingChargeSettlement(models.Model):
         if is_new and not self.settlement_code:
             self.settlement_code = f"GCST-{self.pk:04d}"
             super().save(update_fields=['settlement_code'])
+
+
+class FeedPhaseMaster(models.Model):
+    """Header for a feeding program (Broiler > Master > Feed Phase Master):
+    a program for a bird type / breed, valid over an effective window, with a
+    set of feed-phase line items (Pre-Starter, Starter, Grower, Finisher…)."""
+
+    BIRD_TYPE_CHOICES = [
+        ("broiler", _("Broiler")),
+        ("layer", _("Layer")),
+        ("breeder", _("Breeder")),
+    ]
+    STATUS_CHOICES = [("active", _("Active")), ("inactive", _("Inactive"))]
+
+    program = models.CharField(max_length=100, help_text=_("Feeding program name, e.g. Cobb 430 Standard"))
+    bird_type = models.CharField(max_length=15, choices=BIRD_TYPE_CHOICES, default="broiler")
+    breed = models.ForeignKey('Breed', on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='feed_phase_masters')
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="active")
+    description = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Feed Phase Master")
+        verbose_name_plural = _("Feed Phase Masters")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.program} ({self.get_bird_type_display()})"
+
+    @property
+    def is_active(self):
+        return self.status == "active"
+
+
+class FeedPhaseLine(models.Model):
+    """One feed-phase row within a Feed Phase Master."""
+    master = models.ForeignKey(FeedPhaseMaster, on_delete=models.CASCADE, related_name='lines')
+    seq_no = models.PositiveIntegerField(default=1)
+    from_age = models.PositiveIntegerField(default=0, help_text=_("From age in days"))
+    to_age = models.PositiveIntegerField(default=0, help_text=_("To age in days"))
+    feed_phase = models.CharField(max_length=50, help_text=_("e.g. Pre-Starter, Starter, Grower"))
+    phase_code = models.CharField(max_length=20, blank=True, help_text=_("e.g. PS, ST, GR, FN1"))
+    max_feed_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0,
+                                       help_text=_("Max feed quantity in Kg"))
+    priority = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=10, choices=FeedPhaseMaster.STATUS_CHOICES, default="active")
+
+    class Meta:
+        verbose_name = _("Feed Phase Line")
+        verbose_name_plural = _("Feed Phase Lines")
+        ordering = ['seq_no', 'id']
+
+    def __str__(self):
+        return f"{self.feed_phase} ({self.from_age}-{self.to_age}d)"
+
+    @property
+    def is_active(self):
+        return self.status == "active"

@@ -18,7 +18,7 @@ from .models import (
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
     GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
-    Region, Supervisor,
+    Region, Supervisor, FeedPhaseMaster, FeedPhaseLine,
 )
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
@@ -5368,3 +5368,134 @@ def gc_settlement_print(request, id):
         "supervisor": farm.supervisor.name if farm.supervisor_id else "", "branch": farm.branch, "scheme": s.scheme,
         "company": CompanyProfile.get_solo(), "d": d,
     })
+
+
+# ---------------------------------------------------------------------------
+# Feed Phase Master (Broiler > Master) — a feeding program header with feed
+# phase line items (Pre-Starter, Starter, Grower, Finisher…).
+# ---------------------------------------------------------------------------
+def _feed_phase_line_to_dict(line):
+    return {
+        "id": line.id, "seq_no": line.seq_no,
+        "from_age": line.from_age, "to_age": line.to_age,
+        "feed_phase": line.feed_phase, "phase_code": line.phase_code,
+        "max_feed_qty": str(line.max_feed_qty), "priority": line.priority,
+        "status": line.status,
+    }
+
+
+def _feed_phase_master_to_dict(m, with_lines=False):
+    data = {
+        "id": m.id, "program": m.program,
+        "bird_type": m.bird_type, "bird_type_display": m.get_bird_type_display(),
+        "breed": m.breed_id, "breed_name": m.breed.description if m.breed_id else "",
+        "effective_from": m.effective_from.isoformat() if m.effective_from else "",
+        "effective_to": m.effective_to.isoformat() if m.effective_to else "",
+        "status": m.status, "description": m.description,
+        "line_count": m.lines.count(),
+    }
+    if with_lines:
+        data["lines"] = [_feed_phase_line_to_dict(l) for l in m.lines.all()]
+    return data
+
+
+def _apply_feed_phase_master(instance, data):
+    instance.program = (data.get("program") or "").strip()
+    instance.bird_type = data.get("bird_type") or "broiler"
+    instance.breed_id = data.get("breed") or None
+    instance.effective_from = data.get("effective_from") or None
+    instance.effective_to = data.get("effective_to") or None
+    instance.status = data.get("status") or "active"
+    instance.description = data.get("description") or ""
+
+
+def _save_feed_phase_lines(master, rows):
+    master.lines.all().delete()
+    for i, r in enumerate(rows, start=1):
+        if not (r.get("feed_phase") or "").strip():
+            continue
+        FeedPhaseLine.objects.create(
+            master=master,
+            seq_no=r.get("seq_no") or i,
+            from_age=r.get("from_age") or 0,
+            to_age=r.get("to_age") or 0,
+            feed_phase=(r.get("feed_phase") or "").strip(),
+            phase_code=(r.get("phase_code") or "").strip(),
+            max_feed_qty=Decimal(str(r.get("max_feed_qty") or 0)),
+            priority=r.get("priority") or i,
+            status=r.get("status") or "active",
+        )
+
+
+@method_decorator(login_required, name="dispatch")
+class FeedPhaseMasterListTemplateView(View):
+    def get(self, request):
+        return render(request, "feed_phase_master_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class FeedPhaseMasterFormTemplateView(View):
+    def get(self, request, id=None):
+        instance = FeedPhaseMaster.objects.filter(id=id).first() if id else None
+        return render(request, "feed_phase_master_form.html", {
+            "instance": instance,
+            "lines_json": json.dumps([_feed_phase_line_to_dict(l) for l in instance.lines.all()]) if instance else "[]",
+            "breeds": Breed.objects.filter(is_active=True).order_by("description"),
+            "bird_types": FeedPhaseMaster.BIRD_TYPE_CHOICES,
+            "programs": list(FeedPhaseMaster.objects.order_by("program")
+                             .values_list("program", flat=True).distinct()),
+            "today": timezone.localdate().isoformat(),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class FeedPhaseMasterAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                m = FeedPhaseMaster.objects.prefetch_related("lines").select_related("breed").get(id=id)
+                return JsonResponse(_feed_phase_master_to_dict(m, with_lines=True))
+            masters = (FeedPhaseMaster.objects.select_related("breed")
+                       .prefetch_related("lines").order_by("-created_at"))
+            return JsonResponse([_feed_phase_master_to_dict(m) for m in masters], safe=False)
+        except FeedPhaseMaster.DoesNotExist:
+            raise Http404("Feed Phase Master not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request) -> JsonResponse:
+        try:
+            data = json.loads(request.body or "{}")
+            if not (data.get("program") or "").strip():
+                return JsonResponse({"error": "Program is required"}, status=400)
+            with transaction.atomic():
+                instance = FeedPhaseMaster()
+                _apply_feed_phase_master(instance, data)
+                instance.save()
+                _save_feed_phase_lines(instance, data.get("lines") or [])
+            return JsonResponse({"message": "Feed Phase Master created", "id": instance.id}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            instance = FeedPhaseMaster.objects.get(id=id)
+            data = json.loads(request.body or "{}")
+            with transaction.atomic():
+                _apply_feed_phase_master(instance, data)
+                instance.save()
+                _save_feed_phase_lines(instance, data.get("lines") or [])
+            return JsonResponse({"message": "Feed Phase Master updated"})
+        except FeedPhaseMaster.DoesNotExist:
+            raise Http404("Feed Phase Master not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            FeedPhaseMaster.objects.get(id=id).delete()
+            return JsonResponse({"message": "Feed Phase Master deleted"})
+        except FeedPhaseMaster.DoesNotExist:
+            raise Http404("Feed Phase Master not found")
+        except Exception as e:
+            return self.handle_exception(e)

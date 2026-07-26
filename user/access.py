@@ -41,6 +41,7 @@ MODULE_REGISTRY = [
                     ("branch_farm", "Broiler Farm"),
                     ("broiler_farm_shed", "Broiler Farm Shed"),
                     ("broiler_batch", "Broiler Batch"),
+                    ("feed_phase_master_list", "Feed Phase Master"),
                     ("broiler_disease", "Broiler Disease"),
                 ],
             },

@@ -62,6 +62,12 @@ urlpatterns = [
     path('create-broiler-farm-shed/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_create'),
     path('broiler_farm_shed/<int:id>/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_detail'),
     path('broiler_farm_shed/<int:id>/delete/', BroilerFarmShedAPI.as_view(), name='broiler_farm_shed_delete'),
+
+    path('feed-phase-master/', views.FeedPhaseMasterListTemplateView.as_view(), name='feed_phase_master_list'),
+    path('feed-phase-master/add/', views.FeedPhaseMasterFormTemplateView.as_view(), name='feed_phase_master_add'),
+    path('feed-phase-master/<int:id>/edit/', views.FeedPhaseMasterFormTemplateView.as_view(), name='feed_phase_master_edit'),
+    path('feed_phase_master_api/', views.FeedPhaseMasterAPI.as_view(), name='feed_phase_master_api_list'),
+    path('feed_phase_master_api/<int:id>/', views.FeedPhaseMasterAPI.as_view(), name='feed_phase_master_api'),
     path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch'),
     path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
     path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
