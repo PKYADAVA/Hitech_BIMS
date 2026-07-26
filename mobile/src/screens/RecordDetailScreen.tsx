@@ -174,9 +174,13 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     ]);
   };
 
-  const entries = Object.entries(row).filter(
-    ([k, v]) => !HIDDEN.test(k) && !k.endsWith("_label") && !isEmpty(v)
-  );
+  const entries = Object.entries(row).filter(([k, v]) => {
+    if (HIDDEN.test(k) || k.endsWith("_label") || isEmpty(v)) return false;
+    // Many-to-many / list-of-ids fields: only show when we have a readable
+    // label for them — never render a bare `[9]` id array.
+    if (Array.isArray(v)) return !isEmpty(row[`${k}_label`]);
+    return true;
+  });
   const main = entries.filter(([k]) => !AUDIT.has(k));
   const audit = entries.filter(([k]) => AUDIT.has(k));
 
