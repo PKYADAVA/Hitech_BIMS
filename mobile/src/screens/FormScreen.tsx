@@ -51,13 +51,31 @@ export function FormScreen({ route, navigation }: Props) {
     navigation.setOptions({ title: `${mode === "create" ? "New" : "Edit"} ${config.singular}` });
   }, [navigation, mode, config.singular]);
 
-  const set = (name: string) => (val: string) =>
+  const set = (name: string) => (val: string) => {
     setValues((prev) => ({ ...prev, [name]: val }));
+    // Async auto-fill (e.g. Farm → active Batch + Age), on user change only.
+    const af = schema.autofill;
+    if (af && af.on === name) {
+      af.run(val)
+        .then((patch) => setValues((prev) => ({ ...prev, ...patch })))
+        .catch(() => {});
+    }
+  };
+
+  // Client-side derived values (amounts, totals, derived quantities) — recomputed
+  // each render from the current inputs, mirroring the web forms' calc functions.
+  const derived = useMemo(
+    () => (schema.compute ? schema.compute(values) : {}),
+    [schema, values]
+  );
+  // What each field shows: a computed field wins over any stored value.
+  const shown = (name: string): string => derived[name] ?? values[name] ?? "";
 
   const buildPayload = () => {
     const payload: Record<string, unknown> = { ...(preset ?? {}) };
     for (const f of schema.fields) {
-      const val = values[f.name];
+      if (f.transient) continue; // display-only helper, never persisted
+      const val = derived[f.name] ?? values[f.name];
       if (f.type === "boolean") payload[f.name] = val === "true";
       else if (!isEmpty(val)) payload[f.name] = val;
     }
@@ -67,6 +85,7 @@ export function FormScreen({ route, navigation }: Props) {
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     for (const f of schema.fields) {
+      if (f.readOnly) continue; // computed — nothing to enter
       if (f.required && isEmpty(values[f.name])) errs[f.name] = "Required";
     }
     setErrors(errs);
@@ -129,7 +148,7 @@ export function FormScreen({ route, navigation }: Props) {
           <FormControl
             key={f.name}
             field={f}
-            value={values[f.name] ?? ""}
+            value={shown(f.name)}
             fallbackLabel={row ? (row[`${f.name}_label`] as string) : undefined}
             error={errors[f.name]}
             onChange={set(f.name)}

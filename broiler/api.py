@@ -90,22 +90,39 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
 
 
 class BirdSaleFarmLookupView(V1ViewMixin, APIView):
-    """GET /api/v1/broiler/farm-lookup?farm=<id> — the farm's active batch and
-    owning farmer, for the Bird Sale form's auto-filled Batch + Farmer fields
-    (mirrors the web ``bird_sale_farm_lookup``)."""
+    """GET /api/v1/broiler/farm-lookup?farm=<id> — the farm's active batch,
+    owning farmer, batch age, and next entry date. Serves the auto-filled
+    fields on the Bird Sale, Daily Entry, and Medicine Entry forms (mirrors the
+    web ``bird_sale_farm_lookup`` + ``daily_entry_farm_lookup``)."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
         farm_id = request.query_params.get("farm")
         batch = _active_batch_for_farm(farm_id) if farm_id else None
         farm = (BroilerFarm.objects.filter(id=farm_id).select_related("farmer").first()
                 if farm_id else None)
+
+        age_days = 0
+        if batch and batch.start_date:
+            age_days = max((timezone.localdate() - batch.start_date).days, 0)
+
+        last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by("-date", "-id").first()
+                      if farm_id else None)
+        next_date = (last_entry.date + timedelta(days=1)) if last_entry else timezone.localdate()
+
         return Response({
             "batch": batch.id if batch else None,
             "batch_name": batch.batch_name if batch else "",
             "farmer": farm.farmer_id if farm else None,
             "farmer_name": farm.farmer.farmer_name if farm and farm.farmer_id else "",
+            "age_days": age_days,
+            "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
+            "next_date": next_date.isoformat(),
         })
 
 
