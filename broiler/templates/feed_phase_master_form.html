@@ -130,7 +130,7 @@ function lineRow(d = {}) {
   tr.innerHTML = `
     <td class="fp-seq seq"></td>
     <td><input type="number" min="0" class="form-control from-age" value="${d.from_age ?? ''}"></td>
-    <td><input type="number" min="0" class="form-control to-age" value="${d.to_age ?? ''}"></td>
+    <td><input type="number" min="0" class="form-control to-age" placeholder="& above" title="Leave blank for 'and above'" value="${d.to_age ?? ''}"></td>
     <td><select class="form-select category">${categoryOptions(d.category)}</select></td>
     <td><select class="form-select feed-item">${itemOptions(d.category, d.feed_item)}</select></td>
     <td><input class="form-control phase-code" placeholder="PS" value="${d.phase_code ? escapeHtml(d.phase_code) : ''}"></td>
@@ -182,7 +182,7 @@ function collect() {
     lines: [...document.querySelectorAll('#fp-lines tbody tr')].map((tr, i) => ({
       seq_no: i + 1,
       from_age: tr.querySelector('.from-age').value || 0,
-      to_age: tr.querySelector('.to-age').value || 0,
+      to_age: tr.querySelector('.to-age').value || null,
       category: tr.querySelector('.category').value || null,
       feed_item: tr.querySelector('.feed-item').value || null,
       phase_code: tr.querySelector('.phase-code').value,

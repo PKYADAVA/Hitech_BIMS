@@ -5422,7 +5422,7 @@ def _save_feed_phase_lines(master, rows):
             master=master,
             seq_no=r.get("seq_no") or i,
             from_age=r.get("from_age") or 0,
-            to_age=r.get("to_age") or 0,
+            to_age=r.get("to_age") if r.get("to_age") not in (None, "", 0, "0") else None,
             category_id=r.get("category") or None,
             feed_item_id=r.get("feed_item"),
             phase_code=(r.get("phase_code") or "").strip(),

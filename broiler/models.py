@@ -1731,7 +1731,8 @@ class FeedPhaseLine(models.Model):
     master = models.ForeignKey(FeedPhaseMaster, on_delete=models.CASCADE, related_name='lines')
     seq_no = models.PositiveIntegerField(default=1)
     from_age = models.PositiveIntegerField(default=0, help_text=_("From age in days"))
-    to_age = models.PositiveIntegerField(default=0, help_text=_("To age in days"))
+    to_age = models.PositiveIntegerField(null=True, blank=True,
+                                         help_text=_("To age in days — leave blank for 'and above' (open-ended)"))
     category = models.ForeignKey('inventory.ItemCategory', on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='feed_phase_lines',
                                  help_text=_("Item category — filters the feed item choices"))
@@ -1751,7 +1752,8 @@ class FeedPhaseLine(models.Model):
 
     def __str__(self):
         name = self.feed_item.description if self.feed_item_id else "Feed"
-        return f"{name} ({self.from_age}-{self.to_age}d)"
+        span = f"{self.from_age}+" if self.to_age is None else f"{self.from_age}-{self.to_age}"
+        return f"{name} ({span}d)"
 
     @property
     def is_active(self):
