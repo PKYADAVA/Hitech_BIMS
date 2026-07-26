@@ -68,9 +68,8 @@
 
   <!-- Details -->
   <div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header">
       <span class="fw-bold text-primary"><i class="fas fa-list-ol me-1"></i>Feed Phase Details</span>
-      <button type="button" class="btn btn-sm btn-outline-primary" id="add-line"><i class="fas fa-plus me-1"></i>Add Phase</button>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
@@ -140,20 +139,26 @@ function lineRow(d = {}) {
       <option value="active" ${d.status !== 'inactive' ? 'selected' : ''}>Active</option>
       <option value="inactive" ${d.status === 'inactive' ? 'selected' : ''}>Inactive</option>
     </select></td>
-    <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button></td>`;
+    <td class="text-nowrap text-center px-1">
+      <button type="button" class="btn btn-sm btn-outline-primary add-line-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
   get('fp-lines').tBodies[0].append(tr);
   renumber();
   return tr;
 }
 
 function renumber() {
-  document.querySelectorAll('#fp-lines tbody tr').forEach((tr, i) => {
+  const rows = document.querySelectorAll('#fp-lines tbody tr');
+  rows.forEach((tr, i) => {
     tr.querySelector('.seq').textContent = i + 1;
+    // Only the last row shows the inline "+"; earlier rows just delete.
+    tr.querySelector('.add-line-inline').classList.toggle('d-none', i !== rows.length - 1);
   });
 }
 
-get('add-line').addEventListener('click', () => lineRow());
 get('fp-lines').addEventListener('click', e => {
+  if (e.target.closest('.add-line-inline')) { lineRow(); }
   if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumber(); }
 });
 get('fp-lines').addEventListener('change', e => {
