@@ -1,19 +1,21 @@
 /**
- * Design tokens for a modern, agriculture-themed BIMS.
+ * Design tokens for a modern, business-oriented BIMS.
  *
- * One brand green with per-module accents (broiler = warm orange, hatchery =
- * egg amber) so each domain has its own identity while the app reads as one
- * system. Everything else — spacing, radius, type scale, elevation — is
+ * A near-black charcoal-slate brand (premium monochrome dashboard language)
+ * carries the chrome — headers, primary buttons, full-bleed auth screens — and
+ * lets the per-module accent colors supply all the life. The brand owns the
+ * dark-slate lane, so the neutral `user` module stays a lighter slate to read
+ * distinct. Everything else — spacing, radius, type scale, elevation — is
  * centralized here so components never hard-code a value.
  */
 import { Platform, ViewStyle } from "react-native";
 
 export const colors = {
-  // Brand
-  primary: "#15803d", // green-700 — agriculture
-  primaryDark: "#166534",
-  primaryLight: "#dcfce7",
-  accent: "#f59e0b", // amber-500
+  // Brand — charcoal slate (monochrome premium)
+  primary: "#1e293b", // slate-800 — near-black charcoal
+  primaryDark: "#0f172a", // slate-900 — deepest: auth backdrops, pressed states
+  primaryLight: "#e2e8f0", // slate-200 — subtle tints
+  accent: "#f59e0b", // amber-500 — warm highlight pop
 
   // Per-module identity
   broiler: "#ea580c", // orange-600
@@ -22,16 +24,18 @@ export const colors = {
   hatcheryLight: "#fef3c7",
   sms: "#2563eb", // blue-600
   smsLight: "#dbeafe",
-  account: "#4f46e5", // indigo-600
-  accountLight: "#e0e7ff",
+  account: "#0d9488", // teal-600
+  accountLight: "#ccfbf1",
   inventory: "#0891b2", // cyan-600
   inventoryLight: "#cffafe",
   sales: "#e11d48", // rose-600
   salesLight: "#ffe4e6",
-  purchase: "#7c3aed", // violet-600
-  purchaseLight: "#ede9fe",
+  purchase: "#9333ea", // purple-600
+  purchaseLight: "#f3e8ff",
   hr: "#db2777", // pink-600
   hrLight: "#fce7f3",
+  user: "#64748b", // slate-500 — lighter than the charcoal brand
+  userLight: "#e2e8f0",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",
@@ -82,7 +86,7 @@ export function shadow(level: 1 | 2 | 3 = 1): ViewStyle {
   const s = map[level];
   return Platform.select({
     ios: {
-      shadowColor: "#0f172a",
+      shadowColor: "#0f172a", // slate-900 ink — clean neutral depth
       shadowOffset: { width: 0, height: s.y },
       shadowOpacity: s.opacity,
       shadowRadius: s.radius,

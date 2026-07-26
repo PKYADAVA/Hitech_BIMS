@@ -80,6 +80,41 @@ from api.viewsets import V1ViewMixin  # noqa: E402
 from .models import ChangeRequest  # noqa: E402
 
 
+class TraySettingLookupView(V1ViewMixin, APIView):
+    """GET /hatchery/tray-setting-lookup?tray_setting=<id> — the setting's dates
+    and its source purchase figures (net qty/rate/amount), for the Hatch Entry
+    form's auto-filled Eggs Total / Egg Rate / Hatch Date. Mirrors
+    ``applySetting()`` in the web ``hatch_entry_form``."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ts_id = request.query_params.get("tray_setting")
+        ts = (TraySetting.objects
+              .filter(id=ts_id)
+              .select_related("grading__purchase_invoice")
+              .first() if ts_id else None)
+        if not ts:
+            return Response({})
+
+        inv = getattr(getattr(ts, "grading", None), "purchase_invoice", None)
+
+        def _num(fn):
+            try:
+                return str(fn())
+            except Exception:
+                return "0"
+
+        return Response({
+            "setting_date": ts.setting_date.isoformat() if ts.setting_date else None,
+            "hatch_date": ts.hatch_date.isoformat() if ts.hatch_date else None,
+            "eggs_total": _num(inv.net_quantity) if inv else "0",
+            "egg_rate": _num(inv.net_rate) if inv else "0",
+            "eggs_amount": _num(inv.net_amount) if inv else "0",
+            "eggs_set": _num(ts.total_eggs_set),
+        })
+
+
 class ChangeRequestReviewView(V1ViewMixin, APIView):
     """POST /hatchery/change-requests/<id>/<approve|reject> — apply the web's
     review logic (permission check + apply payload on approve)."""

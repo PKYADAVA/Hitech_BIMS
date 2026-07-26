@@ -9,6 +9,8 @@ import { RecordCard } from "@/components/RecordCard";
 import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
 import { ChildConfig, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { usePermissionsStore } from "@/store/permissionsStore";
+import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
@@ -26,10 +28,12 @@ function ChildSection({
   navigation: Props["navigation"];
 }) {
   const cfg = RESOURCES[child.resourceKey];
-  const editable = isEditable(cfg.key);
+  const canAction = usePermissionsStore((s) => s.canAction);
+  const canAdd = isEditable(cfg.key) && canAction(cfg.module, "add");
+  const canEdit = isEditable(cfg.key) && canAction(cfg.module, "edit");
   const list = useResourceList<Row>(cfg.path, { [child.fkParam]: parentId });
   if (list.isLoading) return null;
-  if (!editable && list.items.length === 0) return null;
+  if (!canAdd && list.items.length === 0) return null;
 
   const openForm = (mode: "create" | "edit", item?: Row) =>
     navigation.navigate("Form", {
@@ -46,7 +50,7 @@ function ChildSection({
         <Text style={styles.childTitle}>
           {cfg.title} ({list.items.length})
         </Text>
-        {editable ? (
+        {canAdd ? (
           <Pressable hitSlop={8} onPress={() => openForm("create")}>
             <Text style={styles.addLink}>＋ Add</Text>
           </Pressable>
@@ -59,7 +63,7 @@ function ChildSection({
           icon={cfg.icon}
           accent={cfg.accent}
           onPress={() =>
-            editable
+            canEdit
               ? openForm("edit", item)
               : navigation.navigate("Detail", { resourceKey: cfg.key, row: item })
           }
@@ -91,26 +95,24 @@ export function RecordDetailScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const row: Row = route.params.row;
   const view = config.card(row);
+  const canEdit =
+    isEditable(config.key) && usePermissionsStore((s) => s.canAction)(config.module, "edit");
 
   useLayoutEffect(() => {
     navigation.setOptions({
       title: config.singular,
-      headerRight: isEditable(config.key)
+      headerRight: canEdit
         ? () => (
             <Pressable
               hitSlop={12}
-              onPress={() =>
-                config.key === "broiler-bird-sales"
-                  ? navigation.navigate("BirdSaleForm", { mode: "edit", row })
-                  : navigation.navigate("Form", { resourceKey: config.key, mode: "edit", row })
-              }
+              onPress={() => openRecordForm(navigation, config.key, "edit", row)}
             >
               <Text style={{ color: colors.onDark, ...type.title }}>Edit</Text>
             </Pressable>
           )
         : undefined,
     });
-  }, [navigation, config.singular, config.key, row]);
+  }, [navigation, config.singular, config.key, row, canEdit]);
 
   // FKs come back as raw ids plus a `<fk>_label` companion (str of the related
   // row). Show the label as the value and hide the standalone `_label` field.
@@ -169,9 +171,13 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     ]);
   };
 
-  const entries = Object.entries(row).filter(
-    ([k, v]) => !HIDDEN.test(k) && !k.endsWith("_label") && !isEmpty(v)
-  );
+  const entries = Object.entries(row).filter(([k, v]) => {
+    if (HIDDEN.test(k) || k.endsWith("_label") || isEmpty(v)) return false;
+    // Many-to-many / list-of-ids fields: only show when we have a readable
+    // label for them — never render a bare `[9]` id array.
+    if (Array.isArray(v)) return !isEmpty(row[`${k}_label`]);
+    return true;
+  });
   const main = entries.filter(([k]) => !AUDIT.has(k));
   const audit = entries.filter(([k]) => AUDIT.has(k));
 

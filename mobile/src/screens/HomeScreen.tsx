@@ -11,6 +11,7 @@ import { AuthUser } from "@/api/types";
 import { Overview, useOverview } from "@/api/stats";
 import { IndicatorCarousel, Indicator } from "@/components/IndicatorCarousel";
 import { useAuthStore } from "@/store/authStore";
+import { usePermissionsStore } from "@/store/permissionsStore";
 
 const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
 
@@ -100,7 +101,8 @@ interface Tile {
     | "InventoryModule"
     | "SalesModule"
     | "PurchaseModule"
-    | "HrModule";
+    | "HrModule"
+    | "UserModule";
 }
 
 const TILES: Tile[] = [
@@ -112,6 +114,7 @@ const TILES: Tile[] = [
   { key: "purchase", title: "Purchase", subtitle: "Suppliers & purchases", icon: "🛒", color: colors.purchase, target: "PurchaseModule" },
   { key: "sales", title: "Sales", subtitle: "Customers & invoices", icon: "💰", color: colors.sales, target: "SalesModule" },
   { key: "sms", title: "SMS", subtitle: "Templates & history", icon: "💬", color: colors.sms, target: "SMS" },
+  { key: "user", title: "Users", subtitle: "Roles & permissions", icon: "👤", color: colors.user, target: "UserModule" },
 ];
 
 function initialsOf(user: AuthUser | null): string {
@@ -125,7 +128,7 @@ function initialsOf(user: AuthUser | null): string {
 
 /**
  * Branded top app bar for Home. Bleeds into the status-bar safe area with the
- * brand green, then rounds off into the light page below — same onDark/white
+ * brand charcoal, then rounds off into the light page below — same onDark/white
  * language as the per-module stack headers, so the app reads as one system.
  */
 function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () => void }) {
@@ -180,6 +183,8 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
 
 export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
+  const canModule = usePermissionsStore((s) => s.canModule);
+  const permsLoaded = usePermissionsStore((s) => s.loaded);
   const { data: ov, refetch, isFetching } = useOverview();
 
   // Re-pull KPIs whenever Home regains focus (e.g. after sending an SMS on
@@ -209,29 +214,33 @@ export function HomeScreen({ navigation }: Props) {
         <View style={styles.body}>
           <SectionHeader title="Modules" />
           <View style={styles.grid}>
-            {TILES.map((t) => {
+            {TILES.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
               const active = !!t.target;
               return (
-                <Card
-                  key={t.key}
-                  padded={false}
-                  style={styles.tile}
-                  onPress={active ? () => navigation.navigate(t.target as any) : undefined}
-                >
-                  <View style={styles.tileInner}>
-                    <View style={[styles.tileIcon, { backgroundColor: withAlpha(t.color, 0.14) }]}>
-                      <Text style={{ fontSize: 26 }}>{t.icon}</Text>
-                    </View>
-                    <Text style={styles.tileTitle}>{t.title}</Text>
-                    <Text style={styles.tileSub}>{t.subtitle}</Text>
-                    {!active ? (
-                      <View style={styles.soon}>
-                        <Badge label="Soon" tone="neutral" />
+                // Outer view carries the shadow (no clipping); inner Card clips
+                // the accent bar to the rounded corners. One view can't do both
+                // on Android (elevation + overflow:hidden fight), hence the wrap.
+                <View key={t.key} style={styles.tileShadow}>
+                  <Card
+                    padded={false}
+                    style={styles.tile}
+                    onPress={active ? () => navigation.navigate(t.target as any) : undefined}
+                  >
+                    <View style={styles.tileInner}>
+                      <View style={[styles.tileIcon, { backgroundColor: withAlpha(t.color, 0.14) }]}>
+                        <Text style={{ fontSize: 22 }}>{t.icon}</Text>
                       </View>
-                    ) : null}
-                  </View>
-                  <View style={[styles.tileBar, { backgroundColor: t.color }]} />
-                </Card>
+                      <Text style={styles.tileTitle}>{t.title}</Text>
+                      <Text style={styles.tileSub}>{t.subtitle}</Text>
+                      {!active ? (
+                        <View style={styles.soon}>
+                          <Badge label="Soon" tone="neutral" />
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={[styles.tileBar, { backgroundColor: t.color }]} />
+                  </Card>
+                </View>
               );
             })}
           </View>
@@ -304,23 +313,27 @@ const styles = StyleSheet.create({
   chartCard: { marginTop: spacing.sm },
   chartTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
 
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: GAP },
-  tile: {
-    width: "47.8%",
-    overflow: "hidden",
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
+  tileShadow: {
+    width: "48%",
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
     ...shadow(1),
   },
-  tileInner: { padding: spacing.lg, gap: spacing.xs, minHeight: 128, justifyContent: "flex-start" },
+  // flex:1 fills the (row-stretched) wrapper so no wrapper background shows
+  // below the accent bar; tileInner then grows to keep the bar at the bottom.
+  tile: { flex: 1, overflow: "hidden" },
+  tileInner: { flex: 1, padding: spacing.md, gap: 2, minHeight: 96, justifyContent: "flex-start" },
   tileIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.lg,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  tileTitle: { ...type.h3, color: colors.text },
+  tileTitle: { ...type.title, color: colors.text },
   tileSub: { ...type.caption, color: colors.textMuted },
-  soon: { position: "absolute", top: spacing.md, right: spacing.md },
+  soon: { position: "absolute", top: spacing.sm, right: spacing.sm },
   tileBar: { height: 4, width: "100%" },
 });

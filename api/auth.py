@@ -192,3 +192,67 @@ class ChangePasswordView(APIView):
         user.set_password(new)
         user.save(update_fields=["password"])
         return Response({"detail": "Password changed."})
+
+
+class PermissionsView(APIView):
+    """Return the authenticated user's effective module (nav) + tab access.
+
+    Drives per-user gating in the mobile app: `unrestricted` (superuser / no
+    matrix configured → sees everything), `nav_groups` (top-level modules the
+    user may open), and `tabs` (viewable tab codes for finer gating).
+    """
+
+    renderer_classes = [EnvelopeJSONRenderer]
+    permission_classes = [IsAuthenticated]
+
+    def get_exception_handler(self):
+        return api_exception_handler
+
+    def get(self, request):
+        from user.access import (
+            NAV_GROUPS,
+            _user_is_unrestricted,
+            allowed_nav_groups,
+            allowed_view_tabs,
+            user_has_any_matrix_config,
+        )
+
+        u = request.user
+        unrestricted = bool(_user_is_unrestricted(u))
+        # No matrix configured → treat as full access (matches allowed_view_tabs).
+        open_access = unrestricted or (
+            bool(getattr(u, "is_authenticated", False)) and not user_has_any_matrix_config(u)
+        )
+
+        if open_access:
+            module_actions = {
+                nav: {"add": True, "edit": True, "delete": True} for nav in NAV_GROUPS
+            }
+        else:
+            from user.models import GroupTabPermission
+
+            add_tabs, edit_tabs, del_tabs = set(), set(), set()
+            for p in GroupTabPermission.objects.filter(group__in=u.groups.all()).values(
+                "tab_code", "can_add", "can_edit", "can_delete"
+            ):
+                if p["can_add"]:
+                    add_tabs.add(p["tab_code"])
+                if p["can_edit"]:
+                    edit_tabs.add(p["tab_code"])
+                if p["can_delete"]:
+                    del_tabs.add(p["tab_code"])
+            module_actions = {
+                nav: {
+                    "add": bool(codes & add_tabs),
+                    "edit": bool(codes & edit_tabs),
+                    "delete": bool(codes & del_tabs),
+                }
+                for nav, codes in NAV_GROUPS.items()
+            }
+
+        return Response({
+            "unrestricted": unrestricted,
+            "nav_groups": sorted(allowed_nav_groups(u)),
+            "tabs": sorted(allowed_view_tabs(u)),
+            "module_actions": module_actions,
+        })

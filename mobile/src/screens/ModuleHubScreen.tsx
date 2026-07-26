@@ -2,9 +2,11 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React from "react";
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
+import { RESOURCE_TABS } from "@/api/permissions";
 import { Card, IconCircle, SectionHeader } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { ModuleStackParams } from "@/navigation/types";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, shadow, spacing, type } from "@/theme";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Hub"> & { moduleKey: ModuleKey };
@@ -16,19 +18,27 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
   const mod = MODULES[moduleKey];
   const { width } = useWindowDimensions();
   const tileW = (width - spacing.md * 2 - spacing.sm * (COLS - 1)) / COLS;
+  const canTab = usePermissionsStore((s) => s.canTab);
+  // A resource tile shows if it has no tab mapping (module-gated) or the user
+  // can view its tab. Sections with no visible tiles are hidden entirely.
+  const visibleKeys = (keys: string[]) =>
+    [...keys]
+      .filter((k) => !RESOURCE_TABS[k] || canTab(RESOURCE_TABS[k]))
+      .sort((a, b) => RESOURCES[a].title.localeCompare(RESOURCES[b].title));
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {/* Header already shows the module name — only its tagline adds context. */}
       <Text style={styles.tagline}>{mod.tagline}</Text>
 
-      {mod.sections.map((section) => (
+      {mod.sections.map((section) => {
+        const keys = visibleKeys(section.resourceKeys);
+        if (keys.length === 0) return null;
+        return (
         <View key={section.title}>
           <SectionHeader title={section.title} />
           <View style={styles.grid}>
-            {[...section.resourceKeys]
-              .sort((a, b) => RESOURCES[a].title.localeCompare(RESOURCES[b].title))
-              .map((key) => {
+            {keys.map((key) => {
               const r = RESOURCES[key];
               return (
                 <Card
@@ -46,7 +56,8 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
             })}
           </View>
         </View>
-      ))}
+        );
+      })}
 
       {mod.reports && mod.reports.length > 0 ? (
         <View>
@@ -62,6 +73,27 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
                 <IconCircle icon={rep.icon} color={mod.color} size={40} />
                 <Text style={styles.tileTitle} numberOfLines={2}>
                   {rep.title}
+                </Text>
+              </Card>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {mod.tools && mod.tools.length > 0 ? (
+        <View>
+          <SectionHeader title="Tools" />
+          <View style={styles.grid}>
+            {mod.tools.map((tool) => (
+              <Card
+                key={tool.key}
+                padded={false}
+                style={{ ...styles.tile, width: tileW }}
+                onPress={() => navigation.navigate(tool.screen)}
+              >
+                <IconCircle icon={tool.icon} color={mod.color} size={40} />
+                <Text style={styles.tileTitle} numberOfLines={2}>
+                  {tool.title}
                 </Text>
               </Card>
             ))}

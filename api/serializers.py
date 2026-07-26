@@ -37,6 +37,18 @@ def _make_label_getter(fk_name: str):
     return getter
 
 
+def _make_m2m_label_getter(m2m_name: str):
+    """A ``get_<m2m>_label`` method: comma-joined ``str()`` of each related row."""
+
+    def getter(self, obj):
+        try:
+            return ", ".join(str(x) for x in getattr(obj, m2m_name).all())
+        except Exception:
+            return ""
+
+    return getter
+
+
 def serializer_factory(
     model,
     *,
@@ -69,11 +81,19 @@ def serializer_factory(
     # items, users, customers). Only when the field set isn't an explicit list
     # (DRF would reject declared fields not named in an explicit `fields`).
     if fields is None:
+        excluded = set(exclude or [])
         for f in model._meta.get_fields():
-            is_rel = getattr(f, "many_to_one", False) or getattr(f, "one_to_one", False)
-            if is_rel and getattr(f, "concrete", False):
+            is_fk = getattr(f, "many_to_one", False) or getattr(f, "one_to_one", False)
+            is_m2m = getattr(f, "many_to_many", False)
+            if not getattr(f, "concrete", False) or f.name in excluded:
+                continue
+            if is_fk:
                 label = f"{f.name}_label"
                 namespace[label] = serializers.SerializerMethodField()
                 namespace[f"get_{label}"] = _make_label_getter(f.name)
+            elif is_m2m:
+                label = f"{f.name}_label"
+                namespace[label] = serializers.SerializerMethodField()
+                namespace[f"get_{label}"] = _make_m2m_label_getter(f.name)
 
     return type(f"{model.__name__}Serializer", (serializers.ModelSerializer,), namespace)

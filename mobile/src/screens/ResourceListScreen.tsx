@@ -7,8 +7,10 @@ import { RecordCard } from "@/components/RecordCard";
 import { EmptyOrError, Loading, SearchBar } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { useResourceList } from "@/query/useResourceList";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, shadow, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
@@ -19,6 +21,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
+  const canAdd = usePermissionsStore((s) => s.canAction)(config.module, "add");
 
   // Server feeds have no search_fields, so filter the loaded rows client-side.
   const data = useMemo(() => {
@@ -77,7 +80,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
         )}
       />
 
-      {isEditable(config.key) ? (
+      {isEditable(config.key) && canAdd ? (
         <Pressable
           style={({ pressed }) => [
             styles.fab,
@@ -85,9 +88,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
             shadow(3),
             pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
           ]}
-          onPress={() =>
-            navigation.navigate("Form", { resourceKey: config.key, mode: "create" })
-          }
+          onPress={() => openRecordForm(navigation, config.key, "create")}
           accessibilityRole="button"
           accessibilityLabel={`Add ${config.singular}`}
         >

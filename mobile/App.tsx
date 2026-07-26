@@ -10,6 +10,7 @@ import { RootNavigator } from "@/navigation/RootNavigator";
 import { registerForPush } from "@/push";
 import { queryClient } from "@/query/queryClient";
 import { useAuthStore } from "@/store/authStore";
+import { usePermissionsStore } from "@/store/permissionsStore";
 import { useSettingsStore } from "@/store/settingsStore";
 
 // Persist the React Query cache to disk so lists/details show last-known data
@@ -25,16 +26,24 @@ export default function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const status = useAuthStore((s) => s.status);
+  const loadPermissions = usePermissionsStore((s) => s.load);
+  const resetPermissions = usePermissionsStore((s) => s.reset);
 
   useEffect(() => {
     bootstrap();
     hydrateSettings();
   }, [bootstrap, hydrateSettings]);
 
-  // Register this device for push once signed in (no-op on Expo Go / simulators).
+  // Once signed in: register for push + load this user's module permissions.
+  // On sign-out: clear permissions so the next user starts fresh.
   useEffect(() => {
-    if (status === "signedIn") registerForPush();
-  }, [status]);
+    if (status === "signedIn") {
+      registerForPush();
+      loadPermissions();
+    } else if (status === "signedOut") {
+      resetPermissions();
+    }
+  }, [status, loadPermissions, resetPermissions]);
 
   return (
     <SafeAreaProvider>

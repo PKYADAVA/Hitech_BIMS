@@ -16,12 +16,14 @@ from account.api import register as register_account
 from account.models import ChartOfAccount
 from broiler.api import BirdSaleFarmLookupView
 from broiler.api import register as register_broiler
-from hatchery.api import ChangeRequestReviewView
+from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
 from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
 from purchase.api import register as register_purchase
+from user.api import RoleModuleView, RolesAccessView, RoleView, UserCreateView, UserRolesView
+from user.api import register as register_user
 from sales.api import register as register_sales
 from notification.api import (
     DeviceRegisterView,
@@ -34,11 +36,26 @@ from notification.models import SmsMessage, SmsSettings, SmsTemplate
 from purchase.models import Supplier
 from sales.models import Customer
 
-from .auth import ChangePasswordView, LoginView, LogoutView, MeView, RefreshView
+from .auth import (
+    ChangePasswordView,
+    LoginView,
+    LogoutView,
+    MeView,
+    PermissionsView,
+    RefreshView,
+)
 from .health import HealthView, ReadyView
 from .reports import (
+    BatchSummaryReportView,
+    ChickSaleReportView,
+    ChicksPlacementReportView,
+    DayRecordReportView,
+    DeliveryChallanReportView,
     EggIntakeReportView,
+    FeedDispatchReportView,
     HatchPerformanceReportView,
+    IncubationReportView,
+    LiftingReportView,
     LiveFlockReportView,
     MortalityTrendReportView,
 )
@@ -55,6 +72,7 @@ register_inventory(router)
 register_sales(router)
 register_purchase(router)
 register_hr(router)
+register_user(router)
 
 
 def register_shared(router: DefaultRouter) -> None:
@@ -92,6 +110,7 @@ auth_patterns = [
     path("refresh", RefreshView.as_view(), name="refresh"),
     path("logout", LogoutView.as_view(), name="logout"),
     path("me", MeView.as_view(), name="me"),
+    path("permissions", PermissionsView.as_view(), name="permissions"),
     path("change-password", ChangePasswordView.as_view(), name="change-password"),
 ]
 
@@ -105,10 +124,20 @@ urlpatterns = [
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
     # Bird Sale form: farm → active batch + owning farmer (declared before router).
     path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
+    # Hatch Entry form: tray setting → dates + source purchase figures.
+    path("hatchery/tray-setting-lookup", TraySettingLookupView.as_view(), name="hatchery-tray-setting-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),
     path("reports/mortality-trend", MortalityTrendReportView.as_view(), name="report-mortality-trend"),
+    path("reports/batch-summary", BatchSummaryReportView.as_view(), name="report-batch-summary"),
+    path("reports/chicks-placement", ChicksPlacementReportView.as_view(), name="report-chicks-placement"),
+    path("reports/feed-dispatch", FeedDispatchReportView.as_view(), name="report-feed-dispatch"),
+    path("reports/day-record", DayRecordReportView.as_view(), name="report-day-record"),
+    path("reports/lifting", LiftingReportView.as_view(), name="report-lifting"),
     path("reports/hatch-performance", HatchPerformanceReportView.as_view(), name="report-hatch-performance"),
     path("reports/egg-intake", EggIntakeReportView.as_view(), name="report-egg-intake"),
+    path("reports/incubation", IncubationReportView.as_view(), name="report-incubation"),
+    path("reports/delivery-challan", DeliveryChallanReportView.as_view(), name="report-delivery-challan"),
+    path("reports/chick-sale", ChickSaleReportView.as_view(), name="report-chick-sale"),
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
@@ -117,5 +146,11 @@ urlpatterns = [
     path("devices/test", DeviceTestView.as_view(), name="device-test"),
     path("hatchery/change-requests/<int:pk>/<str:decision>",
          ChangeRequestReviewView.as_view(), name="change-request-review"),
+    # Access management (admin): role module toggles + user role assignment.
+    path("user/users/create", UserCreateView.as_view(), name="user-create"),
+    path("user/access/roles", RolesAccessView.as_view(), name="access-roles"),
+    path("user/roles/<int:pk>/module", RoleModuleView.as_view(), name="role-module"),
+    path("user/roles/<int:pk>", RoleView.as_view(), name="role-detail"),
+    path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
     path("", include(router.urls)),
 ]

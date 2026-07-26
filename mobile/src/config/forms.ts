@@ -8,6 +8,9 @@
  * now exposed for FK pickers (broiler masters, hatchery masters, and the shared
  * items/warehouses/customers/suppliers/accounts endpoints).
  */
+import { http } from "@/api/client";
+import { Envelope } from "@/api/types";
+
 export type FieldType = "text" | "textarea" | "number" | "decimal" | "date" | "boolean" | "select";
 
 export interface FormField {
@@ -17,11 +20,76 @@ export interface FormField {
   required?: boolean;
   optionsPath?: string;
   optionLabelKeys?: string[];
+  /** Computed/derived — rendered but not editable (value comes from `compute`). */
+  readOnly?: boolean;
+  /** Display-only helper (e.g. a running total) — shown but never sent to the API. */
+  transient?: boolean;
 }
 
 export interface FormSchema {
   fields: FormField[];
+  /**
+   * Client-side derivation, mirroring the web forms' calc functions: given the
+   * current input values, return the derived values for `readOnly` fields
+   * (amounts, totals, derived quantities). Re-runs on every keystroke.
+   */
+  compute?: (values: Record<string, string>) => Record<string, string>;
+  /**
+   * Async auto-fill: when the `on` field changes, derive related values and
+   * merge them into the form (e.g. Farm → active Batch + Age), exactly like the
+   * web forms' lookup handlers. Receives the new value and the current form
+   * values (so it can avoid clobbering fields the user already set).
+   */
+  autofill?: {
+    on: string;
+    run: (value: string, values: Record<string, string>) => Promise<Record<string, string>>;
+  };
 }
+
+interface FarmLookup {
+  batch: number | null;
+  batch_name: string;
+  age_days: number;
+  next_date: string;
+}
+
+/** Farm → active batch, age, and next entry date (shared by daily/medicine entry). */
+const farmLookup = async (farmId: string): Promise<FarmLookup> =>
+  (await http.get<Envelope<FarmLookup>>("/broiler/farm-lookup", { params: { farm: farmId } }))
+    .data.data;
+
+interface TraySettingLookup {
+  setting_date: string | null;
+  hatch_date: string | null;
+  eggs_total: string;
+  egg_rate: string;
+  eggs_amount: string;
+  eggs_set: string;
+}
+
+/** Tray setting → its dates + source purchase figures (Hatch Entry form). */
+const traySettingLookup = async (id: string): Promise<TraySettingLookup> =>
+  (await http.get<Envelope<TraySettingLookup>>("/hatchery/tray-setting-lookup", {
+    params: { tray_setting: id },
+  })).data.data;
+
+/** Add `days` to an ISO date string (YYYY-MM-DD); "" if the date is unparseable. */
+const addDays = (iso: string, days: number): string => {
+  const p = iso.split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return "";
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+/** Parse a form string to a number (blank/garbage → 0), for `compute`. */
+const toNum = (s?: string): number => Number(s) || 0;
+/** Mark a field as computed/read-only. */
+const ro = (f: FormField): FormField => ({ ...f, readOnly: true });
+/** A display-only computed field (shown, never persisted). */
+const calc = (name: string, label: string): FormField => ({
+  name, label, type: "decimal", readOnly: true, transient: true,
+});
 
 /* Concise field builders. */
 const text = (name: string, label: string, required = false): FormField => ({ name, label, type: "text", required });
@@ -73,6 +141,19 @@ export const FORMS: Record<string, FormSchema> = {
       dec("avg_weight_gms", "Avg Weight (g)"),
       text("remarks", "Remarks"),
     ],
+    // Farm → active batch, age, and next entry date (web daily_entry_farm_lookup).
+    autofill: {
+      on: "farm",
+      run: async (farmId): Promise<Record<string, string>> => {
+        if (!farmId) return { batch: "", age_days: "" };
+        const d = await farmLookup(farmId);
+        return {
+          batch: d.batch != null ? String(d.batch) : "",
+          age_days: String(d.age_days ?? ""),
+          date: d.next_date,
+        };
+      },
+    },
   },
   "broiler-medicine-vaccine": {
     fields: [
@@ -85,6 +166,18 @@ export const FORMS: Record<string, FormSchema> = {
       dec("qty", "Quantity"),
       text("remarks", "Remarks"),
     ],
+    // Farm → active batch + age (web medicine_entry_farm_lookup).
+    autofill: {
+      on: "farm",
+      run: async (farmId) => {
+        if (!farmId) return { batch: "", age_days: "" };
+        const d = await farmLookup(farmId);
+        return {
+          batch: d.batch != null ? String(d.batch) : "",
+          age_days: String(d.age_days ?? ""),
+        };
+      },
+    },
   },
   "broiler-bird-sales": {
     fields: [
@@ -145,7 +238,18 @@ export const FORMS: Record<string, FormSchema> = {
       dec("damage_eggs", "Damage Eggs"),
       dec("misshapped_eggs", "Misshapped Eggs"),
       dec("dirty_eggs", "Dirty Eggs"),
+      calc("total_rejections", "Total Rejections"),
+      calc("eggs_to_stock", "Eggs to Stock"),
     ],
+    // Mirrors egg_grading_form.js: rejections summed, stock = quantity − rejections.
+    compute: (v) => {
+      const rejections =
+        toNum(v.broken_eggs) + toNum(v.damage_eggs) + toNum(v.misshapped_eggs) + toNum(v.dirty_eggs);
+      return {
+        total_rejections: rejections.toFixed(2),
+        eggs_to_stock: Math.max(toNum(v.quantity) - rejections, 0).toFixed(2),
+      };
+    },
   },
   "hatchery-hatch-entries": {
     fields: [
@@ -159,6 +263,19 @@ export const FORMS: Record<string, FormSchema> = {
       dec("net_amount", "Net Amount"),
       area("remarks", "Remarks"),
     ],
+    // Tray Setting → hatch date + source purchase eggs/rate (web applySetting()).
+    autofill: {
+      on: "tray_setting",
+      run: async (id) => {
+        if (!id) return { hatch_date: "", eggs_total: "", egg_rate: "" };
+        const d = await traySettingLookup(id);
+        return {
+          hatch_date: d.hatch_date ?? "",
+          eggs_total: d.eggs_total ?? "",
+          egg_rate: d.egg_rate ?? "",
+        };
+      },
+    },
   },
   "hatchery-chick-sales": {
     fields: [
@@ -209,9 +326,17 @@ export const FORMS: Record<string, FormSchema> = {
       dec("rate", "Rate"),
       dec("discount_percent", "Discount %"),
       dec("discount_amount", "Discount Amount"),
-      dec("amount", "Amount"),
-      dec("total_amount", "Total Amount"),
+      ro(dec("amount", "Amount")),
+      ro(dec("total_amount", "Total Amount")),
     ],
+    // Mirrors egg_purchase_form.js calcRow: amount = rate × (received|sent),
+    // less percentage and flat discount.
+    compute: (v) => {
+      const basis = toNum(v.rcv_qty) || toNum(v.sent_qty);
+      const amount = toNum(v.rate) * basis;
+      const total = amount - (amount * toNum(v.discount_percent)) / 100 - toNum(v.discount_amount);
+      return { amount: amount.toFixed(2), total_amount: total.toFixed(2) };
+    },
   },
   "hatchery-chick-sale-items": {
     fields: [
@@ -220,14 +345,22 @@ export const FORMS: Record<string, FormSchema> = {
       dec("total_qty", "Total Qty"),
       dec("mortality", "Mortality"),
       dec("culls", "Culls"),
-      dec("sale_qty", "Sale Qty"),
+      ro(dec("sale_qty", "Sale Qty")),
       dec("free_qty", "Free Qty"),
-      dec("net_qty", "Net Qty"),
+      ro(dec("net_qty", "Net Qty")),
       dec("sale_rate", "Sale Rate"),
       dec("discount_percent", "Discount %"),
       dec("discount_amount", "Discount Amount"),
-      dec("amount", "Amount"),
+      ro(dec("amount", "Amount")),
     ],
+    // Mirrors chick_sale_form.js calcRow: saleable = total − mortality − culls;
+    // net (billed) = saleable − free; amount = net × rate − flat discount.
+    compute: (v) => {
+      const saleQty = Math.max(0, Math.round(toNum(v.total_qty) - toNum(v.mortality) - toNum(v.culls)));
+      const net = Math.max(0, saleQty - toNum(v.free_qty));
+      const amount = net * toNum(v.sale_rate) - toNum(v.discount_amount);
+      return { sale_qty: String(saleQty), net_qty: String(net), amount: amount.toFixed(2) };
+    },
   },
   "hatchery-delivery-challan-items": {
     fields: [
@@ -239,8 +372,15 @@ export const FORMS: Record<string, FormSchema> = {
       dec("price", "Price"),
       dec("discount_percent", "Discount %"),
       dec("tax_percent", "Tax %"),
-      dec("amount", "Amount"),
+      ro(dec("amount", "Amount")),
     ],
+    // Mirrors delivery_challan_form.js: amount = qty × price × (1 − disc%) × (1 + tax%).
+    compute: (v) => {
+      const amount =
+        toNum(v.quantity) * toNum(v.price) * (1 - toNum(v.discount_percent) / 100) *
+        (1 + toNum(v.tax_percent) / 100);
+      return { amount: amount.toFixed(2) };
+    },
   },
 
   /* ------------------------- Broiler master data ------------------------ */
@@ -299,10 +439,15 @@ export const FORMS: Record<string, FormSchema> = {
       num("unit_no", "Unit No."),
       dec("length", "Length"),
       dec("width", "Width"),
-      text("sq_feet", "Sq Feet"),
+      ro(text("sq_feet", "Sq Feet")),
       num("capacity", "Capacity"),
       active(),
     ],
+    // Sq Feet = length × width (web broiler_farm_shed calcSqFeet).
+    compute: (v) => {
+      const area = toNum(v.length) * toNum(v.width);
+      return { sq_feet: area ? (Number.isInteger(area) ? String(area) : area.toFixed(2)) : "" };
+    },
   },
   "broiler-batches": {
     fields: [
@@ -395,6 +540,14 @@ export const FORMS: Record<string, FormSchema> = {
       text("loaded_by", "Loaded By"),
       sel("grading", "Egg Grading", "/hatchery/egg-gradings/", ["transaction_no"]),
     ],
+    // Setting Date → Transfer (+18) and Hatch (+21) dates (web tray_set_form).
+    autofill: {
+      on: "setting_date",
+      run: async (settingDate): Promise<Record<string, string>> => {
+        if (!settingDate) return {};
+        return { transfer_date: addDays(settingDate, 18), hatch_date: addDays(settingDate, 21) };
+      },
+    },
   },
   "hatchery-hatcheries": {
     fields: [

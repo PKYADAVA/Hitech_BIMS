@@ -56,6 +56,17 @@ export function FormControl({
   error?: string;
   onChange: (v: string) => void;
 }) {
+  // Computed/derived fields: show the value in a muted, non-editable box.
+  if (field.readOnly) {
+    return (
+      <FieldShell label={field.label} error={error}>
+        <View style={[styles.input, styles.readonly]}>
+          <Text style={styles.readonlyText}>{value || "0"}</Text>
+        </View>
+      </FieldShell>
+    );
+  }
+
   if (field.type === "boolean") {
     return (
       <FieldShell label={field.label} required={field.required} error={error}>
@@ -238,6 +249,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   textarea: { minHeight: 90, textAlignVertical: "top", flexDirection: "column", alignItems: "stretch" },
+  readonly: { backgroundColor: colors.surfaceAlt },
+  readonlyText: { ...type.body, color: colors.textMuted, flex: 1 },
   inputText: { ...type.body, color: colors.text, flex: 1 },
   placeholder: { ...type.body, color: colors.textFaint, flex: 1 },
   caret: { color: colors.textMuted, fontSize: 14, marginLeft: spacing.sm },

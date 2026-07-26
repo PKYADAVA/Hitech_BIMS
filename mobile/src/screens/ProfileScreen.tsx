@@ -1,14 +1,123 @@
 import React, { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { biometricsAvailable } from "@/components/LockGate";
-import { Button, Card, DetailRow, Divider, Screen } from "@/components/ui";
-import { API_BASE_URL } from "@/config";
-import { sendTestPush } from "@/push";
+import { Card, IconCircle, Screen, withAlpha } from "@/components/ui";
+import { AuthUser } from "@/api/types";
 import { colors, radius, spacing, type } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
+
+const APP_VERSION = "0.1.0";
+
+function initialsOf(user: AuthUser | null): string {
+  return (user?.full_name || user?.username || "?")
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function accessLabel(user: AuthUser | null): string {
+  if (user?.is_superuser) return "Administrator";
+  if (user?.is_staff) return "Staff";
+  return "Standard";
+}
+
+/** Brand hero that bleeds into the status bar, mirroring the Home app bar. */
+function ProfileHero({ user }: { user: AuthUser | null }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.hero, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={styles.avatarRing}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initialsOf(user)}</Text>
+        </View>
+      </View>
+      <View style={styles.heroInfo}>
+        <Text style={styles.name} numberOfLines={1}>
+          {user?.full_name || user?.username || "—"}
+        </Text>
+        <Text style={styles.email} numberOfLines={1}>
+          {user?.email || "No email on file"}
+        </Text>
+        <View style={styles.pillRow}>
+          <View style={styles.heroPill}>
+            <Text style={styles.heroPillText}>{user?.role || "User"}</Text>
+          </View>
+          <View style={styles.heroPill}>
+            <Text style={styles.heroPillText}>{accessLabel(user)}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** Icon-led info row: leading glyph, stacked label + value. */
+function InfoRow({ icon, accent, label, value }: { icon: string; accent: string; label: string; value: string }) {
+  return (
+    <View style={styles.row}>
+      <IconCircle icon={icon} color={accent} size={38} />
+      <View style={styles.rowBody}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** Tappable action row with chevron (change password, etc.). */
+function ActionRow({
+  icon,
+  accent,
+  title,
+  subtitle,
+  onPress,
+  trailing,
+  danger,
+}: {
+  icon: string;
+  accent: string;
+  title: string;
+  subtitle?: string;
+  onPress?: () => void;
+  trailing?: React.ReactNode;
+  danger?: boolean;
+}) {
+  const Body = (
+    <>
+      <IconCircle icon={icon} color={accent} size={38} />
+      <View style={styles.rowBody}>
+        <Text style={[styles.actionTitle, danger && { color: colors.danger }]}>{title}</Text>
+        {subtitle ? <Text style={styles.rowLabel}>{subtitle}</Text> : null}
+      </View>
+      {trailing ?? (onPress ? <Text style={styles.chevron}>›</Text> : null)}
+    </>
+  );
+  if (!onPress) return <View style={styles.row}>{Body}</View>;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+    >
+      {Body}
+    </Pressable>
+  );
+}
+
+function GroupLabel({ text }: { text: string }) {
+  return <Text style={styles.groupLabel}>{text}</Text>;
+}
+
+function HairLine() {
+  return <View style={styles.hairline} />;
+}
 
 export function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
@@ -28,66 +137,68 @@ export function ProfileScreen() {
     await setAppLock(v);
   };
 
-  const onTestPush = async () => {
-    try {
-      const res = await sendTestPush();
-      Alert.alert(
-        res.sent > 0 ? "Sent ✓" : "No devices",
-        res.sent > 0
-          ? `Push sent to ${res.sent} device(s).`
-          : res.error || "This device isn't registered for push yet (needs the installed app, not Expo Go)."
-      );
-    } catch (e) {
-      Alert.alert("Failed", (e as Error)?.message ?? "Could not send test push.");
-    }
-  };
-  const initials = (user?.full_name || user?.username || "?")
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const confirmLogout = () =>
+    Alert.alert("Log out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log out", style: "destructive", onPress: logout },
+    ]);
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Card style={styles.header}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
-          <Text style={styles.name}>{user?.full_name || user?.username}</Text>
-          <Text style={styles.sub}>{user?.email || "—"}</Text>
-        </Card>
+    <Screen edges={["left", "right"]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ProfileHero user={user} />
 
-        <Card>
-          <DetailRow label="Username" value={user?.username ?? "—"} />
-          <Divider />
-          <DetailRow label="Role" value={user?.role || "User"} />
-          <Divider />
-          <DetailRow label="Department" value={user?.department || "—"} />
-          <Divider />
-          <DetailRow label="Access" value={user?.is_superuser ? "Administrator" : user?.is_staff ? "Staff" : "Standard"} />
-        </Card>
+        <View style={styles.body}>
+          <GroupLabel text="Account" />
+          <Card padded={false} style={styles.group}>
+            <InfoRow icon="👤" accent={colors.user} label="Username" value={user?.username ?? "—"} />
+            <HairLine />
+            <InfoRow icon="💼" accent={colors.account} label="Role" value={user?.role || "User"} />
+            <HairLine />
+            <InfoRow icon="🏢" accent={colors.inventory} label="Department" value={user?.department || "—"} />
+            <HairLine />
+            <InfoRow icon="🛡️" accent={colors.sms} label="Access level" value={accessLabel(user)} />
+          </Card>
 
-        <Card style={styles.securityRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.secTitle}>App Lock</Text>
-            <Text style={styles.secSub}>Require Face ID / fingerprint to open</Text>
-          </View>
-          <Switch value={appLock} onValueChange={onToggleLock} trackColor={{ true: colors.primary }} />
-        </Card>
+          <GroupLabel text="Security" />
+          <Card padded={false} style={styles.group}>
+            <ActionRow
+              icon="🔒"
+              accent={colors.primary}
+              title="App Lock"
+              subtitle="Require Face ID / fingerprint to open"
+              trailing={
+                <Switch
+                  value={appLock}
+                  onValueChange={onToggleLock}
+                  trackColor={{ true: colors.primary }}
+                />
+              }
+            />
+            <HairLine />
+            <ActionRow
+              icon="🔑"
+              accent={colors.hatchery}
+              title="Change password"
+              subtitle="Update your login password"
+              onPress={() => setPwOpen(true)}
+            />
+          </Card>
 
-        <Card>
-          <Text style={styles.apiLabel}>Connected to</Text>
-          <Text style={styles.api} selectable>
-            {API_BASE_URL}
-          </Text>
-        </Card>
+          <GroupLabel text="Session" />
+          <Card padded={false} style={styles.group}>
+            <ActionRow
+              icon="🚪"
+              accent={colors.danger}
+              title="Log out"
+              subtitle="Sign out of this device"
+              onPress={confirmLogout}
+              danger
+            />
+          </Card>
 
-        <Button title="Change password" variant="ghost" onPress={() => setPwOpen(true)} />
-        <Button title="Send test notification" variant="ghost" onPress={onTestPush} />
-        <Button title="Log out" variant="danger" onPress={logout} />
-        <Text style={styles.version}>Hitech BIMS · v0.1.0</Text>
+          <Text style={styles.version}>Hitech BIMS · v{APP_VERSION}</Text>
+        </View>
       </ScrollView>
 
       <ChangePasswordModal visible={pwOpen} onClose={() => setPwOpen(false)} />
@@ -96,24 +207,70 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
-  header: { alignItems: "center", gap: spacing.xs, paddingVertical: spacing.xl },
+  content: { paddingBottom: spacing.xxl },
+
+  // Header — plain, on the page background (no dark card)
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  avatarRing: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: withAlpha(colors.primary, 0.12),
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing.sm,
   },
-  avatarText: { ...type.h1, color: colors.onDark },
+  avatarText: { ...type.h3, fontSize: 20, color: colors.primary },
+  heroInfo: { flex: 1, gap: 2 },
   name: { ...type.h2, color: colors.text },
-  sub: { ...type.body, color: colors.textMuted },
-  securityRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  secTitle: { ...type.title, color: colors.text },
-  secSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  apiLabel: { ...type.label, color: colors.textFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
-  api: { ...type.mono, color: colors.text },
-  version: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
+  email: { ...type.caption, color: colors.textMuted },
+  pillRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
+  heroPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  heroPillText: { ...type.caption, color: colors.textMuted, fontWeight: "700" },
+
+  // Body
+  body: { paddingHorizontal: spacing.md, gap: spacing.xs },
+  groupLabel: {
+    ...type.label,
+    color: colors.textFaint,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+  group: { overflow: "hidden" },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  rowBody: { flex: 1, gap: 2 },
+  rowLabel: { ...type.caption, color: colors.textMuted },
+  rowValue: { ...type.title, color: colors.text },
+  actionTitle: { ...type.title, color: colors.text },
+  chevron: { fontSize: 24, color: colors.textFaint, marginLeft: 2 },
+  hairline: { height: 1, backgroundColor: colors.border, marginLeft: 38 + spacing.md + spacing.md },
+
+  version: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.xl },
 });
