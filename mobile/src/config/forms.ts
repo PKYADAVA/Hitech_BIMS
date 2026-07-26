@@ -35,13 +35,14 @@ export interface FormSchema {
    */
   compute?: (values: Record<string, string>) => Record<string, string>;
   /**
-   * Async auto-fill: when the `on` field changes, fetch related data and merge
-   * the returned values into the form (e.g. Farm → active Batch + Age), exactly
-   * like the web forms' farm-lookup handlers.
+   * Async auto-fill: when the `on` field changes, derive related values and
+   * merge them into the form (e.g. Farm → active Batch + Age), exactly like the
+   * web forms' lookup handlers. Receives the new value and the current form
+   * values (so it can avoid clobbering fields the user already set).
    */
   autofill?: {
     on: string;
-    run: (value: string) => Promise<Record<string, string>>;
+    run: (value: string, values: Record<string, string>) => Promise<Record<string, string>>;
   };
 }
 
@@ -56,6 +57,30 @@ interface FarmLookup {
 const farmLookup = async (farmId: string): Promise<FarmLookup> =>
   (await http.get<Envelope<FarmLookup>>("/broiler/farm-lookup", { params: { farm: farmId } }))
     .data.data;
+
+interface TraySettingLookup {
+  setting_date: string | null;
+  hatch_date: string | null;
+  eggs_total: string;
+  egg_rate: string;
+  eggs_amount: string;
+  eggs_set: string;
+}
+
+/** Tray setting → its dates + source purchase figures (Hatch Entry form). */
+const traySettingLookup = async (id: string): Promise<TraySettingLookup> =>
+  (await http.get<Envelope<TraySettingLookup>>("/hatchery/tray-setting-lookup", {
+    params: { tray_setting: id },
+  })).data.data;
+
+/** Add `days` to an ISO date string (YYYY-MM-DD); "" if the date is unparseable. */
+const addDays = (iso: string, days: number): string => {
+  const p = iso.split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return "";
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
 /** Parse a form string to a number (blank/garbage → 0), for `compute`. */
 const toNum = (s?: string): number => Number(s) || 0;
@@ -238,6 +263,19 @@ export const FORMS: Record<string, FormSchema> = {
       dec("net_amount", "Net Amount"),
       area("remarks", "Remarks"),
     ],
+    // Tray Setting → hatch date + source purchase eggs/rate (web applySetting()).
+    autofill: {
+      on: "tray_setting",
+      run: async (id) => {
+        if (!id) return { hatch_date: "", eggs_total: "", egg_rate: "" };
+        const d = await traySettingLookup(id);
+        return {
+          hatch_date: d.hatch_date ?? "",
+          eggs_total: d.eggs_total ?? "",
+          egg_rate: d.egg_rate ?? "",
+        };
+      },
+    },
   },
   "hatchery-chick-sales": {
     fields: [
@@ -401,10 +439,15 @@ export const FORMS: Record<string, FormSchema> = {
       num("unit_no", "Unit No."),
       dec("length", "Length"),
       dec("width", "Width"),
-      text("sq_feet", "Sq Feet"),
+      ro(text("sq_feet", "Sq Feet")),
       num("capacity", "Capacity"),
       active(),
     ],
+    // Sq Feet = length × width (web broiler_farm_shed calcSqFeet).
+    compute: (v) => {
+      const area = toNum(v.length) * toNum(v.width);
+      return { sq_feet: area ? (Number.isInteger(area) ? String(area) : area.toFixed(2)) : "" };
+    },
   },
   "broiler-batches": {
     fields: [
@@ -497,6 +540,14 @@ export const FORMS: Record<string, FormSchema> = {
       text("loaded_by", "Loaded By"),
       sel("grading", "Egg Grading", "/hatchery/egg-gradings/", ["transaction_no"]),
     ],
+    // Setting Date → Transfer (+18) and Hatch (+21) dates (web tray_set_form).
+    autofill: {
+      on: "setting_date",
+      run: async (settingDate): Promise<Record<string, string>> => {
+        if (!settingDate) return {};
+        return { transfer_date: addDays(settingDate, 18), hatch_date: addDays(settingDate, 21) };
+      },
+    },
   },
   "hatchery-hatcheries": {
     fields: [

@@ -16,7 +16,7 @@ from account.api import register as register_account
 from account.models import ChartOfAccount
 from broiler.api import BirdSaleFarmLookupView
 from broiler.api import register as register_broiler
-from hatchery.api import ChangeRequestReviewView
+from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
 from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
@@ -46,8 +46,16 @@ from .auth import (
 )
 from .health import HealthView, ReadyView
 from .reports import (
+    BatchSummaryReportView,
+    ChickSaleReportView,
+    ChicksPlacementReportView,
+    DayRecordReportView,
+    DeliveryChallanReportView,
     EggIntakeReportView,
+    FeedDispatchReportView,
     HatchPerformanceReportView,
+    IncubationReportView,
+    LiftingReportView,
     LiveFlockReportView,
     MortalityTrendReportView,
 )
@@ -116,10 +124,20 @@ urlpatterns = [
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
     # Bird Sale form: farm → active batch + owning farmer (declared before router).
     path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
+    # Hatch Entry form: tray setting → dates + source purchase figures.
+    path("hatchery/tray-setting-lookup", TraySettingLookupView.as_view(), name="hatchery-tray-setting-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),
     path("reports/mortality-trend", MortalityTrendReportView.as_view(), name="report-mortality-trend"),
+    path("reports/batch-summary", BatchSummaryReportView.as_view(), name="report-batch-summary"),
+    path("reports/chicks-placement", ChicksPlacementReportView.as_view(), name="report-chicks-placement"),
+    path("reports/feed-dispatch", FeedDispatchReportView.as_view(), name="report-feed-dispatch"),
+    path("reports/day-record", DayRecordReportView.as_view(), name="report-day-record"),
+    path("reports/lifting", LiftingReportView.as_view(), name="report-lifting"),
     path("reports/hatch-performance", HatchPerformanceReportView.as_view(), name="report-hatch-performance"),
     path("reports/egg-intake", EggIntakeReportView.as_view(), name="report-egg-intake"),
+    path("reports/incubation", IncubationReportView.as_view(), name="report-incubation"),
+    path("reports/delivery-challan", DeliveryChallanReportView.as_view(), name="report-delivery-challan"),
+    path("reports/chick-sale", ChickSaleReportView.as_view(), name="report-chick-sale"),
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),

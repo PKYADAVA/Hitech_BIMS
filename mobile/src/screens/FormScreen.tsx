@@ -52,14 +52,17 @@ export function FormScreen({ route, navigation }: Props) {
   }, [navigation, mode, config.singular]);
 
   const set = (name: string) => (val: string) => {
-    setValues((prev) => ({ ...prev, [name]: val }));
-    // Async auto-fill (e.g. Farm → active Batch + Age), on user change only.
-    const af = schema.autofill;
-    if (af && af.on === name) {
-      af.run(val)
-        .then((patch) => setValues((prev) => ({ ...prev, ...patch })))
-        .catch(() => {});
-    }
+    setValues((prev) => {
+      const next = { ...prev, [name]: val };
+      // Async auto-fill (e.g. Farm → active Batch + Age), on user change only.
+      const af = schema.autofill;
+      if (af && af.on === name) {
+        af.run(val, next)
+          .then((patch) => setValues((cur) => ({ ...cur, ...patch })))
+          .catch(() => {});
+      }
+      return next;
+    });
   };
 
   // Client-side derived values (amounts, totals, derived quantities) — recomputed

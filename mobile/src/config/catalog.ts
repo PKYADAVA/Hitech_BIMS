@@ -1748,6 +1748,11 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     ],
     reports: [
       { key: "live-flock", title: "Live Flock Summary", icon: "📊", path: "/reports/live-flock" },
+      { key: "batch-summary", title: "Batch History", icon: "🐔", path: "/reports/batch-summary" },
+      { key: "chicks-placement", title: "Chicks Placement", icon: "🐥", path: "/reports/chicks-placement" },
+      { key: "day-record", title: "Day Record", icon: "📅", path: "/reports/day-record" },
+      { key: "feed-dispatch", title: "Feed Dispatch & Stock", icon: "🌾", path: "/reports/feed-dispatch" },
+      { key: "lifting", title: "Lifting", icon: "🚚", path: "/reports/lifting" },
       { key: "mortality-trend", title: "Mortality Trend", icon: "📉", path: "/reports/mortality-trend" },
     ],
   },
@@ -1786,7 +1791,10 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     ],
     reports: [
       { key: "hatch-performance", title: "Hatch Performance", icon: "📊", path: "/reports/hatch-performance" },
-      { key: "egg-intake", title: "Egg Intake", icon: "🥚", path: "/reports/egg-intake" },
+      { key: "egg-intake", title: "Egg Purchase", icon: "🥚", path: "/reports/egg-intake" },
+      { key: "incubation", title: "Incubation", icon: "🐣", path: "/reports/incubation" },
+      { key: "delivery-challan", title: "Delivery Challan", icon: "🚚", path: "/reports/delivery-challan" },
+      { key: "chick-sale", title: "Chick Sale", icon: "💰", path: "/reports/chick-sale" },
     ],
   },
   sms: {
