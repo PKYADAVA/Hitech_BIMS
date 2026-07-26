@@ -1741,7 +1741,7 @@ class FeedPhaseLine(models.Model):
                                   help_text=_("Item (of the selected category) for this phase"))
     phase_code = models.CharField(max_length=20, blank=True, help_text=_("e.g. PS, ST, GR, FN1"))
     max_feed_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0,
-                                       help_text=_("Max feed quantity in Kg"))
+                                       help_text=_("Max feed per bird for this phase, in Kg"))
     priority = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=10, choices=FeedPhaseMaster.STATUS_CHOICES, default="active")
 
