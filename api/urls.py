@@ -22,7 +22,7 @@ from inventory.api import register as register_inventory
 from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
 from purchase.api import register as register_purchase
-from user.api import RoleModuleView, RolesAccessView, RoleView, UserRolesView
+from user.api import RoleModuleView, RolesAccessView, RoleView, UserCreateView, UserRolesView
 from user.api import register as register_user
 from sales.api import register as register_sales
 from notification.api import (
@@ -129,6 +129,7 @@ urlpatterns = [
     path("hatchery/change-requests/<int:pk>/<str:decision>",
          ChangeRequestReviewView.as_view(), name="change-request-review"),
     # Access management (admin): role module toggles + user role assignment.
+    path("user/users/create", UserCreateView.as_view(), name="user-create"),
     path("user/access/roles", RolesAccessView.as_view(), name="access-roles"),
     path("user/roles/<int:pk>/module", RoleModuleView.as_view(), name="role-module"),
     path("user/roles/<int:pk>", RoleView.as_view(), name="role-detail"),

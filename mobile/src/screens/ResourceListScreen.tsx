@@ -7,6 +7,7 @@ import { RecordCard } from "@/components/RecordCard";
 import { EmptyOrError, Loading, SearchBar } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { useResourceList } from "@/query/useResourceList";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -87,9 +88,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
             shadow(3),
             pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
           ]}
-          onPress={() =>
-            navigation.navigate("Form", { resourceKey: config.key, mode: "create" })
-          }
+          onPress={() => openRecordForm(navigation, config.key, "create")}
           accessibilityRole="button"
           accessibilityLabel={`Add ${config.singular}`}
         >

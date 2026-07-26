@@ -1,19 +1,21 @@
 /**
- * Design tokens for a modern, agriculture-themed BIMS.
+ * Design tokens for a modern, business-oriented BIMS.
  *
- * One brand green with per-module accents (broiler = warm orange, hatchery =
- * egg amber) so each domain has its own identity while the app reads as one
- * system. Everything else — spacing, radius, type scale, elevation — is
- * centralized here so components never hard-code a value.
+ * A vibrant indigo brand (fintech/SaaS language) with per-module accents so
+ * each domain keeps its own identity while the app reads as one system. Note
+ * the brand owns the indigo/violet lane, so `account` and `purchase` are tuned
+ * to teal/purple to stay distinct from it. Everything else — spacing, radius,
+ * type scale, elevation — is centralized here so components never hard-code a
+ * value.
  */
 import { Platform, ViewStyle } from "react-native";
 
 export const colors = {
-  // Brand
-  primary: "#15803d", // green-700 — agriculture
-  primaryDark: "#166534",
-  primaryLight: "#dcfce7",
-  accent: "#f59e0b", // amber-500
+  // Brand — modern indigo
+  primary: "#4f46e5", // indigo-600
+  primaryDark: "#4338ca", // indigo-700 — full-bleed backdrops, pressed states
+  primaryLight: "#e0e7ff", // indigo-100 — subtle tints
+  accent: "#f59e0b", // amber-500 — warm CTA/highlight pop
 
   // Per-module identity
   broiler: "#ea580c", // orange-600
@@ -22,14 +24,14 @@ export const colors = {
   hatcheryLight: "#fef3c7",
   sms: "#2563eb", // blue-600
   smsLight: "#dbeafe",
-  account: "#4f46e5", // indigo-600
-  accountLight: "#e0e7ff",
+  account: "#0d9488", // teal-600 — off the brand's indigo lane
+  accountLight: "#ccfbf1",
   inventory: "#0891b2", // cyan-600
   inventoryLight: "#cffafe",
   sales: "#e11d48", // rose-600
   salesLight: "#ffe4e6",
-  purchase: "#7c3aed", // violet-600
-  purchaseLight: "#ede9fe",
+  purchase: "#9333ea", // purple-600 — clearly not the brand indigo
+  purchaseLight: "#f3e8ff",
   hr: "#db2777", // pink-600
   hrLight: "#fce7f3",
   user: "#475569", // slate-600
@@ -84,7 +86,7 @@ export function shadow(level: 1 | 2 | 3 = 1): ViewStyle {
   const s = map[level];
   return Platform.select({
     ios: {
-      shadowColor: "#0f172a",
+      shadowColor: "#1e1b4b", // indigo-950 ink — subtle brand-tinted depth
       shadowOffset: { width: 0, height: s.y },
       shadowOpacity: s.opacity,
       shadowRadius: s.radius,

@@ -42,6 +42,8 @@ def register(router) -> None:
 # --- Access management (admin editor) --------------------------------------
 from django.contrib.auth.models import Group as AuthGroup  # noqa: E402
 from django.contrib.auth.models import User as AuthUser  # noqa: E402
+from django.contrib.auth.password_validation import validate_password  # noqa: E402
+from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: E402
 from rest_framework.exceptions import NotFound, ValidationError  # noqa: E402
 from rest_framework.response import Response  # noqa: E402
 from rest_framework.views import APIView  # noqa: E402
@@ -69,6 +71,61 @@ def _role_modules(group) -> dict:
         .values_list("tab_code", flat=True)
     )
     return {nav: bool(NAV_GROUPS.get(nav, set()) & viewable) for nav in _MANAGED_NAVS}
+
+
+class UserCreateView(V1ViewMixin, APIView):
+    """POST /user/users/create — admin creates a new login user.
+
+    Hashes the password (never stores/returns it), assigns roles, and can grant
+    staff access. Creating superusers is intentionally not allowed here — that
+    stays in the web app / Django admin.
+    """
+
+    permission_classes = _ADMIN
+
+    def post(self, request):
+        data = request.data
+        username = str(data.get("username") or "").strip()
+        if not username:
+            raise ValidationError({"username": ["Username is required."]})
+        if AuthUser.objects.filter(username__iexact=username).exists():
+            raise ValidationError({"username": ["A user with that username already exists."]})
+
+        password = str(data.get("password") or "")
+        if not password:
+            raise ValidationError({"password": ["Password is required."]})
+        try:
+            validate_password(password)
+        except DjangoValidationError as exc:
+            raise ValidationError({"password": list(exc.messages)})
+
+        ids = data.get("group_ids") or []
+        if not isinstance(ids, list):
+            raise ValidationError({"group_ids": ["Must be a list of role ids."]})
+
+        user = AuthUser.objects.create_user(
+            username=username,
+            password=password,
+            email=str(data.get("email") or "").strip(),
+            first_name=str(data.get("first_name") or "").strip(),
+            last_name=str(data.get("last_name") or "").strip(),
+        )
+        user.is_active = bool(data.get("is_active", True))
+        user.is_staff = bool(data.get("is_staff", False))
+        user.save(update_fields=["is_active", "is_staff"])
+        if ids:
+            user.groups.set(AuthGroup.objects.filter(id__in=ids))
+
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_active": user.is_active,
+            "is_staff": user.is_staff,
+            "group_ids": list(user.groups.values_list("id", flat=True)),
+        })
 
 
 class RolesAccessView(V1ViewMixin, APIView):

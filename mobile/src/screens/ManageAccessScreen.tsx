@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View
 
 import {
   createRole,
+  createUser,
   deleteRole,
   fetchRolesAccess,
   NAV_LABEL,
@@ -13,6 +14,7 @@ import {
   setRoleModule,
   setUserRoles,
 } from "@/api/access";
+import { ApiError } from "@/api/types";
 import { listResource } from "@/api/resources";
 import { Row } from "@/api/types";
 import { Card, EmptyOrError, Loading } from "@/components/ui";
@@ -237,14 +239,15 @@ function UsersPanel() {
   if (usersQ.isError)
     return <EmptyOrError icon="⚠️" message={(usersQ.error as Error)?.message ?? "Failed."} onRetry={usersQ.refetch} />;
   const users = usersQ.data?.items ?? [];
-  if (users.length === 0) return <EmptyOrError icon="👤" message="No users found." />;
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.hint}>Assign roles to a user. They gain every module their roles allow.</Text>
+    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Text style={styles.hint}>Create a login user, then assign roles. They gain every module their roles allow.</Text>
+      <CreateUserCard roles={roles} onCreated={() => usersQ.refetch()} />
       {roles.length === 0 ? (
-        <Text style={styles.warn}>No roles exist yet — create them in the web app first.</Text>
+        <Text style={styles.warn}>No roles exist yet — add one in the Roles tab to grant module access.</Text>
       ) : null}
+      {users.length === 0 ? <Text style={styles.warn}>No users yet — create the first one above.</Text> : null}
       {users.map((u) => {
         const open = expanded === u.id;
         const mine = groupsByUser[u.id] ?? [];
@@ -279,6 +282,143 @@ function UsersPanel() {
         );
       })}
     </ScrollView>
+  );
+}
+
+/** Collapsible "add a login user" form: credentials, flags, and role toggles. */
+function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [isActive, setIsActive] = useState(true);
+  const [isStaff, setIsStaff] = useState(false);
+  const [groupIds, setGroupIds] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const reset = () => {
+    setUsername(""); setPassword(""); setFirstName(""); setLastName("");
+    setEmail(""); setIsActive(true); setIsStaff(false); setGroupIds([]); setErrors({});
+  };
+
+  const toggleGroup = (id: number, on: boolean) =>
+    setGroupIds((prev) => (on ? [...new Set([...prev, id])] : prev.filter((g) => g !== id)));
+
+  const submit = async () => {
+    setErrors({});
+    const errs: Record<string, string> = {};
+    if (!username.trim()) errs.username = "Required";
+    if (!password) errs.password = "Required";
+    if (Object.keys(errs).length) return setErrors(errs);
+    setSaving(true);
+    try {
+      await createUser({
+        username: username.trim(),
+        password,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim(),
+        is_active: isActive,
+        is_staff: isStaff,
+        group_ids: groupIds,
+      });
+      reset();
+      setOpen(false);
+      onCreated();
+      Alert.alert("User created", `“${username.trim()}” can now sign in.`);
+    } catch (e) {
+      if (e instanceof ApiError && e.fields) {
+        const fe: Record<string, string> = {};
+        for (const [k, v] of Object.entries(e.fields)) fe[k] = Array.isArray(v) ? v.join(" ") : String(v);
+        setErrors(fe);
+      } else {
+        Alert.alert("Failed", (e as Error)?.message ?? "Could not create user.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <Pressable style={styles.newUserBtn} onPress={() => setOpen(true)}>
+        <Text style={styles.newUserBtnText}>＋ New user</Text>
+      </Pressable>
+    );
+  }
+
+  const Input = (
+    label: string,
+    val: string,
+    set: (t: string) => void,
+    opts?: { secure?: boolean; error?: string; keyboard?: "email-address" },
+  ) => (
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        value={val}
+        onChangeText={set}
+        secureTextEntry={opts?.secure}
+        autoCapitalize={opts?.secure || opts?.keyboard ? "none" : "sentences"}
+        keyboardType={opts?.keyboard ?? "default"}
+        placeholder={label}
+        placeholderTextColor={colors.textFaint}
+        style={styles.addInput}
+      />
+      {opts?.error ? <Text style={styles.fieldError}>{opts.error}</Text> : null}
+    </View>
+  );
+
+  return (
+    <Card style={styles.newUserCard}>
+      <View style={styles.cardHeadRow}>
+        <Text style={styles.roleName}>New user</Text>
+        <Pressable hitSlop={10} onPress={() => { reset(); setOpen(false); }}>
+          <Text style={styles.modalClose}>Cancel</Text>
+        </Pressable>
+      </View>
+      {Input("Username", username, setUsername, { error: errors.username })}
+      {Input("Password", password, setPassword, { secure: true, error: errors.password })}
+      {Input("First name", firstName, setFirstName)}
+      {Input("Last name", lastName, setLastName)}
+      {Input("Email", email, setEmail, { keyboard: "email-address", error: errors.email })}
+
+      <View style={styles.flagRow}>
+        <Text style={styles.rowLabel}>Active</Text>
+        <Switch value={isActive} onValueChange={setIsActive} trackColor={{ true: colors.primary }} />
+      </View>
+      <View style={styles.flagRow}>
+        <Text style={styles.rowLabel}>Staff (admin site access)</Text>
+        <Switch value={isStaff} onValueChange={setIsStaff} trackColor={{ true: colors.primary }} />
+      </View>
+
+      {roles.length > 0 ? (
+        <>
+          <Text style={[styles.fieldLabel, { marginTop: spacing.sm }]}>Roles</Text>
+          {roles.map((role) => (
+            <View key={role.id} style={styles.row}>
+              <Text style={styles.rowLabel}>{role.name}</Text>
+              <Switch
+                value={groupIds.includes(role.id)}
+                onValueChange={(v) => toggleGroup(role.id, v)}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
+          ))}
+        </>
+      ) : null}
+
+      <Pressable
+        style={[styles.addBtn, { marginTop: spacing.md }, saving && { opacity: 0.6 }]}
+        onPress={submit}
+        disabled={saving}
+      >
+        <Text style={styles.addBtnText}>{saving ? "Creating…" : "Create user"}</Text>
+      </Pressable>
+    </Card>
   );
 }
 
@@ -320,7 +460,33 @@ const styles = StyleSheet.create({
   },
   addBtnText: { ...type.title, color: colors.onDark },
   card: { padding: 0, overflow: "hidden" },
+  newUserCard: { padding: spacing.lg },
   cardHead: { flexDirection: "row", alignItems: "center", padding: spacing.lg },
+  cardHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  newUserBtn: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderStyle: "dashed",
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginBottom: spacing.xs,
+  },
+  newUserBtnText: { ...type.title, color: colors.primary },
+  fieldLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },
+  fieldError: { ...type.caption, color: colors.danger, marginTop: 2 },
+  flagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.sm,
+  },
+  modalClose: { ...type.title, color: colors.primary },
   roleName: { ...type.title, color: colors.text },
   roleMeta: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   caret: { ...type.h3, color: colors.textFaint },

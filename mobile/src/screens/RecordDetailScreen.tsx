@@ -10,6 +10,7 @@ import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/component
 import { ChildConfig, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { usePermissionsStore } from "@/store/permissionsStore";
+import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
@@ -104,11 +105,7 @@ export function RecordDetailScreen({ route, navigation }: Props) {
         ? () => (
             <Pressable
               hitSlop={12}
-              onPress={() =>
-                config.key === "broiler-bird-sales"
-                  ? navigation.navigate("BirdSaleForm", { mode: "edit", row })
-                  : navigation.navigate("Form", { resourceKey: config.key, mode: "edit", row })
-              }
+              onPress={() => openRecordForm(navigation, config.key, "edit", row)}
             >
               <Text style={{ color: colors.onDark, ...type.title }}>Edit</Text>
             </Pressable>

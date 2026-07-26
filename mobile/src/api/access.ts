@@ -46,6 +46,28 @@ export async function setRoleModule(
   ).data.data;
 }
 
+export interface NewUser {
+  username: string;
+  password: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  is_active?: boolean;
+  is_staff?: boolean;
+  group_ids?: number[];
+}
+
+export interface CreatedUser {
+  id: number;
+  username: string;
+  group_ids: number[];
+}
+
+/** Admin: create a new login user (hashed password, optional roles/staff). */
+export async function createUser(payload: NewUser): Promise<CreatedUser> {
+  return (await http.post<Envelope<CreatedUser>>("/user/users/create", payload)).data.data;
+}
+
 /** Set which roles a user belongs to. */
 export async function setUserRoles(
   userId: number,

@@ -7,6 +7,7 @@ import { Pressable, Text, View } from "react-native";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
@@ -88,11 +89,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
               ? () => (
                   <Pressable
                     hitSlop={12}
-                    onPress={() =>
-                      key === "broiler-bird-sales"
-                        ? navigation.navigate("BirdSaleForm", { mode: "create" })
-                        : navigation.navigate("Form", { resourceKey: key, mode: "create" })
-                    }
+                    onPress={() => openRecordForm(navigation, key, "create")}
                   >
                     <Text style={{ color: colors.onDark, fontSize: 26, fontWeight: "700" }}>＋</Text>
                   </Pressable>
