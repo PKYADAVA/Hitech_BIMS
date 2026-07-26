@@ -1732,7 +1732,9 @@ class FeedPhaseLine(models.Model):
     seq_no = models.PositiveIntegerField(default=1)
     from_age = models.PositiveIntegerField(default=0, help_text=_("From age in days"))
     to_age = models.PositiveIntegerField(default=0, help_text=_("To age in days"))
-    feed_phase = models.CharField(max_length=50, help_text=_("e.g. Pre-Starter, Starter, Grower"))
+    feed_item = models.ForeignKey('inventory.Item', on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name='feed_phase_lines',
+                                  help_text=_("Feed-category item for this phase"))
     phase_code = models.CharField(max_length=20, blank=True, help_text=_("e.g. PS, ST, GR, FN1"))
     max_feed_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0,
                                        help_text=_("Max feed quantity in Kg"))
@@ -1745,7 +1747,8 @@ class FeedPhaseLine(models.Model):
         ordering = ['seq_no', 'id']
 
     def __str__(self):
-        return f"{self.feed_phase} ({self.from_age}-{self.to_age}d)"
+        name = self.feed_item.description if self.feed_item_id else "Feed"
+        return f"{name} ({self.from_age}-{self.to_age}d)"
 
     @property
     def is_active(self):

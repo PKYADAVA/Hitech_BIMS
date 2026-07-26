@@ -5378,7 +5378,9 @@ def _feed_phase_line_to_dict(line):
     return {
         "id": line.id, "seq_no": line.seq_no,
         "from_age": line.from_age, "to_age": line.to_age,
-        "feed_phase": line.feed_phase, "phase_code": line.phase_code,
+        "feed_item": line.feed_item_id,
+        "feed_phase": line.feed_item.description if line.feed_item_id else "",
+        "phase_code": line.phase_code,
         "max_feed_qty": str(line.max_feed_qty), "priority": line.priority,
         "status": line.status,
     }
@@ -5412,14 +5414,14 @@ def _apply_feed_phase_master(instance, data):
 def _save_feed_phase_lines(master, rows):
     master.lines.all().delete()
     for i, r in enumerate(rows, start=1):
-        if not (r.get("feed_phase") or "").strip():
+        if not r.get("feed_item"):
             continue
         FeedPhaseLine.objects.create(
             master=master,
             seq_no=r.get("seq_no") or i,
             from_age=r.get("from_age") or 0,
             to_age=r.get("to_age") or 0,
-            feed_phase=(r.get("feed_phase") or "").strip(),
+            feed_item_id=r.get("feed_item"),
             phase_code=(r.get("phase_code") or "").strip(),
             max_feed_qty=Decimal(str(r.get("max_feed_qty") or 0)),
             priority=r.get("priority") or i,
@@ -5436,12 +5438,14 @@ class FeedPhaseMasterListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class FeedPhaseMasterFormTemplateView(View):
     def get(self, request, id=None):
+        from inventory.models import Item
         instance = FeedPhaseMaster.objects.filter(id=id).first() if id else None
         return render(request, "feed_phase_master_form.html", {
             "instance": instance,
-            "lines_json": json.dumps([_feed_phase_line_to_dict(l) for l in instance.lines.all()]) if instance else "[]",
+            "lines_json": json.dumps([_feed_phase_line_to_dict(l) for l in instance.lines.select_related("feed_item").all()]) if instance else "[]",
             "breeds": Breed.objects.filter(is_active=True).order_by("description"),
             "bird_types": FeedPhaseMaster.BIRD_TYPE_CHOICES,
+            "feed_items": Item.objects.filter(category__name__icontains="feed").order_by("description"),
             "programs": list(FeedPhaseMaster.objects.order_by("program")
                              .values_list("program", flat=True).distinct()),
             "today": timezone.localdate().isoformat(),

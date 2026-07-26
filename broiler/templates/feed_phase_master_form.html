@@ -106,7 +106,14 @@
 <script>
 const INSTANCE_ID = {{ instance.id|default:"null" }};
 const EXISTING_LINES = {{ lines_json|safe }};
+const FEED_ITEMS = [{% for it in feed_items %}{ id: {{ it.id }}, name: "{{ it.description|escapejs }}" },{% endfor %}];
 const get = id => document.getElementById(id);
+
+function feedOptions(selectedId) {
+  return '<option value="">select feed</option>' + FEED_ITEMS.map(it =>
+    `<option value="${it.id}" ${String(it.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(it.name)}</option>`
+  ).join('');
+}
 
 function lineRow(d = {}) {
   const tr = document.createElement('tr');
@@ -114,7 +121,7 @@ function lineRow(d = {}) {
     <td class="fp-seq seq"></td>
     <td><input type="number" min="0" class="form-control from-age" value="${d.from_age ?? ''}"></td>
     <td><input type="number" min="0" class="form-control to-age" value="${d.to_age ?? ''}"></td>
-    <td><input class="form-control feed-phase" placeholder="e.g. Pre-Starter" value="${d.feed_phase ? escapeHtml(d.feed_phase) : ''}"></td>
+    <td><select class="form-select feed-item">${feedOptions(d.feed_item)}</select></td>
     <td><input class="form-control phase-code" placeholder="PS" value="${d.phase_code ? escapeHtml(d.phase_code) : ''}"></td>
     <td><input type="number" min="0" step="0.001" class="form-control max-qty" value="${d.max_feed_qty ?? ''}"></td>
     <td><input type="number" min="0" class="form-control priority" value="${d.priority ?? ''}"></td>
@@ -152,7 +159,7 @@ function collect() {
       seq_no: i + 1,
       from_age: tr.querySelector('.from-age').value || 0,
       to_age: tr.querySelector('.to-age').value || 0,
-      feed_phase: tr.querySelector('.feed-phase').value,
+      feed_item: tr.querySelector('.feed-item').value || null,
       phase_code: tr.querySelector('.phase-code').value,
       max_feed_qty: tr.querySelector('.max-qty').value || 0,
       priority: tr.querySelector('.priority').value || (i + 1),
@@ -164,7 +171,7 @@ function collect() {
 function save(thenNew) {
   const payload = collect();
   if (!payload.program.trim()) { alert('Program is required.'); return; }
-  if (!payload.lines.some(l => l.feed_phase.trim())) { alert('Add at least one feed phase.'); return; }
+  if (!payload.lines.some(l => l.feed_item)) { alert('Select a feed item for at least one phase.'); return; }
   const isEdit = INSTANCE_ID !== null;
   const url = isEdit ? `/feed_phase_master_api/${INSTANCE_ID}/` : "{% url 'feed_phase_master_api_list' %}";
   fetch(url, {
