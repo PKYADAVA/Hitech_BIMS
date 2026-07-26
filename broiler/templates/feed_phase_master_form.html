@@ -156,11 +156,17 @@ get('add-line').addEventListener('click', () => lineRow());
 get('fp-lines').addEventListener('click', e => {
   if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumber(); }
 });
-// Category → refill the Feed Phase (item) dropdown with that category's items.
 get('fp-lines').addEventListener('change', e => {
+  const tr = e.target.closest('tr');
+  // Category → refill the Feed Phase (item) dropdown with that category's items.
   if (e.target.classList.contains('category')) {
-    const tr = e.target.closest('tr');
     tr.querySelector('.feed-item').innerHTML = itemOptions(e.target.value, null);
+    tr.querySelector('.phase-code').value = '';
+  }
+  // Feed item → auto-fill the Phase Code from the item's code.
+  if (e.target.classList.contains('feed-item')) {
+    const it = ITEMS.find(x => String(x.id) === String(e.target.value));
+    tr.querySelector('.phase-code').value = it ? (it.item_code || '') : '';
   }
 });
 

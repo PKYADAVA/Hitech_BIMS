@@ -5452,7 +5452,7 @@ class FeedPhaseMasterFormTemplateView(View):
             "categories": ItemCategory.objects.order_by("name"),
             # every item with its category, so the form can filter items by the chosen category
             "items_json": json.dumps(list(Item.objects.order_by("description")
-                                          .values("id", "description", "category_id"))),
+                                          .values("id", "description", "category_id", "item_code"))),
             "programs": list(FeedPhaseMaster.objects.order_by("program")
                              .values_list("program", flat=True).distinct()),
             "today": timezone.localdate().isoformat(),
