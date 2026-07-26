@@ -80,6 +80,7 @@
               <th style="width:70px">Seq No.</th>
               <th style="width:110px">From Age <small class="text-muted">(Days)</small></th>
               <th style="width:110px">To Age <small class="text-muted">(Days)</small></th>
+              <th style="min-width:150px">Category</th>
               <th style="min-width:160px">Feed Phase <span class="text-danger">*</span></th>
               <th style="width:130px">Phase Code</th>
               <th style="width:150px">Max Feed Qty <small class="text-muted">(Kg)</small></th>
@@ -106,13 +107,22 @@
 <script>
 const INSTANCE_ID = {{ instance.id|default:"null" }};
 const EXISTING_LINES = {{ lines_json|safe }};
-const FEED_ITEMS = [{% for it in feed_items %}{ id: {{ it.id }}, name: "{{ it.description|escapejs }}" },{% endfor %}];
+const ITEMS = {{ items_json|safe }};  // [{id, description, category_id}]
+const CATEGORIES = [{% for c in categories %}{ id: {{ c.id }}, name: "{{ c.name|escapejs }}" },{% endfor %}];
 const get = id => document.getElementById(id);
 
-function feedOptions(selectedId) {
-  return '<option value="">select feed</option>' + FEED_ITEMS.map(it =>
-    `<option value="${it.id}" ${String(it.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(it.name)}</option>`
+function categoryOptions(selectedId) {
+  return '<option value="">select category</option>' + CATEGORIES.map(c =>
+    `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
   ).join('');
+}
+
+// Feed-item options limited to the chosen category.
+function itemOptions(categoryId, selectedId) {
+  const opts = ITEMS.filter(it => String(it.category_id) === String(categoryId))
+    .map(it => `<option value="${it.id}" ${String(it.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(it.description)}</option>`)
+    .join('');
+  return '<option value="">select item</option>' + opts;
 }
 
 function lineRow(d = {}) {
@@ -121,7 +131,8 @@ function lineRow(d = {}) {
     <td class="fp-seq seq"></td>
     <td><input type="number" min="0" class="form-control from-age" value="${d.from_age ?? ''}"></td>
     <td><input type="number" min="0" class="form-control to-age" value="${d.to_age ?? ''}"></td>
-    <td><select class="form-select feed-item">${feedOptions(d.feed_item)}</select></td>
+    <td><select class="form-select category">${categoryOptions(d.category)}</select></td>
+    <td><select class="form-select feed-item">${itemOptions(d.category, d.feed_item)}</select></td>
     <td><input class="form-control phase-code" placeholder="PS" value="${d.phase_code ? escapeHtml(d.phase_code) : ''}"></td>
     <td><input type="number" min="0" step="0.001" class="form-control max-qty" value="${d.max_feed_qty ?? ''}"></td>
     <td><input type="number" min="0" class="form-control priority" value="${d.priority ?? ''}"></td>
@@ -145,6 +156,13 @@ get('add-line').addEventListener('click', () => lineRow());
 get('fp-lines').addEventListener('click', e => {
   if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumber(); }
 });
+// Category → refill the Feed Phase (item) dropdown with that category's items.
+get('fp-lines').addEventListener('change', e => {
+  if (e.target.classList.contains('category')) {
+    const tr = e.target.closest('tr');
+    tr.querySelector('.feed-item').innerHTML = itemOptions(e.target.value, null);
+  }
+});
 
 function collect() {
   return {
@@ -159,6 +177,7 @@ function collect() {
       seq_no: i + 1,
       from_age: tr.querySelector('.from-age').value || 0,
       to_age: tr.querySelector('.to-age').value || 0,
+      category: tr.querySelector('.category').value || null,
       feed_item: tr.querySelector('.feed-item').value || null,
       phase_code: tr.querySelector('.phase-code').value,
       max_feed_qty: tr.querySelector('.max-qty').value || 0,

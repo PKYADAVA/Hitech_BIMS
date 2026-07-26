@@ -1732,9 +1732,12 @@ class FeedPhaseLine(models.Model):
     seq_no = models.PositiveIntegerField(default=1)
     from_age = models.PositiveIntegerField(default=0, help_text=_("From age in days"))
     to_age = models.PositiveIntegerField(default=0, help_text=_("To age in days"))
+    category = models.ForeignKey('inventory.ItemCategory', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='feed_phase_lines',
+                                 help_text=_("Item category — filters the feed item choices"))
     feed_item = models.ForeignKey('inventory.Item', on_delete=models.PROTECT, null=True, blank=True,
                                   related_name='feed_phase_lines',
-                                  help_text=_("Feed-category item for this phase"))
+                                  help_text=_("Item (of the selected category) for this phase"))
     phase_code = models.CharField(max_length=20, blank=True, help_text=_("e.g. PS, ST, GR, FN1"))
     max_feed_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0,
                                        help_text=_("Max feed quantity in Kg"))

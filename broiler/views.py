@@ -5378,6 +5378,8 @@ def _feed_phase_line_to_dict(line):
     return {
         "id": line.id, "seq_no": line.seq_no,
         "from_age": line.from_age, "to_age": line.to_age,
+        "category": line.category_id,
+        "category_name": line.category.name if line.category_id else "",
         "feed_item": line.feed_item_id,
         "feed_phase": line.feed_item.description if line.feed_item_id else "",
         "phase_code": line.phase_code,
@@ -5421,6 +5423,7 @@ def _save_feed_phase_lines(master, rows):
             seq_no=r.get("seq_no") or i,
             from_age=r.get("from_age") or 0,
             to_age=r.get("to_age") or 0,
+            category_id=r.get("category") or None,
             feed_item_id=r.get("feed_item"),
             phase_code=(r.get("phase_code") or "").strip(),
             max_feed_qty=Decimal(str(r.get("max_feed_qty") or 0)),
@@ -5438,14 +5441,18 @@ class FeedPhaseMasterListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class FeedPhaseMasterFormTemplateView(View):
     def get(self, request, id=None):
-        from inventory.models import Item
+        from inventory.models import Item, ItemCategory
         instance = FeedPhaseMaster.objects.filter(id=id).first() if id else None
         return render(request, "feed_phase_master_form.html", {
             "instance": instance,
-            "lines_json": json.dumps([_feed_phase_line_to_dict(l) for l in instance.lines.select_related("feed_item").all()]) if instance else "[]",
+            "lines_json": json.dumps([_feed_phase_line_to_dict(l)
+                                      for l in instance.lines.select_related("feed_item", "category").all()]) if instance else "[]",
             "breeds": Breed.objects.filter(is_active=True).order_by("description"),
             "bird_types": FeedPhaseMaster.BIRD_TYPE_CHOICES,
-            "feed_items": Item.objects.filter(category__name__icontains="feed").order_by("description"),
+            "categories": ItemCategory.objects.order_by("name"),
+            # every item with its category, so the form can filter items by the chosen category
+            "items_json": json.dumps(list(Item.objects.order_by("description")
+                                          .values("id", "description", "category_id"))),
             "programs": list(FeedPhaseMaster.objects.order_by("program")
                              .values_list("program", flat=True).distinct()),
             "today": timezone.localdate().isoformat(),
