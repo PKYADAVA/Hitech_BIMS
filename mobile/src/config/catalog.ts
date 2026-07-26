@@ -1592,7 +1592,12 @@ const userResources: ResourceConfig[] = [
     searchKeys: ["username", "email", "first_name", "last_name"],
     card: (r) => ({
       title: pick(r, ["username"], `User #${r.id}`),
-      subtitle: joinParts([joinParts([pick(r, ["first_name"]), pick(r, ["last_name"])], " "), pick(r, ["email"])]),
+      // Lead with the user's roles (groups) by name; fall back to name/email.
+      subtitle: joinParts([
+        pick(r, ["groups_label"]),
+        joinParts([pick(r, ["first_name"]), pick(r, ["last_name"])], " "),
+        pick(r, ["email"]),
+      ]),
       badge: r.is_active
         ? r.is_superuser
           ? { label: "Admin", tone: "brand" }

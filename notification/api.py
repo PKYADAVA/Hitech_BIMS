@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.serializers import serializer_factory
 from api.viewsets import V1ViewMixin
 
 from .comm_sources import sms_metrics
@@ -45,14 +46,16 @@ def _client_ip(request) -> str:
     return (xff.split(",")[0].strip() if xff else request.META.get("REMOTE_ADDR")) or ""
 
 
-class SmsSettingsSerializer(serializers.ModelSerializer):
+# Extend the factory serializer so FK fields still get their `_label` companions
+# (e.g. modified_by_label) — while keeping the gateway API key write-only.
+_SmsSettingsBase = serializer_factory(SmsSettings)
+
+
+class SmsSettingsSerializer(_SmsSettingsBase):
     """Settings serializer that never leaks the gateway API key on read."""
 
-    class Meta:
-        model = SmsSettings
-        fields = "__all__"
+    class Meta(_SmsSettingsBase.Meta):
         extra_kwargs = {"api_key": {"write_only": True, "required": False}}
-        read_only_fields = ["modified_by", "modified_at"]
 
 
 class SmsTemplateSendView(V1ViewMixin, APIView):
