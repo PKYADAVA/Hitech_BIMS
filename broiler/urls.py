@@ -68,6 +68,7 @@ urlpatterns = [
     path('feed-phase-master/<int:id>/edit/', views.FeedPhaseMasterFormTemplateView.as_view(), name='feed_phase_master_edit'),
     path('feed_phase_master_api/', views.FeedPhaseMasterAPI.as_view(), name='feed_phase_master_api_list'),
     path('feed_phase_master_api/<int:id>/', views.FeedPhaseMasterAPI.as_view(), name='feed_phase_master_api'),
+    path('feed_phase_master_api/<int:id>/duplicate/', views.FeedPhaseMasterDuplicateAPI.as_view(), name='feed_phase_master_duplicate'),
     path('broiler-batch/', BroilerBatchTemplateView.as_view(), name='broiler_batch'),
     path('broiler_batch_list/', BroilerBatchAPI.as_view(), name='broiler_batch_list'),  # For listing all broiler batch
     path('create-batch/', BroilerBatchAPI.as_view(), name='broiler_batch_create'),  # For creating new broiler batch
@@ -118,6 +119,13 @@ urlpatterns = [
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),
+
+    path('bird-category/', views.BirdCategoryTemplateView.as_view(), name='bird_category'),
+    path('bird_category_list/', views.BirdCategoryAPI.as_view(), name='bird_category_list'),
+    path('create-bird-category/', views.BirdCategoryAPI.as_view(), name='bird_category_create'),
+    path('bird_category/<int:id>/', views.BirdCategoryAPI.as_view(), name='bird_category_edit'),
+    path('bird_category/<int:id>/delete/', views.BirdCategoryAPI.as_view(), name='bird_category_delete'),
+    path('bird_category/<int:id>/toggle-active/', views.toggle_bird_category_active, name='bird_category_toggle_active'),
 
     path('breed/', views.BreedTemplateView.as_view(), name='breed'),
     path('breed_list/', views.BreedAPI.as_view(), name='breed_list'),  # For listing all breeds

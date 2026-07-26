@@ -18,7 +18,7 @@ from .models import (
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
     GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
-    Region, Supervisor, FeedPhaseMaster, FeedPhaseLine,
+    Region, Supervisor, FeedPhaseMaster, FeedPhaseLine, BirdCategory,
 )
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
@@ -294,7 +294,9 @@ class BreedTemplateView(View):
     """View for rendering the breed template."""
 
     def get(self, request):
-        return render(request, "breed.html")
+        return render(request, "breed.html", {
+            "categories": BirdCategory.objects.filter(is_active=True).order_by("sort_order", "name"),
+        })
 
 
 @method_decorator(login_required, name="dispatch")
@@ -304,20 +306,24 @@ class BreedAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                breed = Breed.objects.get(id=id)
+                breed = Breed.objects.select_related("bird_category").get(id=id)
                 return JsonResponse({
                     "id": breed.id,
                     "code": breed.code,
                     "description": breed.description,
+                    "bird_category": breed.bird_category_id,
+                    "bird_category_name": breed.bird_category.name if breed.bird_category_id else "",
                     "is_active": breed.is_active,
                     "is_locked": breed.is_locked,
                 })
 
-            breeds = Breed.objects.all()
+            breeds = Breed.objects.select_related("bird_category").all()
             results = [{
                 "id": breed.id,
                 "code": breed.code,
                 "description": breed.description,
+                "bird_category": breed.bird_category_id,
+                "bird_category_name": breed.bird_category.name if breed.bird_category_id else "",
                 "is_active": breed.is_active,
                 "is_locked": breed.is_locked,
             } for breed in breeds]
@@ -331,7 +337,8 @@ class BreedAPI(BaseAPIView):
         try:
             data = request.POST
             with transaction.atomic():
-                Breed.objects.create(description=data["description"])
+                Breed.objects.create(description=data["description"],
+                                     bird_category_id=data.get("bird_category") or None)
             return JsonResponse({"message": "Breed created"}, status=201)
         except Exception as e:
             return self.handle_exception(e)
@@ -344,6 +351,8 @@ class BreedAPI(BaseAPIView):
             data = json.loads(request.body)
             with transaction.atomic():
                 breed.description = data["description"]
+                if "bird_category" in data:
+                    breed.bird_category_id = data["bird_category"] or None
                 breed.save()
             return JsonResponse({"message": "Breed updated"})
         except Breed.DoesNotExist:
@@ -5391,21 +5400,59 @@ def _feed_phase_line_to_dict(line):
 def _feed_phase_master_to_dict(m, with_lines=False):
     data = {
         "id": m.id, "program": m.program,
-        "bird_type": m.bird_type, "bird_type_display": m.get_bird_type_display(),
+        "bird_category": m.bird_category_id,
+        "bird_category_name": m.bird_category.name if m.bird_category_id else "",
         "breed": m.breed_id, "breed_name": m.breed.description if m.breed_id else "",
         "effective_from": m.effective_from.isoformat() if m.effective_from else "",
         "effective_to": m.effective_to.isoformat() if m.effective_to else "",
         "status": m.status, "description": m.description,
         "line_count": m.lines.count(),
+        "phases": [l.feed_item.description for l in m.lines.all() if l.feed_item_id],
     }
     if with_lines:
         data["lines"] = [_feed_phase_line_to_dict(l) for l in m.lines.all()]
     return data
 
 
+def _validate_feed_phase(data):
+    """Return an error message if the feed phase master is invalid, else None:
+    effective dates ordered, at least one item line, each From<=To, at most one
+    open-ended ('& above') phase and it must be last, and no overlapping ages."""
+    ef, et = data.get("effective_from"), data.get("effective_to")
+    if ef and et and str(ef) > str(et):
+        return "Effective From must be on or before Effective To."
+    lines = [r for r in (data.get("lines") or []) if r.get("feed_item")]
+    if not lines:
+        return "Add at least one feed phase with an item selected."
+    ranges, open_count = [], 0
+    for r in lines:
+        try:
+            fa = int(r.get("from_age") or 0)
+        except (TypeError, ValueError):
+            fa = 0
+        to_raw = r.get("to_age")
+        ta = None if to_raw in (None, "", 0, "0") else int(to_raw)
+        if ta is not None and ta < fa:
+            return f"A phase starting at day {fa} has To Age ({ta}) before From Age ({fa})."
+        if ta is None:
+            open_count += 1
+        ranges.append((fa, ta))
+    if open_count > 1:
+        return "Only one phase can be open-ended ('& above')."
+    ranges.sort(key=lambda x: x[0])
+    for i, (fa, ta) in enumerate(ranges):
+        if ta is None and i != len(ranges) - 1:
+            return "The open-ended ('& above') phase must be the last one."
+        if i > 0:
+            prev_ta = ranges[i - 1][1]
+            if prev_ta is None or fa <= prev_ta:
+                return f"Age ranges overlap around day {fa}. Each phase must start after the previous one ends."
+    return None
+
+
 def _apply_feed_phase_master(instance, data):
     instance.program = (data.get("program") or "").strip()
-    instance.bird_type = data.get("bird_type") or "broiler"
+    instance.bird_category_id = data.get("bird_category") or None
     instance.breed_id = data.get("breed") or None
     instance.effective_from = data.get("effective_from") or None
     instance.effective_to = data.get("effective_to") or None
@@ -5447,8 +5494,8 @@ class FeedPhaseMasterFormTemplateView(View):
             "instance": instance,
             "lines_json": json.dumps([_feed_phase_line_to_dict(l)
                                       for l in instance.lines.select_related("feed_item", "category").all()]) if instance else "[]",
-            "breeds": Breed.objects.filter(is_active=True).order_by("description"),
-            "bird_types": FeedPhaseMaster.BIRD_TYPE_CHOICES,
+            "breeds": Breed.objects.filter(is_active=True).select_related("bird_category").order_by("description"),
+            "bird_categories": BirdCategory.objects.filter(is_active=True).order_by("sort_order", "name"),
             "categories": ItemCategory.objects.order_by("name"),
             # every item with its category, so the form can filter items by the chosen category
             "items_json": json.dumps(list(Item.objects.order_by("description")
@@ -5467,7 +5514,7 @@ class FeedPhaseMasterAPI(BaseAPIView):
                 m = FeedPhaseMaster.objects.prefetch_related("lines").select_related("breed").get(id=id)
                 return JsonResponse(_feed_phase_master_to_dict(m, with_lines=True))
             masters = (FeedPhaseMaster.objects.select_related("breed")
-                       .prefetch_related("lines").order_by("-created_at"))
+                       .prefetch_related("lines__feed_item").order_by("-created_at"))
             return JsonResponse([_feed_phase_master_to_dict(m) for m in masters], safe=False)
         except FeedPhaseMaster.DoesNotExist:
             raise Http404("Feed Phase Master not found")
@@ -5479,6 +5526,9 @@ class FeedPhaseMasterAPI(BaseAPIView):
             data = json.loads(request.body or "{}")
             if not (data.get("program") or "").strip():
                 return JsonResponse({"error": "Program is required"}, status=400)
+            err = _validate_feed_phase(data)
+            if err:
+                return JsonResponse({"error": err}, status=400)
             with transaction.atomic():
                 instance = FeedPhaseMaster()
                 _apply_feed_phase_master(instance, data)
@@ -5492,6 +5542,9 @@ class FeedPhaseMasterAPI(BaseAPIView):
         try:
             instance = FeedPhaseMaster.objects.get(id=id)
             data = json.loads(request.body or "{}")
+            err = _validate_feed_phase(data)
+            if err:
+                return JsonResponse({"error": err}, status=400)
             with transaction.atomic():
                 _apply_feed_phase_master(instance, data)
                 instance.save()
@@ -5510,3 +5563,105 @@ class FeedPhaseMasterAPI(BaseAPIView):
             raise Http404("Feed Phase Master not found")
         except Exception as e:
             return self.handle_exception(e)
+
+
+@method_decorator(login_required, name="dispatch")
+class FeedPhaseMasterDuplicateAPI(BaseAPIView):
+    """Clone a Feed Phase Master and all its lines into a new '(Copy)' record."""
+    def post(self, request, id: int) -> JsonResponse:
+        try:
+            src = FeedPhaseMaster.objects.prefetch_related("lines").get(id=id)
+            with transaction.atomic():
+                dup = FeedPhaseMaster.objects.create(
+                    program=f"{src.program} (Copy)", bird_category_id=src.bird_category_id,
+                    breed_id=src.breed_id, effective_from=src.effective_from,
+                    effective_to=src.effective_to, status=src.status,
+                    description=src.description,
+                )
+                for l in src.lines.all():
+                    FeedPhaseLine.objects.create(
+                        master=dup, seq_no=l.seq_no, from_age=l.from_age, to_age=l.to_age,
+                        category_id=l.category_id, feed_item_id=l.feed_item_id,
+                        phase_code=l.phase_code, max_feed_qty=l.max_feed_qty,
+                        priority=l.priority, status=l.status,
+                    )
+            return JsonResponse({"message": "Feed Phase Master duplicated", "id": dup.id}, status=201)
+        except FeedPhaseMaster.DoesNotExist:
+            raise Http404("Feed Phase Master not found")
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+# ---------------------------------------------------------------------------
+# Bird Category master (Broiler > Growing Charges) — simple lookup.
+# ---------------------------------------------------------------------------
+@method_decorator(login_required, name="dispatch")
+class BirdCategoryTemplateView(View):
+    def get(self, request):
+        return render(request, "bird_category.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class BirdCategoryAPI(BaseAPIView):
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            if id:
+                c = BirdCategory.objects.get(id=id)
+                return JsonResponse({"id": c.id, "name": c.name, "is_active": c.is_active})
+            cats = BirdCategory.objects.all()
+            return JsonResponse([{"id": c.id, "name": c.name, "is_active": c.is_active} for c in cats], safe=False)
+        except BirdCategory.DoesNotExist:
+            return JsonResponse({"error": "Bird category not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request) -> JsonResponse:
+        try:
+            name = (request.POST.get("name") or "").strip()
+            if not name:
+                return JsonResponse({"error": "Name is required."}, status=400)
+            with transaction.atomic():
+                nxt = (BirdCategory.objects.order_by("-sort_order").values_list("sort_order", flat=True).first() or 0) + 1
+                BirdCategory.objects.create(name=name, sort_order=nxt)
+            return JsonResponse({"message": "Bird category created"}, status=201)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def put(self, request, id: int) -> JsonResponse:
+        try:
+            c = BirdCategory.objects.get(id=id)
+            data = json.loads(request.body)
+            name = (data.get("name") or "").strip()
+            if not name:
+                return JsonResponse({"error": "Name is required."}, status=400)
+            with transaction.atomic():
+                c.name = name
+                c.save(update_fields=["name", "updated_at"])
+            return JsonResponse({"message": "Bird category updated"})
+        except BirdCategory.DoesNotExist:
+            return JsonResponse({"error": "Bird category not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            with transaction.atomic():
+                BirdCategory.objects.get(id=id).delete()
+            return JsonResponse({"message": "Bird category deleted"})
+        except BirdCategory.DoesNotExist:
+            return JsonResponse({"error": "Bird category not found."}, status=404)
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+def toggle_bird_category_active(request, id):
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=400)
+    try:
+        c = BirdCategory.objects.get(id=id)
+        c.is_active = not c.is_active
+        c.save(update_fields=["is_active"])
+        return JsonResponse({"message": "Bird category updated", "is_active": c.is_active})
+    except BirdCategory.DoesNotExist:
+        return JsonResponse({"error": "Bird category not found."}, status=404)

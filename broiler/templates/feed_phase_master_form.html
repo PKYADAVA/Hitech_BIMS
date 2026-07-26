@@ -32,17 +32,15 @@
         <datalist id="program-list">{% for p in programs %}<option value="{{ p }}">{% endfor %}</datalist>
       </div>
       <div class="col-md-2">
-        <label class="form-label">Bird Type <span class="text-danger">*</span></label>
-        <select class="form-select" id="bird_type" required>
-          {% for val, label in bird_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        <label class="form-label">Bird Category</label>
+        <select class="form-select" id="bird_category">
+          <option value="">select</option>
+          {% for c in bird_categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-md-3">
         <label class="form-label">Breed</label>
-        <select class="form-select" id="breed">
-          <option value="">select</option>
-          {% for b in breeds %}<option value="{{ b.id }}">{{ b.description }}</option>{% endfor %}
-        </select>
+        <select class="form-select" id="breed"><option value="">select</option></select>
       </div>
       <div class="col-md-2">
         <label class="form-label">Effective From</label>
@@ -108,7 +106,17 @@ const INSTANCE_ID = {{ instance.id|default:"null" }};
 const EXISTING_LINES = {{ lines_json|safe }};
 const ITEMS = {{ items_json|safe }};  // [{id, description, category_id}]
 const CATEGORIES = [{% for c in categories %}{ id: {{ c.id }}, name: "{{ c.name|escapejs }}" },{% endfor %}];
+const BREEDS = [{% for b in breeds %}{ id: {{ b.id }}, name: "{{ b.description|escapejs }}", category: {{ b.bird_category_id|default:"null" }} },{% endfor %}];
 const get = id => document.getElementById(id);
+
+// Breeds filtered by the chosen bird category (all breeds when none chosen).
+function breedOptions(categoryId, selectedId) {
+  const list = categoryId ? BREEDS.filter(b => String(b.category) === String(categoryId)) : BREEDS;
+  return '<option value="">select</option>' + list.map(b =>
+    `<option value="${b.id}" ${String(b.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(b.name)}</option>`
+  ).join('');
+}
+
 
 function categoryOptions(selectedId) {
   return '<option value="">select category</option>' + CATEGORIES.map(c =>
@@ -141,7 +149,7 @@ function lineRow(d = {}) {
     </select></td>
     <td class="text-nowrap text-center px-1">
       <button type="button" class="btn btn-sm btn-outline-primary add-line-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
-      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Remove Row"><i class="fas fa-minus"></i></button>
     </td>`;
   get('fp-lines').tBodies[0].append(tr);
   renumber();
@@ -152,8 +160,11 @@ function renumber() {
   const rows = document.querySelectorAll('#fp-lines tbody tr');
   rows.forEach((tr, i) => {
     tr.querySelector('.seq').textContent = i + 1;
-    // Only the last row shows the inline "+"; earlier rows just delete.
-    tr.querySelector('.add-line-inline').classList.toggle('d-none', i !== rows.length - 1);
+    // Only the last row shows the +/- controls (add / remove); earlier rows
+    // keep an empty action column.
+    const isLast = i === rows.length - 1;
+    tr.querySelector('.add-line-inline').classList.toggle('invisible', !isLast);
+    tr.querySelector('.remove').classList.toggle('invisible', !isLast);
   });
 }
 
@@ -178,7 +189,7 @@ get('fp-lines').addEventListener('change', e => {
 function collect() {
   return {
     program: get('program').value,
-    bird_type: get('bird_type').value,
+    bird_category: get('bird_category').value || null,
     breed: get('breed').value || null,
     effective_from: get('effective_from').value || null,
     effective_to: get('effective_to').value || null,
@@ -219,11 +230,18 @@ function save(thenNew) {
 get('fp-form').addEventListener('submit', e => { e.preventDefault(); save(false); });
 get('save-new').addEventListener('click', () => save(true));
 
+// Bird Category → refill the Breed dropdown with that category's breeds.
+get('bird_category').addEventListener('change', function () {
+  get('breed').innerHTML = breedOptions(this.value, null);
+});
+// Start with all breeds available.
+get('breed').innerHTML = breedOptions(null, null);
+
 // prefill
 {% if instance %}
 get('program').value = "{{ instance.program|escapejs }}";
-get('bird_type').value = "{{ instance.bird_type }}";
-get('breed').value = "{{ instance.breed_id|default:'' }}";
+get('bird_category').value = "{{ instance.bird_category_id|default:'' }}";
+get('breed').innerHTML = breedOptions(get('bird_category').value, "{{ instance.breed_id|default:'' }}");
 get('effective_from').value = "{{ instance.effective_from|date:'Y-m-d' }}";
 get('effective_to').value = "{{ instance.effective_to|date:'Y-m-d' }}";
 get('status').value = "{{ instance.status }}";

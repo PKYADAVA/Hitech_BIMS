@@ -29,6 +29,7 @@
         <thead>
           <tr>
             <th>Code</th>
+            <th>Bird Category</th>
             <th>Description</th>
             <th class="text-center">Action</th>
           </tr>
@@ -52,6 +53,13 @@
             <div class="modal-body">
                 <form id="breed-form">
                     {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="bird_category" class="form-label">Bird Category</label>
+                        <select id="bird_category" class="form-select">
+                            <option value="">Select category</option>
+                            {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                        </select>
+                    </div>
                     <div class="mb-3">
                         <label for="description" class="form-label">Breed<span class="text-danger">*</span></label>
                         <input type="text" id="description" class="form-control" placeholder="Enter description..." maxlength="100" required>
@@ -78,6 +86,13 @@
                 <form id="edit-breed-form-{id}">
                     <div class="modal-body">
                         <input type="hidden" name="breed-id" value="{id}">
+                        <div class="mb-3">
+                            <label class="form-label">Bird Category</label>
+                            <select class="form-select" name="bird_category">
+                                <option value="">Select category</option>
+                                {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                            </select>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Breed<span class="text-danger">*</span></label>
                             <input type="text" class="form-control" name="description" placeholder="Enter description..." maxlength="100" required>
@@ -128,6 +143,7 @@ $(document).ready(function () {
                                 ${!breed.is_active ? '<span class="badge bg-secondary ms-1">Inactive</span>' : ''}
                                 ${breed.is_locked ? '<span class="badge bg-warning text-dark ms-1">Locked</span>' : ''}
                             </td>
+                            <td>${escapeHtml(breed.bird_category_name) || '-'}</td>
                             <td>${escapeHtml(breed.description)}</td>
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center flex-wrap">
@@ -175,6 +191,7 @@ $(document).ready(function () {
         event.preventDefault();
         const formData = {
             description: $("#description").val(),
+            bird_category: $("#bird_category").val(),
         };
 
         $.ajax({
@@ -211,6 +228,7 @@ $(document).ready(function () {
                 $(`#editBreedModal-${id}`).modal('show');
 
                 $(`#edit-breed-form-${id} [name="description"]`).val(breed.description);
+                $(`#edit-breed-form-${id} [name="bird_category"]`).val(breed.bird_category || '');
             },
             error: function (xhr, status, error) {
                 showToast('danger', 'Error fetching breed: ' + error);
@@ -224,6 +242,7 @@ $(document).ready(function () {
         const id = $(this).find('[name="breed-id"]').val();
         const formData = {
             description: $(this).find('[name="description"]').val(),
+            bird_category: $(this).find('[name="bird_category"]').val(),
         };
 
         $.ajax({

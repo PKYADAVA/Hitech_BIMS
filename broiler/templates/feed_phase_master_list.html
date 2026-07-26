@@ -20,8 +20,8 @@
       <table class="table table-hover table-bordered mb-0" id="fp-table">
         <thead class="table-dark">
           <tr>
-            <th>Program</th><th>Bird Type</th><th>Breed</th>
-            <th>Effective From</th><th>Effective To</th><th>Phases</th>
+            <th>Program</th><th>Bird Category</th><th>Breed</th>
+            <th>Effective From</th><th>Effective To</th><th>Feed Phases</th>
             <th>Status</th><th class="text-center">Action</th>
           </tr>
         </thead>
@@ -53,21 +53,37 @@ $(function () {
       : '<span class="badge bg-secondary">Inactive</span>';
   }
 
+  // Colour a feed phase by its name — Pre-Starter=yellow, Starter=green,
+  // Grower=blue, Finisher-1=orange, Finisher-2=red (falls back to grey).
+  function phaseBadge(name) {
+    const n = (name || '').toLowerCase();
+    let style = 'background:#e9ecef;color:#495057';           // default grey
+    if (n.includes('pre-starter') || n.includes('pre starter')) style = 'background:#fff3cd;color:#8a6d00';
+    else if (n.includes('finisher-2') || n.includes('finisher 2')) style = 'background:#ffd7d7;color:#c0392b';
+    else if (n.includes('finisher-1') || n.includes('finisher 1')) style = 'background:#ffe1c4;color:#b5560a';
+    else if (n.includes('finisher')) style = 'background:#ffe1c4;color:#b5560a';
+    else if (n.includes('grower')) style = 'background:#d5e6ff;color:#2b62c9';
+    else if (n.includes('starter')) style = 'background:#d5f3df;color:#178a53';
+    return `<span class="badge rounded-pill me-1 mb-1" style="${style};font-weight:600">${escapeHtml(name)}</span>`;
+  }
+
   function loadRows() {
     $.getJSON("{% url 'feed_phase_master_api_list' %}", function (rows) {
       if (table) { table.destroy(); }
       const tbody = $("#fp-table tbody").empty();
       rows.forEach(function (r) {
+        const phases = (r.phases || []).map(phaseBadge).join('') || '<span class="text-muted">-</span>';
         tbody.append(`<tr>
           <td>${escapeHtml(r.program)}</td>
-          <td>${escapeHtml(r.bird_type_display)}</td>
+          <td>${escapeHtml(r.bird_category_name) || '-'}</td>
           <td>${escapeHtml(r.breed_name) || '-'}</td>
           <td>${r.effective_from || '-'}</td>
           <td>${r.effective_to || '-'}</td>
-          <td>${r.line_count}</td>
+          <td style="max-width:340px;white-space:normal">${phases}</td>
           <td>${badge(r.status)}</td>
           <td class="text-center"><div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/feed-phase-master/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if page_perms.add %}<button type="button" class="btn btn-outline-secondary btn-sm duplicate-button" data-id="${r.id}" title="Duplicate"><i class="fas fa-copy"></i></button>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
           </div></td>
         </tr>`);
@@ -79,6 +95,15 @@ $(function () {
       });
     }).fail(() => window.showToast('danger', "Failed to load feed phase masters."));
   }
+
+  $(document).on("click", ".duplicate-button", function () {
+    $.ajax({
+      url: `/feed_phase_master_api/${$(this).data("id")}/duplicate/`, type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () { loadRows(); window.showToast('success', "Feed phase master duplicated."); },
+      error: function (xhr) { window.showToast('danger', xhr.responseJSON?.error || "Failed to duplicate."); },
+    });
+  });
 
   $(document).on("click", ".delete-button", function () {
     pendingDeleteId = $(this).data("id");

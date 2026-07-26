@@ -122,6 +122,10 @@ class Breed(models.Model):
         max_length=100,
         help_text=_("Name of the breed")
     )
+    bird_category = models.ForeignKey(
+        'BirdCategory', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='breeds', help_text=_("Bird category this breed belongs to")
+    )
     is_active = models.BooleanField(
         default=True,
         help_text=_("Inactive breeds are hidden from selection elsewhere")
@@ -1694,15 +1698,12 @@ class FeedPhaseMaster(models.Model):
     a program for a bird type / breed, valid over an effective window, with a
     set of feed-phase line items (Pre-Starter, Starter, Grower, Finisher…)."""
 
-    BIRD_TYPE_CHOICES = [
-        ("broiler", _("Broiler")),
-        ("layer", _("Layer")),
-        ("breeder", _("Breeder")),
-    ]
     STATUS_CHOICES = [("active", _("Active")), ("inactive", _("Inactive"))]
 
     program = models.CharField(max_length=100, help_text=_("Feeding program name, e.g. Cobb 430 Standard"))
-    bird_type = models.CharField(max_length=15, choices=BIRD_TYPE_CHOICES, default="broiler")
+    bird_category = models.ForeignKey('BirdCategory', on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='feed_phase_masters',
+                                      help_text=_("Bird category this program is for"))
     breed = models.ForeignKey('Breed', on_delete=models.SET_NULL, null=True, blank=True,
                               related_name='feed_phase_masters')
     effective_from = models.DateField(null=True, blank=True)
@@ -1719,7 +1720,8 @@ class FeedPhaseMaster(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.program} ({self.get_bird_type_display()})"
+        cat = self.bird_category.name if self.bird_category_id else "—"
+        return f"{self.program} ({cat})"
 
     @property
     def is_active(self):
@@ -1758,3 +1760,21 @@ class FeedPhaseLine(models.Model):
     @property
     def is_active(self):
         return self.status == "active"
+
+
+class BirdCategory(models.Model):
+    """Bird category master (Broiler > Growing Charges) — e.g. Broiler, Layer,
+    Breeder, Parent Stock, etc. Simple lookup used to classify birds/flocks."""
+    name = models.CharField(max_length=100, unique=True, help_text=_("Category name, e.g. Broiler"))
+    sort_order = models.PositiveIntegerField(default=0, help_text=_("Display order"))
+    is_active = models.BooleanField(default=True, help_text=_("Inactive categories are hidden from selection"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Bird Category")
+        verbose_name_plural = _("Bird Categories")
+        ordering = ['sort_order', 'name']
+
+    def __str__(self):
+        return self.name

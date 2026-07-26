@@ -49,6 +49,7 @@ MODULE_REGISTRY = [
                 "label": "Growing Charges",
                 "tabs": [
                     ("growing_charge", "Growing Charges Master", ("growing_charge_list",)),
+                    ("bird_category", "Bird Category", ("bird_category_list",)),
                     ("breed", "Breed", ("breed_list",)),
                     ("breed_standard", "Breed Standard", ("breed_standard_list",)),
                 ],

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Bird Category{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block content %}
+{% include '_broiler_growing_charge_subnavbar.html' with active_tab='bird_category' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fa-solid fa-crow"></i>Bird Category</div>
+    <div class="page-header-subtitle">Add and manage bird category records</div>
+  </div>
+  <div class="page-header-right">
+    {% if page_perms.add %}<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#catFormModal"><i class="fas fa-plus"></i>Add</button>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i>Bird Category List</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0" id="cat-table">
+        <thead><tr><th>Category</th><th>Status</th><th class="text-center">Action</th></tr></thead>
+        <tbody id="cat-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal fade" id="catFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title"><i class="fas fa-plus me-2"></i>Add Bird Category</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <form id="cat-form">{% csrf_token %}
+        <div class="mb-3">
+          <label for="name" class="form-label">Category<span class="text-danger">*</span></label>
+          <input type="text" id="name" class="form-control" placeholder="Enter category..." maxlength="100" required>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Save</button>
+        </div>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+<!-- Edit Modal Template -->
+<template id="editCatModalTemplate">
+  <div class="modal fade" id="editCatModal-{id}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="fas fa-pen me-2"></i>Edit Bird Category</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="edit-cat-form-{id}">
+        <div class="modal-body">
+          <input type="hidden" name="cat-id" value="{id}">
+          <div class="mb-3"><label class="form-label">Category<span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="name" maxlength="100" required></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i>Update</button>
+        </div>
+      </form>
+    </div></div>
+  </div>
+</template>
+
+<script>
+$(document).ready(function () {
+  let catTable;
+  const csrfToken = "{{ csrf_token }}";
+
+  function initTable() {
+    catTable = $('#cat-table').DataTable({ responsive: true, language: { emptyTable: "No bird categories found" }, order: [[0, 'asc']] });
+  }
+
+  function loadList() {
+    $.getJSON("{% url 'bird_category_list' %}", function (rows) {
+      if (catTable) { catTable.destroy(); }
+      const tbody = $("#cat-table-body").empty();
+      rows.forEach(function (c) {
+        tbody.append(`<tr>
+          <td>${escapeHtml(c.name)}</td>
+          <td>${c.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</td>
+          <td class="text-center"><div class="d-flex gap-1 justify-content-center flex-wrap">
+            {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-cat" data-id="${c.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+            {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-cat" data-id="${c.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+            <button class="btn btn-outline-info btn-sm toggle-active-cat" data-id="${c.id}" title="${c.is_active ? 'Pause' : 'Activate'}"><i class="fas ${c.is_active ? 'fa-pause' : 'fa-play'}"></i></button>
+          </div></td>
+        </tr>`);
+      });
+      initTable();
+    }).fail(() => showToast('danger', 'Failed to load bird categories.'));
+  }
+
+  $("#cat-form").on("submit", function (e) {
+    e.preventDefault();
+    $.ajax({ url: "{% url 'bird_category_create' %}", method: "POST", headers: { "X-CSRFToken": csrfToken },
+      data: { name: $("#name").val() },
+      success: function () { $("#catFormModal").modal("hide"); $("#cat-form")[0].reset(); loadList(); showToast('success', 'Bird category added!'); },
+      error: function (xhr) { showToast('danger', xhr.responseJSON?.error || 'Failed to add.'); } });
+  });
+
+  $(document).on("click", ".edit-cat", function () {
+    const id = $(this).data("id");
+    $.getJSON(`/bird_category/${id}/`, function (c) {
+      $(`#editCatModal-${id}`).remove();
+      $('body').append(document.getElementById('editCatModalTemplate').innerHTML.replace(/{id}/g, id));
+      $(`#editCatModal-${id}`).modal('show');
+      $(`#edit-cat-form-${id} [name="name"]`).val(c.name);
+    });
+  });
+
+  $(document).on("submit", "[id^='edit-cat-form-']", function (e) {
+    e.preventDefault();
+    const id = $(this).find('[name="cat-id"]').val();
+    $.ajax({ url: `/bird_category/${id}/`, type: "PUT",
+      headers: { "X-CSRFToken": csrfToken, "Content-Type": "application/json" },
+      data: JSON.stringify({ name: $(this).find('[name="name"]').val() }),
+      success: function () { $(`#editCatModal-${id}`).modal("hide"); loadList(); showToast('success', 'Bird category updated!'); },
+      error: function (xhr) { showToast('danger', xhr.responseJSON?.error || 'Failed to update.'); } });
+  });
+
+  $(document).on("click", ".delete-cat", function () {
+    const id = $(this).data("id");
+    window.bimsConfirm("Delete this bird category?", { title: "Delete category", confirmText: "Delete" }).then(function (ok) {
+      if (!ok) return;
+      $.ajax({ url: `/bird_category/${id}/delete/`, method: "DELETE", headers: { "X-CSRFToken": csrfToken },
+        success: function () { loadList(); showToast('success', 'Bird category deleted!'); },
+        error: function (xhr) { showToast('danger', xhr.responseJSON?.error || 'Failed to delete.'); } });
+    });
+  });
+
+  $(document).on("click", ".toggle-active-cat", function () {
+    $.ajax({ url: `/bird_category/${$(this).data("id")}/toggle-active/`, method: "POST", headers: { "X-CSRFToken": csrfToken },
+      success: loadList, error: function (xhr) { showToast('danger', xhr.responseJSON?.error || 'Failed.'); } });
+  });
+
+  loadList();
+});
+</script>
+{% endblock %}
