@@ -128,7 +128,7 @@ function initialsOf(user: AuthUser | null): string {
 
 /**
  * Branded top app bar for Home. Bleeds into the status-bar safe area with the
- * brand indigo, then rounds off into the light page below — same onDark/white
+ * brand charcoal, then rounds off into the light page below — same onDark/white
  * language as the per-module stack headers, so the app reads as one system.
  */
 function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () => void }) {

@@ -4,8 +4,6 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { biometricsAvailable } from "@/components/LockGate";
 import { Button, Card, DetailRow, Divider, Screen } from "@/components/ui";
-import { API_BASE_URL } from "@/config";
-import { sendTestPush } from "@/push";
 import { colors, radius, spacing, type } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -28,19 +26,6 @@ export function ProfileScreen() {
     await setAppLock(v);
   };
 
-  const onTestPush = async () => {
-    try {
-      const res = await sendTestPush();
-      Alert.alert(
-        res.sent > 0 ? "Sent ✓" : "No devices",
-        res.sent > 0
-          ? `Push sent to ${res.sent} device(s).`
-          : res.error || "This device isn't registered for push yet (needs the installed app, not Expo Go)."
-      );
-    } catch (e) {
-      Alert.alert("Failed", (e as Error)?.message ?? "Could not send test push.");
-    }
-  };
   const initials = (user?.full_name || user?.username || "?")
     .split(" ")
     .map((p) => p[0])
@@ -77,15 +62,7 @@ export function ProfileScreen() {
           <Switch value={appLock} onValueChange={onToggleLock} trackColor={{ true: colors.primary }} />
         </Card>
 
-        <Card>
-          <Text style={styles.apiLabel}>Connected to</Text>
-          <Text style={styles.api} selectable>
-            {API_BASE_URL}
-          </Text>
-        </Card>
-
-        <Button title="Change password" variant="ghost" onPress={() => setPwOpen(true)} />
-        <Button title="Send test notification" variant="ghost" onPress={onTestPush} />
+        <Button title="Change password" onPress={() => setPwOpen(true)} />
         <Button title="Log out" variant="danger" onPress={logout} />
         <Text style={styles.version}>Hitech BIMS · v0.1.0</Text>
       </ScrollView>
@@ -113,7 +90,5 @@ const styles = StyleSheet.create({
   securityRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
   secTitle: { ...type.title, color: colors.text },
   secSub: { ...type.caption, color: colors.textMuted, marginTop: 2 },
-  apiLabel: { ...type.label, color: colors.textFaint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
-  api: { ...type.mono, color: colors.text },
   version: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
 });
