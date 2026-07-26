@@ -6,7 +6,7 @@ import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { biometricsAvailable } from "@/components/LockGate";
 import { Card, IconCircle, Screen, withAlpha } from "@/components/ui";
 import { AuthUser } from "@/api/types";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { colors, radius, spacing, type } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
 
@@ -206,52 +206,46 @@ export function ProfileScreen() {
   );
 }
 
-const ON_DARK_SOFT = withAlpha(colors.onDark, 0.75);
-
 const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxl },
 
-  // Hero
+  // Header — plain, on the page background (no dark card)
   hero: {
-    backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
-    ...shadow(2),
+    paddingBottom: spacing.md,
   },
   avatarRing: {
     padding: 3,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: withAlpha(colors.onDark, 0.3),
-    backgroundColor: withAlpha(colors.onDark, 0.08),
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   avatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: withAlpha(colors.onDark, 0.18),
+    backgroundColor: withAlpha(colors.primary, 0.12),
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { ...type.h3, fontSize: 20, color: colors.onDark },
+  avatarText: { ...type.h3, fontSize: 20, color: colors.primary },
   heroInfo: { flex: 1, gap: 2 },
-  name: { ...type.h2, color: colors.onDark },
-  email: { ...type.caption, color: ON_DARK_SOFT },
+  name: { ...type.h2, color: colors.text },
+  email: { ...type.caption, color: colors.textMuted },
   pillRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
   heroPill: {
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radius.pill,
-    backgroundColor: withAlpha(colors.onDark, 0.16),
+    backgroundColor: colors.surfaceAlt,
   },
-  heroPillText: { ...type.caption, color: colors.onDark, fontWeight: "700" },
+  heroPillText: { ...type.caption, color: colors.textMuted, fontWeight: "700" },
 
-  // Body — cards lift up over the hero's rounded base
+  // Body
   body: { paddingHorizontal: spacing.md, gap: spacing.xs },
   groupLabel: {
     ...type.label,
