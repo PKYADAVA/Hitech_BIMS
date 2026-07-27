@@ -6,6 +6,87 @@
   {% include 'main_top_navbar.html' with active_tab='broiler' %}
 {% endblock %}
 
+{% block css %}
+<style>
+  /* ===== Add Day Record (Single Batch) — visual polish (columns unchanged) ===== */
+  .dr-page .card { border:1px solid #e8ecf1; border-radius:14px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05); }
+  .dr-page .card-header { background:#fff; border-bottom:1px solid #eef1f5;
+    border-radius:14px 14px 0 0; padding:.85rem 1.1rem; color:#0f172a; font-size:.95rem; }
+  .dr-page .card-header .fa-list-ol { color:#2563eb; }
+
+  .dr-topbar { display:flex; align-items:flex-end; gap:1rem; flex-wrap:wrap; }
+  .dr-topbar .form-label { font-weight:600; font-size:.8rem; color:#475569; margin-bottom:.3rem; }
+
+  .dr-table { margin-bottom:0; font-size:.85rem; }
+  .dr-table thead th {
+    background:#f8fafc; color:#475569; font-size:.7rem; font-weight:700;
+    letter-spacing:.03em; text-transform:uppercase; vertical-align:middle;
+    white-space:nowrap; padding:.6rem .55rem; border-bottom:2px solid #e2e8f0 !important; }
+  .dr-table tbody td { vertical-align:top; padding:.5rem .5rem; border-color:#eef1f5; }
+  .dr-table tbody tr:not(.feed-note-row):hover > td { background:#f8fbff; }
+
+  .dr-table td.fg1 { background:#f6fbff; }
+  .dr-table td.fg2 { background:#fbf8ff; }
+  .dr-table thead th.fg1 { background:#eaf4ff; }
+  .dr-table thead th.fg2 { background:#f2ecff; }
+
+  .dr-table .form-control, .dr-table .form-select {
+    font-size:.83rem; padding:.3rem .5rem; border-radius:8px; border-color:#dde3ea; min-height:34px; }
+  .dr-table .form-control:focus, .dr-table .form-select:focus {
+    border-color:#2563eb; box-shadow:0 0 0 .18rem rgba(37,99,235,.12); }
+  .dr-table .form-control[readonly] {
+    background:#f1f5f9 !important; color:#334155; font-weight:600; text-align:center; border-color:#e6ebf1; }
+  .dr-table .mortality, .dr-table .culls, .dr-table .kgs-1, .dr-table .kgs-2, .dr-table .avg-wt { text-align:right; }
+
+  /* Live field-level alerts while entering data */
+  .dr-table .form-control.field-ok, .dr-table .form-select.field-ok { border-color:#22c55e !important; }
+  .dr-table .form-control.field-warn, .dr-table .form-select.field-warn { border-color:#f59e0b !important; background:#fffdf3; }
+  .dr-table .form-control.field-bad, .dr-table .form-select.field-bad {
+    border-color:#ef4444 !important; background:#fff6f6;
+    box-shadow:0 0 0 .14rem rgba(239,68,68,.13); animation:dr-flash .5s ease; }
+  .dr-table .form-control.field-bad:focus, .dr-table .form-select.field-bad:focus {
+    box-shadow:0 0 0 .22rem rgba(239,68,68,.22); }
+  @keyframes dr-flash { 0%{ box-shadow:0 0 0 .32rem rgba(239,68,68,.35); } 100%{ box-shadow:0 0 0 .14rem rgba(239,68,68,.13); } }
+
+  .dr-table .phase-hint .badge, .dr-table .phase-hint-2 .badge,
+  .dr-table .feed-warn .badge, .dr-table .wt-hint .badge {
+    font-weight:600; font-size:.68rem; border-radius:999px; padding:.28em .6em; }
+
+  /* Feed vs standard gauge (under the Kgs cell) */
+  .feed-gauge { display:flex; align-items:center; gap:.35rem; margin-top:2px; }
+  .feed-gauge-track { flex:1; min-width:44px; height:6px; border-radius:999px; background:#e9edf2; overflow:hidden; }
+  .feed-gauge-fill { height:100%; border-radius:999px; transition:width .2s ease; }
+  .feed-gauge-pct { font-size:.68rem; font-weight:700; white-space:nowrap; }
+  .feed-gauge-sub { font-size:.66rem; color:#64748b; margin-top:1px; }
+
+  .dr-table tr.feed-note-row > td {
+    border-top:0; padding:.55rem 1rem .6rem 1rem; background:#f8fafc;
+    border-left:4px solid #cbd5e1; }
+  .dr-table tr.feed-note-ok  > td { background:#f3fbf6; border-left-color:#22c55e; }
+  .dr-table tr.feed-note-near > td { background:#fffaf0; border-left-color:#f59e0b; }
+  .dr-table tr.feed-note-warn > td { background:#fff6f6; border-left-color:#ef4444; }
+  .dr-table tr.feed-note-row > td { color:#334155; font-size:.8rem; line-height:1.5; }
+  .dr-table tr.feed-note-row .text-muted { color:#475569 !important; }
+  .dr-table tr.feed-note-row .text-muted strong { color:#1e293b; }
+  .dr-status-pill { float:right; font-weight:700; font-size:.7rem; letter-spacing:.02em;
+    padding:.28em .75em; border-radius:999px; white-space:nowrap; }
+  .feed-note-ok   .dr-status-pill { background:#dcfce7; color:#15803d; }
+  .feed-note-near .dr-status-pill { background:#fef3c7; color:#b45309; }
+  .feed-note-warn .dr-status-pill { background:#fee2e2; color:#b91c1c; }
+
+  .dr-table .add-row-inline, .dr-table .remove { border-radius:8px; }
+
+  .dr-summary { display:flex; flex-wrap:wrap; gap:1.6rem; align-items:center;
+    padding:.7rem 1.1rem; border-top:1px solid #eef1f5; background:#fafbfc;
+    border-radius:0 0 14px 14px; font-size:.82rem; }
+  .dr-summary .lbl { color:#475569; margin-right:.4rem; }
+  .dr-summary .val { font-weight:700; color:#0f172a; }
+
+  .dr-actions .btn { min-width:130px; border-radius:10px; font-weight:600; }
+</style>
+{% endblock %}
+
 {% block content %}
 {% include '_broiler_transaction_subnavbar.html' with active_tab='daily_entry_single' %}
 
@@ -22,26 +103,26 @@
 </div>
 {% endif %}
 
-<form id="single-batch-form">
+<form id="single-batch-form" class="dr-page">
   <div class="card mb-3">
     <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-3">
-          <label class="form-label">Supervisor <span class="text-danger">*</span></label>
+      <div class="dr-topbar">
+        <div style="min-width:260px">
+          <label class="form-label"><i class="fas fa-user-tie me-1 text-primary"></i>Supervisor <span class="text-danger">*</span></label>
           <select class="form-select" id="supervisor" required>
             <option value="">select</option>
             {% for s in supervisors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Farm <span class="text-danger">*</span></label>
+        <div style="min-width:260px">
+          <label class="form-label"><i class="fas fa-warehouse me-1 text-primary"></i>Farm <span class="text-danger">*</span></label>
           <select class="form-select" id="farm" required>
             <option value="">select</option>
             {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Batch</label>
+        <div style="min-width:220px">
+          <label class="form-label"><i class="fas fa-layer-group me-1 text-primary"></i>Batch</label>
           <input type="text" class="form-control bg-light" id="batch" readonly>
         </div>
       </div>
@@ -54,45 +135,40 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered mb-0" id="row-table">
-          <thead class="table-light">
+        <table class="table table-bordered dr-table" id="row-table">
+          <thead>
             <tr>
               <th style="min-width:80px">Age</th>
               <th style="min-width:130px">Date</th>
               <th style="min-width:100px">Mortality</th>
               <th style="min-width:90px">Culls</th>
-              <th style="min-width:160px">Feed 1</th>
-              <th style="min-width:100px">Stock-1</th>
-              <th style="min-width:90px">Kgs</th>
-              <th style="min-width:160px">Feed 2</th>
-              <th style="min-width:100px">Stock-2</th>
-              <th style="min-width:90px">Kgs</th>
+              <th class="fg1" style="min-width:160px">Feed 1</th>
+              <th class="fg1" style="min-width:100px">Stock-1</th>
+              <th class="fg1" style="min-width:90px">Kgs</th>
+              <th class="fg2" style="min-width:160px">Feed 2</th>
+              <th class="fg2" style="min-width:100px">Stock-2</th>
+              <th class="fg2" style="min-width:90px">Kgs</th>
               <th style="min-width:100px">Avg. Wt.</th>
               <th style="min-width:160px">Remarks</th>
               <th style="min-width:90px"></th>
             </tr>
           </thead>
           <tbody></tbody>
-          <tfoot>
-            <tr>
-              <th colspan="2" class="text-end">Total</th>
-              <th id="total-mortality">0</th>
-              <th id="total-culls">0</th>
-              <th></th><th></th>
-              <th id="total-kgs1">0.00</th>
-              <th></th><th></th>
-              <th id="total-kgs2">0.00</th>
-              <th colspan="3"></th>
-            </tr>
-          </tfoot>
         </table>
+      </div>
+      <div class="dr-summary" id="dr-summary">
+        <span><span class="lbl">Rows</span><span class="val" id="sum-rows">0</span></span>
+        <span><span class="lbl">Total Feed</span><span class="val"><span id="sum-feed">0.00</span> kg</span></span>
+        <span><span class="lbl">Mortality</span><span class="val" id="sum-mort">0</span></span>
+        <span><span class="lbl">Culls</span><span class="val" id="sum-culls">0</span></span>
+        <span><span class="lbl">Latest Wt</span><span class="val"><span id="sum-wt">0</span> g</span></span>
       </div>
     </div>
   </div>
 
-  <div class="d-flex gap-2 mb-4 justify-content-center">
-    <button class="btn btn-primary" type="submit">Submit</button>
-    <a href="{% url 'daily_entry_single_list' %}" class="btn btn-danger">Cancel</a>
+  <div class="dr-actions d-flex gap-2 mb-4 justify-content-center">
+    <button class="btn btn-primary" type="submit"><i class="fas fa-check me-1"></i>Submit</button>
+    <a href="{% url 'daily_entry_single_list' %}" class="btn btn-outline-danger"><i class="fas fa-xmark me-1"></i>Cancel</a>
   </div>
 </form>
 {% endblock %}
@@ -100,24 +176,34 @@
 {% block js %}
 <script>
 const feedOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const allFarmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
+// Farms assigned to each supervisor (BroilerFarm.supervisor) — picking a
+// supervisor narrows the Farm dropdown to just their farms.
+const FARMS_BY_SUPERVISOR = {};
+{% for f in farms %}(FARMS_BY_SUPERVISOR["{{ f.supervisor_id }}"] = FARMS_BY_SUPERVISOR["{{ f.supervisor_id }}"] || []).push({ id: {{ f.id }}, name: "{{ f.farm_name|escapejs }}" });
+{% endfor %}
+function farmOptionsFor(supId) {
+  const farms = FARMS_BY_SUPERVISOR[String(supId)] || [];
+  return '<option value="">select</option>' +
+    farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+}
 const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 let batchStartDate = null;
+const FEED_TOLERANCE = 1.1;   // allow 10% over the breed-standard daily feed
+const FEED_LOW = 0.5;         // below 50% of standard = under-feeding
 
-// Adds one calendar day to a "YYYY-MM-DD" string, staying in local-date
-// arithmetic throughout — toISOString() converts to UTC first, which in any
-// timezone ahead of UTC (e.g. IST, +5:30) rolls back across midnight and
-// silently returns the SAME day, so every added row ends up with an
-// identical date/age instead of advancing.
+// Adds one calendar day to a "YYYY-MM-DD" string in local-date arithmetic
+// (toISOString() would convert to UTC and, in a timezone ahead of UTC, roll
+// back across midnight and return the SAME day).
 function nextDateString(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + 1);
-  const yyyy = dt.getFullYear();
   const mm = String(dt.getMonth() + 1).padStart(2, '0');
   const dd = String(dt.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  return `${dt.getFullYear()}-${mm}-${dd}`;
 }
 
 function row(dateVal) {
@@ -127,13 +213,13 @@ function row(dateVal) {
     <td><input class="form-control date" type="date" value="${dateVal || TODAY}"></td>
     <td><input class="form-control mortality" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control culls" type="number" min="0" step="1" value="0"></td>
-    <td><select class="form-select feed-1">${feedOptions}</select></td>
-    <td><input class="form-control bg-light stock-1" readonly placeholder="auto"></td>
-    <td><input class="form-control kgs-1" type="number" min="0" step=".01" value="0"></td>
-    <td><select class="form-select feed-2">${feedOptions}</select></td>
-    <td><input class="form-control bg-light stock-2" readonly placeholder="auto"></td>
-    <td><input class="form-control kgs-2" type="number" min="0" step=".01" value="0"></td>
-    <td><input class="form-control avg-wt" type="number" min="0" step=".01" value="0"></td>
+    <td class="fg1"><select class="form-select feed-1">${feedOptions}</select><div class="phase-hint small mt-1"></div></td>
+    <td class="fg1"><input class="form-control bg-light stock-1" readonly placeholder="auto"></td>
+    <td class="fg1"><input class="form-control kgs-1" type="number" min="0" step=".01" value="0"><div class="feed-warn small mt-1"></div></td>
+    <td class="fg2"><select class="form-select feed-2">${feedOptions}</select><div class="phase-hint-2 small mt-1"></div></td>
+    <td class="fg2"><input class="form-control bg-light stock-2" readonly placeholder="auto"></td>
+    <td class="fg2"><input class="form-control kgs-2" type="number" min="0" step=".01" value="0"></td>
+    <td><input class="form-control avg-wt" type="number" min="0" step=".01" value="0"><div class="wt-hint small mt-1"></div></td>
     <td><input class="form-control remarks"></td>
     <td class="text-nowrap">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
@@ -142,46 +228,52 @@ function row(dateVal) {
   get('row-table').tBodies[0].append(tr);
   recomputeAge(tr);
   refreshRowAddButtons();
-  totals();
+  refreshRowData(tr);
   return tr;
 }
 
 function recomputeAge(tr) {
   const dateVal = tr.querySelector('.date').value;
   if (!batchStartDate || !dateVal) { tr.querySelector('.age').value = ''; return; }
-  // Placement day is Age 0; the first entry day (the day after placement) is Age 1.
+  // Placement day is Age 0; the day after placement is Age 1.
   const days = Math.max(Math.round((new Date(dateVal) - new Date(batchStartDate)) / 86400000), 0);
   tr.querySelector('.age').value = days;
 }
 
-// Only the last row offers "+" (add another row); earlier rows just delete.
-// The sole remaining row can't be deleted — no "+" would be left to add one back.
+// Only the last row offers "+"; earlier rows just delete. The sole row can't
+// be deleted (no "+" would remain to add one back).
 function refreshRowAddButtons() {
-  const rows = document.querySelectorAll('#row-table tbody tr');
+  const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
   rows.forEach((tr, i) => {
     tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
     tr.querySelector('.remove').disabled = rows.length === 1;
   });
+  updateSummary();
 }
 
-// Live running-stock preview: for each feed item that appears anywhere in
-// the grid, fetch its real opening balance once (as of the earliest row
-// that uses it), then walk the grid top-to-bottom subtracting each row's
-// own Kgs — so row 2 shows the balance AFTER row 1's consumption, not the
-// same opening figure repeated down the column. Rows are expected in
-// increasing date order (the "+" flow enforces that); the backend recomputes
-// the authoritative value at save time regardless.
+// Age-specific batch data (phase / standards / consumption / live birds) for a
+// row's date — same farm+batch for every row (from the header).
+function refreshRowData(tr) {
+  const farmId = value('farm');
+  const dateVal = tr.querySelector('.date').value;
+  if (!farmId || !dateVal) return;
+  fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}&date=${dateVal}`)
+    .then(r => r.json()).then(data => applyFeedPhase(tr, data));
+}
+
+// Live running-stock preview: fetch each feed item's real opening balance once
+// (as of the earliest row that uses it), then walk the grid subtracting each
+// row's Kgs so later rows show the balance after earlier consumption.
 let stockPreviewToken = 0;
 async function recomputeStockPreview() {
   const farmId = value('farm');
   const myToken = ++stockPreviewToken;
-  const rows = [...document.querySelectorAll('#row-table tbody tr')];
+  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
   if (!farmId) {
     rows.forEach(tr => { tr.querySelector('.stock-1').value = ''; tr.querySelector('.stock-2').value = ''; });
     return;
   }
-  const openingCache = {};
-  const running = {};
+  const openingCache = {}, running = {};
   for (const tr of rows) {
     const dateVal = tr.querySelector('.date').value;
     for (const [selCls, stockCls, kgsCls] of [['.feed-1', '.stock-1', '.kgs-1'], ['.feed-2', '.stock-2', '.kgs-2']]) {
@@ -192,7 +284,7 @@ async function recomputeStockPreview() {
         if (!(itemId in openingCache)) {
           const resp = await fetch(`{% url 'daily_entry_stock_lookup' %}?farm=${farmId}&item=${itemId}&date=${dateVal}`);
           const data = await resp.json();
-          if (myToken !== stockPreviewToken) return; // a newer recompute superseded this one
+          if (myToken !== stockPreviewToken) return;
           openingCache[itemId] = Number(data.stock) || 0;
         }
         running[itemId] = openingCache[itemId];
@@ -204,58 +296,442 @@ async function recomputeStockPreview() {
   }
 }
 
-function totals() {
-  let mortality = 0, culls = 0, kgs1 = 0, kgs2 = 0;
-  document.querySelectorAll('#row-table tbody tr').forEach(tr => {
-    mortality += Number(tr.querySelector('.mortality').value) || 0;
-    culls += Number(tr.querySelector('.culls').value) || 0;
-    kgs1 += Number(tr.querySelector('.kgs-1').value) || 0;
-    kgs2 += Number(tr.querySelector('.kgs-2').value) || 0;
-  });
-  get('total-mortality').textContent = mortality;
-  get('total-culls').textContent = culls;
-  get('total-kgs1').textContent = kgs1.toFixed(2);
-  get('total-kgs2').textContent = kgs2.toFixed(2);
+// ===== Feed Phase Master + Breed Standard feedback =====
+function applyFeedPhase(tr, data) {
+  const cur = data.feed_phase || null;
+  tr.dataset.ageDays   = (data.age_days ?? '');
+  tr.dataset.stdFeed   = data.std_feed_kg || '';
+  tr.dataset.stdWeight = data.std_weight_g || '';
+  tr.dataset.stdNote   = data.std_note || '';
+  tr.dataset.bsCurve   = JSON.stringify(data.bs_curve || []);
+  tr.dataset.cumBefore = (data.cum_feed_before_kg ?? '');
+  tr.dataset.consumedByItem = JSON.stringify(data.consumed_by_item || []);
+  tr.dataset.consumedTotal = (data.consumed_total_kg ?? '');
+  tr.dataset.perBirdActual = (data.consumed_per_bird_actual_g ?? '');
+  tr.dataset.liveBirds = data.live_birds || 0;
+  tr.dataset.expectName = (cur && cur.phase_name) || '';
+  tr.dataset.nextFeed   = (cur && cur.next_feed_item) || '';
+  tr.dataset.nextName   = (cur && cur.next_name) || '';
+  tr.dataset.phaseByItem = JSON.stringify((cur && cur.phase_by_item) || {});
+  updateFeedFeedback();
 }
+
+const badge = (cls, txt) => `<span class="badge ${cls}">${txt}</span>`;
+const OK = 'bg-success-subtle text-success-emphasis border border-success-subtle';
+const BAD = 'bg-danger';
+const WARN = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+const INFO = 'bg-secondary-subtle text-secondary-emphasis border';
+
+function setField(el, state) {
+  if (!el) return;
+  el.classList.remove('field-ok', 'field-warn', 'field-bad');
+  if (state) el.classList.add('field-' + state);
+}
+
+function phaseOf(tr, itemId) {
+  return (JSON.parse(tr.dataset.phaseByItem || '{}'))[itemId] || null;
+}
+function ageInRanges(age, ranges) {
+  return (ranges || []).some(([f, t]) => age >= f && (t === null || age <= t));
+}
+function feedName(tr, cls) {
+  const sel = tr.querySelector(cls);
+  return sel.value ? sel.options[sel.selectedIndex].text.replace(/^[A-Z0-9-]+\s-\s/, '') : '';
+}
+
+function updateFeedFeedback() {
+  document.querySelectorAll('#row-table tbody tr.feed-note-row').forEach(r => r.remove());
+  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  rows.forEach(tr => {
+    renderInlineHints(tr);
+    const n = rowNotification(tr);
+    if (!n) return;
+    const note = document.createElement('tr');
+    const statusClass = n.status === 'warn' ? 'feed-note-warn' : n.status === 'near' ? 'feed-note-near' : 'feed-note-ok';
+    const statusLabel = n.status === 'warn' ? 'Needs Review' : n.status === 'near' ? 'Near Limit' : 'Within Standard';
+    note.className = 'feed-note-row ' + statusClass;
+    note.innerHTML = `<td colspan="13" class="small">
+        <span class="dr-status-pill">${statusLabel}</span>
+        <i class="fas fa-wheat-awn me-1 text-muted"></i>${n.head}
+        <span class="ms-2">${n.parts.join(' &nbsp;|&nbsp; ')}</span>
+        <span class="ms-2">${n.totalLine}</span>
+        ${n.weightLine ? `<span class="ms-2">${n.weightLine}</span>` : ''}
+        ${n.crossLine ? `<div class="mt-1">${n.crossLine}</div>` : ''}
+        ${n.consumedLine ? `<div>${n.consumedLine}</div>` : ''}
+        ${n.actualLine ? `<div>${n.actualLine}</div>` : ''}
+        ${n.capLine || ''}
+      </td>`;
+    tr.after(note);
+  });
+  updateSummary();
+}
+
+function updateSummary() {
+  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  let feed = 0, mort = 0, culls = 0, latestWt = 0, latestDate = '';
+  rows.forEach(tr => {
+    feed += (parseFloat(tr.querySelector('.kgs-1').value || '0')) + (parseFloat(tr.querySelector('.kgs-2').value || '0'));
+    mort += parseInt(tr.querySelector('.mortality').value || '0', 10) || 0;
+    culls += parseInt(tr.querySelector('.culls').value || '0', 10) || 0;
+    // Single batch = one flock over consecutive days, so weight grows daily —
+    // the meaningful figure is the LATEST day's weight, not an average.
+    const w = parseFloat(tr.querySelector('.avg-wt').value || '0') || 0;
+    const d = tr.querySelector('.date').value || '';
+    if (w > 0 && d >= latestDate) { latestDate = d; latestWt = w; }
+  });
+  get('sum-rows').textContent = rows.length;
+  get('sum-feed').textContent = feed.toFixed(2);
+  get('sum-mort').textContent = mort;
+  get('sum-culls').textContent = culls;
+  get('sum-wt').textContent = latestWt ? latestWt.toFixed(0) : '0';
+}
+
+function interpCurve(curve, key, target, out) {
+  if (!curve.length || target == null) return null;
+  if (target <= curve[0][key]) return curve[0][out];
+  for (let i = 1; i < curve.length; i++) {
+    if (target <= curve[i][key]) {
+      const a = curve[i - 1], b = curve[i];
+      const span = b[key] - a[key];
+      const frac = span ? (target - a[key]) / span : 0;
+      return a[out] + frac * (b[out] - a[out]);
+    }
+  }
+  return curve[curve.length - 1][out];
+}
+
+function totalFeed(tr) {
+  return (parseFloat(tr.querySelector('.kgs-1').value || '0')) + (parseFloat(tr.querySelector('.kgs-2').value || '0'));
+}
+
+// Feed-vs-standard gauge: mini progress bar + % of the breed-standard daily
+// feed. Green < 100%, amber 100–110%, red > 110%.
+function feedGauge(total, expected) {
+  const pct = expected ? total / expected * 100 : 0;
+  let color = '#22c55e';
+  if (pct > 110) color = '#ef4444';
+  else if (pct >= 100) color = '#f59e0b';
+  const w = Math.max(3, Math.min(pct, 100));
+  return `<div class="feed-gauge">
+      <div class="feed-gauge-track"><div class="feed-gauge-fill" style="width:${w}%;background:${color}"></div></div>
+      <span class="feed-gauge-pct" style="color:${color}">${pct.toFixed(0)}%</span>
+    </div>
+    <div class="feed-gauge-sub">${total.toFixed(1)} / ${expected.toFixed(1)} kg</div>`;
+}
+
+// Cumulative feed of the item toward its Max Feed Qty cap (kg/bird): green while
+// building, amber from 90%, red at/over the cap (time to change phase).
+function feedCapGauge(cum, cap) {
+  const pct = cap ? cum / cap * 100 : 0;
+  let color = '#22c55e';
+  if (pct >= 100) color = '#ef4444';
+  else if (pct >= 90) color = '#f59e0b';
+  const w = Math.max(3, Math.min(pct, 100));
+  return `<div class="feed-gauge">
+      <div class="feed-gauge-track"><div class="feed-gauge-fill" style="width:${w}%;background:${color}"></div></div>
+      <span class="feed-gauge-pct" style="color:${color}">${pct.toFixed(0)}%</span>
+    </div>
+    <div class="feed-gauge-sub">${cum.toFixed(3)} / ${cap.toFixed(3)} kg/bird cum.</div>`;
+}
+
+function cumCapProgress(tr) {
+  for (const cls of ['.feed-1', '.feed-2']) {
+    const sel = tr.querySelector(cls);
+    if (!sel.value) continue;
+    const ph = phaseOf(tr, sel.value);
+    if (ph && Number(ph.max) > 0) {
+      const cum = cumPerBirdForItem(tr, ph.name);
+      if (cum != null) return { name: ph.name, cum, cap: Number(ph.max) };
+    }
+  }
+  return null;
+}
+
+// The cumulative-feed-vs-cap bar for the Feed Check notification strip.
+function capProgressLine(tr) {
+  const cp = cumCapProgress(tr);
+  if (!cp) return '';
+  const pct = cp.cap ? cp.cum / cp.cap * 100 : 0;
+  const note = pct >= 100
+    ? `<span class="text-danger fw-semibold">cap reached — switch${tr.dataset.nextName ? ' to ' + escapeHtml(tr.dataset.nextName) : ''}</span>`
+    : pct >= 90 ? `<span class="text-warning-emphasis">nearing changeover</span>` : '';
+  return `<div class="cap-row mt-1" style="max-width:440px">
+      <span class="text-muted d-block mb-1">${escapeHtml(cp.name)} — cumulative feed vs cap${note ? ' · ' + note : ''}</span>
+      ${feedCapGauge(cp.cum, cp.cap)}
+    </div>`;
+}
+
+// Feed on EARLIER rows in this grid (all the same batch here) — lets a later
+// day count the feed just typed for an earlier day on top of saved history.
+function priorListFeed(tr) {
+  let total = 0; const byItem = {};
+  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  for (const r of rows) {
+    if (r === tr) break;
+    [['.feed-1', '.kgs-1'], ['.feed-2', '.kgs-2']].forEach(([fc, kc]) => {
+      const kg = parseFloat(r.querySelector(kc).value || '0') || 0;
+      if (kg <= 0) return;
+      total += kg;
+      const nm = feedName(r, fc) || 'Feed';
+      byItem[nm] = (byItem[nm] || 0) + kg;
+    });
+  }
+  return { total, byItem };
+}
+
+// Cumulative kg/bird of a feed item: saved history + earlier rows + this row's
+// slots that carry the item, divided by current live birds. Drives the
+// Max-Feed-Qty (e.g. 0.400 kg/bird) phase-changeover trigger.
+function cumPerBirdForItem(tr, itemName) {
+  const birds = parseInt(tr.dataset.liveBirds || '0', 10);
+  if (!birds || !itemName) return null;
+  let kg = 0;
+  JSON.parse(tr.dataset.consumedByItem || '[]').forEach(it => { if (it.name === itemName) kg += Number(it.kg); });
+  const prior = priorListFeed(tr);
+  if (prior.byItem[itemName]) kg += prior.byItem[itemName];
+  [['.feed-1', '.kgs-1'], ['.feed-2', '.kgs-2']].forEach(([fc, kc]) => {
+    if (feedName(tr, fc) === itemName) kg += parseFloat(tr.querySelector(kc).value || '0') || 0;
+  });
+  return kg / birds;
+}
+
+function renderInlineHints(tr) {
+  const age = parseInt(tr.dataset.ageDays || '-1', 10);
+  const std = parseFloat(tr.dataset.stdFeed || '');
+  const birds = parseInt(tr.dataset.liveBirds || '0', 10);
+  slotHint(tr, '.feed-1', '.phase-hint', age);
+  slotHint(tr, '.feed-2', '.phase-hint-2', age);
+
+  const warn = tr.querySelector('.feed-warn');
+  const k1 = tr.querySelector('.kgs-1'), k2 = tr.querySelector('.kgs-2');
+  if (!std || !birds) {
+    warn.innerHTML = tr.dataset.stdNote ? badge(INFO, tr.dataset.stdNote) : '';
+    setField(k1, null); setField(k2, null);
+  } else {
+    const expected = std * birds, total = totalFeed(tr);
+    let fstate = null;
+    if (!total) { warn.innerHTML = badge(INFO, `Std ~${expected.toFixed(1)} kg/day`); }
+    else {
+      warn.innerHTML = feedGauge(total, expected);      // bar + % of standard
+      if (total > expected * FEED_TOLERANCE) fstate = 'bad';
+      else if (total < expected * FEED_LOW) fstate = 'bad';
+      else if (total > expected) fstate = 'warn';
+      else fstate = 'ok';
+    }
+    setField(k1, Number(k1.value) > 0 ? fstate : null);
+    setField(k2, Number(k2.value) > 0 ? fstate : null);
+  }
+
+  const wh = tr.querySelector('.wt-hint');
+  const aw = tr.querySelector('.avg-wt');
+  const stdW = parseFloat(tr.dataset.stdWeight || '');
+  const actW = parseFloat(aw.value || '0');
+  if (!stdW) { wh.innerHTML = ''; setField(aw, null); }
+  else if (!actW) { wh.innerHTML = badge(INFO, `Std ${stdW.toFixed(0)} g`); setField(aw, null); }
+  else {
+    const diff = (actW - stdW) / stdW * 100;
+    if (Math.abs(diff) <= 10) { wh.innerHTML = badge(OK, `✓ ${actW.toFixed(0)}/${stdW.toFixed(0)} g`); setField(aw, 'ok'); }
+    else { wh.innerHTML = badge(BAD, `⚠ ${diff > 0 ? '+' : ''}${diff.toFixed(0)}% vs std ${stdW.toFixed(0)} g`); setField(aw, 'bad'); }
+  }
+}
+
+function slotHint(tr, feedCls, hintCls, age) {
+  const hint = tr.querySelector(hintCls);
+  const sel = tr.querySelector(feedCls);
+  const val = sel.value;
+  if (!val) { hint.innerHTML = ''; setField(sel, null); return; }
+  const ph = phaseOf(tr, val);
+  if (!ph) { hint.innerHTML = badge(INFO, 'Not in program'); setField(sel, null); return; }
+  if (!ageInRanges(age, ph.ranges)) { hint.innerHTML = badge(BAD, `⚠ not for age ${age}`); setField(sel, 'bad'); return; }
+  // Feed-quantity changeover: Max Feed Qty (kg/bird) cap on this phase.
+  const cap = Number(ph.max) || 0;
+  const cum = cap ? cumPerBirdForItem(tr, ph.name) : null;
+  if (cap && cum != null && cum >= cap) {
+    const nx = tr.dataset.nextName ? ` — switch to ${escapeHtml(tr.dataset.nextName)}` : '';
+    hint.innerHTML = badge(WARN, `⚠ ${cum.toFixed(3)}/${cap.toFixed(3)} kg/bird${nx}`);
+    setField(sel, 'warn'); return;
+  }
+  if (cap && cum != null && cum >= cap * 0.9) {
+    hint.innerHTML = badge(INFO, `${escapeHtml(ph.name)} ${cum.toFixed(3)}/${cap.toFixed(3)} kg/bird`);
+    setField(sel, null); return;
+  }
+  hint.innerHTML = badge(OK, `✓ ${escapeHtml(ph.name)}`);
+  setField(sel, 'ok');
+}
+
+function rowNotification(tr) {
+  if (!tr.dataset.stdFeed && !tr.dataset.expectName && !tr.dataset.stdWeight && !tr.dataset.stdNote) return null;
+  if (!value('farm')) return null;
+  const age = parseInt(tr.dataset.ageDays || '-1', 10);
+  const std = parseFloat(tr.dataset.stdFeed || '');
+  const birds = parseInt(tr.dataset.liveBirds || '0', 10);
+  const expectName = tr.dataset.expectName || '';
+  const issues = [], parts = [];
+  let capReached = false;
+
+  [['.feed-1', 'Feed 1'], ['.feed-2', 'Feed 2']].forEach(([cls, label]) => {
+    const val = tr.querySelector(cls).value;
+    if (!val) return;
+    const ph = phaseOf(tr, val);
+    const nm = escapeHtml(feedName(tr, cls));
+    if (!ph) { parts.push(`${label}: ${nm} <span class="text-muted">(not in program)</span>`); return; }
+    if (!ageInRanges(age, ph.ranges)) {
+      parts.push(`${label}: <span class="text-danger fw-semibold">⚠ ${nm}</span>`);
+      issues.push(`${label} "${feedName(tr, cls)}" isn't right for age ${age}${expectName ? ` — use ${expectName}` : ''}`);
+      return;
+    }
+    const cap = Number(ph.max) || 0;
+    const cum = cap ? cumPerBirdForItem(tr, ph.name) : null;
+    if (cap && cum != null && cum >= cap) {
+      const nx = tr.dataset.nextName ? ` — switch to ${tr.dataset.nextName}` : '';
+      parts.push(`${label}: <span class="text-warning-emphasis fw-semibold">⚠ ${nm} ${cum.toFixed(3)}/${cap.toFixed(3)} kg/bird${escapeHtml(nx)}</span>`);
+      capReached = true;
+    } else if (cap && cum != null && cum >= cap * 0.9) {
+      parts.push(`${label}: <span class="text-success">✓ ${nm}</span> <span class="text-muted">(${cum.toFixed(3)}/${cap.toFixed(3)} kg/bird)</span>`);
+    } else {
+      parts.push(`${label}: <span class="text-success">✓ ${nm}</span>`);
+    }
+  });
+
+  let totalLine = '';
+  if (!std && tr.dataset.stdNote) {
+    totalLine = `<span class="text-warning-emphasis">⚠ ${escapeHtml(tr.dataset.stdNote)}</span>`;
+    issues.push(tr.dataset.stdNote);
+  } else if (std && birds) {
+    const expected = std * birds, total = totalFeed(tr);
+    const pct = expected ? (total / expected * 100).toFixed(0) : 0;
+    if (!total) {
+      totalLine = `<span class="text-muted">Std ~${expected.toFixed(1)} kg/day (${birds} birds)</span>`;
+    } else if (total > expected * FEED_TOLERANCE) {
+      totalLine = `<span class="text-danger fw-semibold">⚠ Total ${total.toFixed(1)} kg exceeds Std ${expected.toFixed(1)} kg/day (${pct}% of std)</span>`;
+      issues.push(`Total feed ${total.toFixed(1)} kg is over the standard ${expected.toFixed(1)} kg/day`);
+    } else {
+      totalLine = `<span class="text-success">✓ Total ${total.toFixed(1)} / ${expected.toFixed(1)} kg/day (${pct}% of std)</span>`;
+    }
+  }
+
+  const stdW = parseFloat(tr.dataset.stdWeight || '');
+  const actW = parseFloat(tr.querySelector('.avg-wt').value || '0');
+  let weightLine = '';
+  if (stdW && actW) {
+    const diff = (actW - stdW) / stdW * 100;
+    weightLine = Math.abs(diff) <= 10
+      ? `<span class="text-success">✓ Wt ${actW.toFixed(0)} / std ${stdW.toFixed(0)} g</span>`
+      : `<span class="text-danger fw-semibold">⚠ Wt ${actW.toFixed(0)} g (${diff > 0 ? '+' : ''}${diff.toFixed(0)}% vs std ${stdW.toFixed(0)} g)</span>`;
+    if (Math.abs(diff) > 10) issues.push(`Weight ${actW.toFixed(0)} g is ${diff.toFixed(0)}% off standard ${stdW.toFixed(0)} g`);
+  }
+
+  const prior = priorListFeed(tr);
+
+  let crossLine = '';
+  const curve = JSON.parse(tr.dataset.bsCurve || '[]');
+  const cumBefore = (parseFloat(tr.dataset.cumBefore || '0')) + prior.total;
+  if (curve.length && birds) {
+    const cumKg = cumBefore + totalFeed(tr);
+    const cumPerBirdG = cumKg / birds * 1000;
+    const bits = [];
+    if (actW) {
+      const stdFeedG = interpCurve(curve, 'w', actW, 'cf');
+      if (stdFeedG != null) bits.push(`Std feed @ this wt: ${stdFeedG.toFixed(0)} g/bird · ${(stdFeedG * birds / 1000).toFixed(1)} kg total`);
+    }
+    if (cumPerBirdG > 0) {
+      const stdWtG = interpCurve(curve, 'cf', cumPerBirdG, 'w');
+      if (stdWtG != null) bits.push(`Std wt @ this feed: ${stdWtG.toFixed(0)} g`);
+    }
+    if (bits.length) crossLine = `<span class="text-muted">${bits.join(' &nbsp;·&nbsp; ')}</span>`;
+  }
+
+  let consumedLine = '';
+  const savedTotal = parseFloat(tr.dataset.consumedTotal || '') || 0;
+  const baseConsumed = savedTotal + prior.total;
+  const todayFeed = totalFeed(tr);
+  if (baseConsumed > 0 || todayFeed > 0) {
+    const merged = {};
+    JSON.parse(tr.dataset.consumedByItem || '[]').forEach(it => merged[it.name] = (merged[it.name] || 0) + Number(it.kg));
+    Object.entries(prior.byItem).forEach(([k, v]) => merged[k] = (merged[k] || 0) + v);
+    const items = Object.entries(merged).sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${escapeHtml(k)} ${v.toFixed(1)}`).join(' · ');
+    const pb = kg => birds ? ` &middot; <strong>${(kg / birds * 1000).toFixed(1)} g/bird</strong>` : '';
+    consumedLine = `<span class="text-muted">Consumed to date: <strong>${baseConsumed.toFixed(1)} kg</strong>${pb(baseConsumed)}`
+      + (items ? ` (${items})` : '') + `</span>`;
+    if (todayFeed > 0) {
+      const newTotal = baseConsumed + todayFeed;
+      consumedLine += `<span class="text-muted ms-2">+ this entry <strong>${todayFeed.toFixed(1)} kg</strong>${pb(todayFeed)}`
+        + ` &rarr; New total <strong>${newTotal.toFixed(1)} kg</strong>${pb(newTotal)}</span>`;
+    }
+  }
+
+  let actualLine = '';
+  const savedActual = parseFloat(tr.dataset.perBirdActual || '');
+  if (!isNaN(savedActual) && birds) {
+    const recentFeed = prior.total + todayFeed;
+    const baseActual = savedActual + prior.total / birds * 1000;
+    const newActual = savedActual + recentFeed / birds * 1000;
+    actualLine = `<span class="text-muted">Actual eaten / live bird: <strong>${baseActual.toFixed(1)} g</strong>`
+      + (todayFeed > 0 ? ` &rarr; <strong>${newActual.toFixed(1)} g</strong> with this entry` : '')
+      + ` <span class="text-secondary">(bird-day weighted, excludes dead-bird feed)</span></span>`;
+  }
+
+  let status = 'ok';
+  if (issues.length) status = 'warn';
+  else if (capReached) status = 'near';
+  else if (std && birds) {
+    const expected = std * birds, total = totalFeed(tr);
+    if (total && total > expected) status = 'near';
+  }
+
+  const capLine = capProgressLine(tr);
+
+  const dateVal = tr.querySelector('.date').value || '';
+  const head = `<strong>Age ${age}</strong> <span class="text-muted">· ${escapeHtml(dateVal)} · Phase: ${escapeHtml(expectName || '—')}</span>`;
+  return { head, parts, totalLine, weightLine, crossLine, consumedLine, actualLine, capLine, issues, status };
+}
+
+// ===== Wiring =====
+get('supervisor').addEventListener('change', function () {
+  get('farm').innerHTML = this.value ? farmOptionsFor(this.value) : allFarmOptions;
+  get('farm').value = '';
+  if (window.jQuery) jQuery(get('farm')).trigger('change.select2');
+  get('batch').value = ''; batchStartDate = null;
+  document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)').forEach(recomputeAge);
+  recomputeStockPreview();
+  updateFeedFeedback();
+});
 
 get('farm').addEventListener('change', function () {
   const farmId = this.value;
-  if (!farmId) { get('batch').value = ''; batchStartDate = null; recomputeStockPreview(); return; }
+  if (!farmId) { get('batch').value = ''; batchStartDate = null; recomputeStockPreview(); updateFeedFeedback(); return; }
   fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}`).then(r => r.json()).then(data => {
     get('batch').value = data.batch_name || 'No active batch';
     batchStartDate = data.start_date;
-    // Only the still-untouched single starting row picks up "continue from
-    // the last saved entry" — once more rows exist, leave dates alone.
-    const rows = document.querySelectorAll('#row-table tbody tr');
-    if (rows.length === 1 && data.next_date) {
-      rows[0].querySelector('.date').value = data.next_date;
-    }
-    rows.forEach(recomputeAge);
+    const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
+    if (rows.length === 1 && data.next_date) { rows[0].querySelector('.date').value = data.next_date; }
+    rows.forEach(tr => { recomputeAge(tr); refreshRowData(tr); });
     recomputeStockPreview();
   });
 });
 
 get('row-table').addEventListener('input', e => {
-  if (e.target.classList.contains('date')) { recomputeAge(e.target.closest('tr')); }
-  if (e.target.classList.contains('date') || e.target.classList.contains('kgs-1') || e.target.classList.contains('kgs-2')) {
-    recomputeStockPreview();
-  }
-  totals();
+  const tr = e.target.closest('tr');
+  if (e.target.classList.contains('date')) { recomputeAge(tr); refreshRowData(tr); recomputeStockPreview(); }
+  else if (e.target.classList.contains('kgs-1') || e.target.classList.contains('kgs-2')) { updateFeedFeedback(); recomputeStockPreview(); }
+  else if (e.target.classList.contains('avg-wt')) { updateFeedFeedback(); }
+  else if (e.target.classList.contains('mortality') || e.target.classList.contains('culls')) { updateSummary(); }
 });
 
 get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('feed-1') || e.target.classList.contains('feed-2')) {
+    updateFeedFeedback();
     recomputeStockPreview();
   }
 });
 
 get('row-table').addEventListener('click', e => {
   if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
-    e.target.closest('tr').remove(); refreshRowAddButtons(); totals(); recomputeStockPreview();
+    e.target.closest('tr').remove(); refreshRowAddButtons(); updateFeedFeedback(); recomputeStockPreview();
   }
   if (e.target.closest('.add-row-inline')) {
-    // New row continues the day after whatever date is in the current last row.
-    const lastRow = get('row-table').tBodies[0].lastElementChild;
+    const lastRow = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].pop();
     const lastDate = lastRow ? lastRow.querySelector('.date').value : null;
     row(lastDate ? nextDateString(lastDate) : null);
     recomputeStockPreview();
@@ -268,7 +744,7 @@ get('single-batch-form').addEventListener('submit', function (e) {
   const farm = value('farm');
   if (!supervisor) { alert('Select a Supervisor.'); return; }
   if (!farm) { alert('Select a Farm.'); return; }
-  const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
+  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].map(tr => ({
     date: tr.querySelector('.date').value,
     mortality: tr.querySelector('.mortality').value,
     culls: tr.querySelector('.culls').value,
@@ -279,10 +755,7 @@ get('single-batch-form').addEventListener('submit', function (e) {
     avg_weight_gms: tr.querySelector('.avg-wt').value,
     remarks: tr.querySelector('.remarks').value,
   }));
-  if (!rows.length || rows.some(r => !r.date)) {
-    alert('Every row needs a Date.');
-    return;
-  }
+  if (!rows.length || rows.some(r => !r.date)) { alert('Every row needs a Date.'); return; }
   fetch("{% url 'daily_entry_api_list' %}", {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },

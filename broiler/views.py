@@ -1959,6 +1959,88 @@ class DailyEntryAPI(BaseAPIView):
             return self.handle_exception(e)
 
 
+def resolve_feed_phase(batch, on_date, age_days):
+    """The feed-phase line applicable to a batch at `age_days` on `on_date`.
+    Matches the active Feed Phase Master by the batch's breed (then its bird
+    category), whose effective window covers the date, then the phase whose
+    From/To age range contains age_days. Returns a dict or None."""
+    if not batch or not batch.breed_id:
+        return None
+    breed = batch.breed
+
+    def eff_ok(m):
+        if on_date and m.effective_from and on_date < m.effective_from:
+            return False
+        if on_date and m.effective_to and on_date > m.effective_to:
+            return False
+        return True
+
+    masters = (FeedPhaseMaster.objects.filter(status="active")
+               .prefetch_related("lines__feed_item"))
+    master = next((m for m in masters.filter(breed=breed) if eff_ok(m)), None)
+    if not master and breed.bird_category_id:
+        master = next((m for m in masters.filter(bird_category_id=breed.bird_category_id) if eff_ok(m)), None)
+    if not master:
+        return None
+
+    lines = sorted(master.lines.all(), key=lambda x: x.from_age)
+    # feed item -> its phase name + the age range(s) it's used in, so the form
+    # can label & validate whichever feed is selected in either slot.
+    phase_by_item = {}
+    for l in lines:
+        if not l.feed_item_id:
+            continue
+        e = phase_by_item.setdefault(str(l.feed_item_id),
+                                     {"name": l.feed_item.description, "ranges": [], "max": 0})
+        e["ranges"].append([l.from_age, l.to_age])
+        # Max Feed Qty (kg/bird) — the feed-quantity changeover trigger; keep the
+        # largest cap if the item spans several phase lines.
+        try:
+            m = float(l.max_feed_qty or 0)
+        except (TypeError, ValueError):
+            m = 0
+        if m > e["max"]:
+            e["max"] = m
+
+    for i, l in enumerate(lines):
+        if l.from_age <= age_days and (l.to_age is None or age_days <= l.to_age):
+            nxt = lines[i + 1] if i + 1 < len(lines) else None
+            return {
+                "program": master.program,
+                "phase_name": l.feed_item.description if l.feed_item_id else "",
+                "phase_code": l.phase_code,
+                "feed_item": l.feed_item_id,
+                "max_feed_qty": str(l.max_feed_qty),
+                # the next (changeover) phase — the Feed 2 hint when it's blank
+                "next_name": (nxt.feed_item.description if nxt and nxt.feed_item_id else "") if nxt else "",
+                "next_feed_item": (nxt.feed_item_id if nxt else None),
+                "phase_by_item": phase_by_item,
+            }
+    return None
+
+
+def _live_bird_count(batch, as_of=None):
+    """Best-effort live birds in a batch as of `as_of` (default: all-time):
+    chicks placed − mortality − culls − sold, counting only records up to that
+    date. Used only for the Daily Entry feed-cap soft warning."""
+    from inventory.models import Item, StockTransfer
+    from django.db.models import Sum
+    if not batch:
+        return 0
+    chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+    placed_q = StockTransfer.objects.filter(to_batch_id=batch.id, item_id__in=chick_ids)
+    de_q = DailyEntry.objects.filter(batch_id=batch.id)
+    sold_q = BirdSale.objects.filter(batch_id=batch.id)
+    if as_of:
+        placed_q = placed_q.filter(date__lte=as_of)
+        de_q = de_q.filter(date__lte=as_of)
+        sold_q = sold_q.filter(date__lte=as_of)
+    placed = placed_q.aggregate(t=Sum("quantity"))["t"] or 0
+    de = de_q.aggregate(m=Sum("mortality"), c=Sum("culls"))
+    sold = sold_q.aggregate(b=Sum("birds"))["b"] or 0
+    return max(int(placed) - int(de["m"] or 0) - int(de["c"] or 0) - int(sold or 0), 0)
+
+
 @login_required
 def daily_entry_farm_lookup(request):
     """Returns the active batch/age for a farm, for the Add form's
@@ -1966,17 +2048,93 @@ def daily_entry_farm_lookup(request):
     continues the day after this farm's most recently saved entry (so
     backfilling picks up where it left off), falling back to today when
     there's no prior entry."""
+    from django.utils.dateparse import parse_date
     farm_id = request.GET.get("farm")
     batch = _active_batch_for_farm(farm_id) if farm_id else None
-    age_days = 0
-    if batch and batch.start_date:
-        # Placement day is Age 0; the first entry day (the day after
-        # placement) is Age 1.
-        age_days = max((timezone.localdate() - batch.start_date).days, 0)
 
     last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by('-date', '-id').first()
                  if farm_id else None)
     next_date = (last_entry.date + timedelta(days=1)) if last_entry else timezone.localdate()
+
+    # Everything (age, phase, live-bird count) is resolved as of the entry date —
+    # the date the row will be saved with (passed by the form, else next_date) —
+    # so backfilled/edited entries get the right phase and bird count.
+    entry_date = parse_date(request.GET.get("date") or "") or next_date
+
+    age_days = 0
+    if batch and batch.start_date:
+        # Placement day is Age 0; the first entry day is Age 1.
+        age_days = max((entry_date - batch.start_date).days, 0)
+
+    phase = resolve_feed_phase(batch, entry_date, age_days) if batch else None
+
+    # Expected daily feed per bird from the Breed Standard master (feed_intake is
+    # grams/bird/day at that age) — drives the day's over-feed cap check. Only
+    # trusted while the age is within the breed's defined curve; beyond it we
+    # flag the gap instead of carrying forward a stale (too-low) value.
+    from django.db.models import Max
+    std_feed_kg, std_weight_g, std_note = None, None, None
+    if batch and batch.breed_id:
+        max_age = BreedStandard.objects.filter(breed_id=batch.breed_id).aggregate(m=Max("age"))["m"]
+        if max_age is None:
+            std_note = "No breed standard for this breed"
+        elif age_days > max_age:
+            std_note = f"No breed standard beyond age {max_age} - add rows to Breed Standard"
+        else:
+            std = _breed_standard_at(batch.breed_id, age_days)
+            if std and std.feed_intake:
+                std_feed_kg = str((_num(std.feed_intake) / 1000).quantize(Decimal("0.001")))
+            if std and std.body_weight:
+                std_weight_g = str(_num(std.body_weight).quantize(Decimal("0.1")))
+
+    # Breed-standard curve + this batch's feed-to-date, so the form can show
+    # "Std Feed @ B.Wt" / "Std B.Wt @ Feed" (like the Live Flock report).
+    bs_curve, cum_feed_before_kg = [], None
+    if batch and batch.breed_id and not std_note:
+        from django.db.models import Sum, F
+        bs_curve = [
+            {"a": r.age, "w": float(r.body_weight), "cf": float(r.cum_feed)}
+            for r in BreedStandard.objects.filter(breed_id=batch.breed_id, is_active=True).order_by("age")
+        ]
+        prior = (DailyEntry.objects.filter(batch=batch, date__lt=entry_date)
+                 .aggregate(t=Sum(F("feed_1_qty") + F("feed_2_qty")))["t"])
+        cum_feed_before_kg = str(_num(prior).quantize(Decimal("0.01")))
+
+    # Actual feed consumed to date (saved entries before this date), per item.
+    consumed_by_item, consumed_total_kg = [], None
+    if batch:
+        by_item = {}
+        de_qs = DailyEntry.objects.filter(batch=batch, date__lt=entry_date).select_related("feed_1", "feed_2")
+        for de in de_qs:
+            if de.feed_1_id:
+                by_item[de.feed_1.description] = by_item.get(de.feed_1.description, Decimal("0")) + _num(de.feed_1_qty)
+            if de.feed_2_id:
+                by_item[de.feed_2.description] = by_item.get(de.feed_2.description, Decimal("0")) + _num(de.feed_2_qty)
+        consumed_by_item = [{"name": k, "kg": str(v.quantize(Decimal("0.01")))}
+                            for k, v in sorted(by_item.items(), key=lambda x: -x[1]) if v > 0]
+        consumed_total_kg = str(sum((v for v in by_item.values()), Decimal("0")).quantize(Decimal("0.01")))
+
+    # Actual feed eaten per SURVIVING bird (bird-day weighted): each day's feed
+    # is shared among the birds alive that day, so — unlike total ÷ current-live
+    # — it excludes the extra share that later-dead/culled/sold birds ate.
+    # Sum over saved days of (that day's feed / birds alive that day), in g/bird.
+    consumed_per_bird_actual_g = None
+    if batch:
+        from inventory.models import Item as _Item, StockTransfer as _ST
+        chick_ids = list(_Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+        placed = _ST.objects.filter(to_batch_id=batch.id, item_id__in=chick_ids, date__lt=entry_date)\
+                            .aggregate(t=Sum("quantity"))["t"] or 0
+        sold_by_date = {}
+        for bs in BirdSale.objects.filter(batch=batch, date__lt=entry_date).values("date").annotate(t=Sum("birds")):
+            sold_by_date[bs["date"]] = bs["t"] or 0
+        alive = int(placed)
+        cum_pb = Decimal("0")
+        for de in DailyEntry.objects.filter(batch=batch, date__lt=entry_date).order_by("date", "id"):
+            feed_d = _num(de.feed_1_qty) + _num(de.feed_2_qty)   # birds present at start of day eat it
+            if alive > 0 and feed_d:
+                cum_pb += feed_d / Decimal(alive) * Decimal("1000")
+            alive -= (de.mortality or 0) + (de.culls or 0) + sold_by_date.get(de.date, 0)   # end-of-day losses
+        consumed_per_bird_actual_g = str(cum_pb.quantize(Decimal("0.01")))
 
     return JsonResponse({
         "batch": batch.id if batch else None,
@@ -1984,6 +2142,16 @@ def daily_entry_farm_lookup(request):
         "age_days": age_days,
         "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
         "next_date": next_date.isoformat(),
+        "feed_phase": phase,
+        "std_feed_kg": std_feed_kg,
+        "std_weight_g": std_weight_g,
+        "std_note": std_note,
+        "bs_curve": bs_curve,
+        "cum_feed_before_kg": cum_feed_before_kg,
+        "consumed_by_item": consumed_by_item,
+        "consumed_total_kg": consumed_total_kg,
+        "consumed_per_bird_actual_g": consumed_per_bird_actual_g,
+        "live_birds": _live_bird_count(batch, as_of=entry_date) if batch else 0,
     })
 
 
