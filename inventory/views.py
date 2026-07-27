@@ -954,7 +954,8 @@ class StockTransferListTemplateView(View):
 class StockTransferFormTemplateView(View):
     def get(self, request):
         return render(request, "stock_transfer_form.html", {
-            "items": Item.objects.order_by("item_code"),
+            "items": Item.objects.select_related("category", "storage_uom").order_by("item_code"),
+            "categories": ItemCategory.objects.order_by("name"),
             "warehouses": Warehouse.objects.order_by("name"),
             "farms": BroilerFarm.objects.order_by("farm_name"),
             "today": timezone.localdate().isoformat(),

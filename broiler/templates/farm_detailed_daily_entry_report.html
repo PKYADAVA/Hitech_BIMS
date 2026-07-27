@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Detailed Daily Entry Report — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='farm_detailed_daily_entry_report' %}
+
+<style>
+  .drr-breadcrumb { font-size:.85rem; color:#6c757d; margin:.25rem 0 .75rem; }
+  .drr-title { font-weight:700; margin-bottom:1rem; }
+  .drr-filter .form-label { font-size:.78rem; font-weight:600; margin-bottom:.2rem; }
+  .drr-table { font-size:var(--drr-fs, .72rem); font-family:var(--drr-ff, inherit); }
+  .drr-table th, .drr-table td { white-space:nowrap; vertical-align:middle; text-align:center; padding:.3rem .45rem; }
+  .drr-table thead th { background:#e9f1f7; position:sticky; top:0; z-index:2; }
+  .drr-table td.num { text-align:right; }
+  .drr-table td.txt { text-align:left; }
+  .drr-table tfoot td { background:#f1f3f5; font-weight:700; position:sticky; bottom:0; }
+  .warn { color:#c0392b; font-weight:700; }
+  .drr-scroll { max-height:70vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .drr-muted { color:#adb5bd; }
+  .drr-thumb { height:30px; width:30px; object-fit:cover; border-radius:.25rem; border:1px solid #dee2e6; }
+  .col-picker { font-size:.75rem; }
+  .col-picker label { margin-right:.9rem; white-space:nowrap; cursor:pointer; }
+  .col-picker input { margin-right:.25rem; }
+</style>
+
+<div class="drr-breadcrumb no-print">Reports <span class="mx-1">&rsaquo;</span> Detailed Daily Entry Report</div>
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+  <h3 class="drr-title mb-0">Detailed Daily Entry Report</h3>
+  <div class="text-muted small">{{ from_date|date:"d.m.Y" }} – {{ to_date|date:"d.m.Y" }} &middot; {{ rows|length }} record(s)</div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3 no-print drr-filter"><div class="card-body">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date|date:'Y-m-d' }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date|date:'Y-m-d' }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2"><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Line</label>
+      <select name="line" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for l in lines %}<option value="{{ l }}" {% if line == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Supervisor</label>
+      <select name="supervisor" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Farm</label>
+      <select name="farm" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><label class="form-label">Font Size</label>
+      <select class="form-select form-select-sm" onchange="document.documentElement.style.setProperty('--drr-fs', this.value)">
+        <option value=".72rem">Default</option>
+        <option value=".66rem">Small</option>
+        <option value=".8rem">Large</option>
+      </select></div>
+    <div class="col-md-6 d-flex gap-2">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'farm_detailed_daily_entry_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+      <button class="btn btn-outline-success btn-sm" type="button" id="exportCsv"><i class="fas fa-file-csv me-1"></i>Export CSV</button>
+    </div>
+  </form>
+</div></div>
+
+<!-- Column picker -->
+<div class="card mb-2 no-print"><div class="card-body py-2 col-picker" id="colPicker">
+  {% for c in columns %}<label><input type="checkbox" class="col-toggle" data-col="{{ c.0 }}" checked>{{ c.1 }}</label>{% endfor %}
+</div></div>
+
+<div class="card"><div class="card-body p-2">
+  <div class="drr-scroll">
+    <table class="table table-bordered table-hover drr-table mb-0" id="drrTable" style="width:max-content; min-width:100%;">
+      <thead><tr>
+        {% for c in columns %}<th data-c="{{ c.0 }}">{{ c.1 }}</th>{% endfor %}
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td data-c="slno">{{ forloop.counter }}</td>
+          <td data-c="supervisor" class="txt">{{ r.supervisor|default:"-" }}</td>
+          <td data-c="farm_code" class="txt">{{ r.farm_code|default:"-" }}</td>
+          <td data-c="farmer" class="txt">{{ r.farmer|default:"-" }}</td>
+          <td data-c="batch" class="txt">{{ r.batch|default:"-" }}</td>
+          <td data-c="book_no">{{ r.book_no|default:"-" }}</td>
+          <td data-c="entry_date">{{ r.entry_date|date:"d.m.Y" }}</td>
+          <td data-c="age" class="num">{{ r.age }}</td>
+          <td data-c="placed" class="num">{{ r.placed|floatformat:0 }}</td>
+          <td data-c="opening" class="num">{{ r.opening|floatformat:0 }}</td>
+          <td data-c="mort" class="num">{{ r.mort|floatformat:0 }}</td>
+          <td data-c="mort_pct" class="num {% if r.mort_pct >= 0.5 %}warn{% endif %}">{{ r.mort_pct|floatformat:2 }}</td>
+          <td data-c="mort_image">{% if r.mort_image %}<a href="{{ r.mort_image }}" target="_blank" rel="noopener"><img src="{{ r.mort_image }}" class="drr-thumb" alt="mort"></a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
+          <td data-c="cum_mort" class="num">{{ r.cum_mort|floatformat:0 }}</td>
+          <td data-c="cum_mort_pct" class="num">{{ r.cum_mort_pct|floatformat:2 }}</td>
+          <td data-c="culls" class="num">{{ r.culls|floatformat:0 }}</td>
+          <td data-c="cull_image">{% if r.cull_image %}<a href="{{ r.cull_image }}" target="_blank" rel="noopener"><img src="{{ r.cull_image }}" class="drr-thumb" alt="cull"></a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
+          <td data-c="sold" class="num">{{ r.sold|floatformat:0 }}</td>
+          <td data-c="sold_wt" class="num">{{ r.sold_wt|floatformat:2 }}</td>
+          <td data-c="t_birds" class="num">{{ r.t_birds|floatformat:0 }}</td>
+          <td data-c="t_weight" class="num">{{ r.t_weight|floatformat:2 }}</td>
+          <td data-c="balance" class="num">{{ r.balance|floatformat:0 }}</td>
+          <td data-c="std_bwt" class="num">{% if r.std_bwt is not None %}{{ r.std_bwt|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td data-c="avg_bwt" class="num">{{ r.avg_bwt|floatformat:2 }}</td>
+          <td data-c="std_fcr" class="num">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:3 }}{% else %}-{% endif %}</td>
+          <td data-c="fcr" class="num">{{ r.fcr|floatformat:3 }}</td>
+          <td data-c="cfcr" class="num">{{ r.cfcr|floatformat:2 }}</td>
+          <td data-c="feed_ob" class="num">{{ r.feed_ob|floatformat:2 }}</td>
+          <td data-c="feed_in" class="num">{{ r.feed_in|floatformat:2 }}</td>
+          <td data-c="feed_out" class="num">{{ r.feed_out|floatformat:2 }}</td>
+          <td data-c="feed_con" class="num">{{ r.feed_con|floatformat:2 }}</td>
+          <td data-c="feed_1_item" class="txt">{{ r.feed_1_item|default:"-" }}</td>
+          <td data-c="feed_1_con" class="num">{{ r.feed_1_con|floatformat:2 }}</td>
+          <td data-c="feed_2_item" class="txt">{{ r.feed_2_item|default:"-" }}</td>
+          <td data-c="feed_2_con" class="num">{{ r.feed_2_con|floatformat:2 }}</td>
+          <td data-c="feed_stock" class="num">{{ r.feed_stock|floatformat:2 }}</td>
+          <td data-c="cum_feed" class="num">{{ r.cum_feed|floatformat:2 }}</td>
+          <td data-c="cum_feed_per_bird" class="num">{{ r.cum_feed_per_bird|floatformat:2 }}</td>
+          <td data-c="std_feed_per_bird" class="num">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td data-c="act_feed_per_bird" class="num">{{ r.act_feed_per_bird|floatformat:2 }}</td>
+          <td data-c="diseases_name" class="txt">{% if r.diseases_name %}{{ r.diseases_name }}{% else %}<span class="drr-muted">—</span>{% endif %}</td>
+          <td data-c="remarks" class="txt">{{ r.remarks|default:"-" }}</td>
+          <td data-c="line" class="txt">{{ r.line|default:"-" }}</td>
+          <td data-c="branch" class="txt">{{ r.branch|default:"-" }}</td>
+          <td data-c="farmer_contact" class="txt">{{ r.farmer_contact|default:"-" }}</td>
+          <td data-c="entry_time">{{ r.entry_time|date:"d.m.Y H:i"|default:"-" }}</td>
+          <td data-c="entry_by" class="txt">{{ r.entry_by|default:"-" }}</td>
+          <td data-c="farm_location" class="txt">{% if r.farm_location %}<a href="https://maps.google.com/?q={{ r.farm_location|urlencode }}" target="_blank" rel="noopener">{{ r.farm_location }}</a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
+          <td data-c="entry_location" class="txt">{% if r.entry_location %}<a href="https://maps.google.com/?q={{ r.entry_location|urlencode }}" target="_blank" rel="noopener">{{ r.entry_location }}</a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="49" class="text-center text-muted py-4">No daily entries in {{ from_date|date:"d.m.Y" }} – {{ to_date|date:"d.m.Y" }} with these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot><tr>
+        <td data-c="slno" class="text-end">Total</td>
+        <td data-c="supervisor"></td><td data-c="farm_code"></td><td data-c="farmer"></td>
+        <td data-c="batch"></td><td data-c="book_no"></td><td data-c="entry_date"></td><td data-c="age"></td>
+        <td data-c="placed"></td><td data-c="opening"></td>
+        <td data-c="mort" class="num">{{ totals.mort|floatformat:0 }}</td>
+        <td data-c="mort_pct"></td><td data-c="mort_image"></td>
+        <td data-c="cum_mort"></td><td data-c="cum_mort_pct"></td>
+        <td data-c="culls" class="num">{{ totals.culls|floatformat:0 }}</td>
+        <td data-c="cull_image"></td>
+        <td data-c="sold" class="num">{{ totals.sold|floatformat:0 }}</td>
+        <td data-c="sold_wt" class="num">{{ totals.sold_wt|floatformat:2 }}</td>
+        <td data-c="t_birds"></td>
+        <td data-c="t_weight"></td>
+        <td data-c="balance"></td><td data-c="std_bwt"></td><td data-c="avg_bwt"></td>
+        <td data-c="std_fcr"></td><td data-c="fcr"></td><td data-c="cfcr"></td>
+        <td data-c="feed_ob"></td>
+        <td data-c="feed_in" class="num">{{ totals.feed_in|floatformat:2 }}</td>
+        <td data-c="feed_out" class="num">{{ totals.feed_out|floatformat:2 }}</td>
+        <td data-c="feed_con" class="num">{{ totals.feed_con|floatformat:2 }}</td>
+        <td data-c="feed_1_item"></td>
+        <td data-c="feed_1_con" class="num">{{ totals.feed_1_con|floatformat:2 }}</td>
+        <td data-c="feed_2_item"></td>
+        <td data-c="feed_2_con" class="num">{{ totals.feed_2_con|floatformat:2 }}</td>
+        <td data-c="feed_stock"></td><td data-c="cum_feed"></td>
+        <td data-c="cum_feed_per_bird"></td><td data-c="std_feed_per_bird"></td><td data-c="act_feed_per_bird"></td>
+        <td data-c="diseases_name"></td><td data-c="remarks"></td><td data-c="line"></td><td data-c="branch"></td>
+        <td data-c="farmer_contact"></td><td data-c="entry_time"></td><td data-c="entry_by"></td>
+        <td data-c="farm_location"></td><td data-c="entry_location"></td>
+      </tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div></div>
+
+<script>
+// Column show/hide from the picker checkboxes.
+document.querySelectorAll('.col-toggle').forEach(cb => {
+  cb.addEventListener('change', () => {
+    document.querySelectorAll(`#drrTable [data-c="${cb.dataset.col}"]`)
+      .forEach(el => { el.style.display = cb.checked ? '' : 'none'; });
+  });
+});
+
+// Export the currently-visible columns to CSV.
+document.getElementById('exportCsv').addEventListener('click', () => {
+  const rows = [];
+  document.querySelectorAll('#drrTable thead tr, #drrTable tbody tr, #drrTable tfoot tr').forEach(tr => {
+    const cells = [...tr.children].filter(td => td.style.display !== 'none')
+      .map(td => `"${(td.innerText || '').replace(/"/g, '""').trim()}"`);
+    if (cells.length) rows.push(cells.join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'farm_detailed_daily_entry_{{ from_date|date:"Ymd" }}_{{ to_date|date:"Ymd" }}.csv';
+  a.click();
+});
+</script>
+{% endblock %}

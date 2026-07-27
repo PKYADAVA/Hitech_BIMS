@@ -167,6 +167,9 @@
               {% if 'day_record_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'day_record_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-calendar-day"></i>Day Record Report
               </a></li>{% endif %}
+              {% if 'farm_detailed_daily_entry_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_detailed_daily_entry_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-table-list"></i>Detailed Daily Entry Report
+              </a></li>{% endif %}
               {% if 'lifting_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'lifting_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-truck-loading"></i>Lifting Report
               </a></li>{% endif %}

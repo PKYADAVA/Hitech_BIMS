@@ -75,11 +75,14 @@
         <th>Actual Age</th><th>Placement Date</th><th>Lifting Start Date</th><th>Mean Age</th>
         <th>Latest Entry Date</th><th>Gap Days</th><th>Housed Chicks</th><th>Mort</th><th>Mort%</th>
         <th>Cull</th><th>Cull%</th><th>Sold Birds</th><th>Sold Weight</th><th>Available Birds</th><th>Available Weight</th>
-        <th>Std B.Wt</th><th>Avg B.Wt</th><th>Std B.Wt @ Feed<br><small class="text-muted">g/Bird</small></th><th>Last B.Wt Date</th><th>B.Wt Gap Days</th><th>Std FCR</th><th>FCR</th><th>CFCR</th><th>EEF</th><th>M PC/Kg</th><th>PC/Bird</th>
+        <th>Std B.Wt</th><th>Avg B.Wt</th><th>Std B.Wt @ current Feed<br><small class="text-muted">g/Bird</small></th><th>Last B.Wt Date</th><th>B.Wt Gap Days</th><th>Std FCR</th><th>FCR</th><th>CFCR</th><th>EEF</th><th>M PC/Kg</th><th>PC/Bird</th>
         <th>Feed Transferred</th><th>Transfer In From Other Farms</th>
         <th>Std Feed Con<br><small class="text-muted">KG/Batch</small></th><th>Std Feed Con<br><small class="text-muted">g/Bird</small></th>
+        <th>Std Feed/Bird<br><small class="text-muted">g/Day</small></th>
         <th>Actual Feed Con<br><small class="text-muted">KG/Batch</small></th><th>Actual Feed Con<br><small class="text-muted">g/Bird</small></th>
-        <th>Std Feed @ B.Wt<br><small class="text-muted">KG/Batch</small></th><th>Std Feed @ B.Wt<br><small class="text-muted">g/Bird</small></th>
+        <th>Act Feed/Bird<br><small class="text-muted">g/Bird (Live)</small></th>
+        <th>Feed Phase</th><th>Changeover<br><small class="text-muted">kg/Bird</small></th>
+        <th>Std Feed @ current B.Wt<br><small class="text-muted">KG/Batch</small></th><th>Std Feed @ current B.Wt<br><small class="text-muted">g/Bird</small></th>
         <th>Transfer Out to Farms</th><th>Feed Balance</th><th>Feed Balance Days</th><th>Next 3 Days Feed</th>
         <th>Auto Valuation Remark</th>
       </tr></thead>
@@ -123,8 +126,12 @@
           <td class="num">{{ r.transfer_in_farms|floatformat:2 }}</td>
           <td class="num">{% if r.std_feed_con is not None %}{{ r.std_feed_con|floatformat:2 }}{% else %}-{% endif %}</td>
           <td class="num">{% if r.std_feed_con_bird is not None %}{{ r.std_feed_con_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{% if r.std_feed_bird_daily is not None %}{{ r.std_feed_bird_daily|floatformat:2 }}{% else %}-{% endif %}</td>
           <td class="num">{{ r.feed_con|floatformat:2 }}</td>
           <td class="num">{% if r.feed_con_bird is not None %}{{ r.feed_con_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="num">{{ r.act_feed_bird_live|floatformat:2 }}</td>
+          <td class="txt">{{ r.feed_phase|default:"-" }}{% if r.next_phase %}<br><small class="text-muted">next: {{ r.next_phase }}</small>{% endif %}</td>
+          <td class="num">{% if r.phase_cap %}<span class="{% if r.phase_cum_bird and r.phase_cum_bird >= r.phase_cap %}warn{% endif %}">{{ r.phase_cum_bird|floatformat:3 }} / {{ r.phase_cap|floatformat:3 }}</span>{% else %}<span class="text-muted">-</span>{% endif %}</td>
           <td class="num">{% if r.std_feed_at_bwt is not None %}{{ r.std_feed_at_bwt|floatformat:2 }}{% else %}-{% endif %}</td>
           <td class="num">{% if r.std_feed_at_bwt_bird is not None %}{{ r.std_feed_at_bwt_bird|floatformat:2 }}{% else %}-{% endif %}</td>
           <td class="num">{{ r.transfer_out_farms|floatformat:2 }}</td>
@@ -137,7 +144,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="46" class="text-center text-muted py-4">No live flocks found for these filters.</td></tr>
+        <tr><td colspan="50" class="text-center text-muted py-4">No live flocks found for these filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>

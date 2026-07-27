@@ -3593,6 +3593,39 @@ def _live_flock_row(batch, today):
         avg_bwt=avg_bwt, std_bwt=std_bwt, fcr=fcr_val, std_fcr=std_fcr,
         feed_con=feed_consumed, std_feed_at_bwt=std_feed_at_bwt,
         mort_pct=_num(bc.get("total_mort_pct")), gap_days=gap_days)
+
+    # --- Feed phase + Max Feed Qty (kg/bird) changeover, matching Daily Entry ---
+    from broiler.models import BirdSale as _BirdSale
+    phase = resolve_feed_phase(batch, today, actual_age)
+    phase_name = phase.get("phase_name") if phase else ""
+    next_phase = phase.get("next_name") if phase else ""
+    phase_cap = phase_cum_bird = None
+    if phase:
+        cap = _num(phase.get("max_feed_qty"))
+        phase_cap = cap if cap > 0 else None
+        item_id = phase.get("feed_item")
+        if item_id and phase_cap:
+            agg = DailyEntry.objects.filter(batch=batch).aggregate(
+                f1=Sum("feed_1_qty", filter=Q(feed_1_id=item_id)),
+                f2=Sum("feed_2_qty", filter=Q(feed_2_id=item_id)))
+            item_kg = _num(agg["f1"]) + _num(agg["f2"])
+            denom = available if available > 0 else placed
+            phase_cum_bird = (item_kg / denom).quantize(Decimal("0.001")) if denom else None
+
+    # --- Actual feed eaten per SURVIVING bird (bird-day weighted) ---
+    sold_by_date = {}
+    for _bs in _BirdSale.objects.filter(batch=batch).values("date").annotate(t=Sum("birds")):
+        sold_by_date[_bs["date"]] = _bs["t"] or 0
+    _alive = int(placed)
+    _cum_pb = Decimal("0")
+    for _de in DailyEntry.objects.filter(batch=batch).order_by("date", "id"):
+        _fd = _num(_de.feed_1_qty) + _num(_de.feed_2_qty)
+        if _alive > 0 and _fd:
+            _cum_pb += _fd / Decimal(_alive) * Decimal("1000")
+        _alive -= (_de.mortality or 0) + (_de.culls or 0) + sold_by_date.get(_de.date, 0)
+    act_feed_bird_live = _cum_pb.quantize(q2)
+    std_feed_bird_daily = std.feed_intake if std else None
+
     return {
         "branch": farm.branch.branch_name if farm.branch_id else "",
         "line": farm.line or "",
@@ -3626,6 +3659,11 @@ def _live_flock_row(batch, today):
         "transfer_out_farms": transfer_out_farms, "feed_balance": feed_balance,
         "feed_balance_days": _div(feed_balance, daily_rate).quantize(q2) if daily_rate else Decimal("0"),
         "next_3_days_feed": (daily_rate * 3).quantize(q2),
+        # --- mirrors of Daily Entry feed metrics ---
+        "feed_phase": phase_name, "next_phase": next_phase,
+        "phase_cap": phase_cap, "phase_cum_bird": phase_cum_bird,
+        "act_feed_bird_live": act_feed_bird_live,
+        "std_feed_bird_daily": std_feed_bird_daily,
         "remark": remark, "remark_verdict": remark.split(" — ")[0],
     }
 
@@ -3784,6 +3822,18 @@ def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfe
         "feed_stock": feed_stock.quantize(q2),
         "cum_feed": feed_upto.quantize(q2),
         "feed_images": e.feed_image.url if e.feed_image else "",
+        # --- extra columns for the Farm Detailed Daily Entry report ---
+        "entry_date": e.date,
+        "book_no": batch_no,
+        # T. Birds / T. Weight = total (cumulative) birds/weight sold to date.
+        "t_birds": sold_upto, "t_weight": soldw_upto.quantize(q2),
+        "feed_1_item": e.feed_1.description if e.feed_1_id else "",
+        "feed_1_con": _num(e.feed_1_qty).quantize(q2),
+        "feed_2_item": e.feed_2.description if e.feed_2_id else "",
+        "feed_2_con": _num(e.feed_2_qty).quantize(q2),
+        "cum_feed_per_bird": _div(feed_upto * 1000, placed).quantize(q2),   # g/bird cumulative
+        "std_feed_per_bird": std.feed_intake if std else None,              # g/bird/day standard
+        "act_feed_per_bird": _div(feed_con * 1000, opening).quantize(q2),   # g/bird today
         "line": farm.line if farm else "",
         "branch": farm.branch.branch_name if farm and farm.branch_id else "",
         "farmer_contact": (farmer.mobile_no or farmer.phone_no or "") if farmer else "",
@@ -3826,7 +3876,7 @@ def day_record_report(request):
 
     entries = (DailyEntry.objects.filter(date=sel_date)
                .select_related("farm__branch", "farm__supervisor", "farm__farmer",
-                               "batch__breed", "supervisor", "entry_by")
+                               "batch__breed", "supervisor", "entry_by", "feed_1", "feed_2")
                .order_by("farm__farm_code", "batch__batch_name", "id"))
     if region_id:
         entries = entries.filter(farm__branch__region_id=region_id)
@@ -3864,6 +3914,90 @@ def day_record_report(request):
         "supervisors": Supervisor.objects.order_by("name"),
         "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
         "region_id": region_id, "branch_id": branch_id, "line": line,
+        "supervisor_id": supervisor_id, "farm_id": farm_id,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+@login_required
+def farm_detailed_daily_entry_report(request):
+    """Broiler > Reports > Farm Detailed Daily Entry Report — one row per daily
+    entry over a From/To date range (farm-focused register): the day's
+    mort/cull/sale/feed with cumulative figures, breed-standard comparison and
+    per-bird feed. Reuses the Day Record row builder for each entry's own date."""
+    from account.models import CompanyProfile
+    from django.utils.dateparse import parse_date
+    from datetime import timedelta
+    from inventory.models import StockTransfer, Item
+    from broiler.models import BirdSale
+
+    branch_id = (request.GET.get("branch") or "").strip()
+    line = (request.GET.get("line") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+
+    to_date = parse_date(request.GET.get("to_date") or "") or timezone.localdate()
+    from_date = parse_date(request.GET.get("from_date") or "") or (to_date - timedelta(days=30))
+
+    entries = (DailyEntry.objects.filter(date__gte=from_date, date__lte=to_date)
+               .select_related("farm__branch", "farm__supervisor", "farm__farmer",
+                               "batch__breed", "supervisor", "entry_by", "feed_1", "feed_2")
+               .order_by("farm__farm_code", "batch__batch_name", "date", "id"))
+    if branch_id:
+        entries = entries.filter(farm__branch_id=branch_id)
+    if line:
+        entries = entries.filter(farm__line=line)
+    if supervisor_id:
+        entries = entries.filter(Q(supervisor_id=supervisor_id) | Q(farm__supervisor_id=supervisor_id))
+    if farm_id:
+        entries = entries.filter(farm_id=farm_id)
+
+    feed_ids = list(Item.objects.filter(category__name__icontains="feed").values_list("id", flat=True))
+    chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+    placed_cache = {}
+
+    rows = [_day_record_row(e, e.date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale)
+            for e in entries]
+
+    # Total footer over the daily flow columns only (stock/cumulative columns
+    # don't sum meaningfully across days).
+    tkeys = ["mort", "culls", "sold", "sold_wt",
+             "feed_in", "feed_out", "feed_con", "feed_1_con", "feed_2_con"]
+    totals = {k: sum((_num(r[k]) for r in rows), Decimal("0")) for k in tkeys}
+
+    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+             .values_list("line", flat=True).distinct())
+
+    columns = [
+        ("slno", "Sl.No."), ("supervisor", "Supervisor"), ("farm_code", "Farm Code"),
+        ("farmer", "Farmer"), ("batch", "Batch"), ("book_no", "Book No"),
+        ("entry_date", "Entry Date"), ("age", "Age"), ("placed", "Placed Birds"),
+        ("opening", "Opening Birds"), ("mort", "Mort"), ("mort_pct", "Mort%"),
+        ("mort_image", "Mort Image"), ("cum_mort", "Cum Mort"), ("cum_mort_pct", "Cum Mort%"),
+        ("culls", "Culls"), ("cull_image", "Cull Image"), ("sold", "Sold"),
+        ("sold_wt", "Sold Wt"), ("t_birds", "T. Birds"), ("t_weight", "T. Weight"),
+        ("balance", "Balance Birds"), ("std_bwt", "Std B.Wt"), ("avg_bwt", "Avg B.Wt"),
+        ("std_fcr", "Std FCR"), ("fcr", "FCR"), ("cfcr", "CFCR"), ("feed_ob", "Feed OB"),
+        ("feed_in", "Feed In"), ("feed_out", "Feed Out"), ("feed_con", "Feed Con"),
+        ("feed_1_item", "Feed-1 Item"), ("feed_1_con", "Feed-1 Con"),
+        ("feed_2_item", "Feed-2 Item"), ("feed_2_con", "Feed-2 Con"),
+        ("feed_stock", "Feed Stock"), ("cum_feed", "Cum. Feed"),
+        ("cum_feed_per_bird", "Cum. Feed/Bird"), ("std_feed_per_bird", "Std Feed/Bird"),
+        ("act_feed_per_bird", "Act Feed/Bird"), ("diseases_name", "Diseases Names"),
+        ("remarks", "Remarks"), ("line", "Line"), ("branch", "Branch"),
+        ("farmer_contact", "Farmer Contact"), ("entry_time", "Entry Time"),
+        ("entry_by", "Entry By"), ("farm_location", "Farm Location"),
+        ("entry_location", "Entry Location"),
+    ]
+
+    return render(request, "farm_detailed_daily_entry_report.html", {
+        "rows": rows, "totals": totals, "from_date": from_date, "to_date": to_date,
+        "columns": columns,
+        "branches": Branch.objects.order_by("branch_name"),
+        "lines": lines,
+        "supervisors": Supervisor.objects.order_by("name"),
+        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id,
         "company": CompanyProfile.get_solo(),
     })
