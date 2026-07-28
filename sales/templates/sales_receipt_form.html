@@ -73,7 +73,25 @@ const INSTANCE_ID = {{ instance.id|default:"null" }};
 const get = id => document.getElementById(id);
 
 const customerOptions = `<option value="">select</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.name|escapejs }}</option>{% endfor %}`;
-const modeOptions = `<option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option><option value="Cheque">Cheque</option><option value="UPI">UPI</option><option value="Card">Card</option>`;
+const modeOptions = `{% for m in payment_modes %}<option value="{{ m|escapejs }}">{{ m|escapejs }}</option>{% endfor %}`;
+const MODE_MAP = {{ payment_mode_map_json|safe }};
+// Choosing a payment mode narrows the account list to its mapped Bank/Cash accounts.
+function applyPaymentMode(tr) {
+  const modeEl = tr && tr.querySelector('.mode');
+  const acc = tr && (tr.querySelector('.account') || tr.querySelector('.pay-account'));
+  if (!modeEl || !acc) return;
+  const mapped = (MODE_MAP[modeEl.value] || []).map(String);
+  // Narrow the account list to the mode's mapped Bank/Cash accounts (all when
+  // the mode has no mapping); auto-select when exactly one is mapped.
+  const full = document.createElement('select'); full.innerHTML = accountOptions;
+  const keep = [...full.options].filter(o => !o.value || mapped.length === 0 || mapped.includes(o.value));
+  acc.innerHTML = keep.map(o => o.outerHTML).join('');
+  acc.value = (mapped.length === 1) ? mapped[0] : '';
+  if (window.jQuery) jQuery(acc).trigger('change.select2');
+}
+document.addEventListener('change', function (e) {
+  if (e.target.classList && e.target.classList.contains('mode')) applyPaymentMode(e.target.closest('tr'));
+});
 const accountOptions = `<option value="">select</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code|escapejs }} - {{ a.description|escapejs }}</option>{% endfor %}`;
 
 function row() {

@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}Payment Mode Master — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='account' %}{% endblock %}
+{% block content %}
+{% include '_account_subnavbar.html' with active_tab='payment_mode' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-money-check-dollar"></i> Payment Mode Master</div>
+    <div class="page-header-subtitle">Modes mapped to a Bank / Cash account</div>
+  </div>
+  <div class="page-header-right d-flex gap-2">
+    <button class="btn btn-outline-secondary" id="export-btn"><i class="fas fa-file-export"></i> Export</button>
+    <a class="btn btn-primary" href="{% url 'payment_mode_add' %}"><i class="fas fa-plus"></i> Add Payment Mode</a>
+  </div>
+</div>
+
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+  <table class="table table-hover table-bordered mb-0" id="pm-table">
+    <thead class="table-dark"><tr>
+      <th>#</th><th>Mode Code</th><th>Mode Name</th><th>Category</th><th>Payment Method</th>
+      <th>Applicable For</th><th>Active</th><th>Default</th><th>Display Order</th><th class="text-center">Action</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div></div></div>
+
+<div class="modal fade" id="pm-del-modal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title">Confirm Delete</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">Delete this payment mode?</div>
+  <div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+    <button type="button" class="btn btn-danger" id="pm-del-confirm"><i class="fas fa-trash me-1"></i>Delete</button>
+  </div>
+</div></div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrf = "{{ csrf_token }}";
+  const LIST = "{% url 'payment_mode_master_list' %}";
+  const del = id => `/payment_mode_master/${id}/delete/`;
+  const editUrl = id => `/payment-mode/${id}/edit/`;
+  let table = null, pendingDelete = null;
+  function yn(v) { return v ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'; }
+
+  function load() {
+    $.getJSON(LIST, function (rows) {
+      if (table) table.destroy();
+      const tb = $("#pm-table tbody").empty();
+      rows.forEach(function (r, i) {
+        tb.append(`<tr>
+          <td>${i + 1}</td><td>${escapeHtml(r.code)}</td><td>${escapeHtml(r.name)}</td>
+          <td>${escapeHtml(r.category)}</td>
+          <td>${r.bank_cash_names ? escapeHtml(r.bank_cash_names) : '<span class="text-muted">-</span>'}</td>
+          <td>${escapeHtml(r.applicable_for)}</td>
+          <td>${yn(r.is_active)}</td><td>${yn(r.is_default)}</td><td>${r.display_order}</td>
+          <td class="text-center"><div class="d-flex gap-1 justify-content-center">
+            <a class="btn btn-outline-primary btn-sm" href="${editUrl(r.id)}" title="Edit"><i class="fas fa-pen"></i></a>
+            <button class="btn btn-outline-danger btn-sm del-btn" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>
+          </div></td></tr>`);
+      });
+      table = $("#pm-table").DataTable({ responsive: true, order: [[8, "asc"]],
+        columnDefs: [{ orderable: false, targets: [-1] }], language: { emptyTable: "No payment modes yet." } });
+    }).fail(() => window.showToast('danger', "Failed to load payment modes."));
+  }
+
+  $(document).on("click", ".del-btn", function () { pendingDelete = $(this).data("id"); new bootstrap.Modal("#pm-del-modal").show(); });
+  $("#pm-del-confirm").on("click", function () {
+    if (!pendingDelete) return;
+    $.ajax({ url: del(pendingDelete), type: "DELETE", headers: { "X-CSRFToken": csrf },
+      success: function () { bootstrap.Modal.getInstance("#pm-del-modal").hide(); window.showToast('success', "Payment mode deleted."); load(); },
+      error: xhr => window.showToast('danger', xhr.responseJSON?.error || "Failed to delete.") });
+  });
+
+  $("#export-btn").on("click", function () {
+    const rows = [["Code","Name","Category","Payment Method","Applicable For","Active","Default","Display Order"]];
+    $("#pm-table tbody tr").each(function () {
+      const c = $(this).children();
+      rows.push([c.eq(1).text(), c.eq(2).text(), c.eq(3).text(), c.eq(4).text(), c.eq(5).text(), c.eq(6).text().trim(), c.eq(7).text().trim(), c.eq(8).text()]);
+    });
+    const csvBody = rows.map(r => r.map(v => `"${(v||'').replace(/"/g,'""')}"`).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csvBody], { type: "text/csv;charset=utf-8;" }));
+    a.download = "payment_modes.csv"; a.click();
+  });
+
+  load();
+});
+</script>
+{% endblock %}

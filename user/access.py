@@ -213,6 +213,11 @@ MODULE_REGISTRY = [
                     ("bank_cash", "Bank / Cash Masters", (
                         "bank_cash_master_list",
                     )),
+                    ("payment_mode", "Payment Mode Master", (
+                        "payment_mode_add", "payment_mode_edit",
+                        "payment_mode_master_list", "payment_mode_master_create",
+                        "payment_mode_master_update", "payment_mode_master_delete",
+                    )),
                     ("organization_centre", "Organization Centre", (
                         "organization_centre_master_list", "organization_centre_tree", "organization_centre_children",
                         "organization_centre_parent", "organization_centre_toggle_lock", "organization_centre_approve",
@@ -532,6 +537,7 @@ _ACTION_BASE_TO_TAB = {
     "financial_year": "fin_year",
     "terms_conditions": "terms",
     "bank_cash_master": "bank_cash",
+    "payment_mode_master": "payment_mode",
     "organization_centre_master": "organization_centre",
     # Inventory
     "category": "item_category",

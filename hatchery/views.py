@@ -301,6 +301,7 @@ class EggPurchaseFormTemplateView(View):
     """Renders the egg purchase add/edit page."""
 
     def get(self, request, id: Optional[int] = None, request_mode: bool = False):
+        from account.services.bank_cash import bank_cash_accounts
         context = {
             "egg_purchase_id": id,
             "request_mode": request_mode,
@@ -308,6 +309,7 @@ class EggPurchaseFormTemplateView(View):
             "warehouses": Warehouse.objects.all().order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
             "pay_accounts": ChartOfAccount.objects.filter(status="Active").order_by("code"),
+            "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
             "next_transaction_no": EggPurchase._next_transaction_no() if id is None else None,
         }
         return render(request, "egg_purchase_form.html", context)
@@ -1432,6 +1434,7 @@ class ChickSaleFormTemplateView(View):
                         "sale_rate": str(row.price),
                     } for row in challan.items.all()],
                 }
+        from account.services.bank_cash import bank_cash_accounts
         return render(request, "chick_sale_form.html", {
             "chick_sale_id": id,
             "request_mode": request_mode,
@@ -1439,6 +1442,7 @@ class ChickSaleFormTemplateView(View):
             "warehouses": Warehouse.objects.all().order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
             "accounts": ChartOfAccount.objects.all().order_by("code"),
+            "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
             "states_and_union_territories": STATES_AND_TERRITORIES,
             "next_bill_no": ChickSale.next_bill_no() if id is None else None,
             "from_challan": json.dumps(from_challan),
@@ -1876,11 +1880,15 @@ class ChickSaleReceiptListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class ChickSaleReceiptFormTemplateView(View):
     def get(self, request, id=None):
+        from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
+        import json as _json
         return render(request, "chick_sale_receipt_form.html", {
             "instance": ChickSaleReceipt.objects.filter(id=id).first() if id else None,
             "locations": Warehouse.objects.order_by("name"),
             "customers": Customer.objects.order_by("name"),
-            "accounts": ChartOfAccount.objects.order_by("code"),
+            "accounts": bank_cash_accounts(),   # receipt into a Bank/Cash master account
+            "payment_modes": active_payment_modes("receipt"),
+            "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
             "today": date.today().isoformat(),
         })
 

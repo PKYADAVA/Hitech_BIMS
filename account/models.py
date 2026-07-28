@@ -554,6 +554,57 @@ class BankCashMaster(models.Model):
         super().save(*args, **kwargs)
 
 
+class PaymentMode(models.Model):
+    """Master of payment modes (Account > Master > Payment Mode). Each mode maps
+    to a single Bank/Cash Master account (the "Payment Method"), filtered by
+    Category (Cash/Bank). On a payment/receipt, choosing the mode auto-fills that
+    account. ``applicable_for`` scopes the mode to Payment / Receipt / Both. The
+    transaction's own ``mode`` field stays a plain name string."""
+    CATEGORY_CHOICES = [("Cash", "Cash"), ("Bank", "Bank")]
+    APPLICABLE_CHOICES = [("Payment", "Payment"), ("Receipt", "Receipt"), ("Both", "Both")]
+
+    code = models.CharField(max_length=20, unique=True, editable=False, blank=True,
+                            help_text=_("Auto-generated code, e.g. PM-0001"))
+    name = models.CharField(max_length=100, unique=True,
+                            help_text=_("Mode name shown in payment/receipt dropdowns"))
+    category = models.CharField(max_length=10, choices=CATEGORY_CHOICES, default="Bank",
+                                help_text=_("Cash or Bank — filters the Payment Method options"))
+    bank_cash = models.ManyToManyField('account.BankCashMaster', blank=True,
+                                       related_name='payment_modes',
+                                       help_text=_("Payment Method — the Bank/Cash Master accounts this mode maps to"))
+    applicable_for = models.CharField(max_length=10, choices=APPLICABLE_CHOICES, default="Both",
+                                      help_text=_("Where this mode can be used"))
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False, help_text=_("Preselect this mode on new payments/receipts"))
+    display_order = models.PositiveIntegerField(default=0)
+    description = models.TextField(blank=True)
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        verbose_name = _("Payment Mode")
+        verbose_name_plural = _("Payment Modes")
+
+    @classmethod
+    def next_code(cls):
+        serials = []
+        for code in cls.objects.filter(code__startswith="PM-").values_list("code", flat=True):
+            m = re.match(r"^PM-(\d+)$", code or "")
+            if m:
+                serials.append(int(m.group(1)))
+        return f"PM-{max(serials, default=0) + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.code:
+            self.code = self.next_code()
+        super().save(*args, **kwargs)
+
+
 class CompanyProfile(models.Model):
     """Single record holding the company's own letterhead/bank details, used on printed documents."""
     name = models.CharField(max_length=255, default="Company Name")

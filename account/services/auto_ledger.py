@@ -55,9 +55,19 @@ def sync_ledger(instance, name, anchor_roles, company=None):
                 parent=anchor,
             ).first()
             if existing:
+                changed = []
+                if existing.deleted_at is not None:
+                    # Revive a soft-deleted ledger (e.g. hidden by a COA
+                    # regeneration) since its master still exists.
+                    existing.deleted_at = None
+                    existing.deleted_by = None
+                    existing.status = 'Active'
+                    changed += ['deleted_at', 'deleted_by', 'status']
                 if existing.description != name:
                     existing.description = name
-                    existing.save()
+                    changed.append('description')
+                if changed:
+                    existing.save(update_fields=changed + ['updated_at'])
                 ledgers.append(existing)
                 continue
             ledger = ChartOfAccount(

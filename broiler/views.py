@@ -2649,12 +2649,16 @@ class BirdSaleReceiptListTemplateView(View):
 @method_decorator(login_required, name="dispatch")
 class BirdSaleReceiptFormTemplateView(View):
     def get(self, request, id=None):
+        from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
+        import json as _json
         return render(request, "bird_sale_receipt_form.html", {
             "instance": BirdSaleReceipt.objects.filter(id=id).first() if id else None,
             "locations": Warehouse.objects.order_by("name"),
             "customers": Customer.objects.order_by("name"),
             "farmers": Farmer.objects.order_by("farmer_name"),
-            "accounts": ChartOfAccount.objects.order_by("code"),
+            "accounts": bank_cash_accounts(),   # receipt into a Bank/Cash master account
+            "payment_modes": active_payment_modes("receipt"),
+            "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
             "today": timezone.localdate().isoformat(),
         })
 

@@ -135,7 +135,7 @@
           <label class="form-label">Pay Account</label>
           <select class="form-select" id="pay_account">
             <option value="">select</option>
-            {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
+            {% for a in bank_accounts %}<option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>{% endfor %}
           </select>
         </div>
         <div class="col-md-2">

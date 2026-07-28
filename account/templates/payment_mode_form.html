@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% block title %}{% if instance_id %}Edit{% else %}Add{% endif %} Payment Mode — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='account' %}{% endblock %}
+{% block content %}
+{% include '_account_subnavbar.html' with active_tab='payment_mode' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-money-check-dollar"></i> {% if instance_id %}Edit{% else %}Add{% endif %} Payment Mode</div>
+    <div class="page-header-subtitle">Masters &rsaquo; Payment Mode Master</div>
+  </div>
+  <div class="page-header-right">
+    <a href="{% url 'payment_mode' %}" class="btn btn-outline-secondary"><i class="fas fa-list"></i> List</a>
+  </div>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+  <input type="hidden" id="pm-id">
+  <div class="row g-3">
+    <div class="col-md-6"><div class="row g-3">
+      <div class="col-sm-6"><label class="form-label">Mode Code</label>
+        <input class="form-control bg-light" id="pm-code" readonly placeholder="(auto)"></div>
+      <div class="col-sm-6"><label class="form-label">Mode Name <span class="text-danger">*</span></label>
+        <input class="form-control" id="pm-name" placeholder="e.g. Bank / Cash / RTGS" required></div>
+      <div class="col-sm-6"><label class="form-label">Category <span class="text-danger">*</span></label>
+        <select class="form-select" id="pm-category">
+          {% for v, l in category_choices %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+        </select></div>
+      <div class="col-sm-6"><label class="form-label">Payment Method <span class="text-danger">*</span></label>
+        <div id="pm-method-box" class="border rounded p-2" style="max-height:130px;overflow:auto"></div>
+        <div class="form-text">Tick the Bank / Cash account(s) this mode uses.</div></div>
+      <div class="col-sm-6"><label class="form-label d-block">Applicable For</label>
+        <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" id="pm-app-payment"><label class="form-check-label" for="pm-app-payment">Payment</label></div>
+        <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" id="pm-app-receipt"><label class="form-check-label" for="pm-app-receipt">Receipt</label></div>
+        <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" id="pm-app-both"><label class="form-check-label" for="pm-app-both">Both</label></div>
+      </div>
+      <div class="col-sm-6"><label class="form-label">Display Order</label>
+        <input class="form-control" id="pm-display-order" type="number" min="0" value="0"></div>
+    </div></div>
+    <div class="col-md-6"><div class="row g-3">
+      <div class="col-sm-6"><label class="form-label d-block">Active</label>
+        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pm-active" checked><label class="form-check-label" for="pm-active">Yes</label></div></div>
+      <div class="col-sm-6"><label class="form-label d-block">Default</label>
+        <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pm-default"><label class="form-check-label" for="pm-default">No</label></div></div>
+      <div class="col-12"><label class="form-label">Description</label>
+        <textarea class="form-control" id="pm-description" rows="2"></textarea></div>
+      <div class="col-12"><label class="form-label">Remarks</label>
+        <textarea class="form-control" id="pm-remarks" rows="2"></textarea></div>
+    </div></div>
+  </div>
+  <div class="d-flex gap-2 mt-3">
+    <button class="btn btn-primary" id="save-btn"><i class="fas fa-save me-1"></i>Save</button>
+    <button class="btn btn-outline-primary" id="save-new-btn"><i class="fas fa-save me-1"></i>Save &amp; New</button>
+    <a href="{% url 'payment_mode' %}" class="btn btn-outline-secondary ms-auto"><i class="fas fa-xmark me-1"></i>Cancel</a>
+  </div>
+</div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrf = "{{ csrf_token }}";
+  const INSTANCE_ID = {{ instance_id|default:"null" }};
+  const CREATE = "{% url 'payment_mode_master_create' %}";
+  const LISTPAGE = "{% url 'payment_mode' %}";
+  const upd = id => `/payment_mode_master/${id}/`;
+  const BANKCASH = [{% for b in bank_cash_list %}{ id: {{ b.id }}, label: "{{ b.code|escapejs }} - {{ b.name|escapejs }}", cash: {{ b.is_cash|yesno:"true,false" }} },{% endfor %}];
+
+  function methodCheckboxes(category, selected) {
+    const wantCash = category === 'Cash';
+    const sel = (selected || []).map(String);
+    const list = BANKCASH.filter(b => b.cash === wantCash);
+    if (!list.length) return `<div class="text-muted small">No ${wantCash ? 'cash' : 'bank'} accounts in the Bank / Cash master.</div>`;
+    return list.map(b =>
+      `<div class="form-check"><input class="form-check-input pm-method-cb" type="checkbox" id="pmm-${b.id}" value="${b.id}" ${sel.includes(String(b.id)) ? 'checked' : ''}><label class="form-check-label" for="pmm-${b.id}">${escapeHtml(b.label)}</label></div>`).join('');
+  }
+  function refreshMethod(selected) { $("#pm-method-box").html(methodCheckboxes($("#pm-category").val(), selected)); }
+  $("#pm-category").on("change", () => refreshMethod());
+  $("#pm-app-both").on("change", function () { $("#pm-app-payment,#pm-app-receipt").prop("checked", this.checked); });
+  $("#pm-app-payment,#pm-app-receipt").on("change", function () {
+    $("#pm-app-both").prop("checked", $("#pm-app-payment").is(":checked") && $("#pm-app-receipt").is(":checked"));
+  });
+
+  function fillForm(r) {
+    $("#pm-id").val(r.id); $("#pm-code").val(r.code); $("#pm-name").val(r.name);
+    $("#pm-category").val(r.category); refreshMethod(r.bank_cash);
+    const _p = r.applicable_for === "Payment" || r.applicable_for === "Both";
+    const _r = r.applicable_for === "Receipt" || r.applicable_for === "Both";
+    $("#pm-app-payment").prop("checked", _p); $("#pm-app-receipt").prop("checked", _r); $("#pm-app-both").prop("checked", _p && _r);
+    $("#pm-display-order").val(r.display_order);
+    $("#pm-active").prop("checked", r.is_active); $("#pm-default").prop("checked", r.is_default);
+    $("#pm-description").val(r.description || ""); $("#pm-remarks").val(r.remarks || "");
+  }
+
+  function collect() {
+    const p = $("#pm-app-payment").is(":checked"), r = $("#pm-app-receipt").is(":checked");
+    return {
+      name: $("#pm-name").val().trim(),
+      category: $("#pm-category").val(),
+      bank_cash: $(".pm-method-cb:checked").map(function () { return Number(this.value); }).get(),
+      applicable_for: (p && r) ? "Both" : p ? "Payment" : r ? "Receipt" : "Both",
+      is_active: $("#pm-active").is(":checked"),
+      is_default: $("#pm-default").is(":checked"),
+      display_order: Number($("#pm-display-order").val()) || 0,
+      description: $("#pm-description").val(),
+      remarks: $("#pm-remarks").val(),
+    };
+  }
+
+  function save(thenNew) {
+    const id = $("#pm-id").val(), payload = collect();
+    if (!payload.name) { window.showToast('danger', "Mode Name is required."); return; }
+    $.ajax({
+      url: id ? upd(id) : CREATE, type: id ? "PUT" : "POST",
+      headers: { "X-CSRFToken": csrf, "Content-Type": "application/json" },
+      data: JSON.stringify(payload),
+      success: function () {
+        window.showToast('success', id ? "Payment mode updated." : "Payment mode saved.");
+        if (thenNew) { window.location.href = "{% url 'payment_mode_add' %}"; }
+        else { window.location.href = LISTPAGE; }
+      },
+      error: xhr => window.showToast('danger', xhr.responseJSON?.error || "Failed to save."),
+    });
+  }
+  $("#save-btn").on("click", () => save(false));
+  $("#save-new-btn").on("click", () => save(true));
+
+  // Init: edit -> fetch record; add -> default checkboxes + method list.
+  if (INSTANCE_ID) { $.getJSON(upd(INSTANCE_ID), fillForm); }
+  else { $("#pm-app-payment,#pm-app-receipt,#pm-app-both").prop("checked", true); refreshMethod([]); }
+});
+</script>
+{% endblock %}

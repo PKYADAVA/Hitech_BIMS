@@ -15,7 +15,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
 
-from account.models import BankCashMaster, ChartOfAccount, CompanyProfile, FinancialYear, OrganizationCentre, TermsConditions
+from account.models import BankCashMaster, ChartOfAccount, CompanyProfile, FinancialYear, OrganizationCentre, PaymentMode, TermsConditions
 from hatchery_master.models import STATES_AND_TERRITORIES
 from inventory.models import Mapping, Sector, Warehouse
 
@@ -113,10 +113,13 @@ def _resolve_sectors(raw_ids):
 
 
 def _bank_cash_dict(row):
+    from account.services.bank_cash import ledger_for_bank_cash
     offices = list(row.sectors.all())
     all_offices = not offices
+    ledger = ledger_for_bank_cash(row)
     return {
         "id": row.id, "code": row.code, "is_cash": row.is_cash, "name": row.name,
+        "coa_code": ledger.code if ledger else "",
         "sectors": [o.id for o in offices],
         "sector_names": "All Offices" if all_offices else ", ".join(o.name for o in offices),
         "micr": row.micr, "address": row.address, "email": row.email,
@@ -201,6 +204,108 @@ class BankCashMasterAPI(View):
         try:
             row = BankCashMaster.objects.get(id=id)
         except BankCashMaster.DoesNotExist:
+            raise Http404("Record not found")
+        row.delete()
+        return JsonResponse({"message": "Deleted"})
+
+
+@login_required
+def payment_mode(request):
+    return render(request, "payment_mode.html")
+
+
+@login_required
+def payment_mode_form(request, id=None):
+    return render(request, "payment_mode_form.html", {
+        "instance_id": id,
+        "bank_cash_list": BankCashMaster.objects.order_by("name"),
+        "category_choices": PaymentMode.CATEGORY_CHOICES,
+        "applicable_choices": PaymentMode.APPLICABLE_CHOICES,
+    })
+
+
+def _payment_mode_dict(row):
+    bcs = list(row.bank_cash.all())
+    return {
+        "id": row.id, "code": row.code, "name": row.name, "category": row.category,
+        "bank_cash": [b.id for b in bcs],
+        "bank_cash_names": ", ".join(f"{b.code} - {b.name}" for b in bcs),
+        "applicable_for": row.applicable_for,
+        "is_active": row.is_active, "is_default": row.is_default,
+        "display_order": row.display_order,
+        "description": row.description, "remarks": row.remarks,
+    }
+
+
+@method_decorator(login_required, name="dispatch")
+class PaymentModeAPI(View):
+    def get(self, request, id=None):
+        if id:
+            try:
+                return JsonResponse(_payment_mode_dict(
+                    PaymentMode.objects.prefetch_related("bank_cash").get(id=id)))
+            except PaymentMode.DoesNotExist:
+                raise Http404("Record not found")
+        rows = PaymentMode.objects.prefetch_related("bank_cash").order_by("display_order", "name")
+        return JsonResponse([_payment_mode_dict(r) for r in rows], safe=False)
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        if not data.get("name"):
+            return JsonResponse({"error": "Name is required"}, status=400)
+        try:
+            row = PaymentMode.objects.create(
+                name=data["name"], category=data.get("category") or "Bank",
+                applicable_for=data.get("applicable_for") or "Both",
+                is_active=bool(data.get("is_active", True)),
+                is_default=bool(data.get("is_default", False)),
+                display_order=int(data.get("display_order") or 0),
+                description=data.get("description") or "",
+                remarks=data.get("remarks") or "",
+            )
+            row.bank_cash.set(data.get("bank_cash") or [])
+            if row.is_default:
+                PaymentMode.objects.exclude(pk=row.pk).update(is_default=False)
+            return JsonResponse({"message": "Saved", "id": row.id, "code": row.code}, status=201)
+        except (ValueError, IntegrityError):
+            return JsonResponse({"error": "A payment mode with this name already exists."}, status=400)
+
+    def put(self, request, id):
+        try:
+            row = PaymentMode.objects.get(id=id)
+        except PaymentMode.DoesNotExist:
+            raise Http404("Record not found")
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        try:
+            row.name = data.get("name", row.name)
+            row.category = data.get("category") or row.category
+            row.applicable_for = data.get("applicable_for") or row.applicable_for
+            row.is_active = bool(data.get("is_active", row.is_active))
+            row.is_default = bool(data.get("is_default", row.is_default))
+            row.display_order = int(data.get("display_order") or 0)
+            row.description = data.get("description") or ""
+            row.remarks = data.get("remarks") or ""
+            row.full_clean(exclude=["code"])
+            row.save()
+            row.bank_cash.set(data.get("bank_cash") or [])
+            if row.is_default:
+                PaymentMode.objects.exclude(pk=row.pk).update(is_default=False)
+            return JsonResponse({"message": "Updated"})
+        except ValidationError as e:
+            return JsonResponse({"error": "; ".join(e.messages)}, status=400)
+        except IntegrityError:
+            return JsonResponse({"error": "A payment mode with this name already exists."}, status=400)
+
+    def delete(self, request, id):
+        try:
+            row = PaymentMode.objects.get(id=id)
+        except PaymentMode.DoesNotExist:
             raise Http404("Record not found")
         row.delete()
         return JsonResponse({"message": "Deleted"})

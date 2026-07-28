@@ -1064,11 +1064,15 @@ def sales_receipt_list(request):
 
 @login_required(login_url="login")
 def sales_receipt_form(request, id=None):
+    from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
+    import json as _json
     return render(request, "sales_receipt_form.html", {
         "instance": SalesReceipt.objects.filter(id=id).first() if id else None,
         "locations": Warehouse.objects.order_by("name"),
         "customers": Customer.objects.order_by("name"),
-        "accounts": ChartOfAccount.objects.order_by("code"),
+        "accounts": bank_cash_accounts(),   # receipt into a Bank/Cash master account
+        "payment_modes": active_payment_modes("receipt"),
+        "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
         "today": timezone.localdate().isoformat(),
     })
 

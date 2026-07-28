@@ -193,7 +193,7 @@ $(document).ready(function () {
                         <tr>
                             <td>${escapeHtml(row.code)}</td>
                             <td>${typeBadge}</td>
-                            <td>${escapeHtml(row.name)}</td>
+                            <td>${escapeHtml(row.name)}${row.coa_code ? ` <span class="text-muted">(${escapeHtml(row.coa_code)})</span>` : ''}</td>
                             <td>${escapeHtml(row.sector_names)}</td>
                             <td>${escapeHtml(row.coa_head)}</td>
                             <td>${escapeHtml(row.address)}</td>

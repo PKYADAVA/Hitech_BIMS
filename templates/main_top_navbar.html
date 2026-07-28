@@ -479,6 +479,9 @@
               {% if 'bank_cash' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'bank_cash' %}">
                 <i class="fas fa-university"></i>Bank / Cash Masters
               </a></li>{% endif %}
+              {% if 'payment_mode' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'payment_mode' %}">
+                <i class="fas fa-money-check-dollar"></i>Payment Mode Master
+              </a></li>{% endif %}
               {% if 'organization_centre' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'organization_centre' %}">
                 <i class="fas fa-sitemap"></i>Organization Centre
               </a></li>{% endif %}
