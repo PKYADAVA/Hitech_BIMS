@@ -322,62 +322,75 @@ $(document).ready(function () {
         return rows.filter(r => r.account);
     }
 
+    // NarrationSettings toggles (from the server) — control what the engine may
+    // weave into the sentence. Defaults to all-on when the context is absent.
+    const NARR = {
+        enabled: {{ narration_settings.enabled|yesno:"true,false" }},
+        amount: {{ narration_settings.include_amount|yesno:"true,false" }},
+        reference: {{ narration_settings.include_reference|yesno:"true,false" }},
+        party: {{ narration_settings.include_party|yesno:"true,false" }},
+    };
+
     function buildAutoNarration() {
+        if (!NARR.enabled) return '';
         const voucherType = $('#voucher-type').val();
         const date = $('#voucher-date').val();
         const reference = ($('#voucher-reference').val() || '').trim();
-        const refSuffix = reference ? ` Ref: ${reference}.` : '';
+        const refSuffix = (NARR.reference && reference) ? ` Ref: ${reference}.` : '';
         const lines = collectNarrationLines();
         if (!lines.length) return '';
 
         const debitLine = lines.find(l => l.debit > 0);
         const creditLine = lines.find(l => l.credit > 0);
         const amount = lines.reduce((sum, l) => sum + l.debit, 0);
-        const amt = formatINR(amount);
+        const amt = NARR.amount ? formatINR(amount) : '';
+        const ofAmt = amt ? ` of ${amt}` : '';
+        const amounting = amt ? ` amounting to ${amt}` : '';
 
         // Party ledgers (customer/supplier) speak for themselves; expense/tax
         // ledgers get "toward <phrase>" so "paid to toward rent" never happens.
+        // When include_party is off, drop party NAMES but keep expense phrases.
         function partyOrPhrase(line) {
             if (!line) return null;
-            if (isPartyAccount(line.account)) return { text: line.account.description, toward: false };
+            if (isPartyAccount(line.account)) return NARR.party ? { text: line.account.description, toward: false } : null;
             const phrase = ledgerPhrase(line.account);
             if (phrase) return { text: phrase, toward: true };
-            return { text: line.account.description, toward: false };
+            return NARR.party ? { text: line.account.description, toward: false } : null;
         }
 
         if (voucherType === 'Payment') {
             const mode = creditLine ? moneyModeLabel(creditLine.account) : '';
             const who = partyOrPhrase(debitLine);
             const whoText = who ? (who.toward ? `toward ${who.text}` : `to ${who.text}`) : '';
-            return `Being payment of ${amt} made ${whoText} through ${mode}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+            return `Being payment${ofAmt} made ${whoText} through ${mode}.${refSuffix}`.replace(/\s+/g, ' ').trim();
         }
         if (voucherType === 'Receipt') {
             const mode = debitLine ? moneyModeLabel(debitLine.account) : '';
             const who = partyOrPhrase(creditLine);
             const whoText = who ? (who.toward ? `against ${who.text}` : `from ${who.text}`) : '';
-            return `Being receipt of ${amt} received ${whoText} through ${mode}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+            return `Being receipt${ofAmt} received ${whoText} through ${mode}.${refSuffix}`.replace(/\s+/g, ' ').trim();
         }
         if (voucherType === 'Contra') {
             const debitIsCash = debitLine && isCashAccount(debitLine.account);
             const creditIsCash = creditLine && isCashAccount(creditLine.account);
             const debitIsBank = debitLine && isBankAccount(debitLine.account);
             const creditIsBank = creditLine && isBankAccount(creditLine.account);
-            if (debitIsBank && creditIsCash) return `Being cash deposited into ${debitLine.account.description} amounting to ${amt}.${refSuffix}`.trim();
-            if (debitIsCash && creditIsBank) return `Being cash withdrawn from ${creditLine.account.description} amounting to ${amt}.${refSuffix}`.trim();
-            if (debitIsBank && creditIsBank) return `Being fund transferred from ${creditLine.account.description} to ${debitLine.account.description} amounting to ${amt}.${refSuffix}`.trim();
+            if (debitIsBank && creditIsCash) return `Being cash deposited into ${debitLine.account.description}${amounting}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+            if (debitIsCash && creditIsBank) return `Being cash withdrawn from ${creditLine.account.description}${amounting}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+            if (debitIsBank && creditIsBank) return `Being fund transferred from ${creditLine.account.description} to ${debitLine.account.description}${amounting}.${refSuffix}`.replace(/\s+/g, ' ').trim();
             const a = creditLine ? creditLine.account.description : '';
             const b = debitLine ? debitLine.account.description : '';
-            return `Being contra entry of ${amt} between ${a} and ${b}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+            return `Being contra entry${ofAmt} between ${a} and ${b}.${refSuffix}`.replace(/\s+/g, ' ').trim();
         }
         if (voucherType === 'Sales') {
-            const party = (creditLine && isPartyAccount(creditLine.account) && creditLine.account.description)
-                || (debitLine && isPartyAccount(debitLine.account) && debitLine.account.description) || null;
-            return `Being sale of goods${party ? ` to ${party}` : ''} amounting to ${amt}.${refSuffix}`.trim();
+            const party = NARR.party ? ((creditLine && isPartyAccount(creditLine.account) && creditLine.account.description)
+                || (debitLine && isPartyAccount(debitLine.account) && debitLine.account.description) || null) : null;
+            return `Being sale of goods${party ? ` to ${party}` : ''}${amounting}.${refSuffix}`.replace(/\s+/g, ' ').trim();
         }
         if (voucherType === 'Purchase') {
-            const party = (creditLine && isPartyAccount(creditLine.account) && creditLine.account.description)
-                || (debitLine && isPartyAccount(debitLine.account) && debitLine.account.description) || null;
-            return `Being purchase of goods${party ? ` from ${party}` : ''} amounting to ${amt}.${refSuffix}`.trim();
+            const party = NARR.party ? ((creditLine && isPartyAccount(creditLine.account) && creditLine.account.description)
+                || (debitLine && isPartyAccount(debitLine.account) && debitLine.account.description) || null) : null;
+            return `Being purchase of goods${party ? ` from ${party}` : ''}${amounting}.${refSuffix}`.replace(/\s+/g, ' ').trim();
         }
 
         // Journal (and anything else): lead with whichever ledger carries a
@@ -398,7 +411,7 @@ $(document).ready(function () {
         }
         const debitName = debitLine ? debitLine.account.description : '';
         const creditName = creditLine ? creditLine.account.description : '';
-        return `Being journal entry of ${amt} between ${debitName} and ${creditName}.${refSuffix}`.replace(/\s+/g, ' ').trim();
+        return `Being journal entry${ofAmt} between ${debitName} and ${creditName}.${refSuffix}`.replace(/\s+/g, ' ').trim();
     }
 
     // Stays live until the user types into the narration box; freezing (rather

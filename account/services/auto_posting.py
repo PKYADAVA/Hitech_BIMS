@@ -32,6 +32,7 @@ from account.models import ChartOfAccount, CompanyProfile, Voucher
 from . import journal
 from .auto_ledger import sync_ledger
 from .code_generator import AccountCodeGenerator
+from .narration import compose_narration
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,9 @@ def _egg_purchase_lines(company, doc):
     else:
         lines.append({'account': credit_acct.id, 'debit': 0, 'credit': gross + freight + tcs,
                       'narration': f"Bill {doc.transaction_no}"})
-    return lines, f"Egg purchase {doc.transaction_no} - {doc.supplier.name}"
+    narration = compose_narration('Purchase', party_name=doc.supplier.name,
+                                  amount=gross, reference=doc.transaction_no)
+    return lines, narration
 
 
 def _chick_sale_lines(company, doc):
@@ -161,7 +164,9 @@ def _chick_sale_lines(company, doc):
         freight_acct = doc.freight_account or ensure_role_account(company, 'FREIGHT_RECOVERED')
         lines.append({'account': freight_acct.id, 'debit': 0, 'credit': freight,
                       'narration': 'Freight billed'})
-    return lines, f"Chick sale {doc.bill_no} - {doc.customer.name}"
+    narration = compose_narration('Sales', party_name=doc.customer.name,
+                                  amount=total, reference=doc.bill_no)
+    return lines, narration
 
 
 BUILDERS = {
@@ -203,6 +208,8 @@ def post_document(document, user=None):
             user=user,
             voucher_type=voucher_type,
             narration=narration,
+            auto_narration=narration,          # engine-generated -> track as AUTO
+            narration_source='AUTO',
             reference=reference,
             sector=getattr(document, 'warehouse', None),
             post=True,

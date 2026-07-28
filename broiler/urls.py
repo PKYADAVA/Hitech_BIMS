@@ -117,6 +117,7 @@ urlpatterns = [
     path('day-record-report/', views.day_record_report, name='day_record_report'),
     path('farm-detailed-daily-entry-report/', views.farm_detailed_daily_entry_report, name='farm_detailed_daily_entry_report'),
     path('lifting-report/', views.lifting_report, name='lifting_report'),
+    path('batch-wise-feed-scheduling-report/', views.batch_wise_feed_scheduling_report, name='batch_wise_feed_scheduling_report'),
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),

@@ -776,13 +776,26 @@ def _payment_list_dict(p):
     }
 
 
+def _bank_cash_accounts():
+    """Chart-of-Account ledgers backed by a Bank/Cash Master entry — the only
+    accounts a payment's cash/bank should be picked from (excludes generic COAs
+    and the internal __VERIFY_* anchors that aren't tied to a master row)."""
+    from account.models import BankCashMaster
+    from django.contrib.contenttypes.models import ContentType
+    ct = ContentType.objects.get_for_model(BankCashMaster)
+    return (ChartOfAccount.objects
+            .filter(source_content_type=ct,
+                    source_object_id__in=BankCashMaster.objects.values("id"))
+            .order_by("code"))
+
+
 def _payment_form_context(p=None):
     return {
         "payment": p,
         "next_payment_no": SupplierPayment._next_payment_no() if not p else None,
         "suppliers": Supplier.objects.order_by("name"),
         "locations": Warehouse.objects.order_by("name"),
-        "accounts": ChartOfAccount.objects.order_by("code"),
+        "accounts": _bank_cash_accounts(),
         "today": timezone.localdate().isoformat(),
         "mode_choices": SupplierPaymentLine.MODE_CHOICES,
         "existing_lines_json": json.dumps(
@@ -1076,7 +1089,7 @@ def supplier_ledger_report(request):
         eps = list(EggPurchase.objects.filter(supplier=supplier)
                    .select_related("warehouse").prefetch_related("items__item").order_by("date", "id"))
         pay_lines = list(SupplierPaymentLine.objects.filter(supplier=supplier)
-                         .select_related("payment").order_by("payment__date", "id"))
+                         .select_related("payment", "pay_account").order_by("payment__date", "id"))
         dns = list(DebitNote.objects.filter(supplier=supplier).order_by("date", "id"))
         cns = list(CreditNote.objects.filter(supplier=supplier).order_by("date", "id"))
 
@@ -1216,11 +1229,13 @@ def supplier_ledger_report(request):
                 grp["credit"] += amt
                 grp["rows"].append({
                     "date": d, "trnum": obj.payment.payment_no, "doc_no": obj.reference_no or "",
-                    "type": "Payment", "type_slug": "payment", "item": "", "boxes_bags": "",
+                    "type": "Payment", "type_slug": "payment", "item": obj.get_mode_display(), "boxes_bags": "",
                     "sent_qty": "", "rcv_qty": "", "free_qty": "", "rate": "", "amount": "", "freight": "", "gst": "", "tds": "",
                     "debit": "", "credit": amt.quantize(q2),
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
-                    "sector": "", "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
+                    # Sector column shows the cash/bank account the payment came from.
+                    "sector": (obj.pay_account.description if obj.pay_account_id else obj.mode) or "",
+                    "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
                 })
                 totals["credit"] += amt
                 payments_total += amt

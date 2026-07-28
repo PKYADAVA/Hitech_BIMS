@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.http import Http404, JsonResponse
-from django.db.models import F, Prefetch, Q, Sum
+from django.db.models import F, Max, Min, Prefetch, Q, Sum
 from django.core.files.storage import default_storage
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -4339,6 +4339,763 @@ def chicks_placement_report(request):
         "export": export,
         "company": CompanyProfile.get_solo(),
     })
+
+
+def _feed_phase_master_for(batch, on_date, masters):
+    """The Feed Phase Master applying to a batch on a date, picked from an
+    already-fetched list (same matching rules as ``resolve_feed_phase``:
+    breed first, then the breed's bird category, within the effective
+    window) so a whole report can match without re-querying per batch."""
+    if not batch.breed_id:
+        return None
+
+    def eff_ok(m):
+        if on_date and m.effective_from and on_date < m.effective_from:
+            return False
+        if on_date and m.effective_to and on_date > m.effective_to:
+            return False
+        return True
+
+    cat_id = batch.breed.bird_category_id
+    return (next((m for m in masters if m.breed_id == batch.breed_id and eff_ok(m)), None)
+            or (next((m for m in masters if cat_id and m.bird_category_id == cat_id and eff_ok(m)), None)))
+
+
+def _feed_curve_at(curve, age):
+    """Cumulative standard feed (g/bird) at `age`, read off a breed's ordered
+    (age, cum_feed, body_weight, feed_intake) curve and carried forward from
+    the last defined row. Nothing before the curve starts — cumulative feed
+    there is zero, not the first row's value, which is why this doesn't reuse
+    ``_breed_standard_at`` (that one carries backwards to keep Std columns
+    populated)."""
+    if age is None or age < 0 or not curve:
+        return Decimal("0")
+    value = Decimal("0")
+    for row in curve:
+        if row[0] > age:
+            break
+        value = row[1]
+    return value
+
+
+def _std_at(curve, age):
+    """(body weight g, daily feed intake g) a standard bird of this breed has
+    at `age`, carried forward from the last defined row — (None, None) when
+    the breed has no curve."""
+    if age is None or age < 0 or not curve:
+        return None, None
+    found = None
+    for row in curve:
+        if row[0] > age:
+            break
+        found = row
+    if found is None:
+        found = curve[0]
+    return found[2], found[3]
+
+
+def _phase_feed_due(curve, pl, age):
+    """Feed (g/bird) a phase should have delivered by `age`, and the basis it
+    was read from.
+
+    The phase's Max Feed Qty is a changeover *trigger* — the total per-bird
+    feed at which the flock moves on — so comparing it to consumption
+    mid-phase always flatters the flock. What's wanted is feed due so far,
+    taken from the breed standard's cumulative curve across the phase's own
+    age band ("std"); where the breed has no curve, the cap spread evenly
+    over the band ("pro"); and for an open-ended last phase with neither, the
+    cap itself ("cap"). Returns (None, "") when there's nothing to go on.
+    """
+    if pl is None or age is None:
+        return None, ""
+    lo, hi = pl.from_age or 0, pl.to_age
+    upto = age if hi is None else min(age, hi)
+    if upto < lo:
+        return Decimal("0"), "std" if curve else ""
+    if curve:
+        due = _feed_curve_at(curve, upto) - _feed_curve_at(curve, lo - 1)
+        if due > 0:
+            return due, "std"
+    cap_g = (pl.max_feed_qty or Decimal("0")) * 1000
+    if cap_g <= 0:
+        return None, ""
+    if hi is None:
+        return cap_g, "cap"
+    span = Decimal(hi - lo + 1)
+    elapsed = Decimal(min(upto - lo + 1, hi - lo + 1))
+    return (cap_g * elapsed / span), "pro"
+
+
+def _warehouse_feed_stock(wh_ids, item_ids, as_of):
+    """Feed on hand per item across a set of Warehouses, as of a date.
+
+    Reconciled from the movements themselves — the same event set the Feed
+    Dispatch & Stock ledger replays — rather than read off
+    ``StockTransfer.stock``. That running-balance field is only written by the
+    transfer flow, so a warehouse stocked by purchase or stock-receive and not
+    since transferred out still carries a stale zero on it; counting the
+    movements is the only way this agrees with what is really on the floor.
+    """
+    from purchase.models import GeneralPurchaseItem
+    from inventory.models import (StockTransfer, StockReceiveItem, StockIssueItem,
+                                  InventoryAdjustmentItem)
+    bal = {}
+    if not wh_ids or not item_ids:
+        return bal
+
+    def apply(rows, sign, field="t"):
+        for r in rows:
+            bal[r["item_id"]] = bal.get(r["item_id"], Decimal("0")) + sign * (r[field] or Decimal("0"))
+
+    apply(StockTransfer.objects.filter(item_id__in=item_ids, to_warehouse_id__in=wh_ids, date__lte=as_of)
+          .values("item_id").annotate(t=Sum("quantity")), 1)
+    apply(StockTransfer.objects.filter(item_id__in=item_ids, from_warehouse_id__in=wh_ids, date__lte=as_of)
+          .values("item_id").annotate(t=Sum("quantity")), -1)
+    for r in (GeneralPurchaseItem.objects
+              .filter(item_id__in=item_ids, farm_warehouse_id__in=wh_ids, purchase__date__lte=as_of)
+              .values("item_id").annotate(t=Sum("rcv_qty"), f=Sum("free_qty"))):
+        bal[r["item_id"]] = (bal.get(r["item_id"], Decimal("0"))
+                             + (r["t"] or Decimal("0")) + (r["f"] or Decimal("0")))
+    apply(StockReceiveItem.objects
+          .filter(item_id__in=item_ids, location_type="warehouse", warehouse_id__in=wh_ids,
+                  receive__date__lte=as_of).values("item_id").annotate(t=Sum("quantity")), 1)
+    apply(StockIssueItem.objects
+          .filter(item_id__in=item_ids, location_type="warehouse", warehouse_id__in=wh_ids,
+                  issue__date__lte=as_of).values("item_id").annotate(t=Sum("quantity")), -1)
+    for r in (InventoryAdjustmentItem.objects
+              .filter(item_id__in=item_ids, adjustment__location_type="warehouse",
+                      adjustment__warehouse_id__in=wh_ids, adjustment__date__lte=as_of)
+              .values("item_id", "adjustment_type").annotate(t=Sum("quantity"))):
+        sign = 1 if r["adjustment_type"] == "Add" else -1
+        bal[r["item_id"]] = bal.get(r["item_id"], Decimal("0")) + sign * (r["t"] or Decimal("0"))
+    return bal
+
+
+def _feed_row_actions(r, *, is_current, next_phase, bag_kg):
+    """What to do about one feed item on one flock, worst first.
+
+    Everything here is a decision a scheduler can act on today - send feed,
+    change phase, fix a broken stock figure - rather than a verdict on the
+    flock. Ordering matters: the list is rendered in place, so the first entry
+    is what the row is really telling you.
+    """
+    out = []
+    cover, cap, cons = r["days_cover"], r["cap_bird"], r["cons_bird"]
+
+    if r["avail_qty"] < 0:
+        out.append(("urgent", "Stock negative - check transfers"))
+    if cover is not None and cover >= 0 and r["daily_rate"] > 0:
+        need = r["next_3_days"]
+        bags = f" ({(need / bag_kg).quantize(Decimal('0.1'))} bags)" if bag_kg else ""
+        if cover < 1.5:
+            out.append(("urgent", f"Dispatch {need:.0f} Kg{bags} - {cover:.1f} d cover"))
+        elif cover < 3:
+            out.append(("warn", f"Send {need:.0f} Kg{bags} - {cover:.1f} d cover"))
+    # The cap is the changeover trigger, so reaching it is an instruction to
+    # move the flock on, not merely an overshoot to note.
+    if is_current and cap:
+        if cons >= cap:
+            out.append(("urgent", f"Cap reached - change to {next_phase}" if next_phase
+                                  else "Cap reached - final phase"))
+        elif cons >= cap * Decimal("0.9"):
+            out.append(("warn", f"Nearing cap - {next_phase} next" if next_phase
+                                else "Nearing cap"))
+    return out
+
+
+def _feed_batch_actions(*, is_live, gap_days, no_programme, mort_pct, avg_bwt, std_bwt):
+    """Flock-level notes that belong to the whole batch rather than one feed
+    item, drawn from the same signals Live Flock Summary reads."""
+    out = []
+    if no_programme:
+        out.append(("warn", "No feed programme - nothing to schedule against"))
+    if is_live and gap_days is not None and gap_days >= 2:
+        out.append(("urgent" if gap_days >= 7 else "warn", f"Entries {gap_days} d stale"))
+    if mort_pct is not None and mort_pct >= 5:
+        out.append(("urgent" if mort_pct >= 8 else "warn", f"Mortality {mort_pct:.1f}%"))
+    if std_bwt and avg_bwt:
+        dev = (avg_bwt - std_bwt) / std_bwt * 100
+        if dev <= -10:
+            out.append(("urgent" if dev <= -20 else "warn", f"B.Wt {abs(dev):.0f}% below std"))
+    return out
+
+
+@login_required
+def batch_wise_feed_scheduling_report(request):
+    """Broiler > Reports > Batch wise Feed Scheduling Report — one row per feed
+    phase of a batch's Feed Phase Master: the feed due by now set against what
+    the batch actually received, ate and moved out, the feed still lying at the
+    farm, and how long that feed will last at the flock's current rate.
+
+    Live flocks are the default; Closed and All are there to look back at a
+    finished batch, which is read as of the day it ended rather than today so
+    its age, phase and closing burn rate are the ones it actually had.
+
+    "Scheduled to Date (cumulative intake)" is feed due so far, not the phase's
+    whole allowance — the breed standard's intake accumulated over the phase's
+    age band, where "Day's Intake" is the same curve read for today alone. See
+    ``_phase_feed_due`` for how it is read and what the basis marker on each row
+    means. Difference is that cumulative figure minus consumption, so a positive
+    number is a flock behind its curve and a negative one is a flock ahead of
+    it; the Phase Cap column keeps the changeover trigger itself in view.
+
+    Every phase of the batch's programme is listed whatever the flock's age —
+    a phase it hasn't reached still carries a Total Required Feed to procure
+    against — and each row says in the Phase column whether it is the one being
+    fed now, one already passed, or one still to come. Feed items used by a
+    batch but absent from its programme also get a row (with no schedule), so
+    nothing is dropped.
+
+    Feed quantities are in Kg and per-bird feed in grams. Per-bird figures are
+    against birds still alive (placed - mortality - culls - sold), falling back
+    to birds placed before any are lost, matching how Live Flock Summary reads
+    the same phase cap — scheduling feed for birds that have died would
+    over-dispatch, and dividing consumption by them would understate what the
+    surviving flock is really eating.
+
+    Daily Rate is the mean of the flock's last three daily entries for that
+    feed item within a fortnight, so Days Cover reports on the feed actually
+    moving now; a phase the flock has finished, or one whose entries have gone
+    stale, gets no rate and no cover rather than a fabricated one.
+
+    Two column meanings worth stating, since both fold several transactions
+    into one figure so that In - Consumed - Out always reconciles to Farm
+    Stock: "Feed In" counts only Stock Transfers into the batch (feed
+    purchases carry no batch/farm, so charging them here would credit every
+    batch of the branch with the same feed), and "Transferred Out" counts all
+    feed leaving the batch, whether returned to a warehouse or passed to
+    another farm.
+    """
+    from inventory.models import Mapping, StockTransfer
+
+    branch_id = (request.GET.get("branch") or "").strip()
+    line = (request.GET.get("line") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    excess_only = bool(request.GET.get("excess"))
+    status = (request.GET.get("status") or "live").strip().lower()
+    sort = (request.GET.get("sort") or "farm").strip().lower()
+    export = (request.GET.get("export") or "display").strip().lower()
+    submitted = bool(branch_id or line or supervisor_id or farm_id or excess_only
+                     or request.GET.get("status") or request.GET.get("submit"))
+
+    today = timezone.localdate()
+    q2 = Decimal("0.01")
+    rows, totals, feed_summary = [], None, []
+
+    if submitted:
+        batches = (BroilerBatch.objects
+                   .select_related("broiler_farm__branch", "broiler_farm__supervisor",
+                                   "breed__bird_category")
+                   .order_by("broiler_farm__farm_name", "batch_name"))
+        if status == "closed":
+            batches = batches.filter(Q(end_date__isnull=False) | Q(is_closed=True))
+        elif status != "all":
+            batches = batches.filter(end_date__isnull=True, is_closed=False)
+        if branch_id.isdigit():
+            batches = batches.filter(broiler_farm__branch_id=branch_id)
+        if line:
+            batches = batches.filter(broiler_farm__line=line)
+        if supervisor_id.isdigit():
+            batches = batches.filter(broiler_farm__supervisor_id=supervisor_id)
+        if farm_id.isdigit():
+            batches = batches.filter(broiler_farm_id=farm_id)
+        batches = list(batches)
+        batch_ids = [b.id for b in batches]
+
+        # A finished flock is read as of the day it ended, not today: its age,
+        # the feed phase it was on and its closing burn rate all belong to that
+        # date, and measuring a batch that ended last winter against today would
+        # age it into a phase it never saw.
+        live_flag, as_of_by_batch = {}, {}
+        for b in batches:
+            is_live = b.end_date is None and not b.is_closed
+            live_flag[b.id] = is_live
+            as_of_by_batch[b.id] = today if is_live else min(b.end_date or b.closed_on or today, today)
+
+        # Everything the rows need, in one aggregate per movement type rather
+        # than per batch — this report spans every live flock in a branch.
+        is_chick = Q(item__category__name__icontains="chick")
+        # Placement also dates the flock: a batch with no start_date still has
+        # a real placement — the chick transfer — to take its age from.
+        placement = {
+            r["to_batch_id"]: (r["t"] or Decimal("0"), r["d"])
+            for r in (StockTransfer.objects.filter(to_batch_id__in=batch_ids).filter(is_chick)
+                      .values("to_batch_id").annotate(t=Sum("quantity"), d=Min("date")))
+        }
+        feed_in = {
+            (r["to_batch_id"], r["item_id"]): r["t"] or Decimal("0")
+            for r in (StockTransfer.objects.filter(to_batch_id__in=batch_ids).exclude(is_chick)
+                      .values("to_batch_id", "item_id").annotate(t=Sum("quantity")))
+        }
+        feed_out = {
+            (r["from_batch_id"], r["item_id"]): r["t"] or Decimal("0")
+            for r in (StockTransfer.objects.filter(from_batch_id__in=batch_ids).exclude(is_chick)
+                      .values("from_batch_id", "item_id").annotate(t=Sum("quantity")))
+        }
+        consumed = {}
+        for slot_item, slot_qty in (("feed_1_id", "feed_1_qty"), ("feed_2_id", "feed_2_qty")):
+            for r in (DailyEntry.objects.filter(batch_id__in=batch_ids, **{f"{slot_item}__isnull": False})
+                      .values("batch_id", slot_item).annotate(t=Sum(slot_qty))):
+                key = (r["batch_id"], r[slot_item])
+                consumed[key] = consumed.get(key, Decimal("0")) + (r["t"] or Decimal("0"))
+
+        # Birds lost, so per-bird figures run on the flock that's still eating.
+        losses_by_batch = {
+            r["batch_id"]: (r["m"] or 0) + (r["c"] or 0)
+            for r in (DailyEntry.objects.filter(batch_id__in=batch_ids)
+                      .values("batch_id").annotate(m=Sum("mortality"), c=Sum("culls")))
+        }
+        sold_by_batch = {
+            r["batch_id"]: r["b"] or 0
+            for r in (BirdSale.objects.filter(batch_id__in=batch_ids)
+                      .values("batch_id").annotate(b=Sum("birds")))
+        }
+        last_entry_by_batch = {
+            r["batch_id"]: r["d"]
+            for r in (DailyEntry.objects.filter(batch_id__in=batch_ids)
+                      .values("batch_id").annotate(d=Max("date")))
+        }
+
+        # Each breed's standard curve: cumulative feed drives the feed-due-so-far
+        # figure, body weight and daily intake drive the flock notes and the
+        # fallback burn rate for a phase with no entries to average.
+        curves = {}
+        for r in (BreedStandard.objects
+                  .filter(breed_id__in={b.breed_id for b in batches if b.breed_id}, is_active=True)
+                  .order_by("breed_id", "age")
+                  .values("breed_id", "age", "cum_feed", "body_weight", "feed_intake")):
+            curves.setdefault(r["breed_id"], []).append(
+                (r["age"], r["cum_feed"] or Decimal("0"), r["body_weight"], r["feed_intake"]))
+
+        # Latest weighed entry per batch (days without a weighing are skipped,
+        # as in Live Flock Summary) for the body-weight-against-standard note.
+        weight_by_batch = {}
+        for de in (DailyEntry.objects.filter(batch_id__in=batch_ids, avg_weight_gms__gt=0)
+                   .values("batch_id", "avg_weight_gms").order_by("-date", "-id")):
+            weight_by_batch.setdefault(de["batch_id"], de["avg_weight_gms"])
+
+        # Burn rate per feed item: the last few daily entries that used it in
+        # the fortnight up to each batch's own reference date, so a live flock
+        # whose entries have stopped doesn't keep projecting cover off stale
+        # numbers and a closed one is rated on the days it was actually fed.
+        window = timedelta(days=14)
+        floor = min((a - window for a in as_of_by_batch.values()), default=today)
+        recent_feed = {}
+        for de in (DailyEntry.objects.filter(batch_id__in=batch_ids, date__gte=floor)
+                   .values("batch_id", "date", "feed_1_id", "feed_1_qty", "feed_2_id", "feed_2_qty")
+                   .order_by("-date", "-id")):
+            as_of = as_of_by_batch.get(de["batch_id"], today)
+            if not (as_of - window <= de["date"] <= as_of):
+                continue
+            for slot_item, slot_qty in (("feed_1_id", "feed_1_qty"), ("feed_2_id", "feed_2_qty")):
+                if not de[slot_item]:
+                    continue
+                bucket = recent_feed.setdefault((de["batch_id"], de[slot_item]), [])
+                if len(bucket) < 3:
+                    bucket.append(de[slot_qty] or Decimal("0"))
+        daily_rate = {k: _div(sum(v), len(v)) for k, v in recent_feed.items() if v}
+
+        masters = list(FeedPhaseMaster.objects.filter(status="active")
+                       .select_related("breed", "bird_category")
+                       .prefetch_related("lines__feed_item"))
+        item_meta = {
+            r["id"]: r for r in Item.objects.filter(
+                id__in={i for _b, i in list(feed_in) + list(feed_out) + list(consumed)}
+            ).values("id", "description", "kg_per_bag")
+        }
+
+        groups = []
+        for batch in batches:
+            farm = batch.broiler_farm
+            as_of = as_of_by_batch.get(batch.id, today)
+            is_live = live_flag.get(batch.id, True)
+            placed, placed_on = placement.get(batch.id, (Decimal("0"), None))
+            start = batch.start_date or placed_on
+            age = (as_of - start).days if start else None
+            alive = placed - losses_by_batch.get(batch.id, 0) - sold_by_batch.get(batch.id, 0)
+            # Before any bird is lost the two are the same; once a flock is
+            # fully sold out, fall back to placed so the phase figures stay
+            # readable instead of collapsing to zero.
+            birds = alive if alive > 0 else placed
+            master = _feed_phase_master_for(batch, as_of, masters)
+            curve = curves.get(batch.breed_id) or []
+            last_entry = last_entry_by_batch.get(batch.id)
+            gap_days = (as_of - last_entry).days if last_entry else None
+            mort_pct = (_div(losses_by_batch.get(batch.id, 0) * 100, placed)
+                        if placed else None)
+            std_bwt, std_intake = _std_at(curve, age)
+            avg_bwt = weight_by_batch.get(batch.id)
+
+            # Phases of the batch's own programme, in feeding order, then any
+            # other feed item it has actually moved or eaten (no schedule to
+            # compare against, but its stock still belongs on the farm).
+            phase_items, ordered = [], []
+            if master:
+                for pl in sorted(master.lines.all(), key=lambda x: (x.from_age, x.seq_no)):
+                    if pl.status == "active" and pl.feed_item_id and pl.feed_item_id not in phase_items:
+                        phase_items.append(pl.feed_item_id)
+                        ordered.append((pl.feed_item_id, pl.feed_item.description,
+                                        pl.feed_item.kg_per_bag, pl))
+            for _b, item_id in [k for k in list(feed_in) + list(feed_out) + list(consumed) if k[0] == batch.id]:
+                if item_id not in phase_items:
+                    phase_items.append(item_id)
+                    meta = item_meta.get(item_id) or {}
+                    ordered.append((item_id, meta.get("description") or "", meta.get("kg_per_bag"), None))
+
+            # Which phase the flock is on now, and what follows it — the
+            # changeover instruction needs both.
+            phase_lines = [o for o in ordered if o[3] is not None]
+            current_item, next_phase = None, ""
+            for idx, (iid, _nm, _kg, pl) in enumerate(phase_lines):
+                if age is not None and pl.from_age <= age and (pl.to_age is None or age <= pl.to_age):
+                    current_item = iid
+                    next_phase = phase_lines[idx + 1][1] if idx + 1 < len(phase_lines) else ""
+                    break
+
+            batch_rows = []
+            for item_id, item_name, kg_per_bag, pl in ordered:
+                in_qty = feed_in.get((batch.id, item_id), Decimal("0"))
+                cons_qty = consumed.get((batch.id, item_id), Decimal("0"))
+                out_qty = feed_out.get((batch.id, item_id), Decimal("0"))
+                due_bird, basis = _phase_feed_due(curve, pl, age)
+                due_qty = (due_bird / 1000 * birds) if due_bird is not None else None
+                cons_bird = _div(cons_qty, birds) * 1000
+                avail_qty = in_qty - cons_qty - out_qty
+                is_current = pl is not None and item_id == current_item
+                rate = daily_rate.get((batch.id, item_id), Decimal("0"))
+                # With no entries to average, the phase the flock is on can
+                # still be projected from the breed's standard daily intake —
+                # which is exactly when cover matters most. Finished phases get
+                # no such fallback; they aren't being eaten any more.
+                rate_basis = "actual" if rate > 0 else ""
+                if rate <= 0 and is_current and std_intake:
+                    rate = _div(Decimal(str(std_intake)) * birds, 1000)
+                    rate_basis = "std" if rate > 0 else ""
+                cap_bird = ((pl.max_feed_qty or Decimal("0")) * 1000) if pl else None
+                batch_rows.append({
+                    "item": item_name, "item_id": item_id,
+                    # Plain hyphen, not an en dash: this string goes out through
+                    # CSV, where a non-ASCII character turns to mojibake in Excel.
+                    "phase_band": ("" if pl is None else
+                                   (f"{pl.from_age}+" if pl.to_age is None else f"{pl.from_age}-{pl.to_age}")),
+                    # Every phase of the programme is listed whatever the
+                    # flock's age, so each says where it stands: the one being
+                    # fed now, one already behind it, or one still to come
+                    # (listed so its Total Required can be procured ahead).
+                    "phase_state": ("" if pl is None or age is None else
+                                    "current" if is_current else
+                                    "upcoming" if pl.from_age > age else "done"),
+                    # Per-bird feed reads in grams, as everywhere else in the
+                    # broiler reports; the phase cap is held per bird in Kg,
+                    # so it is scaled here rather than stored that way.
+                    "cap_bird": cap_bird.quantize(q2) if cap_bird else None,
+                    # The whole phase's requirement for this flock, against
+                    # which Scheduled to Date is the part due so far.
+                    "req_qty": (cap_bird / 1000 * birds).quantize(q2) if cap_bird else None,
+                    # What a standard bird of this breed eats on today's day of
+                    # age, and what that comes to across the flock — the day's
+                    # requirement, shown against the phase actually being fed
+                    # since that is the feed the intake applies to.
+                    "intake_bird": (Decimal(str(std_intake)).quantize(q2)
+                                    if is_current and std_intake else None),
+                    "intake_qty": (_div(Decimal(str(std_intake)) * birds, 1000).quantize(q2)
+                                   if is_current and std_intake else None),
+                    "due_bird": due_bird.quantize(q2) if due_bird is not None else None,
+                    "due_qty": due_qty.quantize(q2) if due_qty is not None else None,
+                    "basis": basis,
+                    "feed_in": in_qty.quantize(q2),
+                    "cons_bird": cons_bird.quantize(q2), "cons_qty": cons_qty.quantize(q2),
+                    "out_qty": out_qty.quantize(q2),
+                    "avail_qty": avail_qty.quantize(q2),
+                    "bags": _div(avail_qty, kg_per_bag).quantize(q2) if kg_per_bag else None,
+                    "diff_bird": (due_bird - cons_bird).quantize(q2) if due_bird is not None else None,
+                    "diff_kgs": (due_qty - cons_qty).quantize(q2) if due_qty is not None else None,
+                    "daily_rate": rate.quantize(q2), "rate_basis": rate_basis,
+                    # No rate at all means no honest projection — a finished
+                    # phase with no standard to fall back on, not "0 days".
+                    "days_cover": _div(avail_qty, rate).quantize(q2) if rate > 0 else None,
+                    "next_3_days": (rate * 3).quantize(q2),
+                    "is_current": is_current, "next_phase": next_phase,
+                    "bag_kg": kg_per_bag,
+                    # Feeding order, so the per-feed summary below lists items
+                    # the way the programme runs rather than alphabetically.
+                    "sort_age": pl.from_age if pl else 9999,
+                })
+
+            if excess_only:
+                # Excess is measured against the phase cap, not against the
+                # standard curve the Difference column uses: the cap is the
+                # operational allowance a farm shouldn't feed past, while the
+                # curve is a performance benchmark a flock can trail either way.
+                batch_rows = [r for r in batch_rows
+                              if r["cap_bird"] is not None and r["cons_bird"] > r["cap_bird"]]
+            elif not batch_rows:
+                # Keep a placed-but-idle flock visible instead of silently
+                # dropping it out of the branch's scheduling picture.
+                batch_rows = [{"item": "", "item_id": None, "phase_band": "", "phase_state": "",
+                               "cap_bird": None, "req_qty": None,
+                               "intake_bird": None, "intake_qty": None,
+                               "due_bird": None, "due_qty": None, "basis": "",
+                               "feed_in": Decimal("0.00"), "cons_bird": Decimal("0.00"),
+                               "cons_qty": Decimal("0.00"), "out_qty": Decimal("0.00"),
+                               "avail_qty": Decimal("0.00"), "bags": None,
+                               "diff_bird": None, "diff_kgs": None,
+                               "daily_rate": Decimal("0.00"), "rate_basis": "",
+                               "days_cover": None, "next_3_days": Decimal("0.00"),
+                               "is_current": False, "next_phase": "", "bag_kg": None,
+                               "sort_age": 9999}]
+            if not batch_rows:
+                continue
+
+            # Anything that would otherwise make a figure look wrong rather
+            # than say why: no programme to schedule against, a flock that has
+            # stopped reporting, or stock that has gone impossible.
+            flags = []
+            if master is None:
+                flags.append("No feed programme")
+            if not is_live:
+                flags.append(f"Closed {as_of.strftime('%d.%m.%Y')}")
+            elif last_entry and (today - last_entry).days > 14:
+                # Only a running flock owes daily entries; a finished one
+                # having none lately is simply what "finished" looks like.
+                flags.append(f"No entry since {last_entry.strftime('%d.%m.%Y')}")
+            if any(r["avail_qty"] < 0 for r in batch_rows):
+                flags.append("Negative stock")
+
+            batch_actions = _feed_batch_actions(
+                is_live=is_live, gap_days=gap_days, no_programme=master is None,
+                mort_pct=mort_pct, avg_bwt=avg_bwt, std_bwt=std_bwt)
+            for r in batch_rows:
+                r["actions"] = _feed_row_actions(
+                    r, is_current=r["is_current"], next_phase=r["next_phase"],
+                    bag_kg=r["bag_kg"])
+            if batch_rows:
+                batch_rows[0]["actions"] = batch_actions + batch_rows[0]["actions"]
+
+            covers = [r["days_cover"] for r in batch_rows if r["days_cover"] is not None]
+            groups.append({
+                "batch": batch, "farm": farm, "rows": batch_rows, "flags": flags,
+                "age": age, "placed": placed, "birds": birds, "as_of": as_of,
+                "last_entry": last_entry, "gap_days": gap_days,
+                "start": start, "min_cover": min(covers) if covers else None,
+            })
+
+        # Urgency ordering is what makes this a dispatch list rather than a
+        # register; flocks with no rate to project from sort last either way.
+        if sort == "cover":
+            groups.sort(key=lambda g: (g["min_cover"] is None,
+                                       g["min_cover"] if g["min_cover"] is not None else 0))
+
+        t_req = t_intake = t_due = t_in = t_cons = t_out = t_avail = Decimal("0")
+        t_rate = t_next3 = t_bags = Decimal("0")
+        t_low_cover = t_negative = t_no_prog = t_urgent = 0
+        for sl_no, g in enumerate(groups, start=1):
+            batch, farm = g["batch"], g["farm"]
+            search_key = " ".join([farm.farm_name or "", farm.farm_code or "", batch.batch_name or "",
+                                   farm.line or "", *(r["item"] for r in g["rows"])]).lower()
+            if "No feed programme" in g["flags"]:
+                t_no_prog += 1
+            for i, r in enumerate(g["rows"]):
+                r.update({
+                    "sl_no": sl_no if i == 0 else "",
+                    "farm_name": farm.farm_name if i == 0 else "",
+                    "batch_name": batch.batch_name if i == 0 else "",
+                    "age": (g["age"] if g["age"] is not None else "") if i == 0 else "",
+                    "last_entry": g["last_entry"] if i == 0 else "",
+                    "gap_days": (g["gap_days"] if g["gap_days"] is not None else "") if i == 0 else "",
+                    "placed": g["placed"] if i == 0 else "",
+                    "birds": g["birds"] if i == 0 else "",
+                    "flags": g["flags"] if i == 0 else [],
+                    "is_first": i == 0, "group": sl_no, "search": search_key,
+                    "farm_code": farm.farm_code, "branch": farm.branch.branch_name if farm.branch_id else "",
+                    "line": farm.line or "",
+                    "supervisor": farm.supervisor.name if farm.supervisor_id else "",
+                    # Farm name links through to this flock's day-by-day
+                    # register, opened over the batch's own life rather than
+                    # that report's default last-30-days.
+                    "farm_id": farm.id, "batch_id": batch.id,
+                    "entry_from": g["start"].isoformat() if g["start"] else "",
+                    "entry_to": g["as_of"].isoformat(),
+                })
+                t_req += r["req_qty"] or Decimal("0")
+                t_intake += r["intake_qty"] or Decimal("0")
+                t_due += r["due_qty"] or Decimal("0")
+                t_in += r["feed_in"]; t_cons += r["cons_qty"]
+                t_out += r["out_qty"]; t_avail += r["avail_qty"]
+                t_bags += r["bags"] or Decimal("0")
+                t_rate += r["daily_rate"]; t_next3 += r["next_3_days"]
+                if r["days_cover"] is not None and r["days_cover"] < 3:
+                    t_low_cover += 1
+                if r["avail_qty"] < 0:
+                    t_negative += 1
+                # Flat text so the same actions survive into CSV/Excel.
+                r["action_text"] = "; ".join(t for _lvl, t in r["actions"])
+                if any(lvl == "urgent" for lvl, _t in r["actions"]):
+                    t_urgent += 1
+            rows.extend(g["rows"])
+
+        # Per feed type, across everything the filters selected. A single
+        # grand total mixes Pre-Starter with Finisher into a figure nobody can
+        # order against — what a buyer needs is how much of each feed.
+        by_feed = {}
+        for r in rows:
+            b = by_feed.setdefault(r["item"] or "(no feed item)", {
+                "item": r["item"] or "(no feed item)", "item_id": r["item_id"],
+                "sort_age": r["sort_age"],
+                "batches": set(), "bag_kg": r["bag_kg"],
+                "req_qty": Decimal("0"), "intake_qty": Decimal("0"), "next_3_days": Decimal("0"),
+                "feed_in": Decimal("0"), "cons_qty": Decimal("0"), "avail_qty": Decimal("0"),
+                "bags": Decimal("0"),
+            })
+            b["sort_age"] = min(b["sort_age"], r["sort_age"])
+            b["batches"].add(r["group"])
+            b["bag_kg"] = b["bag_kg"] or r["bag_kg"]
+            for k in ("req_qty", "intake_qty", "next_3_days", "feed_in", "cons_qty", "avail_qty", "bags"):
+                b[k] += r[k] or Decimal("0")
+        feed_summary = sorted(by_feed.values(), key=lambda b: (b["sort_age"], b["item"]))
+        # What the branch warehouses could actually dispatch against that. A
+        # Warehouse reaches its Branch through inventory.Mapping, the same hop
+        # the batch report takes.
+        branch_ids = {g["farm"].branch_id for g in groups if g["farm"].branch_id}
+        wh_ids = list(Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__in=branch_ids)
+                      .values_list("from_id", flat=True))
+        item_ids = {r["item_id"] for r in rows if r["item_id"]}
+        wh_stock = _warehouse_feed_stock(wh_ids, item_ids, today)
+
+        for b in feed_summary:
+            b["batches"] = len(b["batches"])
+            # What is still to reach the farms for the whole programme; a
+            # negative reads as already over-delivered, not as nothing to send.
+            b["to_send"] = b["req_qty"] - b["feed_in"]
+            b["next_3_bags"] = (b["next_3_days"] / b["bag_kg"]).quantize(q2) if b["bag_kg"] else None
+            b["wh_stock"] = wh_stock.get(b["item_id"], Decimal("0"))
+            # Nothing can be dispatched out of a negative balance, so the
+            # shortfall is measured against stock actually on hand: a warehouse
+            # whose books have gone negative is a data problem to fix (flagged
+            # in red), not extra feed to go and buy.
+            b["short_by"] = max(b["to_send"] - max(b["wh_stock"], Decimal("0")), Decimal("0"))
+
+        totals = {"next_3_bags": sum((b["next_3_bags"] or Decimal("0") for b in feed_summary),
+                                     Decimal("0")),
+                  "wh_stock": sum((b["wh_stock"] for b in feed_summary), Decimal("0")),
+                  "short_by": sum((b["short_by"] for b in feed_summary), Decimal("0")),
+                  "req_qty": t_req, "intake_qty": t_intake,
+                  "due_qty": t_due, "feed_in": t_in, "cons_qty": t_cons,
+                  "out_qty": t_out, "avail_qty": t_avail, "bags": t_bags,
+                  "diff_kgs": t_due - t_cons, "daily_rate": t_rate, "next_3_days": t_next3,
+                  "low_cover": t_low_cover, "negative": t_negative, "no_programme": t_no_prog,
+                  "urgent": t_urgent, "batches": len(groups)}
+
+        if export in ("csv", "excel"):
+            return _feed_scheduling_export(rows, totals, export, feed_summary)
+
+    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+             .values_list("line", flat=True).distinct())
+
+    return render(request, "batch_wise_feed_scheduling_report.html", {
+        "branches": Branch.objects.order_by("branch_name"),
+        "lines": lines,
+        "supervisors": Supervisor.objects.order_by("name"),
+        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "branch_id": branch_id, "line": line, "supervisor_id": supervisor_id, "farm_id": farm_id,
+        "excess_only": excess_only, "export": export, "sort": sort, "status": status,
+        "submitted": submitted, "rows": rows, "totals": totals, "feed_summary": feed_summary,
+    })
+
+
+FEED_SCHEDULING_COLUMNS = [
+    ("sl_no", "Sl.No"), ("farm_name", "Farm"), ("batch_name", "Batch"), ("age", "Age (days)"),
+    ("last_entry", "Latest Entry"), ("gap_days", "Gap (days)"),
+    ("item", "Item"), ("placed", "Placed Birds"), ("birds", "Available Birds"),
+    ("phase_band", "Phase Age (days)"), ("cap_bird", "Phase Cap (gm)"),
+    ("req_qty", "Total Required Feed (Kg)"),
+    ("intake_bird", "Day's Intake/Bird (gm)"), ("intake_qty", "Day's Intake Total (Kg)"),
+    ("due_bird", "Scheduled to Date (Cumulative Intake)/Bird (gm)"),
+    ("due_qty", "Scheduled to Date (Cumulative Intake) Qty (Kg)"),
+    ("basis", "Schedule Basis"),
+    ("feed_in", "Feed In Qty (Kg)"),
+    ("cons_bird", "Consumption Feed/Bird (gm)"), ("cons_qty", "Consumed Qty (Kg)"),
+    ("out_qty", "Transferred Out Qty (Kg)"), ("avail_qty", "Available Qty (Kg)"),
+    ("bags", "Available Bags"),
+    ("diff_bird", "Difference Feed/Bird (gm)"), ("diff_kgs", "Difference Feed (Kg)"),
+    ("daily_rate", "Daily Rate (Kg)"), ("rate_basis", "Rate Basis"), ("days_cover", "Days Cover"),
+    ("next_3_days", "Next 3 Days Req. (Kg)"), ("action_text", "Action Required"),
+]
+
+
+FEED_SUMMARY_COLUMNS = [
+    ("item", "Feed Item"), ("batches", "Batches"),
+    ("req_qty", "Total Required (Kg)"), ("feed_in", "Already Sent (Kg)"),
+    ("to_send", "Still To Send (Kg)"),
+    ("wh_stock", "Branch Warehouse Stock (Kg)"), ("short_by", "Short By (Kg)"),
+    ("cons_qty", "Consumed (Kg)"),
+    ("avail_qty", "Farm Stock (Kg)"), ("bags", "Farm Stock (Bags)"),
+    ("intake_qty", "Day's Intake (Kg/day)"),
+    ("next_3_days", "Next 3 Days (Kg)"), ("next_3_bags", "Next 3 Days (Bags)"),
+]
+
+
+def _feed_scheduling_export(rows, totals, export, feed_summary=()):
+    """Batch wise Feed Scheduling rows as a CSV or Excel download. Excel also
+    carries the per-feed-type summary on its own sheet, since that is the sheet
+    a buyer orders from; CSV stays one table and keeps only the detail."""
+    from django.http import HttpResponse
+    import csv as _csv
+
+    headers = [label for _key, label in FEED_SCHEDULING_COLUMNS]
+    data = [[("" if r.get(key) is None else r.get(key, "")) for key, _label in FEED_SCHEDULING_COLUMNS]
+            for r in rows]
+    total_row = ["", "", "", "", "", "", "Total", "", "", "", "", totals["req_qty"],
+                 "", totals["intake_qty"], "", totals["due_qty"], "", totals["feed_in"],
+                 "", totals["cons_qty"], totals["out_qty"], totals["avail_qty"],
+                 totals["bags"], "", totals["diff_kgs"], totals["daily_rate"], "", "",
+                 totals["next_3_days"], ""]
+
+    if export == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="batch_wise_feed_scheduling.csv"'
+        writer = _csv.writer(response)
+        writer.writerow(headers)
+        writer.writerows(data)
+        if rows:
+            writer.writerow(total_row)
+        return response
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Feed Scheduling"
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in data:
+        ws.append([float(v) if isinstance(v, Decimal) else v for v in row])
+    if rows:
+        ws.append([float(v) if isinstance(v, Decimal) else v for v in total_row])
+        for cell in ws[ws.max_row]:
+            cell.font = Font(bold=True)
+    for i, label in enumerate(headers, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = max(len(label) + 2, 12)
+
+    if feed_summary:
+        ws2 = wb.create_sheet("By Feed Type")
+        s_headers = [label for _key, label in FEED_SUMMARY_COLUMNS]
+        ws2.append(s_headers)
+        for cell in ws2[1]:
+            cell.font = Font(bold=True)
+        for b in feed_summary:
+            ws2.append([float(b[k]) if isinstance(b[k], Decimal) else ("" if b[k] is None else b[k])
+                        for k, _label in FEED_SUMMARY_COLUMNS])
+        for i, label in enumerate(s_headers, start=1):
+            ws2.column_dimensions[ws2.cell(row=1, column=i).column_letter].width = max(len(label) + 2, 12)
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="batch_wise_feed_scheduling.xlsx"'
+    wb.save(response)
+    return response
 
 
 @login_required

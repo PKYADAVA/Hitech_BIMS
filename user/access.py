@@ -81,6 +81,7 @@ MODULE_REGISTRY = [
                     ("day_record_report", "Day Record Report"),
                     ("farm_detailed_daily_entry_report", "Detailed Daily Entry Report"),
                     ("lifting_report", "Lifting Report"),
+                    ("batch_wise_feed_scheduling_report", "Batch wise Feed Scheduling Report"),
                 ],
             },
         ],

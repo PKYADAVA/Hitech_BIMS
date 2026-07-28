@@ -48,11 +48,12 @@ def balance_sheet_report(request):
 
 @login_required
 def vouchers(request):
-    from account.models import Voucher
+    from account.models import Voucher, NarrationSettings
     from inventory.models import Warehouse
     return render(request, "journal.html", {
         "voucher_types": Voucher.TYPE_CHOICES,
         "sectors": Warehouse.objects.all().order_by("name"),
+        "narration_settings": NarrationSettings.get_solo(),
     })
 
 

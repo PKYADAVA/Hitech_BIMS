@@ -1,0 +1,430 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Batch wise Feed Scheduling Report — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='batch_wise_feed_scheduling_report' %}
+{# One wording for the projected-rate hint, shared by every column derived from it. #}
+{% with rate_std_hint="Projected from the breed standard's daily intake — this phase has no recent entries to average" %}
+
+<style>
+  .fs-breadcrumb { font-size:.85rem; color:#6c757d; margin:.25rem 0 .75rem; }
+  .fs-title { font-weight:700; }
+  .fs-filter .form-label { font-size:.72rem; font-weight:600; margin-bottom:.2rem; white-space:nowrap; }
+  .fs-filter .form-select-sm { font-size:.78rem; }
+  /* Every filter stays on one row: the selects shrink to share the width and
+     scroll only if they truly can't, while the buttons never shrink. */
+  .fs-filter-form { overflow-x:auto; }
+  .fs-filter-form .filter-field { flex:1 1 0; min-width:92px; }
+  .fs-filter-form .filter-field-wide { flex:1.6 1 0; min-width:120px; }
+  .fs-table { font-size:var(--fs-fs, .72rem); }
+  .fs-table th, .fs-table td { white-space:nowrap; vertical-align:middle; text-align:center; padding:.3rem .45rem; }
+  .fs-table thead th { background:#e9f1f7; font-weight:600; position:sticky; top:0; z-index:2; }
+  .fs-table thead tr:nth-child(2) th { top:26px; }
+  .fs-table td.num, .fs-table th.num { text-align:right; }
+  .fs-table td.farm, .fs-table td.item { text-align:left; }
+  .fs-table td.farm, .fs-table td.farm a { color:#1b6ac9; font-weight:600; text-decoration:none; }
+  .fs-table td.farm a:hover { text-decoration:underline; }
+  /* Buttons sit under the farm name rather than in a column of their own, so
+     they stay with the flock they act on instead of 20-odd columns away. */
+  .fs-table td.farm .farm-links { margin-top:.2rem; white-space:nowrap; }
+  .fs-table td.farm .farm-links .btn { --bs-btn-padding-y:.05rem; --bs-btn-padding-x:.3rem;
+                                       --bs-btn-font-size:.65rem; }
+  .fs-table tr.batch-start td { border-top:1px solid #cfd9e0; }
+  .fs-table tbody tr:hover td { background:#f4f8fc; }
+  .fs-table tfoot td { background:#f1f3f5; font-weight:700; position:sticky; bottom:0; }
+  .fs-scroll { max-height:70vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  .neg { color:#c0392b; font-weight:600; }
+  .low { background:#fdecea; color:#c0392b; font-weight:700; }
+  .fs-table thead .unit { font-weight:600; font-size:.66rem; color:#4a6b7c; }
+  .fs-table .flag { display:inline-block; font-size:.62rem; font-weight:600; color:#8a5300;
+                    background:#fff3cd; border:1px solid #ffe69c; border-radius:.5rem; padding:0 .35rem; margin-top:.15rem; }
+  .fs-table sup.basis { font-size:.6rem; color:#8a5300; margin-left:.15rem; cursor:help; }
+  .fs-legend { font-size:.68rem; color:#6c757d; margin-top:.4rem; }
+  .fs-table td.act { white-space:normal; min-width:190px; max-width:270px; }
+  .act-badge { display:block; font-size:.64rem; font-weight:600; border-radius:.5rem;
+               padding:.1rem .4rem; margin-bottom:.12rem; border:1px solid transparent; }
+  .act-urgent { background:#fdecea; color:#a5251c; border-color:#f5c2c0; }
+  .act-warn   { background:#fff3cd; color:#8a5300; border-color:#ffe69c; }
+  .act-info   { background:#eef2f6; color:#4a6b7c; border-color:#dde5eb; }
+  .ph { display:inline-block; font-size:.6rem; font-weight:700; border-radius:.5rem;
+        padding:0 .3rem; margin-left:.25rem; vertical-align:middle; }
+  .ph-current  { background:#d8f2dd; color:#1d6b33; border:1px solid #b7e3c1; }
+  .ph-upcoming { background:#eef2f6; color:#5a7385; border:1px solid #dde5eb; }
+  .ph-done     { background:#f2f2f2; color:#8a8a8a; border:1px solid #e4e4e4; }
+  .gap-warn { color:#8a5300; font-weight:600; }
+  /* A phase still to come is plan, not history — keep it legible but quiet so
+     the eye lands on what the flock is actually eating. */
+  .fs-table tr.ph-row-upcoming td { color:#93a2ad; }
+  .fs-table tr.ph-row-current td { background:#f6fbf7; }
+  @media print { .no-print { display:none !important; } .fs-scroll { max-height:none; overflow:visible; } }
+</style>
+
+<div class="fs-breadcrumb no-print">Reports <span class="mx-1">&rsaquo;</span> Batch wise Feed Scheduling Report</div>
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2 no-print">
+  <h3 class="fs-title mb-0">Batch wise Feed Scheduling Report</h3>
+  {% if submitted %}
+  <div class="text-muted small">
+    {{ totals.batches }}{% if status == 'closed' %} closed{% elif status == 'live' %} live{% endif %} batch(es)
+    &middot; {{ rows|length }} phase row(s)
+    {% if totals.urgent %}<span class="ms-2 neg"><i class="fas fa-bell me-1"></i>{{ totals.urgent }} need action</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card mb-3 no-print fs-filter"><div class="card-body py-2">
+  <form method="get" class="d-flex flex-nowrap align-items-end gap-2 fs-filter-form">
+    <div class="filter-field"><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div class="filter-field"><label class="form-label">Line</label>
+      <select name="line" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for l in lines %}<option value="{{ l }}" {% if line == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select></div>
+    <div class="filter-field"><label class="form-label">Supervisor</label>
+      <select name="supervisor" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div class="filter-field filter-field-wide"><label class="form-label">Farm</label>
+      <select name="farm" class="form-select form-select-sm">
+        <option value="">-All-</option>
+        {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
+      </select></div>
+    <div class="flex-shrink-0">
+      <div class="form-check mb-1">
+        <input class="form-check-input" type="checkbox" name="excess" value="1" id="excessFeed" {% if excess_only %}checked{% endif %}>
+        <label class="form-check-label" style="font-size:.72rem;white-space:nowrap;" for="excessFeed">Excess Feed</label>
+      </div>
+    </div>
+    <div class="filter-field"><label class="form-label">Batch Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="live" {% if status == 'live' %}selected{% endif %}>Live</option>
+        <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed</option>
+        <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+      </select></div>
+    <div class="filter-field"><label class="form-label">Order By</label>
+      <select name="sort" class="form-select form-select-sm">
+        <option value="farm" {% if sort == 'farm' %}selected{% endif %}>Farm name</option>
+        <option value="cover" {% if sort == 'cover' %}selected{% endif %}>Days cover (urgent first)</option>
+      </select></div>
+    <div class="filter-field"><label class="form-label">Export</label>
+      <select name="export" class="form-select form-select-sm">
+        <option value="display" {% if export == 'display' %}selected{% endif %}>-Display-</option>
+        <option value="excel" {% if export == 'excel' %}selected{% endif %}>Excel</option>
+        <option value="csv" {% if export == 'csv' %}selected{% endif %}>CSV</option>
+      </select></div>
+    <div class="filter-field"><label class="form-label">Font Size</label>
+      <select class="form-select form-select-sm"
+              onchange="document.documentElement.style.setProperty('--fs-fs', this.value)">
+        <option value=".72rem">Default</option>
+        <option value=".66rem">Small</option>
+        <option value=".8rem">Large</option>
+      </select></div>
+    <div class="d-flex gap-1 flex-shrink-0">
+      <button class="btn btn-primary btn-sm" type="submit" name="submit" value="1"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'batch_wise_feed_scheduling_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div></div>
+
+{% if submitted %}
+{% if feed_summary %}
+<div class="card mb-2"><div class="card-body p-2">
+  <div class="small fw-bold mb-2 px-1">
+    <i class="fas fa-boxes-stacked me-1"></i>By Feed Type
+    <span class="fw-normal text-muted">— what to procure and send, per feed, across the whole selection</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-bordered fs-table mb-0" style="width:auto; min-width:100%;">
+      <thead>
+        <tr>
+          <th>Feed Item</th><th class="num">Batches</th>
+          <th class="num">Total Required <span class="unit">(Kg)</span></th>
+          <th class="num">Already Sent <span class="unit">(Kg)</span></th>
+          <th class="num">Still To Send <span class="unit">(Kg)</span></th>
+          <th class="num">Branch Warehouse Stock <span class="unit">(Kg)</span></th>
+          <th class="num">Short By <span class="unit">(Kg)</span></th>
+          <th class="num">Consumed <span class="unit">(Kg)</span></th>
+          <th class="num">Farm Stock <span class="unit">(Kg)</span></th>
+          <th class="num">Farm Stock <span class="unit">(Bags)</span></th>
+          <th class="num">Day's Intake <span class="unit">(Kg/day)</span></th>
+          <th class="num">Next 3 Days <span class="unit">(Kg)</span></th>
+          <th class="num">Next 3 Days <span class="unit">(Bags)</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in feed_summary %}
+        <tr>
+          <td class="item">{{ b.item }}</td>
+          <td class="num">{{ b.batches }}</td>
+          <td class="num">{{ b.req_qty|floatformat:2 }}</td>
+          <td class="num">{{ b.feed_in|floatformat:2 }}</td>
+          <td class="num {% if b.to_send > 0 %}gap-warn{% endif %}">{{ b.to_send|floatformat:2 }}</td>
+          <td class="num {% if b.wh_stock < 0 %}neg{% endif %}"
+              {% if b.wh_stock < 0 %}title="Warehouse books have gone negative — more dispatched than ever received"{% endif %}>{{ b.wh_stock|floatformat:2 }}</td>
+          <td class="num {% if b.short_by > 0 %}neg{% endif %}">{{ b.short_by|floatformat:2 }}</td>
+          <td class="num">{{ b.cons_qty|floatformat:2 }}</td>
+          <td class="num {% if b.avail_qty < 0 %}neg{% endif %}">{{ b.avail_qty|floatformat:2 }}</td>
+          <td class="num">{{ b.bags|floatformat:2 }}</td>
+          <td class="num">{{ b.intake_qty|floatformat:2 }}</td>
+          <td class="num">{{ b.next_3_days|floatformat:2 }}</td>
+          <td class="num">{% if b.next_3_bags != None %}{{ b.next_3_bags|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr>
+        <td class="text-center">Total</td>
+        <td class="num">{{ totals.batches }}</td>
+        <td class="num">{{ totals.req_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.feed_in|floatformat:2 }}</td>
+        <td></td>
+        <td class="num">{{ totals.wh_stock|floatformat:2 }}</td>
+        <td class="num {% if totals.short_by > 0 %}neg{% endif %}">{{ totals.short_by|floatformat:2 }}</td>
+        <td class="num">{{ totals.cons_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.avail_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.bags|floatformat:2 }}</td>
+        <td class="num">{{ totals.intake_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.next_3_days|floatformat:2 }}</td>
+        <td class="num">{{ totals.next_3_bags|floatformat:2 }}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+</div></div>
+{% endif %}
+
+<div class="card"><div class="card-body p-2">
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1 gap-2 flex-wrap">
+    {# Counts live in the page header; this row carries only what needs chasing. #}
+    <div class="small text-muted">
+      {% if totals.low_cover %}<span class="me-3 neg"><i class="fas fa-triangle-exclamation me-1"></i>{{ totals.low_cover }} under 3 days cover</span>{% endif %}
+      {% if totals.negative %}<span class="me-3 neg"><i class="fas fa-circle-exclamation me-1"></i>{{ totals.negative }} negative stock</span>{% endif %}
+      {% if totals.no_programme %}<span class="me-3 gap-warn"><i class="fas fa-circle-question me-1"></i>{{ totals.no_programme }} without a feed programme</span>{% endif %}
+    </div>
+    <div class="d-flex gap-2 align-items-center no-print">
+      {% if excess_only %}<span class="small text-danger">Only rows fed past their phase cap</span>{% endif %}
+      <input type="search" id="fs-search" class="form-control form-control-sm" style="width:220px;"
+             placeholder="Search farm, batch or feed…">
+    </div>
+  </div>
+  <div class="fs-scroll">
+    <table class="table table-bordered table-hover fs-table mb-0" id="fs-table" style="width:auto; min-width:100%;">
+      <thead>
+        <tr>
+          <th rowspan="2">Sl.No</th><th rowspan="2">Farm</th><th rowspan="2">Batch</th>
+          <th rowspan="2">Age<br><span class="unit">(days)</span></th>
+          <th rowspan="2">Latest<br>Entry</th>
+          <th rowspan="2">Gap<br><span class="unit">(days)</span></th>
+          <th rowspan="2">Item</th>
+          <th colspan="2">Birds</th>
+          <th colspan="3">Phase</th>
+          <th colspan="2">Day's Intake</th>
+          <th colspan="2">Scheduled to Date<br><span class="unit">(cumulative intake)</span></th>
+          <th>Purchase/Transfer In</th>
+          <th colspan="2">Consumption</th>
+          <th>Feed Transfer Out</th>
+          <th colspan="2">Farm Stock</th>
+          <th colspan="2">Difference</th>
+          <th colspan="3">Feed Outlook</th>
+          <th rowspan="2">Action Required</th>
+        </tr>
+        <tr>
+          <th class="num">Placed</th><th class="num">Available</th>
+          <th class="num">Age Band <span class="unit">(days)</span></th><th class="num">Cap <span class="unit">(gm/bird)</span></th>
+          <th class="num">Total Required Feed <span class="unit">(Kg)</span></th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Total Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Feed Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Feed In Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Consumed Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Transferred Out Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Available Qty <span class="unit">(Kg)</span></th><th class="num">Bags</th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Feed <span class="unit">(Kg)</span></th>
+          <th class="num">Daily Rate <span class="unit">(Kg)</span></th><th class="num">Days Cover <span class="unit">(days)</span></th><th class="num">Next 3 Days <span class="unit">(Kg)</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="fs-row{% if r.is_first %} batch-start{% endif %}{% if r.phase_state == 'upcoming' %} ph-row-upcoming{% elif r.phase_state == 'current' %} ph-row-current{% endif %}" data-s="{{ r.search }}" data-g="{{ r.group }}">
+          <td>{{ r.sl_no }}</td>
+          <td class="farm" title="{{ r.farm_name }}">
+            {% if r.farm_name and 'farm_detailed_daily_entry_report' in allowed_tabs %}
+              <a href="{% url 'farm_detailed_daily_entry_report' %}?farm={{ r.farm_id }}{% if r.entry_from %}&amp;from_date={{ r.entry_from }}{% endif %}&amp;to_date={{ r.entry_to }}"
+                 target="_blank" rel="noopener" title="Daily entries for {{ r.farm_name }}">{{ r.farm_name }}</a>
+            {% else %}{{ r.farm_name }}{% endif %}
+            {% if r.is_first %}
+            <div class="farm-links no-print">
+              <button type="button" class="btn btn-sm btn-outline-secondary fs-view" title="View this flock's feed card">
+                <i class="fas fa-eye"></i></button>
+              {% if 'farm_detailed_daily_entry_report' in allowed_tabs %}
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="{% url 'farm_detailed_daily_entry_report' %}?farm={{ r.farm_id }}{% if r.entry_from %}&amp;from_date={{ r.entry_from }}{% endif %}&amp;to_date={{ r.entry_to }}"
+                 target="_blank" rel="noopener" title="Daily entries"><i class="fas fa-table-list"></i></a>
+              {% endif %}
+              {% if 'broiler_batch_report' in allowed_tabs %}
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'broiler_batch_report' %}?batch={{ r.batch_id }}"
+                 target="_blank" rel="noopener" title="Batch history"><i class="fas fa-file-alt"></i></a>
+              {% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td>{{ r.batch_name }}{% for f in r.flags %}<br><span class="flag">{{ f }}</span>{% endfor %}</td>
+          <td>{{ r.age }}</td>
+          <td class="text-nowrap">{% if r.last_entry %}{{ r.last_entry|date:"d.m.Y" }}{% elif r.is_first %}<span class="text-muted">none</span>{% endif %}</td>
+          <td class="num {% if r.gap_days >= 7 %}neg{% elif r.gap_days >= 2 %}gap-warn{% endif %}">{{ r.gap_days }}</td>
+          <td class="item" title="{{ r.item }}">{{ r.item }}</td>
+          <td class="num">{% if r.is_first %}{{ r.placed|floatformat:0 }}{% endif %}</td>
+          <td class="num">{% if r.is_first %}{{ r.birds|floatformat:0 }}{% endif %}</td>
+          <td class="num text-nowrap">{{ r.phase_band|default:"-" }}
+            {% if r.phase_state == 'current' %}<span class="ph ph-current">current</span>
+            {% elif r.phase_state == 'upcoming' %}<span class="ph ph-upcoming">upcoming</span>
+            {% elif r.phase_state == 'done' %}<span class="ph ph-done">done</span>{% endif %}</td>
+          <td class="num">{% if r.cap_bird %}{{ r.cap_bird|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.req_qty != None %}{{ r.req_qty|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.intake_bird != None %}{{ r.intake_bird|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.intake_qty != None %}{{ r.intake_qty|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.due_bird != None %}{{ r.due_bird|floatformat:2 }}{% if r.basis and r.basis != 'std' %}<sup class="basis" title="{% if r.basis == 'pro' %}Pro-rated from the phase cap — this breed has no standard curve{% else %}Whole phase cap — open-ended phase with no standard curve{% endif %}">{{ r.basis }}</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.due_qty != None %}{{ r.due_qty|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{{ r.feed_in|floatformat:2 }}</td>
+          <td class="num">{{ r.cons_bird|floatformat:2 }}</td>
+          <td class="num">{{ r.cons_qty|floatformat:2 }}</td>
+          <td class="num">{{ r.out_qty|floatformat:2 }}</td>
+          <td class="num {% if r.avail_qty < 0 %}neg{% endif %}">{{ r.avail_qty|floatformat:2 }}</td>
+          <td class="num">{% if r.bags != None %}{{ r.bags|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num {% if r.diff_bird < 0 %}neg{% endif %}">{% if r.diff_bird != None %}{{ r.diff_bird|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num {% if r.diff_kgs < 0 %}neg{% endif %}">{% if r.diff_kgs != None %}{{ r.diff_kgs|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.daily_rate %}{{ r.daily_rate|floatformat:2 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num {% if r.days_cover != None and r.days_cover < 3 %}low{% endif %}">
+            {% if r.days_cover != None %}{{ r.days_cover|floatformat:1 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.next_3_days %}{{ r.next_3_days|floatformat:2 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="act">
+            {% for level, text in r.actions %}<span class="act-badge act-{{ level }}">{{ text }}</span>{% empty %}<span class="text-muted">-</span>{% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="28" class="text-center text-muted py-4">No batches found for the selected filters.</td></tr>
+        {% endfor %}
+        <tr id="no-match" class="d-none"><td colspan="28" class="text-center text-muted py-4">No farm matches that search.</td></tr>
+      </tbody>
+      {% if rows %}
+      <tfoot><tr>
+        <td colspan="11" class="text-center">Total</td>
+        <td class="num">{{ totals.req_qty|floatformat:2 }}</td>
+        <td></td>
+        <td class="num">{{ totals.intake_qty|floatformat:2 }}</td>
+        <td></td>
+        <td class="num">{{ totals.due_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.feed_in|floatformat:2 }}</td>
+        <td></td>
+        <td class="num">{{ totals.cons_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.out_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.avail_qty|floatformat:2 }}</td>
+        <td class="num">{{ totals.bags|floatformat:2 }}</td>
+        <td></td>
+        <td class="num {% if totals.diff_kgs < 0 %}neg{% endif %}">{{ totals.diff_kgs|floatformat:2 }}</td>
+        <td class="num">{{ totals.daily_rate|floatformat:2 }}</td>
+        <td></td>
+        <td class="num">{{ totals.next_3_days|floatformat:2 }}</td>
+        <td></td>
+      </tr></tfoot>
+      {% endif %}
+    </table>
+  </div>
+  <div class="fs-legend">
+    Every phase of a flock's programme is listed whatever its age, tagged
+    <span class="ph ph-current">current</span><span class="ph ph-done">done</span><span class="ph ph-upcoming">upcoming</span>
+    in the Phase column — an upcoming phase has nothing due yet but carries a Total Required Feed to procure against.
+    Scheduled to Date (cumulative intake) is feed due by today — the breed standard's intake accumulated across each
+    phase's age band, where Day's Intake is that same curve read for today alone.
+    <sup class="basis">pro</sup> marks a figure pro-rated from the phase cap where the breed has no standard curve,
+    <sup class="basis">cap</sup> the whole cap on an open-ended final phase. Difference is that cumulative figure less
+    Consumed — positive means the flock is behind its curve, negative means ahead of it.
+    Feed Outlook is built on what the flock is actually eating — the mean of its last three entries for that feed.
+    A <sup class="basis">std</sup> on Daily Rate, Days Cover or Next 3 Days means there were no recent entries to
+    average and the figure is projected from the breed standard's daily intake instead.
+    Action Required reads red for today, amber for this week.
+  </div>
+</div></div>
+{% else %}
+  <div class="alert alert-info">Choose your filters above and click <strong>Submit</strong> to generate the report.</div>
+{% endif %}
+
+<!-- Feed card: one flock's phases read down the page, since the table itself is
+     wide enough to need sideways scrolling to compare them. -->
+<div class="modal fade" id="fsViewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0" id="fsViewTitle"></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="fsViewHead" class="small mb-2"></div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-0" id="fsViewBody" style="font-size:.75rem;"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endwith %}
+{% endblock %}
+
+{% block js %}
+<script>
+// Search filters whole batch groups, not single rows — a batch's farm, batch
+// name and age sit only on its first row, so hiding rows piecemeal would strand
+// its phase rows under no heading.
+(function () {
+  const box = document.getElementById('fs-search');
+  if (!box) return;
+  const rows = Array.from(document.querySelectorAll('#fs-table tbody tr.fs-row'));
+  const noMatch = document.getElementById('no-match');
+  box.addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    let shown = 0;
+    rows.forEach(tr => {
+      const hit = !q || (tr.dataset.s || '').indexOf(q) !== -1;
+      tr.classList.toggle('d-none', !hit);
+      if (hit) shown++;
+    });
+    noMatch.classList.toggle('d-none', shown > 0);
+  });
+})();
+
+// View builds a per-flock feed card from that batch's own rows. Farm, batch and
+// bird counts sit only on the group's first row, so the header is read from
+// there and the phase lines from every row sharing the group.
+(function () {
+  const table = document.getElementById('fs-table');
+  if (!table) return;
+  const txt = (tr, i) => (tr.children[i] ? tr.children[i].innerText.trim() : '');
+  const PHASE = [['Item', 6], ['Phase Age', 9], ['Cap (gm)', 10], ['Total Required (Kg)', 11],
+                 ["Day's Intake (gm)", 12], ["Day's Intake (Kg)", 13], ['Cum. Intake/Bird (gm)', 14],
+                 ['Consumed/Bird (gm)', 17], ['Stock (Kg)', 20], ['Bags', 21],
+                 ['Rate (Kg)', 24], ['Days Cover', 25], ['Next 3 Days (Kg)', 26]];
+
+  table.addEventListener('click', function (e) {
+    const btn = e.target.closest('.fs-view');
+    if (!btn) return;
+    const first = btn.closest('tr');
+    const rows = Array.from(table.querySelectorAll(`tbody tr.fs-row[data-g="${first.dataset.g}"]`));
+
+    document.getElementById('fsViewTitle').textContent = `${txt(first, 1)} — ${txt(first, 2).split('\n')[0]}`;
+    document.getElementById('fsViewHead').innerHTML =
+      [['Age (days)', txt(first, 3)], ['Latest Entry', txt(first, 4)], ['Gap (days)', txt(first, 5)],
+       ['Placed Birds', txt(first, 7)], ['Available Birds', txt(first, 8)]]
+        .map(([k, v]) => `<span class="me-3"><strong>${k}:</strong> ${v || '-'}</span>`).join('');
+
+    const head = `<thead class="table-light"><tr>${PHASE.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead>`;
+    const body = rows.map(tr =>
+      `<tr>${PHASE.map(c => `<td>${txt(tr, c[1]) || '-'}</td>`).join('')}</tr>`).join('');
+    document.getElementById('fsViewBody').innerHTML = head + `<tbody>${body}</tbody>`;
+    new bootstrap.Modal(document.getElementById('fsViewModal')).show();
+  });
+})();
+</script>
+{% endblock %}

@@ -463,8 +463,10 @@ class AutoPostingTests(EngineTestCase):
             payment_mode=payment_mode, pay_account=self.bank,
             freight_type=freight_type, freight_amount=Decimal(freight),
         )
+        # EggPurchaseItem derives amount from rate x qty (amount is editable=False),
+        # so set the rate that yields the desired amount over 2000 rcv_qty.
         self.EggPurchaseItem.objects.create(egg_purchase=doc, item=self.item,
-                                            rcv_qty=2000, amount=Decimal(amount))
+                                            rcv_qty=2000, rate=Decimal(amount) / Decimal("2000"))
         return doc
 
     def test_credit_purchase_posts_to_supplier_ledger(self):
@@ -506,8 +508,9 @@ class AutoPostingTests(EngineTestCase):
         again = self.post_document(doc)
         self.assertEqual(first.id, again.id)
         # Changed amounts -> old voucher cancelled, new one posted.
-        doc.items.all().update(amount=Decimal("12000"))
-        doc.items.first().save()
+        it = doc.items.first()
+        it.rate = Decimal("6")          # 6 x 2000 rcv_qty = 12000
+        it.save()
         second = self.post_document(doc)
         first.refresh_from_db()
         self.assertEqual(first.status, "Cancelled")

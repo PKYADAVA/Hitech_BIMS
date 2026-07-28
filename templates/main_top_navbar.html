@@ -173,6 +173,9 @@
               {% if 'lifting_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'lifting_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-truck-loading"></i>Lifting Report
               </a></li>{% endif %}
+              {% if 'batch_wise_feed_scheduling_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'batch_wise_feed_scheduling_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-calendar-check"></i>Batch wise Feed Scheduling Report
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

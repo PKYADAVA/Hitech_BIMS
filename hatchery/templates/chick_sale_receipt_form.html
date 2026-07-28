@@ -139,6 +139,38 @@ get('row-table').addEventListener('click', e => {
   if (e.target.closest('.add-row-inline')) { row(); }
 });
 
+// Editable remarks suggestion per row (add mode only; stops once the user types).
+(function () {
+  const table = get('row-table');
+  if (!table) return;
+  function whoText(tr) {
+    const c = tr.querySelector('.customer'), f = tr.querySelector('.farmer');
+    if (f && !f.classList.contains('d-none') && f.value) return f.options[f.selectedIndex].text;
+    if (c && c.value) return c.options[c.selectedIndex].text;
+    return '';
+  }
+  function suggest(tr) {
+    if (typeof INSTANCE_ID !== 'undefined' && INSTANCE_ID !== null) return;   // add mode only
+    const rem = tr.querySelector('.remarks');
+    if (!rem || rem.dataset.touched) return;
+    const who = whoText(tr);
+    const mode = (tr.querySelector('.mode') || {}).value || '';
+    const amt = parseFloat((tr.querySelector('.amount') || {}).value || '0') || 0;
+    if (!who && !amt) { rem.value = ''; return; }
+    const amtStr = amt ? amt.toLocaleString('en-IN') : '';
+    rem.value = `Receipt from ${who} ${amtStr} via ${mode}`.replace(/\s+/g, ' ').trim();
+  }
+  table.addEventListener('input', e => {
+    const tr = e.target.closest('tr'); if (!tr) return;
+    if (e.target.classList.contains('remarks')) { e.target.dataset.touched = '1'; return; }
+    if (e.target.classList.contains('amount')) suggest(tr);
+  });
+  table.addEventListener('change', e => {
+    const tr = e.target.closest('tr'); if (!tr) return;
+    if (['customer', 'farmer', 'mode'].some(c => e.target.classList.contains(c))) suggest(tr);
+  });
+})();
+
 get('receipt-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const locationId = get('location').value;
