@@ -4,6 +4,7 @@ import { AppState, StyleSheet, Text, View } from "react-native";
 
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
+import { AppIcon } from "@/components/AppIcon";
 import { colors, radius, spacing, type } from "@/theme";
 import { Button } from "./ui";
 
@@ -66,7 +67,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
     return (
       <View style={styles.wrap}>
         <View style={styles.logo}>
-          <Text style={styles.glyph}>🔒</Text>
+          <AppIcon name="lock-outline" size={44} color={colors.onDark} />
         </View>
         <Text style={styles.title}>Hitech BIMS is locked</Text>
         <Text style={styles.sub}>Authenticate to continue</Text>

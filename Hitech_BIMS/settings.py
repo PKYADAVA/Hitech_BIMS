@@ -465,6 +465,9 @@ ALERT_SETTINGS = {
         "tracking.TrackingLog",
     ] + env_list("ALERTS_IGNORE_MODELS"),
     # Field-level noise dropped across all models (merged with the built-in
-    # defaults). last_synced_at/last_sync_status bump on every provider sync.
-    "IGNORE_FIELDS": ["last_synced_at", "last_sync_status"],
+    # defaults). last_synced_at/last_sync_status bump on every provider sync;
+    # last_seen_at is the per-heartbeat presence stamp on EmployeeProviderMapping
+    # (refreshed every sync cycle) — dropping it stops the heartbeat-only saves
+    # from flooding the feed while real mapping/config changes are still audited.
+    "IGNORE_FIELDS": ["last_synced_at", "last_sync_status", "last_seen_at"],
 }

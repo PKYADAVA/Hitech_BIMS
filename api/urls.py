@@ -19,12 +19,15 @@ from broiler.api import register as register_broiler
 from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
 from inventory.api import register as register_inventory
+from inventory.api_write import write_urls as inventory_write_urls
 from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
 from purchase.api import register as register_purchase
+from purchase.api_write import write_urls as purchase_write_urls
 from user.api import RoleModuleView, RolesAccessView, RoleView, UserCreateView, UserRolesView
 from user.api import register as register_user
 from sales.api import register as register_sales
+from sales.api_write import write_urls as sales_write_urls
 from notification.api import (
     DeviceRegisterView,
     DeviceTestView,
@@ -152,5 +155,10 @@ urlpatterns = [
     path("user/roles/<int:pk>/module", RoleModuleView.as_view(), name="role-module"),
     path("user/roles/<int:pk>", RoleView.as_view(), name="role-detail"),
     path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
+    # Inventory + Purchase transaction writes — reuse the web posting logic
+    # (declared before the router so they win over the read-only resource routes).
+    *inventory_write_urls(),
+    *purchase_write_urls(),
+    *sales_write_urls(),
     path("", include(router.urls)),
 ]

@@ -10,6 +10,7 @@
  */
 import { http } from "@/api/client";
 import { Envelope } from "@/api/types";
+import { isDocumentForm } from "@/config/documents";
 
 export type FieldType = "text" | "textarea" | "number" | "decimal" | "date" | "boolean" | "select";
 
@@ -784,7 +785,16 @@ export const FORMS: Record<string, FormSchema> = {
   },
 };
 
-/** Whether a resource supports create/edit (has a schema + a CRUD endpoint). */
+/** Whether a resource can be *created* on mobile (flat form or document form). */
 export function isEditable(resourceKey: string): boolean {
+  return resourceKey in FORMS || isDocumentForm(resourceKey);
+}
+
+/**
+ * Whether a resource supports *edit* on mobile. Transaction documents are
+ * create-only for now (their multi-line edit prefill isn't built yet), so the
+ * generic flat forms are the only ones editable.
+ */
+export function isRecordEditable(resourceKey: string): boolean {
   return resourceKey in FORMS;
 }

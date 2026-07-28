@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { TrendPoint } from "@/api/stats";
+import { AppIcon } from "@/components/AppIcon";
 import { Card, withAlpha } from "@/components/ui";
 import { colors, radius, spacing, type } from "@/theme";
 
@@ -51,7 +52,7 @@ function IndicatorCard({ item, width }: { item: Indicator; width: number }) {
     <Card style={{ ...styles.card, width }}>
       <View style={styles.cardTop}>
         <View style={[styles.iconWrap, { backgroundColor: withAlpha(item.accent, 0.14) }]}>
-          <Text style={styles.icon}>{item.icon}</Text>
+          <AppIcon emoji={item.icon} size={18} color={item.accent} />
         </View>
         <Text style={styles.label} numberOfLines={1}>
           {item.label}

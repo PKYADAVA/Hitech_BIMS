@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppIcon } from "@/components/AppIcon";
 import { colors, radius, shadow, spacing, type } from "@/theme";
 
 /* ------------------------------------------------------------------ */
@@ -62,14 +63,19 @@ export function Divider() {
 
 export function SectionHeader({
   title,
+  subtitle,
   action,
 }: {
   title: string;
+  subtitle?: string;
   action?: React.ReactNode;
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      </View>
       {action}
     </View>
   );
@@ -103,7 +109,7 @@ export function IconCircle({
         },
       ]}
     >
-      <Text style={{ fontSize: size * 0.46 }}>{icon}</Text>
+      <AppIcon emoji={icon} size={size * 0.5} color={color} />
     </View>
   );
 }
@@ -161,7 +167,7 @@ export function ListItem({
         ) : null}
       </View>
       {trailing}
-      {onPress ? <Text style={styles.chevron}>›</Text> : null}
+      {onPress ? <AppIcon name="chevron-right" size={22} color={colors.textFaint} /> : null}
     </Card>
   );
 }
@@ -182,7 +188,7 @@ export function StatTile({
     <View style={[styles.stat, shadow(1)]}>
       {icon ? (
         <View style={[styles.statDot, { backgroundColor: withAlpha(accent, 0.14) }]}>
-          <Text style={{ fontSize: 15 }}>{icon}</Text>
+          <AppIcon emoji={icon} size={16} color={accent} />
         </View>
       ) : null}
       <Text style={styles.statValue} numberOfLines={1}>
@@ -222,7 +228,7 @@ export function SearchBar({
 }) {
   return (
     <View style={styles.search}>
-      <Text style={styles.searchIcon}>🔍</Text>
+      <AppIcon name="magnify" size={18} color={colors.textFaint} style={styles.searchIcon} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -308,17 +314,45 @@ export function Loading({ label }: { label?: string }) {
 
 export function EmptyOrError({
   message,
+  title,
   icon = "🗂️",
+  accent = colors.textFaint,
   onRetry,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
 }: {
   message: string;
+  /** Optional bold headline shown above the message. */
+  title?: string;
   icon?: string;
+  /** Tints the icon + its halo (defaults to a neutral grey). */
+  accent?: string;
   onRetry?: () => void;
+  /** Primary call-to-action (e.g. "Add Sale"). */
+  actionLabel?: string;
+  onAction?: () => void;
+  /** Secondary, lower-emphasis action. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }) {
+  const isNeutral = accent === colors.textFaint;
   return (
     <View style={styles.center}>
-      <Text style={styles.emptyIcon}>{icon}</Text>
+      <View style={[styles.emptyIconWrap, !isNeutral && { backgroundColor: withAlpha(accent, 0.12) }]}>
+        <AppIcon emoji={icon} size={40} color={accent} />
+      </View>
+      {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
       <Text style={styles.muted}>{message}</Text>
+      {onAction && actionLabel ? (
+        <View style={styles.emptyAction}>
+          <Button title={actionLabel} onPress={onAction} />
+        </View>
+      ) : null}
+      {onSecondary && secondaryLabel ? (
+        <Button title={secondaryLabel} variant="ghost" onPress={onSecondary} />
+      ) : null}
       {onRetry ? <Button title="Retry" variant="ghost" onPress={onRetry} /> : null}
     </View>
   );
@@ -344,8 +378,17 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   muted: { color: colors.textMuted, textAlign: "center", ...type.body },
-  emptyIcon: { fontSize: 40 },
-  pressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  emptyTitle: { ...type.h3, color: colors.text, textAlign: "center" },
+  emptyAction: { minWidth: 180, marginTop: spacing.xs },
+  emptyIconWrap: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.975 }] },
 
   card: {
     backgroundColor: colors.surface,
@@ -365,6 +408,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   sectionTitle: { ...type.h3, color: colors.text },
+  sectionSubtitle: { ...type.caption, color: colors.textMuted, marginTop: 1 },
 
   iconCircle: { alignItems: "center", justifyContent: "center" },
 
@@ -422,7 +466,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 44,
   },
-  searchIcon: { fontSize: 14, opacity: 0.6 },
+  searchIcon: { opacity: 0.9 },
   searchInput: { flex: 1, ...type.body, color: colors.text, padding: 0 },
 
   btn: {

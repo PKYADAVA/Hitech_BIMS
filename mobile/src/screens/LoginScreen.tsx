@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppIcon } from "@/components/AppIcon";
 import { Button, Field } from "@/components/ui";
 import { colors, radius, shadow, spacing, type } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
@@ -57,7 +58,7 @@ export function LoginScreen() {
             {/* Brand over the photo */}
             <View style={styles.brandWrap}>
               <View style={styles.logo}>
-                <Text style={styles.logoGlyph}>🐔</Text>
+                <AppIcon emoji="🐔" size={40} color={colors.onDark} />
               </View>
               <Text style={styles.brand}>Hitech BIMS</Text>
               <Text style={styles.tagline}>Poultry &amp; Hatchery Management</Text>

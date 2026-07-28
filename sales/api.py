@@ -19,6 +19,7 @@ from .models import (
     SalesInvoice,
     SalesInvoiceItem,
     SalesPriceMaster,
+    SalesReceipt,
 )
 
 
@@ -40,3 +41,7 @@ def register(router) -> None:
                    search_fields=["invoice_no", "reference_no", "vehicle_no", "gstin"],
                    cursor=True)
     register_model(router, "sales/invoice-items", SalesInvoiceItem, read_only=True)
+
+    # --- Receipts (read-only list; created via the /sales/receipts/save API) --
+    register_model(router, "sales/receipts", SalesReceipt, read_only=True,
+                   search_fields=["receipt_no", "reference_no"], cursor=True)

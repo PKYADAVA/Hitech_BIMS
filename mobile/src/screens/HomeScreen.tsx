@@ -4,6 +4,7 @@ import React, { useCallback } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppIcon } from "@/components/AppIcon";
 import { Badge, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
 import { colors, radius, shadow, spacing, type } from "@/theme";
 import { TabParams } from "@/navigation/types";
@@ -131,6 +132,14 @@ function initialsOf(user: AuthUser | null): string {
  * brand charcoal, then rounds off into the light page below — same onDark/white
  * language as the per-module stack headers, so the app reads as one system.
  */
+/** "Good morning/afternoon/evening" for the current local hour. */
+function greetingFor(date = new Date()): string {
+  const h = date.getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () => void }) {
   const insets = useSafeAreaInsets();
   const today = new Date().toLocaleDateString(undefined, {
@@ -138,6 +147,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
     day: "numeric",
     month: "long",
   });
+  const firstName = (user?.full_name || user?.username || "there").split(" ")[0];
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
@@ -145,7 +155,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
       <View style={styles.brandRow}>
         <View style={styles.brand}>
           <View style={styles.logo}>
-            <Text style={styles.logoGlyph}>🐔</Text>
+            <AppIcon emoji="🐔" size={22} color={colors.onDark} />
           </View>
           <View>
             <Text style={styles.brandName}>Hi Tech BIMS</Text>
@@ -167,7 +177,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
       {/* Greeting */}
       <Text style={styles.date}>{today}</Text>
       <Text style={styles.hello} numberOfLines={1}>
-        Hi, {user?.full_name || user?.username || "there"} 👋
+        {greetingFor()}, {firstName} 👋
       </Text>
       {user?.role || user?.department ? (
         <View style={styles.rolePill}>
@@ -207,12 +217,12 @@ export function HomeScreen({ navigation }: Props) {
         <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
 
         <View style={styles.body}>
-          <SectionHeader title="At a glance" />
+          <SectionHeader title="At a glance" subtitle="Today's key numbers across your farm" />
         </View>
         <IndicatorCarousel indicators={buildIndicators(ov)} />
 
         <View style={styles.body}>
-          <SectionHeader title="Modules" />
+          <SectionHeader title="Modules" subtitle="Jump into a workspace" />
           <View style={styles.grid}>
             {TILES.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
               const active = !!t.target;
@@ -228,7 +238,7 @@ export function HomeScreen({ navigation }: Props) {
                   >
                     <View style={styles.tileInner}>
                       <View style={[styles.tileIcon, { backgroundColor: withAlpha(t.color, 0.14) }]}>
-                        <Text style={{ fontSize: 22 }}>{t.icon}</Text>
+                        <AppIcon emoji={t.icon} size={22} color={t.color} />
                       </View>
                       <Text style={styles.tileTitle}>{t.title}</Text>
                       <Text style={styles.tileSub}>{t.subtitle}</Text>

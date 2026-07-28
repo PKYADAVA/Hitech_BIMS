@@ -22,6 +22,8 @@ export type ModuleStackParams = {
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
+  /** Transaction document form (header + line items) — inventory/purchase/sales. */
+  DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row };
 };
 
 export type TabParams = {

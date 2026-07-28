@@ -17,6 +17,7 @@ import { FormField } from "@/config/forms";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { colors, radius, spacing, type } from "@/theme";
 import { formatDate } from "@/utils/format";
+import { AppIcon } from "./AppIcon";
 import { SearchBar } from "./ui";
 
 /** Label + control + inline error wrapper shared by all field types. */
@@ -170,7 +171,7 @@ function SelectControl({
         <Text style={selectedLabel ? styles.inputText : styles.placeholder} numberOfLines={1}>
           {selectedLabel || `Select ${field.label.toLowerCase()}`}
         </Text>
-        <Text style={styles.caret}>▾</Text>
+        <AppIcon name="chevron-down" size={20} color={colors.textFaint} />
       </Pressable>
 
       <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
@@ -214,7 +215,7 @@ function SelectControl({
                 }}
               >
                 <Text style={styles.optionText}>{item.label}</Text>
-                {item.value === value ? <Text style={styles.check}>✓</Text> : null}
+                {item.value === value ? <AppIcon name="check" size={18} color={colors.primary} /> : null}
               </Pressable>
             )}
           />

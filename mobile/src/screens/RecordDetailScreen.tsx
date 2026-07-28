@@ -6,9 +6,10 @@ import { reviewChangeRequest } from "@/api/changeRequests";
 import { retryMessage } from "@/api/sms";
 import { Row } from "@/api/types";
 import { RecordCard } from "@/components/RecordCard";
+import { AppIcon } from "@/components/AppIcon";
 import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
 import { ChildConfig, RESOURCES } from "@/config/catalog";
-import { isEditable } from "@/config/forms";
+import { isEditable, isRecordEditable } from "@/config/forms";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
@@ -51,8 +52,9 @@ function ChildSection({
           {cfg.title} ({list.items.length})
         </Text>
         {canAdd ? (
-          <Pressable hitSlop={8} onPress={() => openForm("create")}>
-            <Text style={styles.addLink}>＋ Add</Text>
+          <Pressable hitSlop={8} onPress={() => openForm("create")} style={styles.addLinkRow}>
+            <AppIcon name="plus" size={16} color={colors.primary} />
+            <Text style={styles.addLink}>Add</Text>
           </Pressable>
         ) : null}
       </View>
@@ -96,7 +98,7 @@ export function RecordDetailScreen({ route, navigation }: Props) {
   const row: Row = route.params.row;
   const view = config.card(row);
   const canEdit =
-    isEditable(config.key) && usePermissionsStore((s) => s.canAction)(config.module, "edit");
+    isRecordEditable(config.key) && usePermissionsStore((s) => s.canAction)(config.module, "edit");
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -258,6 +260,7 @@ const styles = StyleSheet.create({
   },
   childHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs },
   childTitle: { ...type.h3, color: colors.text },
+  addLinkRow: { flexDirection: "row", alignItems: "center", gap: 2 },
   addLink: { ...type.title, color: colors.primary },
   footnote: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
 });

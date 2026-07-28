@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { biometricsAvailable } from "@/components/LockGate";
+import { AppIcon } from "@/components/AppIcon";
 import { Card, IconCircle, Screen, withAlpha } from "@/components/ui";
 import { AuthUser } from "@/api/types";
 import { colors, radius, spacing, type } from "@/theme";
@@ -97,7 +98,7 @@ function ActionRow({
         <Text style={[styles.actionTitle, danger && { color: colors.danger }]}>{title}</Text>
         {subtitle ? <Text style={styles.rowLabel}>{subtitle}</Text> : null}
       </View>
-      {trailing ?? (onPress ? <Text style={styles.chevron}>›</Text> : null)}
+      {trailing ?? (onPress ? <AppIcon name="chevron-right" size={22} color={colors.textFaint} /> : null)}
     </>
   );
   if (!onPress) return <View style={styles.row}>{Body}</View>;

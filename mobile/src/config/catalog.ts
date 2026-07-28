@@ -1107,6 +1107,25 @@ const salesResources: ResourceConfig[] = [
     children: [{ resourceKey: "sales-invoice-items", fkParam: "invoice" }],
   },
   {
+    key: "sales-receipts",
+    module: "sales",
+    path: "/sales/receipts/",
+    title: "Sales Receipts",
+    singular: "Sales Receipt",
+    icon: "💵",
+    accent: SA,
+    emptyMessage: "No receipts yet.",
+    searchKeys: ["receipt_no", "reference_no"],
+    card: (r) => ({
+      title: pick(r, ["receipt_no"], `Receipt #${r.id}`),
+      subtitle: joinParts([pick(r, ["customer_label"]), formatDate(r.date)]),
+      trailing: !isBlank(r.amount)
+        ? { value: formatMoney(r.amount), caption: "amount" }
+        : undefined,
+      badge: !isBlank(r.mode) ? { label: String(r.mode), tone: "info" } : undefined,
+    }),
+  },
+  {
     key: "sales-customers",
     module: "sales",
     path: "/sales/customers/",
@@ -1876,7 +1895,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     sections: [
       {
         title: "Transactions",
-        resourceKeys: ["sales-invoices"],
+        resourceKeys: ["sales-invoices", "sales-receipts"],
       },
       {
         title: "Masters",

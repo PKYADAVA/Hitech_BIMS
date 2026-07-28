@@ -17,6 +17,7 @@ import {
 import { ApiError } from "@/api/types";
 import { listResource } from "@/api/resources";
 import { Row } from "@/api/types";
+import { AppIcon } from "@/components/AppIcon";
 import { Card, EmptyOrError, Loading } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
 import { colors, radius, spacing, type } from "@/theme";
@@ -345,7 +346,8 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
   if (!open) {
     return (
       <Pressable style={styles.newUserBtn} onPress={() => setOpen(true)}>
-        <Text style={styles.newUserBtnText}>＋ New user</Text>
+        <AppIcon name="plus" size={16} color={colors.primary} />
+        <Text style={styles.newUserBtnText}>New user</Text>
       </Pressable>
     );
   }
@@ -469,12 +471,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   newUserBtn: {
+    flexDirection: "row",
+    gap: spacing.xs,
     borderWidth: 1,
     borderColor: colors.primary,
     borderStyle: "dashed",
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: spacing.xs,
   },
   newUserBtnText: { ...type.title, color: colors.primary },

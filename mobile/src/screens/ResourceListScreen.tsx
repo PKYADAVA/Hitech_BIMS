@@ -3,8 +3,10 @@ import React, { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Row } from "@/api/types";
+import { AppIcon } from "@/components/AppIcon";
 import { RecordCard } from "@/components/RecordCard";
-import { EmptyOrError, Loading, SearchBar } from "@/components/ui";
+import { ListSkeleton } from "@/components/Skeleton";
+import { EmptyOrError, SearchBar } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { openRecordForm } from "@/navigation/openForm";
@@ -35,11 +37,30 @@ export function ResourceListScreen({ route, navigation }: Props) {
     );
   }, [list.items, query, config.searchKeys]);
 
-  if (list.isLoading) return <Loading label={`Loading ${config.title.toLowerCase()}…`} />;
+  if (list.isLoading) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.searchWrap}>
+          <SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
+        </View>
+        <ListSkeleton />
+      </View>
+    );
+  }
   if (list.isError) {
     const message = (list.error as Error)?.message ?? "Failed to load.";
-    return <EmptyOrError icon="⚠️" message={message} onRetry={list.refresh} />;
+    return (
+      <EmptyOrError
+        icon="⚠️"
+        accent={colors.danger}
+        title="Couldn't load"
+        message={message}
+        onRetry={list.refresh}
+      />
+    );
   }
+
+  const canCreate = isEditable(config.key) && canAdd;
 
   return (
     <View style={styles.screen}>
@@ -58,10 +79,18 @@ export function ResourceListScreen({ route, navigation }: Props) {
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets
         ListEmptyComponent={
-          <EmptyOrError
-            icon={config.icon}
-            message={query ? "No matches for your search." : config.emptyMessage}
-          />
+          query ? (
+            <EmptyOrError icon="🔍" title="No matches" message="No results for your search." />
+          ) : (
+            <EmptyOrError
+              icon={config.icon}
+              accent={config.accent}
+              title={`No ${config.title.toLowerCase()} yet`}
+              message={config.emptyMessage}
+              actionLabel={canCreate ? `Add ${config.singular}` : undefined}
+              onAction={canCreate ? () => openRecordForm(navigation, config.key, "create") : undefined}
+            />
+          )
         }
         ListFooterComponent={
           list.isFetchingNextPage ? (
@@ -92,7 +121,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={`Add ${config.singular}`}
         >
-          <Text style={styles.fabPlus}>＋</Text>
+          <AppIcon name="plus" size={22} color="#fff" />
           <Text style={styles.fabText}>New</Text>
         </Pressable>
       ) : null}
