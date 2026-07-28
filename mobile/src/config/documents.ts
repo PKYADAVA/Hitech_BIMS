@@ -393,6 +393,97 @@ export const DOCUMENTS: Record<string, DocConfig> = {
     }),
   },
 
+  // Sales Invoice — customer bill with taxable item lines (GST computed server-side).
+  "sales-invoices": {
+    resourceKey: "sales-invoices",
+    title: "Sales Invoice",
+    savePath: "/sales/invoices/save",
+    itemTitle: "Items",
+    header: [
+      fDate(),
+      { name: "customer", label: "Customer", type: "select", optionsPath: "/customers/", optionLabelKeys: ["name", "code"], required: true },
+      fText("reference_no", "Reference No."),
+      fText("place_of_supply", "Place of Supply"),
+      fText("vehicle_no", "Vehicle No."),
+      fDec("other_charges_amount", "Other Charges"),
+      fText("remarks", "Remarks"),
+    ],
+    itemFields: [
+      fItem(),
+      fText("uom", "UOM"),
+      fDec("quantity", "Quantity"),
+      fDec("free_qty", "Free Qty"),
+      fDec("rate", "Rate"),
+      fDec("discount_percent", "Discount %"),
+      fDec("gst_percent", "GST %"),
+      fText("batch_no", "Batch No."),
+      fText("hsn_sac", "HSN/SAC"),
+    ],
+    build: (h, items) => ({
+      transaction_type: "Sales Invoice",
+      date: h.date,
+      customer: h.customer || null,
+      reference_no: h.reference_no || "",
+      place_of_supply: h.place_of_supply || "",
+      vehicle_no: h.vehicle_no || "",
+      other_charges_amount: h.other_charges_amount || "0",
+      remarks: h.remarks || "",
+      items: items
+        .filter((it) => has(it.item))
+        .map((it) => ({
+          item: it.item,
+          uom: it.uom || "",
+          quantity: it.quantity || "0",
+          free_qty: it.free_qty || "0",
+          rate: it.rate || "0",
+          discount_percent: it.discount_percent || "0",
+          gst_percent: it.gst_percent || "0",
+          batch_no: it.batch_no || "",
+          hsn_sac: it.hsn_sac || "",
+        })),
+    }),
+  },
+
+  // Sales Receipt — money received; each line is its own receipt voucher.
+  "sales-receipts": {
+    resourceKey: "sales-receipts",
+    title: "Sales Receipt",
+    savePath: "/sales/receipts/save",
+    itemTitle: "Receipts",
+    header: [fDate(), fWarehouse("location", "Location", true)],
+    itemFields: [
+      { name: "customer", label: "Customer", type: "select", optionsPath: "/customers/", optionLabelKeys: ["name", "code"], required: true },
+      {
+        name: "mode", label: "Mode", type: "toggle",
+        options: [
+          { value: "Cash", label: "Cash" },
+          { value: "Bank Transfer", label: "Bank Transfer" },
+          { value: "Cheque", label: "Cheque" },
+          { value: "UPI", label: "UPI" },
+          { value: "Card", label: "Card" },
+        ],
+      },
+      fAccount("receipt_account", "Receipt Account", true),
+      fDec("amount", "Amount", true),
+      fText("reference_no", "Reference No."),
+      fText("remarks", "Remarks"),
+    ],
+    build: (h, items) => ({
+      rows: items
+        .filter((it) => has(it.customer))
+        .map((it) => ({
+          date: h.date,
+          location: h.location || null,
+          customer: it.customer,
+          mode: it.mode || "Cash",
+          receipt_account: it.receipt_account || null,
+          amount: it.amount || "0",
+          reference_no: it.reference_no || "",
+          remarks: it.remarks || "",
+        })),
+    }),
+  },
+
   // Stock Receive — per-line location (received into warehouse/farm).
   "inventory-stock-receives": {
     resourceKey: "inventory-stock-receives",
