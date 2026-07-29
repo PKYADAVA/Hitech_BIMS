@@ -114,10 +114,6 @@
               <input type="number" min="0" step=".01" class="form-control" id="edit-quantity" value="0">
             </div>
             <div class="col-md-3">
-              <label class="form-label">Purchase Rate</label>
-              <input type="number" min="0" step=".01" class="form-control" id="edit-purchase-rate" value="0">
-            </div>
-            <div class="col-md-3">
               <label class="form-label">Rate</label>
               <input type="number" min="0" step=".01" class="form-control" id="edit-rate" value="0">
             </div>
@@ -302,7 +298,6 @@ $(function () {
       $("#edit-dc-no").val(r.dc_no);
       $("#edit-item").val(r.item || "");
       $("#edit-quantity").val(r.quantity);
-      $("#edit-purchase-rate").val(r.purchase_rate);
       $("#edit-rate").val(r.rate);
       $("#edit-from-location").val(r.from_location_type ? `${r.from_location_type}:${r.from_location_id}` : "");
       $("#edit-to-location").val(r.to_location_type ? `${r.to_location_type}:${r.to_location_id}` : "");
@@ -340,7 +335,6 @@ $(function () {
         dc_no: $("#edit-dc-no").val(),
         item: $("#edit-item").val(),
         quantity: $("#edit-quantity").val(),
-        purchase_rate: $("#edit-purchase-rate").val(),
         rate: $("#edit-rate").val(),
         from_location_type: from.type,
         from_location_id: from.id,

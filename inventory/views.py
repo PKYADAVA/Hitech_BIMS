@@ -948,7 +948,9 @@ def _apply_stock_transfer_row(instance, row, user):
     for field in ("chicks_ordered", "transit_mortality", "shortage", "culls"):
         value = row.get(field)
         setattr(instance, field, Decimal(str(value)) if value not in (None, "") else None)
-    instance.purchase_rate = Decimal(str(row.get("purchase_rate") or 0))
+    # Purchase Rate was dropped from the form; leave any stored value alone.
+    if "purchase_rate" in row:
+        instance.purchase_rate = Decimal(str(row.get("purchase_rate") or 0))
     instance.rate = Decimal(str(row.get("rate") or 0))
 
     from_type = row.get("from_location_type") or "warehouse"
@@ -1128,15 +1130,39 @@ class StockTransferAPI(View):
         return JsonResponse({"message": "Stock transfer deleted"})
 
 
+def item_issue_price(item, on_date=None):
+    """Issue price of an item from Item Price Master (Inventory > Master >
+    Item Price List) — the most recent entry effective on or before the date.
+
+    Falls back to the item's standard cost when it has no price entry, so a
+    transfer is never rated at zero just because the price list is incomplete.
+    """
+    if not item:
+        return Decimal("0")
+    entries = item.price_list_entries.all()
+    if on_date:
+        entries = entries.filter(effective_date__lte=on_date)
+    entry = entries.order_by("-effective_date", "-id").first()
+    return entry.price if entry else Decimal(str(item.standard_cost_per_unit or 0))
+
+
 @login_required
 def stock_transfer_item_lookup(request):
-    """UOM and purchase rate for a selected item, for the Add form's
-    auto-filled UOM / Purchase Rate fields."""
+    """UOM and issue price for a selected item, for the Add form's auto-filled
+    UOM / Rate fields. The rate is the Item Price Master price effective on the
+    row's date."""
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
+    on_date = None
+    raw_date = (request.GET.get("date") or "").strip()
+    if raw_date:
+        try:
+            on_date = timezone.datetime.fromisoformat(raw_date).date()
+        except ValueError:
+            on_date = None
     return JsonResponse({
         "unit": _uom_label(item.storage_uom) if item else "",
-        "purchase_rate": str(item.standard_cost_per_unit) if item else "0",
+        "rate": str(item_issue_price(item, on_date)),
     })
 
 

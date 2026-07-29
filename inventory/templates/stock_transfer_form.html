@@ -38,7 +38,6 @@
               <th style="min-width:90px">UOM</th>
               <th style="min-width:100px">Stock</th>
               <th style="min-width:100px">Quantity <span class="text-danger">*</span></th>
-              <th style="min-width:110px">Purchase Rate</th>
               <th style="min-width:90px">Rate</th>
               <th style="min-width:190px">From Location <span class="text-danger">*</span></th>
               <th style="min-width:150px">Batch</th>
@@ -91,7 +90,6 @@ function row() {
     <td><input class="form-control bg-light uom" readonly></td>
     <td><input class="form-control bg-light stock" readonly placeholder="auto"></td>
     <td><input class="form-control quantity" type="number" min="0" step=".01" value="0"></td>
-    <td><input class="form-control bg-light purchase-rate" readonly value="0"></td>
     <td><input class="form-control rate" type="number" min="0" step=".01" value="0"></td>
     <td><select class="form-select from-location" required>${locationOptions}</select></td>
     <td><select class="form-select from-batch" disabled><option value="">N/A</option></select></td>
@@ -142,6 +140,21 @@ async function refreshBatchBox(tr, side) {
 // location(type+id)+item — mirrors the opening-balance lookup the server
 // uses when it actually saves the rows.
 let stockPreviewToken = 0;
+// Rate is the Item Price Master price effective on the row's date, so a
+// transfer is valued the same way wherever it is raised. It stays editable.
+async function refreshRate(tr) {
+  const itemId = tr.querySelector('.item').value;
+  const rateInput = tr.querySelector('.rate');
+  if (!itemId) { rateInput.value = '0'; return; }
+  const date = tr.querySelector('.date').value || '';
+  try {
+    const resp = await fetch(`{% url 'stock_transfer_item_lookup' %}?item=${itemId}&date=${date}`);
+    const data = await resp.json();
+    rateInput.value = data.rate || '0';
+    if (data.unit) { tr.querySelector('.uom').value = data.unit; }
+  } catch (err) { /* leave the current rate alone if the lookup fails */ }
+}
+
 async function recomputeStockPreview() {
   const myToken = ++stockPreviewToken;
   const rows = [...document.querySelectorAll('#row-table tbody tr')];
@@ -174,7 +187,7 @@ get('row-table').addEventListener('change', e => {
     const tr = e.target.closest('tr');
     const opt = e.target.selectedOptions[0];
     tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
-    tr.querySelector('.purchase-rate').value = opt ? (opt.dataset.rate || '0') : '0';
+    refreshRate(tr);
     recomputeStockPreview();
   }
   if (e.target.classList.contains('from-location')) {
@@ -185,6 +198,7 @@ get('row-table').addEventListener('change', e => {
     refreshBatchBox(e.target.closest('tr'), 'to');
   }
   if (e.target.classList.contains('date')) {
+    refreshRate(e.target.closest('tr'));
     recomputeStockPreview();
   }
 });
@@ -211,7 +225,6 @@ get('stock-transfer-form').addEventListener('submit', function (e) {
       dc_no: tr.querySelector('.dc-no').value,
       item: tr.querySelector('.item').value,
       quantity: tr.querySelector('.quantity').value,
-      purchase_rate: tr.querySelector('.purchase-rate').value,
       rate: tr.querySelector('.rate').value,
       from_location_type: from ? from.type : '',
       from_location_id: from ? from.id : '',
