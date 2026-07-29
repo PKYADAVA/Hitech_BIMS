@@ -232,9 +232,8 @@
           <label class="form-label">Round Off (auto)</label>
           <input type="text" class="form-control bg-light" id="round_off_preview" readonly value="{{ general_purchase.round_off_type|default:'Add' }} {{ general_purchase.round_off|default:'0.00' }}">
         </div>
-      </div>
-      <div class="row g-3 mt-0">
-        <div class="col-md-3 offset-md-9 text-end">
+        {# Net Amount rides the same row: 3+2+2+3+2 fills the 12 columns. #}
+        <div class="col-md-2">
           <label class="form-label">Net Amount (preview)</label>
           <input type="text" class="form-control bg-light text-end fw-bold" id="net_amount_preview" readonly value="{{ general_purchase.net_amount|default:'0.00' }}">
         </div>
@@ -306,7 +305,7 @@ function itemRow(row = {}) {
     <td><input class="form-control disc-percent" type="number" min="0" step=".01" value="${row.discount_percent || 0}"></td>
     <td><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount || 0}"></td>
     <td><select class="form-select gst">${taxOptions}</select></td>
-    <td class="amount text-end align-middle">0.00</td>
+    <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
     <td><select class="form-select farm-warehouse" required>${warehouseOptions}</select></td>
     <td class="text-nowrap">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
@@ -330,7 +329,7 @@ function calcRow(tr) {
   const qty = calcBasis() === 'Received Quantity' ? num('.rcv-qty') : num('.sent-qty');
   const subtotal = (qty * num('.rate')) * (1 - num('.disc-percent') / 100) - num('.disc-amount');
   const amount = subtotal * (1 + num('.gst') / 100);
-  tr.querySelector('.amount').textContent = amount.toFixed(2);
+  tr.querySelector('.amount').value = amount.toFixed(2);
   totals();
 }
 
@@ -351,7 +350,7 @@ function refreshRowAddButtons() {
 
 function grossAmount() {
   let amount = 0;
-  document.querySelectorAll('#item-table tbody tr').forEach(tr => { amount += Number(tr.querySelector('.amount').textContent) || 0; });
+  document.querySelectorAll('#item-table tbody tr').forEach(tr => { amount += Number(tr.querySelector('.amount').value) || 0; });
   return amount;
 }
 
