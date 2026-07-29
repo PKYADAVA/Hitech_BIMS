@@ -64,6 +64,7 @@ Manage Customers
                         <th>SMS/WhatsApp No</th>
                         <th>Party Type</th>
                         <th>Party Category</th>
+                        <th>Customer Group</th>
                         <th>Credit Limit</th>
                         <th>State of Supply</th>
                         <th class="text-center">Actions</th>
@@ -76,7 +77,10 @@ Manage Customers
                         <td>{{ cust.name }}</td>
                         <td>{{ cust.mobile }}</td>
                         <td>{{ cust.contact_type }}</td>
-                        <td>{{ cust.get_party_category_display|default:"—" }}</td>
+                        <td>{{ cust.party_category|default:"—" }}</td>
+                        {# customer_group is optional; a dotted filter *argument* is not
+                           silenced when it is null, so guard it explicitly. #}
+                        <td>{% if cust.customer_group %}{{ cust.customer_group.description|default:cust.customer_group.code }}{% else %}—{% endif %}</td>
                         <td>{{ cust.credit_limit }}</td>
                         <td>{{ cust.state|default:"—" }}</td>
                         <td>

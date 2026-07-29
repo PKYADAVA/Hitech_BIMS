@@ -71,11 +71,15 @@ class Customer(models.Model):
     mobile_2 = models.CharField(max_length=15, blank=True, null=True, help_text="Secondary mobile number")
     email = models.EmailField(blank=True, null=True, help_text="Email address")
     aadhar = models.CharField(max_length=20, blank=True, null=True, help_text="Aadhar number")
+    # Managed through Picklist Master — see the note on party_category below.
     contact_type = models.CharField(
-        max_length=20, choices=ContactType.choices, default=ContactType.BOTH, help_text="Party type"
+        max_length=50, default=ContactType.BOTH, help_text="Party type"
     )
+    # Values are managed through Picklist Master (Users > Picklists), so no
+    # hardcoded choices here — they would reject any list entry an admin adds.
+    # PartyCategory/ContactType are kept as the seed for those picklists.
     party_category = models.CharField(
-        max_length=20, choices=PartyCategory.choices, blank=True, null=True, help_text="Party category"
+        max_length=50, blank=True, null=True, help_text="Party category"
     )
     pan_tin = models.CharField(max_length=50, blank=True, null=True, help_text="PAN/TIN number")
     customer_group = models.ForeignKey(

@@ -25,7 +25,9 @@ states_and_union_territories = STATES_AND_TERRITORIES
 
 @login_required
 def customer(request):
-    return render(request, "customer.html", {"customers": Customer.objects.all()})
+    return render(request, "customer.html", {
+        "customers": Customer.objects.select_related("customer_group").all()
+    })
 
 
 def _customer_form_context(customer=None):

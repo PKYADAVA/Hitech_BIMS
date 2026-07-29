@@ -32,8 +32,11 @@ class Supplier(models.Model):
     email = models.EmailField(blank=True, null=True, help_text="Email address")
     aadhar = models.CharField(max_length=20, blank=True, null=True, help_text="Aadhar number")
     contact_type = models.CharField(max_length=50, null=True, blank=True)
+    # Values are managed through Picklist Master (Users > Picklists), so no
+    # hardcoded choices here — they would reject any list entry an admin adds.
+    # PartyCategory is kept as the seed for that picklist.
     party_category = models.CharField(
-        max_length=20, choices=PartyCategory.choices, blank=True, null=True, help_text="Party category"
+        max_length=50, blank=True, null=True, help_text="Party category"
     )
     pan = models.CharField(max_length=20, null=True, blank=True)
     supplier_group = models.CharField(max_length=100, null=True, blank=True)
