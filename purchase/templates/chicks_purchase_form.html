@@ -33,7 +33,7 @@
           <label class="form-label">Date <span class="text-danger">*</span></label>
           <input type="date" class="form-control" name="date" value="{{ chicks_purchase.date|date:'Y-m-d'|default:today }}" required>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
           <label class="form-label">Supplier <span class="text-danger">*</span></label>
           <select class="form-select" name="supplier" required>
             <option value="">select</option>
@@ -41,17 +41,10 @@
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Hatchery</label>
-          <select class="form-select" name="hatchery">
-            <option value="">select</option>
-            {% for h in hatcheries %}<option value="{{ h.id }}" {% if chicks_purchase.hatchery_id == h.id %}selected{% endif %}>{{ h.hatchery_name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="col-md-2">
           <label class="form-label">Bill No.</label>
           <input type="text" class="form-control" name="bill_no" value="{{ chicks_purchase.bill_no|default:'' }}">
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <label class="form-label">Purchase No.</label>
           <input type="text" class="form-control bg-light" readonly value="{{ chicks_purchase.purchase_no|default:next_purchase_no }}">
         </div>

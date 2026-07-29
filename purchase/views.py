@@ -15,7 +15,7 @@ from django.http import Http404, JsonResponse
 from django.db.models import F
 from django.core.files.storage import default_storage
 from django.utils import timezone
-from hatchery_master.models import STATES_AND_TERRITORIES, Hatchery
+from hatchery_master.models import STATES_AND_TERRITORIES
 from account.models import ChartOfAccount
 from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
 from inventory.models import Item, ItemCategory, Warehouse
@@ -620,7 +620,6 @@ def _chicks_purchase_list_dict(cp):
     return {
         "id": cp.id, "date": cp.date.isoformat(), "bill_no": cp.bill_no, "dc_no": cp.dc_no,
         "supplier_name": cp.supplier.name,
-        "hatchery_name": cp.hatchery.hatchery_name if cp.hatchery_id else "",
         "item_code": cp.item.item_code,
         "quantity": str(cp.total_quantity()), "avg_rate": str(cp.avg_rate()),
         "net_amount": str(cp.net_amount), "farm_warehouse_names": warehouses,
@@ -632,7 +631,6 @@ def _chicks_purchase_form_context(cp=None):
         "chicks_purchase": cp,
         "next_purchase_no": ChicksPurchase._next_purchase_no() if not cp else None,
         "suppliers": Supplier.objects.order_by("name"),
-        "hatcheries": Hatchery.objects.order_by("hatchery_name"),
         "items": Item.objects.order_by("item_code"),
         "warehouses": Warehouse.objects.order_by("name"),
         "accounts": ChartOfAccount.objects.order_by("code"),
@@ -651,7 +649,8 @@ def _chicks_purchase_form_context(cp=None):
 def _apply_posted_chicks_purchase_fields(instance, request):
     instance.date = request.POST.get("date") or timezone.localdate()
     instance.supplier_id = request.POST.get("supplier") or None
-    instance.hatchery_id = request.POST.get("hatchery") or None
+    # Hatchery was dropped from the form (the Supplier identifies it); it is
+    # left untouched here so historic values survive an edit.
     instance.item_id = request.POST.get("item") or None
     instance.bill_no = request.POST.get("bill_no", "").strip()
     # DC No. was dropped from the form (it duplicated Bill No.); it is left
@@ -772,7 +771,7 @@ def chicks_purchase_api_list(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
 
-    qs = ChicksPurchase.objects.select_related("supplier", "hatchery", "item").prefetch_related(
+    qs = ChicksPurchase.objects.select_related("supplier", "item").prefetch_related(
         "items__farm_warehouse")
     if from_date:
         qs = qs.filter(date__gte=from_date)

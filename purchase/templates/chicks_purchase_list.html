@@ -35,7 +35,7 @@
       <table class="table table-hover table-bordered mb-0" id="purchase-table">
         <thead class="table-dark">
           <tr>
-            <th>Date</th><th>Invoice</th><th>Supplier</th><th>Hatchery</th>
+            <th>Date</th><th>Invoice</th><th>Supplier</th>
             <th>Item</th><th>Quantity</th><th>Price</th><th>Amount</th><th>Farm/Warehouse</th>
             <th class="text-center">Action</th>
           </tr>
@@ -94,7 +94,6 @@ $(function () {
         <td>${escapeHtml(row.date)}</td>
         <td>${escapeHtml(row.bill_no) || "-"}</td>
         <td>${escapeHtml(row.supplier_name)}</td>
-        <td>${escapeHtml(row.hatchery_name) || "-"}</td>
         <td>${escapeHtml(row.item_code)}</td>
         <td>${escapeHtml(row.quantity)}</td>
         <td class="text-end">${Number(row.avg_rate).toFixed(2)}</td>
