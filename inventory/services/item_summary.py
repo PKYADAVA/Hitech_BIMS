@@ -275,3 +275,16 @@ def location_item_stock(location_type, location_id, item_id, as_of_date=None):
     for m in _collect(None, as_of_date, None, item_id, location_type, location_id):
         balance = balance + m["qty"] if m["dir"] == "in" else balance - m["qty"]
     return balance
+
+def item_total_stock(item_id, as_of_date=None, location_type="warehouse"):
+    """Total stock of one item across every location of a kind, as of a date.
+
+    For documents that record no source location — a Delivery Challan, say —
+    a company-wide figure is the only meaningful one to show.
+    """
+    balance = Z
+    for m in _collect(None, as_of_date, None, item_id, None, None):
+        if location_type and m["loc"][0] != location_type:
+            continue
+        balance = balance + m["qty"] if m["dir"] == "in" else balance - m["qty"]
+    return balance
