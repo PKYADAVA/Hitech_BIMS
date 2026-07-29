@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 
 import { http } from "@/api/client";
 import { createResource, deleteResource, updateResource } from "@/api/resources";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui";
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { makeStyles, radius, shadow, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "BirdSaleForm">;
@@ -47,6 +47,7 @@ const F_REMARKS: FormField = { name: "remarks", label: "Remarks", type: "text" }
 const num = (v: string) => Number(v) || 0;
 
 export function BirdSaleFormScreen({ route, navigation }: Props) {
+  const styles = useStyles();
   const { mode, row } = route.params;
 
   const [saleType, setSaleType] = useState<SaleType>(
@@ -264,6 +265,7 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
 
 /** A non-editable, computed/derived value shown in the same shell as inputs. */
 function ReadonlyField({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -277,7 +279,7 @@ function ReadonlyField({ label, value, emphasize }: { label: string; value: stri
 const str = (v: unknown) => (isEmpty(v) ? "" : String(v));
 const idStr = (v: unknown) => (v === null || v === undefined || v === "" ? "" : String(v));
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   formError: {
@@ -300,7 +302,7 @@ const styles = StyleSheet.create({
   toggle: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.sm, alignItems: "center" },
   toggleOn: { backgroundColor: colors.surface, ...shadow(1) },
   toggleText: { ...type.label, color: colors.textMuted },
-  toggleTextOn: { color: colors.primary, fontWeight: "800" },
+  toggleTextOn: { color: colors.tint, fontWeight: "800" },
 
   field: { marginBottom: spacing.lg },
   label: { ...type.label, color: colors.text, marginBottom: spacing.xs },
@@ -315,5 +317,5 @@ const styles = StyleSheet.create({
   },
   readonlyStrong: { backgroundColor: colors.primaryLight, borderColor: colors.primaryLight },
   readonlyText: { ...type.body, color: colors.textMuted },
-  readonlyTextStrong: { ...type.h3, color: colors.primaryDark },
-});
+  readonlyTextStrong: { ...type.h3, color: colors.tint },
+}));

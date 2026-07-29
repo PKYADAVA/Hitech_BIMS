@@ -5,7 +5,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -15,8 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FormField } from "@/config/forms";
 import { usePickerOptions } from "@/query/usePickerOptions";
-import { colors, radius, spacing, type } from "@/theme";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { formatDate } from "@/utils/format";
+import { AppIcon } from "./AppIcon";
 import { SearchBar } from "./ui";
 
 /** Label + control + inline error wrapper shared by all field types. */
@@ -31,6 +31,8 @@ function FieldShell({
   error?: string;
   children: React.ReactNode;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>
@@ -56,6 +58,8 @@ export function FormControl({
   error?: string;
   onChange: (v: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   // Computed/derived fields: show the value in a muted, non-editable box.
   if (field.readOnly) {
     return (
@@ -75,7 +79,7 @@ export function FormControl({
           <Switch
             value={value === "true"}
             onValueChange={(v) => onChange(v ? "true" : "false")}
-            trackColor={{ true: colors.primary }}
+            trackColor={{ true: colors.tint }}
           />
         </View>
       </FieldShell>
@@ -115,6 +119,7 @@ export function FormControl({
 }
 
 function DateControl({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const styles = useStyles();
   const [show, setShow] = useState(false);
   const current = value ? new Date(value) : new Date();
 
@@ -151,6 +156,8 @@ function SelectControl({
   fallbackLabel?: string;
   onChange: (v: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { options, loading } = usePickerOptions(field.optionsPath, field.optionLabelKeys);
@@ -170,7 +177,7 @@ function SelectControl({
         <Text style={selectedLabel ? styles.inputText : styles.placeholder} numberOfLines={1}>
           {selectedLabel || `Select ${field.label.toLowerCase()}`}
         </Text>
-        <Text style={styles.caret}>▾</Text>
+        <AppIcon name="chevron-down" size={20} color={colors.textFaint} />
       </Pressable>
 
       <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
@@ -214,7 +221,7 @@ function SelectControl({
                 }}
               >
                 <Text style={styles.optionText}>{item.label}</Text>
-                {item.value === value ? <Text style={styles.check}>✓</Text> : null}
+                {item.value === value ? <AppIcon name="check" size={18} color={colors.tint} /> : null}
               </Pressable>
             )}
           />
@@ -230,7 +237,7 @@ function toISODate(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   field: { marginBottom: spacing.lg },
   label: { ...type.label, color: colors.text, marginBottom: spacing.xs },
   error: { ...type.caption, color: colors.danger, marginTop: spacing.xs },
@@ -277,7 +284,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   modalTitle: { ...type.h3, color: colors.text },
-  modalClose: { ...type.title, color: colors.primary },
+  modalClose: { ...type.title, color: colors.tint },
   option: {
     flexDirection: "row",
     alignItems: "center",
@@ -290,6 +297,6 @@ const styles = StyleSheet.create({
   },
   optionText: { ...type.body, color: colors.text, flex: 1 },
   optionClear: { ...type.body, color: colors.textMuted },
-  check: { color: colors.primary, ...type.title },
+  check: { color: colors.tint, ...type.title },
   empty: { ...type.body, color: colors.textMuted, textAlign: "center", padding: spacing.xl },
-});
+}));

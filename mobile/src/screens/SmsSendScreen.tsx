@@ -1,17 +1,18 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 
 import { extractPlaceholders, sendTemplate } from "@/api/sms";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button, Card, Field } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
-import { colors, spacing, type } from "@/theme";
+import { makeStyles, spacing, type } from "@/theme";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "SmsSend">;
 
 export function SmsSendScreen({ route, navigation }: Props) {
+  const styles = useStyles();
   const template = route.params.row;
   const templateId = template.id;
   const body = String(template.body ?? "");
@@ -96,11 +97,11 @@ export function SmsSendScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   tplName: { ...type.h3, color: colors.text, marginBottom: spacing.xs },
   preview: { ...type.body, color: colors.text, lineHeight: 22 },
   count: { ...type.caption, color: colors.textFaint, marginTop: spacing.sm },
   section: { ...type.label, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: spacing.sm },
-});
+}));

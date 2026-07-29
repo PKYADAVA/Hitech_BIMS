@@ -1,11 +1,12 @@
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AppIcon } from "@/components/AppIcon";
 import { Badge, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { colors, makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { TabParams } from "@/navigation/types";
 import { AuthUser } from "@/api/types";
 import { Overview, useOverview } from "@/api/stats";
@@ -41,7 +42,7 @@ function buildIndicators(ov?: Overview): Indicator[] {
       value: kpi(ov?.broiler.active_batches),
       caption: "in production",
       icon: "📦",
-      accent: colors.primary,
+      accent: colors.tint,
     },
     {
       key: "eggs",
@@ -131,13 +132,23 @@ function initialsOf(user: AuthUser | null): string {
  * brand charcoal, then rounds off into the light page below — same onDark/white
  * language as the per-module stack headers, so the app reads as one system.
  */
+/** "Good morning/afternoon/evening" for the current local hour. */
+function greetingFor(date = new Date()): string {
+  const h = date.getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () => void }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
+  const firstName = (user?.full_name || user?.username || "there").split(" ")[0];
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
@@ -145,7 +156,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
       <View style={styles.brandRow}>
         <View style={styles.brand}>
           <View style={styles.logo}>
-            <Text style={styles.logoGlyph}>🐔</Text>
+            <AppIcon emoji="🐔" size={22} color={colors.onDark} />
           </View>
           <View>
             <Text style={styles.brandName}>Hi Tech BIMS</Text>
@@ -167,7 +178,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
       {/* Greeting */}
       <Text style={styles.date}>{today}</Text>
       <Text style={styles.hello} numberOfLines={1}>
-        Hi, {user?.full_name || user?.username || "there"} 👋
+        {greetingFor()}, {firstName} 👋
       </Text>
       {user?.role || user?.department ? (
         <View style={styles.rolePill}>
@@ -182,6 +193,8 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
 }
 
 export function HomeScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors: theme } = useTheme();
   const user = useAuthStore((s) => s.user);
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
@@ -201,18 +214,18 @@ export function HomeScreen({ navigation }: Props) {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.primary} />
+          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={theme.primary} />
         }
       >
         <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
 
         <View style={styles.body}>
-          <SectionHeader title="At a glance" />
+          <SectionHeader title="At a glance" subtitle="Today's key numbers across your farm" />
         </View>
         <IndicatorCarousel indicators={buildIndicators(ov)} />
 
         <View style={styles.body}>
-          <SectionHeader title="Modules" />
+          <SectionHeader title="Modules" subtitle="Jump into a workspace" />
           <View style={styles.grid}>
             {TILES.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
               const active = !!t.target;
@@ -228,7 +241,7 @@ export function HomeScreen({ navigation }: Props) {
                   >
                     <View style={styles.tileInner}>
                       <View style={[styles.tileIcon, { backgroundColor: withAlpha(t.color, 0.14) }]}>
-                        <Text style={{ fontSize: 22 }}>{t.icon}</Text>
+                        <AppIcon emoji={t.icon} size={22} color={t.color} />
                       </View>
                       <Text style={styles.tileTitle}>{t.title}</Text>
                       <Text style={styles.tileSub}>{t.subtitle}</Text>
@@ -253,7 +266,7 @@ export function HomeScreen({ navigation }: Props) {
 const GAP = spacing.md;
 const ON_DARK_SOFT = withAlpha(colors.onDark, 0.75);
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   scroll: { paddingBottom: spacing.xxl },
 
   header: {
@@ -336,4 +349,4 @@ const styles = StyleSheet.create({
   tileSub: { ...type.caption, color: colors.textMuted },
   soon: { position: "absolute", top: spacing.sm, right: spacing.sm },
   tileBar: { height: 4, width: "100%" },
-});
+}));

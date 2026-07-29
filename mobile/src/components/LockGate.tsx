@@ -1,10 +1,11 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, Text, View } from "react-native";
 
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
-import { colors, radius, spacing, type } from "@/theme";
+import { AppIcon } from "@/components/AppIcon";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { Button } from "./ui";
 
 /** True if the device can actually do biometric / passcode auth. */
@@ -26,6 +27,8 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   const enabled = useSettingsStore((s) => s.appLockEnabled);
   const hydrated = useSettingsStore((s) => s.hydrated);
   const signedIn = useAuthStore((s) => s.status === "signedIn");
+  const { colors } = useTheme();
+  const styles = useStyles();
 
   const active = hydrated && enabled && signedIn;
   const [locked, setLocked] = useState(true);
@@ -66,7 +69,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
     return (
       <View style={styles.wrap}>
         <View style={styles.logo}>
-          <Text style={styles.glyph}>🔒</Text>
+          <AppIcon name="lock-outline" size={44} color={colors.onDark} />
         </View>
         <Text style={styles.title}>Hitech BIMS is locked</Text>
         <Text style={styles.sub}>Authenticate to continue</Text>
@@ -80,7 +83,7 @@ export function LockGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { flex: 1, backgroundColor: colors.primaryDark, alignItems: "center", justifyContent: "center", padding: spacing.xl, gap: spacing.sm },
   logo: {
     width: 84,
@@ -95,4 +98,4 @@ const styles = StyleSheet.create({
   title: { ...type.h2, color: colors.onDark },
   sub: { ...type.body, color: "rgba(255,255,255,0.85)" },
   btn: { alignSelf: "stretch", marginTop: spacing.lg },
-});
+}));

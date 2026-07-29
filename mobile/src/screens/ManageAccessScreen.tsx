@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 
 import {
   createRole,
@@ -17,14 +17,16 @@ import {
 import { ApiError } from "@/api/types";
 import { listResource } from "@/api/resources";
 import { Row } from "@/api/types";
+import { AppIcon } from "@/components/AppIcon";
 import { Card, EmptyOrError, Loading } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
-import { colors, radius, spacing, type } from "@/theme";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { pick } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "ManageAccess">;
 
 export function ManageAccessScreen({ navigation }: Props) {
+  const styles = useStyles();
   const [tab, setTab] = useState<"roles" | "users">("roles");
   useLayoutEffect(() => navigation.setOptions({ title: "Manage Access" }), [navigation]);
 
@@ -51,6 +53,8 @@ export function ManageAccessScreen({ navigation }: Props) {
 /* ------------------------------- Roles ---------------------------------- */
 
 function RolesPanel() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const q = useQuery({ queryKey: ["access-roles"], queryFn: fetchRolesAccess });
   const [roles, setRoles] = useState<RoleAccess[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -175,7 +179,7 @@ function RolesPanel() {
                     <Switch
                       value={!!role.modules[nav]}
                       onValueChange={(v) => toggle(role, nav, v)}
-                      trackColor={{ true: colors.primary }}
+                      trackColor={{ true: colors.tint }}
                     />
                   </View>
                 ))}
@@ -206,6 +210,8 @@ function RolesPanel() {
 /* ------------------------------- Users ---------------------------------- */
 
 function UsersPanel() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const rolesQ = useQuery({ queryKey: ["access-roles"], queryFn: fetchRolesAccess });
   const usersQ = useQuery({
     queryKey: ["access-users"],
@@ -272,7 +278,7 @@ function UsersPanel() {
                       value={mine.includes(role.id)}
                       disabled={!!u.is_superuser}
                       onValueChange={(v) => toggleRole(u.id, role.id, v)}
-                      trackColor={{ true: colors.primary }}
+                      trackColor={{ true: colors.tint }}
                     />
                   </View>
                 ))}
@@ -287,6 +293,8 @@ function UsersPanel() {
 
 /** Collapsible "add a login user" form: credentials, flags, and role toggles. */
 function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -345,7 +353,8 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
   if (!open) {
     return (
       <Pressable style={styles.newUserBtn} onPress={() => setOpen(true)}>
-        <Text style={styles.newUserBtnText}>＋ New user</Text>
+        <AppIcon name="plus" size={16} color={colors.tint} />
+        <Text style={styles.newUserBtnText}>New user</Text>
       </Pressable>
     );
   }
@@ -388,11 +397,11 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
 
       <View style={styles.flagRow}>
         <Text style={styles.rowLabel}>Active</Text>
-        <Switch value={isActive} onValueChange={setIsActive} trackColor={{ true: colors.primary }} />
+        <Switch value={isActive} onValueChange={setIsActive} trackColor={{ true: colors.tint }} />
       </View>
       <View style={styles.flagRow}>
         <Text style={styles.rowLabel}>Staff (admin site access)</Text>
-        <Switch value={isStaff} onValueChange={setIsStaff} trackColor={{ true: colors.primary }} />
+        <Switch value={isStaff} onValueChange={setIsStaff} trackColor={{ true: colors.tint }} />
       </View>
 
       {roles.length > 0 ? (
@@ -404,7 +413,7 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
               <Switch
                 value={groupIds.includes(role.id)}
                 onValueChange={(v) => toggleGroup(role.id, v)}
-                trackColor={{ true: colors.primary }}
+                trackColor={{ true: colors.tint }}
               />
             </View>
           ))}
@@ -422,7 +431,7 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   segment: {
     flexDirection: "row",
@@ -469,15 +478,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   newUserBtn: {
+    flexDirection: "row",
+    gap: spacing.xs,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.tint,
     borderStyle: "dashed",
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: spacing.xs,
   },
-  newUserBtnText: { ...type.title, color: colors.primary },
+  newUserBtnText: { ...type.title, color: colors.tint },
   fieldLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },
   fieldError: { ...type.caption, color: colors.danger, marginTop: 2 },
   flagRow: {
@@ -486,7 +498,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: spacing.sm,
   },
-  modalClose: { ...type.title, color: colors.primary },
+  modalClose: { ...type.title, color: colors.tint },
   roleName: { ...type.title, color: colors.text },
   roleMeta: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   caret: { ...type.h3, color: colors.textFaint },
@@ -523,4 +535,4 @@ const styles = StyleSheet.create({
   smallBtnText: { ...type.label, color: colors.text },
   deleteRow: { paddingBottom: spacing.md },
   deleteLink: { ...type.label, color: colors.danger },
-});
+}));

@@ -1,20 +1,21 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { reviewChangeRequest } from "@/api/changeRequests";
 import { retryMessage } from "@/api/sms";
 import { Row } from "@/api/types";
 import { RecordCard } from "@/components/RecordCard";
+import { AppIcon } from "@/components/AppIcon";
 import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
 import { ChildConfig, RESOURCES } from "@/config/catalog";
-import { isEditable } from "@/config/forms";
+import { isEditable, isRecordEditable } from "@/config/forms";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
-import { colors, spacing, type } from "@/theme";
+import { makeStyles, spacing, type, useTheme } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
 
 /** Line-items of a parent record, fetched by FK and shown (add/edit) in detail. */
@@ -28,6 +29,8 @@ function ChildSection({
   navigation: Props["navigation"];
 }) {
   const cfg = RESOURCES[child.resourceKey];
+  const { colors } = useTheme();
+  const styles = useStyles();
   const canAction = usePermissionsStore((s) => s.canAction);
   const canAdd = isEditable(cfg.key) && canAction(cfg.module, "add");
   const canEdit = isEditable(cfg.key) && canAction(cfg.module, "edit");
@@ -51,8 +54,9 @@ function ChildSection({
           {cfg.title} ({list.items.length})
         </Text>
         {canAdd ? (
-          <Pressable hitSlop={8} onPress={() => openForm("create")}>
-            <Text style={styles.addLink}>＋ Add</Text>
+          <Pressable hitSlop={8} onPress={() => openForm("create")} style={styles.addLinkRow}>
+            <AppIcon name="plus" size={16} color={colors.tint} />
+            <Text style={styles.addLink}>Add</Text>
           </Pressable>
         ) : null}
       </View>
@@ -92,11 +96,13 @@ const AUDIT = new Set([
 ]);
 
 export function RecordDetailScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const config = RESOURCES[route.params.resourceKey];
   const row: Row = route.params.row;
   const view = config.card(row);
   const canEdit =
-    isEditable(config.key) && usePermissionsStore((s) => s.canAction)(config.module, "edit");
+    isRecordEditable(config.key) && usePermissionsStore((s) => s.canAction)(config.module, "edit");
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -243,7 +249,7 @@ export function RecordDetailScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   header: { flexDirection: "row", alignItems: "center", gap: spacing.md },
@@ -258,6 +264,7 @@ const styles = StyleSheet.create({
   },
   childHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs },
   childTitle: { ...type.h3, color: colors.text },
-  addLink: { ...type.title, color: colors.primary },
+  addLinkRow: { flexDirection: "row", alignItems: "center", gap: 2 },
+  addLink: { ...type.title, color: colors.tint },
   footnote: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
-});
+}));

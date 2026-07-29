@@ -1,14 +1,16 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { AppIcon } from "@/components/AppIcon";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
+import { DocumentFormScreen } from "@/screens/DocumentFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
@@ -21,7 +23,7 @@ import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { colors, shadow } from "@/theme";
+import { colors, shadow, useTheme } from "@/theme";
 import { ModuleStackParams, TabParams } from "./types";
 
 const Root = createNativeStackNavigator();
@@ -29,8 +31,8 @@ const Tab = createBottomTabNavigator<TabParams>();
 const ModuleStack = createNativeStackNavigator<ModuleStackParams>();
 
 function tabIcon(icon: string) {
-  return ({ focused }: { focused: boolean }) => (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{icon}</Text>
+  return ({ focused, color }: { focused: boolean; color: string }) => (
+    <AppIcon emoji={icon} size={24} color={color} style={{ opacity: focused ? 1 : 0.9 }} />
   );
 }
 
@@ -38,7 +40,7 @@ function tabIcon(icon: string) {
 function headerTitleWithIcon(icon: string, title: string) {
   return () => (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-      <Text style={{ fontSize: 18 }}>{icon}</Text>
+      <AppIcon emoji={icon} size={19} color={colors.onDark} />
       <Text style={{ color: colors.onDark, fontSize: 17, fontWeight: "800" }}>{title}</Text>
     </View>
   );
@@ -51,6 +53,7 @@ function headerTitleWithIcon(icon: string, title: string) {
  * gesture rather than a header button.
  */
 function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
+  const { colors } = useTheme();
   const mod = MODULES[moduleKey];
   return (
     <ModuleStack.Navigator
@@ -91,7 +94,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
                     hitSlop={12}
                     onPress={() => openRecordForm(navigation, key, "create")}
                   >
-                    <Text style={{ color: colors.onDark, fontSize: 26, fontWeight: "700" }}>＋</Text>
+                    <AppIcon name="plus" size={24} color={colors.onDark} />
                   </Pressable>
                 )
               : undefined,
@@ -101,6 +104,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
+      <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />
       <ModuleStack.Screen name="ManageAccess" component={ManageAccessScreen} />
@@ -119,6 +123,7 @@ const HrStack = () => <ModuleStackScreen moduleKey="hr" />;
 const UserStack = () => <ModuleStackScreen moduleKey="user" />;
 
 function AppTabs() {
+  const { colors } = useTheme();
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
   const show = (m: string) => !permsLoaded || canModule(m);
@@ -126,8 +131,8 @@ function AppTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textFaint,
+        tabBarActiveTintColor: colors.tint,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
@@ -153,11 +158,19 @@ function AppTabs() {
 
 export function RootNavigator() {
   const status = useAuthStore((s) => s.status);
+  const { scheme, colors } = useTheme();
 
   if (status === "loading") return <Loading label="Starting…" />;
 
+  // Theme the container so screen backgrounds (and transition flashes) match
+  // the active palette instead of React Navigation's default white.
+  const navTheme =
+    scheme === "dark"
+      ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.tint, text: colors.text } }
+      : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.tint, text: colors.text } };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Root.Navigator screenOptions={{ headerShown: false }}>
         {status === "signedIn" ? (
           <>

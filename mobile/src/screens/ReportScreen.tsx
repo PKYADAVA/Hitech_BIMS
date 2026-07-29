@@ -1,13 +1,13 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import React, { useLayoutEffect } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { http } from "@/api/client";
 import { Envelope } from "@/api/types";
 import { Card, EmptyOrError, Loading, StatTile } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
-import { colors, spacing, type } from "@/theme";
+import { makeStyles, spacing, type, useTheme } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Report">;
@@ -20,6 +20,8 @@ interface ReportData {
 
 /** Generic report renderer: totals as stat tiles + one card per row. */
 export function ReportScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { title, path } = route.params;
 
   useLayoutEffect(() => {
@@ -48,7 +50,7 @@ export function ReportScreen({ route, navigation }: Props) {
       {totals.length > 0 ? (
         <View style={styles.totals}>
           {totals.map(([label, value]) => (
-            <StatTile key={label} label={label} value={String(value)} accent={colors.primary} />
+            <StatTile key={label} label={label} value={String(value)} accent={colors.tint} />
           ))}
         </View>
       ) : null}
@@ -78,7 +80,7 @@ export function ReportScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   generated: { ...type.caption, color: colors.textMuted, textAlign: "right" },
@@ -95,4 +97,4 @@ const styles = StyleSheet.create({
   },
   pairLabel: { ...type.caption, color: colors.textMuted },
   pairValue: { ...type.title, color: colors.text },
-});
+}));

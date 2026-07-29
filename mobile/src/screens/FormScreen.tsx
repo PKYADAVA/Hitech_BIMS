@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 
 import { createResource, deleteResource, updateResource } from "@/api/resources";
 import { ApiError, Row } from "@/api/types";
@@ -12,7 +12,7 @@ import { FORMS } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { colors, spacing, type } from "@/theme";
+import { colors, makeStyles, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
@@ -22,6 +22,7 @@ export function FormScreen({ route, navigation }: Props) {
   const config = RESOURCES[resourceKey];
   const canDelete = usePermissionsStore((s) => s.canAction)(config.module, "delete");
   const schema = FORMS[resourceKey];
+  const styles = useStyles();
 
   const finish = () =>
     onDoneGoBack ? navigation.goBack() : navigation.navigate("List", { resourceKey });
@@ -173,7 +174,7 @@ export function FormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   formError: {
@@ -184,4 +185,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: spacing.md,
   },
-});
+}));

@@ -2,7 +2,6 @@ import React from "react";
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   TextInputProps,
@@ -11,7 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { AppIcon } from "@/components/AppIcon";
+import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -25,6 +25,7 @@ export function Screen({
   children: React.ReactNode;
   edges?: ("top" | "bottom" | "left" | "right")[];
 }) {
+  const styles = useStyles();
   return (
     <SafeAreaView style={styles.screen} edges={edges}>
       {children}
@@ -44,6 +45,7 @@ export function Card({
   style?: ViewStyle;
   padded?: boolean;
 }) {
+  const styles = useStyles();
   const content = [styles.card, padded && styles.cardPadded, style];
   if (!onPress) return <View style={content}>{children}</View>;
   return (
@@ -57,19 +59,26 @@ export function Card({
 }
 
 export function Divider() {
+  const styles = useStyles();
   return <View style={styles.divider} />;
 }
 
 export function SectionHeader({
   title,
+  subtitle,
   action,
 }: {
   title: string;
+  subtitle?: string;
   action?: React.ReactNode;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      </View>
       {action}
     </View>
   );
@@ -82,7 +91,7 @@ export function SectionHeader({
 /** Rounded tinted square holding an emoji glyph — the app's icon language. */
 export function IconCircle({
   icon,
-  color = colors.primary,
+  color,
   tint,
   size = 44,
 }: {
@@ -91,6 +100,9 @@ export function IconCircle({
   tint?: string;
   size?: number;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const c = color ?? colors.tint;
   return (
     <View
       style={[
@@ -99,11 +111,11 @@ export function IconCircle({
           width: size,
           height: size,
           borderRadius: size / 3,
-          backgroundColor: tint ?? withAlpha(color, 0.12),
+          backgroundColor: tint ?? withAlpha(c, 0.12),
         },
       ]}
     >
-      <Text style={{ fontSize: size * 0.46 }}>{icon}</Text>
+      <AppIcon emoji={icon} size={size * 0.5} color={c} />
     </View>
   );
 }
@@ -111,13 +123,15 @@ export function IconCircle({
 export type BadgeTone = "neutral" | "success" | "danger" | "warning" | "info" | "brand";
 
 export function Badge({ label, tone = "neutral" }: { label: string; tone?: BadgeTone }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const map: Record<BadgeTone, { bg: string; fg: string }> = {
     neutral: { bg: colors.surfaceAlt, fg: colors.textMuted },
     success: { bg: colors.successLight, fg: colors.success },
     danger: { bg: colors.dangerLight, fg: colors.danger },
     warning: { bg: colors.warningLight, fg: "#b45309" },
     info: { bg: colors.infoLight, fg: colors.info },
-    brand: { bg: colors.primaryLight, fg: colors.primaryDark },
+    brand: { bg: colors.primaryLight, fg: colors.tint },
   };
   const c = map[tone];
   return (
@@ -134,7 +148,7 @@ export function Badge({ label, tone = "neutral" }: { label: string; tone?: Badge
 /** A tappable row: leading icon, title + subtitle, trailing value/badge, chevron. */
 export function ListItem({
   icon,
-  accent = colors.primary,
+  accent,
   title,
   subtitle,
   trailing,
@@ -147,9 +161,11 @@ export function ListItem({
   trailing?: React.ReactNode;
   onPress?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <Card onPress={onPress} style={styles.listItem}>
-      {icon ? <IconCircle icon={icon} color={accent} /> : null}
+      {icon ? <IconCircle icon={icon} color={accent ?? colors.tint} /> : null}
       <View style={styles.listItemBody}>
         <Text style={styles.listItemTitle} numberOfLines={1}>
           {title}
@@ -161,28 +177,32 @@ export function ListItem({
         ) : null}
       </View>
       {trailing}
-      {onPress ? <Text style={styles.chevron}>›</Text> : null}
+      {onPress ? <AppIcon name="chevron-right" size={22} color={colors.textFaint} /> : null}
     </Card>
   );
 }
+
 
 /** Compact metric tile for dashboards / hub headers. */
 export function StatTile({
   label,
   value,
   icon,
-  accent = colors.primary,
+  accent,
 }: {
   label: string;
   value: string;
   icon?: string;
   accent?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const c = accent ?? colors.tint;
   return (
     <View style={[styles.stat, shadow(1)]}>
       {icon ? (
-        <View style={[styles.statDot, { backgroundColor: withAlpha(accent, 0.14) }]}>
-          <Text style={{ fontSize: 15 }}>{icon}</Text>
+        <View style={[styles.statDot, { backgroundColor: withAlpha(c, 0.14) }]}>
+          <AppIcon emoji={icon} size={16} color={c} />
         </View>
       ) : null}
       <Text style={styles.statValue} numberOfLines={1}>
@@ -197,6 +217,7 @@ export function StatTile({
 
 /** label / value row for detail screens. */
 export function DetailRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -220,9 +241,11 @@ export function SearchBar({
   onChangeText: (t: string) => void;
   placeholder?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.search}>
-      <Text style={styles.searchIcon}>🔍</Text>
+      <AppIcon name="magnify" size={18} color={colors.textFaint} style={styles.searchIcon} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -250,9 +273,11 @@ export function Button({
   disabled?: boolean;
   variant?: "primary" | "ghost" | "danger";
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
-  const fg = isPrimary || isDanger ? "#fff" : colors.primary;
+  const fg = isPrimary || isDanger ? "#fff" : colors.tint;
   return (
     <Pressable
       onPress={onPress}
@@ -280,6 +305,8 @@ export function Field({
   style,
   ...props
 }: TextInputProps & { label: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -298,9 +325,11 @@ export function Field({
 /* ------------------------------------------------------------------ */
 
 export function Loading({ label }: { label?: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.center}>
-      <ActivityIndicator color={colors.primary} size="large" />
+      <ActivityIndicator color={colors.tint} size="large" />
       {label ? <Text style={styles.muted}>{label}</Text> : null}
     </View>
   );
@@ -308,17 +337,48 @@ export function Loading({ label }: { label?: string }) {
 
 export function EmptyOrError({
   message,
+  title,
   icon = "🗂️",
+  accent,
   onRetry,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
 }: {
   message: string;
+  /** Optional bold headline shown above the message. */
+  title?: string;
   icon?: string;
+  /** Tints the icon + its halo (defaults to a neutral grey). */
+  accent?: string;
   onRetry?: () => void;
+  /** Primary call-to-action (e.g. "Add Sale"). */
+  actionLabel?: string;
+  onAction?: () => void;
+  /** Secondary, lower-emphasis action. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const c = accent ?? colors.textFaint;
+  const isNeutral = c === colors.textFaint;
   return (
     <View style={styles.center}>
-      <Text style={styles.emptyIcon}>{icon}</Text>
+      <View style={[styles.emptyIconWrap, !isNeutral && { backgroundColor: withAlpha(c, 0.12) }]}>
+        <AppIcon emoji={icon} size={40} color={c} />
+      </View>
+      {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
       <Text style={styles.muted}>{message}</Text>
+      {onAction && actionLabel ? (
+        <View style={styles.emptyAction}>
+          <Button title={actionLabel} onPress={onAction} />
+        </View>
+      ) : null}
+      {onSecondary && secondaryLabel ? (
+        <Button title={secondaryLabel} variant="ghost" onPress={onSecondary} />
+      ) : null}
       {onRetry ? <Button title="Retry" variant="ghost" onPress={onRetry} /> : null}
     </View>
   );
@@ -334,7 +394,7 @@ export function withAlpha(hex: string, alpha: number): string {
   return `${hex}${a}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   center: {
     flex: 1,
@@ -344,8 +404,17 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   muted: { color: colors.textMuted, textAlign: "center", ...type.body },
-  emptyIcon: { fontSize: 40 },
-  pressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  emptyTitle: { ...type.h3, color: colors.text, textAlign: "center" },
+  emptyAction: { minWidth: 180, marginTop: spacing.xs },
+  emptyIconWrap: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.975 }] },
 
   card: {
     backgroundColor: colors.surface,
@@ -365,6 +434,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   sectionTitle: { ...type.h3, color: colors.text },
+  sectionSubtitle: { ...type.caption, color: colors.textMuted, marginTop: 1 },
 
   iconCircle: { alignItems: "center", justifyContent: "center" },
 
@@ -422,7 +492,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 44,
   },
-  searchIcon: { fontSize: 14, opacity: 0.6 },
+  searchIcon: { opacity: 0.9 },
   searchInput: { flex: 1, ...type.body, color: colors.text, padding: 0 },
 
   btn: {
@@ -451,4 +521,4 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...type.body,
   },
-});
+}));

@@ -3,15 +3,15 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
-  StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
 
 import { TrendPoint } from "@/api/stats";
+import { AppIcon } from "@/components/AppIcon";
 import { Card, withAlpha } from "@/components/ui";
-import { colors, radius, spacing, type } from "@/theme";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 
 /** One headline number, optionally with a 7-point trend sparkline. */
 export interface Indicator {
@@ -26,6 +26,7 @@ export interface Indicator {
 
 /** Bars-only mini chart — no axis text, sized to sit inside an indicator card. */
 function Sparkline({ data, color, height = 40 }: { data: TrendPoint[]; color: string; height?: number }) {
+  const styles = useStyles();
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <View style={[styles.spark, { height }]}>
@@ -47,11 +48,12 @@ function Sparkline({ data, color, height = 40 }: { data: TrendPoint[]; color: st
 }
 
 function IndicatorCard({ item, width }: { item: Indicator; width: number }) {
+  const styles = useStyles();
   return (
     <Card style={{ ...styles.card, width }}>
       <View style={styles.cardTop}>
         <View style={[styles.iconWrap, { backgroundColor: withAlpha(item.accent, 0.14) }]}>
-          <Text style={styles.icon}>{item.icon}</Text>
+          <AppIcon emoji={item.icon} size={18} color={item.accent} />
         </View>
         <Text style={styles.label} numberOfLines={1}>
           {item.label}
@@ -77,6 +79,8 @@ function IndicatorCard({ item, width }: { item: Indicator; width: number }) {
  * the next card hints there's more; a dot row tracks position.
  */
 export function IndicatorCarousel({ indicators }: { indicators: Indicator[] }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { width } = useWindowDimensions();
   const cardW = Math.round(width * 0.72);
   const interval = cardW + spacing.sm;
@@ -108,7 +112,7 @@ export function IndicatorCarousel({ indicators }: { indicators: Indicator[] }) {
             key={item.key}
             style={[
               styles.dot,
-              i === active && { backgroundColor: colors.primary, width: 16 },
+              i === active && { backgroundColor: colors.tint, width: 16 },
             ]}
           />
         ))}
@@ -117,7 +121,7 @@ export function IndicatorCarousel({ indicators }: { indicators: Indicator[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   track: { paddingHorizontal: spacing.md, gap: spacing.sm, paddingVertical: spacing.xs },
   card: { padding: spacing.lg, gap: spacing.xs, minHeight: 132 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
@@ -140,4 +144,4 @@ const styles = StyleSheet.create({
 
   dots: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: spacing.sm },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
-});
+}));

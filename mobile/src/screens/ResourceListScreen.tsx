@@ -1,17 +1,19 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 
 import { Row } from "@/api/types";
+import { AppIcon } from "@/components/AppIcon";
 import { RecordCard } from "@/components/RecordCard";
-import { EmptyOrError, Loading, SearchBar } from "@/components/ui";
+import { ListSkeleton } from "@/components/Skeleton";
+import { EmptyOrError, SearchBar } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { useResourceList } from "@/query/useResourceList";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { colors, shadow, spacing, type } from "@/theme";
+import { makeStyles, shadow, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "List">;
@@ -22,6 +24,8 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
   const canAdd = usePermissionsStore((s) => s.canAction)(config.module, "add");
+  const { colors } = useTheme();
+  const styles = useStyles();
 
   // Server feeds have no search_fields, so filter the loaded rows client-side.
   const data = useMemo(() => {
@@ -35,11 +39,29 @@ export function ResourceListScreen({ route, navigation }: Props) {
     );
   }, [list.items, query, config.searchKeys]);
 
-  if (list.isLoading) return <Loading label={`Loading ${config.title.toLowerCase()}…`} />;
+  if (list.isLoading) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.searchWrap}>
+          <SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
+        </View>
+        <ListSkeleton />
+      </View>
+    );
+  }
   if (list.isError) {
     const message = (list.error as Error)?.message ?? "Failed to load.";
-    return <EmptyOrError icon="⚠️" message={message} onRetry={list.refresh} />;
+    return (
+      <EmptyOrError
+        icon="⚠️"
+        accent={colors.danger}
+        title="Couldn't load"
+        message={message}
+        onRetry={list.refresh}
+      />
+    );
   }
+
 
   return (
     <View style={styles.screen}>
@@ -58,10 +80,16 @@ export function ResourceListScreen({ route, navigation }: Props) {
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets
         ListEmptyComponent={
-          <EmptyOrError
-            icon={config.icon}
-            message={query ? "No matches for your search." : config.emptyMessage}
-          />
+          query ? (
+            <EmptyOrError icon="🔍" title="No matches" message="No results for your search." />
+          ) : (
+            <EmptyOrError
+              icon={config.icon}
+              accent={config.accent}
+              title={`No ${config.title.toLowerCase()} yet`}
+              message={config.emptyMessage}
+            />
+          )
         }
         ListFooterComponent={
           list.isFetchingNextPage ? (
@@ -92,7 +120,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
           accessibilityRole="button"
           accessibilityLabel={`Add ${config.singular}`}
         >
-          <Text style={styles.fabPlus}>＋</Text>
+          <AppIcon name="plus" size={22} color="#fff" />
           <Text style={styles.fabText}>New</Text>
         </Pressable>
       ) : null}
@@ -100,7 +128,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   searchWrap: { padding: spacing.md, paddingBottom: spacing.sm },
   fill: { flexGrow: 1 },
@@ -118,4 +146,4 @@ const styles = StyleSheet.create({
   },
   fabPlus: { color: "#fff", fontSize: 22, fontWeight: "700", marginTop: -2 },
   fabText: { color: "#fff", ...type.title, fontWeight: "800" },
-});
+}));

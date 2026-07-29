@@ -12,6 +12,7 @@ import { queryClient } from "@/query/queryClient";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { useSettingsStore } from "@/store/settingsStore";
+import { ThemeProvider } from "@/theme";
 
 // Persist the React Query cache to disk so lists/details show last-known data
 // offline (read cache). Cursor/page feeds restore instantly on next launch.
@@ -47,15 +48,17 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <PersistQueryClientProvider
-        client={queryClient}
-        persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}
-      >
-        <StatusBar style="light" />
-        <LockGate>
-          <RootNavigator />
-        </LockGate>
-      </PersistQueryClientProvider>
+      <ThemeProvider>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}
+        >
+          <StatusBar style="light" />
+          <LockGate>
+            <RootNavigator />
+          </LockGate>
+        </PersistQueryClientProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

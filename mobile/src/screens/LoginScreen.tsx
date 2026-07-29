@@ -11,14 +11,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppIcon } from "@/components/AppIcon";
 import { Button, Field } from "@/components/ui";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 
 // Bundled poultry photo — offline, reliable login backdrop.
 const BG = require("../../assets/poultry.jpg");
 
 export function LoginScreen() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const login = useAuthStore((s) => s.login);
   const error = useAuthStore((s) => s.error);
   const [username, setUsername] = useState("");
@@ -57,7 +60,7 @@ export function LoginScreen() {
             {/* Brand over the photo */}
             <View style={styles.brandWrap}>
               <View style={styles.logo}>
-                <Text style={styles.logoGlyph}>🐔</Text>
+                <AppIcon emoji="🐔" size={40} color={colors.onDark} />
               </View>
               <Text style={styles.brand}>Hitech BIMS</Text>
               <Text style={styles.tagline}>Poultry &amp; Hatchery Management</Text>
@@ -97,7 +100,7 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   bg: { flex: 1, backgroundColor: colors.primaryDark },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(6,20,12,0.55)" },
   safe: { flex: 1 },
@@ -133,4 +136,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     textAlign: "center",
   },
-});
+}));
