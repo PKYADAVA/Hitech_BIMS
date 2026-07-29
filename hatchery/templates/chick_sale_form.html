@@ -56,6 +56,11 @@
           </select>
         </div>
         <div class="col-md-3">
+          <label class="form-label">Customer Ledger Balance</label>
+          <input class="form-control bg-light" id="customer_ledger_balance" readonly placeholder="&mdash;"
+                 title="Outstanding balance of the selected customer">
+        </div>
+        <div class="col-md-3">
           <label class="form-label">Stock Point <span class="text-danger">*</span></label>
           <select class="form-select" id="warehouse" required>
             <option value="">select</option>
@@ -96,7 +101,7 @@
         <table class="table table-bordered mb-0" id="item-table">
           <thead class="table-light">
             <tr>
-              <th>Sr.</th><th style="min-width:200px">Item <span class="text-danger">*</span></th><th>Total Qty</th><th>Mortality</th><th>Culls</th>
+              <th>Sr.</th><th style="min-width:200px">Item <span class="text-danger">*</span></th><th style="min-width:110px">Item Stock</th><th>Total Qty</th><th>Mortality</th><th>Culls</th>
               <th>Sale Qty</th><th>Disc %</th><th>Disc Amount</th><th>Free Qty</th><th>Billed Qty</th><th>Sale Rate</th><th>Amount</th><th style="min-width:140px">Farm</th><th></th>
             </tr>
           </thead>
@@ -264,6 +269,8 @@ function itemRow(row={}) {
   const tr=document.createElement('tr');
   tr.innerHTML=`<td class="sr text-center"></td>
     <td><select class="form-select item" required><option value="">select</option>${itemOptions}</select></td>
+    <td><input class="form-control bg-light item-stock" readonly placeholder="&mdash;"
+               title="Stock of this item at the selected Stock Point"></td>
     <td><input class="form-control total-qty" type="number" min="0" step=".01" value="${row.total_qty||0}"></td>
     <td><input class="form-control mortality" type="number" min="0" step=".01" value="${row.mortality||0}"></td>
     <td><input class="form-control culls" type="number" min="0" step=".01" value="${row.culls||0}"></td>
@@ -354,7 +361,53 @@ async function loadShippingAddresses(preferredId=null){
   const address = shippingAddresses.find(a=>String(a.id)===String(preferredId)) || shippingAddresses.find(a=>a.address===existingText) || shippingAddresses.find(a=>a.is_default) || shippingAddresses[0];
   selectedShippingAddressId = address?.id || null; showShippingAddress(address);
 }
-get('customer').onchange=async()=>{const o=get('customer').selectedOptions[0]; get('billing_address').textContent=o?.dataset.address||''; selectedShippingAddressId=null; get('shipping_address').value=''; await loadShippingAddresses();};
+// Stock of the chosen item at the selected Stock Point on the sale date, in
+// red at or below zero, using the same reconciled figure as the reports.
+async function refreshItemStock(tr) {
+  const box = tr.querySelector('.item-stock');
+  const itemId = tr.querySelector('.item').value;
+  const warehouseId = get('warehouse').value;
+  box.classList.remove('text-danger');
+  if (!itemId || !warehouseId) { box.value = ''; return; }
+  try {
+    const resp = await fetch(`{% url 'stock_transfer_stock_lookup' %}?location_type=warehouse&location_id=${warehouseId}&item=${itemId}&date=${get('date').value || ''}`);
+    const data = await resp.json();
+    box.value = data.stock;
+    if (Number(data.stock) <= 0) { box.classList.add('text-danger'); }
+  } catch (err) { box.value = ''; }
+}
+function refreshAllItemStock() {
+  document.querySelectorAll('#item-table tbody tr').forEach(refreshItemStock);
+}
+
+// Outstanding ledger balance of the selected customer, shown as Dr (owes us)
+// or Cr (in advance), red once it is over the customer's credit limit.
+async function refreshCustomerLedgerBalance() {
+  const box = get('customer_ledger_balance');
+  const customerId = get('customer').value;
+  box.classList.remove('text-danger');
+  box.title = 'Outstanding balance of the selected customer';
+  if (!customerId) { box.value = ''; return; }
+  try {
+    const resp = await fetch(`{% url 'customer_ledger_balance' %}?customer=${customerId}`);
+    const data = await resp.json();
+    box.value = data.label || '';
+    if (Number(data.limit_exceeded) > 0) {
+      box.classList.add('text-danger');
+      box.title = `Over credit limit by ${data.limit_exceeded} (limit ${data.credit_limit})`;
+    } else if (data.credit_limit && Number(data.credit_limit) > 0) {
+      box.title = `Credit limit ${data.credit_limit}, available ${data.available}`;
+    }
+  } catch (err) { box.value = ''; }
+}
+
+get('warehouse').addEventListener('change', refreshAllItemStock);
+get('date').addEventListener('change', refreshAllItemStock);
+get('item-table').addEventListener('change', e => {
+  if (e.target.classList.contains('item')) { refreshItemStock(e.target.closest('tr')); }
+});
+
+get('customer').onchange=async()=>{const o=get('customer').selectedOptions[0]; get('billing_address').textContent=o?.dataset.address||''; selectedShippingAddressId=null; get('shipping_address').value=''; refreshCustomerLedgerBalance(); await loadShippingAddresses();};
 get('change_shipping_address').onclick=()=>{ if(!selectedCustomer()) return; pendingShippingAddressId=selectedShippingAddressId; renderShippingAddressList(); changeShippingAddressModal.show(); };
 get('shipping_address_list').addEventListener('change', e=>{ if(e.target.classList.contains('select-address')) pendingShippingAddressId=e.target.value; });
 get('shipping_address_list').addEventListener('click', e=>{ const btn=e.target.closest('.edit-address'); if(!btn) return; const address=shippingAddresses.find(a=>String(a.id)===String(btn.dataset.id)); if(!address) return; get('shipping_address_modal_title').textContent='Edit Shipping Address'; fillShippingAddressFields(address.address); get('shipping_contact_person').value=address.contact_person||''; get('shipping_mobile').value=address.mobile||''; get('shipping_is_default').checked=address.is_default; selectedShippingAddressId=address.id; changeShippingAddressModal.hide(); shippingAddressModal.show(); });
@@ -445,6 +498,7 @@ get('chick-sale-form').onsubmit=async e=>{
     get('date').value=data.date;
     get('customer').value=data.customer;
     get('warehouse').value=data.warehouse;
+    refreshCustomerLedgerBalance();
     get('vehicle').value=data.vehicle||'';
     get('driver').value=data.driver||'';
     get('freight_type').value=data.freight_type;
@@ -460,7 +514,7 @@ get('chick-sale-form').onsubmit=async e=>{
     get('billing_address').textContent=customerOption?.dataset.address||'';
     get('shipping_address').value=data.shipping_address;
     await loadShippingAddresses();
-    data.items.forEach(itemRow);
+    data.items.forEach(itemRow); refreshAllItemStock();
     get('profit_amount').value=Number(data.profit_amount).toFixed(2);
   } else if(fromChallan){
     get('delivery_challan').value=fromChallan.id;
