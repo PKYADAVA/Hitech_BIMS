@@ -55,7 +55,7 @@ function ChildSection({
         </Text>
         {canAdd ? (
           <Pressable hitSlop={8} onPress={() => openForm("create")} style={styles.addLinkRow}>
-            <AppIcon name="plus" size={16} color={colors.primary} />
+            <AppIcon name="plus" size={16} color={colors.tint} />
             <Text style={styles.addLink}>Add</Text>
           </Pressable>
         ) : null}
@@ -265,6 +265,6 @@ const useStyles = makeStyles((colors) => ({
   childHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs },
   childTitle: { ...type.h3, color: colors.text },
   addLinkRow: { flexDirection: "row", alignItems: "center", gap: 2 },
-  addLink: { ...type.title, color: colors.primary },
+  addLink: { ...type.title, color: colors.tint },
   footnote: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
 }));

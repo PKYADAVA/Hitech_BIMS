@@ -179,7 +179,7 @@ function RolesPanel() {
                     <Switch
                       value={!!role.modules[nav]}
                       onValueChange={(v) => toggle(role, nav, v)}
-                      trackColor={{ true: colors.primary }}
+                      trackColor={{ true: colors.tint }}
                     />
                   </View>
                 ))}
@@ -278,7 +278,7 @@ function UsersPanel() {
                       value={mine.includes(role.id)}
                       disabled={!!u.is_superuser}
                       onValueChange={(v) => toggleRole(u.id, role.id, v)}
-                      trackColor={{ true: colors.primary }}
+                      trackColor={{ true: colors.tint }}
                     />
                   </View>
                 ))}
@@ -353,7 +353,7 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
   if (!open) {
     return (
       <Pressable style={styles.newUserBtn} onPress={() => setOpen(true)}>
-        <AppIcon name="plus" size={16} color={colors.primary} />
+        <AppIcon name="plus" size={16} color={colors.tint} />
         <Text style={styles.newUserBtnText}>New user</Text>
       </Pressable>
     );
@@ -397,11 +397,11 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
 
       <View style={styles.flagRow}>
         <Text style={styles.rowLabel}>Active</Text>
-        <Switch value={isActive} onValueChange={setIsActive} trackColor={{ true: colors.primary }} />
+        <Switch value={isActive} onValueChange={setIsActive} trackColor={{ true: colors.tint }} />
       </View>
       <View style={styles.flagRow}>
         <Text style={styles.rowLabel}>Staff (admin site access)</Text>
-        <Switch value={isStaff} onValueChange={setIsStaff} trackColor={{ true: colors.primary }} />
+        <Switch value={isStaff} onValueChange={setIsStaff} trackColor={{ true: colors.tint }} />
       </View>
 
       {roles.length > 0 ? (
@@ -413,7 +413,7 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
               <Switch
                 value={groupIds.includes(role.id)}
                 onValueChange={(v) => toggleGroup(role.id, v)}
-                trackColor={{ true: colors.primary }}
+                trackColor={{ true: colors.tint }}
               />
             </View>
           ))}
@@ -481,7 +481,7 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     gap: spacing.xs,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.tint,
     borderStyle: "dashed",
     borderRadius: radius.md,
     paddingVertical: spacing.md,
@@ -489,7 +489,7 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: "center",
     marginBottom: spacing.xs,
   },
-  newUserBtnText: { ...type.title, color: colors.primary },
+  newUserBtnText: { ...type.title, color: colors.tint },
   fieldLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },
   fieldError: { ...type.caption, color: colors.danger, marginTop: 2 },
   flagRow: {
@@ -498,7 +498,7 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: "space-between",
     paddingVertical: spacing.sm,
   },
-  modalClose: { ...type.title, color: colors.primary },
+  modalClose: { ...type.title, color: colors.tint },
   roleName: { ...type.title, color: colors.text },
   roleMeta: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   caret: { ...type.h3, color: colors.textFaint },

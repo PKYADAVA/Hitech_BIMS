@@ -19,7 +19,7 @@ export function BarChart({
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const barColor = color ?? colors.primary;
+  const barColor = color ?? colors.tint;
   const max = Math.max(1, ...data.map((d) => d.value));
   return (
     <View style={[styles.wrap, { height: height + 26 }]}>

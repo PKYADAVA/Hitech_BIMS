@@ -62,7 +62,6 @@ export function ResourceListScreen({ route, navigation }: Props) {
     );
   }
 
-  const canCreate = isEditable(config.key) && canAdd;
 
   return (
     <View style={styles.screen}>
@@ -89,8 +88,6 @@ export function ResourceListScreen({ route, navigation }: Props) {
               accent={config.accent}
               title={`No ${config.title.toLowerCase()} yet`}
               message={config.emptyMessage}
-              actionLabel={canCreate ? `Add ${config.singular}` : undefined}
-              onAction={canCreate ? () => openRecordForm(navigation, config.key, "create") : undefined}
             />
           )
         }

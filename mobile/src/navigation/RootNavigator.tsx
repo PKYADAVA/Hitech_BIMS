@@ -131,8 +131,8 @@ function AppTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textFaint,
+        tabBarActiveTintColor: colors.tint,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
@@ -166,8 +166,8 @@ export function RootNavigator() {
   // the active palette instead of React Navigation's default white.
   const navTheme =
     scheme === "dark"
-      ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.primary, text: colors.text } }
-      : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.primary, text: colors.text } };
+      ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.tint, text: colors.text } }
+      : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.tint, text: colors.text } };
 
   return (
     <NavigationContainer theme={navTheme}>

@@ -302,7 +302,7 @@ const useStyles = makeStyles((colors) => ({
   toggle: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.sm, alignItems: "center" },
   toggleOn: { backgroundColor: colors.surface, ...shadow(1) },
   toggleText: { ...type.label, color: colors.textMuted },
-  toggleTextOn: { color: colors.primary, fontWeight: "800" },
+  toggleTextOn: { color: colors.tint, fontWeight: "800" },
 
   field: { marginBottom: spacing.lg },
   label: { ...type.label, color: colors.text, marginBottom: spacing.xs },
@@ -317,5 +317,5 @@ const useStyles = makeStyles((colors) => ({
   },
   readonlyStrong: { backgroundColor: colors.primaryLight, borderColor: colors.primaryLight },
   readonlyText: { ...type.body, color: colors.textMuted },
-  readonlyTextStrong: { ...type.h3, color: colors.primaryDark },
+  readonlyTextStrong: { ...type.h3, color: colors.tint },
 }));

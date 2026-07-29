@@ -102,7 +102,7 @@ export function IconCircle({
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const c = color ?? colors.primary;
+  const c = color ?? colors.tint;
   return (
     <View
       style={[
@@ -131,7 +131,7 @@ export function Badge({ label, tone = "neutral" }: { label: string; tone?: Badge
     danger: { bg: colors.dangerLight, fg: colors.danger },
     warning: { bg: colors.warningLight, fg: "#b45309" },
     info: { bg: colors.infoLight, fg: colors.info },
-    brand: { bg: colors.primaryLight, fg: colors.primaryDark },
+    brand: { bg: colors.primaryLight, fg: colors.tint },
   };
   const c = map[tone];
   return (
@@ -165,7 +165,7 @@ export function ListItem({
   const styles = useStyles();
   return (
     <Card onPress={onPress} style={styles.listItem}>
-      {icon ? <IconCircle icon={icon} color={accent ?? colors.primary} /> : null}
+      {icon ? <IconCircle icon={icon} color={accent ?? colors.tint} /> : null}
       <View style={styles.listItemBody}>
         <Text style={styles.listItemTitle} numberOfLines={1}>
           {title}
@@ -197,7 +197,7 @@ export function StatTile({
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const c = accent ?? colors.primary;
+  const c = accent ?? colors.tint;
   return (
     <View style={[styles.stat, shadow(1)]}>
       {icon ? (
@@ -277,7 +277,7 @@ export function Button({
   const styles = useStyles();
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
-  const fg = isPrimary || isDanger ? "#fff" : colors.primary;
+  const fg = isPrimary || isDanger ? "#fff" : colors.tint;
   return (
     <Pressable
       onPress={onPress}
@@ -329,7 +329,7 @@ export function Loading({ label }: { label?: string }) {
   const styles = useStyles();
   return (
     <View style={styles.center}>
-      <ActivityIndicator color={colors.primary} size="large" />
+      <ActivityIndicator color={colors.tint} size="large" />
       {label ? <Text style={styles.muted}>{label}</Text> : null}
     </View>
   );

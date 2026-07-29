@@ -362,7 +362,7 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   itemsTitle: { ...type.h3, color: colors.text },
-  addLink: { ...type.title, color: colors.primary },
+  addLink: { ...type.title, color: colors.tint },
   itemCard: { marginBottom: spacing.md },
   itemCardHead: {
     flexDirection: "row",
@@ -386,7 +386,7 @@ const useStyles = makeStyles((colors) => ({
   toggle: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.sm, alignItems: "center" },
   toggleOn: { backgroundColor: colors.surface },
   toggleText: { ...type.label, color: colors.textMuted },
-  toggleTextOn: { color: colors.primary, fontWeight: "800" },
+  toggleTextOn: { color: colors.tint, fontWeight: "800" },
 
   // Wrapping chip group (for choice fields with several options, e.g. pay mode).
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm },
@@ -398,7 +398,7 @@ const useStyles = makeStyles((colors) => ({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  chipOn: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+  chipOn: { backgroundColor: colors.primaryLight, borderColor: colors.tint },
   chipText: { ...type.label, color: colors.textMuted },
-  chipTextOn: { color: colors.primaryDark, fontWeight: "800" },
+  chipTextOn: { color: colors.tint, fontWeight: "800" },
 }));

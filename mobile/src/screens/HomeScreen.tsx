@@ -42,7 +42,7 @@ function buildIndicators(ov?: Overview): Indicator[] {
       value: kpi(ov?.broiler.active_batches),
       caption: "in production",
       icon: "📦",
-      accent: colors.primary,
+      accent: colors.tint,
     },
     {
       key: "eggs",

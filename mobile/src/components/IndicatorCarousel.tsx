@@ -112,7 +112,7 @@ export function IndicatorCarousel({ indicators }: { indicators: Indicator[] }) {
             key={item.key}
             style={[
               styles.dot,
-              i === active && { backgroundColor: colors.primary, width: 16 },
+              i === active && { backgroundColor: colors.tint, width: 16 },
             ]}
           />
         ))}

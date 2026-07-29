@@ -147,7 +147,7 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   title: { ...type.h3, color: colors.text },
-  close: { ...type.title, color: colors.primary },
+  close: { ...type.title, color: colors.tint },
   content: { padding: spacing.md },
   error: {
     ...type.label,

@@ -39,9 +39,12 @@ const ACCENTS = {
 
 export const lightColors = {
   // Brand — charcoal slate (monochrome premium)
-  primary: "#1e293b", // slate-800 — near-black charcoal
+  primary: "#1e293b", // slate-800 — near-black charcoal (button/header BACKGROUND)
   primaryDark: "#0f172a", // slate-900 — deepest: auth backdrops, pressed states
   primaryLight: "#e2e8f0", // slate-200 — subtle tints
+  // Interactive FOREGROUND brand color (links, active tab, accent text/icons).
+  // Kept dark in light mode, but bright in dark mode so it stays legible.
+  tint: "#1e293b",
 
   ...ACCENTS,
 
@@ -83,9 +86,11 @@ export type Palette = typeof lightColors;
 
 export const darkColors: Palette = {
   // Brand — lift the charcoal so it stays visible (and white-text-safe) on dark.
-  primary: "#334155", // slate-700
+  primary: "#334155", // slate-700 — button/header background (white text)
   primaryDark: "#0f172a",
   primaryLight: withAlpha("#94a3b8", 0.16),
+  // Bright foreground brand color so links / active tab / accent text read on dark.
+  tint: "#cbd5e1", // slate-300
 
   ...ACCENTS,
 
@@ -107,10 +112,10 @@ export const darkColors: Palette = {
   border: "#2b3852",
   borderStrong: "#3b4a63",
 
-  // Text
-  text: "#e5e9f2",
-  textMuted: "#94a3b8",
-  textFaint: "#64748b",
+  // Text — kept bright for legibility on the deep-slate surfaces
+  text: "#f1f5f9",
+  textMuted: "#aeb9cc",
+  textFaint: "#8996ab",
   onDark: "#ffffff",
 
   // Semantic tints

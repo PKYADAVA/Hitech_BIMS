@@ -208,14 +208,14 @@ export function ProfileScreen() {
           <Card padded={false} style={styles.group}>
             <ActionRow
               icon="🔒"
-              accent={colors.primary}
+              accent={colors.tint}
               title="App Lock"
               subtitle="Require Face ID / fingerprint to open"
               trailing={
                 <Switch
                   value={appLock}
                   onValueChange={onToggleLock}
-                  trackColor={{ true: colors.primary }}
+                  trackColor={{ true: colors.tint }}
                 />
               }
             />
@@ -276,7 +276,7 @@ const useStyles = makeStyles((colors) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { ...type.h3, fontSize: 20, color: colors.primary },
+  avatarText: { ...type.h3, fontSize: 20, color: colors.tint },
   heroInfo: { flex: 1, gap: 2 },
   name: { ...type.h2, color: colors.text },
   email: { ...type.caption, color: colors.textMuted },

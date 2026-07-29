@@ -79,7 +79,7 @@ export function FormControl({
           <Switch
             value={value === "true"}
             onValueChange={(v) => onChange(v ? "true" : "false")}
-            trackColor={{ true: colors.primary }}
+            trackColor={{ true: colors.tint }}
           />
         </View>
       </FieldShell>
@@ -221,7 +221,7 @@ function SelectControl({
                 }}
               >
                 <Text style={styles.optionText}>{item.label}</Text>
-                {item.value === value ? <AppIcon name="check" size={18} color={colors.primary} /> : null}
+                {item.value === value ? <AppIcon name="check" size={18} color={colors.tint} /> : null}
               </Pressable>
             )}
           />
@@ -284,7 +284,7 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   modalTitle: { ...type.h3, color: colors.text },
-  modalClose: { ...type.title, color: colors.primary },
+  modalClose: { ...type.title, color: colors.tint },
   option: {
     flexDirection: "row",
     alignItems: "center",
@@ -297,6 +297,6 @@ const useStyles = makeStyles((colors) => ({
   },
   optionText: { ...type.body, color: colors.text, flex: 1 },
   optionClear: { ...type.body, color: colors.textMuted },
-  check: { color: colors.primary, ...type.title },
+  check: { color: colors.tint, ...type.title },
   empty: { ...type.body, color: colors.textMuted, textAlign: "center", padding: spacing.xl },
 }));

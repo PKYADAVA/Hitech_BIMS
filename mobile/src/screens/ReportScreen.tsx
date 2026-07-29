@@ -50,7 +50,7 @@ export function ReportScreen({ route, navigation }: Props) {
       {totals.length > 0 ? (
         <View style={styles.totals}>
           {totals.map(([label, value]) => (
-            <StatTile key={label} label={label} value={String(value)} accent={colors.primary} />
+            <StatTile key={label} label={label} value={String(value)} accent={colors.tint} />
           ))}
         </View>
       ) : null}
