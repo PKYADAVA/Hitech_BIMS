@@ -218,9 +218,8 @@
           <label class="form-label">Round Off (auto)</label>
           <input type="text" class="form-control bg-light" id="round_off_preview" readonly value="{{ chicks_purchase.round_off_type|default:'Add' }} {{ chicks_purchase.round_off|default:'0.00' }}">
         </div>
-      </div>
-      <div class="row g-3 mt-0">
-        <div class="col-md-3 offset-md-9 text-end">
+        {# Net Amount rides the same row: 3+2+2+3+2 fills the 12 columns. #}
+        <div class="col-md-2">
           <label class="form-label">Net Amount (preview)</label>
           <input type="text" class="form-control bg-light text-end fw-bold" id="net_amount_preview" readonly value="{{ chicks_purchase.net_amount|default:'0.00' }}">
         </div>
@@ -287,7 +286,7 @@ function itemRow(row = {}) {
     <td><input class="form-control bg-light free-qty" readonly value="0.00"></td>
     <td><input class="form-control bg-light total-qty" readonly value="0.00"></td>
     <td><input class="form-control rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
-    <td class="amount text-end align-middle">0.00</td>
+    <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
     <td><select class="form-select farm-warehouse" required>${warehouseOptions}</select></td>
     <td><input class="form-control batch" value="${row.batch || ''}"></td>
     <td class="text-nowrap">
@@ -319,7 +318,7 @@ function calcRow(tr) {
   tr.querySelector('.rcv-qty').value = rcvQty.toFixed(2);
   tr.querySelector('.free-qty').value = freeQty.toFixed(2);
   tr.querySelector('.total-qty').value = totalQty.toFixed(2);
-  tr.querySelector('.amount').textContent = amount.toFixed(2);
+  tr.querySelector('.amount').value = amount.toFixed(2);
   totals();
 }
 
@@ -342,7 +341,7 @@ function gridTotals() {
   let qty = 0, amount = 0;
   document.querySelectorAll('#item-table tbody tr').forEach(tr => {
     qty += Number(tr.querySelector('.total-qty').value) || 0;
-    amount += Number(tr.querySelector('.amount').textContent) || 0;
+    amount += Number(tr.querySelector('.amount').value) || 0;
   });
   return { qty, amount };
 }
