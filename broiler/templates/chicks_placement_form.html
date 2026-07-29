@@ -28,9 +28,10 @@
               <th style="min-width:110px">DC No.</th>
               <th style="min-width:160px">Source Hatchery <span class="text-danger">*</span></th>
               <th style="min-width:180px">From Warehouse</th>
-              <th style="min-width:180px">Farm <span class="text-danger">*</span></th>
+              <th style="min-width:180px">To Farm <span class="text-danger">*</span></th>
               <th style="min-width:140px">Batch</th>
               <th style="min-width:220px">Chicks Item <span class="text-danger">*</span></th>
+              <th style="min-width:110px">Item Stock</th>
               <th style="min-width:100px">Chicks Ordered <span class="text-danger">*</span></th>
               <th style="min-width:100px">Transit Mortality</th>
               <th style="min-width:90px">Shortage</th>
@@ -76,6 +77,8 @@ function row() {
     <td><select class="form-select farm" required>${farmOptions}</select></td>
     <td><select class="form-select batch" disabled><option value="">select a farm</option></select></td>
     <td><select class="form-select item" required>${itemOptions}</select></td>
+    <td><input class="form-control bg-light item-stock" readonly placeholder="—"
+               title="Stock of this item at the From Warehouse"></td>
     <td><input class="form-control chicks-ordered" type="number" min="0" step="1" value="0" required></td>
     <td><input class="form-control transit-mortality" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control shortage" type="number" min="0" step="1" value="0"></td>
@@ -152,12 +155,34 @@ function autoSelectHatchery(tr) {
   if (matches.length === 1) { hatcherySelect.value = matches[0].value; }
 }
 
+// Stock of the chosen item at the From Warehouse on the row's date — the same
+// reconciled figure Stock Transfer shows and its save guard enforces, so a
+// placement that would overdraw the warehouse is visible before saving.
+async function refreshItemStock(tr) {
+  const box = tr.querySelector('.item-stock');
+  const itemId = tr.querySelector('.item').value;
+  const warehouseId = tr.querySelector('.warehouse').value;
+  box.classList.remove('text-danger');
+  if (!itemId || !warehouseId) { box.value = ''; return; }
+  const date = tr.querySelector('.date').value || '';
+  try {
+    const resp = await fetch(`{% url 'stock_transfer_stock_lookup' %}?location_type=warehouse&location_id=${warehouseId}&item=${itemId}&date=${date}`);
+    const data = await resp.json();
+    box.value = data.stock;
+    if (Number(data.stock) <= 0) { box.classList.add('text-danger'); }
+  } catch (err) { box.value = ''; }
+}
+
 get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('farm')) {
     refreshBatchBox(e.target.closest('tr'));
   }
   if (e.target.classList.contains('warehouse')) {
     autoSelectHatchery(e.target.closest('tr'));
+    refreshItemStock(e.target.closest('tr'));
+  }
+  if (e.target.classList.contains('date')) {
+    refreshItemStock(e.target.closest('tr'));
   }
   if (e.target.classList.contains('item')) {
     const tr = e.target.closest('tr');
@@ -166,6 +191,7 @@ get('row-table').addEventListener('change', e => {
       tr.querySelector('.rate').value = opt.dataset.rate;
       recalcAmount(tr);
     }
+    refreshItemStock(tr);
   }
 });
 

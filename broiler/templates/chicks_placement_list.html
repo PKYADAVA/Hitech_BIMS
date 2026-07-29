@@ -48,7 +48,7 @@
         <thead class="table-dark">
           <tr>
             <th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Source Hatchery</th><th>From Warehouse</th>
-            <th>Farm</th><th>Batch</th><th>Item</th>
+            <th>To Farm</th><th>Batch</th><th>Item</th>
             <th>Chicks Ordered</th><th>Transit Mortality</th><th>Shortage</th><th>Culls</th><th>Placement Qty</th>
             <th>Rate</th><th>Amount</th>
             <th class="text-center">Action</th>
@@ -100,7 +100,7 @@
               </select>
             </div>
             <div class="col-md-3">
-              <label class="form-label">Farm</label>
+              <label class="form-label">To Farm</label>
               <select class="form-select" id="edit-farm" required>
                 <option value="">select</option>
                 {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
