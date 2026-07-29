@@ -161,6 +161,7 @@ MODULE_REGISTRY = [
             {
                 "label": "Reports",
                 "tabs": [
+                    ("purchase_report", "Purchase Report"),
                     ("supplier_ledger", "Supplier Ledger"),
                     ("supplier_balance", "Supplier Balance"),
                 ],
@@ -286,6 +287,16 @@ MODULE_REGISTRY = [
                     ("inventory_adjustment_list", "Inventory Adjustment"),
                     ("stock_issue_list", "Stock Issued"),
                     ("stock_receive_list", "Stock Received"),
+                ],
+            },
+            {
+                "label": "Reports",
+                "tabs": [
+                    ("stock_transfer_report", "Inventory Stock Transfer Report"),
+                    ("item_ledger_report", "Item Ledger Report"),
+                    ("stock_report", "Stock Report"),
+                    ("item_summary_report", "Item Summary Report"),
+                    ("negative_stock_report", "Negative Stock Check"),
                 ],
             },
         ],

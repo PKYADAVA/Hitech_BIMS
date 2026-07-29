@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Inventory Stock Transfer Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_inventory_report_subnavbar.html' with active_tab='stock_transfer_report' %}
+
+{% include '_report_letterhead.html' with title='Inventory Stock Transfer Report' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">From Region</label>
+      <select name="from_region" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for r in regions %}<option value="{{ r }}" {% if from_region == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">From Branch</label>
+      <select name="from_branch" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if from_branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">To Region</label>
+      <select name="to_region" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for r in regions %}<option value="{{ r }}" {% if to_region == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">To Branch</label>
+      <select name="to_branch" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if to_branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Category</label>
+      <select name="category" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+
+    <div><label class="form-label">Items</label>
+      <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">From Warehouse</label>
+      <select name="from_warehouse" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if from_warehouse == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">To Warehouse</label>
+      <select name="to_warehouse" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if to_warehouse == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Vehicle</label>
+      <select name="vehicle" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for v in vehicles %}<option value="{{ v }}" {% if vehicle == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Driver</label>
+      <select name="driver" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for d in drivers %}<option value="{{ d }}" {% if driver == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+      </select></div>
+    <div class="rpt-actions">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'stock_transfer_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <a class="btn btn-outline-success btn-sm" id="st-excel" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if rows %}
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas fa-right-left me-1"></i>{{ rows|length }} transfer(s)</div>
+  </div>
+  <div class="rpt-scroll">
+    <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0" style="width:auto; min-width:100%; table-layout:auto;">
+      <thead><tr>
+        <th>Date</th><th>Branch</th><th>Transaction No.</th><th>Dc No.</th>
+        <th>From Warehouse</th><th>Farm Code</th><th>From Batch</th>
+        <th>To Warehouse</th><th>Farm Code</th><th>To Batch</th>
+        <th>Item Code</th><th>Item</th>
+        <th class="num">Quantity</th><th class="num">Bag Qty</th><th class="num">Price</th><th class="num">Amount</th>
+        <th>Vehicle</th><th>Driver</th><th>Line</th>
+        <th class="num">Bag/Kg Rate</th><th class="num">Transport Cost</th>
+        <th>Batch</th><th>Narration</th><th>User</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td>{{ r.branch }}</td>
+          <td>{{ r.trnum }}</td>
+          <td>{{ r.dc_no }}</td>
+          <td class="rpt-loc">{{ r.from_location }}</td>
+          <td>{{ r.from_farm_code }}</td>
+          <td>{{ r.from_batch }}</td>
+          <td class="rpt-loc">{{ r.to_location }}</td>
+          <td>{{ r.to_farm_code }}</td>
+          <td>{{ r.to_batch }}</td>
+          <td>{{ r.item_code }}</td>
+          <td>{{ r.item }}</td>
+          <td class="num">{{ r.quantity|indian_currency }}</td>
+          <td class="num">{{ r.bag_qty|floatformat:0 }}</td>
+          <td class="num">{{ r.price|indian_currency }}</td>
+          <td class="num">{{ r.amount|indian_currency }}</td>
+          <td>{{ r.vehicle }}</td>
+          <td>{{ r.driver }}</td>
+          <td>{{ r.line }}</td>
+          <td class="num">0.00</td>
+          <td class="num">0.00</td>
+          <td>{{ r.batch_no }}</td>
+          <td>{{ r.narration }}</td>
+          <td>{{ r.user }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="12" class="text-center">Total</td>
+        <td class="num">{{ totals.quantity|indian_currency }}</td>
+        <td class="num">{{ totals.bag_qty|floatformat:0 }}</td>
+        <td class="num"></td>
+        <td class="num">{{ totals.amount|indian_currency }}</td>
+        <td colspan="8"></td>
+      </tr></tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas fa-right-left fa-2x mb-2 d-block"></i>
+    No stock transfers match these filters.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+// Excel keeps whatever filters are currently applied on the page.
+document.getElementById('st-excel').addEventListener('click', function (e) {
+  e.preventDefault();
+  const params = new URLSearchParams(window.location.search);
+  params.set('export', 'excel');
+  window.location.href = `{% url 'stock_transfer_report' %}?${params}`;
+});
+</script>
+{% endblock %}

@@ -79,4 +79,10 @@ urlpatterns = [
     path('stock_receive_api/<int:id>/', views.StockReceiveAPI.as_view(), name='stock_receive_api'),
     path('stock-received/item-lookup/', views.stock_receive_item_lookup, name='stock_receive_item_lookup'),
     path('stock-received/farm-batches/', views.stock_receive_farm_batches, name='stock_receive_farm_batches'),
+
+    path('item-ledger-report/', views.item_ledger_report, name='item_ledger_report'),
+    path('stock-transfer-report/', views.stock_transfer_report, name='stock_transfer_report'),
+    path('stock-report/', views.stock_report, name='stock_report'),
+    path('item-summary-report/', views.item_summary_report, name='item_summary_report'),
+    path('negative-stock-report/', views.negative_stock_report, name='negative_stock_report'),
 ]

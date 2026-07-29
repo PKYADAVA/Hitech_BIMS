@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Item Ledger Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_inventory_report_subnavbar.html' with active_tab='item_ledger_report' %}
+
+{% include '_report_letterhead.html' with title='Item Ledger Report' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2 col-6"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2 col-6"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-3 col-12"><label class="form-label">Item</label>
+      <select name="item" class="form-select form-select-sm" required>
+        <option value="">Select item</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-12"><label class="form-label">Farm/Sector</label>
+      <select name="warehouse" class="form-select form-select-sm" required>
+        <option value="">Select warehouse</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2 col-12 d-flex gap-1 flex-wrap">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'item_ledger_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      {% if ledger %}<a class="btn btn-outline-success btn-sm" href="?item={{ item_id }}&amp;warehouse={{ warehouse_id }}{% if from_date %}&amp;from_date={{ from_date }}{% endif %}{% if to_date %}&amp;to_date={{ to_date }}{% endif %}&amp;export=excel"><i class="fas fa-file-excel me-1"></i>Excel</a>{% endif %}
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if ledger %}
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas fa-box me-1"></i>{{ item.description }}{% if uom %} ({{ uom }}){% endif %}
+      &middot; <i class="fas fa-warehouse me-1"></i>{{ warehouse.name }} &middot; {{ ledger.rows|length }} movement(s)</div>
+    <div class="small text-muted">Price = perpetual weighted average</div>
+  </div>
+  {% if ledger.closing.qty < 0 %}
+  <div class="alert alert-warning py-1 px-2 small mb-2">
+    <i class="fas fa-triangle-exclamation me-1"></i>
+    Closing stock is <strong>negative</strong> — this item has out-movements at this location
+    with no matching in-movement. The ledger reports it as-is rather than hiding it;
+    the underlying entries need correcting.
+  </div>
+  {% endif %}
+  <div class="rpt-scroll">
+    <table class="table table-bordered table-hover rpt-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
+      <thead>
+        <tr>
+          <th rowspan="2">Sl. No.</th>
+          <th rowspan="2">Date</th>
+          <th rowspan="2">Type</th>
+          <th rowspan="2">Trnum</th>
+          <th rowspan="2">Location</th>
+          <th rowspan="2">Remarks</th>
+          <th colspan="3">Purchase/Transferred IN</th>
+          <th colspan="3">Consume/Sale/Transferred OUT</th>
+          <th colspan="3">Closing</th>
+        </tr>
+        <tr>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="rpt-open">
+          <td colspan="6" class="text-center">Opening Stock</td>
+          <td class="num">{{ ledger.opening.qty|indian_currency }}</td>
+          <td class="num">{{ ledger.opening.price|indian_currency }}</td>
+          <td class="num">{{ ledger.opening.amount|indian_currency }}</td>
+          <td class="num"></td><td class="num"></td><td class="num"></td>
+          <td class="num">{{ ledger.opening.qty|indian_currency }}</td>
+          <td class="num">{{ ledger.opening.price|indian_currency }}</td>
+          <td class="num">{{ ledger.opening.amount|indian_currency }}</td>
+        </tr>
+        {% for r in ledger.rows %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td class="rpt-type">{{ r.type }}</td>
+          <td>{{ r.trnum }}</td>
+          <td class="rpt-loc">{{ r.location }}</td>
+          <td>{{ r.remarks }}</td>
+          <td class="num">{% if r.in_qty %}{{ r.in_qty|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.in_qty %}{{ r.in_price|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.in_qty %}{{ r.in_amount|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.out_qty %}{{ r.out_qty|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.out_qty %}{{ r.out_price|indian_currency }}{% endif %}</td>
+          <td class="num">{% if r.out_qty %}{{ r.out_amount|indian_currency }}{% endif %}</td>
+          <td class="num {% if r.close_qty < 0 %}rpt-neg{% endif %}">{{ r.close_qty|indian_currency }}</td>
+          <td class="num">{{ r.close_price|indian_currency }}</td>
+          <td class="num">{{ r.close_amount|indian_currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="6" class="text-center">Total</td>
+          <td class="num">{{ ledger.totals.in_qty|indian_currency }}</td>
+          <td class="num"></td>
+          <td class="num">{{ ledger.totals.in_amount|indian_currency }}</td>
+          <td class="num">{{ ledger.totals.out_qty|indian_currency }}</td>
+          <td class="num"></td>
+          <td class="num">{{ ledger.totals.out_amount|indian_currency }}</td>
+          <td class="num {% if ledger.closing.qty < 0 %}rpt-neg{% endif %}">{{ ledger.closing.qty|indian_currency }}</td>
+          <td class="num">{{ ledger.closing.price|indian_currency }}</td>
+          <td class="num">{{ ledger.closing.amount|indian_currency }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas fa-filter fa-2x mb-2 d-block"></i>
+    Select an <strong>Item</strong> and a <strong>Farm/Sector</strong>, then press <strong>Submit</strong> to view the ledger.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}

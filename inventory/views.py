@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -121,12 +121,21 @@ class ItemAPI(View):
     def _resolve_warehouses(raw_ids):
         """(warehouses, error) for a list of warehouse ids — "All" is just
         every Warehouse id being present in that list, no special sentinel."""
-        ids = raw_ids or []
+        # Drop the "All" UI sentinel and coerce to ints; "All" is expanded to
+        # every real warehouse id client-side, so only real ids should arrive.
+        ids = []
+        for raw in (raw_ids or []):
+            if raw in ("__all__", "", None):
+                continue
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                return None, "Invalid warehouse ID"
         warehouses = list(Warehouse.objects.filter(id__in=ids))
         if len(warehouses) != len(set(ids)):
             return None, "Invalid warehouse ID"
-        if not warehouses:
-            return None, "At least one warehouse is required"
+        # Warehouse is optional (model field is blank=True) — an item may have
+        # none assigned, so an empty selection is valid.
         return warehouses, None
 
     def get(self, request, id=None):
@@ -155,14 +164,19 @@ class ItemAPI(View):
                 raise Http404("Item not found")
         else:
             items = []
+            total_warehouses = Warehouse.objects.count()
             for item in (Item.objects.select_related("category", "storage_uom", "consumption_uom")
                          .prefetch_related("warehouse")):
+                item_warehouses = list(item.warehouse.all())
+                # Show "All" when every warehouse is assigned, else list the names.
+                warehouse_name = ("All" if total_warehouses and len(item_warehouses) == total_warehouses
+                                  else ", ".join(w.name for w in item_warehouses))
                 items.append({
                     "id": item.id, "item_code": item.item_code, "description": item.description,
                     "category": item.category_id,
                     "category__name": item.category.name,
-                    "warehouse__name": ", ".join(w.name for w in item.warehouse.all()),
-                    "warehouse_ids": [w.id for w in item.warehouse.all()],
+                    "warehouse__name": warehouse_name,
+                    "warehouse_ids": [w.id for w in item_warehouses],
                     "valuation_method": item.valuation_method,
                     "standard_cost_per_unit": str(item.standard_cost_per_unit),
                     "storage_uom": item.storage_uom_id,
@@ -470,28 +484,68 @@ class ItemPriceListAPI(View):
             return JsonResponse([self._to_dict(e) for e in entries], safe=False)
 
     def post(self, request):
+        """Create price entries. Accepts the bulk shape — one shared
+        effective_date plus a `rows` list of item/price pairs — or the single
+        entry shape (item/price/effective_date at the top level). Either way
+        the whole payload is saved or none of it is."""
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-        if not data.get("item"):
-            return JsonResponse({"error": "Item is required"}, status=400)
-        if not data.get("price"):
-            return JsonResponse({"error": "Price is required"}, status=400)
+        rows = data.get("rows")
+        if rows is None:
+            rows = [{"item": data.get("item"), "price": data.get("price")}]
+        if not isinstance(rows, list) or not rows:
+            return JsonResponse({"error": "At least one price row is required"}, status=400)
 
-        try:
-            item = Item.objects.get(id=data["item"])
-        except Item.DoesNotExist:
+        effective_date = data.get("effective_date") or timezone.now().date()
+
+        item_ids = []
+        for index, row in enumerate(rows, start=1):
+            row = row or {}
+            if not row.get("item"):
+                return JsonResponse({"error": f"Row {index}: item is required"}, status=400)
+            if not row.get("price"):
+                return JsonResponse({"error": f"Row {index}: rate is required"}, status=400)
+            item_ids.append(str(row["item"]))
+
+        duplicates = {i for i in item_ids if item_ids.count(i) > 1}
+        if duplicates:
+            return JsonResponse({"error": "The same item appears on more than one row"}, status=400)
+
+        items_by_id = {str(i.id): i for i in Item.objects.filter(id__in=item_ids)}
+        missing = [i for i in item_ids if i not in items_by_id]
+        if missing:
             return JsonResponse({"error": "Invalid item ID"}, status=400)
 
+        entries = []
+        for index, row in enumerate(rows, start=1):
+            try:
+                price = Decimal(str(row["price"]))
+            except (InvalidOperation, TypeError):
+                return JsonResponse({"error": f"Row {index}: rate is not a valid number"}, status=400)
+            entries.append(ItemPriceList(
+                item=items_by_id[str(row["item"])], price=price, effective_date=effective_date,
+            ))
+
+        clashing = list(
+            ItemPriceList.objects.filter(effective_date=effective_date, item_id__in=item_ids)
+            .values_list("item__description", flat=True)
+        )
+        if clashing:
+            return JsonResponse(
+                {"error": f"Already priced on that date: {', '.join(clashing)}"}, status=400)
+
         try:
-            entry = ItemPriceList.objects.create(
-                item=item, price=data["price"], effective_date=data.get("effective_date") or timezone.now().date(),
-            )
+            with transaction.atomic():
+                created = ItemPriceList.objects.bulk_create(entries)
         except IntegrityError:
             return JsonResponse({"error": "This item already has a price entry for that date"}, status=400)
-        return JsonResponse({"message": "Price list entry created", "id": entry.id}, status=201)
+        return JsonResponse({
+            "message": f"{len(created)} price list {'entry' if len(created) == 1 else 'entries'} created",
+            "ids": [e.id for e in created],
+        }, status=201)
 
     def put(self, request, id):
         try:
@@ -1832,6 +1886,8 @@ def _save_stock_issue_items(issue, items_data):
     submission are tracked cumulatively via ``consumed``."""
     from collections import defaultdict
 
+    from inventory.services.valuation import compute_issue_rate
+
     issue.items.all().delete()
     consumed = defaultdict(lambda: Decimal("0"))  # (warehouse_id, item_id) -> qty taken so far this submission
     created = 0
@@ -1842,21 +1898,32 @@ def _save_stock_issue_items(issue, items_data):
             continue
         item_id = int(row["item"])
         quantity = Decimal(str(row.get("quantity") or 0))
-        rate = Decimal(str(row.get("rate") or 0))
         remarks = row.get("remarks") or ""
         batch_id = row.get("batch") if location_type == "farm" else None
+        item = Item.objects.get(id=item_id)
 
-        if location_type == "warehouse" and quantity > 0:
-            available = warehouse_item_stock(item_id, int(location_id), as_of_date=issue.date,
-                                             exclude_issue_id=issue.pk)
-            remaining = available - consumed[(int(location_id), item_id)]
-            if quantity > remaining:
-                item = Item.objects.get(id=item_id)
-                wh = Warehouse.objects.get(id=location_id)
-                raise ValidationError(
-                    f"Not enough stock: only {remaining} of {item} available at "
-                    f"{wh} as of {issue.date} — cannot issue {quantity}.")
-            consumed[(int(location_id), item_id)] += quantity
+        if location_type == "warehouse":
+            wh_id = int(location_id)
+            if quantity > 0:
+                available = warehouse_item_stock(item_id, wh_id, as_of_date=issue.date,
+                                                 exclude_issue_id=issue.pk)
+                remaining = available - consumed[(wh_id, item_id)]
+                if quantity > remaining:
+                    wh = Warehouse.objects.get(id=location_id)
+                    raise ValidationError(
+                        f"Not enough stock: only {remaining} of {item} available at "
+                        f"{wh} as of {issue.date} — cannot issue {quantity}.")
+            # Cost this issue by the item's valuation method (authoritative for
+            # management/COGS reporting), drawing down cumulatively within this
+            # submission via ``consumed``.
+            rate = compute_issue_rate(item, wh_id, issue.date, quantity,
+                                      exclude_issue_id=issue.pk,
+                                      prior_consumed=consumed[(wh_id, item_id)])
+            if quantity > 0:
+                consumed[(wh_id, item_id)] += quantity
+        else:
+            # Farm-location issue: no warehouse cost pool, use standard cost.
+            rate = compute_issue_rate(item, None, issue.date, quantity)
 
         StockIssueItem.objects.create(
             issue=issue, item_id=item_id, quantity=quantity, rate=rate, remarks=remarks,
@@ -1988,13 +2055,33 @@ class StockIssueAPI(View):
 
 @login_required
 def stock_issue_item_lookup(request):
-    """UOM and default rate for a selected item, for the Add form's
-    auto-filled Unit / Rate fields."""
+    """UOM and valuation-method rate for a selected item, for the Add form's
+    auto-filled Unit / Rate fields. When a warehouse Location and date are
+    given the rate is the item's valuation-method cost there; otherwise it
+    falls back to the item's standard cost."""
+    from inventory.services.valuation import compute_issue_rate
+
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
+    if not item:
+        return JsonResponse({"unit": "", "rate": "0", "method": ""})
+
+    location_type = request.GET.get("location_type") or "warehouse"
+    location_id = request.GET.get("location_id") or None
+    quantity = request.GET.get("quantity") or 0
+    as_of = request.GET.get("date") or None
+    if as_of:
+        try:
+            as_of = timezone.datetime.fromisoformat(as_of).date()
+        except ValueError:
+            as_of = None
+
+    warehouse_id = int(location_id) if (location_type == "warehouse" and location_id) else None
+    rate = compute_issue_rate(item, warehouse_id, as_of, quantity)
     return JsonResponse({
-        "unit": _uom_label(item.storage_uom) if item else "",
-        "rate": str(item.standard_cost_per_unit) if item else "0",
+        "unit": _uom_label(item.storage_uom),
+        "rate": str(rate),
+        "method": item.valuation_method,
     })
 
 
@@ -2233,3 +2320,625 @@ def stock_receive_farm_batches(request):
         {"id": b.id, "batch_name": b.batch_name, "is_active": b.end_date is None}
         for b in batches
     ], safe=False)
+
+
+@login_required
+def item_ledger_report(request):
+    """Inventory > Reports > Item Ledger — an item's full stock movement at one
+    warehouse over a date range: opening stock, every IN (purchase received,
+    transfer in, stock received, 'Add' adjustment) and OUT (transfer out, stock
+    issued, 'Deduct' adjustment) movement, and the running closing quantity /
+    weighted-average price / value after each one."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from inventory.services.valuation import item_ledger
+
+    item_id = (request.GET.get("item") or "").strip()
+    warehouse_id = (request.GET.get("warehouse") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    export = (request.GET.get("export") or "").strip().lower()
+
+    item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
+    warehouse = Warehouse.objects.filter(id=warehouse_id).first() if warehouse_id.isdigit() else None
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+
+    ledger = None
+    if item and warehouse:
+        ledger = item_ledger(item.id, warehouse.id, from_date=fd, to_date=td)
+
+    criteria = ""
+    if warehouse:
+        criteria = "From: %s   To: %s   Item: %s   Warehouse: %s" % (
+            from_date or "Beginning", to_date or "Date",
+            item.description if item else "All", warehouse.name)
+
+    context = {
+        "items": Item.objects.select_related("storage_uom").order_by("description"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "item": item, "warehouse": warehouse, "criteria": criteria,
+        "item_id": item_id, "warehouse_id": warehouse_id,
+        "from_date": from_date, "to_date": to_date,
+        "ledger": ledger,
+        "uom": _uom_label(item.storage_uom) if item else "",
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel" and ledger:
+        return _item_ledger_excel(context)
+    return render(request, "item_ledger_report.html", context)
+
+
+def _item_ledger_excel(ctx):
+    """Stream the Item Ledger as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    ledger, item, warehouse = ctx["ledger"], ctx["item"], ctx["warehouse"]
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Item Ledger"
+
+    bold = Font(bold=True)
+    head_font = Font(bold=True, color="FFFFFF")
+    head_fill = PatternFill("solid", fgColor="1B3A6B")
+    centre = Alignment(horizontal="center")
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append([f"Item Ledger Report — {item.description} @ {warehouse.name}"])
+    ws["A2"].font = bold
+    ws.append([f"Period: {ctx['from_date'] or 'Beginning'} to {ctx['to_date'] or 'Date'}"])
+    ws.append([])
+
+    headers = ["Sl. No.", "Date", "Type", "Trnum", "Location", "Remarks",
+               "IN Qty", "IN Price", "IN Amount",
+               "OUT Qty", "OUT Price", "OUT Amount",
+               "Closing Qty", "Closing Price", "Closing Amount"]
+    ws.append(headers)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=ws.max_row, column=col)
+        cell.font = head_font
+        cell.fill = head_fill
+        cell.alignment = centre
+
+    def num(v):
+        return float(v) if v is not None else None
+
+    op = ledger["opening"]
+    ws.append(["", "", "Opening Stock", "", "", "", num(op["qty"]), num(op["price"]), num(op["amount"]),
+               None, None, None, num(op["qty"]), num(op["price"]), num(op["amount"])])
+    for cell in ws[ws.max_row]:
+        cell.font = bold
+
+    for i, r in enumerate(ledger["rows"], start=1):
+        ws.append([i, r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["type"], r["trnum"],
+                   r["location"], r["remarks"],
+                   num(r["in_qty"]), num(r["in_price"]), num(r["in_amount"]),
+                   num(r["out_qty"]), num(r["out_price"]), num(r["out_amount"]),
+                   num(r["close_qty"]), num(r["close_price"]), num(r["close_amount"])])
+
+    t, cl = ledger["totals"], ledger["closing"]
+    ws.append(["", "", "Total", "", "", "",
+               num(t["in_qty"]), None, num(t["in_amount"]),
+               num(t["out_qty"]), None, num(t["out_amount"]),
+               num(cl["qty"]), num(cl["price"]), num(cl["amount"])])
+    for cell in ws[ws.max_row]:
+        cell.font = bold
+
+    for col, width in enumerate([8, 12, 18, 18, 30, 28, 12, 10, 14, 12, 10, 14, 12, 10, 14], start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="item_ledger_report.xlsx"'
+    wb.save(response)
+    return response
+
+
+def _st_bag_figures(transfer):
+    """(bag_qty, price_per_bag, amount) for a transfer line.
+
+    ``rate`` is stored per storage unit (e.g. per kg), so the line's value is
+    quantity x rate. Bagged items additionally show how many bags that is and
+    the equivalent price per bag; unbagged items report 0 bags and the plain
+    per-unit rate.
+    """
+    qty = Decimal(str(transfer.quantity or 0))
+    rate = Decimal(str(transfer.rate or 0))
+    kg_per_bag = transfer.item.kg_per_bag if transfer.item_id else None
+    amount = qty * rate
+    if kg_per_bag and Decimal(str(kg_per_bag)) > 0:
+        kpb = Decimal(str(kg_per_bag))
+        return (qty / kpb), (rate * kpb), amount
+    return Decimal("0"), rate, amount
+
+
+def _st_batch_no(batch):
+    """Trailing sequence of a batch name (AKB-0215-3 -> 3)."""
+    if not batch or not batch.batch_name:
+        return ""
+    tail = batch.batch_name.rsplit("-", 1)[-1]
+    return tail if tail.isdigit() else ""
+
+
+@login_required
+def stock_transfer_report(request):
+    """Inventory > Reports > Stock Transfer Report — every stock transfer in a
+    date range with its from/to location (Warehouse or Farm, with farm code and
+    batch), item, quantity/bags/price/value, vehicle, driver and the user who
+    recorded it."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    from_region, to_region = g("from_region"), g("to_region")
+    from_branch, to_branch = g("from_branch"), g("to_branch")
+    category, item_id = g("category"), g("item")
+    from_warehouse, to_warehouse = g("from_warehouse"), g("to_warehouse")
+    vehicle, driver = g("vehicle"), g("driver")
+    export = g("export").lower()
+
+    qs = (StockTransfer.objects
+          .select_related("item", "item__category", "created_by",
+                          "from_warehouse", "from_farm", "from_farm__branch", "from_batch",
+                          "to_warehouse", "to_farm", "to_farm__branch", "to_batch")
+          .order_by("date", "id"))
+
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    if fd:
+        qs = qs.filter(date__gte=fd)
+    if td:
+        qs = qs.filter(date__lte=td)
+    if category:
+        qs = qs.filter(item__category_id=category)
+    if item_id:
+        qs = qs.filter(item_id=item_id)
+    if from_warehouse:
+        qs = qs.filter(from_location_type="warehouse", from_warehouse_id=from_warehouse)
+    if to_warehouse:
+        qs = qs.filter(to_location_type="warehouse", to_warehouse_id=to_warehouse)
+    if from_region:
+        qs = qs.filter(from_farm__region=from_region)
+    if to_region:
+        qs = qs.filter(to_farm__region=to_region)
+    if from_branch:
+        qs = qs.filter(from_farm__branch_id=from_branch)
+    if to_branch:
+        qs = qs.filter(to_farm__branch_id=to_branch)
+    if vehicle:
+        qs = qs.filter(vehicle_no=vehicle)
+    if driver:
+        qs = qs.filter(driver_name=driver)
+
+    rows = []
+    totals = {"quantity": Decimal("0"), "bag_qty": Decimal("0"), "amount": Decimal("0")}
+    for t in qs:
+        bag_qty, price, amount = _st_bag_figures(t)
+        branch = ((t.from_farm.branch if t.from_farm_id else None)
+                  or (t.to_farm.branch if t.to_farm_id else None))
+        rows.append({
+            "date": t.date,
+            "branch": branch.branch_name if branch else "",
+            "trnum": t.trnum, "dc_no": t.dc_no,
+            "from_location": _location_dict(t.from_location_type, t.from_warehouse, t.from_farm)["name"],
+            "from_farm_code": t.from_farm.farm_code if t.from_farm_id else "",
+            "from_batch": t.from_batch.batch_name if t.from_batch_id else "",
+            "to_location": _location_dict(t.to_location_type, t.to_warehouse, t.to_farm)["name"],
+            "to_farm_code": t.to_farm.farm_code if t.to_farm_id else "",
+            "to_batch": t.to_batch.batch_name if t.to_batch_id else "",
+            "item_code": t.item.item_code if t.item_id else "",
+            "item": t.item.description if t.item_id else "",
+            "quantity": t.quantity, "bag_qty": bag_qty, "price": price, "amount": amount,
+            "vehicle": t.vehicle_no, "driver": t.driver_name,
+            "line": ((t.to_farm.line if t.to_farm_id else "")
+                     or (t.from_farm.line if t.from_farm_id else "")),
+            "batch_no": _st_batch_no(t.to_batch) or _st_batch_no(t.from_batch),
+            "narration": t.remarks,
+            "user": ((t.created_by.get_full_name() or t.created_by.username)
+                     if t.created_by_id else ""),
+        })
+        totals["quantity"] += Decimal(str(t.quantity or 0))
+        totals["bag_qty"] += bag_qty
+        totals["amount"] += amount
+
+    regions = sorted(set(BroilerFarm.objects.exclude(region="").values_list("region", flat=True)))
+    criteria = "From: %s   To: %s   %d transfer(s)" % (
+        from_date or "Beginning", to_date or "Date", len(rows))
+
+    context = {
+        "rows": rows, "totals": totals, "criteria": criteria,
+        "from_date": from_date, "to_date": to_date,
+        "from_region": from_region, "to_region": to_region,
+        "from_branch": from_branch, "to_branch": to_branch,
+        "category": category, "item_id": item_id,
+        "from_warehouse": from_warehouse, "to_warehouse": to_warehouse,
+        "vehicle": vehicle, "driver": driver,
+        "regions": regions,
+        "branches": Branch.objects.order_by("branch_name"),
+        "categories": ItemCategory.objects.order_by("name"),
+        "items": Item.objects.order_by("description"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "vehicles": sorted(set(StockTransfer.objects.exclude(vehicle_no="")
+                               .values_list("vehicle_no", flat=True))),
+        "drivers": sorted(set(StockTransfer.objects.exclude(driver_name="")
+                              .values_list("driver_name", flat=True))),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel":
+        return _stock_transfer_excel(context)
+    return render(request, "stock_transfer_report.html", context)
+
+
+def _stock_transfer_excel(ctx):
+    """Stream the Inventory Stock Transfer Report as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Stock Transfer"
+    bold = Font(bold=True)
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Inventory Stock Transfer Report"])
+    ws["A2"].font = bold
+    period_from = ctx["from_date"] or "Beginning"
+    period_to = ctx["to_date"] or "Date"
+    ws.append(["Period: %s to %s" % (period_from, period_to)])
+    ws.append([])
+
+    headers = ["Date", "Branch", "Transaction No.", "Dc No.", "From Warehouse", "Farm Code",
+               "From Batch", "To Warehouse", "Farm Code", "To Batch", "Item Code", "Item",
+               "Quantity", "Bag Qty", "Price", "Amount", "Vehicle", "Driver", "Line",
+               "Bag/Kg Rate", "Transport Cost", "Batch", "Narration", "User"]
+    ws.append(headers)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=ws.max_row, column=col)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1B3A6B")
+        cell.alignment = Alignment(horizontal="center")
+
+    for r in ctx["rows"]:
+        ws.append([
+            r["date"].strftime("%d.%m.%Y") if r["date"] else "", r["branch"], r["trnum"], r["dc_no"],
+            r["from_location"], r["from_farm_code"], r["from_batch"],
+            r["to_location"], r["to_farm_code"], r["to_batch"],
+            r["item_code"], r["item"],
+            float(r["quantity"] or 0), float(r["bag_qty"] or 0),
+            float(r["price"] or 0), float(r["amount"] or 0),
+            r["vehicle"], r["driver"], r["line"], 0, 0, r["batch_no"], r["narration"], r["user"],
+        ])
+
+    t = ctx["totals"]
+    ws.append(["", "", "Total", "", "", "", "", "", "", "", "", "",
+               float(t["quantity"]), float(t["bag_qty"]), None, float(t["amount"])])
+    for cell in ws[ws.max_row]:
+        cell.font = bold
+
+    widths = [11, 16, 16, 10, 26, 11, 14, 30, 11, 14, 11, 20, 11, 9, 11, 13,
+              12, 12, 16, 11, 13, 8, 20, 14]
+    for col, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="stock_transfer_report.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def stock_report(request):
+    """Inventory > Reports > Stock Report — a per-item stock summary at one
+    warehouse: opening, purchases/transfers in, consumption/transfers out,
+    sold, sale returns and closing, each in the item's storage unit and its
+    bag equivalent."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from inventory.services.valuation import warehouse_stock_summary
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    item_id, warehouse_id, export = g("item"), g("warehouse"), g("export").lower()
+
+    warehouse = Warehouse.objects.filter(id=warehouse_id).first() if warehouse_id.isdigit() else None
+    item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+
+    rows = []
+    if warehouse:
+        rows = warehouse_stock_summary(warehouse.id, from_date=fd, to_date=td,
+                                       item_id=item.id if item else None)
+
+    criteria = ""
+    if warehouse:
+        criteria = "From: %s   To: %s   Item: %s   Warehouse: %s" % (
+            from_date or "Beginning", to_date or "Date",
+            item.description if item else "All", warehouse.name)
+
+    context = {
+        "rows": rows, "criteria": criteria,
+        "from_date": from_date, "to_date": to_date,
+        "item": item, "item_id": item_id,
+        "warehouse": warehouse, "warehouse_id": warehouse_id,
+        "items": Item.objects.order_by("description"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel" and warehouse:
+        return _stock_report_excel(context)
+    return render(request, "stock_report.html", context)
+
+
+def _stock_report_excel(ctx):
+    """Stream the Stock Report as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Stock Report"
+    bold = Font(bold=True)
+    centre = Alignment(horizontal="center")
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Stock Report"])
+    ws["A2"].font = bold
+    ws.append(["Period: %s to %s" % (ctx["from_date"] or "Beginning", ctx["to_date"] or "Date")])
+    ws.append(["Warehouse: %s    Item: %s" % (
+        ctx["warehouse"].name if ctx["warehouse"] else "",
+        ctx["item"].description if ctx["item"] else "All")])
+    ws.append([])
+
+    groups = ["Opening", "Purchase/Transfer In", "Consumption/Transferout",
+              "Sold", "Sale Return", "Closing"]
+    top = ["Category", "Item Name", "Unit"]
+    for label in groups:
+        top += [label, ""]
+    ws.append(top)
+    ws.append(["", "", ""] + ["Kgs", "Bags"] * len(groups))
+    header_top, header_sub = ws.max_row - 1, ws.max_row
+    for col in range(1, 3 + 2 * len(groups) + 1):
+        for row in (header_top, header_sub):
+            cell = ws.cell(row=row, column=col)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1B3A6B")
+            cell.alignment = centre
+    for i in range(len(groups)):
+        start = 4 + i * 2
+        ws.merge_cells(start_row=header_top, start_column=start,
+                       end_row=header_top, end_column=start + 1)
+    for col in range(1, 4):
+        ws.merge_cells(start_row=header_top, start_column=col,
+                       end_row=header_sub, end_column=col)
+
+    keys = ["opening", "opening_bags", "in", "in_bags", "out", "out_bags",
+            "sold", "sold_bags", "sale_return", "sale_return_bags",
+            "closing", "closing_bags"]
+    for r in ctx["rows"]:
+        ws.append([r["category"], r["item"], r["unit"]] + [float(r[k]) for k in keys])
+
+    for col, width in enumerate([16, 30, 13] + [12] * 12, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="stock_report.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def item_summary_report(request):
+    """Inventory > Reports > Item Summary Report — per storage location
+    (Warehouse or Farm) and item: opening, purchases/transfers in,
+    consumption/sales/transfers out and closing, each as quantity, weighted
+    average price and value."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from inventory.services.item_summary import item_summary
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    category, item_id, location, export = g("category"), g("item"), g("location"), g("export").lower()
+
+    loc_type = loc_id = None
+    if location and ":" in location:
+        loc_type, loc_id = location.split(":", 1)
+
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+
+    groups = item_summary(from_date=fd, to_date=td,
+                          category_id=category or None, item_id=item_id or None,
+                          location_type=loc_type, location_id=loc_id)
+
+    item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
+    row_count = sum(len(grp["rows"]) for grp in groups)
+    criteria = "From: %s   To: %s   Item: %s   %d location(s), %d row(s)" % (
+        from_date or "Beginning", to_date or "Date",
+        item.description if item else "All", len(groups), row_count)
+
+    context = {
+        "groups": groups, "criteria": criteria, "row_count": row_count,
+        "from_date": from_date, "to_date": to_date,
+        "category": category, "item_id": item_id, "location": location,
+        "categories": ItemCategory.objects.order_by("name"),
+        "items": Item.objects.order_by("description"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "farms": BroilerFarm.objects.order_by("farm_name"),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel":
+        return _item_summary_excel(context)
+    return render(request, "item_summary_report.html", context)
+
+
+def _item_summary_excel(ctx):
+    """Stream the Item Summary Report as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Item Summary"
+    bold = Font(bold=True)
+    centre = Alignment(horizontal="center")
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Item Summary Report"])
+    ws["A2"].font = bold
+    ws.append([ctx["criteria"]])
+    ws.append([])
+
+    groups = ["Opening", "Purchase/Transferred IN", "Consume/Sale/Transferred OUT", "Closing"]
+    top = ["Storage Location", "Item Category", "Item Description"]
+    for label in groups:
+        top += [label, "", ""]
+    ws.append(top)
+    ws.append(["", "", ""] + ["Quantity", "Price", "Amount"] * len(groups))
+    header_top, header_sub = ws.max_row - 1, ws.max_row
+    for col in range(1, 3 + 3 * len(groups) + 1):
+        for row in (header_top, header_sub):
+            cell = ws.cell(row=row, column=col)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1B3A6B")
+            cell.alignment = centre
+    for i in range(len(groups)):
+        start = 4 + i * 3
+        ws.merge_cells(start_row=header_top, start_column=start,
+                       end_row=header_top, end_column=start + 2)
+    for col in range(1, 4):
+        ws.merge_cells(start_row=header_top, start_column=col,
+                       end_row=header_sub, end_column=col)
+
+    keys = ["open_qty", "open_price", "open_amount", "in_qty", "in_price", "in_amount",
+            "out_qty", "out_price", "out_amount", "close_qty", "close_price", "close_amount"]
+    for grp in ctx["groups"]:
+        for r in grp["rows"]:
+            ws.append([r["location"], r["category"], r["item"]] + [float(r[k]) for k in keys])
+        t = grp["total"]
+        ws.append(["", "", "Total"] + [float(t[k]) for k in keys])
+        for cell in ws[ws.max_row]:
+            cell.font = bold
+
+    for col, width in enumerate([34, 16, 22] + [13] * 12, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="item_summary_report.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def negative_stock_report(request):
+    """Inventory > Reports > Negative Stock Check — locations/items whose stock
+    balance is negative as of a date, i.e. more was issued/transferred out than
+    was ever recorded in. Each row shows when the balance first went negative."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from inventory.services.item_summary import negative_stock
+    from broiler.models import BroilerFarm
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    item_id, location, export = g("item"), g("location"), g("export").lower()
+
+    loc_type = loc_id = None
+    if location and ":" in location:
+        loc_type, loc_id = location.split(":", 1)
+
+    td = parse_date(to_date) if to_date else None
+    rows = negative_stock(as_of_date=td, item_id=item_id or None,
+                          location_type=loc_type, location_id=loc_id)
+
+    # `from_date` narrows the report to breaches that started inside the window;
+    # the balance itself is always the running one as of the To Date.
+    fd = parse_date(from_date) if from_date else None
+    if fd:
+        rows = [r for r in rows if r["since"] and r["since"] >= fd]
+
+    item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
+    criteria = "As on: %s   Item: %s   %d negative balance(s)" % (
+        to_date or "Date", item.description if item else "All", len(rows))
+
+    context = {
+        "rows": rows, "criteria": criteria,
+        "from_date": from_date, "to_date": to_date,
+        "item_id": item_id, "location": location, "item": item,
+        "items": Item.objects.order_by("description"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "farms": BroilerFarm.objects.order_by("farm_name"),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel":
+        return _negative_stock_excel(context)
+    return render(request, "negative_stock_report.html", context)
+
+
+def _negative_stock_excel(ctx):
+    """Stream the Negative Stock Check as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Negative Stock"
+    bold = Font(bold=True)
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Negative Stock Check"])
+    ws["A2"].font = bold
+    ws.append([ctx["criteria"]])
+    ws.append([])
+
+    headers = ["S.No", "Farm/Sector", "Item Name", "Date", "Negative Since", "Quantity"]
+    ws.append(headers)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=ws.max_row, column=col)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1B3A6B")
+        cell.alignment = Alignment(horizontal="center")
+
+    as_on = ctx["to_date"] or ""
+    for i, r in enumerate(ctx["rows"], start=1):
+        ws.append([i, r["location"], r["item"], as_on,
+                   r["since"].strftime("%d.%m.%Y") if r["since"] else "",
+                   float(r["quantity"])])
+
+    for col, width in enumerate([8, 34, 28, 13, 15, 14], start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="negative_stock_check.xlsx"'
+    wb.save(response)
+    return response

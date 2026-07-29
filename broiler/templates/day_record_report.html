@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Day Record Report — BIMS{% endblock %}
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_broiler_report_subnavbar.html' with active_tab='day_record_report' %}
 
@@ -21,14 +22,13 @@
   .drr-thumb { height:30px; width:30px; object-fit:cover; border-radius:.25rem; border:1px solid #dee2e6; }
 </style>
 
-<div class="drr-breadcrumb no-print">Reports <span class="mx-1">&rsaquo;</span> Day Record Report</div>
+{% include '_report_letterhead.html' with title='Day Record Report' %}
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-  <h3 class="drr-title mb-0">Day Record Report</h3>
   <div class="text-muted small">{{ sel_date|date:"d.m.Y" }} &middot; {{ rows|length }} record(s)</div>
 </div>
 
 <!-- Filters -->
-<div class="card mb-3 no-print drr-filter"><div class="card-body">
+<div class="rpt-filter no-print"><div class="card-body">
   <form method="get" class="row g-2 align-items-end">
     <div class="col-md-2"><label class="form-label">Date</label>
       <input type="date" name="date" value="{{ sel_date|date:'Y-m-d' }}" class="form-control form-control-sm"></div>
@@ -73,7 +73,7 @@
 
 <div class="card"><div class="card-body p-2">
   <div class="drr-scroll">
-    <table class="table table-bordered table-hover drr-table mb-0" style="width:max-content; min-width:100%;">
+    <table class="table table-bordered table-hover drr-table mb-0 rpt-table" style="width:max-content; min-width:100%;">
       <thead><tr>
         <th>Sl.No.</th><th>Farm Code</th><th>Farmer</th><th>Batch</th><th>Batch No</th><th>Supervisor</th><th>Age</th>
         <th>Placed Birds</th><th>Opening Birds</th><th>Mort</th><th>Mort%</th><th>Mort Image</th>

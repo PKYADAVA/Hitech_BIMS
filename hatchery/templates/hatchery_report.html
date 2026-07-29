@@ -2,23 +2,17 @@
 {% load static %}
 
 {% block title %}Hatch Register Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{% block nav %}
-  {% include 'main_top_navbar.html' with active_tab='hatchery' %}
-{% endblock %}
+{% block nav %}{% endblock nav %}
 
 {% block content %}
 {% include '_subnav.html' with module='hatchery_report' active_tab='hatch_sheet_report' %}
 
 <!-- Page Header -->
+{% include '_report_letterhead.html' with title='Hatch Register Report' %}
 <div class="page-header">
-    <div class="page-header-main">
-      <div class="page-header-title">
-    <i class="fa-solid fa-chart-bar"></i>
-    Hatch Register Report
-  </div>
-      <div class="page-header-subtitle">Full batch-wise hatch register: egg intake, candling &amp; hatch output and chick sales, with percentages</div>
-    </div>
+    
     <div class="page-header-right">
       <div class="d-flex gap-2">
       <button type="button" class="btn btn-outline-secondary" id="report-print-btn">
@@ -35,7 +29,7 @@
 </div>
 
 <!-- Filter Bar -->
-<div class="card mb-3 report-filter-card">
+<div class="rpt-filter no-print">
   <div class="card-body">
     <form method="get" id="report-filter-form" class="row g-3 align-items-end">
       <input type="hidden" name="export" id="report-export-field" value="">
@@ -98,7 +92,7 @@
     </div>
 
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0 report-table" id="hatchery-report-table">
+      <table class="table table-hover table-bordered mb-0 report-table rpt-table" id="hatchery-report-table">
         <thead>
           <tr class="report-group-row">
             <th rowspan="2">#</th>

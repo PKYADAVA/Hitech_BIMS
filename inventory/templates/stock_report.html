@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Stock Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_inventory_report_subnavbar.html' with active_tab='stock_report' %}
+
+{% include '_report_letterhead.html' with title='Stock Report' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2 col-6"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2 col-6"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-3 col-12"><label class="form-label">Item</label>
+      <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-12"><label class="form-label">Warehouse</label>
+      <select name="warehouse" class="form-select form-select-sm" required>
+        <option value="">Select warehouse</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2 col-12 d-flex gap-1 flex-wrap">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'stock_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      {% if warehouse %}<a class="btn btn-outline-success btn-sm" href="?warehouse={{ warehouse_id }}{% if item_id %}&amp;item={{ item_id }}{% endif %}{% if from_date %}&amp;from_date={{ from_date }}{% endif %}{% if to_date %}&amp;to_date={{ to_date }}{% endif %}&amp;export=excel"><i class="fas fa-file-excel me-1"></i>Excel</a>{% endif %}
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if not warehouse %}
+    <div class="rpt-empty">
+      <i class="fas fa-warehouse fa-2x mb-2 d-block"></i>
+      Select a <strong>Warehouse</strong> and press <strong>Submit</strong> to view the stock report.
+    </div>
+  {% elif rows %}
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas fa-boxes-stacked me-1"></i>{{ rows|length }} item(s)</div>
+  </div>
+  <div class="rpt-scroll">
+    <table class="table table-bordered table-hover rpt-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
+      <thead>
+        <tr>
+          <th rowspan="2">Category</th>
+          <th rowspan="2">Item Name</th>
+          <th rowspan="2">Unit</th>
+          <th colspan="2">Opening</th>
+          <th colspan="2">Purchase/Transfer In</th>
+          <th colspan="2">Consumption/Transferout</th>
+          <th colspan="2">Sold</th>
+          <th colspan="2">Sale Return</th>
+          <th colspan="2">Closing</th>
+        </tr>
+        <tr>
+          <th class="num">Qty</th><th class="num">Bags</th>
+          <th class="num">Qty</th><th class="num">Bags</th>
+          <th class="num">Qty</th><th class="num">Bags</th>
+          <th class="num">Qty</th><th class="num">Bags</th>
+          <th class="num">Qty</th><th class="num">Bags</th>
+          <th class="num">Qty</th><th class="num">Bags</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.category }}</td>
+          <td class="rpt-loc">{{ r.item }}</td>
+          <td>{{ r.unit }}</td>
+          <td class="num">{{ r.opening|indian_currency }}</td>
+          <td class="num">{{ r.opening_bags|indian_currency }}</td>
+          <td class="num">{{ r.in|indian_currency }}</td>
+          <td class="num">{{ r.in_bags|indian_currency }}</td>
+          <td class="num">{{ r.out|indian_currency }}</td>
+          <td class="num">{{ r.out_bags|indian_currency }}</td>
+          <td class="num">{{ r.sold|indian_currency }}</td>
+          <td class="num">{{ r.sold_bags|indian_currency }}</td>
+          <td class="num">{{ r.sale_return|indian_currency }}</td>
+          <td class="num">{{ r.sale_return_bags|indian_currency }}</td>
+          <td class="num {% if r.closing < 0 %}rpt-neg{% endif %}">{{ r.closing|indian_currency }}</td>
+          <td class="num {% if r.closing < 0 %}rpt-neg{% endif %}">{{ r.closing_bags|indian_currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="small text-muted mt-2 px-1">
+    <i class="fas fa-circle-info me-1"></i>
+    Quantities are in each item's own unit, so they are not totalled. Bags are shown for items
+    with a kg-per-bag defined. Sold / Sale Return are nil because sales are not recorded against
+    a warehouse in this system — stock leaves a warehouse via issue, transfer-out or a deduct adjustment.
+  </div>
+  {% else %}
+    <div class="rpt-empty">No stock movement or balance for this warehouse in the selected period.</div>
+  {% endif %}
+</div></div>
+{% endblock %}

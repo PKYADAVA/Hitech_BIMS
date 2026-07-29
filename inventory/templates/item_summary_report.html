@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Item Summary Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_inventory_report_subnavbar.html' with active_tab='item_summary_report' %}
+
+{% include '_report_letterhead.html' with title='Item Summary Report' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-2 col-6"><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2 col-6"><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div class="col-md-2 col-6"><label class="form-label">Category</label>
+      <select name="category" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-12"><label class="form-label">Items</label>
+      <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-3 col-12"><label class="form-label">Farm/Sector</label>
+      <select name="location" class="form-select form-select-sm"><option value="">-All-</option>
+        <optgroup label="Warehouse">
+          {% for w in warehouses %}<option value="warehouse:{{ w.id }}" {% if location == 'warehouse:'|add:w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+        </optgroup>
+        <optgroup label="Farm">
+          {% for f in farms %}<option value="farm:{{ f.id }}" {% if location == 'farm:'|add:f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
+        </optgroup>
+      </select></div>
+    <div class="col-md-12 d-flex gap-1 flex-wrap">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'item_summary_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <a class="btn btn-outline-success btn-sm" id="is-excel" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if groups %}
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1 gap-2 flex-wrap">
+    <input type="text" id="is-search" class="form-control form-control-sm no-print" style="max-width:280px"
+           placeholder="Search here..." autocomplete="off">
+    <div class="small text-muted"><i class="fas fa-boxes-stacked me-1"></i>{{ groups|length }} location(s) &middot; {{ row_count }} row(s)</div>
+  </div>
+  <div class="rpt-scroll">
+    <table class="table table-bordered table-hover rpt-table mb-0" id="is-table" style="width:auto; min-width:100%; table-layout:auto;">
+      <thead>
+        <tr>
+          <th rowspan="2">Storage Location</th>
+          <th rowspan="2">Item Category</th>
+          <th rowspan="2">Item Description</th>
+          <th colspan="3">Opening</th>
+          <th colspan="3">Purchase/Transferred IN</th>
+          <th colspan="3">Consume/Sale/Transferred OUT</th>
+          <th colspan="3">Closing</th>
+        </tr>
+        <tr>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+          <th class="num">Quantity</th><th class="num">Price</th><th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in groups %}
+          {% for r in g.rows %}
+          <tr class="is-row" data-loc="{{ g.location|lower }}">
+            <td class="rpt-loc">{% if forloop.first %}{{ r.location }}{% endif %}</td>
+            <td>{{ r.category }}</td>
+            <td>{{ r.item }}</td>
+            <td class="num">{{ r.open_qty|indian_currency }}</td>
+            <td class="num">{{ r.open_price|indian_currency }}</td>
+            <td class="num">{{ r.open_amount|indian_currency }}</td>
+            <td class="num">{{ r.in_qty|indian_currency }}</td>
+            <td class="num">{{ r.in_price|indian_currency }}</td>
+            <td class="num">{{ r.in_amount|indian_currency }}</td>
+            <td class="num">{{ r.out_qty|indian_currency }}</td>
+            <td class="num">{{ r.out_price|indian_currency }}</td>
+            <td class="num">{{ r.out_amount|indian_currency }}</td>
+            <td class="num {% if r.close_qty < 0 %}rpt-neg{% endif %}">{{ r.close_qty|indian_currency }}</td>
+            <td class="num">{{ r.close_price|indian_currency }}</td>
+            <td class="num {% if r.close_amount < 0 %}rpt-neg{% endif %}">{{ r.close_amount|indian_currency }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="is-row is-subtotal" data-loc="{{ g.location|lower }}">
+            <td colspan="3" class="text-center">Total</td>
+            <td class="num">{{ g.total.open_qty|indian_currency }}</td>
+            <td class="num">{{ g.total.open_price|indian_currency }}</td>
+            <td class="num">{{ g.total.open_amount|indian_currency }}</td>
+            <td class="num">{{ g.total.in_qty|indian_currency }}</td>
+            <td class="num">{{ g.total.in_price|indian_currency }}</td>
+            <td class="num">{{ g.total.in_amount|indian_currency }}</td>
+            <td class="num">{{ g.total.out_qty|indian_currency }}</td>
+            <td class="num">{{ g.total.out_price|indian_currency }}</td>
+            <td class="num">{{ g.total.out_amount|indian_currency }}</td>
+            <td class="num {% if g.total.close_qty < 0 %}rpt-neg{% endif %}">{{ g.total.close_qty|indian_currency }}</td>
+            <td class="num">{{ g.total.close_price|indian_currency }}</td>
+            <td class="num {% if g.total.close_amount < 0 %}rpt-neg{% endif %}">{{ g.total.close_amount|indian_currency }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="small text-muted mt-2 px-1">
+    <i class="fas fa-circle-info me-1"></i>
+    Price is the perpetual weighted average at that location. OUT includes transfers out,
+    stock issued, deduct adjustments and — at farms — daily-entry feed and medicine/vaccine
+    consumption. A negative closing means out-movements exceed recorded in-movements there.
+  </div>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas fa-boxes-stacked fa-2x mb-2 d-block"></i>
+    No stock movement matches these filters.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+// Excel keeps whatever filters are currently applied on the page.
+document.getElementById('is-excel').addEventListener('click', function (e) {
+  e.preventDefault();
+  const params = new URLSearchParams(window.location.search);
+  params.set('export', 'excel');
+  window.location.href = `{% url 'item_summary_report' %}?${params}`;
+});
+
+// Free-text row filter. A location's subtotal stays visible only while at
+// least one of its own rows is showing.
+const search = document.getElementById('is-search');
+if (search) {
+  search.addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    const visibleByLoc = {};
+    document.querySelectorAll('#is-table tbody tr.is-row:not(.is-subtotal)').forEach(tr => {
+      const hit = !q || tr.textContent.toLowerCase().includes(q);
+      tr.style.display = hit ? '' : 'none';
+      const loc = tr.dataset.loc;
+      visibleByLoc[loc] = visibleByLoc[loc] || hit;
+    });
+    document.querySelectorAll('#is-table tbody tr.is-subtotal').forEach(tr => {
+      tr.style.display = visibleByLoc[tr.dataset.loc] ? '' : 'none';
+    });
+  });
+}
+</script>
+{% endblock %}

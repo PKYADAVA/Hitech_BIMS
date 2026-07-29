@@ -1,23 +1,23 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Branch Summary Report{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{% block nav %}
- {% include 'main_top_navbar.html' with active_tab='account' %}
-{% endblock %}
+{% block nav %}{% endblock nav %}
 
 {% block content %}
  {% include '_account_report_subnavbar.html' with active_tab='branch_summary_report' %}
 
+{% include '_report_letterhead.html' with title='Branch Summary Report' %}
 <div class="page-header">
-    <div class="page-header-title"><i class="fas fa-code-branch"></i>Branch Summary Report</div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Debit/credit movement by Branch, rolled up from each voucher's Office via Office Mapping</div>
       <button class="btn btn-outline-secondary" id="bs-print" disabled><i class="fas fa-print"></i> Print</button>
     </div>
 </div>
 
-<div class="card mb-3">
+<div class="card mb-3 rpt-filter no-print">
   <div class="card-body">
     <div class="row g-3 align-items-end">
       <div class="col-md-3">
@@ -44,7 +44,8 @@
   <div class="card-header" id="bs-heading"><i class="fas fa-table"></i> Branch Summary Report</div>
   <div class="card-body p-0">
     <div id="bs-print-area">
-      <table class="table table-bordered mb-0">
+      <div class="table-responsive">
+      <table class="table table-bordered mb-0 rpt-table">
         <thead class="table-dark">
           <tr>
             <th>Branch</th>
@@ -56,6 +57,7 @@
         <tbody id="bs-body"></tbody>
         <tfoot id="bs-foot"></tfoot>
       </table>
+      </div>
     </div>
   </div>
 </div>

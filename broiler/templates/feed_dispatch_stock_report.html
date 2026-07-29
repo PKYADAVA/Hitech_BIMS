@@ -2,12 +2,12 @@
 {% load static %}
 
 {% block title %}Feed Dispatch & Stock Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{% block nav %}
-{% include 'main_top_navbar.html' with active_tab='broiler' %}
-{% endblock nav %}
+{% block nav %}{% endblock nav %}
 
 {% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='feed_dispatch_stock_report' %}
 
 <style>
   .cpr-breadcrumb { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
@@ -73,13 +73,10 @@
   @media print { .no-print { display: none !important; } }
 </style>
 
-<div class="cpr-breadcrumb no-print">
-  Reports <span class="mx-1">&rsaquo;</span> Feed Dispatch &amp; Stock Report
-</div>
+{% include '_report_letterhead.html' with title='Feed Dispatch & Stock Report' %}
 
-<div class="cpr-header no-print">
-  <div><h3>Feed Dispatch &amp; Stock Report</h3>
-    <div class="text-muted small">{% if warehouse_obj %}{{ warehouse_obj.name }}{% elif all_warehouses %}All Warehouses (combined){% endif %}</div>
+<div class="rpt-filter no-print">
+  <div>    <div class="text-muted small">{% if warehouse_obj %}{{ warehouse_obj.name }}{% elif all_warehouses %}All Warehouses (combined){% endif %}</div>
   </div>
 </div>
 
@@ -234,7 +231,7 @@
   <div class="col-lg-3">
     <div class="card h-100"><div class="card-body py-2 px-3">
       <div class="section-title mb-1" style="font-size:.85rem;">Warehouse Snapshot</div>
-      <table class="table table-sm mb-0" style="font-size:.74rem;">
+      <table class="table table-sm mb-0 rpt-table" style="font-size:.74rem;">
         <thead><tr><th class="text-start">Branch</th><th class="text-start">Warehouse</th><th class="text-end">Net Stock (bags)</th></tr></thead>
         <tbody>
           {% for w in warehouse_snapshot %}
@@ -282,7 +279,7 @@
     </div>
     <div class="ledger-table-wrap">
     <div class="table-responsive">
-      <table class="table table-bordered mb-0 ledger-table" id="ledger-table" style="width:100%">
+      <table class="table table-bordered mb-0 ledger-table rpt-table" id="ledger-table" style="width:100%">
         <thead>
           <tr>
             <th class="grp-date" rowspan="2">Date</th>

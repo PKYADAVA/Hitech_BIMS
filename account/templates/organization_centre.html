@@ -657,6 +657,7 @@ $(document).ready(function () {
             <style>body{font-family:sans-serif;padding:24px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #999;padding:6px 10px;text-align:left;}</style>
             </head><body>
             <h3>Organization Centre: ${escapeHtml($("#oc-code").val())} - ${escapeHtml($("#oc-name").val())}</h3>
+            <div class="table-responsive">
             <table>
               <tr><th>Level</th><td>${escapeHtml($("#oc-level").val())}</td></tr>
               <tr><th>Parent</th><td>${escapeHtml($("#oc-parent-label").val()) || "Top level"}</td></tr>
@@ -668,6 +669,7 @@ $(document).ready(function () {
               <tr><th>Effective From</th><td>${escapeHtml($("#oc-effective-from").val())}</td></tr>
               <tr><th>Effective To</th><td>${escapeHtml($("#oc-effective-to").val())}</td></tr>
             </table>
+            </div>
             </body></html>`);
         win.document.close();
         win.print();

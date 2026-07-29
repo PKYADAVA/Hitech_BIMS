@@ -2,7 +2,8 @@
 {% load static %}
 {% load purchase_extras %}
 {% block title %}Customer Balance Report — BIMS{% endblock %}
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock nav %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_sales_report_subnavbar.html' with active_tab='customer_balance' %}
 
@@ -43,14 +44,9 @@
   .gap-hi { color:#c0392b; font-weight:700; }
 </style>
 
-<div class="cb-head">
-  <div class="co-name">{{ company.name }}</div>
-  <div class="co-meta">{{ company.address }}
-    {% if company.gstin %}<br>GSTIN : {{ company.gstin }}{% endif %}{% if company.mobile %} &nbsp; Cont : {{ company.mobile }}{% endif %}</div>
-  <div class="co-title">Customer Balance Report</div>
-</div>
+{% include '_report_letterhead.html' with title='Customer Balance Report' %}
 
-<div class="cb-filter no-print">
+<div class="rpt-filter no-print">
   <form method="get" class="row g-2 align-items-end">
     <div class="col-auto"><label class="form-label">From Date</label>
       <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
@@ -88,7 +84,7 @@
 
 <div class="card"><div class="card-body p-2">
   <div class="cb-scroll">
-    <table class="table table-bordered table-hover cb-table mb-0">
+    <table class="table table-bordered table-hover cb-table mb-0 rpt-table">
       <thead>
         <tr>
           <th rowspan="2">Group</th>

@@ -2,12 +2,12 @@
 {% load static %}
 
 {% block title %}Chicks Placement Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{% block nav %}
-{% include 'main_top_navbar.html' with active_tab='broiler' %}
-{% endblock nav %}
+{% block nav %}{% endblock nav %}
 
 {% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='chicks_placement_report' %}
 
 <style>
   .cpr-breadcrumb { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
@@ -36,13 +36,10 @@
   }
 </style>
 
-<div class="cpr-breadcrumb no-print">
-  Reports <span class="mx-1">&rsaquo;</span> Chicks Placement Report
-</div>
+{% include '_report_letterhead.html' with title='Chicks Placement Report' %}
 
-<div class="cpr-header no-print">
+<div class="rpt-filter no-print">
   <div>
-    <h3>Chicks Placement Report</h3>
   </div>
   <div class="d-flex gap-2 align-items-center flex-wrap">
     <div id="header-export-slot"></div>
@@ -224,7 +221,7 @@
       </div>
     </div>
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0" id="placement-table" style="width:100%">
+      <table class="table table-hover table-bordered mb-0 rpt-table" id="placement-table" style="width:100%">
         <thead class="table-light">
           <tr>
             <th>Date</th><th>Transaction No.</th><th>Dc No.</th><th>Branch</th><th>Line</th><th>Supervisor</th>
@@ -299,7 +296,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <table class="table table-sm table-borderless mb-0" id="cprViewBody"></table>
+        <table class="table table-sm table-borderless mb-0 rpt-table" id="cprViewBody"></table>
       </div>
     </div>
   </div>

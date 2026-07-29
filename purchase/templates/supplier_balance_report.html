@@ -2,7 +2,8 @@
 {% load static %}
 {% load purchase_extras %}
 {% block title %}Supplier Balance Report — BIMS{% endblock %}
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='purchase' %}{% endblock nav %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_purchase_report_subnavbar.html' with active_tab='supplier_balance' %}
 
@@ -41,13 +42,9 @@
   .gap-hi { color:#c0392b; font-weight:700; }
 </style>
 
-<div class="sb-head">
-  <h4 style="font-weight:800;">{{ company.name|default:"Company" }}</h4>
-  <div class="sb-company">{{ company.address }}{% if company.gstin %} &middot; GSTIN: {{ company.gstin }}{% endif %}</div>
-  <h5 class="mt-2">Supplier Balance Report</h5>
-</div>
+{% include '_report_letterhead.html' with title='Supplier Balance Report' %}
 
-<div class="sb-filter no-print">
+<div class="rpt-filter no-print">
   <form method="get" class="row g-2 align-items-end">
     <div class="col-auto"><label class="form-label">From Date</label>
       <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
@@ -85,7 +82,7 @@
 
 <div class="card"><div class="card-body p-2">
   <div class="sb-scroll">
-    <table class="table table-bordered table-hover sb-table mb-0">
+    <table class="table table-bordered table-hover sb-table mb-0 rpt-table">
       <thead>
         <tr>
           <th rowspan="2">Name</th>

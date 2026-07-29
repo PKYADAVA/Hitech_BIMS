@@ -1,14 +1,14 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}SMS History - BIMS{% endblock %}
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='notifications' %}{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_subnav.html' with module='notification_report' active_tab='sms_history' %}
+{% include '_report_letterhead.html' with title='SMS History' %}
 <div class="page-header">
-    <div class="page-header-main">
-      <div class="page-header-title"><i class="fas fa-clock-rotate-left"></i> SMS History</div>
-      <div class="page-header-subtitle">Permanent log of every SMS attempt, with retry for failures</div>
-    </div>
+    
 </div>
 
 <!-- Today stats -->
@@ -22,7 +22,7 @@
 </div>
 
 <!-- Filters -->
-<div class="card mb-3">
+<div class="card mb-3 rpt-filter no-print">
   <div class="card-body">
     <div class="row g-3 align-items-end">
       <div class="col-md-2">
@@ -76,7 +76,7 @@
   <div class="card-header"><i class="fas fa-list"></i> SMS Log</div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0" id="sms-history-table">
+      <table class="table table-hover table-bordered mb-0 rpt-table" id="sms-history-table">
         <thead>
           <tr>
             <th>ID</th>
@@ -202,7 +202,7 @@ $(function () {
     if (!m) return;
     const gw = m.gateway_response ? JSON.stringify(m.gateway_response, null, 2) : "-";
     $("#view-sms-body").html(`
-      <table class="table table-bordered table-sm">
+      <table class="table table-bordered table-sm rpt-table">
         <tr><th style="width:30%">Transaction ID</th><td>${m.id}</td></tr>
         <tr><th>Date</th><td>${escapeHtml(m.created_at)}</td></tr>
         <tr><th>Party</th><td class="text-capitalize">${escapeHtml(m.party_name)} (${escapeHtml(m.party_type)})</td></tr>

@@ -1,0 +1,17 @@
+{% comment %}
+Shared report letterhead — company details + report title, in the standard ERP
+report style. Deliberately compact: the company line, the title and the applied
+filters take three tight lines so the data table gets the vertical space.
+Include with:
+  {% include '_report_letterhead.html' with title='Stock Report' criteria=criteria %}
+`criteria` is optional and renders the applied filters under the title.
+{% endcomment %}
+<div class="rpt-head">
+  <div>
+    <span class="co-name">{{ company.name }}</span>
+    {# address printed raw so HTML collapses its newlines into spaces #}
+    <span class="co-meta">&middot; {{ company.address }}{% if company.gstin %} &middot; GSTIN {{ company.gstin }}{% endif %}{% if company.mobile %} &middot; {{ company.mobile }}{% endif %}</span>
+  </div>
+  <div class="co-title">{{ title }}</div>
+  {% if criteria %}<div class="co-crit">{{ criteria }}</div>{% endif %}
+</div>

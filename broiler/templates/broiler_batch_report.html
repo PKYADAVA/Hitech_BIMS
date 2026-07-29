@@ -2,8 +2,12 @@
 {% load static %}
 
 {% block title %}Growing Charge Statement — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+
+{% block nav %}{% endblock nav %}
 
 {% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='broiler_batch_report' %}
 
 <style>
   body { background: #eef2f5; }
@@ -162,23 +166,10 @@
 </style>
 
 <div class="report-doc">
-  <div class="report-letterhead">
-    <div class="logo-box">
-      <img src="{% static 'images/logo.png' %}" alt="{{ company.name }}" onerror="this.style.display='none'">
-    </div>
-    <div class="company-block">
-      <div class="company-name">{{ company.name }}</div>
-      <div class="company-meta">
-        {{ company.address }}{% if company.state %}, {{ company.state }}{% endif %}<br>
-        {% if company.gstin %}GSTIN: {{ company.gstin }}<br>{% endif %}
-        {% if company.mobile %}Cont: {{ company.mobile }}{% endif %}
-      </div>
-    </div>
-    <div class="logo-box"></div>
-  </div>
+  {% include '_report_letterhead.html' with title='Growing Charge Statement' %}
   <div class="report-doc-title">Growing Charge Statement</div>
 
-  <div class="report-filter-bar no-print">
+  <div class="rpt-filter no-print">
     <form method="get" class="row g-2 align-items-end flex-nowrap">
       <div class="col-6 col-md-2">
         <label class="form-label">Farm</label>
@@ -276,7 +267,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#2a78d6;--ci-bg:#eaf2fc"><i class="fas fa-kiwi-bird"></i></span>Chick Placement</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -295,7 +286,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-cart-shopping"></i></span>Feed Purchase</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Warehouse</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -314,7 +305,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-truck-ramp-box"></i></span>Feed Transfer-In</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Cumulative</th></tr>
               </thead>
@@ -334,7 +325,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eda100;--ci-bg:#fdf1da"><i class="fas fa-rotate-left"></i></span>Feed Return</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -353,7 +344,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#4a3aa7;--ci-bg:#ece9f8"><i class="fas fa-right-left"></i></span>Feed Transfer to Other Farms</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Item</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -372,7 +363,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-boxes-stacked"></i></span>Feed Summary</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Feed Name</th><th>Purchase</th><th>Transfer In</th><th>Consumed</th><th>Return</th><th>Transfer to Other Farms</th><th>Balance</th></tr>
               </thead>
@@ -391,7 +382,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e87ba4;--ci-bg:#fceff4"><i class="fas fa-syringe"></i></span>Medicine and Vaccine Transfer In</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>From Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -410,7 +401,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eda100;--ci-bg:#fdf1da"><i class="fas fa-rotate-left"></i></span>Medicine and Vaccine Return</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Location</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -429,7 +420,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#4a3aa7;--ci-bg:#ece9f8"><i class="fas fa-right-left"></i></span>Medicine and Vaccine Transfer to Other Farms</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Transaction No.</th><th>DC No.</th><th>To Farm</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Rate</th><th>Amount</th></tr>
               </thead>
@@ -448,7 +439,7 @@
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e87ba4;--ci-bg:#fceff4"><i class="fas fa-pills"></i></span>Medicine and Vaccine Consumption</div>
           <div class="table-responsive">
-            <table class="table table-bordered mb-0 report-table">
+            <table class="table table-bordered mb-0 report-table rpt-table">
               <thead>
                 <tr><th>Date</th><th>Age</th><th>Medicine/Vaccine</th><th>Quantity</th><th>Stock</th><th>Remarks</th></tr>
               </thead>
@@ -490,7 +481,7 @@
 
         <div class="gc-card">
           <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#2a78d6;--ci-bg:#eaf2fc"><i class="fas fa-gauge-high"></i></span>Performance Overview</div>
-          <table class="table table-bordered mb-0 report-table gc-perf-table">
+          <table class="table table-bordered mb-0 report-table gc-perf-table rpt-table">
             <thead><tr><th>KPI</th><th>Actual</th><th>Target</th><th>Status</th></tr></thead>
             <tbody>
               {% for p in c.performance_overview %}
@@ -556,7 +547,7 @@
     <div class="gc-card gc-full">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#e34948;--ci-bg:#fbe9e9"><i class="fas fa-table-list"></i></span>Mortality And Feed Consumption Details</div>
       <div class="report-scroll">
-        <table class="table table-bordered mb-0 report-table report-dense">
+        <table class="table table-bordered mb-0 report-table report-dense rpt-table">
           <thead>
             <tr>
               <th colspan="2"></th><th>Opening</th><th colspan="2">Mortality</th><th></th><th colspan="2"></th>
@@ -609,7 +600,7 @@
     <div class="gc-card gc-full">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-hand-holding-dollar"></i></span>Bird Sales</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-table">
+        <table class="table table-bordered mb-0 report-table rpt-table">
           <thead>
             <tr>
               <th>Date</th><th>Sale No.</th><th>Doc No.</th><th>Customer/Farmer</th><th>Birds</th>
@@ -647,7 +638,7 @@
     <div class="gc-card gc-full">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#0d5f8a;--ci-bg:#eaf3f8"><i class="fas fa-file-invoice-dollar"></i></span>Batch Costing Information and Summary</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-costing">
+        <table class="table table-bordered mb-0 report-costing rpt-table">
           <tbody>
             <tr>
               <td class="lbl">Placement Date</td><td class="val">{{ c.placement_date|date:"d.m.Y" }}</td>
@@ -707,7 +698,7 @@
     <div class="gc-card gc-full" data-role="management">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#0d5f8a;--ci-bg:#eaf3f8"><i class="fas fa-briefcase"></i></span>Management KPI</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-costing">
+        <table class="table table-bordered mb-0 report-costing rpt-table">
           <tbody>
             <tr>
               <td class="lbl">Total Birds Placed</td><td class="val">{{ c.chicks_placed }}</td>
@@ -741,7 +732,7 @@
     <div class="gc-card gc-full" data-role="management">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-receipt"></i></span>Actual Cost Analysis</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-table">
+        <table class="table table-bordered mb-0 report-table rpt-table">
           <thead><tr><th>Cost Head</th><th class="text-end">Amount</th><th>Source</th></tr></thead>
           <tbody>
             <tr><td>Actual Chick Cost</td><td class="text-end">{{ c.chick_cost }}</td><td class="text-muted">Chick placement</td></tr>
@@ -765,7 +756,7 @@
     <div class="gc-card gc-full" data-role="management">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#4a3aa7;--ci-bg:#ece9f8"><i class="fas fa-scale-balanced"></i></span>Variance Analysis</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-table">
+        <table class="table table-bordered mb-0 report-table rpt-table">
           <thead><tr><th>Metric</th><th class="text-end">Standard</th><th class="text-end">Actual</th><th class="text-end">Variance</th></tr></thead>
           <tbody>
             <tr>
@@ -788,7 +779,7 @@
     <div class="gc-card gc-full" data-role="management">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#008300;--ci-bg:#e0f0e0"><i class="fas fa-dollar-sign"></i></span>Financial Summary</div>
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 report-costing">
+        <table class="table table-bordered mb-0 report-costing rpt-table">
           <tbody>
             <tr>
               <td class="lbl">Revenue</td><td class="val">{{ c.revenue }}</td>

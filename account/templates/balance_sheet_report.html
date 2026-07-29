@@ -1,23 +1,23 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Balance Sheet{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
-{% block nav %}
- {% include 'main_top_navbar.html' with active_tab='account' %}
-{% endblock %}
+{% block nav %}{% endblock nav %}
 
 {% block content %}
  {% include '_account_report_subnavbar.html' with active_tab='balance_sheet_report' %}
 
+{% include '_report_letterhead.html' with title='Balance Sheet' %}
 <div class="page-header">
-    <div class="page-header-title"><i class="fas fa-scale-balanced"></i>Balance Sheet</div>
     <div class="page-header-right">
       <div class="page-header-subtitle">Assets, liabilities and equity as of a date, from posted vouchers</div>
       <button class="btn btn-outline-secondary" id="bs-print" disabled><i class="fas fa-print"></i> Print</button>
     </div>
 </div>
 
-<div class="card mb-3">
+<div class="card mb-3 rpt-filter no-print">
   <div class="card-body">
     <div class="row g-3 align-items-end">
       <div class="col-md-3">
@@ -37,9 +37,11 @@
     <div class="card h-100">
       <div class="card-header"><i class="fas fa-table"></i> Assets</div>
       <div class="card-body p-0">
-        <table class="table table-bordered mb-0">
+        <div class="table-responsive">
+        <table class="table table-bordered mb-0 rpt-table">
           <tbody id="bs-assets-body"></tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>
@@ -47,9 +49,11 @@
     <div class="card h-100">
       <div class="card-header"><i class="fas fa-table"></i> Liabilities &amp; Equity</div>
       <div class="card-body p-0">
-        <table class="table table-bordered mb-0">
+        <div class="table-responsive">
+        <table class="table table-bordered mb-0 rpt-table">
           <tbody id="bs-liab-body"></tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>

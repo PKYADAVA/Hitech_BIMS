@@ -33,6 +33,7 @@ urlpatterns = [
     path('tax_master/create/', views.TaxMasterAPI.as_view(), name='tax_master_create'),
     path('tax_master/<int:id>/', views.TaxMasterAPI.as_view(), name='tax_master_update'),
     path('tax_master/delete/<int:id>/delete/', views.TaxMasterAPI.as_view(), name='tax_master_delete'),
+    path("purchase-report/", views.purchase_report, name="purchase_report"),
     path("supplier-ledger/", views.supplier_ledger_report, name="supplier_ledger"),
     path("supplier-balance/", views.supplier_balance_report, name="supplier_balance"),
 

@@ -2,7 +2,8 @@
 {% load static %}
 {% load purchase_extras %}
 {% block title %}Lifting Report — BIMS{% endblock %}
-{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock nav %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
 {% block content %}
 {% include '_broiler_report_subnavbar.html' with active_tab='lifting_report' %}
 
@@ -25,14 +26,9 @@
   .cr { color:#0e8698; font-weight:600; } .dr { color:#c0392b; font-weight:600; }
 </style>
 
-<div class="lr-head">
-  <div class="co-name">{{ company.name }}</div>
-  <div class="co-meta">{{ company.address }}
-    {% if company.gstin %}<br>GSTIN : {{ company.gstin }}{% endif %}{% if company.mobile %} &nbsp; Cont : {{ company.mobile }}{% endif %}</div>
-  <div class="co-title">Lifting Report</div>
-</div>
+{% include '_report_letterhead.html' with title='Lifting Report' %}
 
-<div class="lr-filter no-print">
+<div class="rpt-filter no-print">
   <form method="get" class="row g-2 align-items-end">
     <div class="col-md-2 col-6"><label class="form-label">From Date</label>
       <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
@@ -87,7 +83,7 @@
     <div class="small text-muted"><i class="fas fa-truck-loading me-1"></i>{{ rows|length }} lifting(s)</div>
   </div>
   <div class="lr-scroll">
-    <table class="table table-bordered table-hover lr-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
+    <table class="table table-bordered table-hover lr-table mb-0 rpt-table" style="width:auto; min-width:100%; table-layout:auto;">
       <thead><tr>
         <th>Date</th><th>Branch</th><th>Line</th>
         <th>Farm</th><th>Batch</th><th>Cust Code</th>

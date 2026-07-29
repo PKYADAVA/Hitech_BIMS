@@ -435,7 +435,8 @@ def _apply_posted_general_purchase_fields(instance, request):
     instance.date = request.POST.get("date") or timezone.localdate()
     instance.supplier_id = request.POST.get("supplier") or None
     instance.bill_no = request.POST.get("bill_no", "").strip()
-    instance.dc_no = request.POST.get("dc_no", "").strip()
+    # DC No. was dropped from the form (it duplicated Bill No.); it is left
+    # untouched here so historic values survive an edit.
     instance.vehicle_no = request.POST.get("vehicle_no", "").strip()
     instance.driver_name = request.POST.get("driver_name", "").strip()
     instance.driver_mobile = request.POST.get("driver_mobile", "").strip()
@@ -630,7 +631,8 @@ def _apply_posted_chicks_purchase_fields(instance, request):
     instance.hatchery_id = request.POST.get("hatchery") or None
     instance.item_id = request.POST.get("item") or None
     instance.bill_no = request.POST.get("bill_no", "").strip()
-    instance.dc_no = request.POST.get("dc_no", "").strip()
+    # DC No. was dropped from the form (it duplicated Bill No.); it is left
+    # untouched here so historic values survive an edit.
     instance.vehicle_no = request.POST.get("vehicle_no", "").strip()
     instance.driver_name = request.POST.get("driver_name", "").strip()
     instance.freight_type = request.POST.get("freight_type") or "Extra"
@@ -1477,3 +1479,338 @@ def supplier_balance_report(request):
         "from_date": from_date, "to_date": to_date,
         "company": CompanyProfile.get_solo(),
     })
+
+
+# --------------------------------------------------------------------------
+# Purchase > Reports > Purchase Report
+# --------------------------------------------------------------------------
+
+# Columns rendered by the report, in order. Kept here so the page, the Excel
+# export and the totals row can never drift apart.
+PURCHASE_REPORT_COLUMNS = [
+    ("date", "Date"), ("invoice", "Transaction No."),
+    ("txn_type", "Transaction Type"), ("dc_no", "DC No."),
+    ("supplier", "Supplier"), ("hsn", "HSN Code"), ("item_code", "Item Code"),
+    ("item", "Item"), ("sent_qty", "Sent Qty (Bags/Kg)"),
+    ("rcv_qty", "Received Qty (Bags/Qty)"), ("free_qty", "Free Qty"),
+    ("rate", "Rate"), ("disc_percent", "Disc%"), ("disc_amount", "Disc Amount"),
+    ("amount", "Amount"), ("gst_percent", "Gst%"), ("total_amount", "Total Amount"),
+    ("warehouse", "Farm/Warehouse"), ("warehouse_code", "Farm/Warehouse Code"),
+    ("farm_batch", "Farm Batch"), ("vehicle", "Vehicle No."),
+    ("driver", "Driver Name"), ("remarks", "Remarks"),
+    ("upload_status", "Upload Status"), ("added_by", "Added By"),
+    ("added_time", "Added Time"),
+]
+
+
+def _pr_bags(item, qty):
+    """Bag equivalent of a quantity for items that define a kg-per-bag."""
+    kpb = getattr(item, "kg_per_bag", None) if item else None
+    if kpb and Decimal(str(kpb)) > 0:
+        return Decimal(str(qty or 0)) / Decimal(str(kpb))
+    return Decimal("0")
+
+
+def _pr_branch_by_sector():
+    """{sector_id: branch_name} from the Sector -> Branch mapping, so a
+    purchase's warehouse can be resolved to a branch."""
+    from inventory.models import Mapping
+    from broiler.models import Branch
+    pairs = dict(Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH)
+                 .values_list("from_id", "to_id"))
+    branches = {b.id: b.branch_name for b in Branch.objects.all()}
+    return {sector_id: branches.get(branch_id, "")
+            for sector_id, branch_id in pairs.items() if branch_id}
+
+
+def _pr_upload_status(purchase):
+    """Purchases carry up to three optional reference documents; the report
+    reports whether any of them was actually attached."""
+    for field in ("reference_document_1", "reference_document_2", "reference_document_3"):
+        if getattr(purchase, field, None):
+            return "Uploaded"
+    return "Not Uploaded"
+
+
+def _pr_added_by(model_names, object_ids):
+    """{(model_name, object_id): actor} for the *create* audit entries of the
+    given purchases — the purchase models carry no created_by of their own, so
+    the audit trail is the record of who entered them."""
+    from alerts.models import AuditLog
+    rows = (AuditLog.objects
+            .filter(model_name__in=model_names, action="create",
+                    object_id__in=[str(i) for i in object_ids])
+            .values_list("model_name", "object_id", "actor_label"))
+    return {(m, str(o)): (a or "") for m, o, a in rows}
+
+
+@login_required
+def purchase_report(request):
+    """Purchase > Reports > Purchase Report — one row per purchased item line
+    across General and Chicks purchases, with supplier, document references,
+    quantities, rate/value, the receiving farm/warehouse and who entered it."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from broiler.models import Branch
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    supplier_id, category, item_id = g("supplier"), g("category"), g("item")
+    branch_id, warehouse_id = g("branch"), g("warehouse")
+    upload_status, export = g("upload_status"), g("export").lower()
+    purchase_type = g("purchase_type")
+
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    branch_of_sector = _pr_branch_by_sector()
+    branch_name_wanted = ""
+    if branch_id:
+        b = Branch.objects.filter(id=branch_id).first()
+        branch_name_wanted = b.branch_name if b else ""
+
+    def window(qs, field):
+        if fd:
+            qs = qs.filter(**{f"{field}__gte": fd})
+        if td:
+            qs = qs.filter(**{f"{field}__lte": td})
+        return qs
+
+    # ---- General purchases (feed, medicine, consumables) ----
+    gp = window(GeneralPurchaseItem.objects.select_related(
+        "purchase", "purchase__supplier", "item", "item__category",
+        "farm_warehouse", "farm_warehouse__sector"), "purchase__date")
+    if supplier_id:
+        gp = gp.filter(purchase__supplier_id=supplier_id)
+    if category:
+        gp = gp.filter(item__category_id=category)
+    if item_id:
+        gp = gp.filter(item_id=item_id)
+    if warehouse_id:
+        gp = gp.filter(farm_warehouse_id=warehouse_id)
+    gp = list(gp)
+
+    # ---- Chicks purchases (the item lives on the header) ----
+    cp = window(ChicksPurchaseItem.objects.select_related(
+        "purchase", "purchase__supplier", "purchase__item",
+        "purchase__item__category", "purchase__hatchery",
+        "farm_warehouse", "farm_warehouse__sector"), "purchase__date")
+    if supplier_id:
+        cp = cp.filter(purchase__supplier_id=supplier_id)
+    if category:
+        cp = cp.filter(purchase__item__category_id=category)
+    if item_id:
+        cp = cp.filter(purchase__item_id=item_id)
+    if warehouse_id:
+        cp = cp.filter(farm_warehouse_id=warehouse_id)
+    cp = list(cp)
+
+    # ---- Egg purchases (hatchery module, same supplier ledger) ----
+    from hatchery.models import EggPurchaseItem
+    ep = window(EggPurchaseItem.objects.select_related(
+        "egg_purchase", "egg_purchase__supplier", "egg_purchase__warehouse",
+        "egg_purchase__warehouse__sector", "item", "item__category"),
+        "egg_purchase__date")
+    if supplier_id:
+        ep = ep.filter(egg_purchase__supplier_id=supplier_id)
+    if category:
+        ep = ep.filter(item__category_id=category)
+    if item_id:
+        ep = ep.filter(item_id=item_id)
+    if warehouse_id:
+        ep = ep.filter(egg_purchase__warehouse_id=warehouse_id)
+    ep = list(ep)
+
+    # A purchase type filter short-circuits the sources it excludes.
+    if purchase_type == "General Purchase":
+        cp, ep = [], []
+    elif purchase_type == "Chicks Purchase":
+        gp, ep = [], []
+    elif purchase_type == "Egg Purchase":
+        gp, cp = [], []
+
+    added_by = _pr_added_by(
+        ["purchase.GeneralPurchase", "purchase.ChicksPurchase", "hatchery.EggPurchase"],
+        [r.purchase_id for r in gp] + [r.purchase_id for r in cp]
+        + [r.egg_purchase_id for r in ep])
+
+    rows = []
+
+    def build(line, purchase, item, model_name, txn_type, wh, amount, total_amount):
+        """One report row. The three purchase models name their fields
+        differently and value their lines differently, so the caller passes in
+        the resolved warehouse and the pre-GST / final amounts."""
+        sent = Decimal(str(line.sent_qty or 0))
+        rcv = Decimal(str(line.rcv_qty or 0))
+        return {
+            "date": purchase.date,
+            "invoice": (getattr(purchase, "purchase_no", None)
+                        or getattr(purchase, "transaction_no", "")),
+            "txn_type": txn_type,
+            "dc_no": purchase.dc_no or getattr(purchase, "bill_no", "") or "",
+            "supplier": purchase.supplier.name if purchase.supplier_id else "",
+            "hsn": (item.hsn_code or "") if item else "",
+            "item_code": item.item_code if item else "",
+            "item": item.description if item else "",
+            "sent_qty": sent, "sent_bags": _pr_bags(item, sent),
+            "rcv_qty": rcv, "rcv_bags": _pr_bags(item, rcv),
+            "free_qty": line.free_qty,
+            "rate": Decimal(str(line.rate or 0)),
+            "disc_percent": Decimal(str(getattr(line, "discount_percent", 0) or 0)),
+            "disc_amount": Decimal(str(getattr(line, "discount_amount", 0) or 0)),
+            "amount": amount,
+            "gst_percent": Decimal(str(getattr(line, "gst_percent", 0) or 0)),
+            "total_amount": total_amount,
+            "warehouse": wh.name if wh else "",
+            "warehouse_code": wh.code if wh else "",
+            "farm_batch": getattr(line, "batch", "") or getattr(purchase, "batch_no", "") or "",
+            "vehicle": (getattr(purchase, "vehicle_no", None)
+                        or getattr(purchase, "vehicle", "") or ""),
+            "driver": (getattr(purchase, "driver_name", None)
+                       or getattr(purchase, "driver", "") or ""),
+            "remarks": purchase.remarks,
+            "upload_status": _pr_upload_status(purchase),
+            "added_by": added_by.get((model_name, str(purchase.id)), ""),
+            "added_time": purchase.created_at,
+            "branch": branch_of_sector.get(wh.sector_id, "") if wh else "",
+        }
+
+    for r in gp:
+        p = r.purchase
+        # The stored amount already includes GST, so the pre-GST subtotal is
+        # rebuilt exactly the way GeneralPurchaseItem.save() computes it.
+        basis = getattr(p, "calculation_based_on", "Sent Quantity")
+        qty = Decimal(str((r.rcv_qty if basis == "Received Quantity" else r.sent_qty) or 0))
+        subtotal = ((qty * Decimal(str(r.rate or 0)))
+                    * (1 - Decimal(str(r.discount_percent or 0)) / 100)
+                    - Decimal(str(r.discount_amount or 0)))
+        rows.append(build(r, p, r.item, "purchase.GeneralPurchase",
+                          "General Purchase", r.farm_warehouse, subtotal, r.amount))
+
+    for r in cp:
+        # Chicks lines carry no discount or GST of their own.
+        rows.append(build(r, r.purchase, r.purchase.item, "purchase.ChicksPurchase",
+                          "Chicks Purchase", r.farm_warehouse, r.amount, r.amount))
+
+    for r in ep:
+        # Egg lines: `amount` is gross, `total_amount` is net of discount and
+        # there is no GST, so both money columns show the net figure.
+        rows.append(build(r, r.egg_purchase, r.item, "hatchery.EggPurchase",
+                          "Egg Purchase", r.egg_purchase.warehouse,
+                          r.total_amount, r.total_amount))
+
+    if branch_name_wanted:
+        rows = [r for r in rows if r["branch"] == branch_name_wanted]
+    if upload_status:
+        rows = [r for r in rows if r["upload_status"] == upload_status]
+
+    rows.sort(key=lambda r: (r["date"] or parse_date("1900-01-01"), r["invoice"]))
+
+    totals = {k: sum((Decimal(str(r[k] or 0)) for r in rows), Decimal("0"))
+              for k in ("sent_qty", "sent_bags", "rcv_qty", "rcv_bags", "free_qty",
+                        "disc_amount", "amount", "total_amount")}
+    totals["rate"] = (totals["total_amount"] / totals["rcv_qty"]) if totals["rcv_qty"] else Decimal("0")
+
+    # Headline figures for the KPI strip. Bills are counted per invoice, not
+    # per line, so a multi-item bill counts once.
+    bills = {r["invoice"] for r in rows if r["invoice"]}
+    pending_bills = {r["invoice"] for r in rows if r["upload_status"] != "Uploaded"}
+    kpi = {
+        "bills": len(bills),
+        "quantity": totals["rcv_qty"],
+        "value": totals["total_amount"],
+        "avg_rate": totals["rate"],
+        "pending_upload": len(pending_bills),
+        "suppliers": len({r["supplier"] for r in rows if r["supplier"]}),
+    }
+
+    criteria = "From: %s   To: %s   %d line(s)" % (
+        from_date or "Beginning", to_date or "Date", len(rows))
+
+    context = {
+        "rows": rows, "totals": totals, "criteria": criteria, "kpi": kpi,
+        "from_date": from_date, "to_date": to_date,
+        "supplier_id": supplier_id, "category": category, "item_id": item_id,
+        "branch_id": branch_id, "warehouse_id": warehouse_id,
+        "upload_status": upload_status, "purchase_type": purchase_type,
+        "suppliers": Supplier.objects.order_by("name"),
+        "categories": ItemCategory.objects.order_by("name"),
+        "items": Item.objects.order_by("description"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "warehouses": Warehouse.objects.order_by("name"),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel":
+        return _purchase_report_excel(context)
+    return render(request, "purchase_report.html", context)
+
+
+def _purchase_report_excel(ctx):
+    """Stream the Purchase Report as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Purchase Report"
+    bold = Font(bold=True)
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Purchase Report"])
+    ws["A2"].font = bold
+    ws.append([ctx["criteria"]])
+    ws.append([])
+
+    ws.append([label for _key, label in PURCHASE_REPORT_COLUMNS])
+    for col in range(1, len(PURCHASE_REPORT_COLUMNS) + 1):
+        cell = ws.cell(row=ws.max_row, column=col)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1B3A6B")
+        cell.alignment = Alignment(horizontal="center")
+
+    numeric = {"sent_qty", "rcv_qty", "free_qty", "rate", "disc_percent",
+               "disc_amount", "amount", "gst_percent", "total_amount"}
+
+    for r in ctx["rows"]:
+        line = []
+        for key, _label in PURCHASE_REPORT_COLUMNS:
+            value = r.get(key)
+            if key in numeric:
+                line.append(float(value or 0))
+            elif key == "date":
+                line.append(value.strftime("%d.%m.%Y") if value else "")
+            elif key == "added_time":
+                line.append(value.strftime("%d.%m.%Y %I:%M %p") if value else "")
+            elif key == "received_date":
+                line.append(value.strftime("%d.%m.%Y") if value else "")
+            else:
+                line.append(value or "")
+        ws.append(line)
+
+    t = ctx["totals"]
+    total_row = []
+    for key, _label in PURCHASE_REPORT_COLUMNS:
+        if key in t and key not in ("rate",):
+            total_row.append(float(t[key]))
+        elif key == "item":
+            total_row.append("Total")
+        else:
+            total_row.append("")
+    ws.append(total_row)
+    for cell in ws[ws.max_row]:
+        cell.font = bold
+
+    widths = [11, 16, 14, 26, 11, 12, 22, 17, 19, 10, 10, 8, 12, 13, 8,
+              14, 22, 18, 14, 14, 14, 24, 14, 12, 20]
+    for col, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="purchase_report.xlsx"'
+    wb.save(response)
+    return response

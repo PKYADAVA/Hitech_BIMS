@@ -1,0 +1,112 @@
+/* Shared styling for ERP report pages (letterhead, filter bar, data table).
+   Palette matches the Web-Access screens: --wa-purple #6f42c1 on #f4eefc.
+   Matches the established look of the Broiler / Purchase / Sales reports so
+   every module's reports render identically. Include with:
+     {% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+*/
+
+/* ---- letterhead ---- */
+/* Background takes the Web-Access purple tint; the text keeps its original
+   colours (red company name, dark meta, navy title), which stay legible on it. */
+.rpt-head { background:#f4eefc; border:1px solid #e7e0f3; border-radius:.45rem;
+            padding:.3rem .8rem; margin-bottom:.4rem; text-align:center; line-height:1.25; }
+.rpt-head .co-name { font-weight:800; color:#c0392b; font-size:.8rem; display:inline; }
+.rpt-head .co-meta { font-size:.63rem; color:#333; display:inline; }
+.rpt-head .co-title { font-size:.98rem; font-weight:700; color:#1b3a6b; margin-top:0; }
+.rpt-head .co-crit { font-size:.64rem; font-weight:600; color:#1b3a6b; margin-top:0; }
+
+/* ---- filter bar ---- */
+.rpt-filter { background:#f4eefc; border:1px solid #e7e0f3; border-radius:.45rem;
+              padding:.35rem .6rem; margin-bottom:.4rem; }
+.rpt-filter .form-label { font-size:.62rem; font-weight:600; margin-bottom:.05rem; line-height:1.1; }
+.rpt-filter .form-control-sm, .rpt-filter .form-select-sm {
+  font-size:.74rem; padding:.15rem .4rem; height:auto; min-height:0; line-height:1.35; }
+.rpt-filter .btn-sm { font-size:.72rem; padding:.2rem .5rem; }
+.rpt-filter .row { --bs-gutter-y:.3rem; }
+/* Some reports wrap their filters in a Bootstrap card; drop the card chrome so
+   the bar looks the same as a plain .rpt-filter. */
+.rpt-filter.card { box-shadow:none; border-color:#e7e0f3; }
+.rpt-filter > .card-body { padding:.15rem .2rem; background:transparent; }
+.rpt-filter > .card-header { background:transparent; border:0; padding:.1rem .2rem;
+                             font-size:.68rem; font-weight:700; color:#1b3a6b; }
+
+/* Fixed-column filter grid, for reports with enough filters that Bootstrap's
+   row/col wrapping would spill onto a third line. 7 slots per row: the action
+   buttons take the last two, so the fields land in exactly two rows. */
+.rpt-filter .rpt-grid { display:grid; grid-template-columns:repeat(7, minmax(0,1fr));
+                        gap:.3rem .5rem; align-items:end; }
+.rpt-filter .rpt-grid .rpt-actions { grid-column:span 2; display:flex; gap:.35rem; flex-wrap:wrap; }
+@media (max-width:1500px) { .rpt-filter .rpt-grid { grid-template-columns:repeat(5, minmax(0,1fr)); } }
+@media (max-width:1100px) { .rpt-filter .rpt-grid { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+@media (max-width:700px)  { .rpt-filter .rpt-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+
+/* ---- data table ---- */
+.rpt-table { font-size:.72rem; }
+.rpt-table th, .rpt-table td { vertical-align:middle; padding:.34rem .5rem; }
+.rpt-scroll .rpt-table th, .rpt-scroll .rpt-table td { white-space:nowrap; }
+
+/* Wide single-header-row tables: let the heading text wrap onto two lines so a
+   long label stops dictating the column width. Data cells stay on one line.
+   Not applied to the grouped (two-row) headers, whose second row sticks at a
+   fixed offset that assumes a single-line first row. */
+.rpt-table.rpt-wrap-head thead th {
+  white-space:normal; word-break:normal; overflow-wrap:normal;
+  line-height:1.15; max-width:6.5rem; }
+.rpt-table thead th { background-color:#1b3a6b !important; color:#fff !important;
+                      text-align:center; font-weight:600; border-color:#274d84; }
+/* Sticky head/foot only inside a scroll box — a report table rendered straight
+   on the page would otherwise pin its header/totals against the viewport. */
+.rpt-scroll .rpt-table thead th { position:sticky; top:0; z-index:3; }
+.rpt-scroll .rpt-table thead tr:nth-child(2) th { top:30px; }
+.rpt-table td.num { text-align:right; }
+/* every heading is centred, including numeric columns */
+.rpt-table thead th, .rpt-table thead th.num { text-align:center; }
+.rpt-table tbody tr:hover td { background:#f4f8fc; }
+.rpt-table tfoot td { background:#eaf0f8; font-weight:800; border-top:2px solid #1b3a6b; }
+.rpt-scroll .rpt-table tfoot td { position:sticky; bottom:0; }
+.rpt-scroll { max-height:74vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+.rpt-empty { padding:2.2rem; text-align:center; color:#6c757d; }
+.rpt-neg { color:#c0392b; font-weight:700; }
+.rpt-open td { background:#fbfbe6; font-weight:700; }
+.rpt-loc { color:#1b3a6b; font-weight:600; }
+.rpt-type { color:#2b62c9; font-weight:600; }
+
+/* ---- toolbar (Print / Excel / PDF / Refresh) ---- */
+.rpt-toolbar { display:flex; justify-content:flex-end; gap:.3rem; flex-wrap:wrap; margin-bottom:.4rem; }
+.rpt-toolbar .btn-sm { font-size:.72rem; padding:.2rem .55rem; }
+
+/* ---- KPI strip ---- */
+.rpt-kpis { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:.4rem; margin-bottom:.45rem; }
+@media (max-width:1400px) { .rpt-kpis { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+@media (max-width:760px)  { .rpt-kpis { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+.rpt-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.5rem; padding:.35rem .5rem;
+           display:flex; align-items:center; gap:.45rem; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+.rpt-kpi .k-ico { flex:0 0 auto; width:1.9rem; height:1.9rem; border-radius:.45rem;
+                  display:flex; align-items:center; justify-content:center; font-size:.85rem; }
+.rpt-kpi .k-label { font-size:.58rem; color:#6c757d; font-weight:600; white-space:nowrap; line-height:1.1; }
+.rpt-kpi .k-num { font-size:.88rem; font-weight:800; line-height:1.1; white-space:nowrap; color:#1b3a6b; }
+.rpt-kpi .k-sub { font-size:.54rem; color:#adb5bd; line-height:1.1; }
+.k-1 .k-ico { background:#e6f7ea; color:#1a9d5c; }
+.k-2 .k-ico { background:#e7f0ff; color:#2b62c9; }
+.k-3 .k-ico { background:#f0e7ff; color:#7d3ec9; }
+.k-4 .k-ico { background:#fff1e0; color:#d9822b; }
+.k-5 .k-ico { background:#ffe9ef; color:#d63a63; }
+.k-6 .k-ico { background:#e5f6fb; color:#0d8fb0; }
+
+/* ---- status pills & emphasis ---- */
+.rpt-pill { display:inline-block; font-size:.66rem; font-weight:700; border-radius:1rem;
+            padding:.1rem .55rem; white-space:nowrap; }
+.rpt-pill-ok { background:#e6f7ea; color:#1a7f4b; }
+.rpt-pill-wait { background:#fff4e0; color:#b5761e; }
+.rpt-amount { color:#1a7f4b; font-weight:700; }
+.rpt-link { color:#2b62c9; font-weight:600; }
+
+/* DataTables controls sit above/below the table; keep them compact. */
+.rpt-dt-wrap .dataTables_filter input, .rpt-dt-wrap .dataTables_length select { font-size:.78rem; }
+.rpt-dt-wrap .dataTables_wrapper { font-size:.78rem; }
+
+@media print {
+  .no-print { display:none !important; }
+  .rpt-scroll { max-height:none; overflow:visible; }
+  .rpt-toolbar, .dataTables_filter, .dataTables_length, .dataTables_paginate { display:none !important; }
+}

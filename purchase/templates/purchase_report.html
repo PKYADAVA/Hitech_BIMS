@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Purchase Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_purchase_report_subnavbar.html' with active_tab='purchase_report' %}
+
+{% include '_report_letterhead.html' with title='Purchase Report' criteria=criteria %}
+
+<div class="rpt-toolbar no-print">
+  <button class="btn btn-success btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+  <a class="btn btn-success btn-sm" id="pr-excel" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
+  <button class="btn btn-danger btn-sm" type="button" onclick="window.print()"><i class="fas fa-file-pdf me-1"></i>PDF</button>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ request.get_full_path }}"><i class="fas fa-rotate me-1"></i>Refresh</a>
+</div>
+
+{% if rows %}
+<div class="rpt-kpis">
+  <div class="rpt-kpi k-1"><div class="k-ico"><i class="fas fa-file-invoice"></i></div>
+    <div><div class="k-label">Total Bills</div><div class="k-num">{{ kpi.bills }}</div><div class="k-sub">This Period</div></div></div>
+  <div class="rpt-kpi k-2"><div class="k-ico"><i class="fas fa-cart-shopping"></i></div>
+    <div><div class="k-label">Total Quantity</div><div class="k-num">{{ kpi.quantity|indian_currency }}</div><div class="k-sub">Received</div></div></div>
+  <div class="rpt-kpi k-3"><div class="k-ico"><i class="fas fa-indian-rupee-sign"></i></div>
+    <div><div class="k-label">Total Purchase Value</div><div class="k-num">&#8377; {{ kpi.value|indian_currency }}</div><div class="k-sub">This Period</div></div></div>
+  <div class="rpt-kpi k-4"><div class="k-ico"><i class="fas fa-chart-simple"></i></div>
+    <div><div class="k-label">Average Rate</div><div class="k-num">&#8377; {{ kpi.avg_rate|indian_currency }}</div><div class="k-sub">Per Unit (Avg.)</div></div></div>
+  <div class="rpt-kpi k-5"><div class="k-ico"><i class="fas fa-cloud-arrow-up"></i></div>
+    <div><div class="k-label">Pending Upload</div><div class="k-num">{{ kpi.pending_upload }}</div><div class="k-sub">Bills Pending</div></div></div>
+  <div class="rpt-kpi k-6"><div class="k-ico"><i class="fas fa-users"></i></div>
+    <div><div class="k-label">No. of Suppliers</div><div class="k-num">{{ kpi.suppliers }}</div><div class="k-sub">This Period</div></div></div>
+</div>
+{% endif %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">Supplier</label>
+      <select name="supplier" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for s in suppliers %}<option value="{{ s.id }}" {% if supplier_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Category</label>
+      <select name="category" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Items</label>
+      <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Farm/Warehouse</label>
+      <select name="warehouse" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Purchase Type</label>
+      <select name="purchase_type" class="form-select form-select-sm"><option value="">-All-</option>
+        <option value="General Purchase" {% if purchase_type == 'General Purchase' %}selected{% endif %}>General Purchase</option>
+        <option value="Chicks Purchase" {% if purchase_type == 'Chicks Purchase' %}selected{% endif %}>Chicks Purchase</option>
+        <option value="Egg Purchase" {% if purchase_type == 'Egg Purchase' %}selected{% endif %}>Egg Purchase</option>
+      </select></div>
+    <div><label class="form-label">Upload Status</label>
+      <select name="upload_status" class="form-select form-select-sm"><option value="">-All-</option>
+        <option value="Uploaded" {% if upload_status == 'Uploaded' %}selected{% endif %}>Uploaded</option>
+        <option value="Not Uploaded" {% if upload_status == 'Not Uploaded' %}selected{% endif %}>Not Uploaded</option>
+      </select></div>
+    <div class="rpt-actions">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-filter me-1"></i>Filter</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'purchase_report' %}"><i class="fas fa-xmark me-1"></i>Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if rows %}
+  <div class="rpt-dt-wrap">
+    <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0" id="pr-table" style="width:auto; min-width:100%; table-layout:auto;">
+      <thead><tr>
+        <th>Date</th><th>Transaction No.</th><th>Transaction Type</th><th>DC No.</th><th>Supplier</th>
+        <th>HSN Code</th><th>Item Code</th><th>Item</th>
+        <th class="num">Sent Qty (Bags/Kg)</th><th class="num">Received Qty (Bags/Qty)</th>
+        <th class="num">Free Qty</th><th class="num">Rate</th>
+        <th class="num">Disc%</th><th class="num">Disc Amount</th><th class="num">Amount</th>
+        <th class="num">Gst%</th><th class="num">Total Amount</th>
+        <th>Farm/Warehouse</th><th>Farm/Warehouse Code</th><th>Farm Batch</th>
+        <th>Vehicle No.</th><th>Driver Name</th><th>Remarks</th>
+        <th>Upload Status</th><th>Added By</th><th>Added Time</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td class="rpt-link">{{ r.invoice }}</td>
+          <td class="rpt-type">{{ r.txn_type }}</td>
+          <td>{{ r.dc_no }}</td>
+          <td class="rpt-loc">{{ r.supplier }}</td>
+          <td>{{ r.hsn }}</td>
+          <td>{{ r.item_code }}</td>
+          <td>{{ r.item }}</td>
+          <td class="num">{{ r.sent_qty|indian_currency }}</td>
+          <td class="num">{{ r.rcv_qty|indian_currency }}</td>
+          <td class="num">{{ r.free_qty|indian_currency }}</td>
+          <td class="num">{{ r.rate|indian_currency }}</td>
+          <td class="num">{{ r.disc_percent|floatformat:2 }}</td>
+          <td class="num">{{ r.disc_amount|indian_currency }}</td>
+          <td class="num">{{ r.amount|indian_currency }}</td>
+          <td class="num">{{ r.gst_percent|floatformat:2 }}</td>
+          <td class="num rpt-amount">{{ r.total_amount|indian_currency }}</td>
+          <td>{{ r.warehouse }}</td>
+          <td>{{ r.warehouse_code }}</td>
+          <td>{{ r.farm_batch }}</td>
+          <td>{{ r.vehicle }}</td>
+          <td>{{ r.driver }}</td>
+          <td>{{ r.remarks }}</td>
+          <td><span class="rpt-pill {% if r.upload_status == 'Uploaded' %}rpt-pill-ok{% else %}rpt-pill-wait{% endif %}">
+            <i class="fas {% if r.upload_status == 'Uploaded' %}fa-circle-check{% else %}fa-clock{% endif %} me-1"></i>{{ r.upload_status }}</span></td>
+          <td>{{ r.added_by }}</td>
+          <td>{{ r.added_time|date:"d.m.Y h:i A" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="8" class="text-center">Total</td>
+        <td class="num">{{ totals.sent_qty|indian_currency }}</td>
+        <td class="num">{{ totals.rcv_qty|indian_currency }}</td>
+        <td class="num">{{ totals.free_qty|indian_currency }}</td>
+        <td class="num"></td>
+        <td class="num"></td>
+        <td class="num">{{ totals.disc_amount|indian_currency }}</td>
+        <td class="num">{{ totals.amount|indian_currency }}</td>
+        <td class="num"></td>
+        <td class="num rpt-amount">{{ totals.total_amount|indian_currency }}</td>
+        <td colspan="9"></td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div class="small text-muted mt-2 px-1">
+    <i class="fas fa-circle-info me-1"></i>
+    Covers General and Chicks purchases, one row per item line. Bags are derived from the item's kg-per-bag. Upload Status reflects whether a reference
+    document is attached to the bill, and Added By comes from the audit trail.
+  </div>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas fa-file-invoice fa-2x mb-2 d-block"></i>
+    No purchases match these filters.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+// Excel keeps whatever filters are currently applied on the page.
+document.getElementById('pr-excel').addEventListener('click', function (e) {
+  e.preventDefault();
+  const params = new URLSearchParams(window.location.search);
+  params.set('export', 'excel');
+  window.location.href = `{% url 'purchase_report' %}?${params}`;
+});
+
+// Sortable, searchable, paged table. DataTables is already loaded app-wide.
+$(function () {
+  $('#pr-table').DataTable({
+    pageLength: 25,
+    autoWidth: false,          // keep our own column widths so 25 columns can scroll sideways
+    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],   // -1 = show everything
+    order: [],                 // keep the server's date ordering
+    columnDefs: [{ targets: '_all', orderable: true }],
+    language: { search: '', searchPlaceholder: 'Search purchase...' },
+    // Search + length menu above, info + pager below; only the table sits in
+    // the scroll box, so the sticky header and sideways scrolling both work.
+    dom: "<'row mb-2'<'col-sm-6'l><'col-sm-6'f>>" +
+         "<'rpt-scroll'tr>" +
+         "<'row mt-2'<'col-sm-5'i><'col-sm-7'p>>",
+  });
+});
+</script>
+{% endblock %}

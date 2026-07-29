@@ -137,6 +137,8 @@ TEMPLATES = [
                 # Exposes allowed_nav/allowed_tabs/allowed_sections/section_url/
                 # page_perms for nav-hiding and per-page button-hiding.
                 "user.context_processors.web_access",
+                # `company` for the shared report letterhead / printed documents.
+                "Hitech_BIMS.context_processors.company",
             ],
         },
     },

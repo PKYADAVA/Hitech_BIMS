@@ -95,7 +95,7 @@ function row(data = {}) {
     <td><select class="form-select item" required>${itemOptions}</select></td>
     <td><input class="form-control bg-light uom" readonly></td>
     <td><input class="form-control quantity" type="number" min="0" step=".01" value="${data.quantity || 0}"></td>
-    <td><input class="form-control rate" type="number" min="0" step=".01" value="${data.rate || 0}"></td>
+    <td><input class="form-control bg-light rate" type="number" min="0" step=".01" value="${data.rate || 0}" readonly title="Auto-costed from the item's valuation method"></td>
     <td><input class="form-control bg-light amount" readonly value="0.00"></td>
     <td><select class="form-select location" required>${locationOptions}</select></td>
     <td><select class="form-select batch" disabled><option value="">N/A</option></select></td>
@@ -155,22 +155,53 @@ async function refreshBatchBox(tr, selected) {
   if (selected) { batchSelect.value = selected; }
 }
 
+// Rate is auto-costed from the item's valuation method (Weighted Average /
+// FIFO / LIFO / Standard) at the chosen warehouse and issue date — the server
+// re-derives it authoritatively on save; this just keeps the preview honest.
+async function refreshRate(tr) {
+  const itemId = tr.querySelector('.item').value;
+  const rateInput = tr.querySelector('.rate');
+  if (!itemId) { rateInput.value = '0'; calcAmount(tr); return; }
+  const loc = parseLocation(tr.querySelector('.location').value);
+  const params = new URLSearchParams({
+    item: itemId,
+    date: get('date').value || '',
+    quantity: tr.querySelector('.quantity').value || '0',
+  });
+  if (loc) { params.set('location_type', loc.type); params.set('location_id', loc.id); }
+  try {
+    const resp = await fetch(`{% url 'stock_issue_item_lookup' %}?${params}`);
+    const d = await resp.json();
+    rateInput.value = d.rate || '0';
+    if (d.unit) { tr.querySelector('.uom').value = d.unit; }
+  } catch (err) { /* keep the current rate on a lookup failure */ }
+  calcAmount(tr);
+}
+
 get('row-table').addEventListener('change', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
   if (e.target.classList.contains('item')) {
-    const tr = e.target.closest('tr');
     const opt = e.target.selectedOptions[0];
     tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
-    if (!editId) { tr.querySelector('.rate').value = opt ? (opt.dataset.rate || '0') : '0'; calcAmount(tr); }
+    refreshRate(tr);
   }
   if (e.target.classList.contains('location')) {
-    refreshBatchBox(e.target.closest('tr'));
+    refreshBatchBox(tr);
+    refreshRate(tr);
+  }
+  if (e.target.classList.contains('quantity')) {
+    refreshRate(tr);  // FIFO/LIFO cost can depend on issued quantity
   }
 });
 get('row-table').addEventListener('input', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
-  if (e.target.classList.contains('quantity') || e.target.classList.contains('rate')) {
-    calcAmount(tr);
+  if (e.target.classList.contains('quantity')) {
+    calcAmount(tr);  // instant amount preview; rate refreshes on change/blur
   }
+});
+// Re-cost every line when the issue date changes.
+get('date').addEventListener('change', () => {
+  document.querySelectorAll('#row-table tbody tr').forEach(refreshRate);
 });
 get('row-table').addEventListener('click', e => {
   if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
