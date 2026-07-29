@@ -331,6 +331,14 @@ class StockTransfer(models.Model):
         if self._location_key('from') == self._location_key('to'):
             raise ValidationError("From Location and To Location must be different.")
 
+        # A transfer is valued at the Item Price Master rate, so refuse to save
+        # one for an item that has no price defined for its date rather than
+        # letting a guessed figure into stock valuation.
+        if self.item_id and self.date:
+            from inventory.services.pricing import item_issue_price, missing_price_message
+            if item_issue_price(self.item, self.date) is None:
+                raise ValidationError(missing_price_message(self.item, self.date))
+
         # Never let a warehouse's stock go negative on dispatch out (all items,
         # new or edited). Farm sources are out of scope (feed is consumed by
         # birds there, tracked differently). Seeds/admin that skip full_clean

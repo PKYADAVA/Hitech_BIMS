@@ -142,16 +142,27 @@ async function refreshBatchBox(tr, side) {
 let stockPreviewToken = 0;
 // Rate is the Item Price Master price effective on the row's date, so a
 // transfer is valued the same way wherever it is raised. It stays editable.
+// An item with no price for that date is flagged here and refused on save, so
+// the gap in the price list is fixed rather than papered over with a guess.
 async function refreshRate(tr) {
   const itemId = tr.querySelector('.item').value;
   const rateInput = tr.querySelector('.rate');
-  if (!itemId) { rateInput.value = '0'; return; }
+  rateInput.classList.remove('is-invalid');
+  rateInput.title = '';
+  if (!itemId) { rateInput.value = ''; return; }
   const date = tr.querySelector('.date').value || '';
   try {
     const resp = await fetch(`{% url 'stock_transfer_item_lookup' %}?item=${itemId}&date=${date}`);
     const data = await resp.json();
-    rateInput.value = data.rate || '0';
     if (data.unit) { tr.querySelector('.uom').value = data.unit; }
+    if (data.price_missing) {
+      rateInput.value = '';
+      rateInput.classList.add('is-invalid');
+      rateInput.title = data.message;
+      window.showToast('warning', data.message);
+      return;
+    }
+    rateInput.value = data.rate || '';
   } catch (err) { /* leave the current rate alone if the lookup fails */ }
 }
 

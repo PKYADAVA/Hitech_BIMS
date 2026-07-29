@@ -1130,27 +1130,13 @@ class StockTransferAPI(View):
         return JsonResponse({"message": "Stock transfer deleted"})
 
 
-def item_issue_price(item, on_date=None):
-    """Issue price of an item from Item Price Master (Inventory > Master >
-    Item Price List) — the most recent entry effective on or before the date.
-
-    Falls back to the item's standard cost when it has no price entry, so a
-    transfer is never rated at zero just because the price list is incomplete.
-    """
-    if not item:
-        return Decimal("0")
-    entries = item.price_list_entries.all()
-    if on_date:
-        entries = entries.filter(effective_date__lte=on_date)
-    entry = entries.order_by("-effective_date", "-id").first()
-    return entry.price if entry else Decimal(str(item.standard_cost_per_unit or 0))
-
-
 @login_required
 def stock_transfer_item_lookup(request):
     """UOM and issue price for a selected item, for the Add form's auto-filled
     UOM / Rate fields. The rate is the Item Price Master price effective on the
-    row's date."""
+    row's date; when none exists the form is told so it can flag the row."""
+    from inventory.services.pricing import item_issue_price, missing_price_message
+
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
     on_date = None
@@ -1160,9 +1146,12 @@ def stock_transfer_item_lookup(request):
             on_date = timezone.datetime.fromisoformat(raw_date).date()
         except ValueError:
             on_date = None
+    price = item_issue_price(item, on_date)
     return JsonResponse({
         "unit": _uom_label(item.storage_uom) if item else "",
-        "rate": str(item_issue_price(item, on_date)),
+        "rate": "" if price is None else str(price),
+        "price_missing": bool(item) and price is None,
+        "message": missing_price_message(item, on_date) if (item and price is None) else "",
     })
 
 
