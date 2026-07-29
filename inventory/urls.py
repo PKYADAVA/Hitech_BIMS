@@ -80,7 +80,6 @@ urlpatterns = [
     path('stock-received/item-lookup/', views.stock_receive_item_lookup, name='stock_receive_item_lookup'),
     path('stock-received/farm-batches/', views.stock_receive_farm_batches, name='stock_receive_farm_batches'),
 
-    path('item-stock-lookup/', views.item_stock_lookup, name='item_stock_lookup'),
     path('item-ledger-report/', views.item_ledger_report, name='item_ledger_report'),
     path('stock-transfer-report/', views.stock_transfer_report, name='stock_transfer_report'),
     path('stock-report/', views.stock_report, name='stock_report'),

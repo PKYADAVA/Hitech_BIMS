@@ -2999,21 +2999,3 @@ def _negative_stock_excel(ctx):
     response["Content-Disposition"] = 'attachment; filename="negative_stock_check.xlsx"'
     wb.save(response)
     return response
-
-@login_required
-def item_stock_lookup(request):
-    """Total stock of an item across all warehouses as of a date, for forms
-    that do not record a source location of their own."""
-    from inventory.services.item_summary import item_total_stock
-
-    item_id = (request.GET.get("item") or "").strip()
-    if not item_id.isdigit():
-        return JsonResponse({"stock": ""})
-    on_date = None
-    raw_date = (request.GET.get("date") or "").strip()
-    if raw_date:
-        try:
-            on_date = timezone.datetime.fromisoformat(raw_date).date()
-        except ValueError:
-            on_date = None
-    return JsonResponse({"stock": str(item_total_stock(int(item_id), on_date))})
