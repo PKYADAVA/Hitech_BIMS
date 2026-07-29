@@ -522,7 +522,9 @@ def _save_invoice_items(instance, request):
             amount=(taxable + gst_amt).quantize(Decimal("0.01")),
         )
     instance.net_amount = instance.compute_net_amount()
-    instance.save(update_fields=["net_amount"])
+    # "remarks" is included so an auto-generated description picks up the total
+    # that only became known once the line items were saved.
+    instance.save(update_fields=["net_amount", "remarks"])
 
 
 @login_required(login_url="login")

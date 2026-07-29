@@ -513,7 +513,9 @@ def _save_general_purchase_items(instance, request):
             farm_warehouse_id=row["farm_warehouse"],
         )
     instance.net_amount = instance.compute_net_amount()
-    instance.save(update_fields=["net_amount", "round_off", "round_off_type"])
+    # "remarks" is included so an auto-generated description picks up the total
+    # that only became known once the line items were saved.
+    instance.save(update_fields=["net_amount", "round_off", "round_off_type", "remarks"])
 
 
 @login_required(login_url="login")
@@ -706,7 +708,9 @@ def _save_chicks_purchase_items(instance, request):
             batch=row.get("batch") or "",
         )
     instance.net_amount = instance.compute_net_amount()
-    instance.save(update_fields=["net_amount", "round_off", "round_off_type"])
+    # "remarks" is included so an auto-generated description picks up the total
+    # that only became known once the line items were saved.
+    instance.save(update_fields=["net_amount", "round_off", "round_off_type", "remarks"])
 
 
 @login_required(login_url="login")

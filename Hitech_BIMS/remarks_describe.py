@@ -8,7 +8,10 @@ typed text. The generated text is Title-Cased via `to_title_case`, so it is
 consistent with the global formatting rule regardless of signal order.
 
 Note: the auto document number (bill/receipt/payment no.) is blank at the first
-`pre_save`, so descriptions intentionally omit it.
+`pre_save`, so descriptions intentionally omit it. Totals are in the same
+position — a header is saved before its line items exist — so callers that
+recompute a total afterwards must include "remarks" in the second save's
+`update_fields` for the refreshed description to be written.
 """
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
@@ -127,8 +130,17 @@ def _fill_remarks(sender, instance, **kwargs):
     if instance._meta.label not in DESCRIBERS:
         return
     cur = getattr(instance, "remarks", None)
-    if isinstance(cur, str) and cur.strip():
+    typed = isinstance(cur, str) and bool(cur.strip())
+    # A description this receiver wrote itself is refreshed on a later save of
+    # the same in-memory object rather than kept. Headers are written before
+    # their line items exist, so totals like net_amount are still zero at that
+    # first save; without this the description would stay frozen as "... 0"
+    # once the totals are computed and the header re-saved. The flag lives on
+    # the instance only, so text the user typed — and any row loaded back from
+    # the database — is never overwritten.
+    if typed and not getattr(instance, "_remarks_autofilled", False):
         return
     desc = describe(instance)
     if desc:
         instance.remarks = desc
+        instance._remarks_autofilled = True

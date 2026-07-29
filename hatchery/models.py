@@ -832,7 +832,10 @@ class ChickSale(models.Model):
         latest_entry = HatchEntry.objects.order_by('-id').first()
         cost_rate = latest_entry.net_rate if latest_entry else 0
         self.profit_amount = items_amount - (net_qty * cost_rate)
-        super(ChickSale, self).save(update_fields=['final_amount', 'avg_amount', 'profit_amount'])
+        # "remarks" is included so an auto-generated description picks up the
+        # final amount, which is only known once the line items were saved.
+        super(ChickSale, self).save(
+            update_fields=['final_amount', 'avg_amount', 'profit_amount', 'remarks'])
 
 
 class ChickSaleItem(models.Model):
