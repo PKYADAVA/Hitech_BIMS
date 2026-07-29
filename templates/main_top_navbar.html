@@ -1,5 +1,5 @@
 {% load static %}
-<nav class="bims-navbar navbar navbar-expand-lg" id="mainNavbar">
+<nav class="bims-navbar navbar navbar-expand-xl" id="mainNavbar">
   <!-- Brand -->
   <a class="navbar-brand me-4" href="{% url 'home' %}">
     <img src="{% static 'images/logo.png' %}" alt="BIMS" class="brand-logo" onerror="this.style.display='none'">
@@ -18,7 +18,7 @@
 
   <!-- Nav Links -->
   <div class="collapse navbar-collapse" id="mainNavCollapse">
-    <ul class="navbar-nav me-auto align-items-lg-center gap-1 mt-3 mt-lg-0">
+    <ul class="navbar-nav me-auto align-items-xl-center gap-1 mt-3 mt-xl-0">
 
       <!-- Home -->
       <li class="nav-item">
@@ -291,19 +291,19 @@
               <i class="fas fa-chart-bar"></i>Reports
             </a>
             <ul class="dropdown-menu">
-              {% if 'egg_purchase_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'egg_purchase_report' %}">
+              {% if 'egg_purchase_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'egg_purchase_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-shopping-basket"></i>Egg Purchase Report
               </a></li>{% endif %}
-              {% if 'incubation_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'incubation_report' %}">
+              {% if 'incubation_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'incubation_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-egg"></i>Incubation Report
               </a></li>{% endif %}
-              {% if 'hatchery_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'hatchery_report' %}">
+              {% if 'hatchery_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'hatchery_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-chart-bar"></i>Hatch Register Report
               </a></li>{% endif %}
-              {% if 'delivery_challan_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'delivery_challan_report' %}">
+              {% if 'delivery_challan_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'delivery_challan_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-truck"></i>Delivery Challan Report
               </a></li>{% endif %}
-              {% if 'chick_sale_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chick_sale_report' %}">
+              {% if 'chick_sale_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chick_sale_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-cash-register"></i>Chick Sale Report
               </a></li>{% endif %}
             </ul>
@@ -375,6 +375,9 @@
               <i class="fas fa-chart-bar"></i>Reports
             </a>
             <ul class="dropdown-menu">
+              {% if 'purchase_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'purchase_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-file-invoice"></i>Purchase Report
+              </a></li>{% endif %}
               {% if 'supplier_ledger' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supplier_ledger' %}" target="_blank" rel="noopener">
                 <i class="fas fa-book"></i>Supplier Ledger
               </a></li>{% endif %}
@@ -519,19 +522,19 @@
               <i class="fas fa-chart-bar"></i>Reports
             </a>
             <ul class="dropdown-menu">
-              {% if 'ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'ledger_report' %}">
+              {% if 'ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'ledger_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-book-open"></i>Account Ledger
               </a></li>{% endif %}
-              {% if 'profit_loss_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'profit_loss_report' %}">
+              {% if 'profit_loss_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'profit_loss_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-chart-line"></i>Profit &amp; Loss
               </a></li>{% endif %}
-              {% if 'balance_sheet_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'balance_sheet_report' %}">
+              {% if 'balance_sheet_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'balance_sheet_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-scale-balanced"></i>Balance Sheet
               </a></li>{% endif %}
-              {% if 'cost_center_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'cost_center_report' %}">
+              {% if 'cost_center_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'cost_center_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-chart-pie"></i>Cost Center Report
               </a></li>{% endif %}
-              {% if 'branch_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'branch_summary_report' %}">
+              {% if 'branch_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'branch_summary_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-code-branch"></i>Branch Summary Report
               </a></li>{% endif %}
             </ul>
@@ -608,6 +611,32 @@
               </a></li>{% endif %}
               {% if 'stock_receive_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'stock_receive_list' %}">
                 <i class="fas fa-arrow-down-to-bracket"></i>Stock Received
+              </a></li>{% endif %}
+            </ul>
+          </li>
+          {% endif %}
+
+          <!-- Reports Submenu -->
+          {% if 'inventory_reports' in allowed_sections %}
+          <li class="dropdown-submenu">
+            <a class="dropdown-item dropdown-toggle" href="#" id="inventoryReportsDd">
+              <i class="fas fa-chart-bar"></i>Reports
+            </a>
+            <ul class="dropdown-menu">
+              {% if 'stock_transfer_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'stock_transfer_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-right-left"></i>Inventory Stock Transfer Report
+              </a></li>{% endif %}
+              {% if 'item_ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'item_ledger_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-book-open"></i>Item Ledger Report
+              </a></li>{% endif %}
+              {% if 'stock_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'stock_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-boxes-stacked"></i>Stock Report
+              </a></li>{% endif %}
+              {% if 'item_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'item_summary_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-list-check"></i>Item Summary Report
+              </a></li>{% endif %}
+              {% if 'negative_stock_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'negative_stock_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-triangle-exclamation"></i>Negative Stock Check
               </a></li>{% endif %}
             </ul>
           </li>
@@ -785,7 +814,7 @@
               <i class="fas fa-chart-bar"></i>Reports
             </a>
             <ul class="dropdown-menu">
-              {% if 'sms_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_history' %}">
+              {% if 'sms_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'sms_history' %}" target="_blank" rel="noopener">
                 <i class="fas fa-clock-rotate-left"></i>SMS History
               </a></li>{% endif %}
             </ul>
@@ -797,31 +826,11 @@
 
     </ul>
 
-    <!-- Live clock -->
-    <div class="d-flex align-items-center me-lg-3 mt-2 mt-lg-0" style="color:#ffffff;">
-      <i class="fas fa-clock me-2" style="color:#ffffff; opacity:.8;"></i>
-      <span id="navClock" style="color:#ffffff !important; font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; line-height:1.15;"></span>
-    </div>
-    <script>
-      (function () {
-        function tick() {
-          var el = document.getElementById('navClock');
-          if (!el) return;
-          var now = new Date();
-          var d = now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
-          var t = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true });
-          el.innerHTML = d + ' &middot; ' + t;
-        }
-        tick();
-        setInterval(tick, 1000);
-      })();
-    </script>
-
     <!-- Notification Bell (alerts module) -->
     {% include "_alerts_bell.html" %}
 
     <!-- User Profile -->
-    <div class="ms-lg-3 mt-3 mt-lg-0 mb-3 mb-lg-0">
+    <div class="ms-xl-3 mt-3 mt-xl-0 mb-3 mb-xl-0">
       <div class="dropdown">
         <button class="user-btn btn dropdown-toggle" type="button"
                 id="userMenuBtn" data-bs-toggle="dropdown">
@@ -893,5 +902,17 @@ document.addEventListener("DOMContentLoaded", function () {
       menu.classList.toggle("show", !isOpen);
     });
   });
+
+  // The collapsed menu floats over the page as a panel (see style.css), so a
+  // tap anywhere outside it should dismiss it the way a dropdown would.
+  const navCollapse = document.getElementById("mainNavCollapse");
+  const navToggler = document.querySelector("#mainNavbar .navbar-toggler");
+  if (navCollapse && navToggler) {
+    document.addEventListener("click", function (e) {
+      if (!navCollapse.classList.contains("show")) return;
+      if (navCollapse.contains(e.target) || navToggler.contains(e.target)) return;
+      bootstrap.Collapse.getOrCreateInstance(navCollapse).hide();
+    });
+  }
 });
 </script>

@@ -136,7 +136,7 @@
       </div>
     </div>
 
-    <div class="dash-welcome mb-4"><div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"><div><div class="dash-eyebrow">Hi Tech Farms · Operations Centre</div><h1>Good day, {{ request.user.get_full_name|default:request.user.username }}.</h1><p>Everything you need to keep farm operations moving—organised in one place.</p></div></div></div>
+    <div class="dash-welcome mb-4"><div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"><div><div class="dash-eyebrow">Hi Tech Farms · Operations Centre</div><h1>Good day, {{ request.user.get_full_name|default:request.user.username }}.</h1><p>Everything you need to keep farm operations moving—organised in one place.</p></div><div class="dash-date"><i class="fas fa-clock"></i><span id="navClock"></span></div></div></div>
     <div class="mb-3"><h2 class="dash-section-title">Workspace</h2><p class="dash-section-copy">Jump straight into the area you need.</p></div>
     <div class="row g-3 mb-4">
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'branch_template' %}" class="dash-module"><div class="dash-module-icon dash-icon-blue"><i class="fa-solid fa-egg"></i></div><div><span class="dash-module-name">Broiler</span><span class="dash-module-action">Farm operations</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
@@ -322,6 +322,22 @@
 {% endblock %}
 
 {% block js %}
+<script>
+  // Live clock in the welcome banner (moved here from the top navbar).
+  (function () {
+    function tick() {
+      var el = document.getElementById('navClock');
+      if (!el) return;
+      var now = new Date();
+      var d = now.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+      var t = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true });
+      el.innerHTML = d + ' &middot; ' + t;
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+
 <script>
 (function () {
   "use strict";

@@ -1418,18 +1418,34 @@ img, svg, video, canvas {
   .select2-container--bootstrap-5 .select2-selection { min-height: 44px; }
 }
 
-/* Navbar: give the collapsed menu room to breathe */
-@media (max-width: 991.98px) {
+/* Navbar collapses at xl (see navbar-expand-xl), so its collapsed styling
+   applies below 1200px. */
+@media (max-width: 1199.98px) {
   .bims-navbar {
     height: auto;
     padding: 10px 16px;
     flex-wrap: wrap;
   }
+  /* The open menu floats below the bar as a panel. In flow it would stretch
+     the sticky navbar to the full viewport height and push the page out of
+     sight — with ~13 modules the menu is taller than most screens. */
   .bims-navbar .navbar-collapse {
-    max-height: 80vh;
+    position: absolute;
+    top: 100%;
+    left: 8px;
+    right: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    max-height: min(70vh, 520px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    background: #0f172a;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 6px 12px 12px;
   }
+  .bims-navbar .navbar-collapse .navbar-nav { margin-top: 0 !important; }
   .bims-navbar .dropdown-submenu > .dropdown-menu {
     position: static !important;
     left: auto;
@@ -1438,6 +1454,15 @@ img, svg, video, canvas {
     border: none;
     border-left: 2px solid var(--border);
     border-radius: 0;
+  }
+}
+
+/* Wide enough for a right-anchored drawer rather than a full-width sheet,
+   but still collapsed (below xl). */
+@media (min-width: 576px) and (max-width: 1199.98px) {
+  .bims-navbar .navbar-collapse {
+    left: auto;
+    width: 320px;
   }
 }
 

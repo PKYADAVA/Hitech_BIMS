@@ -7,7 +7,7 @@ into the navbar with a single {% include %}. Talks to the alerts REST API
 this project, the CSRF token is injected from the template tag (JS cannot read
 the cookie) into data-csrf below.
 {% endcomment %}
-<div class="ms-lg-2 mt-3 mt-lg-0 me-lg-1" id="alertBellWrap" data-csrf="{{ csrf_token }}">
+<div class="ms-xl-2 mt-3 mt-xl-0 me-xl-1" id="alertBellWrap" data-csrf="{{ csrf_token }}">
   <div class="dropdown">
     <button class="alert-bell-btn btn position-relative" type="button"
             id="alertBellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside"

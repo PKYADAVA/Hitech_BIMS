@@ -1,0 +1,142 @@
+/* ---------------------------------------------------------------------------
+   Responsiveness layer.
+
+   Purely adaptive: nothing here changes the design, colours, type, spacing or
+   component appearance at normal desktop widths. It only stops the layout
+   breaking as the viewport shrinks, and lets every page use the full viewport.
+
+   Loaded after style.css so it can relax fixed sizing where that is what
+   prevents a page from fitting.
+   --------------------------------------------------------------------------- */
+
+/* ---- 1. full viewport, no page-level sideways scroll ---------------------- */
+
+html, body { max-width: 100%; }
+
+/* Wide content scrolls inside its own box (tables below), so nothing should
+   push the page itself sideways. `clip` is used rather than `hidden` because it
+   does not turn the page into a scroll container, which would break the
+   sticky top navbar. */
+body { overflow-x: clip; }
+
+/* dvh tracks mobile browser chrome; the 100% rule stays as the fallback. */
+.content { min-height: 100%; }
+@supports (min-height: 100dvh) { .content { min-height: 100dvh; } }
+
+/* A flex/grid child will not shrink below its content unless told to; without
+   this a wide table or long word makes the whole column overflow. */
+.content, .container-cstm { min-width: 0; }
+.container-cstm > * { max-width: 100%; }
+
+/* Page gutter scales with the viewport instead of being a fixed 32px. Wide
+   screens keep essentially the designed inset; narrower desktops and laptops —
+   where the space actually matters — reclaim some of it. The vertical padding
+   is untouched. */
+.container-cstm { padding-left: clamp(16px, 1.5vw, 32px); padding-right: clamp(16px, 1.5vw, 32px); }
+
+/* Media should never exceed its column. */
+img, svg, video, canvas, iframe { max-width: 100%; }
+img, svg, video { height: auto; }
+
+/* ---- 2. data tables keep their look and scroll horizontally --------------- */
+
+/* Bootstrap's .table-responsive is overflow-x:auto only, so the table inside
+   is untouched. These guards just make sure the container itself cannot be
+   what overflows the page. */
+.table-responsive { max-width: 100%; }
+.table-responsive, .rpt-scroll { -webkit-overflow-scrolling: touch; }
+
+/* Modal bodies hold wide tables on several pages. */
+.modal-body { overflow-x: auto; }
+
+/* ---- 3. top navbar fits the viewport ------------------------------------- */
+
+/* The bar holds 11 module menus plus the alerts bell and user menu, which on
+   narrower desktops is wider than the screen and pushed the right-hand items
+   out of reach. Only horizontal spacing is reduced — font size, colours, icons
+   and the bar's height stay exactly as designed. */
+@media (min-width: 1200px) {
+  /* `me-auto` on the list collapses to zero once space runs out, which let the
+     last menu butt against the alerts bell; column-gap keeps them apart. */
+  .bims-navbar .navbar-collapse { min-width: 0; column-gap: 12px; }
+  /* the module list absorbs the squeeze; the right-hand utilities never do */
+  .bims-navbar .navbar-nav { min-width: 0; }
+  .bims-navbar .navbar-collapse > :not(.navbar-nav) { flex-shrink: 0; }
+}
+
+@media (min-width: 1200px) and (max-width: 1920px) {
+  .bims-navbar { padding: 0 14px; }
+  .bims-navbar .navbar-nav { gap: 0 !important; }
+  .bims-navbar .navbar-nav .nav-link { padding-left: 8px !important; padding-right: 8px !important; }
+  .bims-navbar .navbar-brand { margin-right: 1rem !important; }
+}
+
+@media (min-width: 1200px) and (max-width: 1500px) {
+  .bims-navbar { padding: 0 10px; }
+  .bims-navbar .navbar-nav .nav-link { padding-left: 6px !important; padding-right: 6px !important; }
+  .bims-navbar .navbar-brand { margin-right: .5rem !important; }
+}
+
+/* Tightest tier — keeps all 11 menus on one line down to 1200px. */
+@media (min-width: 1200px) and (max-width: 1400px) {
+  .bims-navbar { padding: 0 8px; }
+  .bims-navbar .navbar-nav .nav-link { padding-left: 4px !important; padding-right: 4px !important; }
+  .bims-navbar .navbar-brand { margin-right: .25rem !important; }
+}
+
+/* The bar is only expanded where all the menus fit, so it is always a single
+   row — below 1200px it collapses into the hamburger instead of wrapping. */
+@media (min-width: 1200px) {
+  .bims-navbar { height: var(--navbar-height); flex-wrap: nowrap; }
+  .bims-navbar .navbar-collapse,
+  .bims-navbar .navbar-nav { flex-wrap: nowrap; }
+}
+
+/* The collapsed drawer itself is already defined in style.css (a right-anchored
+   320px panel that floats below the bar). Only the row rhythm is tightened here
+   so all 11 modules fit the panel without scrolling. */
+@media (max-width: 1199.98px) {
+  .bims-navbar .navbar-nav .nav-link { padding-top: 5px !important; padding-bottom: 5px !important; }
+  .bims-navbar .navbar-nav { gap: 0 !important; }
+}
+
+/* ---- 4. filters and forms wrap on smaller screens ------------------------ */
+
+/* Below desktop, filter controls that carry a fixed pixel width would stop the
+   bar from wrapping and force a horizontal scrollbar. Full-width is the only
+   sensible behaviour once the fields have stacked. */
+@media (max-width: 1199.98px) {
+  .rpt-filter .form-control,
+  .rpt-filter .form-select,
+  .rpt-filter .form-control-sm,
+  .rpt-filter .form-select-sm { width: 100%; min-width: 0; }
+
+  .rpt-filter .rpt-actions { grid-column: 1 / -1; }
+}
+
+/* Bootstrap rows already wrap; this only stops their columns from being forced
+   wider than the screen by long unbroken content. */
+.row > [class*="col"] { min-width: 0; }
+
+/* ---- 5. tablet and phone ------------------------------------------------- */
+
+@media (max-width: 767.98px) {
+  /* Toolbars and button groups stack instead of overflowing. */
+  .rpt-toolbar,
+  .page-header-right { flex-wrap: wrap; }
+
+  /* Dialogs use the available width rather than a fixed one. */
+  .modal-dialog { margin: .5rem; }
+}
+
+@media (max-width: 575.98px) {
+  /* Full-bleed dialogs on phones. */
+  .modal-dialog:not(.modal-fullscreen) { max-width: 100%; }
+}
+
+/* ---- 6. printing --------------------------------------------------------- */
+
+@media print {
+  /* A print sheet has no scrollports; let wide content flow onto the page. */
+  .table-responsive, .modal-body { overflow: visible !important; }
+}
