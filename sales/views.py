@@ -36,6 +36,7 @@ def _customer_form_context(customer=None):
         "next_code": Customer.next_code() if not customer else None,
         "states_and_union_territories": states_and_union_territories,
         "to_pay_to_receive_choices": Customer.ToPayToReceive.choices,
+        "customer_groups": CustomerGroup.objects.order_by("description", "code"),
         "today": timezone.localdate().isoformat(),
     }
 
@@ -45,6 +46,7 @@ def _apply_posted_customer_fields(instance, request):
     instance.address = request.POST.get("address", "").strip()
     instance.mobile = request.POST.get("mobile", "").strip()
     instance.mobile_2 = request.POST.get("mobile_2", "").strip()
+    instance.customer_group_id = request.POST.get("customer_group") or None
     instance.email = request.POST.get("email", "").strip()
     instance.pan_tin = request.POST.get("pan_tin", "").strip()
     instance.aadhar = request.POST.get("aadhar", "").strip()

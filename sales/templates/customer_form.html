@@ -70,6 +70,15 @@
           {% render_picklist_field "sales.Customer.party_category" current_value=customer.party_category field_id="party_category" field_name="party_category" required=True %}
         </div>
         <div class="col-md-3">
+          <label for="customer_group" class="form-label">Customer Group</label>
+          <select id="customer_group" name="customer_group" class="form-select">
+            <option value="">Select group...</option>
+            {% for g in customer_groups %}
+              <option value="{{ g.id }}" {% if customer.customer_group_id == g.id %}selected{% endif %}>{{ g.description|default:g.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
           <label for="gstin" class="form-label">GSTIN</label>
           <input type="text" id="gstin" name="gstin" class="form-control" placeholder="Enter GSTIN..." value="{{ customer.gstin|default:'' }}">
         </div>
