@@ -791,10 +791,9 @@ export function isEditable(resourceKey: string): boolean {
 }
 
 /**
- * Whether a resource supports *edit* on mobile. Transaction documents are
- * create-only for now (their multi-line edit prefill isn't built yet), so the
- * generic flat forms are the only ones editable.
+ * Whether a resource supports *edit* on mobile — the generic flat forms plus
+ * the transaction documents (which now prefill header + line items).
  */
 export function isRecordEditable(resourceKey: string): boolean {
-  return resourceKey in FORMS;
+  return resourceKey in FORMS || isDocumentForm(resourceKey);
 }

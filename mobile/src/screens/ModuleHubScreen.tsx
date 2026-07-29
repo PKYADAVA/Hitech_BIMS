@@ -1,13 +1,13 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React from "react";
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import { RESOURCE_TABS } from "@/api/permissions";
 import { Card, IconCircle, SectionHeader } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { ModuleStackParams } from "@/navigation/types";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { colors, shadow, spacing, type } from "@/theme";
+import { makeStyles, shadow, spacing, type } from "@/theme";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Hub"> & { moduleKey: ModuleKey };
 
@@ -15,6 +15,7 @@ const COLS = 3;
 
 /** Module landing page: branded header + a sectioned grid of small resource tiles. */
 export function ModuleHubScreen({ navigation, moduleKey }: Props) {
+  const styles = useStyles();
   const mod = MODULES[moduleKey];
   const { width } = useWindowDimensions();
   const tileW = (width - spacing.md * 2 - spacing.sm * (COLS - 1)) / COLS;
@@ -104,7 +105,7 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: spacing.xxl },
   tagline: { ...type.caption, color: colors.textMuted, marginBottom: spacing.xs, paddingHorizontal: spacing.xs },
@@ -125,4 +126,4 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: "center",
   },
-});
+}));

@@ -35,6 +35,12 @@ export interface DocConfig {
   header: DocField[];
   itemFields: DocField[];
   build: (header: Dict, items: Dict[]) => Record<string, unknown>;
+  /**
+   * Payload for *edit* (PUT), when it differs from create. The row-based
+   * transactions (stock transfer, sales receipt) create many via `{rows:[…]}`
+   * but edit one flat record — this returns that flat shape.
+   */
+  buildEdit?: (header: Dict, items: Dict[]) => Record<string, unknown>;
 }
 
 /* ------------------------------- helpers -------------------------------- */
@@ -122,6 +128,29 @@ export const DOCUMENTS: Record<string, DocConfig> = {
             driver_name: h.driver_name || "",
             remarks: it.remarks || "",
           })),
+      };
+    },
+    // Edit updates one transfer record — flat row, not `{rows:[…]}`.
+    buildEdit: (h, items) => {
+      const from = loc(h, "from");
+      const to = loc(h, "to");
+      const it = items[0] ?? {};
+      return {
+        date: h.date,
+        dc_no: h.dc_no || "",
+        item: it.item,
+        quantity: it.quantity || "0",
+        rate: it.rate || "0",
+        purchase_rate: it.rate || "0",
+        from_location_type: from.type,
+        from_location_id: from.id,
+        from_batch: from.batch,
+        to_location_type: to.type,
+        to_location_id: to.id,
+        to_batch: to.batch,
+        vehicle_no: h.vehicle_no || "",
+        driver_name: h.driver_name || "",
+        remarks: it.remarks || "",
       };
     },
   },
@@ -482,6 +511,20 @@ export const DOCUMENTS: Record<string, DocConfig> = {
           remarks: it.remarks || "",
         })),
     }),
+    // Edit updates one receipt — flat, not `{rows:[…]}`.
+    buildEdit: (h, items) => {
+      const it = items[0] ?? {};
+      return {
+        date: h.date,
+        location: h.location || null,
+        customer: it.customer,
+        mode: it.mode || "Cash",
+        receipt_account: it.receipt_account || null,
+        amount: it.amount || "0",
+        reference_no: it.reference_no || "",
+        remarks: it.remarks || "",
+      };
+    },
   },
 
   // Stock Receive — per-line location (received into warehouse/farm).

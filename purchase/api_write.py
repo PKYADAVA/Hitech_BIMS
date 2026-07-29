@@ -40,13 +40,69 @@ class _ShimRequest:
         self.method = "POST"
 
 
+def _s(v) -> str:
+    if v is None:
+        return ""
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
+# --- Edit loaders: an existing record → the mobile form's field shape -------
+
+def _load_general_purchase(o) -> dict:
+    return {
+        "header": {
+            "date": _s(o.date), "supplier": _s(o.supplier_id),
+            "bill_no": o.bill_no or "", "dc_no": o.dc_no or "",
+            "calculation_based_on": o.calculation_based_on or "Sent Quantity",
+            "freight_type": o.freight_type or "Extra", "freight_amount": _s(o.freight_amount),
+            "remarks": o.remarks or "",
+        },
+        "items": [{
+            "item": _s(i.item_id), "farm_warehouse": _s(i.farm_warehouse_id),
+            "unit": i.unit or "", "sent_qty": _s(i.sent_qty), "rcv_qty": _s(i.rcv_qty),
+            "free_qty": _s(i.free_qty), "rate": _s(i.rate),
+            "discount_percent": _s(i.discount_percent), "gst_percent": _s(i.gst_percent),
+        } for i in o.items.all()],
+    }
+
+
+def _load_chicks_purchase(o) -> dict:
+    return {
+        "header": {
+            "date": _s(o.date), "supplier": _s(o.supplier_id), "hatchery": _s(o.hatchery_id),
+            "item": _s(o.item_id), "bill_no": o.bill_no or "", "dc_no": o.dc_no or "",
+            "freight_type": o.freight_type or "Extra", "freight_amount": _s(o.freight_amount),
+            "remarks": o.remarks or "",
+        },
+        "items": [{
+            "farm_warehouse": _s(i.farm_warehouse_id), "sent_qty": _s(i.sent_qty),
+            "mortality": _s(i.mortality), "shortage": _s(i.shortage), "weaks": _s(i.weaks),
+            "excess_qty": _s(i.excess_qty), "rate": _s(i.rate), "batch": i.batch or "",
+        } for i in o.items.all()],
+    }
+
+
+def _load_payment(o) -> dict:
+    return {
+        "header": {"date": _s(o.date), "location": _s(o.location_id)},
+        "items": [{
+            "supplier": _s(ln.supplier_id), "mode": ln.mode or "Cash",
+            "pay_account": _s(ln.pay_account_id), "amount": _s(ln.amount),
+            "bank_charges": _s(ln.bank_charges), "reference_no": ln.reference_no or "",
+            "remarks": ln.remarks or "",
+        } for ln in o.lines.all()],
+    }
+
+
 def _messages(exc: DjangoValidationError) -> str:
     return " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
 
 
 def _write_document(spec, request, instance=None) -> Response:
     """Apply header + line items using the web helpers, inside one transaction."""
-    model, apply_fn, save_lines_fn, lines_key, exclude, require_line = spec
+    model, apply_fn, save_lines_fn, lines_key, exclude, require_line = spec[:6]
     data = dict(request.data)
     # The helpers read the lines as a JSON string under a specific POST key.
     lines = data.pop("items", None)
@@ -71,10 +127,16 @@ def _write_document(spec, request, instance=None) -> Response:
 
 
 def _make_write_view(spec):
-    model = spec[0]
+    model, loader = spec[0], spec[6]
 
     class _WriteView(V1ViewMixin, APIView):
         permission_classes = [IsAuthenticated]
+
+        def get(self, request, pk):
+            instance = model.objects.filter(pk=pk).first()
+            if not instance:
+                raise NotFound(f"{model.__name__} not found.")
+            return Response(loader(instance))
 
         def post(self, request):
             return _write_document(spec, request)
@@ -99,13 +161,16 @@ def _make_write_view(spec):
     return _WriteView
 
 
-# spec = (model, apply_fn, save_lines_fn, lines_post_key, clean_exclude, require_line)
+# spec = (model, apply_fn, save_lines_fn, lines_post_key, clean_exclude, require_line, loader)
 _GENERAL = (GeneralPurchase, web._apply_posted_general_purchase_fields,
-            web._save_general_purchase_items, "items_json", ["purchase_no"], False)
+            web._save_general_purchase_items, "items_json", ["purchase_no"], False,
+            _load_general_purchase)
 _CHICKS = (ChicksPurchase, web._apply_posted_chicks_purchase_fields,
-           web._save_chicks_purchase_items, "items_json", ["purchase_no"], False)
+           web._save_chicks_purchase_items, "items_json", ["purchase_no"], False,
+           _load_chicks_purchase)
 _PAYMENT = (SupplierPayment, web._apply_posted_payment_fields,
-            web._save_payment_lines, "lines_json", ["payment_no"], True)
+            web._save_payment_lines, "lines_json", ["payment_no"], True,
+            _load_payment)
 
 GeneralPurchaseWriteView = _make_write_view(_GENERAL)
 ChicksPurchaseWriteView = _make_write_view(_CHICKS)

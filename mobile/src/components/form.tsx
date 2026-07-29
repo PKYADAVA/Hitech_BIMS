@@ -5,7 +5,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -15,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FormField } from "@/config/forms";
 import { usePickerOptions } from "@/query/usePickerOptions";
-import { colors, radius, spacing, type } from "@/theme";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { formatDate } from "@/utils/format";
 import { AppIcon } from "./AppIcon";
 import { SearchBar } from "./ui";
@@ -32,6 +31,8 @@ function FieldShell({
   error?: string;
   children: React.ReactNode;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>
@@ -57,6 +58,8 @@ export function FormControl({
   error?: string;
   onChange: (v: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   // Computed/derived fields: show the value in a muted, non-editable box.
   if (field.readOnly) {
     return (
@@ -116,6 +119,7 @@ export function FormControl({
 }
 
 function DateControl({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const styles = useStyles();
   const [show, setShow] = useState(false);
   const current = value ? new Date(value) : new Date();
 
@@ -152,6 +156,8 @@ function SelectControl({
   fallbackLabel?: string;
   onChange: (v: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { options, loading } = usePickerOptions(field.optionsPath, field.optionLabelKeys);
@@ -231,7 +237,7 @@ function toISODate(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   field: { marginBottom: spacing.lg },
   label: { ...type.label, color: colors.text, marginBottom: spacing.xs },
   error: { ...type.caption, color: colors.danger, marginTop: spacing.xs },
@@ -293,4 +299,4 @@ const styles = StyleSheet.create({
   optionClear: { ...type.body, color: colors.textMuted },
   check: { color: colors.primary, ...type.title },
   empty: { ...type.body, color: colors.textMuted, textAlign: "center", padding: spacing.xl },
-});
+}));

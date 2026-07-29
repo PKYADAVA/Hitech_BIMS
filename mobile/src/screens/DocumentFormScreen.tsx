@@ -1,12 +1,12 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useLayoutEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useLayoutEffect, useState } from "react";
+import { Alert, Pressable, Text, View } from "react-native";
 
-import { saveDocument } from "@/api/documents";
+import { deleteDocument, loadDocument, saveDocument } from "@/api/documents";
 import { ApiError } from "@/api/types";
 import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, Loading } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import {
   BATCH_OPTIONS_PATH,
@@ -18,7 +18,7 @@ import {
 import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
-import { colors, radius, spacing, type } from "@/theme";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "DocumentForm">;
@@ -44,6 +44,8 @@ function LocationControl({
   values: Dict;
   set: (key: string, val: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const type = values[`${field.name}_type`] || "warehouse";
   const idKey = `${field.name}_id`;
   const batchKey = `${field.name}_batch`;
@@ -116,6 +118,8 @@ function ToggleControl({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.locLabel}>
@@ -165,31 +169,60 @@ function DocFieldControl({
   );
 }
 
-/** Seed a values dict for a field set: toggle defaults + warehouse location type. */
+/** Seed a values dict for a field set: toggle defaults + warehouse location type.
+ *  Defaults only fill keys `extra` doesn't already set (so edit prefill wins). */
 const initValues = (fields: DocField[], extra: Dict = {}): Dict => {
   const v: Dict = { ...extra };
   for (const f of fields) {
-    if (f.type === "toggle" && f.options?.length) v[f.name] = f.options[0].value;
-    if (f.type === "location") v[`${f.name}_type`] = "warehouse";
+    if (f.type === "toggle" && f.options?.length && v[f.name] === undefined) {
+      v[f.name] = f.options[0].value;
+    }
+    if (f.type === "location" && v[`${f.name}_type`] === undefined) {
+      v[`${f.name}_type`] = "warehouse";
+    }
   }
   return v;
 };
 
 export function DocumentFormScreen({ route, navigation }: Props) {
-  const { resourceKey } = route.params;
+  const styles = useStyles();
+  const { resourceKey, mode, row } = route.params;
   const doc = DOCUMENTS[resourceKey];
   const config = RESOURCES[resourceKey];
+  const editId = mode === "edit" ? (row?.id as number | undefined) : undefined;
 
   const [header, setHeader] = useState<Dict>(() =>
     initValues(doc.header, { date: new Date().toISOString().slice(0, 10) })
   );
   const [items, setItems] = useState<Dict[]>(() => [initValues(doc.itemFields)]);
+  const [loading, setLoading] = useState(editId != null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: `New ${doc.title}` });
-  }, [navigation, doc.title]);
+    navigation.setOptions({ title: `${editId != null ? "Edit" : "New"} ${doc.title}` });
+  }, [navigation, doc.title, editId]);
+
+  // Edit: fetch the existing document (already in form-field shape) and prefill.
+  useEffect(() => {
+    if (editId == null) return;
+    let alive = true;
+    (async () => {
+      try {
+        const detail = await loadDocument(doc.savePath, editId);
+        if (!alive) return;
+        setHeader(initValues(doc.header, detail.header));
+        setItems(detail.items.length ? detail.items : [initValues(doc.itemFields)]);
+      } catch (e) {
+        if (alive) setFormError((e as Error)?.message ?? "Could not load this record.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [editId, doc]);
 
   const setHeaderKey = (key: string, val: string) => setHeader((p) => ({ ...p, [key]: val }));
   const setItemKey = (idx: number, key: string, val: string) =>
@@ -209,18 +242,22 @@ export function DocumentFormScreen({ route, navigation }: Props) {
         return;
       }
     }
-    const payload = doc.build(header, items);
-    // Guard: at least one usable line.
+    // Edit of a row-based doc updates one record (flat); otherwise header+items.
+    const payload =
+      editId != null && doc.buildEdit ? doc.buildEdit(header, items) : doc.build(header, items);
+    // Guard: at least one usable line (skip for flat single-record edits).
     const lineKey = Object.keys(payload).find((k) => Array.isArray((payload as never)[k]));
-    const lines = lineKey ? ((payload as Record<string, unknown[]>)[lineKey] as unknown[]) : [];
-    if (!lines || lines.length === 0) {
-      setFormError("Add at least one complete line.");
-      return;
+    if (lineKey) {
+      const lines = (payload as Record<string, unknown[]>)[lineKey] as unknown[];
+      if (!lines || lines.length === 0) {
+        setFormError("Add at least one complete line.");
+        return;
+      }
     }
 
     setSaving(true);
     try {
-      await saveDocument(doc.savePath, payload);
+      await saveDocument(doc.savePath, payload, editId);
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
       navigation.navigate("List", { resourceKey });
     } catch (e) {
@@ -230,6 +267,28 @@ export function DocumentFormScreen({ route, navigation }: Props) {
       setSaving(false);
     }
   };
+
+  const onDelete = () => {
+    if (editId == null) return;
+    Alert.alert("Delete", `Delete this ${doc.title.toLowerCase()}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDocument(doc.savePath, editId);
+            queryClient.invalidateQueries({ queryKey: ["list", config.path] });
+            navigation.navigate("List", { resourceKey });
+          } catch (e) {
+            setFormError((e as Error)?.message ?? "Could not delete.");
+          }
+        },
+      },
+    ]);
+  };
+
+  if (loading) return <Loading label={`Loading ${doc.title.toLowerCase()}…`} />;
 
   return (
     <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -242,12 +301,14 @@ export function DocumentFormScreen({ route, navigation }: Props) {
         ))}
       </Card>
 
-      {/* Line items */}
+      {/* Line items. Row-based docs edit a single record, so no add/remove there. */}
       <View style={styles.itemsHeader}>
         <Text style={styles.itemsTitle}>{doc.itemTitle}</Text>
-        <Pressable hitSlop={8} onPress={addItem}>
-          <Text style={styles.addLink}>＋ Add line</Text>
-        </Pressable>
+        {editId != null && doc.buildEdit ? null : (
+          <Pressable hitSlop={8} onPress={addItem}>
+            <Text style={styles.addLink}>＋ Add line</Text>
+          </Pressable>
+        )}
       </View>
 
       {items.map((it, idx) => (
@@ -271,13 +332,18 @@ export function DocumentFormScreen({ route, navigation }: Props) {
         </Card>
       ))}
 
-      <Button title="Create" onPress={onSave} loading={saving} />
+      <Button title={editId != null ? "Save changes" : "Create"} onPress={onSave} loading={saving} />
+      {editId != null ? (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title="Delete" variant="danger" onPress={onDelete} />
+        </View>
+      ) : null}
       <View style={{ height: spacing.xxl }} />
     </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   section: { marginBottom: spacing.md },
@@ -335,4 +401,4 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
   chipText: { ...type.label, color: colors.textMuted },
   chipTextOn: { color: colors.primaryDark, fontWeight: "800" },
-});
+}));

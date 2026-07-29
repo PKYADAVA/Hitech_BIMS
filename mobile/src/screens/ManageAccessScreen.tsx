@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 
 import {
   createRole,
@@ -20,12 +20,13 @@ import { Row } from "@/api/types";
 import { AppIcon } from "@/components/AppIcon";
 import { Card, EmptyOrError, Loading } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
-import { colors, radius, spacing, type } from "@/theme";
+import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { pick } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "ManageAccess">;
 
 export function ManageAccessScreen({ navigation }: Props) {
+  const styles = useStyles();
   const [tab, setTab] = useState<"roles" | "users">("roles");
   useLayoutEffect(() => navigation.setOptions({ title: "Manage Access" }), [navigation]);
 
@@ -52,6 +53,8 @@ export function ManageAccessScreen({ navigation }: Props) {
 /* ------------------------------- Roles ---------------------------------- */
 
 function RolesPanel() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const q = useQuery({ queryKey: ["access-roles"], queryFn: fetchRolesAccess });
   const [roles, setRoles] = useState<RoleAccess[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -207,6 +210,8 @@ function RolesPanel() {
 /* ------------------------------- Users ---------------------------------- */
 
 function UsersPanel() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const rolesQ = useQuery({ queryKey: ["access-roles"], queryFn: fetchRolesAccess });
   const usersQ = useQuery({
     queryKey: ["access-users"],
@@ -288,6 +293,8 @@ function UsersPanel() {
 
 /** Collapsible "add a login user" form: credentials, flags, and role toggles. */
 function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -424,7 +431,7 @@ function CreateUserCard({ roles, onCreated }: { roles: RoleAccess[]; onCreated: 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   segment: {
     flexDirection: "row",
@@ -528,4 +535,4 @@ const styles = StyleSheet.create({
   smallBtnText: { ...type.label, color: colors.text },
   deleteRow: { paddingBottom: spacing.md },
   deleteLink: { ...type.label, color: colors.danger },
-});
+}));

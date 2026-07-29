@@ -23,6 +23,93 @@ from rest_framework.views import APIView
 from api.viewsets import V1ViewMixin
 
 from . import views as web
+from .models import (
+    InventoryAdjustment,
+    MedicineTransfer,
+    StockIssue,
+    StockReceive,
+    StockTransfer,
+)
+
+
+def _s(v) -> str:
+    """Serialize an id/decimal/date to a plain string for the form ('' if None)."""
+    if v is None:
+        return ""
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
+# --- Edit loaders: an existing record → the mobile form's field shape -------
+
+def _load_stock_transfer(o) -> dict:
+    return {
+        "header": {
+            "date": _s(o.date), "dc_no": o.dc_no or "",
+            "from_type": o.from_location_type or "warehouse",
+            "from_id": _s(o.from_warehouse_id or o.from_farm_id),
+            "from_batch": _s(o.from_batch_id),
+            "to_type": o.to_location_type or "warehouse",
+            "to_id": _s(o.to_warehouse_id or o.to_farm_id),
+            "to_batch": _s(o.to_batch_id),
+            "vehicle_no": o.vehicle_no or "", "driver_name": o.driver_name or "",
+        },
+        "items": [{
+            "item": _s(o.item_id), "quantity": _s(o.quantity),
+            "rate": _s(o.rate), "remarks": o.remarks or "",
+        }],
+    }
+
+
+def _load_medicine_transfer(o) -> dict:
+    return {
+        "header": {
+            "date": _s(o.date), "dc_no": o.dc_no or "",
+            "from_type": o.from_location_type or "warehouse",
+            "from_id": _s(o.from_warehouse_id or o.from_farm_id),
+            "from_batch": _s(o.from_batch_id),
+            "to_type": o.to_location_type or "warehouse",
+            "to_id": _s(o.to_warehouse_id or o.to_farm_id),
+            "to_batch": _s(o.to_batch_id),
+            "vehicle_no": o.vehicle_no or "", "driver_name": o.driver_name or "",
+            "transport_cost": _s(o.transport_cost), "paid_by": _s(o.paid_by_id),
+        },
+        "items": [{
+            "item": _s(i.item_id), "quantity": _s(i.quantity),
+            "rate": _s(i.rate), "remarks": i.remarks or "",
+        } for i in o.items.all()],
+    }
+
+
+def _load_adjustment(o) -> dict:
+    return {
+        "header": {
+            "date": _s(o.date), "bill_no": o.bill_no or "",
+            "loc_type": o.location_type or "warehouse",
+            "loc_id": _s(o.warehouse_id or o.farm_id),
+            "loc_batch": _s(o.batch_id),
+            "chart_of_account": _s(o.chart_of_account_id),
+        },
+        "items": [{
+            "item": _s(i.item_id), "adjustment_type": i.adjustment_type,
+            "quantity": _s(i.quantity), "rate": _s(i.rate), "remarks": i.remarks or "",
+        } for i in o.items.all()],
+    }
+
+
+def _load_line_location_doc(o) -> dict:
+    """Stock issue / receive: header account + per-line location items."""
+    return {
+        "header": {"date": _s(o.date), "chart_of_account": _s(o.chart_of_account_id)},
+        "items": [{
+            "item": _s(i.item_id),
+            "loc_type": i.location_type or "warehouse",
+            "loc_id": _s(i.warehouse_id or i.farm_id),
+            "loc_batch": _s(i.batch_id),
+            "quantity": _s(i.quantity), "rate": _s(i.rate), "remarks": i.remarks or "",
+        } for i in o.items.all()],
+    }
 
 
 def _delegate(bound_method, request, *args) -> Response:
@@ -46,11 +133,19 @@ def _delegate(bound_method, request, *args) -> Response:
     return Response(payload, status=resp.status_code)
 
 
-def _make_write_view(web_api_cls):
-    """A mobile create/update/delete view delegating to one web document API."""
+def _make_write_view(web_api_cls, model, loader):
+    """A mobile create/update/delete view delegating to one web document API,
+    plus a GET that returns an existing record in the mobile form's field shape."""
 
     class _WriteView(V1ViewMixin, APIView):
         permission_classes = [IsAuthenticated]
+
+        def get(self, request, pk):
+            obj = (model.objects.prefetch_related("items").filter(pk=pk).first()
+                   if hasattr(model, "items") else model.objects.filter(pk=pk).first())
+            if not obj:
+                raise NotFound(f"{model.__name__} not found.")
+            return Response(loader(obj))
 
         def post(self, request):
             return _delegate(web_api_cls().post, request)
@@ -65,11 +160,11 @@ def _make_write_view(web_api_cls):
     return _WriteView
 
 
-StockTransferWriteView = _make_write_view(web.StockTransferAPI)
-MedicineTransferWriteView = _make_write_view(web.MedicineTransferAPI)
-InventoryAdjustmentWriteView = _make_write_view(web.InventoryAdjustmentAPI)
-StockIssueWriteView = _make_write_view(web.StockIssueAPI)
-StockReceiveWriteView = _make_write_view(web.StockReceiveAPI)
+StockTransferWriteView = _make_write_view(web.StockTransferAPI, StockTransfer, _load_stock_transfer)
+MedicineTransferWriteView = _make_write_view(web.MedicineTransferAPI, MedicineTransfer, _load_medicine_transfer)
+InventoryAdjustmentWriteView = _make_write_view(web.InventoryAdjustmentAPI, InventoryAdjustment, _load_adjustment)
+StockIssueWriteView = _make_write_view(web.StockIssueAPI, StockIssue, _load_line_location_doc)
+StockReceiveWriteView = _make_write_view(web.StockReceiveAPI, StockReceive, _load_line_location_doc)
 
 # Resource path suffix → write view (POST create, PUT/DELETE by id).
 _WRITE_VIEWS = [

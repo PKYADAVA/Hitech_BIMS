@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { StyleProp, TextStyle } from "react-native";
 
-import { colors } from "@/theme";
+import { useTheme } from "@/theme";
 
 /**
  * Single icon system for the app — MaterialCommunityIcons (bundled with Expo,
@@ -100,7 +100,7 @@ export function AppIcon({
   name,
   emoji,
   size = 20,
-  color = colors.text,
+  color,
   style,
 }: {
   /** MCI glyph name (takes precedence over `emoji`). */
@@ -111,6 +111,7 @@ export function AppIcon({
   color?: string;
   style?: StyleProp<TextStyle>;
 }) {
+  const { colors } = useTheme();
   const resolved = name ?? (emoji ? iconFor(emoji) : FALLBACK);
-  return <MaterialCommunityIcons name={resolved} size={size} color={color} style={style} />;
+  return <MaterialCommunityIcons name={resolved} size={size} color={color ?? colors.text} style={style} />;
 }

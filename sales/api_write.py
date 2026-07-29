@@ -28,7 +28,43 @@ from rest_framework.views import APIView
 from api.viewsets import V1ViewMixin
 
 from . import views as web
-from .models import SalesInvoice
+from .models import SalesInvoice, SalesReceipt
+
+
+def _s(v) -> str:
+    if v is None:
+        return ""
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
+def _load_invoice(o) -> dict:
+    return {
+        "header": {
+            "date": _s(o.date), "customer": _s(o.customer_id),
+            "reference_no": o.reference_no or "", "place_of_supply": o.place_of_supply or "",
+            "vehicle_no": o.vehicle_no or "", "other_charges_amount": _s(o.other_charges_amount),
+            "remarks": o.remarks or "",
+        },
+        "items": [{
+            "item": _s(i.item_id), "uom": i.uom or "", "quantity": _s(i.quantity),
+            "free_qty": _s(i.free_qty), "rate": _s(i.rate),
+            "discount_percent": _s(i.discount_percent), "gst_percent": _s(i.gst_percent),
+            "batch_no": i.batch_no or "", "hsn_sac": i.hsn_sac or "",
+        } for i in o.items.all()],
+    }
+
+
+def _load_receipt(o) -> dict:
+    return {
+        "header": {"date": _s(o.date), "location": _s(o.location_id)},
+        "items": [{
+            "customer": _s(o.customer_id), "mode": o.mode or "Cash",
+            "receipt_account": _s(o.receipt_account_id), "amount": _s(o.amount),
+            "reference_no": o.reference_no or "", "remarks": o.remarks or "",
+        }],
+    }
 
 
 class _ShimRequest:
@@ -75,6 +111,12 @@ def _write_invoice(request, instance=None) -> Response:
 class SalesInvoiceWriteView(V1ViewMixin, APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request, pk):
+        instance = SalesInvoice.objects.prefetch_related("items").filter(pk=pk).first()
+        if not instance:
+            raise NotFound("Sales Invoice not found.")
+        return Response(_load_invoice(instance))
+
     def post(self, request):
         return _write_invoice(request)
 
@@ -113,6 +155,12 @@ def _delegate(bound_method, request, *args) -> Response:
 
 class SalesReceiptWriteView(V1ViewMixin, APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        instance = SalesReceipt.objects.filter(pk=pk).first()
+        if not instance:
+            raise NotFound("Receipt not found.")
+        return Response(_load_receipt(instance))
 
     def post(self, request):
         return _delegate(web.SalesReceiptAPI().post, request)

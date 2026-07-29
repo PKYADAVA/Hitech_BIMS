@@ -2,7 +2,6 @@ import React from "react";
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   TextInputProps,
@@ -12,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -26,6 +25,7 @@ export function Screen({
   children: React.ReactNode;
   edges?: ("top" | "bottom" | "left" | "right")[];
 }) {
+  const styles = useStyles();
   return (
     <SafeAreaView style={styles.screen} edges={edges}>
       {children}
@@ -45,6 +45,7 @@ export function Card({
   style?: ViewStyle;
   padded?: boolean;
 }) {
+  const styles = useStyles();
   const content = [styles.card, padded && styles.cardPadded, style];
   if (!onPress) return <View style={content}>{children}</View>;
   return (
@@ -58,6 +59,7 @@ export function Card({
 }
 
 export function Divider() {
+  const styles = useStyles();
   return <View style={styles.divider} />;
 }
 
@@ -70,6 +72,7 @@ export function SectionHeader({
   subtitle?: string;
   action?: React.ReactNode;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1 }}>
@@ -88,7 +91,7 @@ export function SectionHeader({
 /** Rounded tinted square holding an emoji glyph — the app's icon language. */
 export function IconCircle({
   icon,
-  color = colors.primary,
+  color,
   tint,
   size = 44,
 }: {
@@ -97,6 +100,9 @@ export function IconCircle({
   tint?: string;
   size?: number;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const c = color ?? colors.primary;
   return (
     <View
       style={[
@@ -105,11 +111,11 @@ export function IconCircle({
           width: size,
           height: size,
           borderRadius: size / 3,
-          backgroundColor: tint ?? withAlpha(color, 0.12),
+          backgroundColor: tint ?? withAlpha(c, 0.12),
         },
       ]}
     >
-      <AppIcon emoji={icon} size={size * 0.5} color={color} />
+      <AppIcon emoji={icon} size={size * 0.5} color={c} />
     </View>
   );
 }
@@ -117,6 +123,8 @@ export function IconCircle({
 export type BadgeTone = "neutral" | "success" | "danger" | "warning" | "info" | "brand";
 
 export function Badge({ label, tone = "neutral" }: { label: string; tone?: BadgeTone }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const map: Record<BadgeTone, { bg: string; fg: string }> = {
     neutral: { bg: colors.surfaceAlt, fg: colors.textMuted },
     success: { bg: colors.successLight, fg: colors.success },
@@ -140,7 +148,7 @@ export function Badge({ label, tone = "neutral" }: { label: string; tone?: Badge
 /** A tappable row: leading icon, title + subtitle, trailing value/badge, chevron. */
 export function ListItem({
   icon,
-  accent = colors.primary,
+  accent,
   title,
   subtitle,
   trailing,
@@ -153,9 +161,11 @@ export function ListItem({
   trailing?: React.ReactNode;
   onPress?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <Card onPress={onPress} style={styles.listItem}>
-      {icon ? <IconCircle icon={icon} color={accent} /> : null}
+      {icon ? <IconCircle icon={icon} color={accent ?? colors.primary} /> : null}
       <View style={styles.listItemBody}>
         <Text style={styles.listItemTitle} numberOfLines={1}>
           {title}
@@ -172,23 +182,27 @@ export function ListItem({
   );
 }
 
+
 /** Compact metric tile for dashboards / hub headers. */
 export function StatTile({
   label,
   value,
   icon,
-  accent = colors.primary,
+  accent,
 }: {
   label: string;
   value: string;
   icon?: string;
   accent?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const c = accent ?? colors.primary;
   return (
     <View style={[styles.stat, shadow(1)]}>
       {icon ? (
-        <View style={[styles.statDot, { backgroundColor: withAlpha(accent, 0.14) }]}>
-          <AppIcon emoji={icon} size={16} color={accent} />
+        <View style={[styles.statDot, { backgroundColor: withAlpha(c, 0.14) }]}>
+          <AppIcon emoji={icon} size={16} color={c} />
         </View>
       ) : null}
       <Text style={styles.statValue} numberOfLines={1}>
@@ -203,6 +217,7 @@ export function StatTile({
 
 /** label / value row for detail screens. */
 export function DetailRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -226,6 +241,8 @@ export function SearchBar({
   onChangeText: (t: string) => void;
   placeholder?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.search}>
       <AppIcon name="magnify" size={18} color={colors.textFaint} style={styles.searchIcon} />
@@ -256,6 +273,8 @@ export function Button({
   disabled?: boolean;
   variant?: "primary" | "ghost" | "danger";
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
   const fg = isPrimary || isDanger ? "#fff" : colors.primary;
@@ -286,6 +305,8 @@ export function Field({
   style,
   ...props
 }: TextInputProps & { label: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -304,6 +325,8 @@ export function Field({
 /* ------------------------------------------------------------------ */
 
 export function Loading({ label }: { label?: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.center}>
       <ActivityIndicator color={colors.primary} size="large" />
@@ -316,7 +339,7 @@ export function EmptyOrError({
   message,
   title,
   icon = "🗂️",
-  accent = colors.textFaint,
+  accent,
   onRetry,
   actionLabel,
   onAction,
@@ -337,11 +360,14 @@ export function EmptyOrError({
   secondaryLabel?: string;
   onSecondary?: () => void;
 }) {
-  const isNeutral = accent === colors.textFaint;
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const c = accent ?? colors.textFaint;
+  const isNeutral = c === colors.textFaint;
   return (
     <View style={styles.center}>
-      <View style={[styles.emptyIconWrap, !isNeutral && { backgroundColor: withAlpha(accent, 0.12) }]}>
-        <AppIcon emoji={icon} size={40} color={accent} />
+      <View style={[styles.emptyIconWrap, !isNeutral && { backgroundColor: withAlpha(c, 0.12) }]}>
+        <AppIcon emoji={icon} size={40} color={c} />
       </View>
       {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
       <Text style={styles.muted}>{message}</Text>
@@ -368,7 +394,7 @@ export function withAlpha(hex: string, alpha: number): string {
   return `${hex}${a}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   center: {
     flex: 1,
@@ -495,4 +521,4 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...type.body,
   },
-});
+}));

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, DimensionValue, Easing, StyleSheet, View, ViewStyle } from "react-native";
+import { Animated, DimensionValue, Easing, View, ViewStyle } from "react-native";
 
-import { colors, radius, shadow, spacing } from "@/theme";
+import { makeStyles, radius, shadow, spacing, useTheme } from "@/theme";
 
 /**
  * Content placeholders shown while data loads — a calmer, more premium wait
@@ -37,6 +37,7 @@ export function Skeleton({
   opacity?: Animated.Value;
   style?: ViewStyle;
 }) {
+  const { colors } = useTheme();
   const own = usePulse();
   return (
     <Animated.View
@@ -50,6 +51,7 @@ export function Skeleton({
 
 /** A card-shaped placeholder mirroring a RecordCard (icon + two text lines). */
 function SkeletonCard({ opacity }: { opacity: Animated.Value }) {
+  const styles = useStyles();
   return (
     <View style={styles.card}>
       <Skeleton width={44} height={44} radius={radius.md} opacity={opacity} />
@@ -64,6 +66,7 @@ function SkeletonCard({ opacity }: { opacity: Animated.Value }) {
 
 /** A full list of card placeholders — drop-in for a list screen's loading state. */
 export function ListSkeleton({ count = 7 }: { count?: number }) {
+  const styles = useStyles();
   const opacity = usePulse();
   return (
     <View style={styles.list}>
@@ -74,7 +77,7 @@ export function ListSkeleton({ count = 7 }: { count?: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   list: { padding: spacing.md, gap: spacing.sm },
   card: {
     flexDirection: "row",
@@ -88,4 +91,4 @@ const styles = StyleSheet.create({
     ...shadow(1),
   },
   lines: { flex: 1, gap: 8 },
-});
+}));

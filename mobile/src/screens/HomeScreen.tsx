@@ -1,12 +1,12 @@
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
 import { Badge, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
-import { colors, radius, shadow, spacing, type } from "@/theme";
+import { colors, makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { TabParams } from "@/navigation/types";
 import { AuthUser } from "@/api/types";
 import { Overview, useOverview } from "@/api/stats";
@@ -141,6 +141,7 @@ function greetingFor(date = new Date()): string {
 }
 
 function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () => void }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -192,6 +193,8 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
 }
 
 export function HomeScreen({ navigation }: Props) {
+  const styles = useStyles();
+  const { colors: theme } = useTheme();
   const user = useAuthStore((s) => s.user);
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
@@ -211,7 +214,7 @@ export function HomeScreen({ navigation }: Props) {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.primary} />
+          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={theme.primary} />
         }
       >
         <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
@@ -263,7 +266,7 @@ export function HomeScreen({ navigation }: Props) {
 const GAP = spacing.md;
 const ON_DARK_SOFT = withAlpha(colors.onDark, 0.75);
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   scroll: { paddingBottom: spacing.xxl },
 
   header: {
@@ -346,4 +349,4 @@ const styles = StyleSheet.create({
   tileSub: { ...type.caption, color: colors.textMuted },
   soon: { position: "absolute", top: spacing.sm, right: spacing.sm },
   tileBar: { height: 4, width: "100%" },
-});
+}));

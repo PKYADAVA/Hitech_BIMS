@@ -6,7 +6,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -15,10 +14,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { changePassword } from "@/api/auth";
 import { ApiError } from "@/api/types";
 import { Button, Field } from "@/components/ui";
-import { colors, spacing, type } from "@/theme";
+import { makeStyles, spacing, type } from "@/theme";
 
 /** Slide-up sheet to change the signed-in user's password. */
 export function ChangePasswordModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const styles = useStyles();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -134,7 +134,7 @@ export function ChangePasswordModal({ visible, onClose }: { visible: boolean; on
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   header: {
@@ -157,4 +157,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: spacing.md,
   },
-});
+}));

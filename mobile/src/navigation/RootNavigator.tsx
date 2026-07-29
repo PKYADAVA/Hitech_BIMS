@@ -1,5 +1,5 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
@@ -23,7 +23,7 @@ import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { colors, shadow } from "@/theme";
+import { colors, shadow, useTheme } from "@/theme";
 import { ModuleStackParams, TabParams } from "./types";
 
 const Root = createNativeStackNavigator();
@@ -53,6 +53,7 @@ function headerTitleWithIcon(icon: string, title: string) {
  * gesture rather than a header button.
  */
 function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
+  const { colors } = useTheme();
   const mod = MODULES[moduleKey];
   return (
     <ModuleStack.Navigator
@@ -122,6 +123,7 @@ const HrStack = () => <ModuleStackScreen moduleKey="hr" />;
 const UserStack = () => <ModuleStackScreen moduleKey="user" />;
 
 function AppTabs() {
+  const { colors } = useTheme();
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
   const show = (m: string) => !permsLoaded || canModule(m);
@@ -156,11 +158,19 @@ function AppTabs() {
 
 export function RootNavigator() {
   const status = useAuthStore((s) => s.status);
+  const { scheme, colors } = useTheme();
 
   if (status === "loading") return <Loading label="Starting…" />;
 
+  // Theme the container so screen backgrounds (and transition flashes) match
+  // the active palette instead of React Navigation's default white.
+  const navTheme =
+    scheme === "dark"
+      ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.primary, text: colors.text } }
+      : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bg, card: colors.surface, border: colors.border, primary: colors.primary, text: colors.text } };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Root.Navigator screenOptions={{ headerShown: false }}>
         {status === "signedIn" ? (
           <>
