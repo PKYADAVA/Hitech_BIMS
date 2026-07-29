@@ -10,21 +10,21 @@
 {% include '_report_letterhead.html' with title='Stock Report' criteria=criteria %}
 
 <div class="rpt-filter no-print">
-  <form method="get" class="row g-2 align-items-end">
-    <div class="col-md-2 col-6"><label class="form-label">From Date</label>
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
       <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
-    <div class="col-md-2 col-6"><label class="form-label">To Date</label>
+    <div><label class="form-label">To Date</label>
       <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
-    <div class="col-md-3 col-12"><label class="form-label">Item</label>
+    <div><label class="form-label">Item</label>
       <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
         {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
       </select></div>
-    <div class="col-md-3 col-12"><label class="form-label">Warehouse</label>
+    <div><label class="form-label">Warehouse</label>
       <select name="warehouse" class="form-select form-select-sm" required>
         <option value="">Select warehouse</option>
         {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
       </select></div>
-    <div class="col-md-2 col-12 d-flex gap-1 flex-wrap">
+    <div class="rpt-actions">
       <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'stock_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
       {% if warehouse %}<a class="btn btn-outline-success btn-sm" href="?warehouse={{ warehouse_id }}{% if item_id %}&amp;item={{ item_id }}{% endif %}{% if from_date %}&amp;from_date={{ from_date }}{% endif %}{% if to_date %}&amp;to_date={{ to_date }}{% endif %}&amp;export=excel"><i class="fas fa-file-excel me-1"></i>Excel</a>{% endif %}

@@ -10,20 +10,20 @@
 {% include '_report_letterhead.html' with title='Item Summary Report' criteria=criteria %}
 
 <div class="rpt-filter no-print">
-  <form method="get" class="row g-2 align-items-end">
-    <div class="col-md-2 col-6"><label class="form-label">From Date</label>
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
       <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
-    <div class="col-md-2 col-6"><label class="form-label">To Date</label>
+    <div><label class="form-label">To Date</label>
       <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
-    <div class="col-md-2 col-6"><label class="form-label">Category</label>
+    <div><label class="form-label">Category</label>
       <select name="category" class="form-select form-select-sm"><option value="">-All-</option>
         {% for c in categories %}<option value="{{ c.id }}" {% if category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
       </select></div>
-    <div class="col-md-3 col-12"><label class="form-label">Items</label>
+    <div><label class="form-label">Items</label>
       <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
         {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
       </select></div>
-    <div class="col-md-3 col-12"><label class="form-label">Farm/Sector</label>
+    <div><label class="form-label">Farm/Sector</label>
       <select name="location" class="form-select form-select-sm"><option value="">-All-</option>
         <optgroup label="Warehouse">
           {% for w in warehouses %}<option value="warehouse:{{ w.id }}" {% if location == 'warehouse:'|add:w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
@@ -32,7 +32,7 @@
           {% for f in farms %}<option value="farm:{{ f.id }}" {% if location == 'farm:'|add:f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
         </optgroup>
       </select></div>
-    <div class="col-md-12 d-flex gap-1 flex-wrap">
+    <div class="rpt-actions">
       <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'item_summary_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
       <a class="btn btn-outline-success btn-sm" id="is-excel" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
