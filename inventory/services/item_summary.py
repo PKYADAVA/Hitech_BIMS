@@ -262,3 +262,16 @@ def negative_stock(as_of_date=None, item_id=None, location_type=None, location_i
         })
     rows.sort(key=lambda r: (r["location"], r["item"]))
     return rows
+
+def location_item_stock(location_type, location_id, item_id, as_of_date=None):
+    """Running stock balance of one item at one location as of a date.
+
+    Warehouses have inventory.models.warehouse_item_stock for this; farms do
+    not, so this replays the same normalised movement set used by the reports —
+    including the farm-only outflows (daily-entry feed and medicine/vaccine
+    consumption).
+    """
+    balance = Z
+    for m in _collect(None, as_of_date, None, item_id, location_type, location_id):
+        balance = balance + m["qty"] if m["dir"] == "in" else balance - m["qty"]
+    return balance

@@ -1142,9 +1142,17 @@ def stock_transfer_item_lookup(request):
 
 @login_required
 def stock_transfer_stock_lookup(request):
-    """Opening stock of an item at a source location (Warehouse or Farm) as
-    of a given date — the closing balance of the most recent saved transfer
-    before that date (0 if none)."""
+    """True stock of an item at a source location (Warehouse or Farm) as of a
+    date, reconciled across every transaction type.
+
+    This used to report the running balance carried on the most recent prior
+    *transfer*, which ignored purchases, stock received, issues and
+    adjustments — so the Stock column showed 0 for items that plainly had
+    stock. It now uses the same figure StockTransfer.clean() enforces on save,
+    so the preview and the validation can no longer disagree.
+    """
+    from inventory.services.item_summary import location_item_stock
+
     location_type = request.GET.get("location_type")
     location_id = request.GET.get("location_id")
     item_id = request.GET.get("item")
@@ -1152,7 +1160,10 @@ def stock_transfer_stock_lookup(request):
     if not location_type or not location_id or not item_id or not entry_date:
         return JsonResponse({"stock": "0"})
     d = timezone.datetime.fromisoformat(entry_date).date()
-    stock = StockTransfer.previous_stock(location_type, int(location_id), int(item_id), d, None)
+    if location_type == "warehouse":
+        stock = warehouse_item_stock(int(item_id), int(location_id), as_of_date=d)
+    else:
+        stock = location_item_stock(location_type, int(location_id), int(item_id), as_of_date=d)
     return JsonResponse({"stock": str(stock)})
 
 

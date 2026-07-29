@@ -34,7 +34,6 @@
             <tr>
               <th style="min-width:130px">Date <span class="text-danger">*</span></th>
               <th style="min-width:110px">Dc No.</th>
-              <th style="min-width:160px">Category</th>
               <th style="min-width:220px">Item <span class="text-danger">*</span></th>
               <th style="min-width:90px">UOM</th>
               <th style="min-width:100px">Stock</th>
@@ -66,15 +65,11 @@
 
 {% block js %}
 <script>
-// All items with their category, so the Item dropdown can be filtered by the
-// Category chosen in the same row.
-const ITEMS = [{% for item in items %}{ id: {{ item.id }}, cat: "{{ item.category_id }}", uom: "{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}{% endif %}", rate: "{{ item.standard_cost_per_unit }}", label: "{{ item.item_code|escapejs }} - {{ item.description|escapejs }}" },{% endfor %}];
-const categoryOptions = `<option value="">All</option>{% for c in categories %}<option value="{{ c.id }}">{{ c.name|escapejs }}</option>{% endfor %}`;
-function itemOptionsFor(catId) {
-  const list = catId ? ITEMS.filter(i => i.cat === String(catId)) : ITEMS;
-  return '<option value="">select</option>' + list.map(i =>
-    `<option value="${i.id}" data-uom="${i.uom}" data-rate="${i.rate}">${i.label}</option>`).join('');
-}
+// The Item dropdown lists every item; it is chosen directly, with no Category
+// step in front of it.
+const ITEMS = [{% for item in items %}{ id: {{ item.id }}, uom: "{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}{% endif %}", rate: "{{ item.standard_cost_per_unit }}", label: "{{ item.item_code|escapejs }} - {{ item.description|escapejs }}" },{% endfor %}];
+const itemOptions = '<option value="">select</option>' + ITEMS.map(i =>
+  `<option value="${i.id}" data-uom="${i.uom}" data-rate="${i.rate}">${i.label}</option>`).join('');
 const locationOptions = `<option value="">select</option>
   <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
   <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>`;
@@ -92,8 +87,7 @@ function row() {
   tr.innerHTML = `
     <td><input class="form-control date" type="date" value="${TODAY}" required></td>
     <td><input class="form-control dc-no"></td>
-    <td><select class="form-select category">${categoryOptions}</select></td>
-    <td><select class="form-select item" required>${itemOptionsFor('')}</select></td>
+    <td><select class="form-select item" required>${itemOptions}</select></td>
     <td><input class="form-control bg-light uom" readonly></td>
     <td><input class="form-control bg-light stock" readonly placeholder="auto"></td>
     <td><input class="form-control quantity" type="number" min="0" step=".01" value="0"></td>
@@ -176,15 +170,6 @@ async function recomputeStockPreview() {
 }
 
 get('row-table').addEventListener('change', e => {
-  if (e.target.classList.contains('category')) {
-    const tr = e.target.closest('tr');
-    const itemSel = tr.querySelector('.item');
-    itemSel.innerHTML = itemOptionsFor(e.target.value);   // narrow items to this category
-    if (window.jQuery) jQuery(itemSel).trigger('change.select2');
-    tr.querySelector('.uom').value = '';
-    tr.querySelector('.purchase-rate').value = '0';
-    recomputeStockPreview();
-  }
   if (e.target.classList.contains('item')) {
     const tr = e.target.closest('tr');
     const opt = e.target.selectedOptions[0];
