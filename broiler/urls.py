@@ -96,6 +96,7 @@ urlpatterns = [
     path('medicine-entry/item-lookup/', views.medicine_entry_item_lookup, name='medicine_entry_item_lookup'),
     path('medicine-entry/stock-lookup/', views.medicine_entry_stock_lookup, name='medicine_entry_stock_lookup'),
 
+    path('bird-sale/customer-balance/', views.bird_sale_customer_balance, name='bird_sale_customer_balance'),
     path('bird-sale/', views.BirdSaleListTemplateView.as_view(), name='bird_sale_list'),
     path('bird-sale/add/', views.BirdSaleFormTemplateView.as_view(), name='bird_sale_add'),
     path('bird-sale/<int:id>/edit/', views.BirdSaleFormTemplateView.as_view(), name='bird_sale_edit'),

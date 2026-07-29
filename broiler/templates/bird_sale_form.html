@@ -46,6 +46,7 @@
             <tr>
               <th style="min-width:95px">Date <span class="text-danger">*</span></th>
               <th style="min-width:130px">Customer / Farmer <span class="text-danger">*</span></th>
+              <th style="min-width:110px">Ledger Balance</th>
               <th style="min-width:80px">Doc No.</th>
               <th style="min-width:110px">Farm <span class="text-danger">*</span></th>
               <th style="min-width:80px">Batch</th>
@@ -98,6 +99,8 @@ function row() {
       <input class="form-control form-control-sm bg-light farmer-display d-none" readonly
              placeholder="Select a Farm" data-farmer-id="">
     </td>
+    <td><input class="form-control form-control-sm bg-light ledger-balance" readonly
+               placeholder="—" title="Outstanding ledger balance"></td>
     <td><input class="form-control form-control-sm doc-no"></td>
     <td><select class="form-select form-select-sm farm" required>${farmOptions}</select></td>
     <td><input class="form-control form-control-sm bg-light batch" readonly></td>
@@ -154,6 +157,30 @@ function applySaleTypeToRow(tr) {
   const farmer = isFarmerSale();
   tr.querySelector('.customer').classList.toggle('d-none', farmer);
   tr.querySelector('.farmer-display').classList.toggle('d-none', !farmer);
+  // A farmer sale has no customer ledger, so the balance is not applicable.
+  if (farmer) { tr.querySelector('.ledger-balance').value = ''; }
+  else { refreshLedgerBalance(tr); }
+}
+
+// Outstanding ledger balance of the selected customer, shown as Dr (owes us)
+// or Cr (in advance) using the same figures as the Customer Balance report.
+async function refreshLedgerBalance(tr) {
+  const box = tr.querySelector('.ledger-balance');
+  const customerId = tr.querySelector('.customer').value;
+  box.classList.remove('text-danger');
+  box.title = 'Outstanding ledger balance';
+  if (isFarmerSale() || !customerId) { box.value = ''; return; }
+  try {
+    const resp = await fetch(`{% url 'bird_sale_customer_balance' %}?customer=${customerId}`);
+    const data = await resp.json();
+    box.value = data.label || '';
+    if (Number(data.limit_exceeded) > 0) {
+      box.classList.add('text-danger');
+      box.title = `Over credit limit by ${data.limit_exceeded} (limit ${data.credit_limit})`;
+    } else if (data.credit_limit && Number(data.credit_limit) > 0) {
+      box.title = `Credit limit ${data.credit_limit}, available ${data.available}`;
+    }
+  } catch (err) { box.value = ''; }
 }
 
 function applySaleTypeToAllRows() {
@@ -164,6 +191,9 @@ get('sale-type-customer').addEventListener('change', applySaleTypeToAllRows);
 get('sale-type-farmer').addEventListener('change', applySaleTypeToAllRows);
 
 get('row-table').addEventListener('change', e => {
+  if (e.target.classList.contains('customer')) {
+    refreshLedgerBalance(e.target.closest('tr'));
+  }
   if (e.target.classList.contains('farm')) {
     const tr = e.target.closest('tr');
     const farmId = e.target.value;
