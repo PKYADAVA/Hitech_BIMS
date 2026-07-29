@@ -1212,3 +1212,34 @@ def sales_receipt_balance_lookup(request):
     balance = _customer_current_balance(request.GET.get("customer"),
                                         exclude_sales_receipt_id=request.GET.get("exclude_id"))
     return JsonResponse({"balance": str(balance)})
+
+@login_required
+def customer_ledger_balance(request):
+    """Outstanding ledger balance of one customer, for forms that raise a
+    document against them (Bird Sale, Delivery Challan).
+
+    Reuses the Customer Balance report's own row builder rather than adding a
+    second calculation, so the figure shown while raising a document cannot
+    drift from the report the same customer is judged by.
+    """
+    customer_id = (request.GET.get("customer") or "").strip()
+    customer = (Customer.objects.select_related("customer_group")
+                .filter(id=customer_id).first()) if customer_id.isdigit() else None
+    if not customer:
+        return JsonResponse({"balance": "", "label": "", "available": ""})
+
+    # No window: opening plus every movement to date is the current balance.
+    row = _customer_balance_row(customer, None, None, timezone.localdate())
+    if row["debit"] > 0:
+        label = "%s Dr" % row["debit"]          # customer owes us
+    elif row["credit"] > 0:
+        label = "%s Cr" % row["credit"]         # customer is in advance
+    else:
+        label = "0.00"
+    return JsonResponse({
+        "balance": str(row["debit"] - row["credit"]),
+        "label": label,
+        "credit_limit": str(row["credit_limit"]),
+        "available": str(row["available"]),
+        "limit_exceeded": str(row["limit_exceeded"]),
+    })

@@ -171,7 +171,7 @@ async function refreshLedgerBalance(tr) {
   box.title = 'Outstanding ledger balance';
   if (isFarmerSale() || !customerId) { box.value = ''; return; }
   try {
-    const resp = await fetch(`{% url 'bird_sale_customer_balance' %}?customer=${customerId}`);
+    const resp = await fetch(`{% url 'customer_ledger_balance' %}?customer=${customerId}`);
     const data = await resp.json();
     box.value = data.label || '';
     if (Number(data.limit_exceeded) > 0) {
