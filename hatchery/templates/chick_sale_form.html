@@ -18,6 +18,12 @@
   .sale-print th { background:#eee; }
   .sale-print .total-row { text-align:right; font-size:15px; font-weight:700; padding:8px 4px; background:#fbe4d5; }
   .sale-print .amount-words { margin-top:6px; font-size:12px; }
+  /* Compact grid, same as Bird Sale's #row-table: 15 columns need the width
+     back that default cell/control padding takes, or values get clipped. */
+  #item-table th, #item-table td { padding: .25rem .35rem; white-space: nowrap; }
+  #item-table .form-control, #item-table .form-select {
+    padding: .15rem .4rem; font-size: .8rem; min-height: 28px; height: 28px;
+  }
   .sale-print .footer-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:10px; margin-top:20px; font-size:12px; }
   .sale-print .footer-grid .signature-box { text-align:right; }
   .sale-print .signature-line { margin-top:50px; border-top:1px solid #333; padding-top:4px; }
@@ -280,7 +286,7 @@ function itemRow(row={}) {
     <td><input class="form-control free-qty" type="number" min="0" step=".01" value="${row.free_qty||0}"></td>
     <td><input class="form-control bg-light net-qty" readonly value="0.00"></td>
     <td><input class="form-control sale-rate" type="number" min="0" step=".01" value="${row.sale_rate||0}"></td>
-    <td class="amount text-end align-middle">0.00</td>
+    <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
     <td><input class="form-control farm" value="${row.farm||''}"></td>
     <td><button type="button" class="btn btn-sm btn-outline-danger remove"><i class="fas fa-trash"></i></button></td>`;
   get('item-table').tBodies[0].append(tr);
@@ -300,7 +306,7 @@ function calcRow(tr){
     billed=Math.max(0, Math.round(saleQty)-num('.free-qty'));
   }
   tr.querySelector('.net-qty').value=billed;
-  tr.querySelector('.amount').textContent=(billed*num('.sale-rate')-num('.disc-amount')).toFixed(2);
+  tr.querySelector('.amount').value=(billed*num('.sale-rate')-num('.disc-amount')).toFixed(2);
   totals();
 }
 function renumberRows(){ document.querySelectorAll('#item-table tbody tr').forEach((tr,i)=>{tr.querySelector('.sr').textContent=i+1;}); }
@@ -309,7 +315,7 @@ function totals(){
   document.querySelectorAll('#item-table tbody tr').forEach(tr=>{
     const num=s=>Number(tr.querySelector(s).value)||0;
     birds+=num('.total-qty'); sale+=num('.sale-qty'); free+=num('.free-qty'); net+=num('.net-qty');
-    amount+=Number(tr.querySelector('.amount').textContent)||0;
+    amount+=Number(tr.querySelector('.amount').value)||0;
   });
   get('total_birds').textContent=Math.round(birds); get('total_sale').textContent=Math.round(sale);
   get('total_free').textContent=Math.round(free);
@@ -473,7 +479,7 @@ function fillPrint(){
   get('p_shipping').textContent=value('shipping_address');
   get('p_terms').textContent=value('terms');
   const rows=[...document.querySelectorAll('#item-table tbody tr')];
-  get('p_items').innerHTML=rows.map((tr,i)=>`<tr><td>${i+1}</td><td>${tr.querySelector('.item').selectedOptions[0]?.textContent||''}</td><td>${tr.querySelector('.farm').value}</td><td>${tr.querySelector('.total-qty').value}</td><td>${tr.querySelector('.mortality').value}</td><td>${tr.querySelector('.culls').value}</td><td>${tr.querySelector('.free-qty').value}</td><td>${tr.querySelector('.net-qty').value}</td><td>${tr.querySelector('.sale-rate').value}</td><td>${tr.querySelector('.amount').textContent}</td></tr>`).join('');
+  get('p_items').innerHTML=rows.map((tr,i)=>`<tr><td>${i+1}</td><td>${tr.querySelector('.item').selectedOptions[0]?.textContent||''}</td><td>${tr.querySelector('.farm').value}</td><td>${tr.querySelector('.total-qty').value}</td><td>${tr.querySelector('.mortality').value}</td><td>${tr.querySelector('.culls').value}</td><td>${tr.querySelector('.free-qty').value}</td><td>${tr.querySelector('.net-qty').value}</td><td>${tr.querySelector('.sale-rate').value}</td><td>${tr.querySelector('.amount').value}</td></tr>`).join('');
   const finalAmount=Number(value('final_amount'))||0;
   get('p_total').textContent=finalAmount.toFixed(2);
   get('p_words').textContent='Rs. '+numberToWordsIndian(finalAmount)+' Only';
