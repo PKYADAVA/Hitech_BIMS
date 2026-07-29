@@ -7,8 +7,13 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from .admin_import_template import admin_import_template
+
 # Define URL patterns
 urlpatterns = [
+    # Sample-template download for every import-export admin Import page.
+    # Must precede the admin catch-all so it resolves under /admin/.
+    path("admin/import-template/", admin_import_template, name="admin_import_template"),
     path("admin/", admin.site.urls),
     path("", include("user.urls")),
     path("", include("broiler.urls")),

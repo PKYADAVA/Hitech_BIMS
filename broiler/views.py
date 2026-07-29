@@ -918,6 +918,8 @@ class SupervisorAPI(BaseAPIView):
                 employee = Employee.objects.get(id=data.get("employee"))
             except Employee.DoesNotExist:
                 return JsonResponse({"error": "Select an employee"}, status=400)
+            if Supervisor.objects.filter(employee=employee).exists():
+                return JsonResponse({"error": f"{employee.full_name} is already mapped to a supervisor."}, status=400)
             with transaction.atomic():
                 supervisor = Supervisor(branch=branch)
                 self._apply_employee(supervisor, employee)
@@ -940,6 +942,8 @@ class SupervisorAPI(BaseAPIView):
                         employee = Employee.objects.get(id=data["employee"])
                     except Employee.DoesNotExist:
                         return JsonResponse({"error": "Invalid employee"}, status=400)
+                    if Supervisor.objects.filter(employee=employee).exclude(pk=supervisor.pk).exists():
+                        return JsonResponse({"error": f"{employee.full_name} is already mapped to another supervisor."}, status=400)
                     self._apply_employee(supervisor, employee)
                 supervisor.save()
                 cache.delete("supervisor_list")

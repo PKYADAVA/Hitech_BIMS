@@ -247,6 +247,8 @@ class BroilerFarmAdmin(ImportExportModelAdmin):
     list_per_page = 20
     ordering = ('farm_name',)
     inlines = [BroilerFarmShedInline, BroilerFarmImageInline]
+    # farm_code is auto-generated (editable=False) — read-only in the form.
+    readonly_fields = ('farm_code',)
     fieldsets = (
         ('Basic Information', {
             'fields': ('farm_name', 'farm_code', 'farm_type', 'farmer')

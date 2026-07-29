@@ -32,6 +32,8 @@ class HatchSettingAdmin(ImportExportModelAdmin):
     list_per_page = 20
     ordering = ('-setting_date',)
     inlines = [HatchEggIntakeInline, HatchHatcherOutputInline, HatchSalesLineInline]
+    # batch_flock_no is auto-generated (editable=False) — read-only in the form.
+    readonly_fields = ('batch_flock_no',)
     fieldsets = (
         ('Hatch Lot & Timeline Identification', {
             'fields': (

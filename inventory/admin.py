@@ -47,6 +47,9 @@ class ItemAdmin(ImportExportModelAdmin):
     search_fields = ('item_code', 'description', 'category__name', 'warehouse__name', 'hsn_code')
     autocomplete_fields = ('category',)
     filter_horizontal = ('warehouse',)
+    # item_code is auto-generated (editable=False) — show it read-only so it can
+    # stay in the fieldset without breaking the add/change form.
+    readonly_fields = ('item_code',)
 
     def warehouse_list(self, obj):
         return ", ".join(w.name for w in obj.warehouse.all())

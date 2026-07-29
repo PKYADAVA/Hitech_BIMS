@@ -274,12 +274,12 @@ class Supervisor(models.Model):
         related_name='supervisors',
         help_text=_("Branch this supervisor belongs to")
     )
-    employee = models.ForeignKey(
+    employee = models.OneToOneField(
         'hr.Employee',
         on_delete=models.SET_NULL,
         null=True, blank=True,
-        related_name='broiler_supervisor_roles',
-        help_text=_("HR employee record this supervisor is — name/phone/address are copied from here")
+        related_name='broiler_supervisor_role',
+        help_text=_("HR employee record this supervisor is (one-to-one) — name/phone/address are copied from here")
     )
     name = models.CharField(
         max_length=100,

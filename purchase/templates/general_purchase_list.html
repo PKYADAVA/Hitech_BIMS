@@ -49,7 +49,7 @@
       <table class="table table-hover table-bordered mb-0" id="purchase-table">
         <thead class="table-dark">
           <tr>
-            <th>Date</th><th>Invoice</th><th>DC.No</th><th>Supplier</th><th>Item</th>
+            <th>Date</th><th>Invoice</th><th>Supplier</th><th>Item</th>
             <th>Quantity</th><th>Bags</th><th>Price</th><th>Amount</th>
             <th>Farm/Warehouse</th><th>Flock/Batch</th><th>Vehicle</th><th>Driver</th>
             <th class="text-center">Action</th>
@@ -108,7 +108,6 @@ $(function () {
       tbody.append(`<tr>
         <td>${escapeHtml(row.date)}</td>
         <td>${escapeHtml(row.bill_no) || "-"}</td>
-        <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.supplier_name)}</td>
         <td>${escapeHtml(row.item_names)}</td>
         <td>${escapeHtml(row.quantity)}</td>

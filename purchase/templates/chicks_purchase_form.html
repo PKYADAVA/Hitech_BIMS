@@ -62,10 +62,6 @@
             {% for item in items %}<option value="{{ item.id }}" {% if chicks_purchase.item_id == item.id %}selected{% endif %}>{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
-          <label class="form-label">DC No.</label>
-          <input type="text" class="form-control" name="dc_no" value="{{ chicks_purchase.dc_no|default:'' }}">
-        </div>
         <div class="col-md-3">
           <label class="form-label">Vehicle</label>
           <input type="text" class="form-control" name="vehicle_no" value="{{ chicks_purchase.vehicle_no|default:'' }}">

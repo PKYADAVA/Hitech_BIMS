@@ -50,10 +50,6 @@
           <input type="text" class="form-control bg-light" readonly value="{{ general_purchase.purchase_no|default:next_purchase_no }}">
         </div>
         <div class="col-md-3">
-          <label class="form-label">DC No.</label>
-          <input type="text" class="form-control" name="dc_no" value="{{ general_purchase.dc_no|default:'' }}">
-        </div>
-        <div class="col-md-3">
           <label class="form-label">Vehicle</label>
           <input type="text" class="form-control" name="vehicle_no" value="{{ general_purchase.vehicle_no|default:'' }}">
         </div>

@@ -83,7 +83,8 @@
                                 <label for="warehouse" class="form-label mb-0">Warehouse</label>
                                 <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#warehouse">Select All</button>
                             </div>
-                            <select id="warehouse" class="form-select" multiple required>
+                            <select id="warehouse" class="form-select" multiple>
+                                <option value="__all__">-- All Warehouses --</option>
                                 {% for warehouse in warehouses %}
                                     <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
                                 {% endfor %}
@@ -224,15 +225,30 @@
 
     function warehouseOptionsHtml(selectedIds) {
         const selected = new Set((selectedIds || []).map(String));
-        return WAREHOUSE_OPTIONS.map((w) =>
+        return `<option value="__all__">-- All Warehouses --</option>` + WAREHOUSE_OPTIONS.map((w) =>
             `<option value="${w.id}" ${selected.has(String(w.id)) ? "selected" : ""}>${escapeHtml(w.name)}</option>`
         ).join("");
     }
 
+    // Selected warehouse ids, excluding the "All" sentinel option.
+    function selectedWarehouseIds($sel) {
+        return ($sel.val() || []).filter((v) => v !== "__all__");
+    }
+
     $(document).on("click", ".select-all-warehouses", function () {
         const target = $($(this).data("target"));
-        target.find("option").prop("selected", true);
+        target.find("option").not("[value='__all__']").prop("selected", true);
+        target.find("option[value='__all__']").prop("selected", false);
         target.trigger("change");
+    });
+
+    // Picking the "All" option selects every real warehouse (and clears itself).
+    $(document).on("change", "#warehouse, #dynamic-warehouse", function () {
+        const $sel = $(this);
+        if ($sel.find("option[value='__all__']:selected").length) {
+            $sel.find("option").not("[value='__all__']").prop("selected", true);
+            $sel.find("option[value='__all__']").prop("selected", false);
+        }
     });
 
     $(document).ready(function () {
@@ -270,17 +286,7 @@
                                 <td>
                                     <div class="d-flex gap-1">
                                     {% if page_perms.edit %}<button class="btn btn-outline-warning btn-sm edit-item"
-                                        data-item_id="${item.id}"
-                                        data-item_code="${item.item_code}"
-                                        data-description="${item.description}"
-                                        data-category="${item.category ?? ""}"
-                                        data-warehouse='${JSON.stringify(item.warehouse_ids || [])}'
-                                        data-valuation_method="${item.valuation_method}"
-                                        data-standard_cost_per_unit="${item.standard_cost_per_unit}"
-                                        data-usage="${item.usage}"
-                                        data-storage_uom="${item.storage_uom ?? ""}"
-                                        data-consumption_uom="${item.consumption_uom ?? ""}"
-                                        data-hsn_code="${item.hsn_code ?? ""}">
+                                        data-item_id="${item.id}">
                                         <i class="fas fa-pen"></i>
                                     </button>{% endif %}
                                     {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-item"
@@ -308,10 +314,18 @@
 
         // Handle edit button click
         $(document).on("click", ".edit-item", function () {
-            console.log("Edit button clicked", this);
-            const itemData = $(this).data();
-            console.log(itemData.item_id, "itemData");
+            const itemId = $(this).data("item_id");
+            // Fetch fresh, clean data. Avoids fragile data-* attribute parsing that
+            // breaks on descriptions containing quotes and can silently drop the
+            // warehouse selection (which then fails "At least one warehouse required").
+            $.getJSON(`/item/${itemId}/`, function (itemData) {
+                renderItemEditModal(itemData);
+            }).fail(function () {
+                window.showToast('danger', "Could not load the item for editing.");
+            });
+        });
 
+        function renderItemEditModal(itemData) {
             // Remove any existing modal and create a new one dynamically
             $("#dynamicItemEditModal").remove();
 
@@ -326,7 +340,7 @@
                             <div class="modal-body">
                                 <form id="dynamic-item-form">
                                     {% csrf_token %}
-                                    <input type="hidden" id="item-id" value="${itemData.item_id}" />
+                                    <input type="hidden" id="edit-item-id" value="${itemData.id}" />
                                     <div class="mb-3">
                                         <label for="dynamic-item_code" class="form-label">Item Code</label>
                                         <input type="text" id="dynamic-item_code" class="form-control bg-light" value="${itemData.item_code}" readonly />
@@ -344,7 +358,7 @@
                                             <label for="dynamic-warehouse" class="form-label mb-0">Warehouse</label>
                                             <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#dynamic-warehouse">Select All</button>
                                         </div>
-                                        <select id="dynamic-warehouse" class="form-select" multiple required>${warehouseOptionsHtml(itemData.warehouse)}</select>
+                                        <select id="dynamic-warehouse" class="form-select" multiple>${warehouseOptionsHtml(itemData.warehouse)}</select>
                                     </div>
                                     <div class="mb-3">
                                         <label for="dynamic-valuation_method" class="form-label">Valuation Method</label>
@@ -404,11 +418,11 @@
 
                 // Collect the updated data
                 const updatedItemData = {
-                    id: $("#item-id").val(),
+                    id: $("#edit-item-id").val(),
                     item_code: $("#dynamic-item_code").val(),
                     description: $("#dynamic-description").val(),
                     category: $("#dynamic-category").val(),
-                    warehouse: $("#dynamic-warehouse").val() || [],
+                    warehouse: selectedWarehouseIds($("#dynamic-warehouse")),
                     valuation_method: $("#dynamic-valuation_method").val(),
                     standard_cost_per_unit: parseFloat($("#dynamic-standard_cost_per_unit").val()) || 0,
                     usage: $("#dynamic-usage").val(),
@@ -434,7 +448,7 @@
                     },
                     error: function (xhr, status, error) {
                         console.error("Failed to update item:", xhr.responseText);
-                        window.showToast('danger', "An error occurred while updating the item.");
+                        window.showToast('danger', xhr.responseJSON?.error || "An error occurred while updating the item.");
                     },
                 });
             });
@@ -443,7 +457,7 @@
             $("#dynamicItemEditModal").on("hidden.bs.modal", function () {
                 $(this).remove();
             });
-        });
+        }
 
 
         // Handle item form submission
@@ -456,7 +470,7 @@
             const itemData = {
                 description: $("#description").val(),
                 category: $("#category").val(),
-                warehouse: $("#warehouse").val(),
+                warehouse: selectedWarehouseIds($("#warehouse")),
                 valuation_method: $("#valuation_method").val(),
                 standard_cost_per_unit: parseFloat($("#standard_cost_per_unit").val()) || 0,
                 usage: $("#usage").val(),

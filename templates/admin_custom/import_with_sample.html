@@ -1,0 +1,20 @@
+{% extends "admin/import_export/import.html" %}
+{% load i18n %}
+
+{# Prepend a downloadable sample/template link, then render the theme's normal
+   import form via block.super. Works with the jazzmin import.html (which only
+   exposes a `content` block, no import_form_additional_info hook). #}
+{% block content %}
+  <div class="alert alert-info" style="margin-bottom:16px;">
+    <strong>{% trans "Not sure of the format?" %}</strong>
+    {% trans "Download a ready-made template with every column to fill in for bulk upload:" %}
+    <a href="{% url 'admin_import_template' %}?app={{ opts.app_label }}&amp;model={{ opts.model_name }}&amp;format=xlsx">
+      {% trans "Excel template" %}
+    </a>
+    &middot;
+    <a href="{% url 'admin_import_template' %}?app={{ opts.app_label }}&amp;model={{ opts.model_name }}&amp;format=csv">
+      {% trans "CSV" %}
+    </a>.
+  </div>
+  {{ block.super }}
+{% endblock %}
