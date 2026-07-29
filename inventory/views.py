@@ -1269,6 +1269,8 @@ def _save_medicine_transfer_items(transfer, items_data):
     for that item at this source location, then chained locally so two
     lines of the same item within one submission stack correctly). Returns
     the set of item ids the transfer now touches."""
+    from inventory.services.pricing import item_issue_price, missing_price_message
+
     transfer.items.all().delete()
     location_type = transfer.from_location_type
     location_id = transfer.from_warehouse_id or transfer.from_farm_id
@@ -1281,6 +1283,12 @@ def _save_medicine_transfer_items(transfer, items_data):
         quantity = Decimal(str(row.get("quantity") or 0))
         rate = Decimal(str(row.get("rate") or 0))
         remarks = row.get("remarks") or ""
+        # Lines are valued at the Item Price Master rate, so refuse one whose
+        # item has no price for this date rather than storing a guess. These
+        # rows are created directly, so the check cannot live on the model.
+        line_item = Item.objects.filter(id=item_id).first()
+        if item_issue_price(line_item, transfer.date) is None:
+            raise ValidationError(missing_price_message(line_item, transfer.date))
         if item_id not in running_by_item:
             running_by_item[item_id] = Decimal(str(
                 MedicineTransferItem.previous_stock(location_type, location_id, item_id, transfer.date, None)))
@@ -1531,21 +1539,41 @@ def medicine_transfer_bulk_update(request):
 
 @login_required
 def medicine_transfer_item_lookup(request):
-    """UOM and default rate for a selected item, for the Add form's
-    auto-filled Unit / Rate fields."""
+    """UOM and issue price for a selected item, for the Add form's auto-filled
+    Unit / Rate fields. The rate is the Item Price Master price effective on
+    the transfer's date; when none exists the form is told so it can flag it."""
+    from inventory.services.pricing import item_issue_price, missing_price_message
+
     item_id = request.GET.get("item")
     item = Item.objects.filter(id=item_id).first() if item_id else None
+    on_date = None
+    raw_date = (request.GET.get("date") or "").strip()
+    if raw_date:
+        try:
+            on_date = timezone.datetime.fromisoformat(raw_date).date()
+        except ValueError:
+            on_date = None
+    price = item_issue_price(item, on_date)
     return JsonResponse({
         "unit": _uom_label(item.storage_uom) if item else "",
-        "rate": str(item.standard_cost_per_unit) if item else "0",
+        "rate": "" if price is None else str(price),
+        "price_missing": bool(item) and price is None,
+        "message": missing_price_message(item, on_date) if (item and price is None) else "",
     })
 
 
 @login_required
 def medicine_transfer_stock_lookup(request):
-    """Opening stock of an item at a source location (Warehouse or Farm) as
-    of a given date — the closing balance of the most recent saved line
-    before that date (0 if none)."""
+    """True stock of an item at a source location (Warehouse or Farm) as of a
+    date, reconciled across every transaction type.
+
+    This used to report the running balance carried on the most recent prior
+    medicine line, which ignored purchases, stock received, issues, adjustments
+    and ordinary stock transfers — so the Stock column read 0 for items that
+    plainly had stock.
+    """
+    from inventory.services.item_summary import location_item_stock
+
     location_type = request.GET.get("location_type")
     location_id = request.GET.get("location_id")
     item_id = request.GET.get("item")
@@ -1553,7 +1581,10 @@ def medicine_transfer_stock_lookup(request):
     if not location_type or not location_id or not item_id or not entry_date:
         return JsonResponse({"stock": "0"})
     d = timezone.datetime.fromisoformat(entry_date).date()
-    stock = MedicineTransferItem.previous_stock(location_type, int(location_id), int(item_id), d, None)
+    if location_type == "warehouse":
+        stock = warehouse_item_stock(int(item_id), int(location_id), as_of_date=d)
+    else:
+        stock = location_item_stock(location_type, int(location_id), int(item_id), as_of_date=d)
     return JsonResponse({"stock": str(stock)})
 
 

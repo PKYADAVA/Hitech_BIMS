@@ -205,11 +205,33 @@ async function recomputeStockPreview() {
   }
 }
 
+// Rate is the Item Price Master price effective on the transfer's date. An
+// item with no price for that date is flagged here and refused on save, so the
+// gap in the price list is fixed rather than papered over with a guess.
+async function refreshRate(tr) {
+  const itemId = tr.querySelector('.item').value;
+  const rateInput = tr.querySelector('.rate');
+  rateInput.classList.remove('is-invalid');
+  rateInput.title = '';
+  if (!itemId) { rateInput.value = ''; return; }
+  try {
+    const resp = await fetch(`{% url 'medicine_transfer_item_lookup' %}?item=${itemId}&date=${get('date').value || ''}`);
+    const data = await resp.json();
+    if (data.price_missing) {
+      rateInput.value = '';
+      rateInput.classList.add('is-invalid');
+      rateInput.title = data.message;
+      window.showToast('warning', data.message);
+      return;
+    }
+    rateInput.value = data.rate || '';
+  } catch (err) { /* leave the current rate alone if the lookup fails */ }
+}
+
 get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('item')) {
     const tr = e.target.closest('tr');
-    const opt = e.target.selectedOptions[0];
-    if (!editId) { tr.querySelector('.rate').value = opt ? (opt.dataset.rate || '0') : '0'; }
+    refreshRate(tr);
     recomputeStockPreview();
   }
 });
@@ -224,7 +246,10 @@ get('row-table').addEventListener('click', e => {
 });
 get('from-location').addEventListener('change', () => { refreshBatchBox('from'); recomputeStockPreview(); });
 get('to-location').addEventListener('change', () => { refreshBatchBox('to'); });
-get('date').addEventListener('change', recomputeStockPreview);
+get('date').addEventListener('change', () => {
+  document.querySelectorAll('#row-table tbody tr').forEach(refreshRate);
+  recomputeStockPreview();
+});
 
 get('medicine-transfer-form').addEventListener('submit', function (e) {
   e.preventDefault();
