@@ -325,10 +325,25 @@ function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftok
 function composeAddress(street, city, state, pincode){
   return [street, city, state, pincode].map(s=>(s||'').trim()).filter(Boolean).join(', ');
 }
+// composeAddress drops blank parts, so the piece count alone cannot tell us
+// which fields were filled — and a street may legitimately contain commas.
+// Read the known parts off the end instead: a trailing all-digit token is the
+// pincode, a token matching the State list is the state, the next one is the
+// city, and whatever remains (commas and all) is the street.
+function knownStates(){
+  const sel = document.getElementById('billing_state') || document.getElementById('shipping_state');
+  return sel ? Array.from(sel.options).map(o => o.value.trim()).filter(Boolean) : [];
+}
 function parseComposedAddress(current){
   const parts = (current||'').split(',').map(s=>s.trim()).filter(Boolean);
-  if(parts.length === 4){ return {street:parts[0], city:parts[1], state:parts[2], pincode:parts[3]}; }
-  return {street: current||'', city:'', state:'', pincode:''};
+  let street = '', city = '', state = '', pincode = '';
+  if(!parts.length){ return {street, city, state, pincode}; }
+  const states = knownStates();
+  if(parts.length > 1 && /^\d{4,10}$/.test(parts[parts.length-1])){ pincode = parts.pop(); }
+  if(parts.length > 1 && states.includes(parts[parts.length-1])){ state = parts.pop(); }
+  if(parts.length > 1){ city = parts.pop(); }
+  street = parts.join(', ');
+  return {street, city, state, pincode};
 }
 
 const billingAddressModal = new bootstrap.Modal(get('billingAddressModal'));
