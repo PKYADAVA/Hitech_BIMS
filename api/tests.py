@@ -100,9 +100,17 @@ class ResourceTests(APITestCase):
         self.assertEqual(resp.json()["meta"]["pagination"]["type"], "cursor")
 
     def test_readonly_master_rejects_write(self):
-        resp = self.client.post("/api/v1/broiler/farmer-groups/", {})
+        # "items" is registered read_only=True in register_shared(); the broiler
+        # masters are deliberately full CRUD, so they cannot stand in here.
+        resp = self.client.post("/api/v1/items/", {})
         self.assertEqual(resp.status_code, 405)
         self.assertEqual(resp.json()["error"]["code"], "method_not_allowed")
+
+    def test_writable_master_accepts_post(self):
+        # Counterpart to the above: broiler masters are registered without
+        # read_only, so a POST must reach validation rather than be refused.
+        resp = self.client.post("/api/v1/broiler/farmer-groups/", {})
+        self.assertNotEqual(resp.status_code, 405)
 
     def test_validation_error_is_field_mapped(self):
         resp = self.client.post("/api/v1/hatchery/egg-purchase-items/", {})

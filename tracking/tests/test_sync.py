@@ -79,10 +79,15 @@ class SyncEngineTests(TestCase):
         self.assertEqual(EmployeeGeofence.objects.count(), 1)
         self.assertEqual(EmployeeCustomerVisit.objects.count(), 1)
 
-        # Route summaries were rebuilt from the ingested pings.
-        route = EmployeeRoute.objects.get(employee=self.employee_one)
-        self.assertGreater(route.total_distance_km, 0)
-        self.assertGreater(route.points.count(), 0)
+        # Route summaries were rebuilt from the ingested pings. Routes bucket
+        # by *local* day, and the mock emits a 55-minute ping run starting at
+        # the window start, so between 23:05 and midnight local that run
+        # straddles two days and legitimately yields two routes — assert over
+        # the set rather than pinning it to one row.
+        routes = EmployeeRoute.objects.filter(employee=self.employee_one)
+        self.assertGreater(routes.count(), 0)
+        self.assertGreater(sum(r.total_distance_km for r in routes), 0)
+        self.assertGreater(sum(r.points.count() for r in routes), 0)
 
         self.provider.refresh_from_db()
         self.assertEqual(self.provider.last_sync_status, "ok")

@@ -23,7 +23,7 @@ succeeded for that provider/kind, its ``window_end`` becomes the resume
 point and the flag is silently ignored on later invocations. To force a
 genuinely wider backfill (e.g. a newly-deployed environment whose scheduled
 job already ticked a few times before you got to it), add ``--reset-cursor``
-to discard prior sync-run history for the kinds being run first.
+to discard prior sync-run history for the windowed kinds being run first.
 """
 
 import logging
@@ -34,7 +34,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from tracking.models import SyncLock, TrackingSettings, TrackingSync
-from tracking.services.sync_service import DEFAULT_KINDS, SyncService
+from tracking.services.sync_service import DEFAULT_KINDS, WINDOWED_KINDS, SyncService
 
 logger = logging.getLogger("tracking.sync")
 
@@ -65,11 +65,13 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--reset-cursor", action="store_true",
-            help="Discard prior TrackingSync history for the kind(s)/provider(s) "
-                 "about to run, so --lookback-hours actually takes effect instead "
-                 "of resuming from an already-advanced cursor. Use when a "
-                 "scheduled job already ticked before you got to run a wider "
-                 "manual backfill.",
+            help="Discard prior TrackingSync history for the windowed kind(s) "
+                 "(history/visits/attendance) and provider(s) about to run, so "
+                 "--lookback-hours actually takes effect instead of resuming "
+                 "from an already-advanced cursor. Use when a scheduled job "
+                 "already ticked before you got to run a wider manual backfill. "
+                 "Non-windowed kinds (employees/live) keep their run history — "
+                 "they refetch in full anyway.",
         )
 
     def handle(self, *args, **options):
@@ -115,9 +117,12 @@ class Command(BaseCommand):
     def _reset_cursor(self, kinds, provider_identifier):
         from tracking.models import TrackingProvider
 
-        queryset = TrackingSync.objects.filter(
-            sync_type__in=(kinds or DEFAULT_KINDS)
-        )
+        # Only windowed kinds resume from a cursor, so only their run rows are
+        # worth discarding. Deleting an "employees"/"live" run would throw away
+        # sync audit history and move no cursor — those kinds refetch in full
+        # every time regardless.
+        targets = [k for k in (kinds or DEFAULT_KINDS) if k in WINDOWED_KINDS]
+        queryset = TrackingSync.objects.filter(sync_type__in=targets)
         if provider_identifier:
             providers = TrackingProvider.objects.filter(is_active=True)
             providers = (providers.filter(pk=int(provider_identifier))
@@ -125,10 +130,12 @@ class Command(BaseCommand):
                         else providers.filter(name__iexact=provider_identifier))
             queryset = queryset.filter(provider__in=providers)
         deleted, _ = queryset.delete()
-        self.stdout.write(
-            f"--reset-cursor: discarded {deleted} prior sync run(s) for "
-            f"{', '.join(kinds or DEFAULT_KINDS)}; the next run starts fresh."
-        )
+        if targets:
+            tail = f"for {', '.join(targets)}; the next run starts fresh."
+        else:
+            tail = ("for the requested kinds — none of them are windowed, so "
+                    "there is no cursor to reset.")
+        self.stdout.write(f"--reset-cursor: discarded {deleted} prior sync run(s) {tail}")
 
     @staticmethod
     def _parse_kinds(raw):
