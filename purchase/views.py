@@ -101,6 +101,27 @@ def _create_posted_shipping_addresses(instance, request):
             is_default=is_default,
         )
 
+def _sync_default_shipping_address(instance, previous_address):
+    """Keep the default shipping address in step with the billing address.
+
+    On create the default shipping address is seeded from billing, so the two
+    start out identical. Editing billing therefore has to move it along too —
+    but only while it is still a mirror of the old billing text. Once someone
+    has given the shipping address its own content, it is left alone.
+    """
+    new_address = (instance.address or "").strip()
+    if not new_address or new_address == (previous_address or "").strip():
+        return
+    default = instance.shipping_addresses.filter(is_default=True).first()
+    if default is None:
+        SupplierShippingAddress.objects.create(
+            supplier=instance, label=new_address[:100], address=new_address, is_default=True)
+        return
+    if (default.address or "").strip() == (previous_address or "").strip():
+        default.label = new_address[:100]
+        default.address = new_address
+        default.save(update_fields=["label", "address"])
+
 
 @login_required(login_url="login")
 def create_supplier(request):
@@ -126,10 +147,12 @@ def edit_supplier(request, id):
     instance = get_object_or_404(Supplier, id=id)
 
     if request.method == "POST":
+        previous_address = instance.address
         try:
             _apply_posted_supplier_fields(instance, request)
             instance.full_clean()
             instance.save()
+            _sync_default_shipping_address(instance, previous_address)
             messages.success(request, "Supplier updated successfully.")
             return redirect("supplier")
         except ValidationError as e:
