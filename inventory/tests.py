@@ -11,7 +11,7 @@ from purchase.models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase
                              GeneralPurchaseItem, Supplier)
 from sales.models import Customer
 from inventory.services.item_summary import location_item_stock
-from inventory.services.valuation import item_ledger
+from inventory.services.valuation import item_ledger, warehouse_stock_summary
 from inventory.models import (
     InventoryAdjustment,
     InventoryAdjustmentItem,
@@ -267,19 +267,16 @@ class GeneralPurchaseBasisTests(TestCase):
     def test_sent_basis_purchase_reaches_stock(self):
         # The reported case: sent 500, nothing booked as received.
         self.buy("Sent Quantity", sent="500")
-        stock = warehouse_item_stock(self.item.id, self.warehouse.id)
-        print("RESULT sent-basis stock     %s" % stock)
-        self.assertEqual(stock, Decimal("500"))
+        self.assertEqual(warehouse_item_stock(self.item.id, self.warehouse.id),
+                         Decimal("500"))
 
     def test_received_basis_purchase_uses_received(self):
         self.buy("Received Quantity", sent="500", rcv="480")
-        stock = warehouse_item_stock(self.item.id, self.warehouse.id)
-        print("RESULT received-basis stock %s" % stock)
-        self.assertEqual(stock, Decimal("480"))
+        self.assertEqual(warehouse_item_stock(self.item.id, self.warehouse.id),
+                         Decimal("480"))
 
     def test_free_quantity_is_added_on_either_basis(self):
         self.buy("Sent Quantity", sent="500", free="20")
-        print("RESULT sent + free          %s" % warehouse_item_stock(self.item.id, self.warehouse.id))
         self.assertEqual(warehouse_item_stock(self.item.id, self.warehouse.id), Decimal("520"))
 
     def test_reports_agree_with_the_stock_function(self):
@@ -288,7 +285,6 @@ class GeneralPurchaseBasisTests(TestCase):
         self.assertEqual(warehouse_item_stock(self.item.id, self.warehouse.id), expected)
         loc = location_item_stock("warehouse", self.warehouse.id, self.item.id)
         led = item_ledger(self.item.id, self.warehouse.id)
-        print("RESULT summary=%s ledger=%s" % (loc, led["closing"]["qty"]))
         self.assertEqual(Decimal(str(loc)), expected)
         self.assertEqual(led["closing"]["qty"], expected)
 
@@ -303,10 +299,123 @@ class GeneralPurchaseBasisTests(TestCase):
         line = GeneralPurchaseItem.objects.create(      # no percents passed
             purchase=purchase, item=self.item, farm_warehouse=self.warehouse,
             sent_qty=Decimal("500"), rate=Decimal("50"))
-        print("RESULT bare line amount     %s" % line.amount)
         self.assertEqual(line.amount, Decimal("25000"))
         self.assertEqual(
             warehouse_item_stock(self.item.id, self.warehouse.id), Decimal("500"))
+
+
+class StockReportSummaryTests(TestCase):
+    """Inventory > Reports > Stock Report reads its own engine.
+
+    warehouse_stock_summary is a fourth stock engine and had drifted: it knew
+    only about general purchases, transfers, receives, issues and adjustments,
+    so a Chicks Purchase (and every hatchery movement) left the report blank.
+    It must agree with warehouse_item_stock, which is the reference.
+    """
+
+    def setUp(self):
+        at = AccountType.objects.create(name="T", code_range_start=500000,
+                                        code_range_end=599999, report="PL")
+        self.coa = ChartOfAccount.objects.create(
+            company=CompanyProfile.get_solo(), code="500001", description="X",
+            account_type=at)
+        self.wh = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.category = ItemCategory.objects.create(name="Livestock")
+        self.supplier = Supplier.objects.create(name="Ganga Breeding Farm")
+        self.customer = Customer.objects.create(name="Chick Buyer")
+        self.chick = self._item("Broiler Chicks")
+
+    def _item(self, description):
+        return Item.objects.create(
+            description=description, category=self.category,
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("40"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+    def row_for(self, item, **kwargs):
+        rows = warehouse_stock_summary(self.wh.id, **kwargs)
+        return next((r for r in rows if r["item_id"] == item.id), None)
+
+    def test_chicks_purchase_appears_in_the_stock_report(self):
+        """The reported case: the item never showed up at all."""
+        purchase = ChicksPurchase.objects.create(
+            date=date(2026, 6, 4), supplier=self.supplier, item=self.chick)
+        ChicksPurchaseItem.objects.create(
+            purchase=purchase, farm_warehouse=self.wh, sent_qty=Decimal("1000"),
+            free_percent=Decimal("10"), rate=Decimal("40"))
+
+        row = self.row_for(self.chick)
+        self.assertIsNotNone(row, "Chicks Purchase is missing from the stock report")
+        self.assertEqual(row["in"], Decimal("1100"))       # 1000 charged + 100 free
+        self.assertEqual(row["out"], Decimal("0"))
+        self.assertEqual(row["closing"], Decimal("1100"))
+        self.assertEqual(row["closing"],
+                         warehouse_item_stock(self.chick.id, self.wh.id))
+
+    def test_chicks_purchase_before_the_window_is_opening_stock(self):
+        for day in (date(2026, 5, 20), date(2026, 6, 10)):
+            purchase = ChicksPurchase.objects.create(
+                date=day, supplier=self.supplier, item=self.chick)
+            ChicksPurchaseItem.objects.create(
+                purchase=purchase, farm_warehouse=self.wh, sent_qty=Decimal("500"),
+                free_percent=Decimal("0"), rate=Decimal("40"))
+
+        row = self.row_for(self.chick, from_date=date(2026, 6, 1),
+                           to_date=date(2026, 6, 30))
+        self.assertEqual(row["opening"], Decimal("500"))
+        self.assertEqual(row["in"], Decimal("500"))
+        self.assertEqual(row["closing"], Decimal("1000"))
+
+    def test_the_item_filter_reaches_the_header_item(self):
+        """Chicks Purchase keeps its item on the header, so the report's
+        per-item filter has to look through the line to the purchase."""
+        other = self._item("Layer Chicks")
+        purchase = ChicksPurchase.objects.create(
+            date=date(2026, 6, 4), supplier=self.supplier, item=self.chick)
+        ChicksPurchaseItem.objects.create(
+            purchase=purchase, farm_warehouse=self.wh, sent_qty=Decimal("300"),
+            free_percent=Decimal("0"), rate=Decimal("40"))
+
+        self.assertIsNotNone(self.row_for(self.chick, item_id=self.chick.id))
+        self.assertEqual(warehouse_stock_summary(self.wh.id, item_id=other.id), [])
+
+    def test_hatchery_movements_reach_the_report(self):
+        eggs = self._item("Hatching Eggs")
+        ep = EggPurchase.objects.create(
+            date=date(2026, 6, 1), supplier=self.supplier, warehouse=self.wh,
+            pay_account=self.coa)
+        EggPurchaseItem.objects.create(
+            egg_purchase=ep, item=eggs, sent_qty=Decimal("0"),
+            rcv_qty=Decimal("1000"), free_qty=Decimal("50"), rate=Decimal("5"))
+        sale = ChickSale.objects.create(
+            date=date(2026, 6, 8), customer=self.customer, warehouse=self.wh)
+        ChickSaleItem.objects.create(
+            sale=sale, item=eggs, total_qty=Decimal("300"),
+            mortality=Decimal("10"), sale_rate=Decimal("9"))
+
+        row = self.row_for(eggs)
+        self.assertEqual(row["in"], Decimal("1050"))
+        self.assertEqual(row["out"], Decimal("300"))
+        self.assertEqual(row["closing"],
+                         warehouse_item_stock(eggs.id, self.wh.id))
+
+    def test_a_sent_basis_general_purchase_is_counted(self):
+        """Same basis bug as the other three engines: reading rcv_qty alone
+        dropped every purchase billed on Sent quantity."""
+        feed = self._item("Pre Starter Feed")
+        purchase = GeneralPurchase.objects.create(
+            date=date(2026, 6, 3), supplier=self.supplier,
+            calculation_based_on="Sent Quantity")
+        GeneralPurchaseItem.objects.create(
+            purchase=purchase, item=feed, farm_warehouse=self.wh,
+            sent_qty=Decimal("500"), rcv_qty=Decimal("0"), free_qty=Decimal("20"),
+            rate=Decimal("50"), discount_percent=Decimal("0"),
+            discount_amount=Decimal("0"), gst_percent=Decimal("0"))
+
+        row = self.row_for(feed)
+        self.assertIsNotNone(row, "a Sent-basis purchase is missing from the report")
+        self.assertEqual(row["closing"], Decimal("520"))
+        self.assertEqual(row["closing"], warehouse_item_stock(feed.id, self.wh.id))
 
 
 class ChicksPurchaseFormulaTests(TestCase):

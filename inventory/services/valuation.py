@@ -448,22 +448,27 @@ def compute_issue_rate(item, warehouse_id, as_of_date, quantity,
     return std
 
 
-def _sum_by_item(qs, value_fields, date_field, from_date=None, to_date=None):
+def _sum_by_item(qs, value_fields, date_field, from_date=None, to_date=None,
+                 item_field="item_id"):
     """{item_id: total} for ``qs``, summing ``value_fields`` and honouring an
-    optional [from_date, to_date] window on ``date_field``."""
+    optional [from_date, to_date] window on ``date_field``.
+
+    ``item_field`` names the column holding the item: Chicks Purchase keeps a
+    single item on the header, so its lines group by ``purchase__item_id``.
+    """
     from django.db.models import Sum
     if from_date:
         qs = qs.filter(**{f"{date_field}__gte": from_date})
     if to_date:
         qs = qs.filter(**{f"{date_field}__lte": to_date})
-    agg = {f"_{f}": Sum(f) for f in value_fields}
+    agg = {f"_agg_{n}": Sum(f) for n, f in enumerate(value_fields)}
     out = {}
-    for row in qs.values("item_id").annotate(**agg):
+    for row in qs.values(item_field).annotate(**agg):
         total = Z
-        for f in value_fields:
-            total += row[f"_{f}"] or Z
+        for n in range(len(value_fields)):
+            total += row[f"_agg_{n}"] or Z
         if total:
-            out[row["item_id"]] = out.get(row["item_id"], Z) + total
+            out[row[item_field]] = out.get(row[item_field], Z) + total
     return out
 
 
@@ -480,14 +485,30 @@ def warehouse_stock_summary(warehouse_id, from_date=None, to_date=None, item_id=
     a warehouse only via issue, transfer-out or a deduct adjustment. The columns
     are kept so the report matches the standard layout.
     """
-    from purchase.models import GeneralPurchaseItem
+    from django.db.models import Case, DecimalField, F, When
+    from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
+    from hatchery.models import ChickSaleItem, EggPurchaseItem
     from inventory.models import (Item, StockReceiveItem, StockTransfer, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
 
-    def scope(qs):
-        return qs.filter(item_id=item_id) if item_id else qs
+    def scope(qs, field="item_id"):
+        return qs.filter(**{field: item_id}) if item_id else qs
 
-    purch = scope(GeneralPurchaseItem.objects.filter(farm_warehouse_id=warehouse_id))
+    money = DecimalField(max_digits=14, decimal_places=2)
+
+    purch = scope(GeneralPurchaseItem.objects.filter(farm_warehouse_id=warehouse_id)).annotate(
+        # Billed on Sent or Received quantity per the header's basis; reading
+        # rcv_qty alone loses every purchase entered on the Sent basis.
+        _received=Case(When(purchase__calculation_based_on="Received Quantity",
+                            then=F("rcv_qty")),
+                       default=F("sent_qty"), output_field=money))
+    chicks = scope(ChicksPurchaseItem.objects.filter(farm_warehouse_id=warehouse_id),
+                   "purchase__item_id")
+    eggs = scope(EggPurchaseItem.objects.filter(
+        egg_purchase__warehouse_id=warehouse_id)).annotate(
+        _received=Case(When(rcv_qty__gt=0, then=F("rcv_qty")),
+                       default=F("sent_qty"), output_field=money))
+    chick_sales = scope(ChickSaleItem.objects.filter(sale__warehouse_id=warehouse_id))
     tr_in = scope(StockTransfer.objects.filter(to_location_type="warehouse", to_warehouse_id=warehouse_id))
     recv = scope(StockReceiveItem.objects.filter(location_type="warehouse", warehouse_id=warehouse_id))
     adj_add = scope(InventoryAdjustmentItem.objects.filter(
@@ -500,29 +521,37 @@ def warehouse_stock_summary(warehouse_id, from_date=None, to_date=None, item_id=
         adjustment_type="Deduct", adjustment__location_type="warehouse",
         adjustment__warehouse_id=warehouse_id))
 
-    # (queryset, value fields, date field) for every inflow / outflow source.
+    # (queryset, value fields, date field, item field) per inflow / outflow.
     inflow_sources = [
-        (purch, ["rcv_qty", "free_qty"], "purchase__date"),
-        (tr_in, ["quantity"], "date"),
-        (recv, ["quantity"], "receive__date"),
-        (adj_add, ["quantity"], "adjustment__date"),
+        (purch, ["_received", "free_qty"], "purchase__date", "item_id"),
+        (tr_in, ["quantity"], "date", "item_id"),
+        (recv, ["quantity"], "receive__date", "item_id"),
+        (adj_add, ["quantity"], "adjustment__date", "item_id"),
         (scope(MedicineTransferItem.objects.filter(
             transfer__to_location_type="warehouse",
-            transfer__to_warehouse_id=warehouse_id)), ["quantity"], "transfer__date"),
+            transfer__to_warehouse_id=warehouse_id)), ["quantity"], "transfer__date", "item_id"),
+        # Chicks Purchase: total_qty is what physically arrived, and the item
+        # lives on the header.
+        (chicks, ["total_qty"], "purchase__date", "purchase__item_id"),
+        (eggs, ["_received", "free_qty"], "egg_purchase__date", "item_id"),
     ]
     outflow_sources = [
-        (tr_out, ["quantity"], "date"),
-        (issued, ["quantity"], "issue__date"),
-        (adj_ded, ["quantity"], "adjustment__date"),
+        (tr_out, ["quantity"], "date", "item_id"),
+        (issued, ["quantity"], "issue__date", "item_id"),
+        (adj_ded, ["quantity"], "adjustment__date", "item_id"),
         (scope(MedicineTransferItem.objects.filter(
             transfer__from_location_type="warehouse",
-            transfer__from_warehouse_id=warehouse_id)), ["quantity"], "transfer__date"),
+            transfer__from_warehouse_id=warehouse_id)), ["quantity"], "transfer__date", "item_id"),
+        # Chick Sale takes total_qty out: mortality and culls left the stock
+        # point too, so sale_qty alone would overstate what is still there.
+        (chick_sales, ["total_qty"], "sale__date", "item_id"),
     ]
 
     def bucket(sources, start=None, end=None):
         merged = {}
-        for qs, fields, date_field in sources:
-            for item_pk, total in _sum_by_item(qs, fields, date_field, start, end).items():
+        for qs, fields, date_field, item_field in sources:
+            for item_pk, total in _sum_by_item(
+                    qs, fields, date_field, start, end, item_field).items():
                 merged[item_pk] = merged.get(item_pk, Z) + total
         return merged
 
