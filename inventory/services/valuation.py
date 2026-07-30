@@ -94,12 +94,12 @@ def warehouse_inflow_layers(item_id, warehouse_id, as_of_date=None):
             continue
         layers.append((r.transfer.date, ("e", r.id), qty, _q(r.rate)))
 
-    # Chicks Purchase - the item is on the header, and rcv_qty already includes
-    # the free chicks, so free_qty must not be added on top.
+    # Chicks Purchase - the item is on the header. total_qty is the head count
+    # that physically arrived (Received + Free).
     for r in _dcap(ChicksPurchaseItem.objects.filter(
             purchase__item_id=item_id, farm_warehouse_id=warehouse_id
     ).select_related("purchase"), "purchase__date", as_of_date):
-        qty = _q(r.rcv_qty)
+        qty = _q(r.total_qty)
         if qty <= 0:
             continue
         unit_cost = (_q(r.amount) / qty) if r.amount else _q(r.rate)
@@ -312,7 +312,7 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
     for r in (ChicksPurchaseItem.objects.filter(
             purchase__item_id=item_id, farm_warehouse_id=warehouse_id)
             .select_related("purchase", "farm_warehouse")):
-        qty = _q(r.rcv_qty)
+        qty = _q(r.total_qty)
         cost = (_q(r.amount) / qty) if (qty > 0 and r.amount) else _q(r.rate)
         add(r.purchase.date, "in", (0, 5, r.id), qty, cost, "Chicks Purchase", "purchase",
             r.purchase.purchase_no,

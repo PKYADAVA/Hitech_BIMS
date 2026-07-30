@@ -214,18 +214,20 @@ class HatcheryStockVisibilityTests(TestCase):
         self.assertIn("Chick Sale", types)
         self.assertEqual(led["closing"]["qty"], expected)
 
-    def test_chicks_purchase_is_an_inflow_without_double_counting_free(self):
+    def test_chicks_purchase_stocks_the_physical_count(self):
         cp = ChicksPurchase.objects.create(
             date=date(2026, 5, 2), supplier=self.supplier, item=self.item)
-        # rcv_qty is computed: 1000 sent + 10% free = 1100 physically received,
-        # of which 100 is the free portion. Stock must rise by 1100, not 1200.
         line = ChicksPurchaseItem.objects.create(
             purchase=cp, farm_warehouse=self.wh, sent_qty=Decimal("1000"),
-            sent_free_percent=Decimal("10"), rcv_free_percent=Decimal("10"),
-            rate=Decimal("40"))
+            free_percent=Decimal("10"), rate=Decimal("40"))
         stock = warehouse_item_stock(self.item.id, self.wh.id)
-        self.assertEqual(line.rcv_qty, Decimal("1100"))
-        self.assertEqual(stock, Decimal("1100"))
+        # 1000 x 1.1 = 1100 gross, no losses, / 1.1 = 1000 chargeable,
+        # + 10% free = 100, so 1100 birds physically arrive.
+        self.assertEqual(line.received_qty, Decimal("1000"))
+        self.assertEqual(line.free_qty, Decimal("100"))
+        self.assertEqual(line.total_qty, Decimal("1100"))
+        self.assertEqual(line.amount, Decimal("40000"))    # billed on 1000
+        self.assertEqual(stock, Decimal("1100"))           # stocked on 1100
         self.assertEqual(Decimal(str(location_item_stock(
             "warehouse", self.wh.id, self.item.id))), Decimal("1100"))
 
@@ -305,4 +307,62 @@ class GeneralPurchaseBasisTests(TestCase):
         self.assertEqual(line.amount, Decimal("25000"))
         self.assertEqual(
             warehouse_item_stock(self.item.id, self.warehouse.id), Decimal("500"))
+
+
+class ChicksPurchaseFormulaTests(TestCase):
+    """Received / Free / Total / Amount from a single Free %."""
+
+    def setUp(self):
+        self.warehouse = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.item = Item.objects.create(
+            description="Broiler Chicks",
+            category=ItemCategory.objects.create(name="Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("40"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        self.supplier = Supplier.objects.create(name="Ganga Breeding Farm")
+
+    def line(self, **kw):
+        purchase = ChicksPurchase.objects.create(
+            date=date(2026, 7, 21), supplier=self.supplier, item=self.item)
+        defaults = dict(sent_qty=Decimal("1000"), free_percent=Decimal("10"),
+                        rate=Decimal("40"))
+        defaults.update(kw)
+        return ChicksPurchaseItem.objects.create(
+            purchase=purchase, farm_warehouse=self.warehouse, **defaults)
+
+    def test_clean_consignment(self):
+        line = self.line()
+        print("RESULT clean      recv=%s free=%s total=%s amt=%s"
+              % (line.received_qty, line.free_qty, line.total_qty, line.amount))
+        self.assertEqual(line.received_qty, Decimal("1000"))
+        self.assertEqual(line.free_qty, Decimal("100"))
+        self.assertEqual(line.total_qty, Decimal("1100"))
+        self.assertEqual(line.amount, Decimal("40000"))
+
+    def test_losses_reduce_the_received_count(self):
+        # gross 1100 - 50 mortality - 20 shortage - 30 weaks + 10 excess = 1010
+        # 1010 / 1.1 = 918 chargeable, 92 free, 1010 physical
+        line = self.line(mortality=Decimal("50"), shortage=Decimal("20"),
+                         weaks=Decimal("30"), excess_qty=Decimal("10"))
+        print("RESULT with losses recv=%s free=%s total=%s"
+              % (line.received_qty, line.free_qty, line.total_qty))
+        self.assertEqual(line.received_qty, Decimal("918"))
+        self.assertEqual(line.free_qty, Decimal("92"))
+        self.assertEqual(line.total_qty, Decimal("1010"))
+
+    def test_zero_free_percent_passes_the_quantity_straight_through(self):
+        line = self.line(free_percent=Decimal("0"))
+        print("RESULT no free    recv=%s free=%s total=%s"
+              % (line.received_qty, line.free_qty, line.total_qty))
+        self.assertEqual(line.received_qty, Decimal("1000"))
+        self.assertEqual(line.free_qty, Decimal("0"))
+        self.assertEqual(line.total_qty, Decimal("1000"))
+
+    def test_amount_never_charges_the_free_chicks(self):
+        line = self.line()
+        self.assertEqual(line.amount, line.received_qty * line.rate)
+        self.assertLess(line.amount, line.total_qty * line.rate)
+        print("RESULT free not billed: %s < %s"
+              % (line.amount, line.total_qty * line.rate))
 

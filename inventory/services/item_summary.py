@@ -90,11 +90,11 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
         from_id = t.from_farm_id if t.from_location_type == "farm" else t.from_warehouse_id
         add(t.date, t.from_location_type, from_id, r.item_id, "out", r.quantity, None, 7)
 
-    # Chicks Purchase: item lives on the header, and rcv_qty already includes
-    # the free chicks, so free_qty must not be added on top.
+    # Chicks Purchase: item lives on the header. total_qty is what physically
+    # arrived (Received + Free); received_qty alone would drop the free chicks.
     for r in scope(ChicksPurchaseItem.objects.exclude(farm_warehouse=None),
                    "purchase__item_id").select_related("purchase"):
-        qty = _d(r.rcv_qty)
+        qty = _d(r.total_qty)
         cost = (_d(r.amount) / qty) if (qty > 0 and r.amount) else _d(r.rate)
         add(r.purchase.date, "warehouse", r.farm_warehouse_id, r.purchase.item_id,
             "in", qty, cost, 0)

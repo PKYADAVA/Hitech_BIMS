@@ -892,11 +892,12 @@ def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
         item_id=item_id, adjustment_type="Add",
         adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id), "adjustment__date"))
 
-    # Chicks Purchase keeps its item on the header, and rcv_qty already
-    # includes the free chicks - adding free_qty here would double count.
+    # Chicks Purchase keeps its item on the header. total_qty is the head
+    # count that physically arrived (Received + Free); received_qty is only
+    # the chargeable part, so counting that would lose the free chicks.
     inflow += total(dfilt(ChicksPurchaseItem.objects.filter(
         purchase__item_id=item_id, farm_warehouse_id=warehouse_id),
-        "purchase__date"), "rcv_qty")
+        "purchase__date"), "total_qty")
 
     # Egg Purchase: received qty, falling back to sent when nothing was booked
     # as received (the same basis the line's own amount uses), plus free eggs.

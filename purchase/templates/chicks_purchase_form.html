@@ -78,13 +78,12 @@
             <tr>
               <th style="min-width:40px">Sr.</th>
               <th style="min-width:110px">Sent Qty <span class="text-danger">*</span></th>
-              <th style="min-width:90px">Sent Free %</th>
+              <th style="min-width:90px">Free %</th>
               <th style="min-width:100px">Mortality</th>
               <th style="min-width:100px">Shortage</th>
               <th style="min-width:90px">Weaks</th>
               <th style="min-width:100px">Excess Qty</th>
-              <th style="min-width:110px">Rcv Qty</th>
-              <th style="min-width:90px">Rcv Free %</th>
+              <th style="min-width:120px">Received Qty</th>
               <th style="min-width:100px">Free Qty</th>
               <th style="min-width:110px">Total Qty</th>
               <th style="min-width:100px">Rate <span class="text-danger">*</span></th>
@@ -96,7 +95,7 @@
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="10" class="text-end">Total</th><th id="total_qty">0.00</th><th></th><th id="total_amount">0.00</th><th colspan="3"></th></tr>
+            <tr><th colspan="9" class="text-end">Total</th><th id="total_qty">0.00</th><th></th><th id="total_amount">0.00</th><th colspan="3"></th></tr>
           </tfoot>
         </table>
       </div>
@@ -276,13 +275,12 @@ function itemRow(row = {}) {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td class="sr text-center"></td>
     <td><input class="form-control sent-qty" type="number" min="0" step=".01" value="${row.sent_qty || 0}"></td>
-    <td><input class="form-control sent-free-percent" type="number" min="0" step=".01" value="${row.sent_free_percent || 0}"></td>
+    <td><input class="form-control free-percent" type="number" min="0" step=".01" value="${row.free_percent || 0}"></td>
     <td><input class="form-control mortality" type="number" min="0" step=".01" value="${row.mortality || 0}"></td>
     <td><input class="form-control shortage" type="number" min="0" step=".01" value="${row.shortage || 0}"></td>
     <td><input class="form-control weaks" type="number" min="0" step=".01" value="${row.weaks || 0}"></td>
     <td><input class="form-control excess-qty" type="number" min="0" step=".01" value="${row.excess_qty || 0}"></td>
-    <td><input class="form-control bg-light rcv-qty" readonly value="0.00"></td>
-    <td><input class="form-control rcv-free-percent" type="number" min="0" step=".01" value="${row.rcv_free_percent || 0}"></td>
+    <td><input class="form-control bg-light received-qty" readonly value="0.00"></td>
     <td><input class="form-control bg-light free-qty" readonly value="0.00"></td>
     <td><input class="form-control bg-light total-qty" readonly value="0.00"></td>
     <td><input class="form-control rate" type="number" min="0" step=".01" value="${row.rate || 0}"></td>
@@ -302,23 +300,25 @@ function itemRow(row = {}) {
 
 // Mirrors ChicksPurchaseItem.save(): Rcv Qty is the physically-received
 // count (sent + its Sent Free% - losses + excess), already inclusive of the
-// free chicks; Total Qty backs the Rcv Free% back out of Rcv Qty to get the
-// chargeable quantity Amount is based on, and Free Qty is the remainder.
-// Sent Free% and Rcv Free% are independent fields — typing into Sent Free%
-// defaults Rcv Free% to match (see the sent-free-percent input listener
-// below), but Rcv Free% stays a normal editable field either way.
+// One Free % runs the line, matching ChicksPurchaseItem.recalculate():
+//   gross        = Sent x (1 + Free%/100)
+//   after losses = gross - Mortality - Shortage - Weaks + Excess
+//   Received Qty = after losses / (1 + Free%/100)   <- chargeable
+//   Free Qty     = Received x Free%/100
+//   Total Qty    = Received + Free                  <- physically arrived
+// Amount bills the Received Qty, so the free chicks are not charged.
 function calcRow(tr) {
   const num = s => Number(tr.querySelector(s).value) || 0;
-  const sent = num('.sent-qty'), sentFreePercent = num('.sent-free-percent'), rcvFreePercent = num('.rcv-free-percent');
-  const freeFromSent = Math.round(sent * sentFreePercent / 100);
-  const rcvQty = sent + freeFromSent - num('.mortality') - num('.shortage') - num('.weaks') + num('.excess-qty');
-  const totalQty = rcvFreePercent ? Math.round(rcvQty / (1 + rcvFreePercent / 100)) : rcvQty;
-  const freeQty = rcvQty - totalQty;
-  const amount = totalQty * num('.rate');
-  tr.querySelector('.rcv-qty').value = rcvQty.toFixed(2);
+  const factor = 1 + num('.free-percent') / 100;
+  const gross = num('.sent-qty') * factor;
+  const afterLosses = gross - num('.mortality') - num('.shortage') - num('.weaks') + num('.excess-qty');
+  const receivedQty = Math.round(afterLosses / factor);
+  const freeQty = Math.round(receivedQty * num('.free-percent') / 100);
+  const totalQty = receivedQty + freeQty;
+  tr.querySelector('.received-qty').value = receivedQty.toFixed(2);
   tr.querySelector('.free-qty').value = freeQty.toFixed(2);
   tr.querySelector('.total-qty').value = totalQty.toFixed(2);
-  tr.querySelector('.amount').value = amount.toFixed(2);
+  tr.querySelector('.amount').value = (receivedQty * num('.rate')).toFixed(2);
   totals();
 }
 
@@ -364,12 +364,6 @@ function totals() {
 
 get('item-table').addEventListener('input', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
-  // Typing into Sent Free % defaults Rcv Free % to match; Rcv Free % stays
-  // freely editable afterward — this only overwrites it while Sent Free %
-  // itself is the field being edited.
-  if (e.target.classList.contains('sent-free-percent')) {
-    tr.querySelector('.rcv-free-percent').value = e.target.value;
-  }
   calcRow(tr);
 });
 get('item-table').addEventListener('click', e => {
@@ -383,8 +377,8 @@ get('item-table').addEventListener('click', e => {
 
 get('chicks-purchase-form').addEventListener('submit', function (e) {
   const rows = [...document.querySelectorAll('#item-table tbody tr')].map(tr => ({
-    sent_qty: tr.querySelector('.sent-qty').value, sent_free_percent: tr.querySelector('.sent-free-percent').value,
-    rcv_free_percent: tr.querySelector('.rcv-free-percent').value,
+    sent_qty: tr.querySelector('.sent-qty').value,
+    free_percent: tr.querySelector('.free-percent').value,
     mortality: tr.querySelector('.mortality').value, shortage: tr.querySelector('.shortage').value,
     weaks: tr.querySelector('.weaks').value, excess_qty: tr.querySelector('.excess-qty').value,
     rate: tr.querySelector('.rate').value,

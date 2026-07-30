@@ -602,12 +602,25 @@ def general_purchase_api_list(request):
 # Chicks Purchase (Purchase > Transactions)
 # ---------------------------------------------------------------------------
 
+def _received_of(line):
+    """The received quantity of a purchase line, whichever model it is.
+
+    Chicks Purchase renamed its quantity columns when its formula changed —
+    its chargeable count is `received_qty`, where General and Egg Purchase
+    still call theirs `rcv_qty`. The Supplier Ledger and Purchase Report walk
+    all three through the same code, so they ask here rather than assuming.
+    """
+    value = getattr(line, "rcv_qty", None)
+    if value is None:
+        value = getattr(line, "received_qty", 0)
+    return value
+
+
 def _chicks_purchase_to_item_dict(row):
     return {
-        "sent_qty": str(row.sent_qty), "sent_free_percent": str(row.sent_free_percent),
-        "rcv_free_percent": str(row.rcv_free_percent),
+        "sent_qty": str(row.sent_qty), "free_percent": str(row.free_percent),
         "mortality": str(row.mortality), "shortage": str(row.shortage), "weaks": str(row.weaks),
-        "excess_qty": str(row.excess_qty), "rcv_qty": str(row.rcv_qty),
+        "excess_qty": str(row.excess_qty), "received_qty": str(row.received_qty),
         "free_qty": str(row.free_qty), "total_qty": str(row.total_qty),
         "rate": str(row.rate), "amount": str(row.amount),
         "farm_warehouse": row.farm_warehouse_id, "farm_warehouse_name": row.farm_warehouse.name,
@@ -697,8 +710,7 @@ def _save_chicks_purchase_items(instance, request):
         ChicksPurchaseItem.objects.create(
             purchase=instance,
             sent_qty=Decimal(str(row.get("sent_qty") or 0)),
-            sent_free_percent=Decimal(str(row.get("sent_free_percent") or 0)),
-            rcv_free_percent=Decimal(str(row.get("rcv_free_percent") or 0)),
+            free_percent=Decimal(str(row.get("free_percent") or 0)),
             mortality=Decimal(str(row.get("mortality") or 0)),
             shortage=Decimal(str(row.get("shortage") or 0)),
             weaks=Decimal(str(row.get("weaks") or 0)),
@@ -1282,7 +1294,7 @@ def supplier_ledger_report(request):
                         "item": item_name,
                         "boxes_bags": boxes,
                         "sent_qty": _sl_num(it.sent_qty) if it else "",
-                        "rcv_qty": _sl_num(it.rcv_qty) if it else "",
+                        "rcv_qty": _sl_num(_received_of(it)) if it else "",
                         "free_qty": _sl_num(it.free_qty) if it else "",
                         "rate": _sl_num(it.rate) if it else "",
                         "amount": it_amount,
@@ -1716,7 +1728,7 @@ def purchase_report(request):
         differently and value their lines differently, so the caller passes in
         the resolved warehouse and the pre-GST / final amounts."""
         sent = Decimal(str(line.sent_qty or 0))
-        rcv = Decimal(str(line.rcv_qty or 0))
+        rcv = Decimal(str(_received_of(line) or 0))
         return {
             "date": purchase.date,
             "invoice": (getattr(purchase, "purchase_no", None)

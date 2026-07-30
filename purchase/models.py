@@ -438,27 +438,32 @@ class ChicksPurchaseItem(models.Model):
     """One batch/lot row within a Chicks Purchase — the header carries a
     single Item; each row reconciles that batch's sent vs received chicks.
 
-    Rcv Qty = Sent Qty + (Sent Free% of Sent Qty) - Mortality - Shortage
-    - Weaks + Excess Qty — the physically received count, which already
-    includes the free chicks. Total Qty (the chargeable/billable quantity
-    Amount is based on) is then Rcv Qty backed out by the Received Free% —
-    Rcv Qty / (1 + Rcv Free%) — mirroring how Chick Sale derives its billed
-    qty from a discount-inclusive sale qty. Free Qty is the remainder:
-    Rcv Qty - Total Qty. Sent Free% and Rcv Free% are independent — the form
-    defaults Rcv Free% from Sent Free% as it's typed, but either can be
-    edited on its own (e.g. a different confirmed free% on arrival).
+    A single Free % runs the whole line::
+
+        gross        = Sent Qty x (1 + Free%/100)      # sent plus its free
+        after losses = gross - Mortality - Shortage - Weaks + Excess Qty
+        Received Qty = after losses / (1 + Free%/100)  # the chargeable count
+        Free Qty     = Received Qty x Free%/100
+        Total Qty    = Received Qty + Free Qty         # what physically arrived
+
+    Received Qty is what the supplier bills for, so Amount is based on it;
+    Free Qty rides on top; Total Qty is the head count that actually reaches
+    the farm and is therefore what stock counts.
+
+    Note the naming moved with the formula: what this model used to call
+    rcv_qty (physical) is now total_qty, and what it called total_qty
+    (chargeable) is now received_qty.
     """
     purchase = models.ForeignKey(ChicksPurchase, on_delete=models.CASCADE, related_name="items")
     sent_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    sent_free_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
-                                            help_text="Free % applied to Sent Qty when deriving Rcv Qty")
-    rcv_free_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
-                                           help_text="Free % backed out of Rcv Qty to get the chargeable Total Qty")
+    free_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                       help_text="Free % on the consignment; drives Received, Free and Total")
     mortality = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     shortage = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     weaks = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     excess_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    rcv_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
+    received_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False,
+                                       help_text="Chargeable count — what Amount is based on")
     free_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
     total_qty = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False)
     rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -474,17 +479,20 @@ class ChicksPurchaseItem(models.Model):
         return f"Batch {self.batch or self.id} ({self.purchase.purchase_no})"
 
     def save(self, *args, **kwargs):
-        sent = _dec(self.sent_qty)
-        free_from_sent = round(sent * _dec(self.sent_free_percent) / 100)
-        self.rcv_qty = (sent + free_from_sent - _dec(self.mortality)
-                        - _dec(self.shortage) - _dec(self.weaks) + _dec(self.excess_qty))
-        if self.rcv_free_percent:
-            self.total_qty = round(_dec(self.rcv_qty) / (1 + _dec(self.rcv_free_percent) / 100))
-        else:
-            self.total_qty = self.rcv_qty
-        self.free_qty = _dec(self.rcv_qty) - _dec(self.total_qty)
-        self.amount = _dec(self.total_qty) * _dec(self.rate)
+        self.recalculate()
         super().save(*args, **kwargs)
+
+    def recalculate(self):
+        """Derive Received / Free / Total / Amount from what was typed."""
+        factor = 1 + _dec(self.free_percent) / 100
+        gross = _dec(self.sent_qty) * factor
+        after_losses = (gross - _dec(self.mortality) - _dec(self.shortage)
+                        - _dec(self.weaks) + _dec(self.excess_qty))
+        self.received_qty = round(after_losses / factor)
+        self.free_qty = round(_dec(self.received_qty) * _dec(self.free_percent) / 100)
+        self.total_qty = _dec(self.received_qty) + _dec(self.free_qty)
+        # Billed on the chargeable count — the free chicks are free.
+        self.amount = _dec(self.received_qty) * _dec(self.rate)
 
 
 
