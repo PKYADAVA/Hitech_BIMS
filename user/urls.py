@@ -17,6 +17,7 @@ urlpatterns = [
     path('manage_groups/', views.manage_groups, name='user_groups'),
     path('delete_group/', views.delete_group, name='delete_group'),
     path('get-assigned-groups/', views.get_assigned_groups, name='get_assigned_groups'),
+    path('api/global-search/', views.global_search_api, name='global_search_api'),
     path('user_analytics/', views.user_analytics, name='user_analytics'),
      path('analytics/data/', views.user_analytics_data, name='user_analytics_data'),
 

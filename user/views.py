@@ -57,6 +57,19 @@ def _home_context():
     }
 
 
+@login_required
+def global_search_api(request):
+    """Dashboard search box — pages and master records in one response.
+
+    The permission filtering lives in the service, keyed on the same tab codes
+    the nav and the view-guard use, so a hit can never point somewhere the user
+    would be bounced out of.
+    """
+    from .services.global_search import global_search
+
+    return JsonResponse(global_search(request.user, request.GET.get("q", "")))
+
+
 def dashboard(request):
     return render(request, "home.html", _home_context())
 

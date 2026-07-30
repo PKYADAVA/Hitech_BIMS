@@ -16,6 +16,28 @@ $.extend(true, $.fn.dataTable.defaults, {
 });
 
 // ---------------------------------------------------------------------------
+// Landing from the dashboard's global search: a record hit links to its list
+// page carrying ?find=<term>. Seed every DataTable on that page with the term
+// so the row the user actually picked is filtered to the top on arrival,
+// instead of dropping them at the top of an unfiltered list.
+//
+// Registered as a delegated init.dt here (rather than an initComplete default)
+// because $.extend replaces rather than merges functions - a page defining its
+// own initComplete would silently drop ours.
+// ---------------------------------------------------------------------------
+(function ($) {
+  var term = new URLSearchParams(window.location.search).get("find");
+  if (!term) return;
+  $(document).on("init.dt", function (e, settings) {
+    var api = new $.fn.dataTable.Api(settings);
+    if (api.search()) return;   // the page set its own filter - leave it alone
+    var box = $(settings.nTableWrapper).find(".dataTables_filter input");
+    if (box.length) box.val(term);
+    api.search(term).draw();
+  });
+})(jQuery);
+
+// ---------------------------------------------------------------------------
 // Global searchable dropdowns: every select.form-select on the site becomes a
 // searchable Select2 (Bootstrap 5 theme), including selects added to the DOM
 // later (dynamic table rows, generated modals). Opt out with data-no-search.
