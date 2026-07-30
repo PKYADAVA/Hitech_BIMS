@@ -496,12 +496,12 @@ class BagWeightWarningTests(TestCase):
 
     def test_missing_bag_weight_is_called_out(self):
         html = self.report()
-        self.assertIn("have no Kg per Bag", html)
+        self.assertIn("have no Bag Capacity", html)
         self.assertIn("Pre Starer Feed", html)
 
     def test_no_warning_once_the_bag_weight_is_set(self):
         self.item.kg_per_bag = Decimal("50")
         self.item.save(update_fields=["kg_per_bag"])
         html = self.report()   # 1500 kg / 50
-        self.assertNotIn("have no Kg per Bag", html)
+        self.assertNotIn("have no Bag Capacity", html)
         self.assertIn("30.00", html)

@@ -262,11 +262,11 @@
   <div class="alert alert-warning d-flex align-items-start gap-2 mb-3 no-print">
     <i class="fas fa-triangle-exclamation mt-1"></i>
     <div>
-      <strong>These feed items have no Kg per Bag, so their columns read 0:</strong>
+      <strong>These feed items have no Bag Capacity, so their columns read 0:</strong>
       {{ items_missing_bag_weight|join:", " }}.
       <div class="small mt-1">This report is measured in bags — quantities are
-        converted from kg using each item's bag weight, so an item without one
-        cannot be shown. Set it in Inventory &rsaquo; Master &rsaquo; Item.</div>
+        converted from kg using each item's Bag Capacity, so an item without one
+        cannot be shown. Set Bag Capacity in Inventory &rsaquo; Master &rsaquo; Item.</div>
     </div>
   </div>
 {% endif %}
