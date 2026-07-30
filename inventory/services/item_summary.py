@@ -32,10 +32,11 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
     """All stock movements as dicts, newest-last. ``to_date`` caps the replay;
     ``from_date`` is *not* applied here because everything before it forms the
     opening balance."""
-    from purchase.models import GeneralPurchaseItem
+    from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
     from inventory.models import (StockTransfer, StockReceiveItem, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
     from broiler.models import DailyEntry, MedicineVaccineEntry
+    from hatchery.models import ChickSaleItem, EggPurchaseItem
 
     moves = []
 
@@ -87,6 +88,24 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
         from_id = t.from_farm_id if t.from_location_type == "farm" else t.from_warehouse_id
         add(t.date, t.from_location_type, from_id, r.item_id, "out", r.quantity, None, 7)
 
+    # Chicks Purchase: item lives on the header, and rcv_qty already includes
+    # the free chicks, so free_qty must not be added on top.
+    for r in scope(ChicksPurchaseItem.objects.exclude(farm_warehouse=None),
+                   "purchase__item_id").select_related("purchase"):
+        qty = _d(r.rcv_qty)
+        cost = (_d(r.amount) / qty) if (qty > 0 and r.amount) else _d(r.rate)
+        add(r.purchase.date, "warehouse", r.farm_warehouse_id, r.purchase.item_id,
+            "in", qty, cost, 0)
+
+    # Egg Purchase (hatchery): received qty falls back to sent, plus free eggs.
+    for r in scope(EggPurchaseItem.objects.exclude(egg_purchase__warehouse=None)
+                   ).select_related("egg_purchase"):
+        qty = _d(r.rcv_qty) or _d(r.sent_qty)
+        qty += _d(r.free_qty)
+        cost = (_d(r.amount) / qty) if (qty > 0 and r.amount) else _d(r.rate)
+        add(r.egg_purchase.date, "warehouse", r.egg_purchase.warehouse_id, r.item_id,
+            "in", qty, cost, 0)
+
     # ---------------- outflows ----------------
     for r in scope(StockIssueItem.objects.all()).select_related("issue"):
         loc_id = r.farm_id if r.location_type == "farm" else r.warehouse_id
@@ -104,6 +123,13 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
 
     for r in scope(MedicineVaccineEntry.objects.all()):
         add(r.date, "farm", r.farm_id, r.item_id, "out", r.qty, None, 10)
+
+    # Chick Sale (hatchery): total_qty left the stock point - sale_qty omits
+    # mortality and culls, which physically left as well.
+    for r in scope(ChickSaleItem.objects.exclude(sale__warehouse=None)
+                   ).select_related("sale"):
+        add(r.sale.date, "warehouse", r.sale.warehouse_id, r.item_id,
+            "out", r.total_qty, None, 11)
 
     moves.sort(key=lambda m: (m["date"], m["order"]))
     return moves

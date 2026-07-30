@@ -41,9 +41,10 @@ def warehouse_inflow_layers(item_id, warehouse_id, as_of_date=None):
     """Cost-bearing inflows of ``item`` at ``warehouse`` as (date, seq, qty,
     unit_cost) tuples, oldest first. ``seq`` breaks ties on the same date so
     ordering is deterministic across runs."""
-    from purchase.models import GeneralPurchaseItem
+    from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
     from inventory.models import (StockReceiveItem, StockTransfer,
                                   InventoryAdjustmentItem, MedicineTransferItem)
+    from hatchery.models import EggPurchaseItem
     layers = []
 
     for r in _dcap(GeneralPurchaseItem.objects.filter(
@@ -92,6 +93,28 @@ def warehouse_inflow_layers(item_id, warehouse_id, as_of_date=None):
             continue
         layers.append((r.transfer.date, ("e", r.id), qty, _q(r.rate)))
 
+    # Chicks Purchase - the item is on the header, and rcv_qty already includes
+    # the free chicks, so free_qty must not be added on top.
+    for r in _dcap(ChicksPurchaseItem.objects.filter(
+            purchase__item_id=item_id, farm_warehouse_id=warehouse_id
+    ).select_related("purchase"), "purchase__date", as_of_date):
+        qty = _q(r.rcv_qty)
+        if qty <= 0:
+            continue
+        unit_cost = (_q(r.amount) / qty) if r.amount else _q(r.rate)
+        layers.append((r.purchase.date, ("f", r.id), qty, unit_cost))
+
+    # Egg Purchase (hatchery) - received qty falls back to sent when nothing was
+    # booked as received, plus free eggs.
+    for r in _dcap(EggPurchaseItem.objects.filter(
+            item_id=item_id, egg_purchase__warehouse_id=warehouse_id
+    ).select_related("egg_purchase"), "egg_purchase__date", as_of_date):
+        qty = (_q(r.rcv_qty) or _q(r.sent_qty)) + _q(r.free_qty)
+        if qty <= 0:
+            continue
+        unit_cost = (_q(r.total_amount) / qty) if r.total_amount else _q(r.rate)
+        layers.append((r.egg_purchase.date, ("g", r.id), qty, unit_cost))
+
     layers.sort(key=lambda x: (x[0], x[1]))
     return layers
 
@@ -101,6 +124,7 @@ def warehouse_outflow_events(item_id, warehouse_id, as_of_date=None, exclude_iss
     oldest first. Value is not needed — outflows leave at the method's cost."""
     from inventory.models import (StockTransfer, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
+    from hatchery.models import ChickSaleItem
     events = []
 
     for r in _dcap(StockTransfer.objects.filter(
@@ -127,6 +151,13 @@ def warehouse_outflow_events(item_id, warehouse_id, as_of_date=None, exclude_iss
             transfer__from_warehouse_id=warehouse_id
     ).select_related("transfer"), "transfer__date", as_of_date):
         events.append((r.transfer.date, ("e", r.id), _q(r.quantity)))
+
+    # Chick Sale (hatchery) - total_qty left the stock point, mortality and
+    # culls included.
+    for r in _dcap(ChickSaleItem.objects.filter(
+            item_id=item_id, sale__warehouse_id=warehouse_id
+    ).select_related("sale"), "sale__date", as_of_date):
+        events.append((r.sale.date, ("h", r.id), _q(r.total_qty)))
 
     events.sort(key=lambda x: (x[0], x[1]))
     return events
@@ -228,9 +259,10 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
     adjustment). Returns a dict: ``opening``/``closing`` ({qty, price, amount}),
     ``rows`` (the window movements) and ``totals`` (window in/out sums).
     """
-    from purchase.models import GeneralPurchaseItem
+    from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
     from inventory.models import (StockReceiveItem, StockTransfer, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
+    from hatchery.models import ChickSaleItem, EggPurchaseItem
 
     moves = []
 
@@ -276,6 +308,26 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
         add(t.date, "in", (0, 4, r.id), r.quantity, r.rate, "Medicine-In", "medicine-in",
             t.trnum, _loc_name(t.from_location_type, t.from_warehouse, t.from_farm), r.remarks)
 
+    for r in (ChicksPurchaseItem.objects.filter(
+            purchase__item_id=item_id, farm_warehouse_id=warehouse_id)
+            .select_related("purchase", "farm_warehouse")):
+        qty = _q(r.rcv_qty)
+        cost = (_q(r.amount) / qty) if (qty > 0 and r.amount) else _q(r.rate)
+        add(r.purchase.date, "in", (0, 5, r.id), qty, cost, "Chicks Purchase", "purchase",
+            r.purchase.purchase_no,
+            r.farm_warehouse.name if r.farm_warehouse_id else "",
+            getattr(r.purchase, "remarks", "") or "")
+
+    for r in (EggPurchaseItem.objects.filter(
+            item_id=item_id, egg_purchase__warehouse_id=warehouse_id)
+            .select_related("egg_purchase", "egg_purchase__warehouse")):
+        qty = (_q(r.rcv_qty) or _q(r.sent_qty)) + _q(r.free_qty)
+        cost = (_q(r.total_amount) / qty) if (qty > 0 and r.total_amount) else _q(r.rate)
+        add(r.egg_purchase.date, "in", (0, 6, r.id), qty, cost, "Egg Purchase", "purchase",
+            r.egg_purchase.transaction_no,
+            r.egg_purchase.warehouse.name if r.egg_purchase.warehouse_id else "",
+            getattr(r.egg_purchase, "remarks", "") or "")
+
     # ---- outflows ----
     for r in (StockTransfer.objects.filter(item_id=item_id, from_location_type="warehouse", from_warehouse_id=warehouse_id)
               .select_related("to_warehouse", "to_farm")):
@@ -292,6 +344,14 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
               .select_related("adjustment", "adjustment__warehouse")):
         add(r.adjustment.date, "out", (1, 2, r.id), r.quantity, None, "Adjustment -", "adjust-deduct",
             r.adjustment.trnum, r.adjustment.warehouse.name if r.adjustment.warehouse_id else "", r.remarks)
+
+    for r in (ChickSaleItem.objects.filter(
+            item_id=item_id, sale__warehouse_id=warehouse_id)
+            .select_related("sale", "sale__warehouse")):
+        add(r.sale.date, "out", (1, 4, r.id), r.total_qty, None, "Chick Sale", "chick-sale",
+            r.sale.bill_no,
+            r.sale.warehouse.name if r.sale.warehouse_id else "",
+            getattr(r.sale, "remarks", "") or "")
 
     for r in (MedicineTransferItem.objects.filter(
             item_id=item_id, transfer__from_location_type="warehouse",

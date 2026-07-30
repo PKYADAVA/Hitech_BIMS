@@ -6,6 +6,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from account.models import AccountType, ChartOfAccount, CompanyProfile
+from hatchery.models import ChickSale, ChickSaleItem, EggPurchase, EggPurchaseItem
+from purchase.models import ChicksPurchase, ChicksPurchaseItem, Supplier
+from sales.models import Customer
+from inventory.services.item_summary import location_item_stock
+from inventory.services.valuation import item_ledger
 from inventory.models import (
     InventoryAdjustment,
     InventoryAdjustmentItem,
@@ -16,6 +21,7 @@ from inventory.models import (
     StockReceive,
     StockReceiveItem,
     Warehouse,
+    warehouse_item_stock,
 )
 
 
@@ -138,3 +144,86 @@ class InventoryLineReportTests(TestCase):
             found = re.search(r'colspan="(\d+)"', cell)
             span += int(found.group(1)) if found else 1
         self.assertEqual([head, row, span], [expected, expected, expected])
+
+
+class HatcheryStockVisibilityTests(TestCase):
+    """Hatchery movements must reach the inventory stock engines."""
+
+    def setUp(self):
+        get_user_model().objects.create_superuser("h", "h@x.com", "Str0ngPass!")
+        at = AccountType.objects.create(name="T", code_range_start=500000,
+                                        code_range_end=599999, report="PL")
+        self.coa = ChartOfAccount.objects.create(
+            company=CompanyProfile.get_solo(), code="500001", description="X",
+            account_type=at)
+        self.wh = Warehouse.objects.create(name="Hatchery Store")
+        self.item = Item.objects.create(
+            description="Hatching Eggs", category=ItemCategory.objects.create(name="Eggs"),
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("5"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        self.supplier = Supplier.objects.create(name="Egg Supplier")
+        self.customer = Customer.objects.create(name="Chick Buyer")
+
+    def _egg_purchase(self, rcv, free=0, sent=0):
+        ep = EggPurchase.objects.create(
+            date=date(2026, 5, 1), supplier=self.supplier, warehouse=self.wh,
+            pay_account=self.coa)
+        EggPurchaseItem.objects.create(
+            egg_purchase=ep, item=self.item, sent_qty=Decimal(str(sent)),
+            rcv_qty=Decimal(str(rcv)), free_qty=Decimal(str(free)),
+            rate=Decimal("5"))
+        return ep
+
+    def _chick_sale(self, total, mortality=0, culls=0):
+        cs = ChickSale.objects.create(
+            date=date(2026, 5, 10), customer=self.customer, warehouse=self.wh)
+        ChickSaleItem.objects.create(
+            sale=cs, item=self.item, total_qty=Decimal(str(total)),
+            mortality=Decimal(str(mortality)), culls=Decimal(str(culls)),
+            sale_rate=Decimal("9"))
+        return cs
+
+    def test_egg_purchase_is_an_inflow(self):
+        self.assertEqual(warehouse_item_stock(self.item.id, self.wh.id), Decimal("0"))
+        self._egg_purchase(rcv=1000, free=50)
+        self.assertEqual(warehouse_item_stock(self.item.id, self.wh.id), Decimal("1050"))
+
+    def test_received_falls_back_to_sent(self):
+        self._egg_purchase(rcv=0, sent=800, free=0)
+        self.assertEqual(warehouse_item_stock(self.item.id, self.wh.id), Decimal("800"))
+
+    def test_chick_sale_is_an_outflow_including_losses(self):
+        self._egg_purchase(rcv=1000)
+        self._chick_sale(total=300, mortality=10, culls=5)
+        # 1000 - 300 (not 1000 - 285): the dead and culled birds left too
+        self.assertEqual(warehouse_item_stock(self.item.id, self.wh.id), Decimal("700"))
+
+    def test_reports_agree_with_the_stock_function(self):
+        self._egg_purchase(rcv=1000, free=50)
+        self._chick_sale(total=300)
+        expected = Decimal("750")
+        self.assertEqual(warehouse_item_stock(self.item.id, self.wh.id), expected)
+        loc = location_item_stock("warehouse", self.wh.id, self.item.id)
+        self.assertEqual(Decimal(str(loc)), expected)
+
+        led = item_ledger(self.item.id, self.wh.id)
+        types = [r["type"] for r in led["rows"]]
+        self.assertIn("Egg Purchase", types)
+        self.assertIn("Chick Sale", types)
+        self.assertEqual(led["closing"]["qty"], expected)
+
+    def test_chicks_purchase_is_an_inflow_without_double_counting_free(self):
+        cp = ChicksPurchase.objects.create(
+            date=date(2026, 5, 2), supplier=self.supplier, item=self.item)
+        # rcv_qty is computed: 1000 sent + 10% free = 1100 physically received,
+        # of which 100 is the free portion. Stock must rise by 1100, not 1200.
+        line = ChicksPurchaseItem.objects.create(
+            purchase=cp, farm_warehouse=self.wh, sent_qty=Decimal("1000"),
+            sent_free_percent=Decimal("10"), rcv_free_percent=Decimal("10"),
+            rate=Decimal("40"))
+        stock = warehouse_item_stock(self.item.id, self.wh.id)
+        self.assertEqual(line.rcv_qty, Decimal("1100"))
+        self.assertEqual(stock, Decimal("1100"))
+        self.assertEqual(Decimal(str(location_item_stock(
+            "warehouse", self.wh.id, self.item.id))), Decimal("1100"))

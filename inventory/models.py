@@ -839,18 +839,23 @@ def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
     transaction type — none of which alone is a source of truth, since each
     keeps its own isolated running balance.
 
-    Inflows : purchases received here + stock transferred IN + stock received
-              + inventory 'Add' adjustments.
+    Inflows : purchases received here (general, chicks and hatchery egg
+              purchases) + stock transferred IN + stock received + inventory
+              'Add' adjustments.
     Outflows: stock transferred OUT + stock issued + inventory 'Deduct'
-              adjustments.
+              adjustments + chicks sold from here.
+
+    Delivery Challan and Hatch Entry are deliberately absent: neither records
+    a stock point, so their movements cannot be attributed to a warehouse.
 
     Counts records dated on/before ``as_of_date`` when given. ``exclude_*``
     drop a record being edited so it isn't counted against itself. Returns a
     Decimal (can be negative for historical data that predates this check).
     """
     from decimal import Decimal
-    from django.db.models import Sum
-    from purchase.models import GeneralPurchaseItem
+    from django.db.models import Case, DecimalField, F, Sum, When
+    from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
+    from hatchery.models import ChickSaleItem, EggPurchaseItem
 
     Z = Decimal("0")
 
@@ -878,6 +883,21 @@ def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
         item_id=item_id, adjustment_type="Add",
         adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id), "adjustment__date"))
 
+    # Chicks Purchase keeps its item on the header, and rcv_qty already
+    # includes the free chicks - adding free_qty here would double count.
+    inflow += total(dfilt(ChicksPurchaseItem.objects.filter(
+        purchase__item_id=item_id, farm_warehouse_id=warehouse_id),
+        "purchase__date"), "rcv_qty")
+
+    # Egg Purchase: received qty, falling back to sent when nothing was booked
+    # as received (the same basis the line's own amount uses), plus free eggs.
+    eggs = dfilt(EggPurchaseItem.objects.filter(
+        item_id=item_id, egg_purchase__warehouse_id=warehouse_id), "egg_purchase__date")
+    eggs = eggs.annotate(_received=Case(
+        When(rcv_qty__gt=0, then=F("rcv_qty")), default=F("sent_qty"),
+        output_field=DecimalField(max_digits=14, decimal_places=2)))
+    inflow += total(eggs, "_received") + total(eggs, "free_qty")
+
     # ---- outflows ----
     tout = dfilt(StockTransfer.objects.filter(
         item_id=item_id, from_location_type="warehouse", from_warehouse_id=warehouse_id), "date")
@@ -894,5 +914,11 @@ def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
     outflow += total(dfilt(InventoryAdjustmentItem.objects.filter(
         item_id=item_id, adjustment_type="Deduct",
         adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id), "adjustment__date"))
+
+    # Chick Sale: total_qty is what left the stock point. sale_qty excludes
+    # mortality and culls, but those birds physically left too - charging only
+    # sale_qty would leave them unaccounted and overstate stock.
+    outflow += total(dfilt(ChickSaleItem.objects.filter(
+        item_id=item_id, sale__warehouse_id=warehouse_id), "sale__date"), "total_qty")
 
     return inflow - outflow
