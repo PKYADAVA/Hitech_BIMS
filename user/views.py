@@ -79,22 +79,29 @@ def forgot_password_view(request):
 
 @login_required
 def user_profile(request):
-    if request.method == "POST":
-        first_name = request.POST.get("first_name", "").strip()
-        last_name = request.POST.get("last_name", "").strip()
-        email = request.POST.get("email", "").strip()
+    """Save the signed-in user's own profile.
 
-        if not first_name or not email:
-            return JsonResponse({"error": "First name and email are required."}, status=400)
+    The profile is a modal in the top navbar (see main_top_navbar.html), so this
+    is a POST endpoint. A GET is someone following an old link to the page the
+    modal replaced — send them home rather than serve a second, stale copy of
+    the same form.
+    """
+    if request.method != "POST":
+        return redirect("/")
 
-        user = request.user
-        user.first_name = first_name
-        user.last_name = last_name
-        user.email = email
-        user.save()
-        return JsonResponse({"message": "Profile updated successfully."})
+    first_name = request.POST.get("first_name", "").strip()
+    last_name = request.POST.get("last_name", "").strip()
+    email = request.POST.get("email", "").strip()
 
-    return render(request, "user_profile.html")
+    if not first_name or not email:
+        return JsonResponse({"error": "First name and email are required."}, status=400)
+
+    user = request.user
+    user.first_name = first_name
+    user.last_name = last_name
+    user.email = email
+    user.save()
+    return JsonResponse({"message": "Profile updated successfully."})
 
 
 @login_required

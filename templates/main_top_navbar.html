@@ -862,7 +862,7 @@
           {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
             <i class="fas fa-tools"></i>Django Admin
           </a></li>{% endif %}
-          <li><a class="dropdown-item" href="{% url 'user_profile' %}">
+          <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userProfileModal">
             <i class="fas fa-id-card"></i>View Profile
           </a></li>
           <li><hr class="dropdown-divider"></li>
@@ -877,6 +877,98 @@
     </div>
   </div>
 </nav>
+
+{% if request.user.is_authenticated %}
+<!-- Profile, as a modal: opened from the user menu on any page and closed on
+     save, so updating no longer leaves a page sitting open. -->
+<div class="modal fade" id="userProfileModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-user me-2"></i>Profile Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="user-profile-modal-form">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="up-first-name" class="form-label">First Name <span class="text-danger">*</span></label>
+            <input type="text" id="up-first-name" class="form-control"
+                   value="{{ request.user.first_name }}" placeholder="Enter first name" required>
+          </div>
+          <div class="mb-3">
+            <label for="up-last-name" class="form-label">Last Name</label>
+            <input type="text" id="up-last-name" class="form-control"
+                   value="{{ request.user.last_name }}" placeholder="Enter last name">
+          </div>
+          <div class="mb-0">
+            <label for="up-email" class="form-label">Email <span class="text-danger">*</span></label>
+            <input type="email" id="up-email" class="form-control"
+                   value="{{ request.user.email }}" placeholder="Enter email" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="up-save">
+            <i class="fas fa-save me-1"></i>Update Profile
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('user-profile-modal-form');
+  if (!form) return;
+  const modalEl = document.getElementById('userProfileModal');
+  const save = document.getElementById('up-save');
+  // Reopening after a cancelled edit should show what is stored, not the
+  // half-typed values left behind last time.
+  const initial = {
+    first: "{{ request.user.first_name|escapejs }}",
+    last: "{{ request.user.last_name|escapejs }}",
+    email: "{{ request.user.email|escapejs }}",
+  };
+  modalEl.addEventListener('show.bs.modal', function () {
+    document.getElementById('up-first-name').value = initial.first;
+    document.getElementById('up-last-name').value = initial.last;
+    document.getElementById('up-email').value = initial.email;
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const data = new URLSearchParams({
+      first_name: document.getElementById('up-first-name').value.trim(),
+      last_name: document.getElementById('up-last-name').value.trim(),
+      email: document.getElementById('up-email').value.trim(),
+      csrfmiddlewaretoken: form.querySelector('[name=csrfmiddlewaretoken]').value,
+    });
+    save.disabled = true;
+    fetch("{% url 'user_profile' %}", {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+                 'X-Requested-With': 'XMLHttpRequest' },
+      body: data,
+    }).then(async function (resp) {
+      const body = await resp.json().catch(function () { return {}; });
+      if (!resp.ok) throw new Error(body.error || 'Error updating profile. Please try again.');
+      // Keep the edits on screen so a reopen shows the saved values.
+      initial.first = data.get('first_name');
+      initial.last = data.get('last_name');
+      initial.email = data.get('email');
+      bootstrap.Modal.getInstance(modalEl).hide();
+      window.showToast('success', body.message || 'Profile updated successfully.');
+    }).catch(function (err) {
+      window.showToast('danger', err.message);
+    }).finally(function () {
+      save.disabled = false;
+    });
+  });
+})();
+</script>
+{% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
