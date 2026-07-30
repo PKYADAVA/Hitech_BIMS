@@ -341,7 +341,10 @@ MODULE_REGISTRY = [
                 ],
             },
             {
-                "label": "Employee Tracking",
+                # Renamed from "Employee Tracking". section_key() derives the
+                # template key from this label, so the nav guard in
+                # main_top_navbar.html uses 'hr_employee_trip_and_route'.
+                "label": "Employee Trip And Route",
                 "tabs": [
                     ("tracking_dashboard", "Live Dashboard", (
                         "api_tracking_live", "api_tracking_sync_now",
