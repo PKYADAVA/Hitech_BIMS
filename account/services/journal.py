@@ -157,8 +157,8 @@ def validate_lines(company, lines_data, manual=True):
 
 def _apply_narration_fields(voucher, user, auto_narration, narration_source):
     """Persist the auto-narration engine's audit trail (auto_narration/source/
-    who-when), called from both create and update. No-op for callers (e.g.
-    auto_posting.py) that don't pass these - they keep the model defaults."""
+    who-when), called from both create and update. No-op for callers that
+    don't pass these - they keep the model defaults."""
     if auto_narration is not None:
         voucher.auto_narration = auto_narration
     if narration_source is not None:

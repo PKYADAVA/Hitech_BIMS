@@ -183,27 +183,25 @@ Vouchers** tab (Account ▸ Transactions). All posting goes through this service
 * Other modules (sales/purchase/hatchery) should call
   `journal.create_voucher(..., manual=False, post=True)` to post documents.
 
-## Automatic document posting
+## Automatic document posting — removed
 
-`account/services/auto_posting.py` — hatchery documents post vouchers
-automatically through the journal service (called from the hatchery views
-after save; `post_delete` signals cancel on delete):
+There is none. **Journal vouchers are entered manually only.**
 
-* **EggPurchase → Purchase voucher**: Dr Egg Purchases (gross) + freight
-  account + TCS Receivable; Cr supplier AP ledger (*pay_later*) or pay
-  account (*pay_in_bill*); `freight_type='Exclude'` credits the pay account
-  separately for freight. **ChickSale → Sales voucher**: Dr customer AR
-  ledger / pay account (final amount); Cr Chick Sales + freight recovery
-  when billed.
-* One Posted voucher per document (generic FK `Voucher.source`). Edits with
-  changed amounts cancel + re-post; unchanged saves are no-ops; document
-  delete cancels the voucher. `sector` = the document's warehouse.
-* Role accounts (`EGG_PURCHASES`, `CHICK_SALES`, `FREIGHT_INWARD`,
-  `FREIGHT_RECOVERED`, `TCS_RECEIVABLE`) are created on demand under their
-  anchors, so this works with any generated template.
-* Posting failures never block the document save — they're logged; run
-  `python manage.py repost_documents` (add `--all` to re-check documents
-  that already have vouchers) to backfill.
+`account/services/auto_posting.py` and `manage.py repost_documents` were
+removed on 2026-07-30 at the user's request, together with the hatchery view
+calls and the `post_delete` cancel signals. EggPurchase and ChickSale were the
+only documents that had ever posted; nothing posts now.
+
+Do not reintroduce automatic posting as a side effect of other work — it is a
+deliberate boundary, not a gap. If it is ever wanted again, the removed
+implementation is recoverable from git history (it built one Posted voucher per
+document via generic FK `Voucher.source`, cancelling and re-posting on
+amount changes), but the account mapping should be confirmed first.
+
+Note that vouchers posted before the removal are still in the books and still
+count towards the trial balance and P&L; they were deliberately left in place.
+Supplier/customer ledger reports and the Purchase Report read the transaction
+tables directly, not vouchers, so documents still appear there.
 
 ## Profit & Loss / Balance Sheet
 
@@ -235,9 +233,8 @@ side. Pages: Account ▸ Reports ▸ **Profit & Loss** / **Balance Sheet**
 * **Cash Flow statement**, comparatives (multi-period P&L/BS side by side).
 * **Bank reconciliation**, **budgets**, **cost-center reporting**
   (`cost_center` is already accepted on voucher lines via API).
-* **More document types** – purchase invoices/GRNs and sales invoices post
-  nothing yet because those models don't exist (POs are commitments, not
-  accounting events); when built, add a builder to `auto_posting.BUILDERS`.
+* **More document types** – explicitly *not* planned. No business document
+  posts to the journal; see "Automatic document posting — removed" above.
 * **Tree UI extras** – drag-drop move/merge; move works via `PUT {parent: …}`.
 * **Per-company scoping of master records** – customers/suppliers/etc. have no
   company FK yet; auto-ledgers default to company 1 until they do.
