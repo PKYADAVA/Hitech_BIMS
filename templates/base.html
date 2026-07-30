@@ -34,11 +34,12 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-5-theme/1.3.0/select2-bootstrap-5-theme.min.css" />
 
-  <!-- BIMS Global Styles -->
-  <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+  <!-- BIMS Global Styles (bump ?v= when this file changes so browsers drop
+       cached copies — same convention as main.js below) -->
+  <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260730" />
 
   <!-- Responsiveness layer: adapts the existing design to every screen size -->
-  <link rel="stylesheet" href="{% static 'css/responsive.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v=20260730" />
 
   {% block css %}{% endblock %}
 

@@ -1710,6 +1710,17 @@ img, svg, video, canvas {
 .bims-navbar .dropdown-item i.fa-hub,
 .bims-navbar .dropdown-item i.fa-key             { --nav-icon: #7c3aed; }
 
+/* Icons written with the newer `fa-solid` prefix rather than `fas` — the
+   selectors key off the icon class alone, so the prefix does not matter, but
+   these were missed on the first pass. */
+.bims-navbar .dropdown-item i.fa-crow,
+.bims-navbar .dropdown-item i.fa-dna              { --nav-icon: #d97706; }
+.bims-navbar .dropdown-item i.fa-indian-rupee-sign { --nav-icon: #16a34a; }
+.bims-navbar .dropdown-item i.fa-shopping-cart     { --nav-icon: #ea580c; }
+.bims-navbar .dropdown-item i.fa-users-gear        { --nav-icon: #db2777; }
+.bims-navbar .dropdown-item i.fa-clipboard-check   { --nav-icon: #0d9488; }
+.bims-navbar .dropdown-item i.fa-home              { --nav-icon: #3b82f6; }
+
 /* Attention — the only reds, so a warning still stands out */
 .bims-navbar .dropdown-item i.fa-bell            { --nav-icon: #f59e0b; }
 .bims-navbar .dropdown-item i.fa-triangle-exclamation,
