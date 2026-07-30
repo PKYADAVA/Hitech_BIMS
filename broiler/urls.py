@@ -165,4 +165,12 @@ urlpatterns = [
     path('gc_settlement/<int:id>/', views.GCSettlementAPI.as_view(), name='gc_settlement_detail'),
     path('gc_settlement/<int:id>/delete/', views.GCSettlementAPI.as_view(), name='gc_settlement_delete'),
     path('gc_settlement/<int:id>/print/', views.gc_settlement_print, name='gc_settlement_print'),
+
+    path('farm-location-capture/', views.farm_location_capture_list, name='farm_location_capture_list'),
+    path('farm-location-capture/add/', views.farm_location_capture_add, name='farm_location_capture_add'),
+    path('farm-location-capture/<int:id>/edit/', views.farm_location_capture_edit, name='farm_location_capture_edit'),
+    path('farm-location-capture/<int:id>/clear/', views.farm_location_capture_clear, name='farm_location_capture_clear'),
+    path('farm-location-capture/<int:id>/delete/', views.farm_location_capture_delete, name='farm_location_capture_delete'),
+    path('farm_location_capture_api/', views.farm_location_capture_api, name='farm_location_capture_api'),
+    path('farm-capture-file/<int:id>/delete/', views.farm_capture_file_delete, name='farm_capture_file_delete'),
 ]

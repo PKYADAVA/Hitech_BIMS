@@ -127,6 +127,9 @@
               {% if 'chicks_placement_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chicks_placement_list' %}">
                 <i class="fa-solid fa-kiwi-bird"></i>Chicks Placement
               </a></li>{% endif %}
+              {% if 'farm_location_capture_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_location_capture_list' %}">
+                <i class="fas fa-location-dot"></i>Farm Location &amp; Photos
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}{% if capture %}Edit{% else %}Add{% endif %} Farm Location Capture - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_broiler_transaction_subnavbar.html' with active_tab='farm_location_capture' %}
+
+<div class="page-header">
+  <div class="page-header-title"><i class="fas fa-location-dot"></i>
+    {% if capture %}Edit{% else %}Add{% endif %} Farm Location Capture</div>
+  <div class="page-header-right">
+    <a class="btn btn-outline-secondary" href="{% url 'farm_location_capture_list' %}">
+      <i class="fas fa-arrow-left"></i> Register</a>
+  </div>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="card mb-3">
+    <div class="card-header">Capture Details</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Capture No.</label>
+          <input class="form-control bg-light" readonly
+                 value="{% if capture %}{{ capture.capture_no }}{% else %}{{ next_no }}{% endif %}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" name="date" class="form-control" required
+                 value="{% if capture %}{{ capture.date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Farm <span class="text-danger">*</span></label>
+          <select name="farm" id="farm" class="form-select" required>
+            <option value="">Select farm</option>
+            {% for f in farms %}
+            <option value="{{ f.id }}" data-farmer="{{ f.farmer.farmer_name|default:''|escapejs }}"
+                    {% if capture and capture.farm_id == f.id %}selected{% endif %}>
+              {{ f.farm_code }} - {{ f.farm_name }}
+            </option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Farmer</label>
+          <input class="form-control bg-light" id="farmer" readonly placeholder="&mdash;"
+                 title="Comes from the selected farm">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-map-location-dot me-1"></i>Location</span>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="use-my-location">
+        <i class="fas fa-crosshairs me-1"></i>Use my current location</button>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Latitude</label>
+          <input type="number" step="any" min="-90" max="90" name="latitude" id="latitude"
+                 class="form-control" placeholder="e.g. 26.760600"
+                 value="{% if capture and capture.latitude != None %}{{ capture.latitude }}{% endif %}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Longitude</label>
+          <input type="number" step="any" min="-180" max="180" name="longitude" id="longitude"
+                 class="form-control" placeholder="e.g. 83.373200"
+                 value="{% if capture and capture.longitude != None %}{{ capture.longitude }}{% endif %}">
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <a class="btn btn-outline-secondary d-none" id="preview-map" target="_blank" rel="noopener">
+            <i class="fas fa-map me-1"></i>Preview on map</a>
+          <div class="small text-muted ms-2" id="geo-note"></div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Address</label>
+          <textarea name="address" class="form-control" rows="2"
+                    placeholder="Address as found on the visit">{% if capture %}{{ capture.address }}{% endif %}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-camera me-1"></i>Photos &amp; Documents</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Photos</label>
+          <input type="file" name="photos" class="form-control" accept="image/*" multiple>
+          <div class="form-text">Added to the farm's pictures as well.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Documents</label>
+          <input type="file" name="documents" class="form-control" multiple>
+          <div class="form-text">Agreements, cheque scans, anything else from the visit.</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Remarks</label>
+          <textarea name="remarks" class="form-control" rows="2">{% if capture %}{{ capture.remarks }}{% endif %}</textarea>
+        </div>
+      </div>
+
+      {% if existing_files %}
+      <hr>
+      <div class="small text-muted mb-2">Already attached ({{ existing_files|length }})</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for f in existing_files %}
+        <div class="border rounded p-1 text-center" style="width:130px">
+          {% if f.kind == 'photo' %}
+          <a href="{{ f.url }}" target="_blank" rel="noopener">
+            <img src="{{ f.url }}" alt="{{ f.name }}"
+                 style="width:118px;height:80px;object-fit:cover;border-radius:.3rem"></a>
+          {% else %}
+          <a href="{{ f.url }}" target="_blank" rel="noopener"><i class="fas fa-file fa-2x my-3"></i></a>
+          {% endif %}
+          <div class="text-truncate" style="font-size:.65rem" title="{{ f.name }}">{{ f.name }}</div>
+          <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-file"
+                  data-id="{{ f.id }}" title="Remove"><i class="fas fa-trash"></i></button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4">
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+    <a class="btn btn-secondary" href="{% url 'farm_location_capture_list' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  const farm = document.getElementById('farm');
+  const farmer = document.getElementById('farmer');
+  const lat = document.getElementById('latitude');
+  const lng = document.getElementById('longitude');
+  const preview = document.getElementById('preview-map');
+  const note = document.getElementById('geo-note');
+
+  function showFarmer() {
+    const opt = farm.selectedOptions[0];
+    farmer.value = opt ? (opt.dataset.farmer || '') : '';
+  }
+  farm.addEventListener('change', showFarmer);
+  showFarmer();
+
+  function refreshPreview() {
+    const ok = lat.value !== '' && lng.value !== '';
+    preview.classList.toggle('d-none', !ok);
+    if (ok) preview.href = `https://www.google.com/maps?q=${lat.value},${lng.value}`;
+  }
+  lat.addEventListener('input', refreshPreview);
+  lng.addEventListener('input', refreshPreview);
+  refreshPreview();
+
+  document.getElementById('use-my-location').addEventListener('click', function () {
+    if (!navigator.geolocation) {
+      note.textContent = 'This browser cannot report a location.';
+      return;
+    }
+    note.textContent = 'Reading location…';
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      lat.value = pos.coords.latitude.toFixed(6);
+      lng.value = pos.coords.longitude.toFixed(6);
+      refreshPreview();
+      note.textContent = 'Accurate to about ' + Math.round(pos.coords.accuracy) + ' m — edit if needed.';
+    }, function (err) {
+      // The usual causes are a denied prompt or a page served over plain HTTP.
+      note.textContent = err.code === err.PERMISSION_DENIED
+        ? 'Location permission denied — enter the coordinates manually.'
+        : 'Could not read the location — enter the coordinates manually.';
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  });
+
+  document.querySelectorAll('.remove-file').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!confirm('Remove this file?')) return;
+      fetch(`/farm-capture-file/${btn.dataset.id}/delete/`, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+      }).then(function (r) {
+        if (!r.ok) throw new Error();
+        btn.closest('div.border').remove();
+        window.showToast('success', 'File removed.');
+      }).catch(function () { window.showToast('danger', 'Could not remove the file.'); });
+    });
+  });
+})();
+</script>
+{% endblock %}

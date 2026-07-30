@@ -1778,3 +1778,164 @@ class BirdCategory(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class FarmLocationCapture(models.Model):
+    """A dated visit that records where a farm is and what it looks like —
+    Broiler > Transactions > Farm Location & Photos.
+
+    The farm master keeps only the *current* location and picture set. This is
+    the trail behind it: who captured what, when. Saving writes the latest
+    capture through to the farm (see ``sync_farm``), so the master always shows
+    the most recent visit while older captures stay for reference.
+
+    The farmer is not stored again — it is read from ``farm.farmer``, so a farm
+    changing hands can never leave a capture pointing at the wrong person.
+    """
+
+    capture_no = models.CharField(
+        max_length=30, unique=True, editable=False, blank=True,
+        help_text=_("Auto-generated, e.g. FLC-2627-0001"))
+    date = models.DateField(default=now)
+    farm = models.ForeignKey(
+        BroilerFarm, on_delete=models.CASCADE, related_name="location_captures",
+        help_text=_("Farm this capture belongs to; the farmer comes from it"))
+    latitude = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)],
+        help_text=_("Decimal degrees, -90 to 90"))
+    longitude = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)],
+        help_text=_("Decimal degrees, -180 to 180"))
+    address = models.TextField(blank=True, help_text=_("Address as found on the visit"))
+    remarks = models.TextField(blank=True)
+    captured_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="farm_location_captures")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Farm Location Capture")
+        verbose_name_plural = _("Farm Location Captures")
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.capture_no or f"(unsaved capture for {self.farm})"
+
+    @property
+    def farmer(self):
+        """Read through to the farm's farmer rather than storing a second copy."""
+        return self.farm.farmer if self.farm_id else None
+
+    @property
+    def has_location(self):
+        return self.latitude is not None and self.longitude is not None
+
+    def clean(self):
+        # Half a coordinate pair is worse than none: it looks like a location
+        # but cannot be plotted, and would overwrite a good one on the farm.
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValidationError(_("Enter both latitude and longitude, or neither."))
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.capture_no:
+            self.capture_no = self._next_no(self.date)
+            super().save(update_fields=["capture_no"])
+        self.sync_farm()
+
+    def delete(self, *args, **kwargs):
+        farm = self.farm
+        super().delete(*args, **kwargs)
+        # The farm should fall back to whatever capture is now the latest.
+        FarmLocationCapture.sync_farm_from_latest(farm)
+
+    @classmethod
+    def _next_no(cls, on_date=None):
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"FLC-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(capture_no__startswith=prefix).values_list("capture_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    def sync_farm(self):
+        """Push this capture onto the farm master — but only if it is the
+        latest one, so editing an old visit cannot undo a newer reading."""
+        FarmLocationCapture.sync_farm_from_latest(self.farm)
+
+    @staticmethod
+    def sync_farm_from_latest(farm):
+        """Set the farm's current location from its most recent capture that
+        has one. With no captures left the farm keeps what was typed on the
+        master directly — this only ever overwrites with a real reading."""
+        if farm is None:
+            return
+        latest = (FarmLocationCapture.objects
+                  .filter(farm=farm, latitude__isnull=False, longitude__isnull=False)
+                  .order_by("-date", "-id").first())
+        if latest is None:
+            return
+        fields = []
+        if farm.farm_latitude != latest.latitude:
+            farm.farm_latitude = latest.latitude
+            fields.append("farm_latitude")
+        if farm.farm_longitude != latest.longitude:
+            farm.farm_longitude = latest.longitude
+            fields.append("farm_longitude")
+        if latest.address and farm.farm_address != latest.address:
+            farm.farm_address = latest.address
+            fields.append("farm_address")
+        if fields:
+            farm.save(update_fields=fields)
+
+
+class FarmCaptureFile(models.Model):
+    """One photo or document attached to a location capture.
+
+    Photos are mirrored into BroilerFarmImage so they show up on the farm
+    master exactly like pictures uploaded there directly; the mirror is removed
+    again when the file is cleared or the capture deleted.
+    """
+
+    KIND_PHOTO = "photo"
+    KIND_DOCUMENT = "document"
+    KIND_CHOICES = [(KIND_PHOTO, _("Photo")), (KIND_DOCUMENT, _("Document"))]
+
+    capture = models.ForeignKey(
+        FarmLocationCapture, on_delete=models.CASCADE, related_name="files")
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_PHOTO)
+    file = models.FileField(upload_to="farm/captures/%Y/%m/")
+    caption = models.CharField(max_length=150, blank=True)
+    # The mirrored farm picture, so clearing a capture can take it back out.
+    farm_image = models.OneToOneField(
+        BroilerFarmImage, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="capture_file", editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Farm Capture File")
+        verbose_name_plural = _("Farm Capture Files")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} for {self.capture}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.kind == self.KIND_PHOTO and self.farm_image_id is None and self.file:
+            image = BroilerFarmImage.objects.create(
+                farm=self.capture.farm, image=self.file.name)
+            FarmCaptureFile.objects.filter(pk=self.pk).update(farm_image=image)
+            self.farm_image_id = image.pk
+
+    def delete(self, *args, **kwargs):
+        image = self.farm_image
+        super().delete(*args, **kwargs)
+        if image is not None:
+            image.delete()

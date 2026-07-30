@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Farm Location &amp; Photos - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_broiler_transaction_subnavbar.html' with active_tab='farm_location_capture' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-location-dot"></i> Farm Location &amp; Photos</div>
+    <div class="page-header-subtitle">Capture a farm's location and pictures; the farm master keeps the latest</div>
+  </div>
+  <div class="page-header-right">
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'farm_location_capture_add' %}">
+      <i class="fas fa-plus"></i> Add</a>{% endif %}
+  </div>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+<div class="card mb-3"><div class="card-body">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-2"><label class="form-label">From Date</label>
+      <input type="date" class="form-control" id="from-date"></div>
+    <div class="col-md-2"><label class="form-label">To Date</label>
+      <input type="date" class="form-control" id="to-date"></div>
+    <div class="col-md-4"><label class="form-label">Farm</label>
+      <select class="form-select" id="farm-filter"><option value="">All farms</option>
+        {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_code }} - {{ f.farm_name }}</option>{% endfor %}
+      </select></div>
+    <div class="col-md-2"><button class="btn btn-primary" id="filter-submit">Submit</button></div>
+  </div>
+</div></div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-list"></i> Capture Register</div>
+  <div class="card-body p-0"><div class="table-responsive">
+    <table class="table table-hover table-bordered mb-0" id="capture-table">
+      <thead class="table-dark"><tr>
+        <th>Capture No.</th><th>Date</th><th>Farm</th><th>Farmer</th><th>Branch</th>
+        <th>Location</th><th>Address</th><th class="text-center">Photos</th>
+        <th class="text-center">Documents</th><th>Captured By</th>
+        <th class="text-center">Actions</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div></div>
+</div>
+
+<!-- View: everything captured on that visit -->
+<div class="modal fade" id="viewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title"><i class="fas fa-eye me-2"></i><span id="view-title">Capture</span></h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body" id="view-body"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+  </div></div>
+</div>
+
+<!-- Confirm for the two destructive actions; the wording changes per action -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="confirm-title">Confirm</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><p id="confirm-text"></p></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      <form id="confirm-form" method="post">{% csrf_token %}
+        <button type="submit" class="btn btn-danger" id="confirm-ok">Confirm</button></form>
+    </div>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  let table = null;
+  const esc = s => s == null ? "" : String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  let rowsById = {};
+
+  function locationCell(r) {
+    if (!r.has_location) return '<span class="text-muted">—</span>';
+    const label = Number(r.latitude).toFixed(6) + ", " + Number(r.longitude).toFixed(6);
+    // Opens the reading on a map so it can be sanity-checked against the address.
+    return `<a href="https://www.google.com/maps?q=${r.latitude},${r.longitude}"
+               target="_blank" rel="noopener" title="Open in maps">${label}</a>`;
+  }
+
+  function render(rows) {
+    if (table) table.destroy();
+    rowsById = {};
+    const tb = $("#capture-table tbody").empty();
+    rows.forEach(function (r) {
+      rowsById[r.id] = r;
+      tb.append(`<tr>
+        <td>${esc(r.capture_no)}</td><td>${esc(r.date)}</td>
+        <td>${esc(r.farm_code)} - ${esc(r.farm)}</td>
+        <td>${esc(r.farmer) || "—"}</td><td>${esc(r.branch) || "—"}</td>
+        <td>${locationCell(r)}</td>
+        <td>${esc(r.address) || "—"}</td>
+        <td class="text-center">${r.photos}</td>
+        <td class="text-center">${r.documents}</td>
+        <td>${esc(r.captured_by) || "—"}</td>
+        <td class="text-center"><div class="d-flex gap-1 justify-content-center">
+          <button class="btn btn-outline-info btn-sm act-view" data-id="${r.id}" title="View"><i class="fas fa-eye"></i></button>
+          {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/farm-location-capture/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+          {% if page_perms.edit %}<button class="btn btn-outline-secondary btn-sm act-clear" data-id="${r.id}" title="Clear location and files"><i class="fas fa-eraser"></i></button>{% endif %}
+          {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm act-delete" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+        </div></td>
+      </tr>`);
+    });
+    table = $("#capture-table").DataTable({
+      responsive: true, order: [[1, "desc"]],
+      dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      columnDefs: [{ orderable: false, targets: -1 }],
+      language: { emptyTable: "No captures recorded yet" },
+    });
+  }
+
+  function load() {
+    $.getJSON("{% url 'farm_location_capture_api' %}", {
+      from_date: $("#from-date").val(), to_date: $("#to-date").val(),
+      farm: $("#farm-filter").val(),
+    }, render).fail(() => window.showToast('danger', "Failed to load captures."));
+  }
+  $("#filter-submit").on("click", load);
+
+  $(document).on("click", ".act-view", function () {
+    const r = rowsById[$(this).data("id")];
+    $("#view-title").text(r.capture_no + " — " + r.farm);
+    const photos = r.files.filter(f => f.kind === "photo");
+    const docs = r.files.filter(f => f.kind === "document");
+    $("#view-body").html(`
+      <dl class="row mb-3">
+        <dt class="col-sm-3">Date</dt><dd class="col-sm-9">${esc(r.date)}</dd>
+        <dt class="col-sm-3">Farm</dt><dd class="col-sm-9">${esc(r.farm_code)} - ${esc(r.farm)}</dd>
+        <dt class="col-sm-3">Farmer</dt><dd class="col-sm-9">${esc(r.farmer) || "—"}</dd>
+        <dt class="col-sm-3">Location</dt><dd class="col-sm-9">${locationCell(r)}</dd>
+        <dt class="col-sm-3">Address</dt><dd class="col-sm-9">${esc(r.address) || "—"}</dd>
+        <dt class="col-sm-3">Remarks</dt><dd class="col-sm-9">${esc(r.remarks) || "—"}</dd>
+        <dt class="col-sm-3">Captured By</dt><dd class="col-sm-9">${esc(r.captured_by) || "—"}</dd>
+      </dl>
+      <h6 class="mb-2">Photos (${photos.length})</h6>
+      <div class="d-flex flex-wrap gap-2 mb-3">${
+        photos.length
+          ? photos.map(f => `<a href="${esc(f.url)}" target="_blank" rel="noopener">
+               <img src="${esc(f.url)}" alt="${esc(f.name)}"
+                    style="width:120px;height:90px;object-fit:cover;border-radius:.4rem;border:1px solid #e5e7eb"></a>`).join("")
+          : '<span class="text-muted">No photos.</span>'}</div>
+      <h6 class="mb-2">Documents (${docs.length})</h6>
+      <ul class="mb-0">${
+        docs.length
+          ? docs.map(f => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a></li>`).join("")
+          : '<li class="text-muted list-unstyled">No documents.</li>'}</ul>`);
+    new bootstrap.Modal(document.getElementById("viewModal")).show();
+  });
+
+  function confirmAction(id, action) {
+    const r = rowsById[id];
+    const clearing = action === "clear";
+    $("#confirm-title").text(clearing ? "Clear Capture" : "Delete Capture");
+    $("#confirm-text").html(clearing
+      ? `Remove the location and all files from <strong>${esc(r.capture_no)}</strong>?
+         The visit record stays, and the farm falls back to its previous capture.`
+      : `Delete <strong>${esc(r.capture_no)}</strong> entirely, with its files?
+         The farm falls back to its previous capture.`);
+    $("#confirm-ok").text(clearing ? "Clear" : "Delete");
+    $("#confirm-form").attr("action", `/farm-location-capture/${id}/${action}/`);
+    new bootstrap.Modal(document.getElementById("confirmModal")).show();
+  }
+  $(document).on("click", ".act-clear", function () { confirmAction($(this).data("id"), "clear"); });
+  $(document).on("click", ".act-delete", function () { confirmAction($(this).data("id"), "delete"); });
+
+  load();
+});
+</script>
+{% endblock %}

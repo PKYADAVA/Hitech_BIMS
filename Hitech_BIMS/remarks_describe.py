@@ -92,6 +92,12 @@ def _d_note(o):  # DebitNote / CreditNote
     return f"{kind} {o.supplier.name if o.supplier_id else ''} {_amt(o.amount)}"
 
 
+def _d_farm_capture(o):
+    farm = o.farm.farm_name if o.farm_id else ""
+    where = ("at %s, %s" % (o.latitude, o.longitude)) if o.has_location else ""
+    return f"Location capture {farm} {where}".strip()
+
+
 def _d_customer_note(o):  # CustomerDebitNote / CustomerCreditNote
     # "customerdebitnote" -> "customer debit note"
     kind = o._meta.model_name.replace("customer", "customer ").replace("note", " note")
@@ -114,6 +120,7 @@ DESCRIBERS = {
     "sales.SalesInvoice": _d_sales_invoice,
     "purchase.DebitNote": _d_note,
     "purchase.CreditNote": _d_note,
+    "broiler.FarmLocationCapture": _d_farm_capture,
     "sales.CustomerDebitNote": _d_customer_note,
     "sales.CustomerCreditNote": _d_customer_note,
 }

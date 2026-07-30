@@ -1,10 +1,12 @@
 #pylint: disable=no-member
 
 from typing import Dict, List, Optional, Union
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.http import require_POST
+from django.contrib import messages
 from django.http import Http404, JsonResponse
 from django.db.models import F, Max, Min, Prefetch, Q, Sum
 from django.core.files.storage import default_storage
@@ -19,6 +21,7 @@ from .models import (
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
     GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
     Region, Supervisor, FeedPhaseMaster, FeedPhaseLine, BirdCategory,
+    FarmLocationCapture, FarmCaptureFile,
 )
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
@@ -6732,3 +6735,167 @@ def toggle_bird_category_active(request, id):
         return JsonResponse({"message": "Bird category updated", "is_active": c.is_active})
     except BirdCategory.DoesNotExist:
         return JsonResponse({"error": "Bird category not found."}, status=404)
+
+
+# ------------------------------------------- farm location & photo captures
+
+def _capture_row(c):
+    farmer = c.farmer
+    files = list(c.files.all())
+    return {
+        "id": c.id,
+        "capture_no": c.capture_no,
+        "date": c.date.isoformat() if c.date else "",
+        "farm": c.farm.farm_name if c.farm_id else "",
+        "farm_code": c.farm.farm_code if c.farm_id else "",
+        "farmer": farmer.farmer_name if farmer else "",
+        "branch": (c.farm.branch.branch_name
+                   if c.farm_id and c.farm.branch_id else ""),
+        "latitude": c.latitude, "longitude": c.longitude,
+        "has_location": c.has_location,
+        "address": c.address or "",
+        "photos": sum(1 for f in files if f.kind == FarmCaptureFile.KIND_PHOTO),
+        "documents": sum(1 for f in files if f.kind == FarmCaptureFile.KIND_DOCUMENT),
+        "remarks": c.remarks or "",
+        "captured_by": ((c.captured_by.get_full_name() or c.captured_by.username)
+                        if c.captured_by_id else ""),
+        "files": [{
+            "id": f.id, "kind": f.kind, "url": f.file.url if f.file else "",
+            "name": f.file.name.rsplit("/", 1)[-1] if f.file else "",
+            "caption": f.caption or "",
+        } for f in files],
+    }
+
+
+@login_required(login_url="login")
+def farm_location_capture_list(request):
+    """Broiler > Transactions > Farm Location & Photos — the register."""
+    return render(request, "farm_location_capture_list.html", {
+        "farms": BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name"),
+    })
+
+
+@login_required
+def farm_location_capture_api(request):
+    """JSON rows for the register, filtered by date range / farm / farmer."""
+    qs = (FarmLocationCapture.objects
+          .select_related("farm", "farm__farmer", "farm__branch", "captured_by")
+          .prefetch_related("files"))
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    if farm_id.isdigit():
+        qs = qs.filter(farm_id=farm_id)
+    return JsonResponse([_capture_row(c) for c in qs.order_by("-date", "-id")], safe=False)
+
+
+def _capture_form_context(instance=None):
+    return {
+        "capture": instance,
+        "next_no": FarmLocationCapture._next_no() if not instance else None,
+        "farms": BroilerFarm.objects.select_related("farmer").order_by("farm_name"),
+        "today": timezone.localdate().isoformat(),
+        "existing_files": [
+            {"id": f.id, "kind": f.kind, "name": f.file.name.rsplit("/", 1)[-1],
+             "url": f.file.url if f.file else "", "caption": f.caption or ""}
+            for f in instance.files.all()
+        ] if instance else [],
+    }
+
+
+def _save_capture(request, instance):
+    """Create or update a capture, attaching any newly uploaded files."""
+    def blank_to_none(value):
+        value = (value or "").strip()
+        return value or None
+
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.farm_id = request.POST.get("farm") or None
+    instance.latitude = blank_to_none(request.POST.get("latitude"))
+    instance.longitude = blank_to_none(request.POST.get("longitude"))
+    instance.address = (request.POST.get("address") or "").strip()
+    instance.remarks = (request.POST.get("remarks") or "").strip()
+    if instance.captured_by_id is None:
+        instance.captured_by = request.user
+    if not instance.farm_id:
+        raise ValidationError("Select a farm.")
+    instance.full_clean(exclude=["capture_no", "captured_by"])
+    instance.save()
+
+    for upload in request.FILES.getlist("photos"):
+        FarmCaptureFile.objects.create(
+            capture=instance, kind=FarmCaptureFile.KIND_PHOTO, file=upload)
+    for upload in request.FILES.getlist("documents"):
+        FarmCaptureFile.objects.create(
+            capture=instance, kind=FarmCaptureFile.KIND_DOCUMENT, file=upload)
+    return instance
+
+
+@login_required(login_url="login")
+def farm_location_capture_add(request):
+    if request.method == "POST":
+        try:
+            with transaction.atomic():
+                _save_capture(request, FarmLocationCapture())
+            messages.success(request, "Farm location capture saved successfully.")
+            return redirect("farm_location_capture_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+    return render(request, "farm_location_capture_form.html", _capture_form_context())
+
+
+@login_required(login_url="login")
+def farm_location_capture_edit(request, id):
+    instance = get_object_or_404(FarmLocationCapture, id=id)
+    if request.method == "POST":
+        try:
+            with transaction.atomic():
+                _save_capture(request, instance)
+            messages.success(request, "Farm location capture updated successfully.")
+            return redirect("farm_location_capture_list")
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+    return render(request, "farm_location_capture_form.html", _capture_form_context(instance))
+
+
+@login_required(login_url="login")
+@require_POST
+def farm_location_capture_clear(request, id):
+    """Clear = drop the attachments and the coordinates, keep the visit record.
+
+    Deliberately different from Delete: the visit still happened, and the farm
+    falls back to whatever earlier capture still holds a reading.
+    """
+    capture = get_object_or_404(FarmLocationCapture, id=id)
+    with transaction.atomic():
+        for f in capture.files.all():
+            f.delete()                      # also removes the mirrored farm picture
+        capture.latitude = None
+        capture.longitude = None
+        capture.address = ""
+        capture.save(update_fields=["latitude", "longitude", "address", "updated_at"])
+        FarmLocationCapture.sync_farm_from_latest(capture.farm)
+    messages.success(request, "Capture cleared.")
+    return redirect("farm_location_capture_list")
+
+
+@login_required(login_url="login")
+@require_POST
+def farm_location_capture_delete(request, id):
+    capture = get_object_or_404(FarmLocationCapture, id=id)
+    capture.delete()
+    messages.success(request, "Farm location capture deleted successfully.")
+    return redirect("farm_location_capture_list")
+
+
+@login_required
+@require_POST
+def farm_capture_file_delete(request, id):
+    """Remove one attachment from a capture (used by the View dialog)."""
+    f = get_object_or_404(FarmCaptureFile, id=id)
+    f.delete()
+    return JsonResponse({"message": "File removed."})

@@ -63,6 +63,8 @@ MODULE_REGISTRY = [
                     ("bird_sale_list", "Bird Sale"),
                     ("bird_sale_receipt_list", "Bird Receipt"),
                     ("chicks_placement_list", "Chicks Placement"),
+                    ("farm_location_capture_list", "Farm Location & Photos",
+                     ("farm_location_capture_api", "farm_capture_file_delete")),
                 ],
             },
             {
