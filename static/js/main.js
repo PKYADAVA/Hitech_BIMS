@@ -258,3 +258,57 @@ window.reverseGeocode = function (latitude, longitude) {
   // Whichever settles first: a slow lookup must never hold up the form.
   return Promise.race([lookup, timeout]);
 };
+
+
+/* ---------------------------------------------------------------------------
+   Dependent dropdowns — load one select's options from an endpoint.
+   ---------------------------------------------------------------------------
+   Replaces the hand-rolled "empty the select, then append in the AJAX
+   callback" pattern, which double-fills whenever its change handler runs more
+   than once: the empty happens straight away but both replies append later, so
+   the list arrives twice. Select2 makes that routine — it raises its own
+   jQuery change and the bridge above re-dispatches a native one, so a handler
+   bound with .change() sees both.
+
+   Two things make a repeated call harmless here: the list is rebuilt inside
+   the reply rather than appended to, and each call takes a token so only the
+   newest reply is allowed to render.
+
+     loadOptions('#branch', url, {region_id: 3}, {list: 'branches', label: 'branch_name'})
+   --------------------------------------------------------------------------- */
+window.loadOptions = function (select, url, data, options) {
+  options = options || {};
+  const $select = window.jQuery(select);
+  if (!$select.length) return window.jQuery.Deferred().resolve().promise();
+
+  const token = ($select.data('optionsToken') || 0) + 1;
+  $select.data('optionsToken', token);
+
+  const placeholder = options.placeholder === undefined ? 'select' : options.placeholder;
+  const valueKey = options.value || 'id';
+  const labelKey = options.label || 'name';
+
+  return window.jQuery.getJSON(url, data).then(function (response) {
+    if ($select.data('optionsToken') !== token) return;   // a newer call won
+    const rows = options.list ? (response[options.list] || []) : (response || []);
+
+    $select.empty();
+    if (placeholder !== null) {
+      const first = document.createElement('option');
+      first.value = '';
+      first.textContent = placeholder;
+      first.selected = true;
+      if (options.placeholderDisabled !== false) first.disabled = true;
+      $select.append(first);
+    }
+    rows.forEach(function (row) {
+      const opt = document.createElement('option');
+      opt.value = row[valueKey];
+      // textContent, so a name with < or & cannot inject markup.
+      opt.textContent = row[labelKey];
+      $select.append(opt);
+    });
+    if (options.selected) $select.val(options.selected);
+    if ($select.hasClass('select2-hidden-accessible')) $select.trigger('change.select2');
+  });
+};

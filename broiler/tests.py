@@ -3,6 +3,7 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.urls import reverse
 
 from broiler.models import (
     Branch, BroilerFarm, BroilerFarmImage, FarmCaptureFile, FarmLocationCapture,
@@ -411,4 +412,48 @@ class FarmLocationCaptureTests(TestCase):
                      'name="address"', 'name="latitude"', 'name="longitude"'):
             self.assertIn(name, html)
         print("RESULT form carries every location field")
+
+
+class DependentDropdownTests(TestCase):
+    """Region -> Branch and friends must list each row once.
+
+    The double-listing came from the browser, not the query: the change handler
+    ran twice (Select2 raises its own change and main.js re-dispatches a native
+    one), each run emptied the select straight away but appended in its reply,
+    so both replies filled the emptied list.
+    """
+
+    def setUp(self):
+        user = get_user_model().objects.create_superuser("dd", "d@x.com", "Str0ngPass!")
+        self.client.force_login(user)
+        self.region = Region.objects.create(description="Uttar Pradesh")
+        self.branches = [
+            Branch.objects.create(branch_name=name, region=self.region, prefix=name[:3])
+            for name in ("BAHRAICH BRANCH", "VARANASI BRANCH", "AKBARPUR BRANCH")
+        ]
+
+    def test_endpoint_returns_each_branch_once(self):
+        rows = self.client.get(
+            reverse("get_branches_by_region"),
+            {"region_id": self.region.id}).json()["branches"]
+        names = [r["branch_name"] for r in rows]
+        print("RESULT branches returned  %s" % names)
+        self.assertEqual(len(names), 3)
+        self.assertEqual(len(set(names)), 3)
+
+    def test_cascades_rebuild_rather_than_append(self):
+        """Guard the fix: a cascade that appends without emptying first is the
+        exact shape that double-fills when its handler runs twice."""
+        import re
+        offenders = []
+        for path in ("broiler/templates/broiler_farm.html",
+                     "broiler/templates/broiler_line.html"):
+            with open(path, encoding="utf-8") as fh:
+                body = fh.read()
+            for match in re.finditer(r"\$\.ajax\(\{(.{0,700}?)\}\);", body, re.S):
+                block = match.group(1)
+                if "append" in block and "empty" not in block:
+                    offenders.append(path)
+        print("RESULT append-without-rebuild: %s" % (offenders or "none"))
+        self.assertEqual(offenders, [])
 

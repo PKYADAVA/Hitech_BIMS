@@ -225,35 +225,24 @@ $(document).ready(function () {
     // Region -> Branch cascade (Add form)
     $("#region").change(function () {
         const regionId = $(this).val();
-        const branchSelect = $("#branch");
-        branchSelect.empty().append('<option value="" selected disabled>select</option>');
-        if (!regionId) return;
-        $.ajax({
-            url: "{% url 'get_branches_by_region' %}",
-            data: { region_id: regionId },
-            success: function (data) {
-                data.branches.forEach(function (branch) {
-                    branchSelect.append(`<option value="${branch.id}">${escapeHtml(branch.branch_name)}</option>`);
-                });
-            }
-        });
+        if (!regionId) {
+            $("#branch").empty().append('<option value="" selected disabled>select</option>');
+            return;
+        }
+        window.loadOptions("#branch", "{% url 'get_branches_by_region' %}",
+            { region_id: regionId }, { list: "branches", label: "branch_name" });
     });
 
     // Region -> Branch cascade (Edit forms)
     $(document).on("change", "[id^='editLineModal-'] [name='region']", function () {
         const regionId = $(this).val();
         const branchSelect = $(this).closest("form").find("[name='branch']");
-        branchSelect.empty().append('<option value="" selected disabled>select</option>');
-        if (!regionId) return;
-        $.ajax({
-            url: "{% url 'get_branches_by_region' %}",
-            data: { region_id: regionId },
-            success: function (data) {
-                data.branches.forEach(function (branch) {
-                    branchSelect.append(`<option value="${branch.id}">${escapeHtml(branch.branch_name)}</option>`);
-                });
-            }
-        });
+        if (!regionId) {
+            branchSelect.empty().append('<option value="" selected disabled>select</option>');
+            return;
+        }
+        window.loadOptions(branchSelect, "{% url 'get_branches_by_region' %}",
+            { region_id: regionId }, { list: "branches", label: "branch_name" });
     });
 
     // Dynamic Line rows
@@ -323,18 +312,10 @@ $(document).ready(function () {
         $(`#edit-line-form-${id} [name="region"]`).val(regionId);
         $(`#edit-line-form-${id} [name="description"]`).val(description);
 
-        $.ajax({
-            url: "{% url 'get_branches_by_region' %}",
-            data: { region_id: regionId },
-            success: function (data) {
-                const branchSelect = $(`#edit-line-form-${id} [name="branch"]`);
-                branchSelect.empty();
-                data.branches.forEach(function (branch) {
-                    branchSelect.append(`<option value="${branch.id}">${escapeHtml(branch.branch_name)}</option>`);
-                });
-                branchSelect.val(branchId);
-            }
-        });
+        window.loadOptions(`#edit-line-form-${id} [name="branch"]`,
+            "{% url 'get_branches_by_region' %}", { region_id: regionId },
+            { list: "branches", label: "branch_name", placeholder: null,
+              selected: branchId });
     });
 
     // Update Line

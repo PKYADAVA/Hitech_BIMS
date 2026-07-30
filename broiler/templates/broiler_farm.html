@@ -608,15 +608,9 @@ $(document).ready(function () {
         $("#line").empty().append('<option value="" selected disabled>-Select-</option>');
         $("#supervisor").empty().append('<option value="" selected disabled>Select a supervisor</option>');
         if (!regionId) return;
-        $.ajax({
-            url: "{% url 'get_branches_by_region' %}",
-            data: { region_id: regionId },
-            success: function (data) {
-                data.branches.forEach(function (branch) {
-                    branchSelect.append(`<option value="${branch.id}">${branch.branch_name}</option>`);
-                });
-            }
-        });
+        window.loadOptions(branchSelect, "{% url 'get_branches_by_region' %}",
+            { region_id: regionId },
+            { list: "branches", label: "branch_name", placeholder: "-Select-" });
     });
 
     /* ---------------------------------------------------------------- */
@@ -629,24 +623,13 @@ $(document).ready(function () {
         supervisorSelect.empty().append('<option value="" selected disabled>Select a supervisor</option>');
         lineSelect.empty().append('<option value="" selected disabled>-Select-</option>');
         if (!branchId) return;
-        $.ajax({
-            url: "{% url 'get_supervisors' %}",
-            data: { branch_id: branchId },
-            success: function (data) {
-                data.supervisors.forEach(function (supervisor) {
-                    supervisorSelect.append(`<option value="${supervisor.id}">${supervisor.name}</option>`);
-                });
-            }
-        });
-        $.ajax({
-            url: "{% url 'get_lines_by_branch' %}",
-            data: { branch_id: branchId },
-            success: function (data) {
-                data.lines.forEach(function (line) {
-                    lineSelect.append(`<option value="${line.description}">${line.description}</option>`);
-                });
-            }
-        });
+        window.loadOptions(supervisorSelect, "{% url 'get_supervisors' %}",
+            { branch_id: branchId },
+            { list: "supervisors", label: "name", placeholder: "Select a supervisor" });
+        window.loadOptions(lineSelect, "{% url 'get_lines_by_branch' %}",
+            { branch_id: branchId },
+            { list: "lines", value: "description", label: "description",
+              placeholder: "-Select-" });
     });
 
     /* ---------------------------------------------------------------- */
