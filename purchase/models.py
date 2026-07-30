@@ -567,8 +567,12 @@ class SupplierPaymentLine(models.Model):
 
 class SupplierNoteBase(models.Model):
     """Shared base for supplier Debit / Credit Notes — a single-supplier note
-    with an amount and reason (Purchase > Transactions). Subclasses set
-    NOTE_PREFIX for the auto number series."""
+    with an amount, account and sector (Purchase > Transactions). Entered a row
+    at a time on a grid, so one screen can record several notes. Subclasses set
+    NOTE_PREFIX for the auto number series.
+
+    Kept deliberately parallel to sales.CustomerNoteBase; the two sides of the
+    same idea should behave identically."""
 
     NOTE_PREFIX = "XN"
 
@@ -577,11 +581,16 @@ class SupplierNoteBase(models.Model):
     date = models.DateField(default=now)
     supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="%(class)ss")
     against_bill = models.CharField(max_length=50, blank=True,
-                                    help_text="Related purchase bill/invoice no.")
-    reason = models.CharField(max_length=150, blank=True)
+                                    help_text="Related purchase bill / DC no.")
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True,
                                 blank=True, related_name="+")
+    # "Sector" is the office/branch, the same meaning (and model) as
+    # account.Voucher.sector, which the Journal screen labels
+    # "Sector (Office / Branch)".
+    sector = models.ForeignKey("inventory.Warehouse", on_delete=models.SET_NULL, null=True,
+                               blank=True, related_name="+",
+                               help_text="Office / branch this note belongs to")
     remarks = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

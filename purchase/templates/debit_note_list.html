@@ -21,8 +21,9 @@
   <div class="card-body p-0"><div class="table-responsive">
     <table class="table table-hover table-bordered mb-0" id="note-table">
       <thead class="table-dark"><tr>
-        <th>Date</th><th>Note No.</th><th>Supplier</th><th>Against Bill</th><th>Reason</th>
-        <th>Amount</th><th class="text-center">Action</th>
+        <th>Transaction No.</th><th>Date</th><th>Supplier</th><th>Against Bill / DC No.</th>
+        <th>Account</th><th class="text-end">Amount</th><th>Sector</th><th>Remark</th>
+        <th class="text-center">Action</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -48,16 +49,17 @@ $(function () {
     const tb = $("#note-table tbody"); tb.empty();
     rows.forEach(function (r) {
       tb.append(`<tr>
-        <td>${esc(r.date)}</td><td>${esc(r.note_no)}</td><td>${esc(r.supplier_name)}</td>
-        <td>${esc(r.against_bill)||"-"}</td><td>${esc(r.reason)||"-"}</td>
+        <td>${esc(r.note_no)}</td><td>${esc(r.date)}</td><td>${esc(r.supplier_name)}</td>
+        <td>${esc(r.against_bill)||"-"}</td><td>${esc(r.account_name)||"-"}</td>
         <td class="text-end">${Number(r.amount).toFixed(2)}</td>
+        <td>${esc(r.sector_name)||"-"}</td><td>${esc(r.remarks)||"-"}</td>
         <td class="text-center"><div class="d-flex gap-1 justify-content-center">
           {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/debit-note/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
           {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
         </div></td>
       </tr>`);
     });
-    table = $("#note-table").DataTable({ responsive:true, order:[[0,"desc"]],
+    table = $("#note-table").DataTable({ responsive:true, order:[[1,"desc"]],
       dom:"Bfrtip", buttons:["copy","csv","excel","pdf","print","colvis"],
       columnDefs:[{orderable:false,targets:-1}], language:{emptyTable:"No data available in table"} });
   }

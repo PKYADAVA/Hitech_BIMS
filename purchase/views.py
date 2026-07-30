@@ -1,6 +1,6 @@
 #pylint: disable=no-member
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -944,56 +944,97 @@ def _note_list_dict(n):
     return {
         "id": n.id, "date": n.date.isoformat(), "note_no": n.note_no,
         "supplier_name": n.supplier.name if n.supplier_id else "",
-        "against_bill": n.against_bill, "reason": n.reason,
+        "against_bill": n.against_bill,
+        "account_name": n.account.description if n.account_id else "",
+        "sector_name": n.sector.name if n.sector_id else "",
         "amount": str(n.amount), "remarks": n.remarks,
     }
 
 
+def _note_row_dict(n):
+    """One row for the entry grid, so editing reopens exactly what was saved."""
+    return {
+        "id": n.id, "date": n.date.isoformat() if n.date else "",
+        "note_no": n.note_no, "supplier": n.supplier_id or "",
+        "against_bill": n.against_bill or "", "account": n.account_id or "",
+        "amount": str(n.amount or 0), "sector": n.sector_id or "",
+        "remarks": n.remarks or "",
+    }
+
+
 def _note_form_context(model, instance=None):
+    from inventory.models import Warehouse
     return {
         "note": instance,
         "next_no": model._next_no() if not instance else None,
         "note_kind": "Debit Note" if model is DebitNote else "Credit Note",
         "suppliers": Supplier.objects.order_by("name"),
         "accounts": ChartOfAccount.objects.order_by("code"),
+        "sectors": Warehouse.objects.order_by("name"),
         "today": timezone.localdate().isoformat(),
+        "existing_rows_json": json.dumps(
+            [_note_row_dict(instance)] if instance else []),
     }
 
 
-def _apply_note_fields(instance, request):
-    instance.date = request.POST.get("date") or timezone.localdate()
-    instance.supplier_id = request.POST.get("supplier") or None
-    instance.against_bill = request.POST.get("against_bill") or ""
-    instance.reason = request.POST.get("reason") or ""
-    instance.amount = Decimal(str(request.POST.get("amount") or 0))
-    instance.account_id = request.POST.get("account") or None
-    instance.remarks = request.POST.get("remarks") or ""
+def _apply_note_row(instance, row):
+    """Copy one posted grid row onto a note, validating as we go."""
+    instance.date = row.get("date") or timezone.localdate()
+    instance.supplier_id = row.get("supplier") or None
+    instance.against_bill = (row.get("against_bill") or "").strip()
+    instance.account_id = row.get("account") or None
+    instance.sector_id = row.get("sector") or None
+    instance.remarks = (row.get("remarks") or "").strip()
+    try:
+        instance.amount = Decimal(str(row.get("amount") or 0))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValidationError("Enter a valid amount.")
+    if not instance.supplier_id:
+        raise ValidationError("Select a supplier on every row.")
+    if instance.amount <= 0:
+        raise ValidationError("Enter an amount greater than zero on every row.")
 
 
-def _save_note(request, model, instance, kind, template, redirect_name):
+def _save_notes(request, model, kind, template, redirect_name, instance=None):
+    """Grid entry: one note per row, all saved together or not at all.
+
+    The Add screen takes as many rows as wanted; the Edit screen reopens the one
+    note being edited as a single row.
+    """
     if request.method == "POST":
         try:
-            _apply_note_fields(instance, request)
-            if not instance.supplier_id:
-                raise ValidationError("Select a supplier.")
-            if instance.amount <= 0:
-                raise ValidationError("Enter an amount greater than zero.")
-            instance.full_clean(exclude=["note_no"])
-            was_edit = bool(instance.pk)
+            rows = json.loads(request.POST.get("rows_json") or "[]")
+        except json.JSONDecodeError:
+            rows = []
+        rows = [r for r in rows if any(str(v).strip() for v in r.values())]
+        try:
+            if not rows:
+                raise ValidationError("Add at least one row.")
             with transaction.atomic():
-                instance.save()
-            messages.success(request, f"{kind} {'updated' if was_edit else 'added'} successfully.")
+                saved = 0
+                for row in rows:
+                    note = (get_object_or_404(model, id=row["id"])
+                            if row.get("id") else model())
+                    _apply_note_row(note, row)
+                    note.full_clean(exclude=["note_no"])
+                    note.save()
+                    saved += 1
+            messages.success(
+                request,
+                "%s %s successfully." % (
+                    kind if saved == 1 else "%d %ss" % (saved, kind),
+                    "updated" if instance else "added"))
             return redirect(redirect_name)
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, template, _note_form_context(model, instance if instance.pk else None))
+    return render(request, template, _note_form_context(model, instance))
 
 
 def _note_api(request, model):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     supplier_id = (request.GET.get("supplier") or "").strip()
-    qs = model.objects.select_related("supplier")
+    qs = model.objects.select_related("supplier", "account", "sector")
     if from_date:
         qs = qs.filter(date__gte=from_date)
     if to_date:
@@ -1011,12 +1052,13 @@ def debit_note_list(request):
 
 @login_required(login_url="login")
 def create_debit_note(request):
-    return _save_note(request, DebitNote, DebitNote(), "Debit Note", "debit_note_form.html", "debit_note_list")
+    return _save_notes(request, DebitNote, "Debit Note", "debit_note_form.html", "debit_note_list")
 
 
 @login_required(login_url="login")
 def edit_debit_note(request, id):
-    return _save_note(request, DebitNote, get_object_or_404(DebitNote, id=id), "Debit Note", "debit_note_form.html", "debit_note_list")
+    return _save_notes(request, DebitNote, "Debit Note", "debit_note_form.html", "debit_note_list",
+                       instance=get_object_or_404(DebitNote, id=id))
 
 
 @login_required(login_url="login")
@@ -1040,12 +1082,13 @@ def credit_note_list(request):
 
 @login_required(login_url="login")
 def create_credit_note(request):
-    return _save_note(request, CreditNote, CreditNote(), "Credit Note", "credit_note_form.html", "credit_note_list")
+    return _save_notes(request, CreditNote, "Credit Note", "credit_note_form.html", "credit_note_list")
 
 
 @login_required(login_url="login")
 def edit_credit_note(request, id):
-    return _save_note(request, CreditNote, get_object_or_404(CreditNote, id=id), "Credit Note", "credit_note_form.html", "credit_note_list")
+    return _save_notes(request, CreditNote, "Credit Note", "credit_note_form.html", "credit_note_list",
+                       instance=get_object_or_404(CreditNote, id=id))
 
 
 @login_required(login_url="login")
@@ -1123,8 +1166,10 @@ def supplier_ledger_report(request):
                    .select_related("warehouse").prefetch_related("items__item").order_by("date", "id"))
         pay_lines = list(SupplierPaymentLine.objects.filter(supplier=supplier)
                          .select_related("payment", "pay_account").order_by("payment__date", "id"))
-        dns = list(DebitNote.objects.filter(supplier=supplier).order_by("date", "id"))
-        cns = list(CreditNote.objects.filter(supplier=supplier).order_by("date", "id"))
+        dns = list(DebitNote.objects.filter(supplier=supplier)
+                   .select_related("account", "sector").order_by("date", "id"))
+        cns = list(CreditNote.objects.filter(supplier=supplier)
+                   .select_related("account", "sector").order_by("date", "id"))
 
         # previous balance = opening + (purchases+debit notes) - (payments+credit
         # notes) strictly before the window
@@ -1291,12 +1336,15 @@ def supplier_ledger_report(request):
                     "date": d, "trnum": obj.note_no, "doc_no": obj.against_bill or "",
                     "type": "Debit Note" if is_dn else "Credit Note",
                     "type_slug": "debit-note" if is_dn else "credit-note",
-                    "item": obj.reason or "", "boxes_bags": "",
+                    "item": obj.account.description if obj.account_id else "",
+                    "boxes_bags": "",
                     "sent_qty": "", "rcv_qty": "", "free_qty": "", "rate": "", "amount": "", "freight": "", "gst": "", "tds": "",
                     "debit": amt.quantize(q2) if is_dn else "",
                     "credit": "" if is_dn else amt.quantize(q2),
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
-                    "sector": "", "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
+                    # Sector = the office/branch, as on the Journal screen.
+                    "sector": obj.sector.name if obj.sector_id else "",
+                    "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
                 })
             grp["closing"] = running  # running after the latest event in the month
 

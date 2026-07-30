@@ -54,3 +54,88 @@ class AutoRemarksTests(TestCase):
         reloaded.save()
         reloaded.refresh_from_db()
         self.assertEqual(reloaded.remarks, "Purchase From Ganga Breeding Farm 500")
+
+
+class SupplierNoteGridTests(TestCase):
+    """Supplier Debit / Credit Notes on the row-entry grid.
+
+    Kept in step with sales.CustomerNoteTests — the two sides of the same idea
+    should behave identically.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from inventory.models import Warehouse
+        user = get_user_model().objects.create_superuser(
+            "purchase-tester", "p@example.com", "Str0ngPass!")
+        self.client.force_login(user)
+        self.supplier = Supplier.objects.create(name="Test Supplier")
+        self.warehouse = Warehouse.objects.create(name="Head Office")
+
+    def post_rows(self, slug, rows):
+        import json
+        return self.client.post("/%s/add/" % slug, {"rows_json": json.dumps(rows)})
+
+    def test_one_screen_saves_several_notes(self):
+        from purchase.models import DebitNote
+        self.post_rows("debit-note", [
+            {"date": "2026-05-01", "supplier": self.supplier.id, "amount": "100",
+             "sector": self.warehouse.id},
+            {"date": "2026-05-02", "supplier": self.supplier.id, "amount": "250"},
+        ])
+        notes = DebitNote.objects.order_by("date")
+        self.assertEqual([n.note_no for n in notes], ["DN-2627-0001", "DN-2627-0002"])
+        self.assertEqual(notes[0].sector_id, self.warehouse.id)
+
+    def test_one_bad_row_saves_nothing(self):
+        from purchase.models import DebitNote
+        self.post_rows("debit-note", [
+            {"date": "2026-05-01", "supplier": self.supplier.id, "amount": "100"},
+            {"date": "2026-05-02", "supplier": self.supplier.id, "amount": "0"},
+        ])
+        self.assertFalse(DebitNote.objects.exists())
+
+    def test_credit_note_uses_its_own_series(self):
+        from purchase.models import CreditNote
+        self.post_rows("credit-note", [
+            {"date": "2026-05-01", "supplier": self.supplier.id, "amount": "500"}])
+        self.assertEqual(CreditNote.objects.get().note_no, "CN-2627-0001")
+
+    def test_grid_column_order_and_alignment(self):
+        import re
+        html = self.client.get("/debit-note/add/").content.decode()
+        head = re.search(r"<thead.*?</thead>", html, re.S).group(0)
+        labels = [re.sub(r"<[^>]+>", "", h).strip()
+                  for h in re.findall(r"<th[^>]*>(.*?)</th>", head, re.S)]
+        self.assertEqual(labels[:3], ["Transaction No.", "Date *", "Supplier *"])
+        rowjs = re.search(r"tr\.innerHTML = `(.*?)`;", html, re.S).group(1)
+        self.assertEqual(len(re.findall(r"<td(?:\s[^>]*)?>", rowjs)), len(labels))
+
+    def test_edit_reopens_the_saved_row(self):
+        import json, re
+        from datetime import date
+        from purchase.models import DebitNote
+        note = DebitNote.objects.create(
+            date=date(2026, 5, 1), supplier=self.supplier, amount=Decimal("10"),
+            against_bill="BILL-9", sector=self.warehouse)
+        html = self.client.get("/debit-note/%d/edit/" % note.id).content.decode()
+        row = json.loads(re.search(r"const EXISTING = (\[.*?\]);", html, re.S).group(1))[0]
+        self.assertEqual(row["note_no"], note.note_no)
+        self.assertEqual(row["supplier"], self.supplier.id)
+        self.assertEqual(row["against_bill"], "BILL-9")
+        self.assertEqual(row["sector"], self.warehouse.id)
+        self.assertNotIn('id="add-row"', html)
+
+    def test_notes_show_on_the_supplier_ledger_with_the_office(self):
+        from datetime import date
+        from purchase.models import CreditNote, DebitNote
+        DebitNote.objects.create(
+            date=date(2026, 5, 1), supplier=self.supplier, amount=Decimal("2000"),
+            sector=self.warehouse)
+        CreditNote.objects.create(
+            date=date(2026, 5, 2), supplier=self.supplier, amount=Decimal("500"))
+        html = self.client.get(
+            "/supplier-ledger/?supplier=%d" % self.supplier.id).content.decode()
+        for token in ("Debit Note", "Credit Note", "DN-2627-0001", "CN-2627-0001",
+                      "Head Office"):
+            self.assertIn(token, html)
