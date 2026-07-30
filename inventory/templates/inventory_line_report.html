@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}{{ title }} — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_inventory_report_subnavbar.html' with active_tab=active_tab %}
+
+{% include '_report_letterhead.html' with title=title criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">Category</label>
+      <select name="category" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Items</label>
+      <select name="item" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for i in items %}<option value="{{ i.id }}" {% if item_id == i.id|stringformat:'s' %}selected{% endif %}>{{ i.description }}</option>{% endfor %}
+      </select></div>
+    <div class="rpt-actions">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Submit</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url url_name %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <a class="btn btn-outline-success btn-sm" id="inv-excel" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if rows %}
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas {{ icon }} me-1"></i>{{ rows|length }} {{ noun }}(s)</div>
+  </div>
+  <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0" id="inv-table"
+         style="width:auto; min-width:100%; table-layout:auto;">
+    <thead><tr>
+      {% for label, key, kind in columns %}<th {% if kind == 'num' %}class="num"{% endif %}>{{ label }}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        {% for value, kind, key in r.cells %}
+          {% if kind == 'date' %}<td>{{ value|date:"d.m.Y" }}</td>
+          {% elif kind == 'num' %}<td class="num">{{ value|indian_currency }}</td>
+          {% else %}<td{% if key == 'location' %} class="rpt-loc"{% endif %}>{{ value }}</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr>
+      <td colspan="{{ total_colspan }}" class="text-center">Total</td>
+      <td class="num">{{ totals.quantity|indian_currency }}</td>
+      <td class="num">{{ totals.price|indian_currency }}</td>
+      <td class="num">{{ totals.amount|indian_currency }}</td>
+      <td colspan="{{ trailing_colspan }}"></td>
+    </tr></tfoot>
+  </table>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas {{ icon }} fa-2x mb-2 d-block"></i>
+    No records match these filters.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+// Excel keeps whatever filters are currently applied on the page.
+document.getElementById('inv-excel').addEventListener('click', function (e) {
+  e.preventDefault();
+  const params = new URLSearchParams(window.location.search);
+  params.set('export', 'excel');
+  window.location.href = `{% url url_name %}?${params}`;
+});
+
+{% if rows %}
+// Sortable, searchable, paged table. DataTables is already loaded app-wide.
+$(function () {
+  $('#inv-table').DataTable({
+    pageLength: 25,
+    autoWidth: false,
+    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],   // -1 = show everything
+    order: [],                 // keep the server's date ordering
+    language: { search: '', searchPlaceholder: 'Search here...' },
+    // Search + length menu above, info + pager below; only the table sits in
+    // the scroll box, so the sticky header and sideways scrolling both work.
+    dom: "<'row mb-2'<'col-sm-6'l><'col-sm-6'f>>" +
+         "<'rpt-scroll'tr>" +
+         "<'row mt-2'<'col-sm-5'i><'col-sm-7'p>>",
+  });
+});
+{% endif %}
+</script>
+{% endblock %}

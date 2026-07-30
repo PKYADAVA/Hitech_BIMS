@@ -2999,3 +2999,240 @@ def _negative_stock_excel(ctx):
     response["Content-Disposition"] = 'attachment; filename="negative_stock_check.xlsx"'
     wb.save(response)
     return response
+
+
+# --------------------------------------------------- inventory line reports
+#
+# Inventory Adjustment / Received / Issued share one shape: a row per item line
+# with date, transaction no., item, quantity, price, amount, location and
+# remarks. They differ only in the model, where the location lives (on the
+# header for Adjustment, on the line for the other two) and Adjustment's extra
+# Type column. One config and one template keep the three from drifting apart.
+
+INVENTORY_LINE_REPORTS = {
+    "adjustment": {
+        "model": InventoryAdjustmentItem,
+        "header": "adjustment",
+        "location_on_header": True,
+        "type_field": "adjustment_type",
+        "title": "Inventory Adjustment Report",
+        "url_name": "inventory_adjustment_report",
+        "active_tab": "inventory_adjustment_report",
+        "icon": "fa-sliders",
+        "noun": "adjustment line",
+        "sheet": "Adjustments",
+        "filename": "inventory_adjustment_report.xlsx",
+    },
+    "receive": {
+        "model": StockReceiveItem,
+        "header": "receive",
+        "location_on_header": False,
+        "type_field": None,
+        "title": "Inventory Received Report",
+        "url_name": "inventory_received_report",
+        "active_tab": "inventory_received_report",
+        "icon": "fa-arrow-down",
+        "noun": "receipt line",
+        "sheet": "Received",
+        "filename": "inventory_received_report.xlsx",
+    },
+    "issue": {
+        "model": StockIssueItem,
+        "header": "issue",
+        "location_on_header": False,
+        "type_field": None,
+        "title": "Inventory Issued Report",
+        "url_name": "inventory_issued_report",
+        "active_tab": "inventory_issued_report",
+        "icon": "fa-arrow-up",
+        "noun": "issue line",
+        "sheet": "Issued",
+        "filename": "inventory_issued_report.xlsx",
+    },
+}
+
+
+def _inventory_line_columns(cfg):
+    """(header, key, kind) per column; kind drives alignment and formatting."""
+    cols = [("Date", "date", "date"), ("Transaction No.", "trnum", "text")]
+    if cfg["type_field"]:
+        cols.append(("Type", "type", "text"))
+    cols += [
+        ("Item", "item", "text"),
+        ("Quantity", "quantity", "num"),
+        ("Price", "price", "num"),
+        ("Amount", "amount", "num"),
+        ("Warehouse/Location", "location", "text"),
+        ("Remarks", "remarks", "text"),
+    ]
+    return cols
+
+
+def _inventory_line_report(request, kind):
+    """Shared engine for the three Inventory line reports."""
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+
+    cfg = INVENTORY_LINE_REPORTS[kind]
+    model, header = cfg["model"], cfg["header"]
+    on_header = cfg["location_on_header"]
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    category, item_id = g("category"), g("item")
+    export = g("export").lower()
+
+    related = ["item", "item__category", header]
+    related += ([header + "__warehouse", header + "__farm"] if on_header
+                else ["warehouse", "farm"])
+    qs = (model.objects.select_related(*related)
+          .order_by(header + "__date", header + "__id", "id"))
+
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    if fd:
+        qs = qs.filter(**{header + "__date__gte": fd})
+    if td:
+        qs = qs.filter(**{header + "__date__lte": td})
+    if category:
+        qs = qs.filter(item__category_id=category)
+    if item_id:
+        qs = qs.filter(item_id=item_id)
+
+    columns = _inventory_line_columns(cfg)
+    rows = []
+    totals = {"quantity": Decimal("0"), "amount": Decimal("0")}
+    for line in qs:
+        head = getattr(line, header)
+        owner = head if on_header else line
+        quantity = Decimal(str(line.quantity or 0))
+        amount = Decimal(str(line.amount or 0))
+        row = {
+            "date": head.date,
+            "trnum": head.trnum,
+            "item": line.item.description if line.item_id else "",
+            "quantity": quantity,
+            "price": line.rate,
+            "amount": amount,
+            "location": _location_dict(owner.location_type, owner.warehouse,
+                                       owner.farm)["name"],
+            "remarks": line.remarks,
+        }
+        if cfg["type_field"]:
+            row["type"] = getattr(line, cfg["type_field"], "")
+        # Ordered cells so the shared template can render any column set
+        # without needing a dictionary-lookup filter.
+        row["cells"] = [(row.get(key, ""), kind, key) for _l, key, kind in columns]
+        rows.append(row)
+        totals["quantity"] += quantity
+        totals["amount"] += amount
+
+    # Total Price is the weighted average (value / quantity), not a sum of
+    # rates - adding per-unit rates together would be meaningless.
+    totals["price"] = (totals["amount"] / totals["quantity"]
+                       if totals["quantity"] else Decimal("0"))
+
+    context = {
+        "columns": columns,
+        "rows": rows,
+        "totals": totals,
+        # Total row: the label spans the leading text columns, then the three
+        # figures, then location + remarks stay blank.
+        "total_colspan": len(columns) - 5,
+        "trailing_colspan": 2,
+        "title": cfg["title"],
+        "url_name": cfg["url_name"],
+        "active_tab": cfg["active_tab"],
+        "icon": cfg["icon"],
+        "noun": cfg["noun"],
+        "criteria": "From: %s   To: %s   %d %s(s)" % (
+            from_date or "Beginning", to_date or "Date", len(rows), cfg["noun"]),
+        "from_date": from_date, "to_date": to_date,
+        "category": category, "item_id": item_id,
+        "categories": ItemCategory.objects.order_by("name"),
+        "items": Item.objects.order_by("description"),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel":
+        return _inventory_line_excel(context, cfg)
+    return render(request, "inventory_line_report.html", context)
+
+
+def _inventory_line_excel(ctx, cfg):
+    """Stream an Inventory line report as an .xlsx workbook (openpyxl)."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = cfg["sheet"]
+    bold = Font(bold=True)
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append([cfg["title"]])
+    ws["A2"].font = bold
+    ws.append([ctx["criteria"]])
+    ws.append([])
+
+    head_row = ws.max_row + 1
+    ws.append([label for label, _key, _kind in ctx["columns"]])
+    fill = PatternFill("solid", fgColor="1B3A6B")
+    for cell in ws[head_row]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal="center", wrap_text=True)
+
+    for row in ctx["rows"]:
+        line = []
+        for _label, key, kind in ctx["columns"]:
+            value = row.get(key, "")
+            line.append(value.strftime("%d.%m.%Y") if kind == "date" and value else value)
+        ws.append(line)
+
+    total = []
+    for _label, key, _kind in ctx["columns"]:
+        if key in ("quantity", "price", "amount"):
+            total.append(ctx["totals"][key])
+        else:
+            total.append("Total" if key == "date" else "")
+    ws.append(total)
+    for cell in ws[ws.max_row]:
+        cell.font = bold
+
+    for idx, (label, _key, _kind) in enumerate(ctx["columns"], start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = max(12, len(label) + 4)
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="' + cfg["filename"] + '"'
+    wb.save(response)
+    return response
+
+
+@login_required(login_url="login")
+def inventory_adjustment_report(request):
+    """Inventory > Reports > Inventory Adjustment Report - every stock
+    correction line in a date range with its type (Add/Deduct), item,
+    quantity, price, value, location and remarks."""
+    return _inventory_line_report(request, "adjustment")
+
+
+@login_required(login_url="login")
+def inventory_received_report(request):
+    """Inventory > Reports > Inventory Received Report - every stock receipt
+    line in a date range with its item, quantity, price, value, location and
+    remarks."""
+    return _inventory_line_report(request, "receive")
+
+
+@login_required(login_url="login")
+def inventory_issued_report(request):
+    """Inventory > Reports > Inventory Issued Report - every stock issue line
+    in a date range with its item, quantity, price, value, location and
+    remarks."""
+    return _inventory_line_report(request, "issue")

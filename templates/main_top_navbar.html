@@ -635,6 +635,15 @@
               {% if 'item_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'item_summary_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-list-check"></i>Item Summary Report
               </a></li>{% endif %}
+              {% if 'inventory_received_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'inventory_received_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-arrow-down"></i>Inventory Received Report
+              </a></li>{% endif %}
+              {% if 'inventory_issued_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'inventory_issued_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-arrow-up"></i>Inventory Issued Report
+              </a></li>{% endif %}
+              {% if 'inventory_adjustment_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'inventory_adjustment_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-sliders"></i>Inventory Adjustment Report
+              </a></li>{% endif %}
               {% if 'negative_stock_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'negative_stock_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-triangle-exclamation"></i>Negative Stock Check
               </a></li>{% endif %}

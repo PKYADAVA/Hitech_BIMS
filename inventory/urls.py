@@ -85,4 +85,7 @@ urlpatterns = [
     path('stock-report/', views.stock_report, name='stock_report'),
     path('item-summary-report/', views.item_summary_report, name='item_summary_report'),
     path('negative-stock-report/', views.negative_stock_report, name='negative_stock_report'),
+    path('inventory-adjustment-report/', views.inventory_adjustment_report, name='inventory_adjustment_report'),
+    path('inventory-received-report/', views.inventory_received_report, name='inventory_received_report'),
+    path('inventory-issued-report/', views.inventory_issued_report, name='inventory_issued_report'),
 ]
