@@ -40,4 +40,16 @@ urlpatterns = [
     path('sales_receipt_api/', views.SalesReceiptAPI.as_view(), name='sales_receipt_api_list'),
     path('sales_receipt_api/<int:id>/', views.SalesReceiptAPI.as_view(), name='sales_receipt_api'),
     path('sales-receipt/balance-lookup/', views.sales_receipt_balance_lookup, name='sales_receipt_balance_lookup'),
+
+    path('customer-debit-note/', views.customer_debit_note_list, name='customer_debit_note_list'),
+    path('customer-debit-note/add/', views.create_customer_debit_note, name='customer_debit_note_add'),
+    path('customer-debit-note/<int:id>/edit/', views.edit_customer_debit_note, name='customer_debit_note_edit'),
+    path('customer-debit-note/<int:id>/delete/', views.delete_customer_debit_note, name='customer_debit_note_delete'),
+    path('customer_debit_note_api/', views.customer_debit_note_api_list, name='customer_debit_note_api_list'),
+
+    path('customer-credit-note/', views.customer_credit_note_list, name='customer_credit_note_list'),
+    path('customer-credit-note/add/', views.create_customer_credit_note, name='customer_credit_note_add'),
+    path('customer-credit-note/<int:id>/edit/', views.edit_customer_credit_note, name='customer_credit_note_edit'),
+    path('customer-credit-note/<int:id>/delete/', views.delete_customer_credit_note, name='customer_credit_note_delete'),
+    path('customer_credit_note_api/', views.customer_credit_note_api_list, name='customer_credit_note_api_list'),
 ]

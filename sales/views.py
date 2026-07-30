@@ -17,7 +17,8 @@ from inventory.models import Item, ItemCategory
 from account.models import ChartOfAccount
 from hatchery_master.models import STATES_AND_TERRITORIES
 from picklist.services import validate_value
-from sales.models import Customer, CustomerGroup, CustomerShippingAddress, SalesPriceMaster
+from sales.models import (Customer, CustomerCreditNote, CustomerDebitNote, CustomerGroup,
+                          CustomerShippingAddress, SalesPriceMaster)
 
 # Used only by the billing/shipping address modals (state field itself is
 # picklist-bound, see picklist.bindable_fields.BINDABLE_FIELDS).
@@ -659,6 +660,11 @@ def customer_ledger_report(request):
                               .select_related("receipt_account").order_by("date", "id"))
         sales_receipts = list(SalesReceipt.objects.filter(customer=customer)
                               .select_related("receipt_account").order_by("date", "id"))
+        # A debit note raises what the customer owes, a credit note reduces it.
+        debit_notes = list(CustomerDebitNote.objects.filter(customer=customer)
+                           .order_by("date", "id"))
+        credit_notes = list(CustomerCreditNote.objects.filter(customer=customer)
+                            .order_by("date", "id"))
 
         # previous balance = opening + sales - receipts strictly before window
         prev_balance = opening
@@ -680,6 +686,12 @@ def customer_ledger_report(request):
         for sr in sales_receipts:
             if fd and sr.date and sr.date < fd:
                 prev_balance -= _si_num(sr.amount)
+        for dn in debit_notes:
+            if fd and dn.date and dn.date < fd:
+                prev_balance += _si_num(dn.amount)
+        for cn in credit_notes:
+            if fd and cn.date and cn.date < fd:
+                prev_balance -= _si_num(cn.amount)
 
         # in-window events, ordered by (date, kind)
         events = []
@@ -707,6 +719,16 @@ def customer_ledger_report(request):
             if sr.date and ((fd and sr.date < fd) or (td and sr.date > td)):
                 continue
             events.append((sr.date, 2, "SR", sr))
+        # Notes sort with the sales (order 1): they adjust a sale, so they read
+        # naturally next to it rather than after the day's receipts.
+        for dn in debit_notes:
+            if dn.date and ((fd and dn.date < fd) or (td and dn.date > td)):
+                continue
+            events.append((dn.date, 1, "CDN", dn))
+        for cn in credit_notes:
+            if cn.date and ((fd and cn.date < fd) or (td and cn.date > td)):
+                continue
+            events.append((cn.date, 1, "CCN", cn))
         events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1]))
 
         month_groups = OrderedDict()
@@ -802,6 +824,33 @@ def customer_ledger_report(request):
                         "remarks": (obj.remarks or "") if first else "",
                         "overdue": overdue if first else "",
                     })
+            elif kind in ("CDN", "CCN"):
+                # Customer debit/credit note. Counted in neither the sale nor
+                # the receipt tally - it adjusts a sale rather than being one.
+                amt = _si_num(obj.amount)
+                is_debit = kind == "CDN"
+                if is_debit:
+                    running += amt
+                    grp["debit"] += amt
+                    totals["debit"] += amt
+                else:
+                    running -= amt
+                    grp["credit"] += amt
+                    totals["credit"] += amt
+                grp["rows"].append({
+                    "date": d, "trnum": obj.note_no, "doc_no": obj.against_bill or "",
+                    "type": "Debit Note" if is_debit else "Credit Note",
+                    "type_slug": "note",
+                    "item": obj.reason or "",
+                    "birds": "", "quantity": "", "avg_weight": "", "free": "", "rate": "",
+                    "amount": amt.quantize(q2),
+                    "debit": amt.quantize(q2) if is_debit else "",
+                    "credit": "" if is_debit else amt.quantize(q2),
+                    "balance": abs(running).quantize(q2),
+                    "cr_dr": "Dr" if running >= 0 else "Cr",
+                    "sector": obj.account.description if obj.account_id else "",
+                    "vehicle": "", "remarks": obj.remarks or "", "overdue": "",
+                })
             else:  # RC / CRC / SR — receipt (bird / chick / sales)
                 receipt_count += 1
                 amt = _si_num(obj.amount)
@@ -877,6 +926,8 @@ def _customer_balance_row(cust, fd, td, ref_date):
     chick_sales = list(ChickSale.objects.filter(customer=cust).prefetch_related("items"))
     chick_receipts = list(ChickSaleReceipt.objects.filter(customer=cust))
     sales_receipts = list(SalesReceipt.objects.filter(customer=cust))
+    debit_notes = list(CustomerDebitNote.objects.filter(customer=cust))
+    credit_notes = list(CustomerCreditNote.objects.filter(customer=cust))
 
     def before(d):
         return d and fd and d < fd
@@ -919,6 +970,16 @@ def _customer_balance_row(cust, fd, td, ref_date):
         v = _si_num(sr.amount)
         opening -= v if before(sr.date) else 0
         receipt += v if within(sr.date) else 0
+    # A debit note behaves like a sale (raises the receivable), a credit note
+    # like a receipt (reduces it), so they join those two period buckets.
+    for dn in debit_notes:
+        v = _si_num(dn.amount)
+        opening += v if before(dn.date) else 0
+        amount += v if within(dn.date) else 0
+    for cn in credit_notes:
+        v = _si_num(cn.amount)
+        opening -= v if before(cn.date) else 0
+        receipt += v if within(cn.date) else 0
 
     bw = amount - receipt
     closing = opening + bw
@@ -1245,3 +1306,145 @@ def customer_ledger_balance(request):
         "available": str(row["available"]),
         "limit_exceeded": str(row["limit_exceeded"]),
     })
+
+
+# ---------------------------------------------------- customer credit/debit notes
+#
+# Deliberately parallel to purchase's supplier Debit/Credit Notes: same fields,
+# same helper shape, same auto-number series style. A Debit Note raises the
+# receivable, a Credit Note reduces it; both feed the Customer Ledger and
+# Customer Balance.
+
+def _customer_note_list_dict(n):
+    return {
+        "id": n.id, "date": n.date.isoformat(), "note_no": n.note_no,
+        "customer_name": n.customer.name if n.customer_id else "",
+        "against_bill": n.against_bill, "reason": n.reason,
+        "amount": str(n.amount), "remarks": n.remarks,
+    }
+
+
+def _customer_note_form_context(model, instance=None):
+    from account.models import ChartOfAccount
+    return {
+        "note": instance,
+        "next_no": model._next_no() if not instance else None,
+        "note_kind": ("Customer Debit Note" if model is CustomerDebitNote
+                      else "Customer Credit Note"),
+        "customers": Customer.objects.order_by("name"),
+        "accounts": ChartOfAccount.objects.order_by("code"),
+        "today": timezone.localdate().isoformat(),
+    }
+
+
+def _apply_customer_note_fields(instance, request):
+    instance.date = request.POST.get("date") or timezone.localdate()
+    instance.customer_id = request.POST.get("customer") or None
+    instance.against_bill = request.POST.get("against_bill") or ""
+    instance.reason = request.POST.get("reason") or ""
+    instance.amount = Decimal(str(request.POST.get("amount") or 0))
+    instance.account_id = request.POST.get("account") or None
+    instance.remarks = request.POST.get("remarks") or ""
+
+
+def _save_customer_note(request, model, instance, kind, template, redirect_name):
+    if request.method == "POST":
+        try:
+            _apply_customer_note_fields(instance, request)
+            if not instance.customer_id:
+                raise ValidationError("Select a customer.")
+            if instance.amount <= 0:
+                raise ValidationError("Enter an amount greater than zero.")
+            instance.full_clean(exclude=["note_no"])
+            was_edit = bool(instance.pk)
+            with transaction.atomic():
+                instance.save()
+            messages.success(request, f"{kind} {'updated' if was_edit else 'added'} successfully.")
+            return redirect(redirect_name)
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
+    return render(request, template,
+                  _customer_note_form_context(model, instance if instance.pk else None))
+
+
+def _customer_note_api(request, model):
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    customer_id = (request.GET.get("customer") or "").strip()
+    qs = model.objects.select_related("customer")
+    if from_date:
+        qs = qs.filter(date__gte=from_date)
+    if to_date:
+        qs = qs.filter(date__lte=to_date)
+    if customer_id.isdigit():
+        qs = qs.filter(customer_id=customer_id)
+    return JsonResponse([_customer_note_list_dict(n) for n in qs.order_by("-date", "-id")],
+                        safe=False)
+
+
+# --- Customer Debit Note ---
+@login_required(login_url="login")
+def customer_debit_note_list(request):
+    return render(request, "customer_debit_note_list.html")
+
+
+@login_required(login_url="login")
+def create_customer_debit_note(request):
+    return _save_customer_note(request, CustomerDebitNote, CustomerDebitNote(),
+                               "Customer Debit Note", "customer_debit_note_form.html",
+                               "customer_debit_note_list")
+
+
+@login_required(login_url="login")
+def edit_customer_debit_note(request, id):
+    return _save_customer_note(request, CustomerDebitNote,
+                               get_object_or_404(CustomerDebitNote, id=id),
+                               "Customer Debit Note", "customer_debit_note_form.html",
+                               "customer_debit_note_list")
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_customer_debit_note(request, id):
+    get_object_or_404(CustomerDebitNote, id=id).delete()
+    messages.success(request, "Customer Debit Note deleted successfully.")
+    return redirect("customer_debit_note_list")
+
+
+@login_required
+def customer_debit_note_api_list(request):
+    return _customer_note_api(request, CustomerDebitNote)
+
+
+# --- Customer Credit Note ---
+@login_required(login_url="login")
+def customer_credit_note_list(request):
+    return render(request, "customer_credit_note_list.html")
+
+
+@login_required(login_url="login")
+def create_customer_credit_note(request):
+    return _save_customer_note(request, CustomerCreditNote, CustomerCreditNote(),
+                               "Customer Credit Note", "customer_credit_note_form.html",
+                               "customer_credit_note_list")
+
+
+@login_required(login_url="login")
+def edit_customer_credit_note(request, id):
+    return _save_customer_note(request, CustomerCreditNote,
+                               get_object_or_404(CustomerCreditNote, id=id),
+                               "Customer Credit Note", "customer_credit_note_form.html",
+                               "customer_credit_note_list")
+
+
+@login_required(login_url="login")
+@require_POST
+def delete_customer_credit_note(request, id):
+    get_object_or_404(CustomerCreditNote, id=id).delete()
+    messages.success(request, "Customer Credit Note deleted successfully.")
+    return redirect("customer_credit_note_list")
+
+
+@login_required
+def customer_credit_note_api_list(request):
+    return _customer_note_api(request, CustomerCreditNote)

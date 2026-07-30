@@ -92,6 +92,12 @@ def _d_note(o):  # DebitNote / CreditNote
     return f"{kind} {o.supplier.name if o.supplier_id else ''} {_amt(o.amount)}"
 
 
+def _d_customer_note(o):  # CustomerDebitNote / CustomerCreditNote
+    # "customerdebitnote" -> "customer debit note"
+    kind = o._meta.model_name.replace("customer", "customer ").replace("note", " note")
+    return f"{kind} {o.customer.name if o.customer_id else ''} {_amt(o.amount)}"
+
+
 DESCRIBERS = {
     "purchase.SupplierPaymentLine": _d_payment_line,
     "broiler.BirdSaleReceipt": _d_receipt,
@@ -108,6 +114,8 @@ DESCRIBERS = {
     "sales.SalesInvoice": _d_sales_invoice,
     "purchase.DebitNote": _d_note,
     "purchase.CreditNote": _d_note,
+    "sales.CustomerDebitNote": _d_customer_note,
+    "sales.CustomerCreditNote": _d_customer_note,
 }
 
 

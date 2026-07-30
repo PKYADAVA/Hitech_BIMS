@@ -353,3 +353,68 @@ class SalesReceipt(models.Model):
             rcpts = rcpts.exclude(id=exclude_id)
         total_received = rcpts.aggregate(t=models.Sum('amount'))['t'] or 0
         return total_sold - total_received
+
+
+class CustomerNoteBase(models.Model):
+    """Shared base for customer Debit / Credit Notes — a single-customer note
+    with an amount and reason (Sales > Transactions). Subclasses set
+    NOTE_PREFIX for the auto number series.
+
+    Mirrors purchase.SupplierNoteBase; the two are deliberately parallel so the
+    sales and purchase sides of the same idea behave identically.
+    """
+
+    NOTE_PREFIX = "XN"
+
+    note_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                              help_text="Auto-generated, e.g. CDN-2627-0001 / CCN-2627-0001")
+    date = models.DateField(default=_now)
+    customer = models.ForeignKey("Customer", on_delete=models.PROTECT, related_name="%(class)ss")
+    against_bill = models.CharField(max_length=50, blank=True,
+                                    help_text="Related sales invoice/bill no.")
+    reason = models.CharField(max_length=150, blank=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True,
+                                blank=True, related_name="+")
+    remarks = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.note_no or f"(unsaved {self.NOTE_PREFIX})"
+
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new and not self.note_no:
+            self.note_no = self._next_no(self.date)
+            super().save(update_fields=["note_no"])
+
+    @classmethod
+    def _next_no(cls, on_date=None):
+        current_date = on_date or _now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"{cls.NOTE_PREFIX}-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(note_no__startswith=prefix).values_list("note_no", flat=True):
+            m = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+
+class CustomerDebitNote(CustomerNoteBase):
+    """Debit note raised on a customer (rate difference, extra charge, etc.) —
+    raises the receivable (Debit side) in the customer ledger."""
+    NOTE_PREFIX = "CDN"
+
+
+class CustomerCreditNote(CustomerNoteBase):
+    """Credit note issued to a customer (sales return, discount allowed, etc.)
+    — reduces the receivable (Credit side) in the customer ledger."""
+    NOTE_PREFIX = "CCN"

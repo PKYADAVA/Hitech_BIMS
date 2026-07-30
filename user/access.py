@@ -185,6 +185,8 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("sales_invoice_list", "Sales Invoice", ("sales_invoice_api_list",)),
                     ("sales_receipt_list", "Sales Receipt", ("sales_receipt_api_list",)),
+                    ("customer_debit_note_list", "Customer Debit Note", ("customer_debit_note_api_list",)),
+                    ("customer_credit_note_list", "Customer Credit Note", ("customer_credit_note_api_list",)),
                 ],
             },
             {
