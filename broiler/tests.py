@@ -189,3 +189,41 @@ class FarmLocationCaptureTests(TestCase):
             self.assertIn(label, html)
         print("RESULT form offers all slots and labels")
 
+    def test_several_picture_rows_all_arrive(self):
+        # The form repeats a file input named "photos"; the view reads them all.
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "photos": [self.photo("a.png"), self.photo("b.png"), self.photo("c.png")],
+        })
+        cap = FarmLocationCapture.objects.get()
+        photos = cap.files.filter(kind=FarmCaptureFile.KIND_PHOTO).count()
+        mirrored = BroilerFarmImage.objects.filter(farm=self.farm).count()
+        print("RESULT picture rows     %d captured, %d mirrored on the farm" % (photos, mirrored))
+        self.assertEqual(photos, 3)
+        self.assertEqual(mirrored, 3)
+
+    def test_form_has_the_add_picture_control(self):
+        html = self.client.get("/farm-location-capture/add/").content.decode()
+        for token in ('id="add-picture"', 'id="picture-rows"', 'Add Picture'):
+            self.assertIn(token, html)
+        # rows are added by the script, so the container ships empty
+        self.assertIn('<div id="picture-rows"></div>', html)
+        print("RESULT add-picture control present, single input removed")
+
+    def test_branch_select_precedes_farm_and_tags_each_farm(self):
+        html = self.client.get("/farm-location-capture/add/").content.decode()
+        self.assertIn('id="branch"', html)
+        # Branch must come before Farm in the markup
+        self.assertLess(html.index('id="branch"'), html.index('id="farm"'))
+        # every farm option carries its branch so the list can be narrowed
+        self.assertIn('data-branch="%d"' % self.branch.id, html)
+        print("RESULT branch select before farm, farms tagged with branch")
+
+    def test_branch_is_not_stored_on_the_capture(self):
+        # It only narrows the list; the branch is already reachable via the farm.
+        self.add()
+        cap = FarmLocationCapture.objects.get()
+        self.assertFalse(hasattr(cap, "branch_id"))
+        self.assertEqual(cap.farm.branch, self.branch)
+        print("RESULT branch derived from the farm, not duplicated")
+

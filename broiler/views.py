@@ -6798,7 +6798,8 @@ def _capture_form_context(instance=None):
     return {
         "capture": instance,
         "next_no": FarmLocationCapture._next_no() if not instance else None,
-        "farms": BroilerFarm.objects.select_related("farmer").order_by("farm_name"),
+        "farms": BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name"),
+        "branches": Branch.objects.order_by("branch_name"),
         "today": timezone.localdate().isoformat(),
         "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
                   for k in FarmCaptureFile.SLOT_TARGETS

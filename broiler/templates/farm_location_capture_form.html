@@ -31,18 +31,27 @@
           <input type="date" name="date" class="form-control" required
                  value="{% if capture %}{{ capture.date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
+          <label class="form-label">Branch</label>
+          <select id="branch" class="form-select">
+            <option value="">All branches</option>
+            {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+          </select>
+          <div class="form-text">Narrows the farm list; not stored on the capture.</div>
+        </div>
+        <div class="col-md-4">
           <label class="form-label">Farm <span class="text-danger">*</span></label>
           <select name="farm" id="farm" class="form-select" required>
             <option value="">Select farm</option>
             {% for f in farms %}
             <option value="{{ f.id }}" data-farmer="{{ f.farmer.farmer_name|default:''|escapejs }}"
+                    data-branch="{{ f.branch_id|default:'' }}"
                     {% if capture and capture.farm_id == f.id %}selected{% endif %}>
               {{ f.farm_code }} - {{ f.farm_name }}
             </option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label">Farmer</label>
           <input class="form-control bg-light" id="farmer" readonly placeholder="&mdash;"
                  title="Comes from the selected farm">
@@ -90,9 +99,15 @@
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label">Farm Pictures</label>
-          <input type="file" name="photos" class="form-control" accept="image/*" multiple>
-          <div class="form-text">Any number; each is added to the farm's pictures too.</div>
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label mb-0">Farm Pictures</label>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-picture">
+              <i class="fas fa-plus me-1"></i>Add Picture</button>
+          </div>
+          <!-- Every row posts under the same name, so the view keeps reading
+               request.FILES.getlist("photos") whether one row or ten. -->
+          <div id="picture-rows"></div>
+          <div class="form-text">Add as many as you like; each is added to the farm's pictures too.</div>
         </div>
         <div class="col-md-6">
           <label class="form-label">Other Documents</label>
@@ -163,12 +178,40 @@
   const preview = document.getElementById('preview-map');
   const note = document.getElementById('geo-note');
 
+  const branch = document.getElementById('branch');
+  // Keep every farm option aside so filtering can rebuild the list rather than
+  // hide options — Select2 replaces the element, so hidden options still show.
+  const allFarmOptions = Array.from(farm.options).map(o => o.cloneNode(true));
+
   function showFarmer() {
     const opt = farm.selectedOptions[0];
     farmer.value = opt ? (opt.dataset.farmer || '') : '';
   }
+
+  function applyBranch() {
+    const want = branch.value;
+    const keep = farm.value;
+    farm.innerHTML = '';
+    allFarmOptions.forEach(function (o) {
+      if (!o.value || !want || o.dataset.branch === want) {
+        farm.append(o.cloneNode(true));
+      }
+    });
+    // Hold the selection if that farm is still in the narrowed list.
+    farm.value = Array.from(farm.options).some(o => o.value === keep) ? keep : '';
+    if (window.jQuery && farm.classList.contains('select2-hidden-accessible')) {
+      jQuery(farm).trigger('change.select2');
+    }
+    showFarmer();
+  }
+
+  branch.addEventListener('change', applyBranch);
   farm.addEventListener('change', showFarmer);
-  showFarmer();
+
+  // Editing: start on the saved farm's branch so the list is already narrowed.
+  const chosen = allFarmOptions.find(o => o.selected && o.value);
+  if (chosen && chosen.dataset.branch) branch.value = chosen.dataset.branch;
+  applyBranch();
 
   function refreshPreview() {
     const ok = lat.value !== '' && lng.value !== '';
@@ -197,6 +240,63 @@
         : 'Could not read the location — enter the coordinates manually.';
     }, { enableHighAccuracy: true, timeout: 10000 });
   });
+
+  // --- Farm pictures: one row per picture, added on demand ---------------
+  const rows = document.getElementById('picture-rows');
+
+  function addPictureRow() {
+    const row = document.createElement('div');
+    row.className = 'input-group input-group-sm mb-2 picture-row';
+    row.innerHTML = `
+      <input type="file" name="photos" class="form-control" accept="image/*" multiple>
+      <span class="input-group-text p-1 d-none pic-thumb"></span>
+      <button type="button" class="btn btn-outline-danger drop-row" title="Remove">
+        <i class="fas fa-trash"></i></button>`;
+    rows.append(row);
+
+    const input = row.querySelector('input');
+    input.addEventListener('change', function () {
+      const thumb = row.querySelector('.pic-thumb');
+      thumb.innerHTML = '';
+      thumb.classList.add('d-none');
+      const file = input.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.style.cssText = 'height:28px;width:38px;object-fit:cover;border-radius:.2rem';
+        img.onload = () => URL.revokeObjectURL(img.src);
+        thumb.append(img);
+        if (input.files.length > 1) {
+          const more = document.createElement('span');
+          more.className = 'ms-1 small text-muted';
+          more.textContent = '+' + (input.files.length - 1);
+          thumb.append(more);
+        }
+        thumb.classList.remove('d-none');
+      }
+      // Picking a file in the last row offers another straight away.
+      if (row === rows.lastElementChild && input.files.length) addPictureRow();
+    });
+    refreshDropButtons();
+    return row;
+  }
+
+  // The only row left has nothing to drop back to, so its button stays off.
+  function refreshDropButtons() {
+    const all = rows.querySelectorAll('.picture-row');
+    all.forEach(r => { r.querySelector('.drop-row').disabled = all.length === 1; });
+  }
+
+  rows.addEventListener('click', function (e) {
+    const drop = e.target.closest('.drop-row');
+    if (drop && !drop.disabled) {
+      drop.closest('.picture-row').remove();
+      if (!rows.querySelector('.picture-row')) addPictureRow();
+      refreshDropButtons();
+    }
+  });
+  document.getElementById('add-picture').addEventListener('click', () => addPictureRow());
+  addPictureRow();
 
   document.querySelectorAll('.remove-file').forEach(function (btn) {
     btn.addEventListener('click', function () {
