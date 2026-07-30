@@ -403,3 +403,19 @@ class ItemBagWeightFieldTests(TestCase):
         print("RESULT saved kg_per_bag = %s" % item.kg_per_bag)
         self.assertEqual(item.kg_per_bag, Decimal("50"))
 
+    def test_add_form_preselects_every_warehouse(self):
+        """All is the default: the Add form opens with every warehouse chosen,
+        so an item is visible everywhere unless it is narrowed on purpose."""
+        a = Warehouse.objects.create(name="Main Warehouse")
+        b = Warehouse.objects.create(name="Akbarpur Warehouse")
+        html = self.client.get("/items/").content.decode()
+        import re
+        add_form = html[html.index('id="item-form"'):html.index("</form>", html.index('id="item-form"'))]
+        chosen = re.findall(r'<option value="(\d+)" selected>', add_form)
+        print("RESULT preselected warehouse ids: %s of %s"
+              % (sorted(chosen), sorted([str(a.id), str(b.id)])))
+        self.assertEqual(sorted(chosen), sorted([str(a.id), str(b.id)]))
+        # the "All" sentinel itself stays unselected — it is a trigger, and the
+        # API expects real ids, not the sentinel
+        self.assertNotIn('<option value="__all__" selected>', add_form)
+

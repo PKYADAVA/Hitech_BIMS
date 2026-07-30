@@ -155,7 +155,7 @@
                             <select id="warehouse" class="form-select" multiple>
                                 <option value="__all__">-- All Warehouses --</option>
                                 {% for warehouse in warehouses %}
-                                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                                    <option value="{{ warehouse.id }}" selected>{{ warehouse.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
