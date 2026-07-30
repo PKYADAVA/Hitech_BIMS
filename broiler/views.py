@@ -6800,18 +6800,23 @@ def farm_location_capture_api(request):
 
 
 def _capture_form_context(instance=None):
+    grouped = _capture_files_by_slot(instance)
     return {
         "capture": instance,
         "next_no": FarmLocationCapture._next_no() if not instance else None,
         "farms": BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name"),
         "branches": Branch.objects.order_by("branch_name"),
         "today": timezone.localdate().isoformat(),
-        "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
-                  for k in FarmCaptureFile.SLOT_TARGETS
-                  if k != FarmCaptureFile.KIND_DOCUMENT],
-        # Grouped by slot so each upload input can show what it already holds
-        # directly beneath it, rather than in one pile at the bottom.
-        "files_by_slot": _capture_files_by_slot(instance),
+        # (code, label, files) per slot: carrying the files in the row lets the
+        # template show each one under its own input without indexing a dict by
+        # a loop variable, which Django templates cannot do.
+        "slot_rows": [
+            (k, dict(FarmCaptureFile.KIND_CHOICES)[k], grouped.get(k, []))
+            for k in FarmCaptureFile.SLOT_TARGETS
+            if k != FarmCaptureFile.KIND_DOCUMENT
+        ],
+        "farm_pictures": grouped.get(FarmCaptureFile.KIND_PHOTO, []),
+        "other_documents": grouped.get(FarmCaptureFile.KIND_DOCUMENT, []),
     }
 
 

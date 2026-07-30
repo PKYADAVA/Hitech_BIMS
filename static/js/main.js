@@ -217,3 +217,30 @@ $(document).ready(function () {
     }
   });
 });
+
+
+/* ---------------------------------------------------------------------------
+   Reverse geocoding — turn a GPS reading into a readable address.
+   ---------------------------------------------------------------------------
+   Used by Broiler > Transactions > Farm Location & Photos, so capturing a
+   farm's pin also records where it is in words.
+
+   OpenStreetMap's Nominatim needs no API key. It is best-effort by design: it
+   is rate-limited and can be blocked or offline, so every caller must keep
+   working when this resolves to null rather than treating a lookup failure as
+   a failure to capture the location. The coordinates are the record; the
+   address is a convenience on top.
+   --------------------------------------------------------------------------- */
+window.reverseGeocode = function (latitude, longitude) {
+  const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2'
+            + '&lat=' + encodeURIComponent(latitude)
+            + '&lon=' + encodeURIComponent(longitude)
+            + '&zoom=18&addressdetails=1';
+  const timeout = new Promise(function (resolve) { setTimeout(() => resolve(null), 8000); });
+  const lookup = fetch(url, { headers: { 'Accept': 'application/json' } })
+    .then(function (resp) { return resp.ok ? resp.json() : null; })
+    .then(function (data) { return (data && data.display_name) || null; })
+    .catch(function () { return null; });
+  // Whichever settles first: a slow lookup must never hold up the form.
+  return Promise.race([lookup, timeout]);
+};

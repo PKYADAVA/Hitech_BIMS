@@ -328,3 +328,34 @@ class FarmLocationCaptureTests(TestCase):
         self.assertIn('r.files.filter(f => f.kind !== "photo")', html)
         print("RESULT view dialog renders attachments")
 
+    # ------------------------------------------------- address from the pin
+
+    def test_form_looks_the_pin_up_as_an_address(self):
+        html = self.client.get("/farm-location-capture/add/").content.decode()
+        self.assertIn("fillAddressFrom", html)
+        self.assertIn('id="address"', html)
+        self.assertIn('id="address-note"', html)
+        print("RESULT form looks up the pin")
+
+    def test_fill_dialog_looks_the_pin_up_too(self):
+        html = self.client.get("/farm-location-capture/").content.decode()
+        self.assertIn("window.reverseGeocode", html)
+        print("RESULT fill dialog looks up the pin")
+
+    def test_address_is_still_saved_when_typed_by_hand(self):
+        # The lookup is a convenience; a typed address must survive untouched.
+        self.add(address="Plot 4, Lacchipur, near the canal")
+        cap = FarmLocationCapture.objects.get()
+        self.farm.refresh_from_db()
+        print("RESULT typed address kept  %r" % cap.address)
+        self.assertEqual(cap.address, "Plot 4, Lacchipur, near the canal")
+        self.assertEqual(self.farm.farm_address, "Plot 4, Lacchipur, near the canal")
+
+    def test_location_saves_even_with_no_address(self):
+        # A failed or blocked lookup must not stop the pin being recorded.
+        self.add(address="")
+        cap = FarmLocationCapture.objects.get()
+        print("RESULT pin without address lat=%s address=%r" % (cap.latitude, cap.address))
+        self.assertAlmostEqual(cap.latitude, 26.7606, places=4)
+        self.assertEqual(cap.address, "")
+

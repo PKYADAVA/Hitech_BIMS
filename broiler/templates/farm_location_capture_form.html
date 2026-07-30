@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load broiler_extras %}
 {% block title %}{% if capture %}Edit{% else %}Add{% endif %} Farm Location Capture - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
 {% block content %}
@@ -88,8 +87,9 @@
         </div>
         <div class="col-12">
           <label class="form-label">Address</label>
-          <textarea name="address" class="form-control" rows="2"
+          <textarea name="address" id="address" class="form-control" rows="2"
                     placeholder="Address as found on the visit">{% if capture %}{{ capture.address }}{% endif %}</textarea>
+          <div class="form-text" id="address-note"></div>
         </div>
       </div>
     </div>
@@ -109,9 +109,9 @@
                request.FILES.getlist("photos") whether one row or ten. -->
           <div id="picture-rows"></div>
           <div class="form-text">Add as many as you like; each is added to the farm's pictures too.</div>
-          {% with held=files_by_slot.photo %}{% if held %}
+          {% if farm_pictures %}
           <div class="d-flex flex-wrap gap-2 mt-2">
-            {% for f in held %}
+            {% for f in farm_pictures %}
             <div class="border rounded p-1 text-center" style="width:104px">
               <a href="{{ f.url }}" target="_blank" rel="noopener" title="{{ f.name }}">
                 <img src="{{ f.url }}" alt="{{ f.name }}"
@@ -122,15 +122,15 @@
             </div>
             {% endfor %}
           </div>
-          {% endif %}{% endwith %}
+          {% endif %}
         </div>
         <div class="col-md-6">
           <label class="form-label">Other Documents</label>
           <input type="file" name="documents" class="form-control" multiple>
           <div class="form-text">Anything else from the visit.</div>
-          {% with held=files_by_slot.document %}{% if held %}
+          {% if other_documents %}
           <ul class="list-unstyled mt-2 mb-0 small">
-            {% for f in held %}
+            {% for f in other_documents %}
             <li class="d-flex align-items-center gap-2 mb-1">
               <i class="fas fa-file text-muted"></i>
               <a href="{{ f.url }}" target="_blank" rel="noopener" class="text-truncate">{{ f.name }}</a>
@@ -139,7 +139,7 @@
             </li>
             {% endfor %}
           </ul>
-          {% endif %}{% endwith %}
+          {% endif %}
         </div>
       </div>
 
@@ -149,11 +149,10 @@
         matching file on the Farmer or Farm record
       </div>
       <div class="row g-3">
-        {% for code, label in slots %}
+        {% for code, label, held in slot_rows %}
         <div class="col-md-4 col-lg-3">
           <label class="form-label">{{ label }}</label>
           <input type="file" name="slot_{{ code }}" class="form-control form-control-sm">
-          {% with held=files_by_slot|slot_files:code %}{% if held %}
           {% for f in held %}
           <div class="border rounded p-1 mt-2 text-center">
             {% if f.is_image %}
@@ -169,7 +168,6 @@
                     data-id="{{ f.id }}" title="Remove"><i class="fas fa-trash"></i></button>
           </div>
           {% endfor %}
-          {% endif %}{% endwith %}
         </div>
         {% endfor %}
       </div>
@@ -245,6 +243,35 @@
   lng.addEventListener('input', refreshPreview);
   refreshPreview();
 
+  // Look the pin up as an address. Typed text is never overwritten — the
+  // result is offered instead, so a hand-written address always wins.
+  const address = document.getElementById('address');
+  const addressNote = document.getElementById('address-note');
+
+  function fillAddressFrom(latitude, longitude) {
+    if (!window.reverseGeocode) return;
+    addressNote.textContent = 'Looking up the address…';
+    window.reverseGeocode(latitude, longitude).then(function (found) {
+      if (!found) {
+        addressNote.textContent = 'No address found for this pin — type it if needed.';
+        return;
+      }
+      if (!address.value.trim()) {
+        address.value = found;
+        addressNote.textContent = 'Address filled from the pin — edit if it is not right.';
+        return;
+      }
+      addressNote.innerHTML = 'Pin resolves to: <em></em> ' +
+        '<a href="#" id="use-found-address">use this instead</a>';
+      addressNote.querySelector('em').textContent = found;
+      addressNote.querySelector('#use-found-address').addEventListener('click', function (e) {
+        e.preventDefault();
+        address.value = found;
+        addressNote.textContent = 'Address replaced with the looked-up one.';
+      });
+    });
+  }
+
   document.getElementById('use-my-location').addEventListener('click', function () {
     if (!navigator.geolocation) {
       note.textContent = 'This browser cannot report a location.';
@@ -256,6 +283,7 @@
       lng.value = pos.coords.longitude.toFixed(6);
       refreshPreview();
       note.textContent = 'Accurate to about ' + Math.round(pos.coords.accuracy) + ' m — edit if needed.';
+      fillAddressFrom(lat.value, lng.value);
     }, function (err) {
       // The usual causes are a denied prompt or a page served over plain HTTP.
       note.textContent = err.code === err.PERMISSION_DENIED

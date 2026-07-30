@@ -270,8 +270,17 @@ $(function () {
   $(document).on("click", "#fill-geo", function () {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(function (pos) {
-      $("#fill-lat").val(pos.coords.latitude.toFixed(6));
-      $("#fill-lng").val(pos.coords.longitude.toFixed(6));
+      const la = pos.coords.latitude.toFixed(6), lo = pos.coords.longitude.toFixed(6);
+      $("#fill-lat").val(la);
+      $("#fill-lng").val(lo);
+      // Fill the address from the pin, but only when it is still blank here —
+      // the locked case has no textarea at all, and typed text is left alone.
+      const box = $("#fill-body").find("textarea[name=address]");
+      if (box.length && !box.val().trim() && window.reverseGeocode) {
+        window.reverseGeocode(la, lo).then(function (found) {
+          if (found && !box.val().trim()) box.val(found);
+        });
+      }
     }, function () { window.showToast('danger', 'Could not read the location.'); },
       { enableHighAccuracy: true, timeout: 10000 });
   });
