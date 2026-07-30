@@ -11,9 +11,13 @@ type's range (Asset 100000-199999, Liability 200000-299999, ...):
 Users never type codes; every create path calls :class:`AccountCodeGenerator`.
 Uniqueness is enforced per company both here and by the database constraint
 ``uniq_coa_company_code``, so a concurrent duplicate insert fails cleanly
-instead of silently colliding.
+instead of silently colliding. That constraint covers *live* accounts only
+(``deleted_at IS NULL``), because a deleted account's code can be reused —
+see :meth:`AccountCodeGenerator._reserved_qs` for exactly when.
 """
 import re
+
+from django.db.models import Q
 
 from account.models import ChartOfAccount
 
@@ -49,11 +53,30 @@ class AccountCodeGenerator:
 
     # ------------------------------------------------------------- internals
 
+    def _reserved_qs(self):
+        """Accounts whose code is NOT available for reuse.
+
+        Live accounts, plus soft-deleted ones that appear on a voucher. A code
+        that has history in the books must never be reissued to a different
+        account: balances would stay right (lines link by FK, not by code) but
+        exports, imports and any code-keyed report would describe two
+        different ledgers depending on the date.
+
+        A soft-deleted account with no voucher line was never in the books, so
+        its code becomes free again — delete the last account under a parent
+        and the next one created takes that code back, while a code deleted
+        from the middle of a range simply stays empty.
+
+        Any voucher line reserves the code, not only posted ones: a draft can
+        still be posted later, and a cancelled voucher is deliberately kept in
+        the books.
+        """
+        return ChartOfAccount.all_objects.filter(company=self.company).filter(
+            Q(deleted_at__isnull=True) | Q(voucher_lines__isnull=False)
+        ).distinct()
+
     def _existing_codes(self):
-        return set(
-            ChartOfAccount.all_objects.filter(company=self.company)
-            .values_list("code", flat=True)
-        )
+        return set(self._reserved_qs().values_list("code", flat=True))
 
     def _next_root_code(self, account_type):
         start, end = account_type.code_range_start, account_type.code_range_end
@@ -69,9 +92,8 @@ class AccountCodeGenerator:
         span = self._parent_span(parent)
         end = parent_code + span - 1
         siblings = [
-            int(c) for c in ChartOfAccount.all_objects.filter(
-                company=self.company, parent=parent
-            ).values_list("code", flat=True)
+            int(c) for c in self._reserved_qs().filter(parent=parent)
+            .values_list("code", flat=True)
             if NUMERIC_CODE_RE.match(c)
         ]
         candidate = (max(siblings) + step) if siblings else (parent_code + step)
@@ -82,7 +104,7 @@ class AccountCodeGenerator:
         return GROUP_LEVEL_STEP.get(parent.level, 10) if parent.level > 0 else 100000
 
     def _numeric_codes_between(self, start, end, level=None):
-        qs = ChartOfAccount.all_objects.filter(company=self.company)
+        qs = self._reserved_qs()
         if level is not None:
             qs = qs.filter(level=level)
         return [

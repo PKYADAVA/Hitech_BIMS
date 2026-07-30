@@ -434,7 +434,15 @@ class ChartOfAccount(models.Model):
         verbose_name = _("Chart of Account")
         verbose_name_plural = _("Chart of Accounts")
         constraints = [
-            models.UniqueConstraint(fields=['company', 'code'], name='uniq_coa_company_code'),
+            # Live accounts only: a soft-deleted row keeps its code in the
+            # table, and this condition is what lets the code generator hand
+            # that code out again once the account is gone. Without the
+            # condition the reuse would fail at the database.
+            models.UniqueConstraint(
+                fields=['company', 'code'],
+                condition=models.Q(deleted_at__isnull=True),
+                name='uniq_coa_company_code',
+            ),
         ]
         indexes = [
             models.Index(fields=['code']),

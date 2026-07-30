@@ -669,3 +669,67 @@ class ApiTests(EngineTestCase):
         self.assertTrue(
             ChartOfAccount.objects.filter(company=self.company, description="Generator Fuel").exists()
         )
+
+
+class CodeReuseAfterDeleteTests(EngineTestCase):
+    """A deleted account frees its code — unless it has voucher history.
+
+    Mirrors the numbering rule the rest of the ERP already follows: delete the
+    last account and the next one created takes that code back; delete from the
+    middle and the gap stays. The exception is an account that has appeared on
+    a voucher, whose code must never describe two different ledgers.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        import datetime
+        cls.fy = FinancialYear.objects.create(
+            start_date=datetime.date(2026, 4, 1),
+            end_date=datetime.date(2027, 3, 31),
+            is_active=True,
+        )
+
+    def setUp(self):
+        self.generate()
+        self.parent = ChartOfAccount.objects.get(
+            company=self.company, system_role="CASH_IN_HAND").parent
+        self.gen = AccountCodeGenerator(self.company)
+
+    def _leaf(self, description):
+        return ChartOfAccount.objects.create(
+            company=self.company, parent=self.parent, description=description,
+            account_type=self.parent.account_type, is_group=False,
+            code=self.gen.next_code(parent=self.parent),
+        )
+
+    def test_last_code_is_reused_and_middle_gap_is_not(self):
+        a, b, c = (self._leaf("A"), self._leaf("B"), self._leaf("C"))
+        self.assertEqual([a.code, b.code, c.code], sorted([a.code, b.code, c.code]))
+
+        c.soft_delete(user=self.user)                 # delete the LAST
+        self.assertEqual(self._leaf("D").code, c.code)
+
+        b.soft_delete(user=self.user)                 # delete a MIDDLE one
+        self.assertNotEqual(self._leaf("E").code, b.code)
+
+    def test_trailing_block_is_refilled_in_order(self):
+        made = [self._leaf(f"N{i}") for i in range(4)]
+        freed = [obj.code for obj in made[1:]]
+        for obj in made[1:]:
+            obj.soft_delete(user=self.user)
+        self.assertEqual([self._leaf(f"R{i}").code for i in range(3)], freed)
+
+    def test_code_of_an_account_with_voucher_history_is_never_reused(self):
+        from account.services import journal
+        keep = self._leaf("Has Postings")
+        other = ChartOfAccount.objects.get(company=self.company, system_role="CASH_IN_HAND")
+        journal.create_voucher(
+            company=self.company, date="2026-05-01", user=self.user, post=True,
+            lines_data=[
+                {"account": keep.id, "debit": "100", "credit": 0},
+                {"account": other.id, "debit": 0, "credit": "100"},
+            ],
+        )
+        keep.soft_delete(user=self.user)
+        self.assertNotEqual(self._leaf("Newcomer").code, keep.code)
