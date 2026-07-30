@@ -1,62 +1,155 @@
 {% extends "base.html" %}
-{% block title %}{% if note %}Edit{% else %}Add{% endif %} {{ note_kind }} - BIMS{% endblock %}
+{% block title %}{% if note %}Edit{% else %}Add{% endif %} Customer Debit Note - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock %}
 {% block content %}
 {% include '_sales_transaction_subnavbar.html' with active_tab='customer_debit_note' %}
+
+<style>
+  /* Compact grid, same as the other row-entry screens. */
+  #note-rows th, #note-rows td { padding:.25rem .35rem; white-space:nowrap; vertical-align:middle; }
+  #note-rows .form-control, #note-rows .form-select {
+    padding:.15rem .4rem; font-size:.8rem; min-height:28px; height:28px;
+  }
+</style>
+
 <div class="page-header">
-  <div class="page-header-title"><i class="fas fa-file-invoice"></i> {% if note %}Edit{% else %}Add{% endif %} {{ note_kind }}</div>
+  <div class="page-header-title"><i class="fas fa-file-invoice"></i> {% if note %}Edit{% else %}Add{% endif %} Customer Debit Note</div>
   <div class="page-header-right"><a class="btn btn-outline-secondary" href="{% url 'customer_debit_note_list' %}"><i class="fas fa-arrow-left"></i> Back</a></div>
 </div>
 
 {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
 
-<div class="card"><div class="card-body">
-  <form method="post">
-    {% csrf_token %}
-    <div class="row g-3">
-      <div class="col-md-3">
-        <label class="form-label">{{ note_kind }} No.</label>
-        <input type="text" class="form-control bg-light" value="{% if note %}{{ note.note_no }}{% else %}{{ next_no }}{% endif %}" readonly>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Date <span class="text-danger">*</span></label>
-        <input type="date" name="date" class="form-control" value="{% if note %}{{ note.date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}" required>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Customer <span class="text-danger">*</span></label>
-        <select name="customer" class="form-select" required>
-          <option value="">Select customer</option>
-          {% for s in customers %}<option value="{{ s.id }}" {% if note and note.customer_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label">Against Bill</label>
-        <input type="text" name="against_bill" class="form-control" value="{% if note %}{{ note.against_bill }}{% endif %}" placeholder="Sales invoice/bill no.">
-      </div>
-      <div class="col-md-5">
-        <label class="form-label">Reason</label>
-        <input type="text" name="reason" class="form-control" value="{% if note %}{{ note.reason }}{% endif %}" placeholder="e.g. Rate difference, Return">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Amount <span class="text-danger">*</span></label>
-        <input type="number" step="0.01" min="0" name="amount" class="form-control" value="{% if note %}{{ note.amount }}{% endif %}" required>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Account</label>
-        <select name="account" class="form-select">
-          <option value="">Select account</option>
-          {% for a in accounts %}<option value="{{ a.id }}" {% if note and note.account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label">Remarks</label>
-        <input type="text" name="remarks" class="form-control" value="{% if note %}{{ note.remarks }}{% endif %}">
+<form method="post" id="note-form">
+  {% csrf_token %}
+  <input type="hidden" name="rows_json" id="rows_json">
+
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div><i class="fas fa-list-ol me-1"></i><strong>Customer Debit Notes</strong></div>
+      {% if not note %}<button class="btn btn-sm btn-primary" type="button" id="add-row"><i class="fas fa-plus"></i> Add Row</button>{% endif %}
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0" id="note-rows">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:150px">Transaction No.</th>
+              <th style="min-width:140px">Date <span class="text-danger">*</span></th>
+              <th style="min-width:220px">Customer <span class="text-danger">*</span></th>
+              <th style="min-width:170px">Against Bill / DC No.</th>
+              <th style="min-width:220px">Account</th>
+              <th style="min-width:130px">Amount <span class="text-danger">*</span></th>
+              <th style="min-width:180px">Sector</th>
+              <th style="min-width:200px">Remark</th>
+              <th style="min-width:60px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot><tr>
+            <th colspan="5" class="text-end">Total</th>
+            <th class="text-end" id="total_amount">0.00</th>
+            <th colspan="3"></th>
+          </tr></tfoot>
+        </table>
       </div>
     </div>
-    <div class="mt-3 d-flex gap-2">
-      <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
-      <a class="btn btn-secondary" href="{% url 'customer_debit_note_list' %}">Cancel</a>
-    </div>
-  </form>
-</div></div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4">
+    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+    <a class="btn btn-secondary" href="{% url 'customer_debit_note_list' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const customerOptions = `<option value="">select</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.name|escapejs }}</option>{% endfor %}`;
+const accountOptions  = `<option value="">select</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code|escapejs }} - {{ a.description|escapejs }}</option>{% endfor %}`;
+const sectorOptions   = `<option value="">select</option>{% for s in sectors %}<option value="{{ s.id }}">{{ s.name|escapejs }}</option>{% endfor %}`;
+const TODAY = "{{ today }}";
+const NEXT_NO = "{{ next_no|default:'' }}";
+const EXISTING = {{ existing_rows_json|safe }};
+const IS_EDIT = {% if note %}true{% else %}false{% endif %};
+const get = id => document.getElementById(id);
+
+function addRow(row) {
+  row = row || {};
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="form-control bg-light r-note-no" readonly
+               value="${row.note_no || NEXT_NO}" title="Assigned automatically on save"></td>
+    <td><input type="date" class="form-control r-date" value="${row.date || TODAY}" required></td>
+    <td><select class="form-select r-customer" required>${customerOptions}</select></td>
+    <td><input class="form-control r-against-bill" value="${row.against_bill || ''}"
+               placeholder="Sales invoice / DC no."></td>
+    <td><select class="form-select r-account">${accountOptions}</select></td>
+    <td><input type="number" step="0.01" min="0" class="form-control text-end r-amount"
+               value="${row.amount || ''}" required></td>
+    <td><select class="form-select r-sector">${sectorOptions}</select></td>
+    <td><input class="form-control r-remarks" value="${row.remarks || ''}"></td>
+    <td class="text-center">
+      <button type="button" class="btn btn-sm btn-outline-danger r-remove" title="Remove row"><i class="fas fa-trash"></i></button>
+    </td>`;
+  tr.dataset.id = row.id || '';
+  get('note-rows').tBodies[0].append(tr);
+  // Selects are set after insertion so Select2 (applied site-wide) sees a value.
+  tr.querySelector('.r-customer').value = row.customer || '';
+  tr.querySelector('.r-account').value = row.account || '';
+  tr.querySelector('.r-sector').value = row.sector || '';
+  refreshRowButtons();
+  totals();
+  return tr;
+}
+
+// Only the Add screen can grow or shrink; editing works on the single note.
+function refreshRowButtons() {
+  const rows = [...document.querySelectorAll('#note-rows tbody tr')];
+  rows.forEach(tr => {
+    const btn = tr.querySelector('.r-remove');
+    btn.disabled = IS_EDIT || rows.length === 1;
+    btn.classList.toggle('d-none', IS_EDIT);
+  });
+}
+
+function totals() {
+  let total = 0;
+  document.querySelectorAll('#note-rows tbody tr').forEach(tr => {
+    total += Number(tr.querySelector('.r-amount').value) || 0;
+  });
+  get('total_amount').textContent = total.toFixed(2);
+}
+
+get('note-rows').addEventListener('input', e => {
+  if (e.target.classList.contains('r-amount')) totals();
+});
+get('note-rows').addEventListener('click', e => {
+  const remove = e.target.closest('.r-remove');
+  if (remove && !remove.disabled) {
+    remove.closest('tr').remove();
+    refreshRowButtons();
+    totals();
+  }
+});
+if (get('add-row')) get('add-row').addEventListener('click', () => addRow());
+
+get('note-form').addEventListener('submit', function (e) {
+  const rows = [...document.querySelectorAll('#note-rows tbody tr')].map(tr => ({
+    id: tr.dataset.id || null,
+    date: tr.querySelector('.r-date').value,
+    customer: tr.querySelector('.r-customer').value,
+    against_bill: tr.querySelector('.r-against-bill').value,
+    account: tr.querySelector('.r-account').value,
+    amount: tr.querySelector('.r-amount').value,
+    sector: tr.querySelector('.r-sector').value,
+    remarks: tr.querySelector('.r-remarks').value,
+  }));
+  if (!rows.length) { e.preventDefault(); alert('Add at least one row.'); return; }
+  if (rows.some(r => !r.customer)) { e.preventDefault(); alert('Select a Customer on every row.'); return; }
+  if (rows.some(r => !(Number(r.amount) > 0))) { e.preventDefault(); alert('Enter an Amount greater than zero on every row.'); return; }
+  get('rows_json').value = JSON.stringify(rows);
+});
+
+if (EXISTING.length) { EXISTING.forEach(addRow); } else { addRow(); }
+</script>
 {% endblock %}

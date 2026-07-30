@@ -357,7 +357,8 @@ class SalesReceipt(models.Model):
 
 class CustomerNoteBase(models.Model):
     """Shared base for customer Debit / Credit Notes — a single-customer note
-    with an amount and reason (Sales > Transactions). Subclasses set
+    with an amount, account and sector (Sales > Transactions). Entered a row at
+    a time on a grid, so one screen can record several notes. Subclasses set
     NOTE_PREFIX for the auto number series.
 
     Mirrors purchase.SupplierNoteBase; the two are deliberately parallel so the
@@ -371,11 +372,16 @@ class CustomerNoteBase(models.Model):
     date = models.DateField(default=_now)
     customer = models.ForeignKey("Customer", on_delete=models.PROTECT, related_name="%(class)ss")
     against_bill = models.CharField(max_length=50, blank=True,
-                                    help_text="Related sales invoice/bill no.")
-    reason = models.CharField(max_length=150, blank=True)
+                                    help_text="Related sales invoice / DC no.")
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True,
                                 blank=True, related_name="+")
+    # "Sector" is the office/branch, the same meaning (and model) as
+    # account.Voucher.sector, which the Journal screen labels
+    # "Sector (Office / Branch)".
+    sector = models.ForeignKey("inventory.Warehouse", on_delete=models.SET_NULL, null=True,
+                               blank=True, related_name="+",
+                               help_text="Office / branch this note belongs to")
     remarks = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
