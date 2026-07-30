@@ -154,7 +154,8 @@ $(function () {
       <h6 class="mb-2">Documents (${docs.length})</h6>
       <ul class="mb-0">${
         docs.length
-          ? docs.map(f => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a></li>`).join("")
+          ? docs.map(f => `<li><strong>${esc(f.label)}:</strong>
+               <a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a></li>`).join("")
           : '<li class="text-muted list-unstyled">No documents.</li>'}</ul>`);
     new bootstrap.Modal(document.getElementById("viewModal")).show();
   });

@@ -6755,12 +6755,13 @@ def _capture_row(c):
         "has_location": c.has_location,
         "address": c.address or "",
         "photos": sum(1 for f in files if f.kind == FarmCaptureFile.KIND_PHOTO),
-        "documents": sum(1 for f in files if f.kind == FarmCaptureFile.KIND_DOCUMENT),
+        "documents": sum(1 for f in files if f.kind != FarmCaptureFile.KIND_PHOTO),
         "remarks": c.remarks or "",
         "captured_by": ((c.captured_by.get_full_name() or c.captured_by.username)
                         if c.captured_by_id else ""),
         "files": [{
-            "id": f.id, "kind": f.kind, "url": f.file.url if f.file else "",
+            "id": f.id, "kind": f.kind, "label": f.get_kind_display(),
+            "url": f.file.url if f.file else "",
             "name": f.file.name.rsplit("/", 1)[-1] if f.file else "",
             "caption": f.caption or "",
         } for f in files],
@@ -6799,8 +6800,12 @@ def _capture_form_context(instance=None):
         "next_no": FarmLocationCapture._next_no() if not instance else None,
         "farms": BroilerFarm.objects.select_related("farmer").order_by("farm_name"),
         "today": timezone.localdate().isoformat(),
+        "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
+                  for k in FarmCaptureFile.SLOT_TARGETS
+                  if k != FarmCaptureFile.KIND_DOCUMENT],
         "existing_files": [
-            {"id": f.id, "kind": f.kind, "name": f.file.name.rsplit("/", 1)[-1],
+            {"id": f.id, "kind": f.kind, "label": f.get_kind_display(),
+             "name": f.file.name.rsplit("/", 1)[-1],
              "url": f.file.url if f.file else "", "caption": f.caption or ""}
             for f in instance.files.all()
         ] if instance else [],
@@ -6826,12 +6831,20 @@ def _save_capture(request, instance):
     instance.full_clean(exclude=["capture_no", "captured_by"])
     instance.save()
 
+    # Farm pictures and other documents take any number of files; the master
+    # fields behind the remaining slots hold one each, so those take one.
     for upload in request.FILES.getlist("photos"):
         FarmCaptureFile.objects.create(
             capture=instance, kind=FarmCaptureFile.KIND_PHOTO, file=upload)
     for upload in request.FILES.getlist("documents"):
         FarmCaptureFile.objects.create(
             capture=instance, kind=FarmCaptureFile.KIND_DOCUMENT, file=upload)
+    for kind in FarmCaptureFile.SLOT_TARGETS:
+        if kind == FarmCaptureFile.KIND_DOCUMENT:
+            continue                      # handled above, many allowed
+        upload = request.FILES.get("slot_%s" % kind)
+        if upload:
+            FarmCaptureFile.objects.create(capture=instance, kind=kind, file=upload)
     return instance
 
 

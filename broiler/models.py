@@ -1847,6 +1847,12 @@ class FarmLocationCapture(models.Model):
 
     def delete(self, *args, **kwargs):
         farm = self.farm
+        # Delete the files one by one rather than letting the cascade take them:
+        # a cascade is a bulk delete, so FarmCaptureFile.delete() never runs and
+        # the mirrored farm pictures would be orphaned and the master documents
+        # left pointing at this capture's files.
+        for attachment in list(self.files.all()):
+            attachment.delete()
         super().delete(*args, **kwargs)
         # The farm should fall back to whatever capture is now the latest.
         FarmLocationCapture.sync_farm_from_latest(farm)
@@ -1905,11 +1911,39 @@ class FarmCaptureFile(models.Model):
 
     KIND_PHOTO = "photo"
     KIND_DOCUMENT = "document"
-    KIND_CHOICES = [(KIND_PHOTO, _("Photo")), (KIND_DOCUMENT, _("Document"))]
+    KIND_CHOICES = [
+        (KIND_PHOTO, _("Farm Picture")),
+        ("farmer_photo", _("Farmer Photo")),
+        ("pan", _("PAN Card")),
+        ("aadhar_front", _("Aadhar (Front)")),
+        ("aadhar_back", _("Aadhar (Back)")),
+        ("agreement", _("Agreement Copy")),
+        ("cheque_1", _("Security Cheque 1")),
+        ("cheque_2", _("Security Cheque 2")),
+        ("cheque_3", _("Security Cheque 3")),
+        ("cheque_4", _("Security Cheque 4")),
+        (KIND_DOCUMENT, _("Other Document")),
+    ]
+
+    # Where each slot lands on the masters. "farmer"/"farm" says which record,
+    # then the field on it. Farm pictures are the odd one out: many are allowed,
+    # so they mirror into BroilerFarmImage instead of overwriting one field.
+    SLOT_TARGETS = {
+        "farmer_photo": ("farmer", "farmer_photo"),
+        "pan": ("farmer", "pan_upload"),
+        "aadhar_front": ("farmer", "aadhar_upload_front"),
+        "aadhar_back": ("farmer", "aadhar_upload_back"),
+        "agreement": ("farm", "agreement_copy"),
+        "cheque_1": ("farm", "cheque_1_file"),
+        "cheque_2": ("farm", "cheque_2_file"),
+        "cheque_3": ("farm", "cheque_3_file"),
+        "cheque_4": ("farm", "cheque_4_file"),
+        KIND_DOCUMENT: ("farm", "other_documents"),
+    }
 
     capture = models.ForeignKey(
         FarmLocationCapture, on_delete=models.CASCADE, related_name="files")
-    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_PHOTO)
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_PHOTO)
     file = models.FileField(upload_to="farm/captures/%Y/%m/")
     caption = models.CharField(max_length=150, blank=True)
     # The mirrored farm picture, so clearing a capture can take it back out.
@@ -1933,9 +1967,38 @@ class FarmCaptureFile(models.Model):
                 farm=self.capture.farm, image=self.file.name)
             FarmCaptureFile.objects.filter(pk=self.pk).update(farm_image=image)
             self.farm_image_id = image.pk
+        FarmCaptureFile.sync_slot(self.capture, self.kind)
 
     def delete(self, *args, **kwargs):
         image = self.farm_image
+        capture, kind = self.capture, self.kind
         super().delete(*args, **kwargs)
         if image is not None:
             image.delete()
+        FarmCaptureFile.sync_slot(capture, kind)
+
+    @staticmethod
+    def sync_slot(capture, kind):
+        """Point the master's field at the newest capture that filled this slot.
+
+        Same rule as the location: the master shows the latest visit, so editing
+        or deleting an older capture cannot disturb it. With no captures left
+        holding this slot the master keeps whatever it already had — a file
+        uploaded on the master directly is never blanked from here.
+        """
+        target = FarmCaptureFile.SLOT_TARGETS.get(kind)
+        if target is None or capture is None or capture.farm_id is None:
+            return
+        owner_kind, field = target
+        owner = capture.farm.farmer if owner_kind == "farmer" else capture.farm
+        if owner is None:
+            return
+        latest = (FarmCaptureFile.objects
+                  .filter(capture__farm_id=capture.farm_id, kind=kind)
+                  .exclude(file="")
+                  .order_by("-capture__date", "-capture__id", "-id").first())
+        if latest is None or not latest.file:
+            return
+        if getattr(owner, field) != latest.file.name:
+            setattr(owner, field, latest.file.name)
+            owner.save(update_fields=[field])

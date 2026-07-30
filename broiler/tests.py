@@ -128,3 +128,64 @@ class FarmLocationCaptureTests(TestCase):
         self.add()
         cap = FarmLocationCapture.objects.get()
         self.assertIn("Location Capture", cap.remarks)
+
+    # ------------------------------------------------------- master documents
+
+    def test_each_slot_lands_on_its_master_field(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "slot_farmer_photo": self.photo("face.png"),
+            "slot_pan": self.photo("pan.png"),
+            "slot_aadhar_front": self.photo("af.png"),
+            "slot_aadhar_back": self.photo("ab.png"),
+            "slot_agreement": self.photo("agr.png"),
+            "slot_cheque_1": self.photo("chq1.png"),
+        })
+        self.farmer.refresh_from_db()
+        self.farm.refresh_from_db()
+        for label, value, expect in (
+            ("farmer_photo", self.farmer.farmer_photo.name, "face"),
+            ("pan_upload", self.farmer.pan_upload.name, "pan"),
+            ("aadhar_front", self.farmer.aadhar_upload_front.name, "af"),
+            ("aadhar_back", self.farmer.aadhar_upload_back.name, "ab"),
+            ("agreement_copy", self.farm.agreement_copy.name, "agr"),
+            ("cheque_1_file", self.farm.cheque_1_file.name, "chq1"),
+        ):
+            print("RESULT %-16s -> %s" % (label, value))
+            self.assertIn(expect, value)
+
+    def test_a_newer_capture_replaces_the_master_document(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "slot_pan": self.photo("old_pan.png")})
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-09-01", "farm": self.farm.id,
+            "slot_pan": self.photo("new_pan.png")})
+        self.farmer.refresh_from_db()
+        print("RESULT pan after newer  -> %s" % self.farmer.pan_upload.name)
+        self.assertIn("new_pan", self.farmer.pan_upload.name)
+
+    def test_deleting_the_newer_capture_falls_back_to_the_older_document(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "slot_pan": self.photo("old_pan.png")})
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-09-01", "farm": self.farm.id,
+            "slot_pan": self.photo("new_pan.png")})
+        newest = FarmLocationCapture.objects.order_by("-date").first()
+        self.client.post("/farm-location-capture/%d/delete/" % newest.id)
+        self.farmer.refresh_from_db()
+        print("RESULT pan after delete -> %s" % self.farmer.pan_upload.name)
+        self.assertIn("old_pan", self.farmer.pan_upload.name)
+
+    def test_form_offers_every_master_slot(self):
+        html = self.client.get("/farm-location-capture/add/").content.decode()
+        for name in ("slot_farmer_photo", "slot_pan", "slot_aadhar_front",
+                     "slot_aadhar_back", "slot_agreement", "slot_cheque_1",
+                     "slot_cheque_2", "slot_cheque_3", "slot_cheque_4"):
+            self.assertIn('name="%s"' % name, html)
+        for label in ("Farmer Photo", "PAN Card", "Aadhar (Front)",
+                      "Aadhar (Back)", "Agreement Copy", "Farm Pictures"):
+            self.assertIn(label, html)
+        print("RESULT form offers all slots and labels")
+
