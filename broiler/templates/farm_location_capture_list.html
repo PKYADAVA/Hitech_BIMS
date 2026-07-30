@@ -101,6 +101,22 @@ $(function () {
     .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   let rowsById = {};
 
+  // Show an attachment as what it is: images render, anything else gets a file
+  // icon that still opens. Both are links, so a click always reaches the file.
+  function thumb(f, withLabel) {
+    const label = withLabel ? `<div class="fw-semibold" style="font-size:.62rem">${esc(f.label)}</div>` : '';
+    const body = f.is_image
+      ? `<img src="${esc(f.url)}" alt="${esc(f.name)}"
+              style="width:112px;height:82px;object-fit:cover;border-radius:.3rem">`
+      : `<div class="d-flex align-items-center justify-content-center"
+              style="width:112px;height:82px"><i class="fas fa-file fa-2x text-secondary"></i></div>`;
+    return `<div class="border rounded p-1 text-center" style="width:124px">
+        <a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${body}</a>
+        ${label}
+        <div class="text-truncate text-muted" style="font-size:.58rem">${esc(f.name)}</div>
+      </div>`;
+  }
+
   function locationCell(r) {
     if (!r.has_location) return '<span class="text-muted">—</span>';
     const label = Number(r.latitude).toFixed(6) + ", " + Number(r.longitude).toFixed(6);
@@ -154,7 +170,7 @@ $(function () {
     const r = rowsById[$(this).data("id")];
     $("#view-title").text(r.capture_no + " — " + r.farm);
     const photos = r.files.filter(f => f.kind === "photo");
-    const docs = r.files.filter(f => f.kind === "document");
+    const docs = r.files.filter(f => f.kind !== "photo");
     $("#view-body").html(`
       <dl class="row mb-3">
         <dt class="col-sm-3">Date</dt><dd class="col-sm-9">${esc(r.date)}</dd>
@@ -165,19 +181,16 @@ $(function () {
         <dt class="col-sm-3">Remarks</dt><dd class="col-sm-9">${esc(r.remarks) || "—"}</dd>
         <dt class="col-sm-3">Captured By</dt><dd class="col-sm-9">${esc(r.captured_by) || "—"}</dd>
       </dl>
-      <h6 class="mb-2">Photos (${photos.length})</h6>
+      <h6 class="mb-2">Farm Pictures (${photos.length})</h6>
       <div class="d-flex flex-wrap gap-2 mb-3">${
         photos.length
-          ? photos.map(f => `<a href="${esc(f.url)}" target="_blank" rel="noopener">
-               <img src="${esc(f.url)}" alt="${esc(f.name)}"
-                    style="width:120px;height:90px;object-fit:cover;border-radius:.4rem;border:1px solid #e5e7eb"></a>`).join("")
-          : '<span class="text-muted">No photos.</span>'}</div>
+          ? photos.map(f => thumb(f)).join("")
+          : '<span class="text-muted">No pictures.</span>'}</div>
       <h6 class="mb-2">Documents (${docs.length})</h6>
-      <ul class="mb-0">${
+      <div class="d-flex flex-wrap gap-2 mb-0">${
         docs.length
-          ? docs.map(f => `<li><strong>${esc(f.label)}:</strong>
-               <a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a></li>`).join("")
-          : '<li class="text-muted list-unstyled">No documents.</li>'}</ul>`);
+          ? docs.map(f => thumb(f, true)).join("")
+          : '<span class="text-muted">No documents.</span>'}</div>`);
     new bootstrap.Modal(document.getElementById("viewModal")).show();
   });
 

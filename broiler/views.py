@@ -6763,6 +6763,8 @@ def _capture_row(c):
             "id": f.id, "kind": f.kind, "label": f.get_kind_display(),
             "url": f.file.url if f.file else "",
             "name": f.file.name.rsplit("/", 1)[-1] if f.file else "",
+            "is_image": (f.file.name or "").lower().endswith(
+                (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")),
             "caption": f.caption or "",
         } for f in files],
     }
@@ -6807,13 +6809,25 @@ def _capture_form_context(instance=None):
         "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
                   for k in FarmCaptureFile.SLOT_TARGETS
                   if k != FarmCaptureFile.KIND_DOCUMENT],
-        "existing_files": [
-            {"id": f.id, "kind": f.kind, "label": f.get_kind_display(),
-             "name": f.file.name.rsplit("/", 1)[-1],
-             "url": f.file.url if f.file else "", "caption": f.caption or ""}
-            for f in instance.files.all()
-        ] if instance else [],
+        # Grouped by slot so each upload input can show what it already holds
+        # directly beneath it, rather than in one pile at the bottom.
+        "files_by_slot": _capture_files_by_slot(instance),
     }
+
+
+def _capture_files_by_slot(instance):
+    grouped = {}
+    if instance is None:
+        return grouped
+    for f in instance.files.all():
+        grouped.setdefault(f.kind, []).append({
+            "id": f.id, "kind": f.kind, "label": f.get_kind_display(),
+            "name": f.file.name.rsplit("/", 1)[-1] if f.file else "",
+            "url": f.file.url if f.file else "",
+            "is_image": (f.file.name or "").lower().endswith(
+                (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")),
+        })
+    return grouped
 
 
 def _save_capture(request, instance):

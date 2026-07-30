@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load broiler_extras %}
 {% block title %}{% if capture %}Edit{% else %}Add{% endif %} Farm Location Capture - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
 {% block content %}
@@ -108,11 +109,37 @@
                request.FILES.getlist("photos") whether one row or ten. -->
           <div id="picture-rows"></div>
           <div class="form-text">Add as many as you like; each is added to the farm's pictures too.</div>
+          {% with held=files_by_slot.photo %}{% if held %}
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            {% for f in held %}
+            <div class="border rounded p-1 text-center" style="width:104px">
+              <a href="{{ f.url }}" target="_blank" rel="noopener" title="{{ f.name }}">
+                <img src="{{ f.url }}" alt="{{ f.name }}"
+                     style="width:92px;height:64px;object-fit:cover;border-radius:.25rem"></a>
+              <div class="text-truncate text-muted" style="font-size:.58rem">{{ f.name }}</div>
+              <button type="button" class="btn btn-sm btn-outline-danger mt-1 py-0 remove-file"
+                      data-id="{{ f.id }}" title="Remove"><i class="fas fa-trash"></i></button>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}{% endwith %}
         </div>
         <div class="col-md-6">
           <label class="form-label">Other Documents</label>
           <input type="file" name="documents" class="form-control" multiple>
           <div class="form-text">Anything else from the visit.</div>
+          {% with held=files_by_slot.document %}{% if held %}
+          <ul class="list-unstyled mt-2 mb-0 small">
+            {% for f in held %}
+            <li class="d-flex align-items-center gap-2 mb-1">
+              <i class="fas fa-file text-muted"></i>
+              <a href="{{ f.url }}" target="_blank" rel="noopener" class="text-truncate">{{ f.name }}</a>
+              <button type="button" class="btn btn-sm btn-outline-danger py-0 remove-file"
+                      data-id="{{ f.id }}" title="Remove"><i class="fas fa-trash"></i></button>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}{% endwith %}
         </div>
       </div>
 
@@ -126,6 +153,23 @@
         <div class="col-md-4 col-lg-3">
           <label class="form-label">{{ label }}</label>
           <input type="file" name="slot_{{ code }}" class="form-control form-control-sm">
+          {% with held=files_by_slot|slot_files:code %}{% if held %}
+          {% for f in held %}
+          <div class="border rounded p-1 mt-2 text-center">
+            {% if f.is_image %}
+            <a href="{{ f.url }}" target="_blank" rel="noopener">
+              <img src="{{ f.url }}" alt="{{ f.name }}"
+                   style="max-width:100%;height:74px;object-fit:cover;border-radius:.25rem"></a>
+            {% else %}
+            <a href="{{ f.url }}" target="_blank" rel="noopener" class="d-block py-3">
+              <i class="fas fa-file fa-2x"></i></a>
+            {% endif %}
+            <div class="text-truncate text-muted" style="font-size:.58rem" title="{{ f.name }}">{{ f.name }}</div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-1 py-0 remove-file"
+                    data-id="{{ f.id }}" title="Remove"><i class="fas fa-trash"></i></button>
+          </div>
+          {% endfor %}
+          {% endif %}{% endwith %}
         </div>
         {% endfor %}
       </div>
@@ -137,27 +181,6 @@
         </div>
       </div>
 
-      {% if existing_files %}
-      <hr>
-      <div class="small text-muted mb-2">Already attached ({{ existing_files|length }})</div>
-      <div class="d-flex flex-wrap gap-2">
-        {% for f in existing_files %}
-        <div class="border rounded p-1 text-center" style="width:130px">
-          {% if f.kind == 'photo' %}
-          <a href="{{ f.url }}" target="_blank" rel="noopener">
-            <img src="{{ f.url }}" alt="{{ f.name }}"
-                 style="width:118px;height:80px;object-fit:cover;border-radius:.3rem"></a>
-          {% else %}
-          <a href="{{ f.url }}" target="_blank" rel="noopener"><i class="fas fa-file fa-2x my-3"></i></a>
-          {% endif %}
-          <div class="text-truncate fw-semibold" style="font-size:.62rem">{{ f.label }}</div>
-          <div class="text-truncate text-muted" style="font-size:.6rem" title="{{ f.name }}">{{ f.name }}</div>
-          <button type="button" class="btn btn-sm btn-outline-danger mt-1 remove-file"
-                  data-id="{{ f.id }}" title="Remove"><i class="fas fa-trash"></i></button>
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
     </div>
   </div>
 

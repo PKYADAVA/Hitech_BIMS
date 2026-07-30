@@ -290,3 +290,41 @@ class FarmLocationCaptureTests(TestCase):
         self.assertIn('id="fillModal"', html)
         print("RESULT + button present in the action column")
 
+    # -------------------------------------------------- attachments on screen
+
+    def test_edit_form_shows_each_file_under_its_own_slot(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "slot_pan": self.photo("pan_here.png"),
+            "photos": self.photo("pic_here.png")})
+        cap = FarmLocationCapture.objects.get()
+        html = self.client.get("/farm-location-capture/%d/edit/" % cap.id).content.decode()
+
+        # the PAN preview must sit inside the PAN slot, i.e. after that input
+        # and before the next slot's input
+        pan_input = html.index('name="slot_pan"')
+        next_input = html.index('name="slot_aadhar_front"')
+        print("RESULT pan preview under its own input: %s"
+              % ("pan_here" in html[pan_input:next_input]))
+        self.assertIn("pan_here", html[pan_input:next_input])
+        self.assertIn("pic_here", html)
+        # the old catch-all strip is gone
+        self.assertNotIn("Already attached", html)
+
+    def test_api_marks_which_attachments_are_images(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "slot_pan": self.photo("pan.png")})
+        row = self.client.get("/farm_location_capture_api/").json()[0]
+        pan = [f for f in row["files"] if f["kind"] == "pan"][0]
+        print("RESULT api flags image  is_image=%s label=%r" % (pan["is_image"], pan["label"]))
+        self.assertTrue(pan["is_image"])
+        self.assertEqual(pan["label"], "PAN Card")
+
+    def test_view_dialog_renders_documents_not_just_links(self):
+        html = self.client.get("/farm-location-capture/").content.decode()
+        self.assertIn("function thumb(", html)
+        # documents in the dialog are everything that is not a farm picture
+        self.assertIn('r.files.filter(f => f.kind !== "photo")', html)
+        print("RESULT view dialog renders attachments")
+
