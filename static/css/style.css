@@ -219,7 +219,9 @@ footer { margin-top: auto; }
 
 .bims-navbar .dropdown-item i {
   width: 16px;
-  color: var(--text-muted);
+  /* Each icon sets --nav-icon in the palette block further down; anything not
+     given a colour falls back to muted grey. */
+  color: var(--nav-icon, var(--text-muted));
 }
 
 .bims-navbar .dropdown-item:hover {
@@ -227,7 +229,8 @@ footer { margin-top: auto; }
   color: var(--primary);
 }
 
-.bims-navbar .dropdown-item:hover i { color: var(--primary); }
+/* Hover keeps the icon's own colour — the row background is the feedback. */
+.bims-navbar .dropdown-item:hover i { color: var(--nav-icon, var(--primary)); }
 
 /* Submenu */
 .bims-navbar .dropdown-submenu { position: relative; }
@@ -1592,3 +1595,125 @@ img, svg, video, canvas {
 .group-toggle { cursor: pointer; }
 .group-toggle .group-chevron { transition: transform 0.2s ease; }
 .group-toggle:not(.collapsed) .group-chevron { transform: rotate(90deg); }
+
+
+/* ---------------------------------------------------------------------------
+   Navigation icon palette
+   ---------------------------------------------------------------------------
+   The menu icons were all one muted grey, which made long dropdowns hard to
+   scan. Each icon now carries a colour by what it *means*, not by which module
+   it sits in, so the same idea reads the same everywhere — a chart is always
+   teal, money is always green, a bird is always amber.
+
+   Only `--nav-icon` is set here; `.bims-navbar .dropdown-item i` consumes it
+   and falls back to muted grey, so an icon added later still looks right
+   without being listed. Add new icons to whichever family fits.
+   --------------------------------------------------------------------------- */
+
+/* Masters & setup — indigo */
+.bims-navbar .dropdown-item i.fa-sliders-h,
+.bims-navbar .dropdown-item i.fa-sliders,
+.bims-navbar .dropdown-item i.fa-gear,
+.bims-navbar .dropdown-item i.fa-tools,
+.bims-navbar .dropdown-item i.fa-sitemap,
+.bims-navbar .dropdown-item i.fa-diagram-project,
+.bims-navbar .dropdown-item i.fa-code-branch,
+.bims-navbar .dropdown-item i.fa-layer-group,
+.bims-navbar .dropdown-item i.fa-tags,
+.bims-navbar .dropdown-item i.fa-tag,
+.bims-navbar .dropdown-item i.fa-ruler,
+.bims-navbar .dropdown-item i.fa-table-cells,
+.bims-navbar .dropdown-item i.fa-table-list,
+.bims-navbar .dropdown-item i.fa-folder,
+.bims-navbar .dropdown-item i.fa-draw-polygon,
+.bims-navbar .dropdown-item i.fa-pen        { --nav-icon: #6366f1; }
+
+/* Transactions & movement — blue */
+.bims-navbar .dropdown-item i.fa-exchange-alt,
+.bims-navbar .dropdown-item i.fa-right-left,
+.bims-navbar .dropdown-item i.fa-arrow-up,
+.bims-navbar .dropdown-item i.fa-arrow-down,
+.bims-navbar .dropdown-item i.fa-arrow-up-from-bracket,
+.bims-navbar .dropdown-item i.fa-arrow-down-to-bracket,
+.bims-navbar .dropdown-item i.fa-truck,
+.bims-navbar .dropdown-item i.fa-truck-loading,
+.bims-navbar .dropdown-item i.fa-route,
+.bims-navbar .dropdown-item i.fa-paper-plane { --nav-icon: #3b82f6; }
+
+/* Money — green */
+.bims-navbar .dropdown-item i.fa-file-invoice-dollar,
+.bims-navbar .dropdown-item i.fa-money-bill-wave,
+.bims-navbar .dropdown-item i.fa-money-check-dollar,
+.bims-navbar .dropdown-item i.fa-hand-holding-dollar,
+.bims-navbar .dropdown-item i.fa-cash-register,
+.bims-navbar .dropdown-item i.fa-receipt,
+.bims-navbar .dropdown-item i.fa-percentage,
+.bims-navbar .dropdown-item i.fa-scale-balanced,
+.bims-navbar .dropdown-item i.fa-handshake,
+.bims-navbar .dropdown-item i.fa-file-contract,
+.bims-navbar .dropdown-item i.fa-file-invoice  { --nav-icon: #16a34a; }
+
+/* Reports & analytics — teal */
+.bims-navbar .dropdown-item i.fa-chart-bar,
+.bims-navbar .dropdown-item i.fa-chart-pie,
+.bims-navbar .dropdown-item i.fa-chart-line,
+.bims-navbar .dropdown-item i.fa-chart-column,
+.bims-navbar .dropdown-item i.fa-gauge-high,
+.bims-navbar .dropdown-item i.fa-book,
+.bims-navbar .dropdown-item i.fa-book-open,
+.bims-navbar .dropdown-item i.fa-list-check,
+.bims-navbar .dropdown-item i.fa-list-alt,
+.bims-navbar .dropdown-item i.fa-file-alt,
+.bims-navbar .dropdown-item i.fa-clock-rotate-left { --nav-icon: #0d9488; }
+
+/* People & HR — pink */
+.bims-navbar .dropdown-item i.fa-users,
+.bims-navbar .dropdown-item i.fa-user,
+.bims-navbar .dropdown-item i.fa-user-check,
+.bims-navbar .dropdown-item i.fa-user-tie,
+.bims-navbar .dropdown-item i.fa-user-group,
+.bims-navbar .dropdown-item i.fa-user-cog,
+.bims-navbar .dropdown-item i.fa-id-card,
+.bims-navbar .dropdown-item i.fa-id-badge     { --nav-icon: #db2777; }
+
+/* Livestock, feed & health — amber */
+.bims-navbar .dropdown-item i.fa-kiwi-bird,
+.bims-navbar .dropdown-item i.fa-dove,
+.bims-navbar .dropdown-item i.fa-egg,
+.bims-navbar .dropdown-item i.fa-wheat-awn,
+.bims-navbar .dropdown-item i.fa-tractor,
+.bims-navbar .dropdown-item i.fa-syringe       { --nav-icon: #d97706; }
+
+/* Inventory & premises — orange */
+.bims-navbar .dropdown-item i.fa-warehouse,
+.bims-navbar .dropdown-item i.fa-boxes-stacked,
+.bims-navbar .dropdown-item i.fa-box,
+.bims-navbar .dropdown-item i.fa-shopping-basket,
+.bims-navbar .dropdown-item i.fa-building,
+.bims-navbar .dropdown-item i.fa-university     { --nav-icon: #ea580c; }
+
+/* Places — cyan */
+.bims-navbar .dropdown-item i.fa-map-marker-alt,
+.bims-navbar .dropdown-item i.fa-map-marked-alt,
+.bims-navbar .dropdown-item i.fa-map-location-dot,
+.bims-navbar .dropdown-item i.fa-location-dot,
+.bims-navbar .dropdown-item i.fa-temperature-half { --nav-icon: #0891b2; }
+
+/* Dates — sky */
+.bims-navbar .dropdown-item i.fa-calendar-check,
+.bims-navbar .dropdown-item i.fa-calendar-day,
+.bims-navbar .dropdown-item i.fa-calendar-alt,
+.bims-navbar .dropdown-item i.fa-comment-sms     { --nav-icon: #0284c7; }
+
+/* Devices & keys — violet */
+.bims-navbar .dropdown-item i.fa-microchip,
+.bims-navbar .dropdown-item i.fa-hub,
+.bims-navbar .dropdown-item i.fa-key             { --nav-icon: #7c3aed; }
+
+/* Attention — the only reds, so a warning still stands out */
+.bims-navbar .dropdown-item i.fa-bell            { --nav-icon: #f59e0b; }
+.bims-navbar .dropdown-item i.fa-triangle-exclamation,
+.bims-navbar .dropdown-item i.fa-temperature-high,
+.bims-navbar .dropdown-item i.fa-virus,
+.bims-navbar .dropdown-item i.fa-user-times,
+.bims-navbar .dropdown-item i.fa-sign-out-alt    { --nav-icon: #dc2626; }
