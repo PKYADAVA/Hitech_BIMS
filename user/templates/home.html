@@ -422,10 +422,13 @@
     }
 
     function row(hit) {
-      return '<a class="gs-item" href="' + esc(hit.url) + '" role="option">'
+      // Results open in a new tab, so the dashboard the user searched from
+      // stays put and several hits can be opened from one search.
+      return '<a class="gs-item" href="' + esc(hit.url) + '" role="option"'
+           + ' target="_blank" rel="noopener">'
            + '<span class="gs-item-icon ' + esc(hit.colour) + '"><i class="' + esc(hit.icon) + '"></i></span>'
            + '<span><b>' + esc(hit.title) + '</b><span>' + esc(hit.subtitle) + '</span></span>'
-           + '<i class="fa-solid fa-arrow-right gs-go"></i></a>';
+           + '<i class="fa-solid fa-arrow-up-right-from-square gs-go"></i></a>';
     }
 
     function render(data) {

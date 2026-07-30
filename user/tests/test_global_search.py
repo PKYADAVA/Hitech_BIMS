@@ -121,6 +121,8 @@ class GlobalSearchTests(TestCase):
         # The JS builds its fetch URL from {% url %}; a renamed route must
         # break here rather than leave a search box that silently does nothing.
         self.assertIn(reverse("global_search_api"), html)
+        # Results open in a new tab, leaving the dashboard where it was.
+        self.assertIn('target="_blank" rel="noopener"', html)
 
     # ---- the sources stay honest -----------------------------------------
 
