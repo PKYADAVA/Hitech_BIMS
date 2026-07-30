@@ -114,6 +114,19 @@
                             />
                         </div>
                         <div class="mb-3">
+                            <label for="kg_per_bag" class="form-label">Kg per Bag</label>
+                            <input
+                                type="number"
+                                id="kg_per_bag"
+                                class="form-control"
+                                placeholder="e.g. 50"
+                                step="0.01"
+                                min="0"
+                            />
+                            <div class="form-text">Weight of one bag. Feed reports are measured in
+                                bags and cannot convert an item without this.</div>
+                        </div>
+                        <div class="mb-3">
                             <label for="usage" class="form-label">Usage</label>
                             <select id="usage" class="form-select">
                                 <option value="" selected disabled>Select usage</option>
@@ -375,6 +388,13 @@
                                         <input type="number" id="dynamic-standard_cost_per_unit" class="form-control" value="${itemData.standard_cost_per_unit}" step="0.01" required />
                                     </div>
                                     <div class="mb-3">
+                                        <label for="dynamic-kg_per_bag" class="form-label">Kg per Bag</label>
+                                        <input type="number" id="dynamic-kg_per_bag" class="form-control"
+                                               value="${itemData.kg_per_bag ?? ''}" step="0.01" min="0" placeholder="e.g. 50" />
+                                        <div class="form-text">Feed reports are measured in bags and
+                                            cannot convert an item without this.</div>
+                                    </div>
+                                    <div class="mb-3">
                                         <label for="dynamic-usage" class="form-label">Usage</label>
                                         <select id="dynamic-usage" class="form-select" required>
                                             <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
@@ -425,6 +445,7 @@
                     warehouse: selectedWarehouseIds($("#dynamic-warehouse")),
                     valuation_method: $("#dynamic-valuation_method").val(),
                     standard_cost_per_unit: parseFloat($("#dynamic-standard_cost_per_unit").val()) || 0,
+                    kg_per_bag: $("#dynamic-kg_per_bag").val() || null,
                     usage: $("#dynamic-usage").val(),
                     storage_uom: $("#dynamic-storage_uom").val() || null,
                     consumption_uom: $("#dynamic-consumption_uom").val() || null,
@@ -473,6 +494,7 @@
                 warehouse: selectedWarehouseIds($("#warehouse")),
                 valuation_method: $("#valuation_method").val(),
                 standard_cost_per_unit: parseFloat($("#standard_cost_per_unit").val()) || 0,
+                kg_per_bag: $("#kg_per_bag").val() || null,
                 usage: $("#usage").val(),
                 storage_uom: $("#storage_uom").val() || null,
                 consumption_uom: $("#consumption_uom").val() || null,

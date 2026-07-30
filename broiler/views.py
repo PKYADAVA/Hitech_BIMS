@@ -5146,6 +5146,12 @@ def feed_dispatch_stock_report(request):
     # its own ledger column, keyed by item id and ordered by item_code. Add a
     # new feed Item and it shows up here automatically, no code change needed.
     feed_items_all = list(Item.objects.filter(category__name__icontains="feed").order_by("item_code"))
+    # Every figure here is in bags, converted from kg by the item's bag weight.
+    # An item without one divides by nothing, so its columns read 0 however much
+    # was actually bought or dispatched — which looks like "no activity" rather
+    # than "cannot convert". Name those items instead of leaving zeros to be
+    # puzzled over.
+    items_missing_bag_weight = [it.description for it in feed_items_all if not it.kg_per_bag]
     label_ids = [it.id for it in feed_items_all]
     label_item = {it.id: it for it in feed_items_all}
     label_name = {it.id: it.description for it in feed_items_all}
@@ -5569,6 +5575,7 @@ def feed_dispatch_stock_report(request):
         "ledger_totals": ledger_totals, "top_feed": top_feed,
         "recent_activity": recent_activity, "trend": trend, "warehouse_snapshot": warehouse_snapshot,
         "export": export,
+        "items_missing_bag_weight": items_missing_bag_weight,
         "company": CompanyProfile.get_solo(),
     })
 

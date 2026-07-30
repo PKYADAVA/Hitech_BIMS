@@ -258,7 +258,19 @@
 </div>
 
 <div class="card mb-3">
-  <div class="card-body">
+  {% if items_missing_bag_weight %}
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-3 no-print">
+    <i class="fas fa-triangle-exclamation mt-1"></i>
+    <div>
+      <strong>These feed items have no Kg per Bag, so their columns read 0:</strong>
+      {{ items_missing_bag_weight|join:", " }}.
+      <div class="small mt-1">This report is measured in bags — quantities are
+        converted from kg using each item's bag weight, so an item without one
+        cannot be shown. Set it in Inventory &rsaquo; Master &rsaquo; Item.</div>
+    </div>
+  </div>
+{% endif %}
+<div class="card-body">
     <div class="section-title">
       Feed Dispatch &amp; Stock Ledger — {% if warehouse_obj %}{{ warehouse_obj.name }}{% else %}All Warehouses (combined){% endif %}
     </div>

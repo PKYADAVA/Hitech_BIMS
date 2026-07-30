@@ -366,3 +366,40 @@ class ChicksPurchaseFormulaTests(TestCase):
         print("RESULT free not billed: %s < %s"
               % (line.amount, line.total_qty * line.rate))
 
+
+class ItemBagWeightFieldTests(TestCase):
+    """Kg per Bag must be settable from the Item screen.
+
+    The API already accepted and returned it, but the form had no input, so
+    every item saved with it empty — which silently zeroed the bag-denominated
+    feed reports.
+    """
+
+    def setUp(self):
+        user = get_user_model().objects.create_superuser(
+            "itm", "i@example.com", "Str0ngPass!")
+        self.client.force_login(user)
+        self.category = ItemCategory.objects.create(name="Feed")
+
+    def test_form_offers_the_field_on_add_and_edit(self):
+        html = self.client.get("/items/").content.decode()
+        self.assertIn('id="kg_per_bag"', html)          # add form
+        self.assertIn('id="dynamic-kg_per_bag"', html)  # edit modal
+        self.assertIn("kg_per_bag:", html)              # posted in the payload
+
+    def test_value_round_trips_through_the_api(self):
+        import json
+        resp = self.client.post(
+            "/create-item/",
+            data=json.dumps({
+                "description": "Pre Starter Feed", "category": self.category.id,
+                "valuation_method": "Weighted Average", "standard_cost_per_unit": 50,
+                "usage": "Produced", "source": "Purchased", "type": "Raw Material",
+                "item_account": "Expense", "kg_per_bag": "50",
+            }),
+            content_type="application/json")
+        self.assertIn(resp.status_code, (200, 201))
+        item = Item.objects.get(description="Pre Starter Feed")
+        print("RESULT saved kg_per_bag = %s" % item.kg_per_bag)
+        self.assertEqual(item.kg_per_bag, Decimal("50"))
+

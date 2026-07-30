@@ -1,10 +1,13 @@
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
+from inventory.models import Item, ItemCategory, Warehouse
+from purchase.models import GeneralPurchase, GeneralPurchaseItem, Supplier
 from broiler.models import (
     Branch, BroilerFarm, BroilerFarmImage, FarmCaptureFile, FarmLocationCapture,
     Farmer, Region, Supervisor,
@@ -457,3 +460,48 @@ class DependentDropdownTests(TestCase):
         print("RESULT append-without-rebuild: %s" % (offenders or "none"))
         self.assertEqual(offenders, [])
 
+
+class BagWeightWarningTests(TestCase):
+    """The feed ledger is measured in bags.
+
+    An item with no Kg per Bag cannot be converted, so its columns read 0
+    however much was bought — indistinguishable from no activity. The report
+    names those items rather than leaving the zeros unexplained.
+    """
+
+    def setUp(self):
+        u = get_user_model().objects.create_superuser("bw", "b@x.com", "Str0ngPass!")
+        self.client.force_login(u)
+        self.wh = Warehouse.objects.create(name="Akbarpur Warehouse")
+        cat = ItemCategory.objects.create(name="Feed")
+        self.item = Item.objects.create(
+            description="Pre Starer Feed", category=cat,
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("50"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")                     # deliberately no kg_per_bag
+        supplier = Supplier.objects.create(name="Maharashtra Feeds Pvt Ltd")
+        p = GeneralPurchase.objects.create(
+            date=date(2026, 7, 21), supplier=supplier,
+            calculation_based_on="Received Quantity")
+        GeneralPurchaseItem.objects.create(
+            purchase=p, item=self.item, farm_warehouse=self.wh,
+            sent_qty=Decimal("1500"), rcv_qty=Decimal("1500"), free_qty=Decimal("0"),
+            rate=Decimal("30"), discount_percent=Decimal("0"),
+            discount_amount=Decimal("0"), gst_percent=Decimal("0"))
+
+    def report(self):
+        return self.client.get("/feed-dispatch-stock-report/", {
+            "warehouse": self.wh.id, "from_date": "2026-01-01",
+            "to_date": "2026-12-31", "submit": "1"}).content.decode()
+
+    def test_missing_bag_weight_is_called_out(self):
+        html = self.report()
+        self.assertIn("have no Kg per Bag", html)
+        self.assertIn("Pre Starer Feed", html)
+
+    def test_no_warning_once_the_bag_weight_is_set(self):
+        self.item.kg_per_bag = Decimal("50")
+        self.item.save(update_fields=["kg_per_bag"])
+        html = self.report()   # 1500 kg / 50
+        self.assertNotIn("have no Kg per Bag", html)
+        self.assertIn("30.00", html)

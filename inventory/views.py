@@ -216,6 +216,10 @@ class ItemAPI(View):
             storage_uom_id=data.get("storage_uom") or None,
             consumption_uom_id=data.get("consumption_uom") or None,
             hsn_code=data.get("hsn_code") or None,
+            # Create accepted everything except this, so a bag weight typed on
+            # the Add form was dropped and only stuck if the item was edited
+            # afterwards — which silently zeroed the bag-denominated reports.
+            kg_per_bag=data.get("kg_per_bag") or None,
         )
         item.warehouse.set(warehouses)
         return JsonResponse({"message": "Item created"}, status=201)
