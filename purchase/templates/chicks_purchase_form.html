@@ -298,8 +298,6 @@ function itemRow(row = {}) {
   refreshRowAddButtons();
 }
 
-// Mirrors ChicksPurchaseItem.save(): Rcv Qty is the physically-received
-// count (sent + its Sent Free% - losses + excess), already inclusive of the
 // One Free % runs the line, matching ChicksPurchaseItem.recalculate():
 //   gross        = Sent x (1 + Free%/100)
 //   after losses = gross - Mortality - Shortage - Weaks + Excess
