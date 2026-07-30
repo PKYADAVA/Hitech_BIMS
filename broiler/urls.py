@@ -169,6 +169,7 @@ urlpatterns = [
     path('farm-location-capture/', views.farm_location_capture_list, name='farm_location_capture_list'),
     path('farm-location-capture/add/', views.farm_location_capture_add, name='farm_location_capture_add'),
     path('farm-location-capture/<int:id>/edit/', views.farm_location_capture_edit, name='farm_location_capture_edit'),
+    path('farm-location-capture/<int:id>/complete/', views.farm_location_capture_complete, name='farm_location_capture_complete'),
     path('farm-location-capture/<int:id>/clear/', views.farm_location_capture_clear, name='farm_location_capture_clear'),
     path('farm-location-capture/<int:id>/delete/', views.farm_location_capture_delete, name='farm_location_capture_delete'),
     path('farm_location_capture_api/', views.farm_location_capture_api, name='farm_location_capture_api'),

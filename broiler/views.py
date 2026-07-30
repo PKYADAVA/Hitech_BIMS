@@ -6773,6 +6773,9 @@ def farm_location_capture_list(request):
     """Broiler > Transactions > Farm Location & Photos — the register."""
     return render(request, "farm_location_capture_list.html", {
         "farms": BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name"),
+        "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
+                  for k in FarmCaptureFile.SLOT_TARGETS
+                  if k != FarmCaptureFile.KIND_DOCUMENT],
     })
 
 
@@ -6913,3 +6916,54 @@ def farm_capture_file_delete(request, id):
     f = get_object_or_404(FarmCaptureFile, id=id)
     f.delete()
     return JsonResponse({"message": "File removed."})
+
+@login_required
+@require_POST
+def farm_location_capture_complete(request, id):
+    """Fill in what a capture is still missing, from the register's + button.
+
+    Only blanks are written. The dialog locks what is already there, but the
+    check lives here as well: the browser deciding what may be overwritten
+    would let a hand-made request quietly replace a document or a GPS reading.
+    """
+    capture = get_object_or_404(FarmLocationCapture, id=id)
+    filled = []
+
+    with transaction.atomic():
+        # Location goes in as a pair or not at all, and only if none is held.
+        if capture.latitude is None and capture.longitude is None:
+            lat = (request.POST.get("latitude") or "").strip()
+            lng = (request.POST.get("longitude") or "").strip()
+            if lat and lng:
+                capture.latitude, capture.longitude = float(lat), float(lng)
+                filled.append("location")
+        if not capture.address and (request.POST.get("address") or "").strip():
+            capture.address = request.POST["address"].strip()
+            filled.append("address")
+        if filled:
+            capture.full_clean(exclude=["capture_no", "captured_by"])
+            capture.save()
+
+        # A slot already holding a file on this capture is left alone.
+        taken = set(capture.files.values_list("kind", flat=True))
+        for kind in FarmCaptureFile.SLOT_TARGETS:
+            if kind == FarmCaptureFile.KIND_DOCUMENT or kind in taken:
+                continue
+            upload = request.FILES.get("slot_%s" % kind)
+            if upload:
+                FarmCaptureFile.objects.create(capture=capture, kind=kind, file=upload)
+                filled.append(kind)
+
+        # Pictures and other documents are never "full" — more can always come.
+        for upload in request.FILES.getlist("photos"):
+            FarmCaptureFile.objects.create(
+                capture=capture, kind=FarmCaptureFile.KIND_PHOTO, file=upload)
+            filled.append("photo")
+        for upload in request.FILES.getlist("documents"):
+            FarmCaptureFile.objects.create(
+                capture=capture, kind=FarmCaptureFile.KIND_DOCUMENT, file=upload)
+            filled.append("document")
+
+    if not filled:
+        return JsonResponse({"error": "Nothing pending was filled in."}, status=400)
+    return JsonResponse({"message": "Capture updated (%d item(s) filled in)." % len(filled)})

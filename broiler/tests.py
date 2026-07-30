@@ -227,3 +227,66 @@ class FarmLocationCaptureTests(TestCase):
         self.assertEqual(cap.farm.branch, self.branch)
         print("RESULT branch derived from the farm, not duplicated")
 
+    # ------------------------------------------------- fill pending (+ button)
+
+    def test_fill_completes_a_blank_location(self):
+        self.add(latitude="", longitude="", address="")
+        cap = FarmLocationCapture.objects.get()
+        resp = self.client.post("/farm-location-capture/%d/complete/" % cap.id, {
+            "latitude": "26.500000", "longitude": "83.500000", "address": "Found it"})
+        self.assertEqual(resp.status_code, 200)
+        cap.refresh_from_db()
+        self.farm.refresh_from_db()
+        print("RESULT fill blank       cap=%s farm=%s" % (cap.latitude, self.farm.farm_latitude))
+        self.assertAlmostEqual(cap.latitude, 26.5, places=4)
+        self.assertAlmostEqual(self.farm.farm_latitude, 26.5, places=4)
+
+    def test_fill_cannot_overwrite_a_location_already_captured(self):
+        self.add(latitude="26.100000", longitude="83.100000", address="First")
+        cap = FarmLocationCapture.objects.get()
+        resp = self.client.post("/farm-location-capture/%d/complete/" % cap.id, {
+            "latitude": "99.000000", "longitude": "99.000000", "address": "Tampered"})
+        cap.refresh_from_db()
+        print("RESULT lock enforced    status=%s lat=%s address=%r"
+              % (resp.status_code, cap.latitude, cap.address))
+        self.assertAlmostEqual(cap.latitude, 26.1, places=4)
+        self.assertEqual(cap.address, "First")
+        self.assertEqual(resp.status_code, 400)      # nothing was pending
+
+    def test_fill_cannot_replace_a_slot_already_holding_a_file(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "slot_pan": self.photo("first_pan.png")})
+        cap = FarmLocationCapture.objects.get()
+        self.client.post("/farm-location-capture/%d/complete/" % cap.id, {
+            "slot_pan": self.photo("second_pan.png")})
+        names = [f.file.name for f in cap.files.filter(kind="pan")]
+        print("RESULT slot lock        %s" % names)
+        self.assertEqual(len(names), 1)
+        self.assertIn("first_pan", names[0])
+
+    def test_fill_adds_to_a_slot_that_was_still_empty(self):
+        self.add()
+        cap = FarmLocationCapture.objects.get()
+        self.client.post("/farm-location-capture/%d/complete/" % cap.id, {
+            "slot_pan": self.photo("late_pan.png")})
+        self.farmer.refresh_from_db()
+        print("RESULT late slot filled %s" % self.farmer.pan_upload.name)
+        self.assertIn("late_pan", self.farmer.pan_upload.name)
+
+    def test_pictures_can_always_be_added(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id, "photos": self.photo("one.png")})
+        cap = FarmLocationCapture.objects.get()
+        self.client.post("/farm-location-capture/%d/complete/" % cap.id, {
+            "photos": [self.photo("two.png"), self.photo("three.png")]})
+        count = cap.files.filter(kind=FarmCaptureFile.KIND_PHOTO).count()
+        print("RESULT pictures grow    %d" % count)
+        self.assertEqual(count, 3)
+
+    def test_register_offers_the_fill_button(self):
+        html = self.client.get("/farm-location-capture/").content.decode()
+        self.assertIn("act-fill", html)
+        self.assertIn('id="fillModal"', html)
+        print("RESULT + button present in the action column")
+
