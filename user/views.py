@@ -70,6 +70,19 @@ def global_search_api(request):
     return JsonResponse(global_search(request.user, request.GET.get("q", "")))
 
 
+@login_required
+def dashboard_widgets_api(request):
+    """Dashboard widget data, fetched after the page paints.
+
+    The dashboard is the most-loaded page in the ERP and some of these figures
+    walk every supplier and customer, so the shell renders immediately and the
+    numbers arrive here rather than blocking the first paint.
+    """
+    from .services.dashboard_widgets import dashboard_widgets
+
+    return JsonResponse({"widgets": dashboard_widgets(request.user)})
+
+
 def dashboard(request):
     return render(request, "home.html", _home_context())
 

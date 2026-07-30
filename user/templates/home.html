@@ -63,6 +63,39 @@
   .home-cal-grid .home-cal-day.is-today { background:#0d6efd; color:#fff; font-weight:600; }
   .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
 
+  /* ---- Widgets ---------------------------------------------------------- */
+  .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
+             border:1px solid #e7edf5; border-radius:16px; padding:17px 18px; }
+  .dw-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .dw-head-icon { width:32px; height:32px; flex:0 0 32px; border-radius:10px; display:grid;
+                  place-items:center; font-size:.78rem; }
+  .dw-title { font-size:.87rem; font-weight:700; margin:0; }
+  .dw-open { margin-left:auto; font-size:.72rem; color:#6b7890; text-decoration:none; white-space:nowrap; }
+  .dw-open:hover { color:#2563eb; }
+  .dw-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:9px; }
+  .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
+  .dw-stat .dw-label { display:block; font-size:.68rem; color:#6b7890; text-transform:uppercase;
+                       letter-spacing:.04em; }
+  .dw-stat .dw-value { display:block; font-size:1.12rem; font-weight:700; margin-top:3px; line-height:1.2; }
+  .dw-stat .dw-sub { display:block; font-size:.69rem; color:#8494ab; margin-top:2px; }
+  .dw-stat.t-good .dw-value { color:#078b75; } .dw-stat.t-good { background:#f2fbf8; border-color:#d8f0e9; }
+  .dw-stat.t-warn .dw-value { color:#b45309; } .dw-stat.t-warn { background:#fffaf1; border-color:#f6e6cd; }
+  .dw-stat.t-bad  .dw-value { color:#dc465b; } .dw-stat.t-bad  { background:#fff5f6; border-color:#f7dbdf; }
+  .dw-rows { margin-top:13px; border-top:1px solid #edf1f6; padding-top:10px; }
+  .dw-rows-title { font-size:.66rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+                   color:#93a4bd; margin-bottom:6px; }
+  .dw-row { display:flex; align-items:baseline; gap:9px; padding:4px 0; font-size:.79rem; }
+  .dw-row b { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dw-row .dw-row-meta { color:#8494ab; font-size:.71rem; }
+  .dw-row .dw-row-value { margin-left:auto; font-weight:600; white-space:nowrap; }
+  .dw-note { margin-top:11px; font-size:.75rem; color:#6b7890; }
+  .dw-card.is-error { border-color:#f7dbdf; background:#fffbfb; }
+  .dw-skel { height:96px; border-radius:16px; border:1px solid #e7edf5; background:#fff; }
+  .dw-skel:after { content:""; display:block; height:100%; border-radius:16px;
+                   background:linear-gradient(90deg,#f4f7fb 25%,#eaf0f7 37%,#f4f7fb 63%);
+                   background-size:400% 100%; animation:dw-shimmer 1.3s ease infinite; }
+  @keyframes dw-shimmer { 0% { background-position:100% 50%; } 100% { background-position:0 50%; } }
+
   /* ---- Global search ---------------------------------------------------- */
   .gs-wrap { position:relative; margin:-8px 0 22px; }
   .gs-box { display:flex; align-items:center; gap:11px; padding:13px 17px; background:#fff;
@@ -196,7 +229,8 @@
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'item_category' %}" class="dash-module"><div class="dash-module-icon dash-icon-red"><i class="fas fa-boxes-stacked"></i></div><div><span class="dash-module-name">Inventory</span><span class="dash-module-action">Items &amp; warehouses</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'employee_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-cyan"><i class="fas fa-users"></i></div><div><span class="dash-module-name">HR</span><span class="dash-module-action">People &amp; payroll</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
     </div>
-    <div class="row g-3 mb-4"><div class="col-12"><div class="dash-panel"><div class="dash-panel-head"><h2 class="dash-section-title">Getting started</h2><p class="dash-section-copy">Use these core areas to set up and run daily operations.</p></div><div class="row g-2 mb-2"><div class="col-sm-4"><div class="dash-mini-stat"><i class="fa-solid fa-warehouse"></i><span>Inventory</span><b>Manage stock</b></div></div><div class="col-sm-4"><div class="dash-mini-stat"><i class="fa-solid fa-file-lines"></i><span>Transactions</span><b>Record activity</b></div></div><div class="col-sm-4"><div class="dash-mini-stat"><i class="fa-solid fa-chart-pie"></i><span>Reports</span><b>Review insights</b></div></div></div><div class="dash-activity"><div class="dash-activity-icon"><i class="fa-solid fa-egg"></i></div><div><b>Start a hatchery transaction</b><span>Record egg purchase, grading or update the hatch register.</span></div></div><div class="dash-activity"><div class="dash-activity-icon"><i class="fa-solid fa-box"></i></div><div><b>Keep inventory current</b><span>Maintain item masters and warehouse information for accurate operations.</span></div></div><div class="dash-activity"><div class="dash-activity-icon"><i class="fa-solid fa-user-group"></i></div><div><b>Manage your team</b><span>Access employee records, attendance and payroll from HR.</span></div></div></div></div></div>
+    <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
+    <div class="row g-3 mb-4" id="dash-widgets"></div>
 
     {% if 'tracking_dashboard' in allowed_tabs %}
     {% csrf_token %}
@@ -385,6 +419,74 @@
     }
     tick();
     setInterval(tick, 1000);
+  })();
+</script>
+
+<script>
+  // Dashboard widgets. Fetched after paint so a slow aggregate never holds up
+  // the page; the grid shows shimmering placeholders until the data lands.
+  (function () {
+    "use strict";
+    var grid = document.getElementById('dash-widgets');
+    if (!grid) return;
+
+    function esc(text) {
+      var d = document.createElement('div');
+      d.textContent = text == null ? '' : text;
+      return d.innerHTML;
+    }
+
+    function stat(s) {
+      return '<div class="dw-stat' + (s.tone ? ' t-' + esc(s.tone) : '') + '">'
+           + '<span class="dw-label">' + esc(s.label) + '</span>'
+           + '<span class="dw-value">' + esc(s.value) + '</span>'
+           + (s.sub ? '<span class="dw-sub">' + esc(s.sub) + '</span>' : '')
+           + '</div>';
+    }
+
+    function row(r) {
+      return '<div class="dw-row"><b>' + esc(r.label) + '</b>'
+           + (r.meta ? '<span class="dw-row-meta">' + esc(r.meta) + '</span>' : '')
+           + (r.value ? '<span class="dw-row-value">' + esc(r.value) + '</span>' : '')
+           + '</div>';
+    }
+
+    function card(w) {
+      var body = '';
+      if (w.stats && w.stats.length) {
+        body += '<div class="dw-stats">' + w.stats.map(stat).join('') + '</div>';
+      }
+      if (w.rows && w.rows.length) {
+        body += '<div class="dw-rows">'
+              + (w.rows_title ? '<div class="dw-rows-title">' + esc(w.rows_title) + '</div>' : '')
+              + w.rows.map(row).join('')
+              + (w.more ? '<div class="dw-note">and ' + w.more + ' more</div>' : '')
+              + '</div>';
+      }
+      if (w.note) body += '<div class="dw-note">' + esc(w.note) + '</div>';
+
+      return '<div class="col-12 col-md-6 col-xl-3">'
+           + '<div class="dw-card' + (w.error ? ' is-error' : '') + '">'
+           + '<div class="dw-head">'
+           + '<span class="dw-head-icon ' + esc(w.colour) + '"><i class="' + esc(w.icon) + '"></i></span>'
+           + '<h3 class="dw-title">' + esc(w.title) + '</h3>'
+           + (w.url ? '<a class="dw-open" href="' + esc(w.url) + '" target="_blank" rel="noopener">'
+                    + 'Open <i class="fa-solid fa-arrow-up-right-from-square"></i></a>' : '')
+           + '</div>' + body + '</div></div>';
+    }
+
+    grid.innerHTML = new Array(4).join('|').split('|')
+      .map(function () { return '<div class="col-12 col-md-6 col-xl-3"><div class="dw-skel"></div></div>'; })
+      .join('');
+
+    fetch('{% url "dashboard_widgets_api" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        // No widgets is a legitimate answer: a user may have access to none of
+        // the four reports these are drawn from.
+        grid.innerHTML = (data.widgets || []).map(card).join('');
+      })
+      .catch(function () { grid.innerHTML = ''; });
   })();
 </script>
 
