@@ -1,5 +1,7 @@
 import re
 
+from decimal import Decimal
+
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
@@ -8,6 +10,20 @@ from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
 from purchase.models import Supplier
 from sales.models import Customer
+
+
+def _dec(value):
+    """The value as a Decimal, whatever the attribute currently holds.
+
+    A DecimalField declared ``default=0`` holds the plain int ``0`` until the
+    row is read back from the database, so ``value / 100`` produces a float and
+    the next Decimal operation raises TypeError. The forms always post
+    Decimals, so this only bites a script, a shell session or a bulk import —
+    which is exactly where a crash is least welcome.
+    """
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value or 0))
 
 
 class HatchSetting(models.Model):
@@ -539,10 +555,11 @@ class DeliveryChallan(models.Model):
         return self.items.aggregate(total=models.Sum("amount"))["total"] or 0
 
     def total_tax(self):
-        total = 0
+        total = Decimal("0")
         for row in self.items.all():
-            subtotal = row.quantity * row.price * (1 - row.discount_percent / 100)
-            total += subtotal * row.tax_percent / 100
+            subtotal = (_dec(row.quantity) * _dec(row.price)
+                        * (1 - _dec(row.discount_percent) / 100))
+            total += subtotal * _dec(row.tax_percent) / 100
         return total
 
     def grand_total(self):
@@ -567,8 +584,9 @@ class DeliveryChallanItem(models.Model):
     def save(self, *args, **kwargs):
         if not self.quantity:
             self.quantity = self.packing_size * self.units
-        subtotal = self.quantity * self.price * (1 - self.discount_percent / 100)
-        self.amount = subtotal * (1 + self.tax_percent / 100)
+        subtotal = (_dec(self.quantity) * _dec(self.price)
+                    * (1 - _dec(self.discount_percent) / 100))
+        self.amount = subtotal * (1 + _dec(self.tax_percent) / 100)
         super().save(*args, **kwargs)
 
 

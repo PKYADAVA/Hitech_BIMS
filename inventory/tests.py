@@ -290,3 +290,19 @@ class GeneralPurchaseBasisTests(TestCase):
         self.assertEqual(Decimal(str(loc)), expected)
         self.assertEqual(led["closing"]["qty"], expected)
 
+    def test_a_line_created_without_explicit_decimals_still_saves(self):
+        """A DecimalField's default=0 is a plain int until the row is read back,
+        so percent/100 produced a float and the next Decimal operation raised
+        TypeError. The forms always post Decimals; a script or import does not.
+        """
+        purchase = GeneralPurchase.objects.create(
+            date=date(2026, 7, 21), supplier=self.supplier,
+            calculation_based_on="Sent Quantity")
+        line = GeneralPurchaseItem.objects.create(      # no percents passed
+            purchase=purchase, item=self.item, farm_warehouse=self.warehouse,
+            sent_qty=Decimal("500"), rate=Decimal("50"))
+        print("RESULT bare line amount     %s" % line.amount)
+        self.assertEqual(line.amount, Decimal("25000"))
+        self.assertEqual(
+            warehouse_item_stock(self.item.id, self.warehouse.id), Decimal("500"))
+

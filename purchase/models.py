@@ -1,8 +1,24 @@
 import re
+from decimal import Decimal
 
 from django.db import models
 from django.utils.timezone import now
 from inventory.models import ItemCategory, Item
+
+
+def _dec(value):
+    """The value as a Decimal, whatever the attribute currently holds.
+
+    A DecimalField declared ``default=0`` holds the plain int ``0`` until the
+    row is read back from the database, so ``value / 100`` produces a float and
+    the next Decimal operation raises TypeError. The forms always post
+    Decimals, so this only bites a script, a shell session or a bulk import —
+    which is exactly where a crash is least welcome.
+    """
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value or 0))
+
 
 
 class Supplier(models.Model):
@@ -291,9 +307,10 @@ class GeneralPurchaseItem(models.Model):
         return self.rcv_qty if basis == "Received Quantity" else self.sent_qty
 
     def save(self, *args, **kwargs):
-        qty = self.effective_qty()
-        subtotal = (qty * self.rate) * (1 - self.discount_percent / 100) - self.discount_amount
-        self.amount = subtotal * (1 + self.gst_percent / 100)
+        qty = _dec(self.effective_qty())
+        subtotal = ((qty * _dec(self.rate)) * (1 - _dec(self.discount_percent) / 100)
+                    - _dec(self.discount_amount))
+        self.amount = subtotal * (1 + _dec(self.gst_percent) / 100)
         super().save(*args, **kwargs)
 
 
@@ -457,15 +474,16 @@ class ChicksPurchaseItem(models.Model):
         return f"Batch {self.batch or self.id} ({self.purchase.purchase_no})"
 
     def save(self, *args, **kwargs):
-        free_from_sent = round(self.sent_qty * self.sent_free_percent / 100)
-        self.rcv_qty = (self.sent_qty + free_from_sent - self.mortality
-                        - self.shortage - self.weaks + self.excess_qty)
+        sent = _dec(self.sent_qty)
+        free_from_sent = round(sent * _dec(self.sent_free_percent) / 100)
+        self.rcv_qty = (sent + free_from_sent - _dec(self.mortality)
+                        - _dec(self.shortage) - _dec(self.weaks) + _dec(self.excess_qty))
         if self.rcv_free_percent:
-            self.total_qty = round(self.rcv_qty / (1 + self.rcv_free_percent / 100))
+            self.total_qty = round(_dec(self.rcv_qty) / (1 + _dec(self.rcv_free_percent) / 100))
         else:
             self.total_qty = self.rcv_qty
-        self.free_qty = self.rcv_qty - self.total_qty
-        self.amount = self.total_qty * self.rate
+        self.free_qty = _dec(self.rcv_qty) - _dec(self.total_qty)
+        self.amount = _dec(self.total_qty) * _dec(self.rate)
         super().save(*args, **kwargs)
 
 
