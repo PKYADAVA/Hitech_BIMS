@@ -60,7 +60,9 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
 
     # ---------------- inflows ----------------
     for r in scope(GeneralPurchaseItem.objects.exclude(farm_warehouse=None)).select_related("purchase"):
-        qty = _d(r.rcv_qty) + _d(r.free_qty)
+        # Billed on Sent or Received quantity per the header's basis; reading
+        # rcv_qty alone loses every purchase entered on the Sent basis.
+        qty = _d(r.effective_qty()) + _d(r.free_qty)
         cost = (_d(r.amount) / qty) if (qty > 0 and r.amount) else _d(r.rate)
         add(r.purchase.date, "warehouse", r.farm_warehouse_id, r.item_id, "in", qty, cost, 0)
 

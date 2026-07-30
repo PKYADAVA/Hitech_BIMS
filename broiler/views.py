@@ -5254,12 +5254,15 @@ def feed_dispatch_stock_report(request):
         purchase_qs = GeneralPurchaseItem.objects.filter(item_id__in=tracked_item_ids)
         purchase_qs = (purchase_qs.filter(farm_warehouse_id__in=scoped_warehouse_ids) if scoped_warehouse_ids is not None
                       else purchase_qs.filter(farm_warehouse__isnull=False))
-        purchase_qs = purchase_qs.select_related("purchase__supplier", "farm_warehouse")
+        purchase_qs = purchase_qs.select_related("purchase", "purchase__supplier", "farm_warehouse")
         for p in purchase_qs:
             events.append({
                 "date": p.purchase.date, "sort_key": (p.purchase.date, 1, -p.id), "kind": "receipt",
                 "source": "purchase", "item_id": p.item_id,
-                "qty_kg": (p.rcv_qty or Decimal("0")) + (p.free_qty or Decimal("0")),
+                # Sent or Received per the purchase's own basis: on the Sent
+                # basis (the default) rcv_qty stays zero, and reading it alone
+                # left every such receipt showing nothing here.
+                "qty_kg": (p.effective_qty() or Decimal("0")) + (p.free_qty or Decimal("0")),
                 "challan_no": p.purchase.dc_no, "txn_no": p.purchase.purchase_no,
                 "warehouse_id": p.farm_warehouse_id,
                 "warehouse_name": p.farm_warehouse.name, "branch_name": _branch_for_warehouse(p.farm_warehouse),

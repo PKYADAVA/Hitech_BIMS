@@ -7,7 +7,8 @@ from django.test import TestCase
 
 from account.models import AccountType, ChartOfAccount, CompanyProfile
 from hatchery.models import ChickSale, ChickSaleItem, EggPurchase, EggPurchaseItem
-from purchase.models import ChicksPurchase, ChicksPurchaseItem, Supplier
+from purchase.models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase,
+                             GeneralPurchaseItem, Supplier)
 from sales.models import Customer
 from inventory.services.item_summary import location_item_stock
 from inventory.services.valuation import item_ledger
@@ -227,3 +228,65 @@ class HatcheryStockVisibilityTests(TestCase):
         self.assertEqual(stock, Decimal("1100"))
         self.assertEqual(Decimal(str(location_item_stock(
             "warehouse", self.wh.id, self.item.id))), Decimal("1100"))
+
+
+class GeneralPurchaseBasisTests(TestCase):
+    """A General Purchase is billed on Sent or Received quantity.
+
+    calculation_based_on defaults to "Sent Quantity", and on that basis rcv_qty
+    is legitimately left at zero. Reading rcv_qty alone made every such
+    purchase invisible to stock and to the feed report.
+    """
+
+    def setUp(self):
+        get_user_model().objects.create_superuser("gp", "g@x.com", "Str0ngPass!")
+        self.warehouse = Warehouse.objects.create(name="Bahraich Warehouse")
+        self.item = Item.objects.create(
+            description="Pre Starter Feed",
+            category=ItemCategory.objects.create(name="Feed"),
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("50"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        self.supplier = Supplier.objects.create(name="Maharashtra Feeds Pvt Ltd")
+
+    def buy(self, basis, sent="0", rcv="0", free="0"):
+        purchase = GeneralPurchase.objects.create(
+            date=date(2026, 7, 21), supplier=self.supplier, calculation_based_on=basis)
+        GeneralPurchaseItem.objects.create(
+            purchase=purchase, item=self.item, farm_warehouse=self.warehouse,
+            sent_qty=Decimal(sent), rcv_qty=Decimal(rcv), free_qty=Decimal(free),
+            rate=Decimal("50"),
+            # The views always pass these as Decimals; the model's int defaults
+            # would make save() do Decimal * float and blow up.
+            discount_percent=Decimal("0"), discount_amount=Decimal("0"),
+            gst_percent=Decimal("0"))
+        return purchase
+
+    def test_sent_basis_purchase_reaches_stock(self):
+        # The reported case: sent 500, nothing booked as received.
+        self.buy("Sent Quantity", sent="500")
+        stock = warehouse_item_stock(self.item.id, self.warehouse.id)
+        print("RESULT sent-basis stock     %s" % stock)
+        self.assertEqual(stock, Decimal("500"))
+
+    def test_received_basis_purchase_uses_received(self):
+        self.buy("Received Quantity", sent="500", rcv="480")
+        stock = warehouse_item_stock(self.item.id, self.warehouse.id)
+        print("RESULT received-basis stock %s" % stock)
+        self.assertEqual(stock, Decimal("480"))
+
+    def test_free_quantity_is_added_on_either_basis(self):
+        self.buy("Sent Quantity", sent="500", free="20")
+        print("RESULT sent + free          %s" % warehouse_item_stock(self.item.id, self.warehouse.id))
+        self.assertEqual(warehouse_item_stock(self.item.id, self.warehouse.id), Decimal("520"))
+
+    def test_reports_agree_with_the_stock_function(self):
+        self.buy("Sent Quantity", sent="500")
+        expected = Decimal("500")
+        self.assertEqual(warehouse_item_stock(self.item.id, self.warehouse.id), expected)
+        loc = location_item_stock("warehouse", self.warehouse.id, self.item.id)
+        led = item_ledger(self.item.id, self.warehouse.id)
+        print("RESULT summary=%s ledger=%s" % (loc, led["closing"]["qty"]))
+        self.assertEqual(Decimal(str(loc)), expected)
+        self.assertEqual(led["closing"]["qty"], expected)
+

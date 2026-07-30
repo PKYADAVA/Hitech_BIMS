@@ -50,7 +50,8 @@ def warehouse_inflow_layers(item_id, warehouse_id, as_of_date=None):
     for r in _dcap(GeneralPurchaseItem.objects.filter(
             item_id=item_id, farm_warehouse_id=warehouse_id
     ).select_related("purchase"), "purchase__date", as_of_date):
-        qty = _q(r.rcv_qty) + _q(r.free_qty)
+        # Per the header's Sent/Received basis — see effective_qty().
+        qty = _q(r.effective_qty()) + _q(r.free_qty)
         if qty <= 0:
             continue
         # Landed unit cost = net line amount spread over received + free qty;
@@ -279,7 +280,7 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
     # ---- inflows ----
     for r in (GeneralPurchaseItem.objects.filter(item_id=item_id, farm_warehouse_id=warehouse_id)
               .select_related("purchase", "farm_warehouse")):
-        qty = _q(r.rcv_qty) + _q(r.free_qty)
+        qty = _q(r.effective_qty()) + _q(r.free_qty)
         cost = (_q(r.amount) / qty) if (qty > 0 and r.amount) else _q(r.rate)
         add(r.purchase.date, "in", (0, 0, r.id), qty, cost, "Purchase-RcvQty", "purchase",
             r.purchase.purchase_no, r.farm_warehouse.name if r.farm_warehouse_id else "",

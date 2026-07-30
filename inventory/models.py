@@ -866,9 +866,18 @@ def warehouse_item_stock(item_id, warehouse_id, as_of_date=None,
         return qs.filter(**{f"{date_field}__lte": as_of_date}) if as_of_date else qs
 
     # ---- inflows ----
+    # A General Purchase is billed on either Sent or Received quantity
+    # (GeneralPurchase.calculation_based_on, defaulting to Sent). On a Sent
+    # basis rcv_qty is legitimately left at zero, so reading it alone makes
+    # every such purchase invisible to stock — take the basis into account,
+    # exactly as GeneralPurchaseItem.effective_qty() does.
     purch = dfilt(GeneralPurchaseItem.objects.filter(
         item_id=item_id, farm_warehouse_id=warehouse_id), "purchase__date")
-    inflow = total(purch, "rcv_qty") + total(purch, "free_qty")
+    purch = purch.annotate(_received=Case(
+        When(purchase__calculation_based_on="Received Quantity", then=F("rcv_qty")),
+        default=F("sent_qty"),
+        output_field=DecimalField(max_digits=14, decimal_places=2)))
+    inflow = total(purch, "_received") + total(purch, "free_qty")
 
     tin = dfilt(StockTransfer.objects.filter(
         item_id=item_id, to_location_type="warehouse", to_warehouse_id=warehouse_id), "date")
