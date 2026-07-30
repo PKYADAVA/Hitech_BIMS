@@ -1,7 +1,9 @@
 """Tests for the chart-of-accounts engine: code generation, template
 generation, posting rules, auto-ledgers, opening balances and the REST APIs.
 """
+import datetime
 import json
+import re
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -17,8 +19,10 @@ from account.models import (
     CoATemplate,
     CompanyProfile,
     FinancialYear,
+    Voucher,
 )
-from account.services import AccountCodeGenerator, CoAGeneratorService
+from account.services import AccountCodeGenerator, CoAGeneratorService, journal
+from inventory.models import Warehouse
 
 
 class EngineTestCase(TestCase):
@@ -733,3 +737,117 @@ class CodeReuseAfterDeleteTests(EngineTestCase):
         )
         keep.soft_delete(user=self.user)
         self.assertNotEqual(self._leaf("Newcomer").code, keep.code)
+
+
+class JournalVoucherReportTests(TestCase):
+    """Account > Reports > Journal Voucher Report.
+
+    Covers the Journal Type column and filter, the drill-down to each
+    voucher's ledger lines, and the rule that money totals count Posted
+    vouchers only.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_coa_templates()
+        cls.company = CompanyProfile.get_solo()
+        cls.template = CoATemplate.objects.get(industry="Poultry")
+        cls.user = get_user_model().objects.create_superuser(
+            "jv", "jv@example.com", "Str0ngPass!")
+        cls.fy = FinancialYear.objects.create(
+            start_date=datetime.date(2026, 4, 1), end_date=datetime.date(2027, 3, 31),
+            is_active=True)
+
+    def setUp(self):
+        CoAGeneratorService(self.company, self.template, user=self.user).generate()
+        self.client.force_login(self.user)
+        self.cash = ChartOfAccount.objects.get(company=self.company, system_role="CASH_IN_HAND")
+        self.sales = ChartOfAccount.objects.get(company=self.company, description="Broiler Sales")
+        self.branch = Warehouse.objects.create(name="Akbarpur Farm")
+
+    def make(self, amount="1000", post=True, date="2026-05-01", vtype="Journal", **kw):
+        return journal.create_voucher(
+            company=self.company, date=date, user=self.user, post=post,
+            voucher_type=vtype,
+            lines_data=[
+                {"account": self.cash.id, "debit": amount, "credit": 0, "narration": "cash in"},
+                {"account": self.sales.id, "debit": 0, "credit": amount},
+            ], **kw)
+
+    def get(self, qs=""):
+        return self.client.get("/reports/journal-voucher/" + qs).content.decode()
+
+    def test_lists_vouchers_with_journal_type_column(self):
+        self.make(amount="1000")
+        self.make(amount="250", vtype="Payment")
+        html = self.get()
+        self.assertIn("<th>Journal Type</th>", html)
+        self.assertIn(">Journal</span>", html)
+        self.assertIn(">Payment</span>", html)
+
+    def test_totals_count_posted_only(self):
+        self.make(amount="1000")                 # posted
+        self.make(amount="500", post=False)      # draft — must not be counted
+        html = self.get()
+        self.assertIn("1,000.00", html)
+        # the draft still appears as a row
+        self.assertIn("Draft", html)
+
+    def test_journal_type_filter(self):
+        self.make(amount="1000", vtype="Journal")
+        self.make(amount="777", vtype="Payment")
+        only_payment = self.get("?journal_type=Payment")
+        self.assertIn("777.00", only_payment)
+        self.assertNotIn("1,000.00", only_payment)
+
+    def test_drilldown_shows_the_ledger_lines(self):
+        self.make(amount="1000")
+        html = self.get()
+        self.assertIn("jv-lines", html)
+        self.assertIn("Ledger Code", html)
+
+    def test_kpis_and_entry_count(self):
+        self.make(amount="1000")
+        self.make(amount="250")
+        html = self.get()
+        m = re.search(r'No\. of Entries</div><div class="k-num">(\d+)</div>', html)
+        self.assertEqual(m.group(1), "4")        # 2 vouchers x 2 lines
+        self.assertIn("Out of Balance", html)
+
+    def test_excel_export(self):
+        self.make(amount="1000")
+        resp = self.client.get("/reports/journal-voucher/?export=excel")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("spreadsheetml", resp["Content-Type"])
+
+    def test_column_alignment(self):
+        self.make(amount="1000")
+        html = self.get()
+        thead = re.search(r"<thead><tr>(.*?)</tr></thead>", html, re.S).group(1)
+        heads = len(re.findall(r"<th[^>]*>", thead))
+        body = re.search(r'<tr class="jv-row[^"]*"[^>]*>(.*?)</tr>', html, re.S).group(1)
+        cells = len(re.findall(r"<td[^>]*>", body))
+        # the drill-down tables have their own <tfoot>; the main one is last
+        tfoot = re.findall(r"<tfoot><tr>(.*?)</tr></tfoot>", html, re.S)[-1]
+        span = sum(int(m.group(1)) if m else 1
+                   for m in (re.search(r'colspan="(\d+)"', t)
+                             for t in re.findall(r"<td[^>]*>", tfoot)))
+        drill = re.search(r'<tr class="jv-lines[^"]*"[^>]*>\s*<td colspan="(\d+)"', html).group(1)
+        self.assertEqual([heads, cells, span, int(drill)], [14, 14, 14, 14])
+
+    def test_from_and_to_accounts_follow_the_money(self):
+        # Cash is debited, Broiler Sales credited: money moves from Sales to Cash.
+        self.make(amount="1000")
+        html = self.get()
+        head = re.search(r"<thead><tr>(.*?)</tr></thead>", html, re.S).group(1)
+        labels = [re.sub(r"<[^>]+>", "", h).strip()
+                  for h in re.findall(r"<th[^>]*>(.*?)</th>", head, re.S)]
+        self.assertEqual(labels[1:], [
+            "Date", "JV No.", "Journal Type", "Branch", "Profit Centre",
+            "Cost Centre", "From Account", "To Account", "Reference",
+            "Total Debit", "Total Credit", "Narration", "Status"])
+        row = re.search(r'<tr class="jv-row[^"]*"[^>]*>(.*?)</tr>', html, re.S).group(1)
+        cells = [re.sub(r"<[^>]+>", "", c).strip()
+                 for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
+        self.assertEqual(cells[7], "Broiler Sales")   # From = credited
+        self.assertEqual(cells[8], "Cash In Hand")    # To   = debited

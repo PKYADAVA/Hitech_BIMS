@@ -543,6 +543,9 @@
               {% if 'branch_summary_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'branch_summary_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-code-branch"></i>Branch Summary Report
               </a></li>{% endif %}
+              {% if 'journal_voucher_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'journal_voucher_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-book"></i>Journal Voucher Report
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

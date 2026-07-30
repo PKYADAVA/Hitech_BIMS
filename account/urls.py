@@ -33,6 +33,7 @@ urlpatterns = [
     path('reports/balance-sheet/', views.balance_sheet_report, name='balance_sheet_report'),
     path('reports/cost-center/', views.cost_center_report, name='cost_center_report'),
     path('reports/branch-summary/', views.branch_summary_report, name='branch_summary_report'),
+    path('reports/journal-voucher/', views.journal_voucher_report, name='journal_voucher_report'),
     path('coa/', views.coa, name='coa'),
     path('chart-of-accounts/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_list'),
     path('chart-of-accounts/create/', views.ChartOfAccountsAPI.as_view(), name='chart_of_accounts_create'),

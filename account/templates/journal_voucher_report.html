@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Journal Voucher Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}?v=20260730">
+<style>
+  /* Status pills — Posted green, Draft amber, Cancelled muted red. */
+  .jv-status { font-size:.68rem; font-weight:600; border-radius:.35rem; padding:.12em .55em; white-space:nowrap; }
+  .jv-posted    { background:#dcfce7; color:#15803d; }
+  .jv-draft     { background:#fef3c7; color:#b45309; }
+  .jv-cancelled { background:#fee2e2; color:#b91c1c; }
+  .jv-type      { background:#eef2ff; color:#4338ca; font-size:.68rem; font-weight:600;
+                  border-radius:.35rem; padding:.12em .55em; white-space:nowrap; }
+  tr.jv-row { cursor:pointer; }
+  tr.jv-row:hover { background:#f8fafc; }
+  tr.jv-cancelled-row td { color:#94a3b8; text-decoration:line-through; }
+  tr.jv-cancelled-row td .jv-status { text-decoration:none; }
+  /* Drill-down: the voucher's own lines, indented under it. */
+  tr.jv-lines > td { background:#f8fafc; padding:0 !important; }
+  .jv-lines-inner { padding:.5rem .75rem .65rem 2.2rem; }
+  .jv-lines-inner table { width:auto; min-width:60%; font-size:.72rem; margin:0; }
+  .jv-lines-inner th { background:#e8eef7 !important; color:#1b3a6b !important; font-weight:600; }
+  .jv-caret { transition:transform .15s ease; display:inline-block; }
+  tr.jv-row.open .jv-caret { transform:rotate(90deg); }
+  .jv-warn { color:#b91c1c; font-weight:700; }
+</style>
+{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+{% include '_account_report_subnavbar.html' with active_tab='journal_voucher_report' %}
+
+{% include '_report_letterhead.html' with title='Journal Voucher Report' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">Date From</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">Date To</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Cost Centre</label>
+      <select name="cost_centre" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for c in cost_centres %}<option value="{{ c.id }}" {% if cost_centre == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Voucher No.</label>
+      <input type="text" name="voucher_no" value="{{ voucher_no }}" class="form-control form-control-sm" placeholder="JV/2026-27/…"></div>
+    <div><label class="form-label">Ledger</label>
+      <select name="ledger" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for a in ledgers %}<option value="{{ a.id }}" {% if ledger == a.id|stringformat:'s' %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Journal Type</label>
+      <select name="journal_type" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for value, label in journal_types %}<option value="{{ value }}" {% if journal_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Status</label>
+      <select name="status" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for value, label in statuses %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Created By</label>
+      <select name="created_by" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for u in users %}<option value="{{ u.id }}" {% if created_by == u.id|stringformat:'s' %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Narration</label>
+      <input type="text" name="narration" value="{{ narration }}" class="form-control form-control-sm" placeholder="Contains…"></div>
+    <div class="rpt-actions">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-search me-1"></i>Apply Filter</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'journal_voucher_report' %}"><i class="fas fa-rotate-left me-1"></i>Reset</a>
+      <a class="btn btn-outline-success btn-sm" id="jv-excel" href="#"><i class="fas fa-file-excel me-1"></i>Excel</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="rpt-kpis">
+  <div class="rpt-kpi k-1"><div class="k-ico"><i class="fas fa-book"></i></div>
+    <div><div class="k-label">Total Journal Vouchers</div><div class="k-num">{{ rows|length }}</div>
+      <div class="k-sub">{{ counts.posted }} posted &middot; {{ counts.draft }} draft &middot; {{ counts.cancelled }} cancelled</div></div></div>
+  <div class="rpt-kpi k-2"><div class="k-ico"><i class="fas fa-arrow-right-to-bracket"></i></div>
+    <div><div class="k-label">Total Debit</div><div class="k-num">&#8377; {{ totals.debit|indian_currency }}</div>
+      <div class="k-sub">Posted only</div></div></div>
+  <div class="rpt-kpi k-3"><div class="k-ico"><i class="fas fa-arrow-right-from-bracket"></i></div>
+    <div><div class="k-label">Total Credit</div><div class="k-num">&#8377; {{ totals.credit|indian_currency }}</div>
+      <div class="k-sub">Posted only</div></div></div>
+  <div class="rpt-kpi k-4"><div class="k-ico"><i class="fas fa-list-ol"></i></div>
+    <div><div class="k-label">No. of Entries</div><div class="k-num">{{ counts.entries }}</div>
+      <div class="k-sub">Ledger lines</div></div></div>
+  <div class="rpt-kpi k-5"><div class="k-ico"><i class="fas fa-scale-unbalanced"></i></div>
+    <div><div class="k-label">Out of Balance</div>
+      <div class="k-num{% if counts.unbalanced %} jv-warn{% endif %}">{{ counts.unbalanced }}</div>
+      <div class="k-sub">Posted, Dr &ne; Cr</div></div></div>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if rows %}
+  <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+    <div class="small text-muted"><i class="fas fa-list me-1"></i>{{ rows|length }} voucher(s) — click a row for its ledger lines</div>
+    <button class="btn btn-outline-secondary btn-sm no-print" type="button" id="jv-toggle-all">
+      <i class="fas fa-angles-down me-1"></i>Expand all</button>
+  </div>
+  <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0" id="jv-table"
+         style="width:auto; min-width:100%; table-layout:auto;">
+    <thead><tr>
+      <th style="min-width:34px"></th>
+      <th>Date</th><th>JV No.</th><th>Journal Type</th><th>Branch</th>
+      <th>Profit Centre</th><th>Cost Centre</th>
+      <th>From Account</th><th>To Account</th><th>Reference</th>
+      <th class="num">Total Debit</th><th class="num">Total Credit</th>
+      <th>Narration</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="jv-row{% if r.status == 'Cancelled' %} jv-cancelled-row{% endif %}" data-target="jv-lines-{{ r.id }}">
+        <td class="text-center"><i class="fas fa-chevron-right jv-caret text-muted"></i></td>
+        <td>{{ r.date|date:"d.m.Y" }}</td>
+        <td>{{ r.voucher_no }}</td>
+        <td><span class="jv-type">{{ r.voucher_type }}</span></td>
+        <td>{{ r.branch }}</td>
+        <td>{{ r.profit_centre }}</td>
+        <td>{{ r.cost_centre }}</td>
+        <td>{{ r.from_account }}</td>
+        <td>{{ r.to_account }}</td>
+        <td>{{ r.reference }}</td>
+        <td class="num">{{ r.debit|indian_currency }}{% if r.unbalanced %} <i class="fas fa-triangle-exclamation jv-warn" title="Debit and credit disagree on a posted voucher"></i>{% endif %}</td>
+        <td class="num">{{ r.credit|indian_currency }}</td>
+        <td>{{ r.narration }}</td>
+        <td><span class="jv-status jv-{{ r.status|lower }}">{{ r.status }}</span>
+            {% if r.created_by %}<div class="text-muted" style="font-size:.62rem">{{ r.created_by }} &middot; {{ r.created_time|date:"d.m.Y H:i" }}</div>{% endif %}</td>
+      </tr>
+      <tr class="jv-lines d-none" id="jv-lines-{{ r.id }}">
+        <td colspan="14">
+          <div class="jv-lines-inner">
+            <table class="table table-bordered table-sm mb-0">
+              <thead><tr>
+                <th>S. No.</th><th>Ledger Code</th><th>Ledger Name</th><th>Cost Centre</th>
+                <th class="num">Debit</th><th class="num">Credit</th><th>Narration</th>
+              </tr></thead>
+              <tbody>
+                {% for l in r.lines %}
+                <tr>
+                  <td>{{ l.no }}</td><td>{{ l.code }}</td><td>{{ l.ledger }}</td>
+                  <td>{{ l.cost_centre }}</td>
+                  <td class="num">{% if l.debit %}{{ l.debit|indian_currency }}{% else %}—{% endif %}</td>
+                  <td class="num">{% if l.credit %}{{ l.credit|indian_currency }}{% else %}—{% endif %}</td>
+                  <td>{{ l.narration }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-muted">This voucher has no ledger lines.</td></tr>
+                {% endfor %}
+              </tbody>
+              <tfoot><tr>
+                <th colspan="4" class="text-end">Total</th>
+                <th class="num">{{ r.debit|indian_currency }}</th>
+                <th class="num">{{ r.credit|indian_currency }}</th>
+                <th></th>
+              </tr></tfoot>
+            </table>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr>
+      <td colspan="10" class="text-end">Grand Total <span class="text-muted">(posted vouchers)</span></td>
+      <td class="num">{{ totals.debit|indian_currency }}</td>
+      <td class="num">{{ totals.credit|indian_currency }}</td>
+      <td colspan="2"></td>
+    </tr></tfoot>
+  </table>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas fa-book fa-2x mb-2 d-block"></i>
+    No journal vouchers match these filters.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}
+
+{% block js %}
+<script>
+// Excel keeps whatever filters are currently applied on the page.
+document.getElementById('jv-excel').addEventListener('click', function (e) {
+  e.preventDefault();
+  const params = new URLSearchParams(window.location.search);
+  params.set('export', 'excel');
+  window.location.href = `{% url 'journal_voucher_report' %}?${params}`;
+});
+
+{% if rows %}
+// Click a voucher to reveal its ledger lines beneath it.
+document.querySelectorAll('#jv-table tr.jv-row').forEach(function (tr) {
+  tr.addEventListener('click', function () {
+    document.getElementById(tr.dataset.target).classList.toggle('d-none');
+    tr.classList.toggle('open');
+  });
+});
+
+const toggleAll = document.getElementById('jv-toggle-all');
+toggleAll.addEventListener('click', function () {
+  const expand = toggleAll.dataset.expanded !== 'true';
+  document.querySelectorAll('#jv-table tr.jv-lines').forEach(function (tr) {
+    tr.classList.toggle('d-none', !expand);
+  });
+  document.querySelectorAll('#jv-table tr.jv-row').forEach(function (tr) {
+    tr.classList.toggle('open', expand);
+  });
+  toggleAll.dataset.expanded = expand ? 'true' : 'false';
+  toggleAll.innerHTML = expand
+    ? '<i class="fas fa-angles-up me-1"></i>Collapse all'
+    : '<i class="fas fa-angles-down me-1"></i>Expand all';
+});
+
+// Printing should show everything, not just what happens to be open.
+window.addEventListener('beforeprint', function () {
+  document.querySelectorAll('#jv-table tr.jv-lines').forEach(function (tr) {
+    tr.classList.remove('d-none');
+  });
+});
+{% endif %}
+</script>
+{% endblock %}

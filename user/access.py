@@ -257,6 +257,7 @@ MODULE_REGISTRY = [
                     ("cost_center_report", "Cost Center Report", (
                         "api_cost_center_report",
                     )),
+                    ("journal_voucher_report", "Journal Voucher Report"),
                     ("branch_summary_report", "Branch Summary Report", (
                         "api_branch_summary_report",
                     )),

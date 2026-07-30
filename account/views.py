@@ -1026,3 +1026,214 @@ class TermsConditionsAPI(View):
         terms_conditions.delete()
         return JsonResponse({"message": "TermsConditions deleted"})
 
+
+# ------------------------------------------------------------ journal voucher report
+
+JV_REPORT_COLUMNS = [
+    ("Date", "date"), ("JV No.", "voucher_no"), ("Journal Type", "voucher_type"),
+    ("Branch", "branch"), ("Profit Centre", "profit_centre"),
+    ("Cost Centre", "cost_centre"), ("From Account", "from_account"),
+    ("To Account", "to_account"), ("Reference", "reference"),
+    ("Total Debit", "debit"), ("Total Credit", "credit"),
+    ("Narration", "narration"), ("Status", "status"),
+]
+
+
+@login_required(login_url="login")
+def journal_voucher_report(request):
+    """Account > Reports > Journal Voucher Report — every voucher in a date
+    range with its journal type, branch, cost centres, narration and totals,
+    each expandable to its own ledger lines.
+
+    Money totals count Posted vouchers only: a Draft is not in the books yet and
+    a Cancelled one has been taken out, so adding either would disagree with the
+    ledger and the trial balance. Both are still listed, and the KPI strip
+    reports them separately rather than hiding them.
+    """
+    from decimal import Decimal
+    from django.utils.dateparse import parse_date
+    from django.contrib.auth import get_user_model
+    from account.models import Voucher, VoucherLine
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    branch, cost_centre = g("branch"), g("cost_centre")
+    voucher_no, ledger = g("voucher_no"), g("ledger")
+    journal_type, status = g("journal_type"), g("status")
+    created_by, narration = g("created_by"), g("narration")
+    export = g("export").lower()
+
+    qs = (Voucher.objects
+          .select_related("sector", "created_by")
+          .prefetch_related("lines__account", "lines__cost_center")
+          .order_by("-date", "-id"))
+
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+    if fd:
+        qs = qs.filter(date__gte=fd)
+    if td:
+        qs = qs.filter(date__lte=td)
+    if branch:
+        qs = qs.filter(sector_id=branch)
+    if voucher_no:
+        qs = qs.filter(voucher_no__icontains=voucher_no)
+    if journal_type:
+        qs = qs.filter(voucher_type=journal_type)
+    if status:
+        qs = qs.filter(status=status)
+    if created_by:
+        qs = qs.filter(created_by_id=created_by)
+    if narration:
+        qs = qs.filter(narration__icontains=narration)
+    # Line-level filters match a voucher when any of its lines match.
+    if cost_centre:
+        qs = qs.filter(lines__cost_center_id=cost_centre).distinct()
+    if ledger:
+        qs = qs.filter(lines__account_id=ledger).distinct()
+
+    rows = []
+    totals = {"debit": Decimal("0"), "credit": Decimal("0")}
+    counts = {"posted": 0, "draft": 0, "cancelled": 0, "entries": 0, "unbalanced": 0}
+    for v in qs:
+        lines = list(v.lines.all())
+
+        def centres_of(*categories):
+            """Distinct centre names on this voucher's lines, by category.
+            A centre marked BOTH counts as profit and cost alike."""
+            return ", ".join(dict.fromkeys(
+                ln.cost_center.name for ln in lines
+                if ln.cost_center_id and ln.cost_center.category in categories))
+
+        # Money moves from the credited account to the debited one, so From is
+        # the credit side and To is the debit side.
+        def accounts_on(side):
+            return ", ".join(dict.fromkeys(
+                ln.account.description for ln in lines
+                if ln.account_id and (ln.credit if side == "credit" else ln.debit)))
+
+        centres = centres_of("COST", "BOTH")
+        profit_centres = centres_of("PROFIT", "BOTH")
+        debit = Decimal(str(v.total_debit or 0))
+        credit = Decimal(str(v.total_credit or 0))
+        counts["entries"] += len(lines)
+        counts[v.status.lower()] = counts.get(v.status.lower(), 0) + 1
+        # A posted voucher whose sides disagree is a data-integrity problem, not
+        # a rounding quirk — surface it rather than letting it sit in a total.
+        unbalanced = v.status == "Posted" and debit != credit
+        if unbalanced:
+            counts["unbalanced"] += 1
+        if v.status == "Posted":
+            totals["debit"] += debit
+            totals["credit"] += credit
+        rows.append({
+            "id": v.id,
+            "date": v.date,
+            "voucher_no": v.voucher_no or "—",
+            "voucher_type": v.voucher_type,
+            "branch": v.sector.name if v.sector_id else "",
+            "profit_centre": profit_centres,
+            "cost_centre": centres,
+            "from_account": accounts_on("credit"),
+            "to_account": accounts_on("debit"),
+            "narration": v.narration or "",
+            "reference": v.reference or "",
+            "debit": debit, "credit": credit,
+            "status": v.status,
+            "unbalanced": unbalanced,
+            "created_by": ((v.created_by.get_full_name() or v.created_by.username)
+                           if v.created_by_id else ""),
+            "created_time": v.created_at,
+            "lines": [{
+                "no": ln.line_no,
+                "ledger": ln.account.description if ln.account_id else "",
+                "code": ln.account.code if ln.account_id else "",
+                "debit": ln.debit, "credit": ln.credit,
+                "cost_centre": ln.cost_center.name if ln.cost_center_id else "",
+                "narration": ln.narration or "",
+            } for ln in lines],
+        })
+
+    criteria = "From: %s   To: %s   %d voucher(s)" % (
+        from_date or "Beginning", to_date or "Date", len(rows))
+
+    context = {
+        "rows": rows, "totals": totals, "counts": counts, "criteria": criteria,
+        "columns": JV_REPORT_COLUMNS,
+        "from_date": from_date, "to_date": to_date, "branch": branch,
+        "cost_centre": cost_centre, "voucher_no": voucher_no, "ledger": ledger,
+        "journal_type": journal_type, "status": status,
+        "created_by": created_by, "narration": narration,
+        "branches": Warehouse.objects.order_by("name"),
+        "cost_centres": OrganizationCentre.objects.order_by("name"),
+        "ledgers": ChartOfAccount.objects.filter(is_postable=True).order_by("code"),
+        "journal_types": Voucher.TYPE_CHOICES,
+        "statuses": Voucher.STATUS_CHOICES,
+        "users": get_user_model().objects.filter(
+            id__in=Voucher.objects.exclude(created_by=None)
+            .values_list("created_by_id", flat=True)).order_by("username"),
+        "company": CompanyProfile.get_solo(),
+    }
+    if export == "excel":
+        return _journal_voucher_excel(context)
+    return render(request, "journal_voucher_report.html", context)
+
+
+def _journal_voucher_excel(ctx):
+    """Stream the Journal Voucher Report as an .xlsx workbook, each voucher
+    followed by its own ledger lines so the export stands on its own."""
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Journal Vouchers"
+    bold = Font(bold=True)
+
+    ws.append([ctx["company"].name if ctx["company"] else ""])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Journal Voucher Report"])
+    ws["A2"].font = bold
+    ws.append([ctx["criteria"]])
+    ws.append([])
+
+    head_row = ws.max_row + 1
+    ws.append([label for label, _key in ctx["columns"]])
+    fill = PatternFill("solid", fgColor="1B3A6B")
+    for cell in ws[head_row]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = fill
+        cell.alignment = Alignment(horizontal="center", wrap_text=True)
+
+    for row in ctx["rows"]:
+        ws.append([
+            row["date"].strftime("%d.%m.%Y") if row["date"] else "",
+            row["voucher_no"], row["voucher_type"], row["branch"],
+            row["profit_centre"], row["cost_centre"],
+            row["from_account"], row["to_account"], row["reference"],
+            row["debit"], row["credit"], row["narration"], row["status"],
+        ])
+        for line in row["lines"]:
+            detail = ws.max_row + 1
+            ws.append(["", "   %s" % line["no"], line["code"], line["ledger"],
+                       "", line["cost_centre"], "", "", "",
+                       line["debit"], line["credit"], line["narration"], ""])
+            for cell in ws[detail]:
+                cell.font = Font(italic=True, color="555555")
+
+    total = ws.max_row + 1
+    ws.append(["", "", "", "", "", "", "", "", "Grand Total (Posted)",
+               ctx["totals"]["debit"], ctx["totals"]["credit"], "", ""])
+    for cell in ws[total]:
+        cell.font = bold
+
+    for idx, (label, _key) in enumerate(ctx["columns"], start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = max(14, len(label) + 4)
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="journal_voucher_report.xlsx"'
+    wb.save(response)
+    return response
