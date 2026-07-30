@@ -50,7 +50,9 @@
                     <form id="item-form">
                         {% csrf_token %}
                         <input type="hidden" id="item-id" />
-                                                <div class="row g-3">
+                        <div class="fw-semibold text-primary mb-3">Basic Information <i class="fas fa-circle-info text-muted ms-1" title="Fields marked * are required"></i></div>
+                                                
+                                                    <div class="row g-3">
                             <div class="col-md-3">
                             <label for="item_code" class="form-label">Item Code</label>
                             <input
@@ -61,17 +63,16 @@
                                 placeholder="Auto-generated"
                             />
                         </div>
-                            <div class="col-md-5">
-                            <label for="description" class="form-label">Description</label>
+                            <div class="col-md-3">
+                            <label for="description" class="form-label">Description <span class="text-danger">*</span></label>
                             <textarea
                                 id="description"
                                 class="form-control"
                                 placeholder="Enter item description"
-                                rows="3"
-                            ></textarea>
+                                rows="1" required></textarea>
                         </div>
-                            <div class="col-md-4">
-                            <label for="category" class="form-label">Category</label>
+                            <div class="col-md-3">
+                            <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
                             <select id="category" class="form-select" required>
                                 <option value="" selected disabled>Select category</option>
                                 {% for category in categories %}
@@ -79,41 +80,9 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <label for="warehouse" class="form-label mb-0">Warehouse</label>
-                                <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#warehouse">Select All</button>
-                            </div>
-                            <select id="warehouse" class="form-select" multiple>
-                                <option value="__all__">-- All Warehouses --</option>
-                                {% for warehouse in warehouses %}
-                                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
                             <div class="col-md-3">
-                            <label for="valuation_method" class="form-label">Valuation Method</label>
-                            <select id="valuation_method" class="form-select" required>
-                                <option value="" selected disabled>Select valuation method</option>
-                                <option value="Weighted Average">Weighted Average</option>
-                                <option value="Standard Costing">Standard Costing</option>
-                                <option value="FIFO">FIFO (First In, First Out)</option>
-                                <option value="LIFO">LIFO (Last In, First Out)</option>
-                                <option value="FEFO">FEFO (First Expiry, First Out)</option>
-                            </select>
-                        </div>
-                            <div class="col-md-3">
-                            <label for="standard_cost_per_unit" class="form-label">Standard Cost/Unit</label>
-                            <input
-                                type="number"
-                                id="standard_cost_per_unit"
-                                class="form-control"
-                                placeholder="Enter standard cost per unit"
-                                step="0.01"
-                                required
-                            />
+                            <label for="hsn_code" class="form-label">HSN / SAC</label>
+                            <input type="text" id="hsn_code" class="form-control" placeholder="e.g. 01051100" maxlength="100">
                         </div>
                         </div>
                         <div class="row g-3">
@@ -127,16 +96,6 @@
                                 step="0.01"
                                 min="0"
                             />
-                            <div class="form-text">Weight of one bag. Feed reports are measured in
-                                bags and cannot convert an item without this.</div>
-                        </div>
-                            <div class="col-md-3">
-                            <label for="usage" class="form-label">Usage</label>
-                            <select id="usage" class="form-select">
-                                <option value="" selected disabled>Select usage</option>
-                                <option value="Produced">Produced</option>
-                                <option value="Sales">Sales</option>
-                            </select>
                         </div>
                             <div class="col-md-3">
                             <label for="storage_uom" class="form-label">Storage UOM</label>
@@ -156,22 +115,60 @@
                                 {% endfor %}
                             </select>
                         </div>
+                            <div class="col-md-3">
+                            <label for="valuation_method" class="form-label">Valuation Method <span class="text-danger">*</span></label>
+                            <select id="valuation_method" class="form-select" required>
+                                <option value="" selected disabled>Select valuation method</option>
+                                <option value="Weighted Average">Weighted Average</option>
+                                <option value="Standard Costing">Standard Costing</option>
+                                <option value="FIFO">FIFO (First In, First Out)</option>
+                                <option value="LIFO">LIFO (Last In, First Out)</option>
+                                <option value="FEFO">FEFO (First Expiry, First Out)</option>
+                            </select>
+                        </div>
                         </div>
                         <div class="row g-3">
-                            <div class="col-md-4">
-                            <label for="hsn_code" class="form-label">HSN / SAC</label>
-                            <input type="text" id="hsn_code" class="form-control" placeholder="e.g. 01051100" maxlength="100">
+                            <div class="col-md-3">
+                            <label for="standard_cost_per_unit" class="form-label">Standard Cost/Unit <span class="text-danger">*</span></label>
+                            <input
+                                type="number"
+                                id="standard_cost_per_unit"
+                                class="form-control"
+                                placeholder="Enter standard cost per unit"
+                                step="0.01"
+                                required
+                            />
+                        </div>
+                            <div class="col-md-3">
+                            <label for="usage" class="form-label">Usage <span class="text-danger">*</span></label>
+                            <select id="usage" class="form-select" required>
+                                <option value="" selected disabled>Select usage</option>
+                                <option value="Produced">Produced</option>
+                                <option value="Sales">Sales</option>
+                            </select>
+                        </div>
+                            <div class="col-md-6">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label for="warehouse" class="form-label mb-0">Warehouse</label>
+                                <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#warehouse">Select All</button>
+                            </div>
+                            <select id="warehouse" class="form-select" multiple>
+                                <option value="__all__">-- All Warehouses --</option>
+                                {% for warehouse in warehouses %}
+                                    <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                         </div>
                         <div class="d-flex justify-content-end gap-2 mt-3">
                             <button
                                 type="button"
-                                class="btn btn-secondary"
+                                class="btn btn-danger"
                                 data-bs-dismiss="modal"
                             >
-                                Cancel
+                                <i class="fas fa-circle-xmark me-1"></i>Cancel
                             </button>
-                            <button type="submit" class="btn btn-primary">Save</button>
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Submit</button>
                         </div>
                     </form>
                 </div>
@@ -361,41 +358,24 @@
                                 <form id="dynamic-item-form">
                                     {% csrf_token %}
                                     <input type="hidden" id="edit-item-id" value="${itemData.id}" />
-                                                                        <div class="row g-3">
+                                    <div class="fw-semibold text-primary mb-3">Basic Information <i class="fas fa-circle-info text-muted ms-1" title="Fields marked * are required"></i></div>
+                                                                        
+                                                                            <div class="row g-3">
                                         <div class="col-md-3">
                                         <label for="dynamic-item_code" class="form-label">Item Code</label>
                                         <input type="text" id="dynamic-item_code" class="form-control bg-light" value="${itemData.item_code}" readonly />
                                     </div>
-                                        <div class="col-md-5">
-                                        <label for="dynamic-description" class="form-label">Description</label>
-                                        <textarea id="dynamic-description" class="form-control" rows="3" required>${itemData.description}</textarea>
+                                        <div class="col-md-3">
+                                        <label for="dynamic-description" class="form-label">Description <span class="text-danger">*</span></label>
+                                        <textarea id="dynamic-description" class="form-control" rows="1" required>${itemData.description}</textarea>
                                     </div>
-                                        <div class="col-md-4">
-                                        <label for="dynamic-category" class="form-label">Category</label>
+                                        <div class="col-md-3">
+                                        <label for="dynamic-category" class="form-label">Category <span class="text-danger">*</span></label>
                                         <select id="dynamic-category" class="form-select" required>${categoryOptionsHtml(itemData.category)}</select>
                                     </div>
-                                    </div>
-                                    <div class="row g-3">
-                                        <div class="col-md-6">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <label for="dynamic-warehouse" class="form-label mb-0">Warehouse</label>
-                                            <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#dynamic-warehouse">Select All</button>
-                                        </div>
-                                        <select id="dynamic-warehouse" class="form-select" multiple>${warehouseOptionsHtml(itemData.warehouse)}</select>
-                                    </div>
                                         <div class="col-md-3">
-                                        <label for="dynamic-valuation_method" class="form-label">Valuation Method</label>
-                                        <select id="dynamic-valuation_method" class="form-select" required>
-                                            <option value="Weighted Average" ${itemData.valuation_method === "Weighted Average" ? "selected" : ""}>Weighted Average</option>
-                                            <option value="Standard Costing" ${itemData.valuation_method === "Standard Costing" ? "selected" : ""}>Standard Costing</option>
-                                            <option value="FIFO" ${itemData.valuation_method === "FIFO" ? "selected" : ""}>FIFO (First In, First Out)</option>
-                                            <option value="LIFO" ${itemData.valuation_method === "LIFO" ? "selected" : ""}>LIFO (Last In, First Out)</option>
-                                            <option value="FEFO" ${itemData.valuation_method === "FEFO" ? "selected" : ""}>FEFO (First Expiry, First Out)</option>
-                                        </select>
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-standard_cost_per_unit" class="form-label">Standard Cost/Unit</label>
-                                        <input type="number" id="dynamic-standard_cost_per_unit" class="form-control" value="${itemData.standard_cost_per_unit}" step="0.01" required />
+                                        <label for="dynamic-hsn_code" class="form-label">HSN / SAC</label>
+                                        <input type="text" id="dynamic-hsn_code" class="form-control" maxlength="100" value="${itemData.hsn_code ?? ""}">
                                     </div>
                                     </div>
                                     <div class="row g-3">
@@ -403,15 +383,6 @@
                                         <label for="dynamic-kg_per_bag" class="form-label">Kg per Bag</label>
                                         <input type="number" id="dynamic-kg_per_bag" class="form-control"
                                                value="${itemData.kg_per_bag ?? ''}" step="0.01" min="0" placeholder="e.g. 50" />
-                                        <div class="form-text">Feed reports are measured in bags and
-                                            cannot convert an item without this.</div>
-                                    </div>
-                                        <div class="col-md-3">
-                                        <label for="dynamic-usage" class="form-label">Usage</label>
-                                        <select id="dynamic-usage" class="form-select" required>
-                                            <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
-                                            <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
-                                        </select>
                                     </div>
                                         <div class="col-md-3">
                                         <label for="dynamic-storage_uom" class="form-label">Storage UOM</label>
@@ -421,16 +392,40 @@
                                         <label for="dynamic-consumption_uom" class="form-label">Consumption UOM</label>
                                         <select id="dynamic-consumption_uom" class="form-select">${uomOptionsHtml(itemData.consumption_uom)}</select>
                                     </div>
+                                        <div class="col-md-3">
+                                        <label for="dynamic-valuation_method" class="form-label">Valuation Method <span class="text-danger">*</span></label>
+                                        <select id="dynamic-valuation_method" class="form-select" required>
+                                            <option value="Weighted Average" ${itemData.valuation_method === "Weighted Average" ? "selected" : ""}>Weighted Average</option>
+                                            <option value="Standard Costing" ${itemData.valuation_method === "Standard Costing" ? "selected" : ""}>Standard Costing</option>
+                                            <option value="FIFO" ${itemData.valuation_method === "FIFO" ? "selected" : ""}>FIFO (First In, First Out)</option>
+                                            <option value="LIFO" ${itemData.valuation_method === "LIFO" ? "selected" : ""}>LIFO (Last In, First Out)</option>
+                                            <option value="FEFO" ${itemData.valuation_method === "FEFO" ? "selected" : ""}>FEFO (First Expiry, First Out)</option>
+                                        </select>
+                                    </div>
                                     </div>
                                     <div class="row g-3">
-                                        <div class="col-md-4">
-                                        <label for="dynamic-hsn_code" class="form-label">HSN / SAC</label>
-                                        <input type="text" id="dynamic-hsn_code" class="form-control" maxlength="100" value="${itemData.hsn_code ?? ""}">
+                                        <div class="col-md-3">
+                                        <label for="dynamic-standard_cost_per_unit" class="form-label">Standard Cost/Unit <span class="text-danger">*</span></label>
+                                        <input type="number" id="dynamic-standard_cost_per_unit" class="form-control" value="${itemData.standard_cost_per_unit}" step="0.01" required />
+                                    </div>
+                                        <div class="col-md-3">
+                                        <label for="dynamic-usage" class="form-label">Usage <span class="text-danger">*</span></label>
+                                        <select id="dynamic-usage" class="form-select" required>
+                                            <option value="Produced" ${itemData.usage === "Produced" ? "selected" : ""}>Produced</option>
+                                            <option value="Sales" ${itemData.usage === "Sales" ? "selected" : ""}>Sales</option>
+                                        </select>
+                                    </div>
+                                        <div class="col-md-6">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <label for="dynamic-warehouse" class="form-label mb-0">Warehouse</label>
+                                            <button type="button" class="btn btn-link btn-sm p-0 select-all-warehouses" data-target="#dynamic-warehouse">Select All</button>
+                                        </div>
+                                        <select id="dynamic-warehouse" class="form-select" multiple>${warehouseOptionsHtml(itemData.warehouse)}</select>
                                     </div>
                                     </div>
                                     <div class="d-flex justify-content-end gap-2 mt-3">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" class="btn btn-primary">Update</button>
+                                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal"><i class="fas fa-circle-xmark me-1"></i>Cancel</button>
+                                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Update</button>
                                     </div>
                                 </form>
                             </div>
