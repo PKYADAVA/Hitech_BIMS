@@ -833,7 +833,7 @@ class JournalVoucherReportTests(TestCase):
                    for m in (re.search(r'colspan="(\d+)"', t)
                              for t in re.findall(r"<td[^>]*>", tfoot)))
         drill = re.search(r'<tr class="jv-lines[^"]*"[^>]*>\s*<td colspan="(\d+)"', html).group(1)
-        self.assertEqual([heads, cells, span, int(drill)], [14, 14, 14, 14])
+        self.assertEqual([heads, cells, span, int(drill)], [15, 15, 15, 15])
 
     def test_from_and_to_accounts_follow_the_money(self):
         # Cash is debited, Broiler Sales credited: money moves from Sales to Cash.
@@ -843,11 +843,12 @@ class JournalVoucherReportTests(TestCase):
         labels = [re.sub(r"<[^>]+>", "", h).strip()
                   for h in re.findall(r"<th[^>]*>(.*?)</th>", head, re.S)]
         self.assertEqual(labels[1:], [
-            "Date", "JV No.", "Journal Type", "Branch", "Profit Centre",
-            "Cost Centre", "From Account", "To Account", "Reference",
-            "Total Debit", "Total Credit", "Narration", "Status"])
+            "Date", "JV No.", "Journal Type", "Branch", "Profit / Cost Centre",
+            "From Account", "To Account", "Reference",
+            "Total Debit", "Total Credit", "Narration", "Status",
+            "Created By", "Created Time"])
         row = re.search(r'<tr class="jv-row[^"]*"[^>]*>(.*?)</tr>', html, re.S).group(1)
         cells = [re.sub(r"<[^>]+>", "", c).strip()
                  for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
-        self.assertEqual(cells[7], "Broiler Sales")   # From = credited
-        self.assertEqual(cells[8], "Cash In Hand")    # To   = debited
+        self.assertEqual(cells[6], "Broiler Sales")   # From = credited
+        self.assertEqual(cells[7], "Cash In Hand")    # To   = debited

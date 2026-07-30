@@ -41,7 +41,7 @@
       <select name="branch" class="form-select form-select-sm"><option value="">-All-</option>
         {% for b in branches %}<option value="{{ b.id }}" {% if branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
       </select></div>
-    <div><label class="form-label">Cost Centre</label>
+    <div><label class="form-label">Profit / Cost Centre</label>
       <select name="cost_centre" class="form-select form-select-sm"><option value="">-All-</option>
         {% for c in cost_centres %}<option value="{{ c.id }}" {% if cost_centre == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
       </select></div>
@@ -105,10 +105,10 @@
     <thead><tr>
       <th style="min-width:34px"></th>
       <th>Date</th><th>JV No.</th><th>Journal Type</th><th>Branch</th>
-      <th>Profit Centre</th><th>Cost Centre</th>
+      <th>Profit / Cost Centre</th>
       <th>From Account</th><th>To Account</th><th>Reference</th>
       <th class="num">Total Debit</th><th class="num">Total Credit</th>
-      <th>Narration</th><th>Status</th>
+      <th>Narration</th><th>Status</th><th>Created By</th><th>Created Time</th>
     </tr></thead>
     <tbody>
       {% for r in rows %}
@@ -118,19 +118,19 @@
         <td>{{ r.voucher_no }}</td>
         <td><span class="jv-type">{{ r.voucher_type }}</span></td>
         <td>{{ r.branch }}</td>
-        <td>{{ r.profit_centre }}</td>
-        <td>{{ r.cost_centre }}</td>
+        <td>{{ r.centre }}</td>
         <td>{{ r.from_account }}</td>
         <td>{{ r.to_account }}</td>
         <td>{{ r.reference }}</td>
         <td class="num">{{ r.debit|indian_currency }}{% if r.unbalanced %} <i class="fas fa-triangle-exclamation jv-warn" title="Debit and credit disagree on a posted voucher"></i>{% endif %}</td>
         <td class="num">{{ r.credit|indian_currency }}</td>
         <td>{{ r.narration }}</td>
-        <td><span class="jv-status jv-{{ r.status|lower }}">{{ r.status }}</span>
-            {% if r.created_by %}<div class="text-muted" style="font-size:.62rem">{{ r.created_by }} &middot; {{ r.created_time|date:"d.m.Y H:i" }}</div>{% endif %}</td>
+        <td><span class="jv-status jv-{{ r.status|lower }}">{{ r.status }}</span></td>
+        <td>{{ r.created_by }}</td>
+        <td>{{ r.created_time|date:"d.m.Y H:i" }}</td>
       </tr>
       <tr class="jv-lines d-none" id="jv-lines-{{ r.id }}">
-        <td colspan="14">
+        <td colspan="15">
           <div class="jv-lines-inner">
             <table class="table table-bordered table-sm mb-0">
               <thead><tr>
@@ -163,10 +163,10 @@
       {% endfor %}
     </tbody>
     <tfoot><tr>
-      <td colspan="10" class="text-end">Grand Total <span class="text-muted">(posted vouchers)</span></td>
+      <td colspan="9" class="text-end">Grand Total <span class="text-muted">(posted vouchers)</span></td>
       <td class="num">{{ totals.debit|indian_currency }}</td>
       <td class="num">{{ totals.credit|indian_currency }}</td>
-      <td colspan="2"></td>
+      <td colspan="4"></td>
     </tr></tfoot>
   </table>
   {% else %}

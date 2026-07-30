@@ -1031,11 +1031,12 @@ class TermsConditionsAPI(View):
 
 JV_REPORT_COLUMNS = [
     ("Date", "date"), ("JV No.", "voucher_no"), ("Journal Type", "voucher_type"),
-    ("Branch", "branch"), ("Profit Centre", "profit_centre"),
-    ("Cost Centre", "cost_centre"), ("From Account", "from_account"),
+    ("Branch", "branch"), ("Profit / Cost Centre", "centre"),
+    ("From Account", "from_account"),
     ("To Account", "to_account"), ("Reference", "reference"),
     ("Total Debit", "debit"), ("Total Credit", "credit"),
     ("Narration", "narration"), ("Status", "status"),
+    ("Created By", "created_by"), ("Created Time", "created_time"),
 ]
 
 
@@ -1100,12 +1101,11 @@ def journal_voucher_report(request):
     for v in qs:
         lines = list(v.lines.all())
 
-        def centres_of(*categories):
-            """Distinct centre names on this voucher's lines, by category.
-            A centre marked BOTH counts as profit and cost alike."""
-            return ", ".join(dict.fromkeys(
-                ln.cost_center.name for ln in lines
-                if ln.cost_center_id and ln.cost_center.category in categories))
+        # One column for the centre, whichever kind applies: a centre is a cost
+        # centre, a profit centre, or both, and the voucher simply carries the
+        # one it was booked against.
+        centres = ", ".join(dict.fromkeys(
+            ln.cost_center.name for ln in lines if ln.cost_center_id))
 
         # Money moves from the credited account to the debited one, so From is
         # the credit side and To is the debit side.
@@ -1114,8 +1114,6 @@ def journal_voucher_report(request):
                 ln.account.description for ln in lines
                 if ln.account_id and (ln.credit if side == "credit" else ln.debit)))
 
-        centres = centres_of("COST", "BOTH")
-        profit_centres = centres_of("PROFIT", "BOTH")
         debit = Decimal(str(v.total_debit or 0))
         credit = Decimal(str(v.total_credit or 0))
         counts["entries"] += len(lines)
@@ -1134,8 +1132,7 @@ def journal_voucher_report(request):
             "voucher_no": v.voucher_no or "—",
             "voucher_type": v.voucher_type,
             "branch": v.sector.name if v.sector_id else "",
-            "profit_centre": profit_centres,
-            "cost_centre": centres,
+            "centre": centres,
             "from_account": accounts_on("credit"),
             "to_account": accounts_on("debit"),
             "narration": v.narration or "",
@@ -1211,21 +1208,23 @@ def _journal_voucher_excel(ctx):
         ws.append([
             row["date"].strftime("%d.%m.%Y") if row["date"] else "",
             row["voucher_no"], row["voucher_type"], row["branch"],
-            row["profit_centre"], row["cost_centre"],
+            row["centre"],
             row["from_account"], row["to_account"], row["reference"],
             row["debit"], row["credit"], row["narration"], row["status"],
+            row["created_by"],
+            row["created_time"].strftime("%d.%m.%Y %H:%M") if row["created_time"] else "",
         ])
         for line in row["lines"]:
             detail = ws.max_row + 1
             ws.append(["", "   %s" % line["no"], line["code"], line["ledger"],
-                       "", line["cost_centre"], "", "", "",
-                       line["debit"], line["credit"], line["narration"], ""])
+                       line["cost_centre"], "", "", "",
+                       line["debit"], line["credit"], line["narration"], "", "", ""])
             for cell in ws[detail]:
                 cell.font = Font(italic=True, color="555555")
 
     total = ws.max_row + 1
-    ws.append(["", "", "", "", "", "", "", "", "Grand Total (Posted)",
-               ctx["totals"]["debit"], ctx["totals"]["credit"], "", ""])
+    ws.append(["", "", "", "", "", "", "", "Grand Total (Posted)",
+               ctx["totals"]["debit"], ctx["totals"]["credit"], "", "", "", ""])
     for cell in ws[total]:
         cell.font = bold
 
