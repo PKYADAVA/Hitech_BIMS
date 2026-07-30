@@ -1806,6 +1806,9 @@ class FarmLocationCapture(models.Model):
     longitude = models.FloatField(
         null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)],
         help_text=_("Decimal degrees, -180 to 180"))
+    state = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
+    area = models.CharField(max_length=100, blank=True)
     address = models.TextField(blank=True, help_text=_("Address as found on the visit"))
     remarks = models.TextField(blank=True)
     captured_by = models.ForeignKey(
@@ -1894,9 +1897,16 @@ class FarmLocationCapture(models.Model):
         if farm.farm_longitude != latest.longitude:
             farm.farm_longitude = latest.longitude
             fields.append("farm_longitude")
-        if latest.address and farm.farm_address != latest.address:
-            farm.farm_address = latest.address
-            fields.append("farm_address")
+        # The written parts only overwrite when the capture actually has them —
+        # a visit that recorded a pin but no address must not wipe the master's.
+        for capture_field, farm_field in (("address", "farm_address"),
+                                          ("state", "state"),
+                                          ("district", "district"),
+                                          ("area", "area")):
+            value = getattr(latest, capture_field)
+            if value and getattr(farm, farm_field) != value:
+                setattr(farm, farm_field, value)
+                fields.append(farm_field)
         if fields:
             farm.save(update_fields=fields)
 

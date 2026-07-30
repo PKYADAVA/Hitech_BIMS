@@ -6753,6 +6753,7 @@ def _capture_row(c):
                    if c.farm_id and c.farm.branch_id else ""),
         "latitude": c.latitude, "longitude": c.longitude,
         "has_location": c.has_location,
+        "state": c.state or "", "district": c.district or "", "area": c.area or "",
         "address": c.address or "",
         "photos": sum(1 for f in files if f.kind == FarmCaptureFile.KIND_PHOTO),
         "documents": sum(1 for f in files if f.kind != FarmCaptureFile.KIND_PHOTO),
@@ -6845,6 +6846,9 @@ def _save_capture(request, instance):
     instance.farm_id = request.POST.get("farm") or None
     instance.latitude = blank_to_none(request.POST.get("latitude"))
     instance.longitude = blank_to_none(request.POST.get("longitude"))
+    instance.state = (request.POST.get("state") or "").strip()
+    instance.district = (request.POST.get("district") or "").strip()
+    instance.area = (request.POST.get("area") or "").strip()
     instance.address = (request.POST.get("address") or "").strip()
     instance.remarks = (request.POST.get("remarks") or "").strip()
     if instance.captured_by_id is None:
@@ -6901,21 +6905,21 @@ def farm_location_capture_edit(request, id):
 @login_required(login_url="login")
 @require_POST
 def farm_location_capture_clear(request, id):
-    """Clear = drop the attachments and the coordinates, keep the visit record.
+    """Clear = drop the location only. Photos and documents are kept.
 
-    Deliberately different from Delete: the visit still happened, and the farm
-    falls back to whatever earlier capture still holds a reading.
+    Deliberately narrow: a wrong GPS reading is the thing that needs undoing,
+    and the pictures taken on that visit are still good. Removing a file is a
+    separate action on the file itself, and Delete removes the whole visit.
+    The farm falls back to whatever earlier capture still holds a reading.
     """
     capture = get_object_or_404(FarmLocationCapture, id=id)
     with transaction.atomic():
-        for f in capture.files.all():
-            f.delete()                      # also removes the mirrored farm picture
         capture.latitude = None
         capture.longitude = None
         capture.address = ""
         capture.save(update_fields=["latitude", "longitude", "address", "updated_at"])
         FarmLocationCapture.sync_farm_from_latest(capture.farm)
-    messages.success(request, "Capture cleared.")
+    messages.success(request, "Location cleared; the attached files were kept.")
     return redirect("farm_location_capture_list")
 
 
@@ -6956,9 +6960,11 @@ def farm_location_capture_complete(request, id):
             if lat and lng:
                 capture.latitude, capture.longitude = float(lat), float(lng)
                 filled.append("location")
-        if not capture.address and (request.POST.get("address") or "").strip():
-            capture.address = request.POST["address"].strip()
-            filled.append("address")
+        for field in ("state", "district", "area", "address"):
+            posted = (request.POST.get(field) or "").strip()
+            if posted and not getattr(capture, field):
+                setattr(capture, field, posted)
+                filled.append(field)
         if filled:
             capture.full_clean(exclude=["capture_no", "captured_by"])
             capture.save()

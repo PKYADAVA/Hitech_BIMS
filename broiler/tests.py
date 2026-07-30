@@ -76,20 +76,19 @@ class FarmLocationCaptureTests(TestCase):
 
     # --------------------------------------------------------------- actions
 
-    def test_clear_keeps_the_visit_but_drops_location_and_files(self):
+    def test_clear_drops_the_location_but_keeps_the_files(self):
         self.client.post("/farm-location-capture/add/", {
             "date": "2026-08-01", "farm": self.farm.id,
             "latitude": "26.76", "longitude": "83.37", "photos": self.photo()})
         cap = FarmLocationCapture.objects.get()
         self.client.post("/farm-location-capture/%d/clear/" % cap.id)
         cap.refresh_from_db()
-        print("RESULT after clear         lat=%s files=%d farm_images=%d record_kept=%s" % (
-            cap.latitude, cap.files.count(),
-            BroilerFarmImage.objects.filter(farm=self.farm).count(),
-            FarmLocationCapture.objects.filter(id=cap.id).exists()))
         self.assertIsNone(cap.latitude)
-        self.assertEqual(cap.files.count(), 0)
-        self.assertEqual(BroilerFarmImage.objects.filter(farm=self.farm).count(), 0)
+        self.assertIsNone(cap.longitude)
+        self.assertEqual(cap.address, "")
+        # the pictures taken on that visit are still good
+        self.assertEqual(cap.files.count(), 1)
+        self.assertEqual(BroilerFarmImage.objects.filter(farm=self.farm).count(), 1)
         self.assertTrue(FarmLocationCapture.objects.filter(id=cap.id).exists())
 
     def test_delete_removes_the_capture_and_falls_back_to_the_previous_one(self):
@@ -358,4 +357,58 @@ class FarmLocationCaptureTests(TestCase):
         print("RESULT pin without address lat=%s address=%r" % (cap.latitude, cap.address))
         self.assertAlmostEqual(cap.latitude, 26.7606, places=4)
         self.assertEqual(cap.address, "")
+
+    # ------------------------------------------------ full location field set
+
+    def test_state_district_area_save_and_reach_the_farm(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "latitude": "26.760600", "longitude": "83.373200",
+            "state": "Uttar Pradesh", "district": "Gorakhpur",
+            "area": "Lacchipur", "address": "Sonauli Road"})
+        cap = FarmLocationCapture.objects.get()
+        self.farm.refresh_from_db()
+        print("RESULT capture  %s / %s / %s" % (cap.state, cap.district, cap.area))
+        print("RESULT farm     %s / %s / %s / %s" % (
+            self.farm.state, self.farm.district, self.farm.area, self.farm.farm_address))
+        self.assertEqual(cap.state, "Uttar Pradesh")
+        self.assertEqual(self.farm.state, "Uttar Pradesh")
+        self.assertEqual(self.farm.district, "Gorakhpur")
+        self.assertEqual(self.farm.area, "Lacchipur")
+        self.assertEqual(self.farm.farm_address, "Sonauli Road")
+
+    def test_a_capture_without_written_parts_does_not_wipe_the_farm(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id,
+            "latitude": "26.100000", "longitude": "83.100000",
+            "state": "Uttar Pradesh", "district": "Gorakhpur", "area": "Lacchipur"})
+        # a later visit records only a pin
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-09-01", "farm": self.farm.id,
+            "latitude": "26.900000", "longitude": "83.900000"})
+        self.farm.refresh_from_db()
+        print("RESULT kept     %s / %s / %s  lat=%s" % (
+            self.farm.state, self.farm.district, self.farm.area, self.farm.farm_latitude))
+        self.assertAlmostEqual(self.farm.farm_latitude, 26.9, places=4)
+        self.assertEqual(self.farm.state, "Uttar Pradesh")     # not wiped
+        self.assertEqual(self.farm.area, "Lacchipur")
+
+    def test_fill_dialog_completes_blank_written_parts_only(self):
+        self.client.post("/farm-location-capture/add/", {
+            "date": "2026-08-01", "farm": self.farm.id, "state": "Uttar Pradesh"})
+        cap = FarmLocationCapture.objects.get()
+        self.client.post("/farm-location-capture/%d/complete/" % cap.id, {
+            "state": "Tampered", "district": "Gorakhpur", "area": "Lacchipur"})
+        cap.refresh_from_db()
+        print("RESULT after +  %s / %s / %s" % (cap.state, cap.district, cap.area))
+        self.assertEqual(cap.state, "Uttar Pradesh")   # already filled, locked
+        self.assertEqual(cap.district, "Gorakhpur")    # was blank, filled
+        self.assertEqual(cap.area, "Lacchipur")
+
+    def test_form_offers_the_whole_location_set(self):
+        html = self.client.get("/farm-location-capture/add/").content.decode()
+        for name in ('name="state"', 'name="district"', 'name="area"',
+                     'name="address"', 'name="latitude"', 'name="longitude"'):
+            self.assertIn(name, html)
+        print("RESULT form carries every location field")
 

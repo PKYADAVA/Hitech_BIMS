@@ -145,7 +145,7 @@ $(function () {
              title="Fill in what is still pending"><i class="fas fa-plus"></i></button>{% endif %}
           <button class="btn btn-outline-info btn-sm act-view" data-id="${r.id}" title="View"><i class="fas fa-eye"></i></button>
           {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/farm-location-capture/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
-          {% if page_perms.edit %}<button class="btn btn-outline-secondary btn-sm act-clear" data-id="${r.id}" title="Clear location and files"><i class="fas fa-eraser"></i></button>{% endif %}
+          {% if page_perms.edit %}<button class="btn btn-outline-secondary btn-sm act-clear" data-id="${r.id}" title="Clear the location"><i class="fas fa-eraser"></i></button>{% endif %}
           {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm act-delete" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
         </div></td>
       </tr>`);
@@ -177,7 +177,10 @@ $(function () {
         <dt class="col-sm-3">Farm</dt><dd class="col-sm-9">${esc(r.farm_code)} - ${esc(r.farm)}</dd>
         <dt class="col-sm-3">Farmer</dt><dd class="col-sm-9">${esc(r.farmer) || "—"}</dd>
         <dt class="col-sm-3">Location</dt><dd class="col-sm-9">${locationCell(r)}</dd>
-        <dt class="col-sm-3">Address</dt><dd class="col-sm-9">${esc(r.address) || "—"}</dd>
+        <dt class="col-sm-3">State</dt><dd class="col-sm-9">${esc(r.state) || "—"}</dd>
+        <dt class="col-sm-3">District</dt><dd class="col-sm-9">${esc(r.district) || "—"}</dd>
+        <dt class="col-sm-3">Area</dt><dd class="col-sm-9">${esc(r.area) || "—"}</dd>
+        <dt class="col-sm-3">Farm Address</dt><dd class="col-sm-9">${esc(r.address) || "—"}</dd>
         <dt class="col-sm-3">Remarks</dt><dd class="col-sm-9">${esc(r.remarks) || "—"}</dd>
         <dt class="col-sm-3">Captured By</dt><dd class="col-sm-9">${esc(r.captured_by) || "—"}</dd>
       </dl>
@@ -238,12 +241,22 @@ $(function () {
              <i class="fas fa-crosshairs me-1"></i>Use my location</button>
          </div>`;
 
-    const addressHtml = r.address
-      ? lockedInput("Address", r.address)
-      : `<div class="col-12">
-           <label class="form-label">Address</label>
-           <textarea name="address" class="form-control form-control-sm" rows="2"></textarea>
+    const textField = (name, label, value) => value
+      ? lockedInput(label, value)
+      : `<div class="col-md-4">
+           <label class="form-label">${esc(label)}</label>
+           <input name="${name}" class="form-control form-control-sm" maxlength="100">
          </div>`;
+    const addressHtml =
+      textField("state", "State", r.state) +
+      textField("district", "District", r.district) +
+      textField("area", "Area", r.area) +
+      (r.address
+        ? lockedInput("Farm Address", r.address)
+        : `<div class="col-12">
+             <label class="form-label">Farm Address</label>
+             <textarea name="address" class="form-control form-control-sm" rows="2"></textarea>
+           </div>`);
 
     $("#fill-body").html(`
       <div class="small text-muted mb-2">Locked items were captured already — only what is still blank can be filled.</div>
@@ -275,12 +288,18 @@ $(function () {
       $("#fill-lng").val(lo);
       // Fill the address from the pin, but only when it is still blank here —
       // the locked case has no textarea at all, and typed text is left alone.
-      const box = $("#fill-body").find("textarea[name=address]");
-      if (box.length && !box.val().trim() && window.reverseGeocode) {
-        window.reverseGeocode(la, lo).then(function (found) {
-          if (found && !box.val().trim()) box.val(found);
+      if (!window.reverseGeocode) return;
+      window.reverseGeocode(la, lo).then(function (place) {
+        if (!place) return;
+        // Only the inputs still present are blank — the locked ones render as
+        // readonly text with no name, so they cannot be written by accident.
+        ["state", "district", "area"].forEach(function (key) {
+          const el = $("#fill-body").find(`input[name=${key}]`);
+          if (el.length && !el.val().trim() && place[key]) el.val(place[key]);
         });
-      }
+        const box = $("#fill-body").find("textarea[name=address]");
+        if (box.length && !box.val().trim() && place.display) box.val(place.display);
+      });
     }, function () { window.showToast('danger', 'Could not read the location.'); },
       { enableHighAccuracy: true, timeout: 10000 });
   });
@@ -305,10 +324,11 @@ $(function () {
   function confirmAction(id, action) {
     const r = rowsById[id];
     const clearing = action === "clear";
-    $("#confirm-title").text(clearing ? "Clear Capture" : "Delete Capture");
+    $("#confirm-title").text(clearing ? "Clear Location" : "Delete Capture");
     $("#confirm-text").html(clearing
-      ? `Remove the location and all files from <strong>${esc(r.capture_no)}</strong>?
-         The visit record stays, and the farm falls back to its previous capture.`
+      ? `Remove the location from <strong>${esc(r.capture_no)}</strong>?
+         The photos and documents are kept, and the farm falls back to its
+         previous capture for its location.`
       : `Delete <strong>${esc(r.capture_no)}</strong> entirely, with its files?
          The farm falls back to its previous capture.`);
     $("#confirm-ok").text(clearing ? "Clear" : "Delete");

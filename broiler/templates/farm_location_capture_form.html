@@ -85,8 +85,23 @@
             <i class="fas fa-map me-1"></i>Preview on map</a>
           <div class="small text-muted ms-2" id="geo-note"></div>
         </div>
+        <div class="col-md-4">
+          <label class="form-label">State</label>
+          <input name="state" id="state" class="form-control" maxlength="100"
+                 value="{% if capture %}{{ capture.state }}{% endif %}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">District</label>
+          <input name="district" id="district" class="form-control" maxlength="100"
+                 value="{% if capture %}{{ capture.district }}{% endif %}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Area</label>
+          <input name="area" id="area" class="form-control" maxlength="100"
+                 value="{% if capture %}{{ capture.area }}{% endif %}">
+        </div>
         <div class="col-12">
-          <label class="form-label">Address</label>
+          <label class="form-label">Farm Address</label>
           <textarea name="address" id="address" class="form-control" rows="2"
                     placeholder="Address as found on the visit">{% if capture %}{{ capture.address }}{% endif %}</textarea>
           <div class="form-text" id="address-note"></div>
@@ -251,7 +266,14 @@
   function fillAddressFrom(latitude, longitude) {
     if (!window.reverseGeocode) return;
     addressNote.textContent = 'Looking up the address…';
-    window.reverseGeocode(latitude, longitude).then(function (found) {
+    window.reverseGeocode(latitude, longitude).then(function (place) {
+      // State/District/Area are derived labels, so the pin refreshes them.
+      if (place) {
+        ['state', 'district', 'area'].forEach(function (key) {
+          if (place[key]) document.getElementById(key).value = place[key];
+        });
+      }
+      const found = place && place.display;
       if (!found) {
         addressNote.textContent = 'No address found for this pin — type it if needed.';
         return;

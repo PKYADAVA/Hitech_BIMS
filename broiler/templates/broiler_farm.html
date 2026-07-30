@@ -567,21 +567,29 @@ $(document).ready(function () {
             $("#farm_latitude").val(lat);
             $("#farm_longitude").val(lon);
 
-            $.ajax({
-                url: "https://nominatim.openstreetmap.org/reverse",
-                data: { format: "jsonv2", lat: lat, lon: lon, addressdetails: 1 },
-                success: function (data) {
-                    const address = data.address || {};
-                    const state = address.state || "";
-                    const district = address.state_district || address.county || address.district || "";
-                    if (state) $("#state").val(state);
-                    if (district) $("#district").val(district);
-                },
-                error: function () {
-                    window.showToast("warning", "Got your coordinates, but could not look up State/District automatically.");
-                },
-                complete: function () {
-                    $btn.prop("disabled", false).text(originalText);
+            // One shared lookup (see window.reverseGeocode in main.js) fills
+            // State, District, Area and the Farm Address from the same pin.
+            window.reverseGeocode(lat, lon).then(function (place) {
+                $btn.prop("disabled", false).text(originalText);
+                if (!place) {
+                    window.showToast("warning",
+                        "Got your coordinates, but could not look up the address automatically.");
+                    return;
+                }
+                if (place.state) $("#state").val(place.state);
+                if (place.district) $("#district").val(place.district);
+                if (place.area) $("#area").val(place.area);
+
+                // The address is the one field someone actually writes prose
+                // in, so it is filled only when blank; the rest are derived
+                // labels and are safe to refresh.
+                const $address = $("#farm_address");
+                if (place.display && !$address.val().trim()) {
+                    $address.val(place.display);
+                    window.showToast("success", "Location and address filled from your position.");
+                } else if (place.display) {
+                    window.showToast("success",
+                        "Location filled. Farm Address was left as you typed it.");
                 }
             });
         }, function () {

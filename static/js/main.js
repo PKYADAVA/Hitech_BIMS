@@ -225,6 +225,8 @@ $(document).ready(function () {
    Used by Broiler > Transactions > Farm Location & Photos, so capturing a
    farm's pin also records where it is in words.
 
+   Resolves to {display, state, district, area}, or null.
+
    OpenStreetMap's Nominatim needs no API key. It is best-effort by design: it
    is rate-limited and can be blocked or offline, so every caller must keep
    working when this resolves to null rather than treating a lookup failure as
@@ -239,7 +241,19 @@ window.reverseGeocode = function (latitude, longitude) {
   const timeout = new Promise(function (resolve) { setTimeout(() => resolve(null), 8000); });
   const lookup = fetch(url, { headers: { 'Accept': 'application/json' } })
     .then(function (resp) { return resp.ok ? resp.json() : null; })
-    .then(function (data) { return (data && data.display_name) || null; })
+    .then(function (data) {
+      if (!data || !data.display_name) return null;
+      const a = data.address || {};
+      // Nominatim names the same level differently by country and by how built
+      // up the place is, so each part takes the first key that answers.
+      return {
+        display: data.display_name,
+        state: a.state || '',
+        district: a.state_district || a.county || a.district || '',
+        area: a.suburb || a.village || a.town || a.city_district
+              || a.neighbourhood || a.hamlet || a.city || '',
+      };
+    })
     .catch(function () { return null; });
   // Whichever settles first: a slow lookup must never hold up the form.
   return Promise.race([lookup, timeout]);
