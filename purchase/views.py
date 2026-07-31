@@ -7,7 +7,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (suppliers_for, branches_for, farms_for,
+from user.services.scoping import (scope_any, suppliers_for, branches_for, farms_for,
                                    supervisors_for, warehouses_for)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -588,7 +588,9 @@ def general_purchase_api_list(request):
     category = (request.GET.get("category") or "").strip()
     warehouse = (request.GET.get("warehouse") or "").strip()
 
-    qs = GeneralPurchase.objects.select_related("supplier").prefetch_related(
+    # The warehouse a purchase landed in is on its lines, so scope through them.
+    qs = scope_any(request.user, GeneralPurchase.objects.filter(),
+                   sectors="items__farm_warehouse_id").select_related("supplier").prefetch_related(
         "items__item", "items__farm_warehouse")
     if from_date:
         qs = qs.filter(date__gte=from_date)
@@ -792,7 +794,8 @@ def chicks_purchase_api_list(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
 
-    qs = ChicksPurchase.objects.select_related("supplier", "item").prefetch_related(
+    qs = scope_any(request.user, ChicksPurchase.objects.filter(),
+                   sectors="items__farm_warehouse_id").select_related("supplier", "item").prefetch_related(
         "items__farm_warehouse")
     if from_date:
         qs = qs.filter(date__gte=from_date)
@@ -942,7 +945,9 @@ def payment_api_list(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
 
-    qs = SupplierPayment.objects.prefetch_related("lines__pay_account", "lines__supplier")
+    qs = scope_any(request.user, SupplierPayment.objects.filter(),
+                   sectors="location_id").prefetch_related(
+        "lines__pay_account", "lines__supplier")
     if from_date:
         qs = qs.filter(date__gte=from_date)
     if to_date:

@@ -660,3 +660,93 @@ class InventoryRowScopingTests(TestCase):
                    .values_list("dc_no", flat=True))
         self.assertIn("T-NULL", refs)
         self.assertNotIn("T-OTHER", refs)
+
+
+class CrossModuleRowScopingTests(TestCase):
+    """Purchase, Sales and Hatchery grids follow Inventory's.
+
+    Each of these sits at one warehouse — on the header for hatchery and the
+    notes, on the lines for purchases, and through the chick sales it carries
+    for a delivery challan.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("cr_user", "cr@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Cross")
+        self.user.groups.add(self.group)
+        from user.access import ALL_TAB_CODES
+        for code in ALL_TAB_CODES:
+            GroupTabPermission.objects.get_or_create(
+                group=self.group, tab_code=code, defaults={"can_view": True})
+
+        self.mine = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.theirs = Warehouse.objects.create(name="Bahraich Warehouse")
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_sectors=False)
+        profile.sectors.add(self.mine)
+        self.client.force_login(self.user)
+
+    def rows(self, qs):
+        from user.services.scoping import scope_any
+        return scope_any(get_user_model().objects.get(pk=self.user.pk), qs,
+                         sectors="warehouse_id")
+
+    def test_hatchery_egg_purchases_are_scoped_by_warehouse(self):
+        from account.models import AccountType, ChartOfAccount, CompanyProfile
+        from hatchery.models import EggPurchase
+        from purchase.models import Supplier
+
+        at = AccountType.objects.create(name="T", code_range_start=500000,
+                                        code_range_end=599999, report="PL")
+        coa = ChartOfAccount.objects.create(company=CompanyProfile.get_solo(),
+                                            code="500001", description="X",
+                                            account_type=at)
+        supplier = Supplier.objects.create(name="Egg Co", mobile="7100000001")
+        for wh, ref in ((self.mine, "MINE"), (self.theirs, "THEIRS")):
+            EggPurchase.objects.create(date=timezone.localdate(), supplier=supplier,
+                                       warehouse=wh, pay_account=coa,
+                                       remarks=ref)
+        # remarks is normalised on save, so compare case-insensitively — the
+        # point of the test is which rows come back, not how they are spelt.
+        refs = {r.upper() for r in self.rows(EggPurchase.objects.all())
+                .values_list("remarks", flat=True)}
+        self.assertEqual(refs, {"MINE"})
+
+    def test_a_general_purchase_is_scoped_through_its_lines(self):
+        """The warehouse a purchase landed in is on the line, not the header."""
+        from purchase.models import GeneralPurchase, GeneralPurchaseItem, Supplier
+        from user.services.scoping import scope_any
+
+        supplier = Supplier.objects.create(name="Feed Co", mobile="7100000002")
+        item = Item.objects.create(
+            description="Feed", category=ItemCategory.objects.create(name="Feed"),
+            valuation_method="Weighted Average", standard_cost_per_unit=50,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        for wh, ref in ((self.mine, "P-MINE"), (self.theirs, "P-THEIRS")):
+            gp = GeneralPurchase.objects.create(date=timezone.localdate(),
+                                                supplier=supplier, remarks=ref)
+            GeneralPurchaseItem.objects.create(
+                purchase=gp, item=item, farm_warehouse=wh,
+                sent_qty=Decimal("10"), rate=Decimal("50"),
+                discount_percent=Decimal("0"), discount_amount=Decimal("0"),
+                gst_percent=Decimal("0"))
+
+        refs = {r.upper() for r in
+                scope_any(get_user_model().objects.get(pk=self.user.pk),
+                          GeneralPurchase.objects.all(),
+                          sectors="items__farm_warehouse_id")
+                .values_list("remarks", flat=True)}
+        self.assertEqual(refs, {"P-MINE"})
+
+    def test_an_unscoped_user_sees_both(self):
+        from hatchery.models import EggPurchase
+        from user.services.scoping import scope_any
+
+        boss = get_user_model().objects.create_superuser("cr_boss", "crb@x.com",
+                                                          "Str0ngPass!")
+        self.assertEqual(
+            scope_any(boss, EggPurchase.objects.all(), sectors="warehouse_id")
+            .count(), EggPurchase.objects.count())

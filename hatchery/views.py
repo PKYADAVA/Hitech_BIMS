@@ -6,7 +6,7 @@ from django.shortcuts import render, get_object_or_404
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for,
+from user.services.scoping import (scope_any, branches_for, farms_for,
                                    supervisors_for, warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -1613,7 +1613,9 @@ class EggPurchaseReportView(View):
         to_date = request.GET.get("to_date", "").strip()
         supplier = request.GET.get("supplier", "").strip()
 
-        qs = EggPurchase.objects.select_related("supplier", "warehouse").prefetch_related("items__item")
+        qs = scope_any(request.user, EggPurchase.objects.filter(),
+                       sectors="warehouse_id").select_related(
+            "supplier", "warehouse").prefetch_related("items__item")
         if from_date:
             qs = qs.filter(date__gte=from_date)
         if to_date:
@@ -1779,7 +1781,11 @@ class DeliveryChallanReportView(View):
         to_date = request.GET.get("to_date", "").strip()
         customer = request.GET.get("customer", "").strip()
 
-        qs = DeliveryChallan.objects.select_related("customer").prefetch_related("items__item", "chick_sales")
+        # A challan has no warehouse of its own; it inherits the scope of the
+        # chick sales it carries.
+        qs = scope_any(request.user, DeliveryChallan.objects.filter(),
+                       sectors="chick_sales__warehouse_id").select_related(
+            "customer").prefetch_related("items__item", "chick_sales")
         if from_date:
             qs = qs.filter(date__gte=from_date)
         if to_date:
@@ -1974,7 +1980,9 @@ class ChickSaleReportView(View):
         to_date = request.GET.get("to_date", "").strip()
         customer = request.GET.get("customer", "").strip()
 
-        qs = ChickSale.objects.select_related("customer", "warehouse", "delivery_challan").prefetch_related("items__item")
+        qs = scope_any(request.user, ChickSale.objects.filter(),
+                       sectors="warehouse_id").select_related(
+            "customer", "warehouse", "delivery_challan").prefetch_related("items__item")
         if from_date:
             qs = qs.filter(date__gte=from_date)
         if to_date:

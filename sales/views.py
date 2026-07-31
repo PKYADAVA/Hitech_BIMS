@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: party lists are narrowed to the customer / supplier
 # groups the signed-in user is scoped to.
-from user.services.scoping import customers_for
+from user.services.scoping import customers_for, scope_any
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -541,7 +541,8 @@ def sales_invoice_list(request):
 def sales_invoice_api_list(request):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
-    qs = SalesInvoice.objects.select_related("customer")
+    qs = scope_any(request.user, SalesInvoice.objects.filter(),
+                   sectors="branch_id").select_related("customer")
     if from_date:
         qs = qs.filter(date__gte=from_date)
     if to_date:
@@ -1180,7 +1181,9 @@ class SalesReceiptAPI(View):
             if id:
                 row = SalesReceipt.objects.select_related("customer", "location", "receipt_account").get(id=id)
                 return JsonResponse(_sales_receipt_to_dict(row))
-            qs = SalesReceipt.objects.select_related("customer", "location", "receipt_account")
+            qs = scope_any(request.user, SalesReceipt.objects.filter(),
+                           sectors="location_id").select_related(
+                "customer", "location", "receipt_account")
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
