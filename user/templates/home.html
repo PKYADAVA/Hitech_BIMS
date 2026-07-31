@@ -43,14 +43,21 @@
   /* One line: greeting left, clock right. Height is the line box plus padding. */
   .dash-welcome { position:relative; overflow:hidden; padding:7px 16px; border-radius:10px; color:#fff; background:linear-gradient(118deg,#102a56,#1d4f94 56%,#197c8a); box-shadow:0 4px 12px rgba(22,59,113,.15); }
   .dash-welcome:after { content:""; position:absolute; width:150px; height:150px; right:-55px; top:-95px; border-radius:50%; background:rgba(255,255,255,.09); }.dash-welcome > * { position:relative; z-index:1; }
-  .dash-welcome h1 { font-size:.94rem; margin:0; font-weight:700; line-height:1.5; }
-  .dash-date { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border:1px solid rgba(255,255,255,.2); border-radius:7px; background:rgba(8,27,59,.18); font-size:.73rem; color:#eff6ff; white-space:nowrap; }
+  .dash-eyebrow { flex:0 0 auto; color:#bfdbfe; letter-spacing:.08em; text-transform:uppercase; font-size:.61rem; font-weight:700; white-space:nowrap; border:1px solid rgba(255,255,255,.22); border-radius:6px; padding:2px 7px; }
+  .dash-welcome h1 { flex:0 0 auto; font-size:.94rem; margin:0; font-weight:700; line-height:1.5; white-space:nowrap; }
+  /* The blurb takes the leftover width and ellipsises rather than wrapping, so
+     the banner stays exactly one line at every viewport. */
+  .dash-welcome p { flex:1 1 auto; min-width:0; margin:0; color:#dbeafe; font-size:.78rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dash-date { flex:0 0 auto; margin-left:auto; display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border:1px solid rgba(255,255,255,.2); border-radius:7px; background:rgba(8,27,59,.18); font-size:.73rem; color:#eff6ff; white-space:nowrap; }
   .dash-section-title { font-size:1rem; font-weight:700; margin:0; }.dash-section-copy { color:#6b7890; font-size:.79rem; margin:.15rem 0 0; }
   .dash-module { display:flex; align-items:center; gap:13px; height:100%; padding:15px; background:#fff; border:1px solid #e7edf5; border-radius:14px; color:#15233b; text-decoration:none; transition:.18s ease; }.dash-module:hover { color:#15233b; transform:translateY(-3px); border-color:#cdddf5; box-shadow:0 9px 20px rgba(22,42,79,.09); }.dash-module-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; font-size:1rem; flex:0 0 42px; }.dash-module-name { display:block; font-size:.87rem; font-weight:700; }.dash-module-action { display:block; margin-top:2px; color:#6b7890; font-size:.72rem; }.dash-module-arrow { margin-left:auto; color:#a3afc2; font-size:.75rem; }
   .dash-icon-blue{background:#e8f0ff;color:#2563eb}.dash-icon-green{background:#e6f7f3;color:#078b75}.dash-icon-orange{background:#fff1df;color:#d97706}.dash-icon-purple{background:#f1ebff;color:#7c3aed}.dash-icon-red{background:#ffecee;color:#dc465b}.dash-icon-cyan{background:#e5f7fb;color:#0087a5}
   .dash-panel { background:#fff; border:1px solid #e7edf5; border-radius:16px; padding:20px; height:100%; }.dash-panel-head { margin-bottom:17px; }.dash-activity { display:flex; align-items:flex-start; gap:11px; padding:12px 0; border-bottom:1px solid #edf1f6; }.dash-activity:last-child { border-bottom:0; padding-bottom:0; }.dash-activity-icon { width:31px; height:31px; border-radius:9px; background:#f2f6fd; color:#4370b6; display:grid; place-items:center; flex:0 0 31px; font-size:.75rem; }.dash-activity b { font-size:.8rem; display:block; }.dash-activity span { display:block; margin-top:2px; font-size:.73rem; color:#6b7890; }
   .dash-mini-stat { padding:13px; border:1px solid #eaf0f7; border-radius:12px; background:#fbfdff; }.dash-mini-stat span { color:#6b7890; display:block; font-size:.72rem; }.dash-mini-stat b { display:block; font-size:1rem; margin-top:4px; }.dash-mini-stat i { float:right; color:#93a4bd; }.dashboard-shell .home-cal-card { max-width:none; border:0; box-shadow:none; }.dashboard-shell .home-cal-card .card-header { padding:0 0 14px; border:0; background:transparent; font-weight:700; color:#15233b; }.dashboard-shell .home-cal-card .card-body { padding:0; }.dashboard-shell .home-cal-grid { gap:4px; }.dashboard-shell .home-cal-grid .home-cal-day { padding:.34rem 0; font-size:.74rem; color:#475569; }.dashboard-shell .home-cal-grid .home-cal-day.is-today { background:#2563eb; box-shadow:0 3px 8px rgba(37,99,235,.25); }
-  @media (max-width:767.98px) { .dash-welcome { padding:6px 12px; }.dash-welcome h1 { font-size:.87rem; }.dash-panel { padding:16px; } }
+  /* Drop the least essential item first as width runs out, so the row never
+     wraps into a second line: blurb, then eyebrow. */
+  @media (max-width:1199.98px) { .dash-welcome p { display:none; } }
+  @media (max-width:767.98px) { .dash-welcome { padding:6px 12px; }.dash-welcome h1 { font-size:.87rem; }.dash-eyebrow { display:none; }.dash-panel { padding:16px; } }
   .home-cal-card { max-width: 260px; }
   .home-cal-card .card-header { display:flex; align-items:center; justify-content:space-between; padding:.4rem .6rem; font-size:.8rem; }
   .home-cal-card .card-body { padding:.5rem; }
@@ -212,8 +219,10 @@
     </div>
 
     <div class="dash-welcome mb-3">
-      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div class="d-flex flex-nowrap align-items-center gap-2">
+        <span class="dash-eyebrow">Hi Tech Farms · Operations Centre</span>
         <h1>Good day, {{ request.user.get_full_name|default:request.user.username }}.</h1>
+        <p>Everything you need to keep farm operations moving—organised in one place.</p>
         <div class="dash-date"><i class="fas fa-clock"></i><span id="navClock"></span></div>
       </div>
     </div>
