@@ -574,10 +574,18 @@ class AuditIsNotItselfAudited(TestCase):
 
         from alerts.models import Alert
 
-        mine = Alert.objects.create(model_name="WebAccessAudit", title="noise",
+        # Built with the alerts app's own helper rather than a hand-typed
+        # string: the first version of this test invented "WebAccessAudit",
+        # which is not what gets stored, so it passed while the command
+        # matched nothing in production.
+        from alerts.utils import model_label
+        from broiler.models import Region
+
+        mine = Alert.objects.create(model_name=model_label(WebAccessAudit),
+                                    title="noise",
                                     message="unmapped: GET alert-list")
-        theirs = Alert.objects.create(model_name="BroilerFarm", title="real",
-                                      message="someone edited a farm")
+        theirs = Alert.objects.create(model_name=model_label(Region),
+                                      title="real", message="someone edited a region")
 
         out = StringIO()
         call_command("purge_audit_alerts", dry_run=True, stdout=out)
@@ -587,6 +595,16 @@ class AuditIsNotItselfAudited(TestCase):
         call_command("purge_audit_alerts", stdout=StringIO())
         self.assertFalse(Alert.objects.filter(pk=mine.pk).exists())
         self.assertTrue(Alert.objects.filter(pk=theirs.pk).exists())
+
+    def test_the_purge_matches_the_label_the_alerts_app_actually_stores(self):
+        """The regression that let the command report zero against a feed full
+        of rows: it looked for "WebAccessAudit" while "user.WebAccessAudit" is
+        what gets written."""
+        from alerts.utils import model_label
+        from user.management.commands.purge_audit_alerts import Command
+
+        self.assertEqual(Command().model_name(), model_label(WebAccessAudit))
+        self.assertIn(".", Command().model_name())
 
     def test_the_alert_endpoints_no_longer_feed_the_loop(self):
         """Opening the alert centre recorded an audit row, which raised an
