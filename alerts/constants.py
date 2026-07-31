@@ -119,6 +119,17 @@ DEFAULT_IGNORE_APP_LABELS: frozenset[str] = frozenset(
     }
 )
 
+#: Individual models that are infrastructure rather than business records.
+#: Auditing them is circular: the Web-Access audit table exists to record which
+#: endpoints get reached, and it writes a row per unmapped endpoint per user —
+#: each of which would otherwise raise its own alert, and clearing the table
+#: would emit one per deleted row.
+DEFAULT_IGNORE_MODELS: frozenset[str] = frozenset(
+    {
+        "user.webaccessaudit",
+    }
+)
+
 # Candidate field names treated as a "status" transition.
 STATUS_FIELD_NAMES: frozenset[str] = frozenset({"status", "state", "stage", "approval_status"})
 

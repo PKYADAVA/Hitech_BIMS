@@ -531,3 +531,39 @@ class DerivedTabTests(TestCase):
                 self.assertIsNotNone(explicit)
                 if derived is not None:
                     self.assertEqual(explicit, derived)
+
+
+class AuditIsNotItselfAudited(TestCase):
+    """The Web-Access audit table must not feed the alerts system.
+
+    alerts auto-registers every model, so it picked this one up: each audit
+    write raised its own alert, and `webaccess_audit --clear` emitted one per
+    deleted row — a wall of WARNING ALERT lines. Auditing the audit table is
+    circular, and it is infrastructure rather than a business record.
+    """
+
+    def test_the_model_is_excluded_from_alert_tracking(self):
+        from alerts.constants import DEFAULT_IGNORE_MODELS
+        from alerts.registry import registry
+
+        self.assertIn("user.webaccessaudit", DEFAULT_IGNORE_MODELS)
+        self.assertFalse(registry.is_registered(WebAccessAudit))
+
+    def test_writing_and_clearing_raises_no_alerts(self):
+        from alerts.models import Alert
+
+        before = Alert.objects.count()
+        for i in range(3):
+            WebAccessAudit.objects.create(url_name=f"probe_{i}", method="GET",
+                                          verdict="unmapped", username="probe")
+        self.assertEqual(Alert.objects.count(), before)
+
+        WebAccessAudit.objects.filter(username="probe").delete()
+        self.assertEqual(Alert.objects.count(), before)
+
+    def test_other_models_are_still_tracked(self):
+        """The exclusion is one model, not a hole in the alerts system."""
+        from alerts.registry import registry
+        from broiler.models import Region
+
+        self.assertTrue(registry.is_registered(Region))

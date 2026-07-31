@@ -13,7 +13,8 @@ from django.conf import settings
 from django.core.signals import setting_changed
 from django.dispatch import receiver
 
-from .constants import DEFAULT_IGNORE_APP_LABELS, DEFAULT_IGNORE_FIELDS
+from .constants import (DEFAULT_IGNORE_APP_LABELS, DEFAULT_IGNORE_FIELDS,
+                        DEFAULT_IGNORE_MODELS)
 
 DEFAULTS: dict[str, Any] = {
     # --- scope -----------------------------------------------------------
@@ -21,7 +22,7 @@ DEFAULTS: dict[str, Any] = {
     # is audited automatically, so newly-added apps need zero wiring. When
     # False only models added via the registry / @register_alert are tracked.
     "TRACK_ALL_MODELS": True,
-    "IGNORE_MODELS": [],          # ["app_label.ModelName", ...]
+    "IGNORE_MODELS": [],          # merged with DEFAULT_IGNORE_MODELS
     "IGNORE_APP_LABELS": [],      # merged with DEFAULT_IGNORE_APP_LABELS
     "IGNORE_FIELDS": [],          # merged with DEFAULT_IGNORE_FIELDS
     # --- features --------------------------------------------------------
@@ -79,7 +80,8 @@ class AlertConfig:
             merged["IGNORE_FIELDS"] = set(DEFAULT_IGNORE_FIELDS) | set(
                 merged.get("IGNORE_FIELDS", [])
             )
-            merged["IGNORE_MODELS"] = {m.lower() for m in merged.get("IGNORE_MODELS", [])}
+            merged["IGNORE_MODELS"] = set(DEFAULT_IGNORE_MODELS) | {
+                m.lower() for m in merged.get("IGNORE_MODELS", [])}
             self._cache = merged
         return self._cache
 
