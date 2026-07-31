@@ -6,6 +6,11 @@ from django.db.models import F
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
+
+# Data scoping: user-facing option lists are narrowed to the branches,
+# farms and warehouses the signed-in user is scoped to.
+from user.services.scoping import (branches_for, farms_for,
+                                   supervisors_for, warehouses_for)
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -1005,8 +1010,8 @@ class StockTransferListTemplateView(View):
         return render(request, "stock_transfer_list.html", {
             "categories": ItemCategory.objects.order_by("name"),
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         })
 
 
@@ -1016,8 +1021,8 @@ class StockTransferFormTemplateView(View):
         return render(request, "stock_transfer_form.html", {
             "items": Item.objects.select_related("category", "storage_uom").order_by("item_code"),
             "categories": ItemCategory.objects.order_by("name"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -1327,8 +1332,8 @@ class MedicineTransferListTemplateView(View):
         return render(request, "medicine_transfer_list.html", {
             "categories": ItemCategory.objects.order_by("name"),
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
         })
 
@@ -1338,8 +1343,8 @@ class MedicineTransferFormTemplateView(View):
     def get(self, request):
         return render(request, "medicine_transfer_form.html", {
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -1717,7 +1722,7 @@ class InventoryAdjustmentListTemplateView(View):
         return render(request, "inventory_adjustment_list.html", {
             "categories": ItemCategory.objects.order_by("name"),
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
         })
 
@@ -1727,8 +1732,8 @@ class InventoryAdjustmentFormTemplateView(View):
     def get(self, request):
         return render(request, "inventory_adjustment_form.html", {
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -2003,7 +2008,7 @@ class StockIssueListTemplateView(View):
         return render(request, "stock_issued_list.html", {
             "categories": ItemCategory.objects.order_by("name"),
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         })
 
 
@@ -2012,8 +2017,8 @@ class StockIssueFormTemplateView(View):
     def get(self, request):
         return render(request, "stock_issued_form.html", {
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -2246,7 +2251,7 @@ class StockReceiveListTemplateView(View):
         return render(request, "stock_received_list.html", {
             "categories": ItemCategory.objects.order_by("name"),
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         })
 
 
@@ -2255,8 +2260,8 @@ class StockReceiveFormTemplateView(View):
     def get(self, request):
         return render(request, "stock_received_form.html", {
             "items": Item.objects.order_by("item_code"),
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "accounts": ChartOfAccount.objects.order_by("code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -2401,7 +2406,10 @@ def item_ledger_report(request):
     export = (request.GET.get("export") or "").strip().lower()
 
     item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
-    warehouse = Warehouse.objects.filter(id=warehouse_id).first() if warehouse_id.isdigit() else None
+    # Scoped: a querystring is not a permission, so a warehouse outside the
+    # user's scope resolves to None rather than being read.
+    warehouse = (warehouses_for(request.user).filter(id=warehouse_id).first()
+                 if warehouse_id.isdigit() else None)
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None
 
@@ -2417,7 +2425,7 @@ def item_ledger_report(request):
 
     context = {
         "items": Item.objects.select_related("storage_uom").order_by("description"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         "item": item, "warehouse": warehouse, "criteria": criteria,
         "item_id": item_id, "warehouse_id": warehouse_id,
         "from_date": from_date, "to_date": to_date,
@@ -2622,10 +2630,10 @@ def stock_transfer_report(request):
         "from_warehouse": from_warehouse, "to_warehouse": to_warehouse,
         "vehicle": vehicle, "driver": driver,
         "regions": regions,
-        "branches": Branch.objects.order_by("branch_name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "categories": ItemCategory.objects.order_by("name"),
         "items": Item.objects.order_by("description"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         "vehicles": sorted(set(StockTransfer.objects.exclude(vehicle_no="")
                                .values_list("vehicle_no", flat=True))),
         "drivers": sorted(set(StockTransfer.objects.exclude(driver_name="")
@@ -2714,7 +2722,10 @@ def stock_report(request):
     from_date, to_date = g("from_date"), g("to_date")
     item_id, warehouse_id, export = g("item"), g("warehouse"), g("export").lower()
 
-    warehouse = Warehouse.objects.filter(id=warehouse_id).first() if warehouse_id.isdigit() else None
+    # Scoped: a querystring is not a permission, so a warehouse outside the
+    # user's scope resolves to None rather than being read.
+    warehouse = (warehouses_for(request.user).filter(id=warehouse_id).first()
+                 if warehouse_id.isdigit() else None)
     item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None
@@ -2736,7 +2747,7 @@ def stock_report(request):
         "item": item, "item_id": item_id,
         "warehouse": warehouse, "warehouse_id": warehouse_id,
         "items": Item.objects.order_by("description"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         "company": CompanyProfile.get_solo(),
     }
     if export == "excel" and warehouse:
@@ -2844,8 +2855,8 @@ def item_summary_report(request):
         "category": category, "item_id": item_id, "location": location,
         "categories": ItemCategory.objects.order_by("name"),
         "items": Item.objects.order_by("description"),
-        "warehouses": Warehouse.objects.order_by("name"),
-        "farms": BroilerFarm.objects.order_by("farm_name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         "company": CompanyProfile.get_solo(),
     }
     if export == "excel":
@@ -2938,6 +2949,18 @@ def negative_stock_report(request):
     rows = negative_stock(as_of_date=td, item_id=item_id or None,
                           location_type=loc_type, location_id=loc_id)
 
+    # Negative stock is reported per location, so the warehouse and farm scopes
+    # apply to the rows. Filtered here rather than inside negative_stock, which
+    # is shared with the dashboard widget and has no request to scope by.
+    from user.services.scoping import allowed_ids
+
+    limits = {"warehouse": allowed_ids(request.user, "sectors"),
+              "farm": allowed_ids(request.user, "farms")}
+    if any(v is not None for v in limits.values()):
+        rows = [r for r in rows
+                if limits.get(r["location_type"]) is None
+                or r["location_id"] in limits[r["location_type"]]]
+
     # `from_date` narrows the report to breaches that started inside the window;
     # the balance itself is always the running one as of the To Date.
     fd = parse_date(from_date) if from_date else None
@@ -2953,8 +2976,8 @@ def negative_stock_report(request):
         "from_date": from_date, "to_date": to_date,
         "item_id": item_id, "location": location, "item": item,
         "items": Item.objects.order_by("description"),
-        "warehouses": Warehouse.objects.order_by("name"),
-        "farms": BroilerFarm.objects.order_by("farm_name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         "company": CompanyProfile.get_solo(),
     }
     if export == "excel":

@@ -376,3 +376,69 @@ class BroilerModuleScopingTests(TestCase):
         html = self.client.get(reverse("day_record_report")).content.decode()
         self.assertIn("MineFarm", html)
         self.assertIn("TheirFarm", html)
+
+
+class CrossModuleScopingTests(TestCase):
+    """Every module's option lists, checked by rendering the real pages.
+
+    The rewrite was mechanical, so the risk is a page that was missed rather
+    than one that was done wrong — these fail on the former.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("cm_user", "c@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Everything")
+        self.user.groups.add(self.group)
+
+        region = Region.objects.create(description="East")
+        self.mine = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                          prefix="AKB")
+        self.theirs = Branch.objects.create(branch_name="Bahraich", region=region,
+                                            prefix="BHR")
+        self.wh_mine = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.wh_theirs = Warehouse.objects.create(name="Bahraich Warehouse")
+
+        profile = GroupAccessProfile.objects.create(
+            group=self.group, all_branches=False, all_sectors=False)
+        profile.branches.add(self.mine)
+        profile.sectors.add(self.wh_mine)
+
+        from user.access import ALL_TAB_CODES
+        for code in ALL_TAB_CODES:
+            GroupTabPermission.objects.get_or_create(
+                group=self.group, tab_code=code, defaults={"can_view": True})
+        self.client.force_login(self.user)
+
+    def assertWarehouseScoped(self, url_name):
+        with self.subTest(page=url_name):
+            html = self.client.get(reverse(url_name)).content.decode()
+            self.assertIn("Akbarpur Warehouse", html)
+            self.assertNotIn("Bahraich Warehouse", html)
+
+    def test_inventory_pages_offer_only_the_users_warehouses(self):
+        for url_name in ("stock_report", "item_ledger_report",
+                         "negative_stock_report", "item_summary_report",
+                         "stock_transfer_report"):
+            self.assertWarehouseScoped(url_name)
+
+    def test_a_hand_typed_warehouse_is_not_read_by_the_stock_report(self):
+        html = self.client.get(reverse("stock_report"),
+                               {"warehouse": self.wh_theirs.id,
+                                "submit": "1"}).content.decode()
+        self.assertNotIn("Bahraich Warehouse", html)
+
+    def test_purchase_and_hatchery_forms_are_scoped(self):
+        for url_name in ("general_purchase_list", "chicks_purchase_list"):
+            with self.subTest(page=url_name):
+                html = self.client.get(reverse(url_name)).content.decode()
+                self.assertNotIn("Bahraich Warehouse", html)
+
+    def test_an_unscoped_user_is_unaffected_everywhere(self):
+        boss = get_user_model().objects.create_superuser("cm_boss", "z2@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        html = self.client.get(reverse("stock_report")).content.decode()
+        self.assertIn("Akbarpur Warehouse", html)
+        self.assertIn("Bahraich Warehouse", html)

@@ -9,6 +9,11 @@ the Web-Access matrix (``user/access.py``) under the HR module.
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
+# Data scoping: user-facing option lists are narrowed to the branches,
+# farms and warehouses the signed-in user is scoped to.
+from user.services.scoping import (branches_for, farms_for,
+                                   supervisors_for, warehouses_for)
+
 from hr.models import Designation, Employee, Group
 from inventory.models import Warehouse
 from sales.models import Customer
@@ -24,7 +29,7 @@ def tracking_dashboard(request):
         "tracking_enabled": settings_row.enabled,
         "refresh_seconds": settings_row.dashboard_refresh_seconds,
         "map_provider": settings_row.map_provider,
-        "warehouses": Warehouse.objects.all().order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
         "groups": Group.objects.all().order_by("name"),
         "designations": Designation.objects.all().order_by("title"),
     })
@@ -80,7 +85,7 @@ def tracking_reports(request):
     return render(request, "tracking_reports.html", {
         "reports": [(key, label) for key, (label, _fn) in REPORTS.items()],
         "employees": list(employees),
-        "warehouses": Warehouse.objects.all().order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
     })
 
 
@@ -93,7 +98,7 @@ def tracking_geofences(request):
     customers = Customer.objects.order_by("name").values("id", "name")
     return render(request, "tracking_geofences.html", {
         "geofence_types": EmployeeGeofence.TYPE_CHOICES,
-        "warehouses": Warehouse.objects.all().order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
         "customers": list(customers),
         "default_radius": settings_row.default_geofence_radius_m,
     })

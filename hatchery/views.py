@@ -3,6 +3,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 from django.shortcuts import render, get_object_or_404
+
+# Data scoping: user-facing option lists are narrowed to the branches,
+# farms and warehouses the signed-in user is scoped to.
+from user.services.scoping import (branches_for, farms_for,
+                                   supervisors_for, warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -306,7 +311,7 @@ class EggPurchaseFormTemplateView(View):
             "egg_purchase_id": id,
             "request_mode": request_mode,
             "suppliers": Supplier.objects.all().order_by("name"),
-            "warehouses": Warehouse.objects.all().order_by("name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
             "items": Item.objects.all().order_by("item_code"),
             "pay_accounts": ChartOfAccount.objects.filter(status="Active").order_by("code"),
             "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
@@ -1435,7 +1440,7 @@ class ChickSaleFormTemplateView(View):
             "chick_sale_id": id,
             "request_mode": request_mode,
             "customers": Customer.objects.filter(contact_type__in=["Customer", "Supplier & Customer"]).order_by("name"),
-            "warehouses": Warehouse.objects.all().order_by("name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
             "items": Item.objects.all().order_by("item_code"),
             "accounts": ChartOfAccount.objects.all().order_by("code"),
             "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only

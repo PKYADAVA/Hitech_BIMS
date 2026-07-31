@@ -4,6 +4,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from django.shortcuts import render, get_object_or_404, redirect
+
+# Data scoping: user-facing option lists are narrowed to the branches,
+# farms and warehouses the signed-in user is scoped to.
+from user.services.scoping import (branches_for, farms_for,
+                                   supervisors_for, warehouses_for)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -432,13 +437,13 @@ def _general_purchase_list_dict(gp):
     }
 
 
-def _general_purchase_form_context(gp=None):
+def _general_purchase_form_context(user, gp=None):
     return {
         "general_purchase": gp,
         "next_purchase_no": GeneralPurchase._next_purchase_no() if not gp else None,
         "suppliers": Supplier.objects.order_by("name"),
         "items": Item.objects.order_by("item_code"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
         "tax_masters": TaxMaster.objects.exclude(tax_percentage__isnull=True).order_by("tax_code"),
@@ -522,7 +527,7 @@ def _save_general_purchase_items(instance, request):
 def general_purchase_list(request):
     return render(request, "general_purchase_list.html", {
         "categories": ItemCategory.objects.order_by("name"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
     })
 
 
@@ -542,7 +547,7 @@ def create_general_purchase(request):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "general_purchase_form.html", _general_purchase_form_context())
+    return render(request, "general_purchase_form.html", _general_purchase_form_context(request.user))
 
 
 @login_required(login_url="login")
@@ -562,7 +567,7 @@ def edit_general_purchase(request, id):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "general_purchase_form.html", _general_purchase_form_context(instance))
+    return render(request, "general_purchase_form.html", _general_purchase_form_context(request.user, instance))
 
 
 @login_required(login_url="login")
@@ -641,13 +646,13 @@ def _chicks_purchase_list_dict(cp):
     }
 
 
-def _chicks_purchase_form_context(cp=None):
+def _chicks_purchase_form_context(user, cp=None):
     return {
         "chicks_purchase": cp,
         "next_purchase_no": ChicksPurchase._next_purchase_no() if not cp else None,
         "suppliers": Supplier.objects.order_by("name"),
         "items": Item.objects.order_by("item_code"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
         "today": timezone.localdate().isoformat(),
@@ -728,7 +733,7 @@ def _save_chicks_purchase_items(instance, request):
 @login_required(login_url="login")
 def chicks_purchase_list(request):
     return render(request, "chicks_purchase_list.html", {
-        "warehouses": Warehouse.objects.order_by("name"),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
     })
 
 
@@ -748,7 +753,7 @@ def create_chicks_purchase(request):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context())
+    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context(request.user))
 
 
 @login_required(login_url="login")
@@ -768,7 +773,7 @@ def edit_chicks_purchase(request, id):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context(instance))
+    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context(request.user, instance))
 
 
 @login_required(login_url="login")
@@ -1823,8 +1828,8 @@ def purchase_report(request):
         "suppliers": Supplier.objects.order_by("name"),
         "categories": ItemCategory.objects.order_by("name"),
         "items": Item.objects.order_by("description"),
-        "branches": Branch.objects.order_by("branch_name"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         "company": CompanyProfile.get_solo(),
     }
     if export == "excel":
