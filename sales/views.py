@@ -637,7 +637,8 @@ def customer_ledger_report(request):
     td = parse_date(to_date) if to_date else None
     as_of = td or _date.today()
 
-    customer = Customer.objects.filter(id=customer_id).first() if customer_id.isdigit() else None
+    customer = (customers_for(request.user).filter(id=customer_id).first()
+                if customer_id.isdigit() else None)
     groups = []
     totals = {"debit": Decimal("0"), "credit": Decimal("0")}
     prev_balance = Decimal("0")
@@ -1040,7 +1041,8 @@ def customer_balance_report(request):
     td = parse_date(to_date) if to_date else None
     ref_date = td or timezone.localdate()
 
-    customers = Customer.objects.select_related("customer_group").order_by("name")
+    customers = customers_for(
+        request.user, Customer.objects.select_related("customer_group").order_by("name"))
     if group.isdigit():
         customers = customers.filter(customer_group_id=group)
 

@@ -1167,7 +1167,10 @@ def supplier_ledger_report(request):
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None
 
-    supplier = Supplier.objects.filter(id=supplier_id).first() if supplier_id.isdigit() else None
+    # A querystring is not a permission: a supplier outside the user's group
+    # scope resolves to None rather than having their ledger printed.
+    supplier = (suppliers_for(request.user).filter(id=supplier_id).first()
+                if supplier_id.isdigit() else None)
     groups, totals = [], {"credit": Decimal("0"), "debit": Decimal("0")}
     prev_balance = Decimal("0")
     running = Decimal("0")
@@ -1556,7 +1559,7 @@ def supplier_balance_report(request):
     td = parse_date(to_date) if to_date else None
     ref_date = td or timezone.localdate()
 
-    suppliers = Supplier.objects.order_by("name")
+    suppliers = suppliers_for(request.user, Supplier.objects.order_by("name"))
     if group:
         suppliers = suppliers.filter(supplier_group=group)
 
@@ -1673,10 +1676,15 @@ def purchase_report(request):
             qs = qs.filter(**{f"{field}__lte": td})
         return qs
 
+    def scoped(qs):
+        """Every line here records the warehouse it landed in, so the report
+        narrows with the user's sectors the same way the grids do."""
+        return scope_any(request.user, qs, sectors="farm_warehouse_id")
+
     # ---- General purchases (feed, medicine, consumables) ----
-    gp = window(GeneralPurchaseItem.objects.select_related(
+    gp = scoped(window(GeneralPurchaseItem.objects.select_related(
         "purchase", "purchase__supplier", "item", "item__category",
-        "farm_warehouse", "farm_warehouse__sector"), "purchase__date")
+        "farm_warehouse", "farm_warehouse__sector"), "purchase__date"))
     if supplier_id:
         gp = gp.filter(purchase__supplier_id=supplier_id)
     if category:
@@ -1688,10 +1696,10 @@ def purchase_report(request):
     gp = list(gp)
 
     # ---- Chicks purchases (the item lives on the header) ----
-    cp = window(ChicksPurchaseItem.objects.select_related(
+    cp = scoped(window(ChicksPurchaseItem.objects.select_related(
         "purchase", "purchase__supplier", "purchase__item",
         "purchase__item__category", "purchase__hatchery",
-        "farm_warehouse", "farm_warehouse__sector"), "purchase__date")
+        "farm_warehouse", "farm_warehouse__sector"), "purchase__date"))
     if supplier_id:
         cp = cp.filter(purchase__supplier_id=supplier_id)
     if category:

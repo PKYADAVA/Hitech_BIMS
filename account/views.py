@@ -1066,10 +1066,16 @@ def journal_voucher_report(request):
     created_by, narration = g("created_by"), g("narration")
     export = g("export").lower()
 
-    qs = (Voucher.objects
-          .select_related("sector", "created_by")
-          .prefetch_related("lines__account", "lines__cost_center")
-          .order_by("-date", "-id"))
+    # Voucher.sector is the Warehouse (Office / Branch) the entry belongs to,
+    # so the report narrows with the user's sectors. Vouchers with no sector
+    # are kept — an unfiled entry is not evidence the user should be denied it,
+    # and dropping it would change the debit/credit totals rather than restrict
+    # what is visible.
+    from user.services.scoping import scope_any
+
+    qs = scope_any(request.user,
+                   Voucher.objects.filter(), sectors="sector_id"
+                   ).select_related("sector", "created_by")                     .prefetch_related("lines__account", "lines__cost_center")                     .order_by("-date", "-id")
 
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None

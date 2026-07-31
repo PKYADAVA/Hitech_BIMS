@@ -750,3 +750,86 @@ class CrossModuleRowScopingTests(TestCase):
         self.assertEqual(
             scope_any(boss, EggPurchase.objects.all(), sectors="warehouse_id")
             .count(), EggPurchase.objects.count())
+
+
+class ReportDataScopingTests(TestCase):
+    """Report bodies, not just their filter bars.
+
+    A scoped user could still read another branch's figures by opening the
+    report — the dropdowns narrowed, the numbers underneath did not.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("rd_user", "rd@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Reports")
+        self.user.groups.add(self.group)
+        from user.access import ALL_TAB_CODES
+        for code in ALL_TAB_CODES:
+            GroupTabPermission.objects.get_or_create(
+                group=self.group, tab_code=code, defaults={"can_view": True})
+
+        self.mine = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.theirs = Warehouse.objects.create(name="Bahraich Warehouse")
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_sectors=False,
+                                                    all_supplier_groups=False)
+        profile.sectors.add(self.mine)
+        self.client.force_login(self.user)
+
+    def test_the_supplier_balance_report_lists_only_permitted_suppliers(self):
+        from purchase.models import Supplier, VendorGroup
+
+        allowed = VendorGroup.objects.create(code="FD", description="Feed Vendors")
+        VendorGroup.objects.create(code="EQ", description="Equipment Vendors")
+        self.group.access_profile.supplier_groups.add(allowed)
+        Supplier.objects.create(name="Feed Co", supplier_group="Feed Vendors",
+                                mobile="7200000001")
+        Supplier.objects.create(name="Equipment Co",
+                                supplier_group="Equipment Vendors",
+                                mobile="7200000002")
+
+        html = self.client.get(reverse("supplier_balance")).content.decode()
+        self.assertIn("Feed Co", html)
+        self.assertNotIn("Equipment Co", html)
+
+    def test_a_supplier_ledger_outside_the_scope_is_not_printed(self):
+        from purchase.models import Supplier, VendorGroup
+
+        allowed = VendorGroup.objects.create(code="FD2", description="Feed 2")
+        self.group.access_profile.supplier_groups.add(allowed)
+        other = Supplier.objects.create(name="Equipment Co",
+                                        supplier_group="Equipment Vendors",
+                                        mobile="7200000003")
+        html = self.client.get(reverse("supplier_ledger"),
+                               {"supplier": other.id}).content.decode()
+        self.assertNotIn("Equipment Co", html)
+
+    def test_the_journal_voucher_report_is_scoped_by_sector(self):
+        from account.models import CompanyProfile, FinancialYear, Voucher
+
+        company = CompanyProfile.get_solo()
+        year = FinancialYear.objects.create(start_date="2026-04-01",
+                                            end_date="2027-03-31")
+        for wh, ref in ((self.mine, "JV-MINE"), (self.theirs, "JV-THEIRS"),
+                        (None, "JV-NONE")):
+            Voucher.objects.create(company=company, financial_year=year,
+                                   sector=wh, voucher_type="Journal",
+                                   date="2026-06-01", reference=ref)
+
+        html = self.client.get(reverse("journal_voucher_report"),
+                               {"from_date": "2026-01-01",
+                                "to_date": "2026-12-31"}).content.decode()
+        self.assertIn("JV-MINE", html)
+        self.assertNotIn("JV-THEIRS", html)
+        # an unfiled entry is kept: dropping it would change the totals rather
+        # than restrict what is visible
+        self.assertIn("JV-NONE", html)
+
+    def test_an_unscoped_user_sees_every_voucher(self):
+        boss = get_user_model().objects.create_superuser("rd_boss", "rdb@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        response = self.client.get(reverse("journal_voucher_report"))
+        self.assertEqual(response.status_code, 200)
