@@ -446,6 +446,17 @@ def iter_tabs():
                 yield module["nav"], section["label"], code, label, extra_urls
 
 
+# Url-names that stay reachable for every signed-in user, whatever their
+# matrix says. These are the pages someone needs in order to be a user at all —
+# signing in and out, the landing page, their own profile and password — plus
+# the dashboard's own endpoints, which do their own per-tab filtering and would
+# otherwise need a tab of their own just to exist.
+PUBLIC_URL_NAMES = {
+    "login", "logout", "home", "dashboard", "forgot_password",
+    "update_password", "reset_password", "user_profile",
+    "global_search_api", "dashboard_widgets_api",
+}
+
 # All tab codes (url-names) that participate in the matrix.
 ALL_TAB_CODES = {code for _nav, _s, code, _l, _e in iter_tabs()}
 

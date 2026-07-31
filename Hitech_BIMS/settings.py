@@ -53,6 +53,14 @@ if not SECRET_KEY:
 DEBUG = env_bool("DEBUG", False)
 DEVELOPMENT_MODE = env_bool("DEVELOPMENT_MODE", DEBUG)
 
+# Web-Access enforcement (see user/middleware.py). The matrix already refuses
+# any page it can map to a tab; most of the URL surface it cannot map, and is
+# therefore open. Turning that around blind would lock users out of endpoints
+# nobody realised were in use, so it ships dark: with this False the guard only
+# *records* those requests to user.WebAccessAudit. Review the table
+# (`manage.py webaccess_audit`), fill in the mapping, then set it True.
+WEB_ACCESS_ENFORCE = os.getenv("WEB_ACCESS_ENFORCE", "False").lower() in ("true", "1", "yes")
+
 # Configure allowed hosts based on environment.
 # No insecure "*" fallback: production must set ALLOWED_HOSTS explicitly.
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")

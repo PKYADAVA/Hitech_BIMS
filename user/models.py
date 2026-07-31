@@ -98,3 +98,45 @@ class GroupAccessProfile(models.Model):
 
     def __str__(self):
         return f"Access profile · {self.group.name}"
+
+
+class WebAccessAudit(models.Model):
+    """What the Web-Access guard *would* do, recorded without doing it.
+
+    The guard currently allows any URL it cannot map to a tab, which is most of
+    them. Turning that around blind would lock real users out of endpoints
+    nobody realised were in use, so enforcement ships dark: every request that
+    is unmapped — or that would be refused once the mapping is complete — lands
+    here instead. Read the table after a normal day's work and the allowlist
+    writes itself.
+
+    One row per (url name, method, verdict, user); ``hits`` counts repeats so
+    the table stays small enough to read.
+    """
+
+    UNMAPPED = "unmapped"     # no tab owns this url — today it is simply open
+    DENIED = "denied"         # mapped, and the matrix says no (already enforced)
+
+    VERDICTS = [(UNMAPPED, "Unmapped"), (DENIED, "Denied")]
+
+    url_name = models.CharField(max_length=200, db_index=True)
+    method = models.CharField(max_length=10)
+    verdict = models.CharField(max_length=20, choices=VERDICTS, db_index=True)
+    username = models.CharField(max_length=150)
+    path = models.CharField(max_length=300, blank=True)
+    view = models.CharField(max_length=200, blank=True,
+                            help_text="Dotted path of the view that served it")
+    tab_code = models.CharField(max_length=100, blank=True)
+    action = models.CharField(max_length=20, blank=True)
+    hits = models.PositiveIntegerField(default=1)
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Web access audit"
+        verbose_name_plural = "Web access audit"
+        unique_together = ("url_name", "method", "verdict", "username")
+        ordering = ["url_name", "username"]
+
+    def __str__(self):
+        return f"{self.verdict}: {self.method} {self.url_name} ({self.username})"
