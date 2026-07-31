@@ -4,7 +4,7 @@
 {% block title %}Dashboard — BIMS{% endblock %}
 
 {% block nav %}
-  {% include 'main_top_navbar.html' with active_tab='home' %}
+  {% if not preview_mode %}{% include 'main_top_navbar.html' with active_tab='home' %}{% endif %}
 {% endblock %}
 
 {% block css %}
@@ -70,6 +70,10 @@
   .home-cal-grid .home-cal-day.is-blank { visibility:hidden; }
   .home-cal-grid .home-cal-day.is-today { background:#0d6efd; color:#fff; font-weight:600; }
   .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
+
+  /* A flex column so Dashboard Access can order the blocks: each carries its
+     own `order`, and the widget grid rides at its earliest card's position. */
+  .dash-panels { display:flex; flex-direction:column; }
 
   /* ---- Quick Actions ---------------------------------------------------- */
   /* Flex rather than a 7-column grid: cards are permission-gated, so the count
@@ -332,12 +336,22 @@
     </div>
 
 
+    {% if preview_mode %}
+    <div class="alert alert-info py-2 px-3 mb-3" style="font-size:.8rem;">
+      <i class="fas fa-eye me-1"></i>Preview of what
+      <strong>{{ preview_group.name }}</strong> sees. Controls are inert here.
+    </div>
+    {% endif %}
+
+    <div class="dash-panels">
+
+    {% if 'quick_actions' in dash_panels %}
     <!-- Quick Actions: straight into a transaction, without walking the menus.
          Each card is gated on the same tab code the nav and the view-guard use,
          so nothing is offered that would bounce the user at the door. They open
          in a new tab, like the search results, so the dashboard stays put. -->
-    <div class="mb-2"><h2 class="dash-section-title">Quick Actions</h2><p class="dash-section-copy">Start a transaction without hunting through the menus.</p></div>
-    <div class="qa-row mb-4">
+    <div class="mb-2" style="order:{{ dash_panels.quick_actions }};"><h2 class="dash-section-title">Quick Actions</h2><p class="dash-section-copy">Start a transaction without hunting through the menus.</p></div>
+    <div class="qa-row mb-4" style="order:{{ dash_panels.quick_actions }};">
       {% if 'broiler_batch' in allowed_tabs %}
       <a class="qa-card" href="{% url 'broiler_batch' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-blue"><i class="fa-solid fa-layer-group"></i></span><span class="qa-label">Batch Creation</span></a>
       {% endif %}
@@ -361,13 +375,15 @@
       {% endif %}
     </div>
 
-    <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
-    <div class="row g-3 mb-4" id="dash-widgets"></div>
+    {% endif %}
 
-    {% if 'tracking_dashboard' in allowed_tabs %}
+    <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
+    <div class="row g-3 mb-4" id="dash-widgets" style="order:{{ dash_widgets_order }};"></div>
+
+    {% if 'field_team' in dash_panels %}
     {% csrf_token %}
     <!-- Field Team — Live (Employee Tracking) -->
-    <div class="card mb-4">
+    <div class="card mb-4" style="order:{{ dash_panels.field_team }};">
       <div class="card-header d-flex align-items-center justify-content-between">
         <span><i class="fas fa-location-dot"></i> Field Team — Live</span>
         <span class="d-flex gap-2">
@@ -456,6 +472,8 @@
       </div>
     </div>
     {% endif %}
+
+    </div><!-- /.dash-panels -->
 
     <!-- Features Section -->
     <div class="d-flex align-items-center justify-content-between mb-3 legacy-calendar">
@@ -644,6 +662,7 @@
         history.replaceState(null, '',
           location.pathname + (params.toString() ? '?' + params : ''));
       }
+      {% if preview_group %}params.set('preview_group', '{{ preview_group.id }}');{% endif %}
       fetch('{% url "dashboard_widgets_api" %}?' + params,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })

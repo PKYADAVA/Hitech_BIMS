@@ -19,6 +19,10 @@ urlpatterns = [
     path('get-assigned-groups/', views.get_assigned_groups, name='get_assigned_groups'),
     path('api/global-search/', views.global_search_api, name='global_search_api'),
     path('api/dashboard-widgets/', views.dashboard_widgets_api, name='dashboard_widgets_api'),
+    path('dashboard-access/', views.dashboard_access, name='dashboard_access'),
+    path('dashboard-access/form/', views.dashboard_access_form, name='dashboard_access_form'),
+    path('dashboard-access/<int:group_id>/preview/', views.dashboard_access_preview, name='dashboard_access_preview'),
+    path('dashboard-access/<int:group_id>/delete/', views.dashboard_access_delete, name='dashboard_access_delete'),
     path('user_analytics/', views.user_analytics, name='user_analytics'),
      path('analytics/data/', views.user_analytics_data, name='user_analytics_data'),
 

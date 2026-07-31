@@ -77,9 +77,9 @@ class QuickActionTests(TestCase):
             with self.subTest(action=label):
                 self.assertNotIn(f'class="qa-card" href="{reverse(code)}"', html)
 
-    def test_the_row_is_present_even_with_no_permitted_actions(self):
-        """An empty row must not break the page for a user with no broiler
-        access at all."""
+    def test_the_whole_row_is_dropped_for_a_user_with_no_actions(self):
+        """Quick Actions is a dashboard panel now, so a user with none of its
+        tabs gets no heading and no empty row — not a row with nothing in it."""
         User = get_user_model()
         outsider = User.objects.create_user("qanone", "n@x.com", "Str0ngPass!")
         group = Group.objects.create(name="No Broiler")
@@ -87,5 +87,7 @@ class QuickActionTests(TestCase):
         GroupTabPermission.objects.create(group=group, tab_code="items", can_view=True)
 
         html = self.dashboard(outsider)
-        self.assertIn('class="qa-row', html)
         self.assertNotIn('class="qa-card"', html)
+        # the heading travels with the row (the words also appear in a CSS
+        # comment, so match the element rather than the text)
+        self.assertNotIn(">Quick Actions</h2>", html)

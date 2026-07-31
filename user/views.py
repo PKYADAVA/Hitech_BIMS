@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.models import Group, Permission
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from hr.models import Designation, Employee
 from hr.models import Group as HrGroup
@@ -46,13 +47,43 @@ def logout(request):
     return redirect("login")
 
 
-def _home_context():
+def _preview_group(request):
+    """The group a Dashboard Access preview is being rendered for, if any.
+
+    Rendering someone else's dashboard is a permission of its own: only a user
+    who may open Dashboard Access can do it, and only ever read-only.
+    """
+    from .access import user_can
+
+    raw = (request.GET.get("preview_group") or "").strip()
+    if not raw.isdigit():
+        return None
+    if not user_can(getattr(request, "user", None), "dashboard_access", "view"):
+        return None
+    return Group.objects.filter(id=raw).first()
+
+
+def _home_context(request):
     """Filter-option lists for the Field Team widget and the widget filter bar
     (cheap; harmless to compute even for users without access — both are
     permission-gated in the template)."""
     from broiler.models import Branch, BroilerFarm, Supervisor
+    from .services.dashboard_widgets import dashboard_panels
+
+    preview = _preview_group(request)
+    panels = dashboard_panels(getattr(request, "user", None), as_group=preview)
+    # The widget grid sits wherever its earliest card sits, so ordering one
+    # card to the top brings the row with it.
+    card_positions = [v for k, v in panels.items()
+                      if k not in ("quick_actions", "field_team")]
 
     return {
+        "dash_panels": panels,
+        "preview_group": preview,
+        # Chrome off inside the preview iframe: it is a picture of the page, not
+        # a place to navigate from.
+        "preview_mode": bool(preview) and request.GET.get("preview") == "1",
+        "dash_widgets_order": min(card_positions) if card_positions else 99,
         "trk_warehouses": Warehouse.objects.all().order_by("name"),
         "trk_groups": HrGroup.objects.all().order_by("name"),
         "trk_designations": Designation.objects.all().order_by("title"),
@@ -65,6 +96,119 @@ def _home_context():
         "dash_supervisors": Supervisor.objects.order_by("name"),
         "dash_farms": BroilerFarm.objects.order_by("farm_name"),
     }
+
+
+@login_required
+def dashboard_access(request):
+    """User > Dashboard Access — one row per group, with the usual actions.
+
+    Only groups that have been configured appear here. A group with no row is
+    unconfigured and sees whatever its tabs allow, which is how the system
+    behaved before this page existed.
+    """
+    from .models import GroupDashboardWidget
+    from .services.dashboard_widgets import all_panels
+
+    titles = {key: title for key, title, *_ in all_panels()}
+    total = len(titles)
+
+    rows = []
+    for group in Group.objects.order_by("name"):
+        saved = list(GroupDashboardWidget.objects.filter(group=group))
+        if not saved:
+            continue
+        on = [r for r in sorted(saved, key=lambda r: r.position) if r.enabled]
+        rows.append({
+            "group": group,
+            "enabled_count": len(on),
+            "total": total,
+            "names": ", ".join(titles.get(r.widget_key, r.widget_key) for r in on) or "None",
+        })
+
+    return render(request, "dashboard_access_list.html", {
+        "rows": rows,
+        "unconfigured": Group.objects.exclude(
+            id__in=[r["group"].id for r in rows]).order_by("name"),
+    })
+
+
+@login_required
+def dashboard_access_form(request):
+    """Add or edit one group's dashboard access."""
+    from .models import GroupDashboardWidget
+    from .services.dashboard_widgets import all_panels
+
+    panels = list(all_panels())
+
+    if request.method == "POST":
+        group = get_object_or_404(Group, id=request.POST.get("group") or 0)
+        GroupDashboardWidget.objects.filter(group=group).delete()
+        GroupDashboardWidget.objects.bulk_create([
+            GroupDashboardWidget(
+                group=group, widget_key=key,
+                enabled=request.POST.get(f"on_{key}") == "on",
+                position=int((request.POST.get(f"pos_{key}") or "").strip() or 0))
+            for key, _title, _tabs, _icon, _colour in panels
+        ])
+        messages.success(request, f"Dashboard access saved for “{group.name}”.")
+        return redirect("dashboard_access")
+
+    group_id = (request.GET.get("group") or "").strip()
+    selected = Group.objects.filter(id=group_id).first() if group_id.isdigit() else None
+
+    saved = {}
+    if selected:
+        saved = {r.widget_key: r for r in
+                 GroupDashboardWidget.objects.filter(group=selected)}
+
+    widgets = []
+    for index, (key, title, tabs, icon, colour) in enumerate(panels):
+        row = saved.get(key)
+        widgets.append({
+            "key": key, "title": title, "icon": icon, "colour": colour,
+            "tabs": ", ".join(tabs),
+            # A group being configured for the first time starts with everything
+            # on, in registry order — the same as its current behaviour.
+            "enabled": row.enabled if row else True,
+            "position": row.position if row else index,
+        })
+    widgets.sort(key=lambda w: w["position"])
+
+    return render(request, "dashboard_access_form.html", {
+        "groups": Group.objects.order_by("name"),
+        "selected_group": selected,
+        "widgets": widgets,
+        "editing": bool(saved),
+    })
+
+
+@login_required
+def dashboard_access_preview(request, group_id):
+    """What this group's dashboard would look like — JSON for the modal.
+
+    Computed for the group rather than by impersonating a member, and it says
+    *why* a panel is missing: switched off here, or not permitted by the tab
+    matrix at all.
+    """
+    from .services.dashboard_widgets import panels_for_group
+
+    group = get_object_or_404(Group, id=group_id)
+    return JsonResponse({"group": group.name,
+                         "panels": panels_for_group(group)})
+
+
+@login_required
+def dashboard_access_delete(request, group_id):
+    """Clear a group's dashboard access, returning it to the default."""
+    from .models import GroupDashboardWidget
+
+    group = get_object_or_404(Group, id=group_id)
+    GroupDashboardWidget.objects.filter(group=group).delete()
+    messages.success(
+        request,
+        f"Dashboard access cleared for “{group.name}” — it now sees every "
+        "widget its permissions allow.")
+    return redirect("dashboard_access")
 
 
 @login_required
@@ -91,15 +235,20 @@ def dashboard_widgets_api(request):
     from .services.dashboard_widgets import dashboard_widgets, parse_filters
 
     filters = parse_filters(request.GET)
-    return JsonResponse({"widgets": dashboard_widgets(request.user, filters)})
+    return JsonResponse({"widgets": dashboard_widgets(
+        request.user, filters, as_group=_preview_group(request))})
 
 
+# X_FRAME_OPTIONS is DENY site-wide. The Dashboard Access preview frames this
+# page from the same origin, so relax it here only — external sites still
+# cannot frame the dashboard.
+@xframe_options_sameorigin
 def dashboard(request):
-    return render(request, "home.html", _home_context())
+    return render(request, "home.html", _home_context(request))
 
 
 def home(request):
-    return render(request, "home.html", _home_context())
+    return render(request, "home.html", _home_context(request))
 
 
 def forgot_password_view(request):

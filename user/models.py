@@ -140,3 +140,40 @@ class WebAccessAudit(models.Model):
 
     def __str__(self):
         return f"{self.verdict}: {self.method} {self.url_name} ({self.username})"
+
+
+class GroupDashboardWidget(models.Model):
+    """Which dashboard widgets a group sees, and in what order.
+
+    The widgets are already gated on the report tab each one links to, so this
+    is a second, narrower switch: a group may be allowed to open the Stock
+    Report and still not want its card on the dashboard. Both must agree — this
+    can only take a widget away, never grant one the matrix withholds.
+
+    ``position`` is the sort order within the row, low first. A user in several
+    groups sees the union of what those groups enable, at the earliest position
+    any of them gives it, which matches how the tab matrix combines groups.
+
+    A group with no rows here is treated as unconfigured and sees every widget
+    its tabs allow, so existing groups keep working until someone sets this up.
+    """
+
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, related_name="dashboard_widgets"
+    )
+    widget_key = models.CharField(
+        max_length=50,
+        help_text="Key from user.services.dashboard_widgets.WIDGETS",
+    )
+    enabled = models.BooleanField(default=True)
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Dashboard widget access"
+        verbose_name_plural = "Dashboard widget access"
+        unique_together = ("group", "widget_key")
+        ordering = ["position", "widget_key"]
+
+    def __str__(self):
+        state = "on" if self.enabled else "off"
+        return f"{self.group.name} · {self.widget_key} ({state}, #{self.position})"

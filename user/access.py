@@ -399,6 +399,8 @@ MODULE_REGISTRY = [
                 "label": "User Management",
                 "tabs": [
                     ("user_groups", "User Access Groups"),
+                    ("dashboard_access", "Dashboard Access",
+                     ("dashboard_access_form", "dashboard_access_preview")),
                     ("create_user", "Create User"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
@@ -567,6 +569,7 @@ _ACTION_BASE_TO_TAB = {
     "customer_group": "customer_groups",
     "sales_price": "sales_price_master",
     # Account
+    "dashboard_access": "dashboard_access",
     "chart_of_accounts": "coa",
     "financial_year": "fin_year",
     "terms_conditions": "terms",

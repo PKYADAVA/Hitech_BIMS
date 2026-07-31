@@ -1,0 +1,57 @@
+{% comment %}
+Preview modal for Dashboard Access, shared by the list and the form.
+
+It shows what a *group* would get rather than rendering the viewer's own
+dashboard, which would show the wrong thing entirely. Each panel says which of
+the two gates it failed: switched off here, or not permitted by the tab matrix.
+
+Open it with: dashboardAccessPreview(groupId)
+{% endcomment %}
+<div class="modal fade" id="da-preview" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-eye me-2"></i>Dashboard preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="dap-frame-wrap">
+          <iframe id="da-preview-frame" title="Dashboard preview" loading="lazy"></iframe>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="me-auto text-muted" style="font-size:.75rem;">
+          Rendered as the group, not as you — the real dashboard page with that
+          group's tabs and widget settings.
+        </span>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  #da-preview .modal-dialog { max-width: min(1280px, 96vw); }
+  .dap-frame-wrap { background:#f4f7fb; border-radius:0 0 .5rem .5rem; }
+  #da-preview-frame { width:100%; height:min(70vh, 620px); border:0; display:block; }
+</style>
+
+<script>
+  function dashboardAccessPreview(groupId) {
+    var modalEl = document.getElementById('da-preview');
+    var frame = document.getElementById('da-preview-frame');
+    // Loaded on open rather than up front, so listing twenty groups does not
+    // mean twenty hidden dashboards.
+    frame.src = '/dashboard/?preview=1&preview_group=' + encodeURIComponent(groupId);
+    new bootstrap.Modal(modalEl).show();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var modalEl = document.getElementById('da-preview');
+    if (!modalEl) return;
+    modalEl.addEventListener('hidden.bs.modal', function () {
+      // Drop the frame so its timers and map stop when the modal closes.
+      document.getElementById('da-preview-frame').src = 'about:blank';
+    });
+  });
+</script>

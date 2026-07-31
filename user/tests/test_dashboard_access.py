@@ -1,0 +1,380 @@
+"""User > Dashboard Access — per-group widget visibility and order.
+
+The rule that matters: this can only take a widget away. It sits on top of the
+tab gate, so it must never reveal a card for a report the group cannot open.
+"""
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.core.cache import cache
+from django.test import TestCase
+from django.urls import reverse
+from django.utils.html import escape
+
+from user.models import GroupDashboardWidget, GroupTabPermission
+from user.services.dashboard_widgets import (WIDGETS, all_panels,
+                                             dashboard_widgets)
+
+ALL_KEYS = [w[0] for w in WIDGETS]           # the data cards
+ALL_PANEL_KEYS = [p[0] for p in all_panels()]  # plus Quick Actions / Field Team
+
+
+class DashboardAccessTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("da_admin", "a@x.com", "Str0ngPass!")
+        self.member = User.objects.create_user("da_member", "m@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Farm Managers")
+        self.member.groups.add(self.group)
+        # Every widget's tab, so the tab gate is never what is being measured.
+        for _key, _t, tabs, _u, _i, _c, _b in WIDGETS:
+            for tab in tabs:
+                GroupTabPermission.objects.get_or_create(
+                    group=self.group, tab_code=tab, defaults={"can_view": True})
+
+    def keys(self, user):
+        return [w["key"] for w in dashboard_widgets(user, use_cache=False)]
+
+    def user(self):
+        return get_user_model().objects.get(pk=self.member.pk)
+
+    # ---- defaults ---------------------------------------------------------
+
+    def test_an_unconfigured_group_sees_everything_its_tabs_allow(self):
+        """Nothing saved yet must behave exactly as before this feature."""
+        self.assertEqual(self.keys(self.user()), ALL_KEYS)
+
+    def test_a_superuser_is_unaffected_by_group_rows(self):
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=False)
+        self.assertEqual(self.keys(self.admin), ALL_KEYS)
+
+    # ---- switching widgets off -------------------------------------------
+
+    def configure(self, **enabled_by_key):
+        GroupDashboardWidget.objects.filter(group=self.group).delete()
+        for index, key in enumerate(ALL_KEYS):
+            GroupDashboardWidget.objects.create(
+                group=self.group, widget_key=key,
+                enabled=enabled_by_key.get(key, True), position=index)
+
+    def test_a_disabled_widget_disappears(self):
+        self.configure(balances=False)
+        keys = self.keys(self.user())
+        self.assertNotIn("balances", keys)
+        self.assertIn("live_flock", keys)
+
+    def test_disabling_everything_leaves_an_empty_dashboard(self):
+        self.configure(**{k: False for k in ALL_KEYS})
+        self.assertEqual(self.keys(self.user()), [])
+
+    def test_it_can_never_grant_a_widget_the_matrix_withholds(self):
+        """Enabled here, but the group cannot open the report it links to."""
+        GroupTabPermission.objects.filter(
+            group=self.group, tab_code="negative_stock_report").delete()
+        self.configure()
+        self.assertNotIn("stock_alerts", self.keys(self.user()))
+
+    # ---- ordering ---------------------------------------------------------
+
+    def test_position_sets_the_order(self):
+        GroupDashboardWidget.objects.filter(group=self.group).delete()
+        for position, key in enumerate(reversed(ALL_KEYS)):
+            GroupDashboardWidget.objects.create(group=self.group, widget_key=key,
+                                                enabled=True, position=position)
+        self.assertEqual(self.keys(self.user()), list(reversed(ALL_KEYS)))
+
+    def test_widgets_sharing_a_position_keep_registry_order(self):
+        GroupDashboardWidget.objects.filter(group=self.group).delete()
+        for key in ALL_KEYS:
+            GroupDashboardWidget.objects.create(group=self.group, widget_key=key,
+                                                enabled=True, position=0)
+        self.assertEqual(self.keys(self.user()), ALL_KEYS)
+
+    # ---- several groups ---------------------------------------------------
+
+    def test_enabled_in_any_group_wins_at_the_earliest_position(self):
+        """Matches how the tab matrix combines groups — a permission granted
+        anywhere is granted."""
+        self.configure(live_flock=False)
+        other = Group.objects.create(name="Also Managers")
+        self.member.groups.add(other)
+        GroupDashboardWidget.objects.create(group=other, widget_key="live_flock",
+                                            enabled=True, position=0)
+        keys = self.keys(self.user())
+        self.assertEqual(keys[0], "live_flock")
+
+    # ---- the editor -------------------------------------------------------
+
+    def test_the_page_lists_every_widget(self):
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard_access_form"),
+                               {"group": self.group.id}).content.decode()
+        for key, title, *_ in all_panels():
+            self.assertIn(f'name="on_{key}"', html)
+            self.assertIn(f'name="pos_{key}"', html)
+            self.assertIn(escape(title), html)   # "Receivables &amp; Payables"
+
+    def test_the_form_says_when_a_group_is_unconfigured(self):
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard_access_form"),
+                               {"group": self.group.id}).content.decode()
+        self.assertIn("Nothing is saved", html)
+
+    def test_the_list_shows_only_configured_groups(self):
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard_access")).content.decode()
+        self.assertIn("No group has been configured yet", html)
+
+        self.configure(balances=False)
+        html = self.client.get(reverse("dashboard_access")).content.decode()
+        self.assertIn("Farm Managers", html)
+        self.assertIn(f'?group={self.group.id}', html)      # edit link
+        self.assertIn(reverse("dashboard_access_delete", args=[self.group.id]), html)
+
+    def test_clearing_a_group_returns_it_to_the_default(self):
+        self.configure(balances=False)
+        self.assertNotIn("balances", self.keys(self.user()))
+
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("dashboard_access_delete", args=[self.group.id]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            GroupDashboardWidget.objects.filter(group=self.group).exists())
+        self.assertEqual(self.keys(self.user()), ALL_KEYS)
+
+    def test_saving_stores_the_switches_and_positions(self):
+        self.client.force_login(self.admin)
+        data = {"group": self.group.id}
+        for index, key in enumerate(ALL_KEYS):
+            data[f"pos_{key}"] = len(ALL_KEYS) - index
+            if key != "balances":
+                data[f"on_{key}"] = "on"
+        response = self.client.post(reverse("dashboard_access_form"), data)
+        self.assertEqual(response.status_code, 302)
+
+        rows = {r.widget_key: r for r in
+                GroupDashboardWidget.objects.filter(group=self.group)}
+        self.assertEqual(len(rows), len(ALL_PANEL_KEYS))
+        self.assertFalse(rows["balances"].enabled)
+        self.assertTrue(rows["live_flock"].enabled)
+        self.assertEqual(rows[ALL_KEYS[0]].position, len(ALL_KEYS))
+        # and it takes effect
+        self.assertNotIn("balances", self.keys(self.user()))
+
+    def test_saving_replaces_rather_than_accumulates(self):
+        self.client.force_login(self.admin)
+        for _ in range(2):
+            self.client.post(reverse("dashboard_access_form"),
+                             {"group": self.group.id,
+                              **{f"on_{k}": "on" for k in ALL_PANEL_KEYS}})
+        self.assertEqual(
+            GroupDashboardWidget.objects.filter(group=self.group).count(),
+            len(ALL_PANEL_KEYS))
+
+    def test_the_tab_is_registered_and_reachable(self):
+        from user.access import ALL_TAB_CODES
+
+        self.assertIn("dashboard_access", ALL_TAB_CODES)
+        self.assertEqual(reverse("dashboard_access"), "/dashboard-access/")
+
+    def test_the_nav_link_is_permission_gated(self):
+        """Same rule as every other tab: no view right, no link. The link lives
+        in the User Management subnav, not on the dashboard."""
+        from user.access import allowed_view_tabs
+
+        self.assertNotIn("dashboard_access", allowed_view_tabs(self.user()))
+        GroupTabPermission.objects.create(group=self.group,
+                                          tab_code="dashboard_access", can_view=True)
+        self.assertIn("dashboard_access", allowed_view_tabs(self.user()))
+
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard_access")).content.decode()
+        self.assertIn(reverse("dashboard_access_form"), html)
+
+
+class DashboardPanelTests(TestCase):
+    """Quick Actions and Field Team are rendered server-side, so they are
+    switched and ordered through the same page as the data cards."""
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.member = User.objects.create_user("dp_member", "p@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Field Supervisors")
+        self.member.groups.add(self.group)
+        for key, _t, tabs, *_ in all_panels():
+            for tab in tabs:
+                GroupTabPermission.objects.get_or_create(
+                    group=self.group, tab_code=tab, defaults={"can_view": True})
+
+    def user(self):
+        return get_user_model().objects.get(pk=self.member.pk)
+
+    def panels(self):
+        from user.services.dashboard_widgets import dashboard_panels
+        return dashboard_panels(self.user())
+
+    def test_field_team_is_a_switchable_panel(self):
+        self.assertIn("field_team", ALL_PANEL_KEYS)
+        self.assertIn("quick_actions", ALL_PANEL_KEYS)
+
+    def test_an_unconfigured_group_gets_every_panel(self):
+        self.assertEqual(set(self.panels()), set(ALL_PANEL_KEYS))
+
+    def test_switching_field_team_off_hides_it(self):
+        for key in ALL_PANEL_KEYS:
+            GroupDashboardWidget.objects.create(
+                group=self.group, widget_key=key,
+                enabled=key != "field_team", position=0)
+        self.assertNotIn("field_team", self.panels())
+        self.assertIn("quick_actions", self.panels())
+
+    def test_the_tracking_tab_alone_no_longer_shows_field_team(self):
+        """Before this, the block keyed straight off the tracking tab. Now the
+        group can hold that tab and still not want the panel."""
+        for key in ALL_PANEL_KEYS:
+            GroupDashboardWidget.objects.create(
+                group=self.group, widget_key=key,
+                enabled=key != "field_team", position=0)
+        self.client.force_login(self.member)
+        html = self.client.get(reverse("dashboard")).content.decode()
+        self.assertNotIn('id="home-trk-map"', html)
+
+    def test_a_panel_still_needs_its_tab(self):
+        GroupTabPermission.objects.filter(
+            group=self.group, tab_code="tracking_dashboard").delete()
+        self.assertNotIn("field_team", self.panels())
+
+    def test_the_dashboard_orders_the_blocks_by_position(self):
+        for key in ALL_PANEL_KEYS:
+            GroupDashboardWidget.objects.create(
+                group=self.group, widget_key=key, enabled=True,
+                position=0 if key == "field_team" else 5)
+        self.client.force_login(self.member)
+        html = self.client.get(reverse("dashboard")).content.decode()
+        self.assertIn("order:0;", html)          # field team hoisted to the top
+        self.assertIn('class="dash-panels"', html)
+
+
+class DashboardAccessPreviewTests(TestCase):
+    """The Preview action answers for the group, not for whoever clicks it."""
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("pv_admin", "v@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Preview Group")
+        self.client.force_login(self.admin)
+
+    def preview(self):
+        response = self.client.get(
+            reverse("dashboard_access_preview", args=[self.group.id]))
+        self.assertEqual(response.status_code, 200)
+        return {p["key"]: p for p in response.json()["panels"]}
+
+    def test_a_panel_the_group_cannot_reach_is_marked_not_permitted(self):
+        panels = self.preview()
+        self.assertFalse(panels["live_flock"]["permitted"])
+        self.assertFalse(panels["live_flock"]["shown"])
+
+    def test_a_permitted_and_enabled_panel_is_shown(self):
+        GroupTabPermission.objects.create(group=self.group, can_view=True,
+                                          tab_code="live_flock_summary_report")
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=True, position=0)
+        self.assertTrue(self.preview()["live_flock"]["shown"])
+
+    def test_switched_off_is_distinguished_from_not_permitted(self):
+        """The modal says which gate failed, so the two must not collapse."""
+        GroupTabPermission.objects.create(group=self.group, can_view=True,
+                                          tab_code="live_flock_summary_report")
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=False, position=0)
+        panel = self.preview()["live_flock"]
+        self.assertTrue(panel["permitted"])
+        self.assertFalse(panel["switched_on"])
+        self.assertFalse(panel["shown"])
+
+    def test_the_preview_follows_the_saved_order(self):
+        for tab in ("live_flock_summary_report", "negative_stock_report"):
+            GroupTabPermission.objects.create(group=self.group, tab_code=tab,
+                                              can_view=True)
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="stock_alerts",
+                                            enabled=True, position=0)
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=True, position=1)
+        response = self.client.get(
+            reverse("dashboard_access_preview", args=[self.group.id]))
+        keys = [p["key"] for p in response.json()["panels"]]
+        self.assertLess(keys.index("stock_alerts"), keys.index("live_flock"))
+
+    def test_both_pages_carry_the_preview_modal(self):
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=True, position=0)
+        for url in (reverse("dashboard_access"),
+                    reverse("dashboard_access_form") + f"?group={self.group.id}"):
+            with self.subTest(url=url):
+                html = self.client.get(url).content.decode()
+                self.assertIn('id="da-preview"', html)
+                self.assertIn(f"dashboardAccessPreview({self.group.id})", html)
+
+
+class DashboardPreviewRenderTests(TestCase):
+    """The preview renders the real dashboard page as the group would get it."""
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("pr_admin", "r@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Preview Render")
+        GroupTabPermission.objects.create(group=self.group, can_view=True,
+                                          tab_code="live_flock_summary_report")
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=True, position=0)
+
+    def preview(self, **extra):
+        self.client.force_login(self.admin)
+        return self.client.get(reverse("dashboard"),
+                               {"preview_group": self.group.id, **extra})
+
+    def test_the_frame_is_allowed_from_the_same_origin(self):
+        """X_FRAME_OPTIONS is DENY site-wide, which would blank the iframe."""
+        self.assertEqual(self.preview()["X-Frame-Options"], "SAMEORIGIN")
+
+    def test_preview_mode_drops_the_navbar(self):
+        html = self.preview(preview="1").content.decode()
+        # navClock is in the welcome banner, not the navbar — pick a marker that
+        # only the top navbar carries.
+        self.assertNotIn("Change Requests", html)
+        self.assertIn("Change Requests", self.client.get(
+            reverse("dashboard")).content.decode())
+        self.assertIn("Preview of what", html)
+
+    def test_the_preview_shows_the_group_panels_not_the_viewers(self):
+        """The admin sees every panel; this group has one."""
+        html = self.preview(preview="1").content.decode()
+        self.assertNotIn('class="qa-card"', html)      # quick actions withheld
+        self.assertIn('id="dash-widgets"', html)
+
+    def test_the_widgets_api_answers_for_the_previewed_group(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("dashboard_widgets_api"),
+                                   {"preview_group": self.group.id})
+        self.assertEqual([w["key"] for w in response.json()["widgets"]],
+                         ["live_flock"])
+
+    def test_a_user_without_dashboard_access_cannot_preview_a_group(self):
+        """Otherwise preview would be a way around the matrix."""
+        User = get_user_model()
+        outsider = User.objects.create_user("pr_out", "o@x.com", "Str0ngPass!")
+        plain = Group.objects.create(name="Plain")
+        outsider.groups.add(plain)
+        GroupTabPermission.objects.create(group=plain, tab_code="items", can_view=True)
+
+        self.client.force_login(outsider)
+        response = self.client.get(reverse("dashboard_widgets_api"),
+                                   {"preview_group": self.group.id})
+        # falls back to their own (empty) dashboard rather than the group's
+        self.assertEqual(response.json()["widgets"], [])

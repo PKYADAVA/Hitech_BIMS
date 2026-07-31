@@ -367,6 +367,139 @@ WIDGETS = [
 ]
 
 
+#: The dashboard blocks that are not data cards: rendered server-side in
+#: home.html, so they have no builder — but they are switched off and ordered
+#: from the same page, because "which widgets do I see" should mean all of them.
+EXTRA_PANELS = [
+    ("quick_actions", "Quick Actions",
+     ("broiler_batch", "chicks_placement_list", "stock_transfer_list",
+      "daily_entry_list", "medicine_entry_list", "bird_sale_list",
+      "bird_sale_receipt_list"),
+     "fa-solid fa-bolt", "gs-purple"),
+    ("field_team", "Field Team — Live", ("tracking_dashboard",),
+     "fa-solid fa-location-dot", "gs-cyan"),
+]
+
+
+def all_panels():
+    """``(key, title, tabs, icon, colour)`` for every switchable block."""
+    for key, title, tabs, _url, icon, colour, _build in WIDGETS:
+        yield key, title, tabs, icon, colour
+    yield from EXTRA_PANELS
+
+
+def dashboard_panels(user, as_group=None):
+    """``{key: position}`` for the dashboard blocks this user may see.
+
+    Both gates applied: the tab matrix decides what is possible, Dashboard
+    Access decides what is wanted. Used by home.html to show and order the
+    server-rendered blocks alongside the data cards.
+    """
+    if as_group is not None:
+        viewable, prefs = group_viewable_tabs(as_group), group_preferences(as_group)
+    else:
+        viewable, prefs = allowed_view_tabs(user), widget_preferences(user)
+    out = {}
+    for index, (key, _title, tabs, _icon, _colour) in enumerate(all_panels()):
+        if not any(t in viewable for t in tabs):
+            continue
+        if prefs is not None and key not in prefs:
+            continue
+        out[key] = (prefs or {}).get(key, index)
+    return out
+
+
+def group_viewable_tabs(group):
+    """Tabs a group may view — the group-level twin of allowed_view_tabs."""
+    from user.models import GroupTabPermission
+
+    return set(GroupTabPermission.objects.filter(group=group)
+               .filter(_group_any_action_q())
+               .values_list("tab_code", flat=True))
+
+
+def group_preferences(group):
+    """``{key: position}`` for a group, or None when it is unconfigured."""
+    from user.models import GroupDashboardWidget
+
+    rows = list(GroupDashboardWidget.objects.filter(group=group))
+    if not rows:
+        return None
+    return {r.widget_key: r.position for r in rows if r.enabled}
+
+
+def panels_for_group(group):
+    """What a group's dashboard would hold — for the Preview action.
+
+    Answers for the *group* rather than a signed-in user, so an administrator
+    can see the result without impersonating anyone. Each panel reports both
+    halves of the decision: whether the group's tabs allow it at all, and
+    whether Dashboard Access has it switched on.
+    """
+    from user.models import GroupDashboardWidget, GroupTabPermission
+
+    allowed = set(
+        GroupTabPermission.objects.filter(group=group)
+        .filter(_group_any_action_q())
+        .values_list("tab_code", flat=True))
+    rows = {r.widget_key: r for r in
+            GroupDashboardWidget.objects.filter(group=group)}
+    configured = bool(rows)
+
+    out = []
+    for index, (key, title, tabs, icon, colour) in enumerate(all_panels()):
+        row = rows.get(key)
+        out.append({
+            "key": key, "title": title, "icon": icon, "colour": colour,
+            "tabs": list(tabs),
+            "permitted": any(t in allowed for t in tabs),
+            "switched_on": row.enabled if row else not configured or False,
+            "position": row.position if row else index,
+        })
+    out.sort(key=lambda p: p["position"])
+    for p in out:
+        p["shown"] = p["permitted"] and p["switched_on"]
+    return out
+
+
+def _group_any_action_q():
+    from django.db.models import Q
+    from user.access import ACTIONS
+
+    q = Q()
+    for action in ACTIONS:
+        q |= Q(**{f"can_{action}": True})
+    return q
+
+
+def widget_preferences(user):
+    """``{widget_key: position}`` for the widgets this user's groups enable.
+
+    ``None`` means "not configured" — no group has said anything about widgets,
+    so every widget the tab matrix allows is shown, in registry order. That
+    keeps groups working that predate this setting.
+
+    Enabled in *any* group wins, at the earliest position any group gives it,
+    which is how the tab matrix combines groups too.
+    """
+    from user.access import _user_is_unrestricted
+    from user.models import GroupDashboardWidget
+
+    if not user or not user.is_authenticated or _user_is_unrestricted(user):
+        return None
+    rows = list(GroupDashboardWidget.objects.filter(group__in=user.groups.all()))
+    if not rows:
+        return None
+
+    prefs = {}
+    for row in rows:
+        if not row.enabled:
+            continue
+        if row.widget_key not in prefs or row.position < prefs[row.widget_key]:
+            prefs[row.widget_key] = row.position
+    return prefs
+
+
 def _link(url_name, viewable, filters):
     """The report link, carrying whatever of the filter the report understands."""
     from urllib.parse import urlencode
@@ -399,21 +532,32 @@ def _ignored_note(filters, used):
     return f"{', '.join(ignored[:-1])} and {ignored[-1]} do not apply here."
 
 
-def dashboard_widgets(user, filters=None, use_cache=True):
+def dashboard_widgets(user, filters=None, use_cache=True, as_group=None):
     """Widget payloads for everything ``user`` is allowed to see.
 
     One widget failing must not take the dashboard down with it, so a builder
     that raises is logged and rendered as a card that says so.
     """
     filters = filters or dict.fromkeys(FILTER_KEYS)
-    viewable = allowed_view_tabs(user)
+    # ``as_group`` answers for a group rather than the signed-in user, so the
+    # Dashboard Access preview can render the real dashboard as that group would
+    # get it instead of the viewer's own.
+    if as_group is not None:
+        viewable, prefs = group_viewable_tabs(as_group), group_preferences(as_group)
+    else:
+        viewable = allowed_view_tabs(user)
+        # A second, narrower switch on top of the tab gate: it can hide a widget
+        # the matrix allows, never reveal one it withholds.
+        prefs = widget_preferences(user)
     # A filtered view is a deliberate question with an unbounded key space;
     # only the default dashboard is worth caching.
-    use_cache = use_cache and not _active(filters)
+    use_cache = use_cache and not _active(filters) and as_group is None
 
     out = []
     for key, title, tabs, url_name, icon, colour, build in WIDGETS:
         if not any(t in viewable for t in tabs):
+            continue
+        if prefs is not None and key not in prefs:
             continue
         card = {"key": key, "title": title, "icon": icon, "colour": colour,
                 "url": _link(url_name, viewable, filters)}
@@ -434,5 +578,10 @@ def dashboard_widgets(user, filters=None, use_cache=True):
                     cache.set(cache_key, body, CACHE_SECONDS)
         card.update(body)
         card["ignored"] = _ignored_note(filters, card.get("filters_used") or [])
+        card["position"] = (prefs or {}).get(key, len(out))
         out.append(card)
+
+    if prefs is not None:
+        # Stable: widgets sharing a position keep their registry order.
+        out.sort(key=lambda c: c["position"])
     return out
