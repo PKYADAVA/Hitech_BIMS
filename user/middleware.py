@@ -77,11 +77,22 @@ class WebAccessMiddleware:
                 return self._unmapped(request, view_func, url_name, user)
             tab, action = resolved
 
+        # Exporting is the "print" column, which nothing had ever checked.
+        # Every report asks for it the same way (?export=excel|pdf|csv), so it
+        # is enforced here rather than in each of the eighteen views.
+        if action == "view" and self._is_export(request):
+            action = "print"
+
         if user_can(user, tab, action):
             return None
 
         self._record(request, view_func, url_name, user, "denied", tab, action)
         return self._deny(request, action)
+
+    @staticmethod
+    def _is_export(request):
+        value = (request.GET.get("export") or "").strip().lower()
+        return bool(value) and value != "display"
 
     # ---- the unmapped surface --------------------------------------------
 

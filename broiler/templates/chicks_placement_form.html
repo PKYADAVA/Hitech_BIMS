@@ -63,7 +63,7 @@
 const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 const hatcheryOptions = `<option value="">select</option>{% for h in hatcheries %}<option value="{{ h.id }}" data-warehouse="{{ h.warehouse_id|default:'' }}">{{ h.hatchery_name|escapejs }}</option>{% endfor %}`;
-const itemOptions = `<option value="">select</option>{% for item in chick_items %}<option value="{{ item.id }}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const itemOptions = `<option value="">select</option>{% for item in chick_items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 
@@ -84,7 +84,8 @@ function row() {
     <td><input class="form-control shortage" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control culls" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control bg-light quantity" type="number" readonly value="0"></td>
-    <td><input class="form-control rate" type="number" min="0" step="0.01" value="0"></td>
+    <td><input class="form-control rate" type="number" min="0" step="0.01" value=""
+               title="Item Price Master rate for the row's date"></td>
     <td><input class="form-control bg-light amount" readonly value="0.00"></td>
     <td><input class="form-control vehicle-no"></td>
     <td><input class="form-control driver-name"></td>
@@ -158,6 +159,34 @@ function autoSelectHatchery(tr) {
 // Stock of the chosen item at the From Warehouse on the row's date — the same
 // reconciled figure Stock Transfer shows and its save guard enforces, so a
 // placement that would overdraw the warehouse is visible before saving.
+// Rate comes from the Item Price Master (Inventory > Master > Item Price List)
+// — the price effective on the row's date — so a placement is valued exactly
+// like the Stock Transfer it is saved as. It stays editable. An item with no
+// price for that date is flagged here and refused on save by StockTransfer's
+// own validation, so the gap in the price list is fixed rather than papered
+// over with a guess.
+async function refreshRate(tr) {
+  const itemId = tr.querySelector('.item').value;
+  const rateInput = tr.querySelector('.rate');
+  rateInput.classList.remove('is-invalid');
+  rateInput.title = 'Item Price Master rate for the row\'s date';
+  if (!itemId) { rateInput.value = ''; recalcAmount(tr); return; }
+  const date = tr.querySelector('.date').value || '';
+  try {
+    const resp = await fetch(`{% url 'stock_transfer_item_lookup' %}?item=${itemId}&date=${date}`);
+    const data = await resp.json();
+    if (data.price_missing) {
+      rateInput.value = '';
+      rateInput.classList.add('is-invalid');
+      rateInput.title = data.message;
+      window.showToast('warning', data.message);
+    } else {
+      rateInput.value = data.rate || '';
+    }
+  } catch (err) { /* leave the current rate alone if the lookup fails */ }
+  recalcAmount(tr);
+}
+
 async function refreshItemStock(tr) {
   const box = tr.querySelector('.item-stock');
   const itemId = tr.querySelector('.item').value;
@@ -183,15 +212,12 @@ get('row-table').addEventListener('change', e => {
   }
   if (e.target.classList.contains('date')) {
     refreshItemStock(e.target.closest('tr'));
+    refreshRate(e.target.closest('tr'));
   }
   if (e.target.classList.contains('item')) {
     const tr = e.target.closest('tr');
-    const opt = e.target.selectedOptions[0];
-    if (opt && opt.dataset.rate && Number(tr.querySelector('.rate').value) === 0) {
-      tr.querySelector('.rate').value = opt.dataset.rate;
-      recalcAmount(tr);
-    }
     refreshItemStock(tr);
+    refreshRate(tr);
   }
 });
 

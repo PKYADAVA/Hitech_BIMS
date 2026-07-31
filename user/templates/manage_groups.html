@@ -54,6 +54,8 @@
     .wa-matrix thead th { background:var(--wa-purple-soft); color:var(--wa-purple); position:sticky; top:0; z-index:1; font-size:.82rem; }
     .wa-matrix th.link-cell, .wa-matrix td.link-cell { text-align:left; width:auto; }
     .wa-matrix th.act-col, .wa-matrix td.act-col { text-align:center; width:8%; }
+    .wa-inert { color:#b45309; font-weight:700; cursor:help; }
+    .wa-inert-note { font-size:.75rem; color:#8494ab; margin:8px 2px 0; }
     .wa-cat-row td { background:#f7f1ff; font-weight:700; font-size:.92rem; }
     .wa-mod-row td { background:#fcfaff; font-weight:600; }
     .wa-tab-row td.link-cell { font-weight:400; }
@@ -165,7 +167,7 @@
                 <tr>
                     <th class="link-cell">Link<br><input type="checkbox" class="form-check-input wa-all" title="Select every permission"></th>
                     {% for action in actions %}
-                    <th class="act-col">{{ action|capfirst }}<br><input type="checkbox" class="form-check-input wa-col" data-action="{{ action }}" title="Select all {{ action }}"></th>
+                    <th class="act-col">{{ action|capfirst }}{% if action in unenforced_actions %}<sup class="wa-inert" title="Stored, but nothing checks this yet">*</sup>{% endif %}<br><input type="checkbox" class="form-check-input wa-col" data-action="{{ action }}" title="Select all {{ action }}"></th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -218,6 +220,15 @@
             </tbody>
         </table>
     </div>
+
+    {% if unenforced_actions %}
+    <p class="wa-inert-note">
+      <span class="wa-inert">*</span>
+      {{ unenforced_actions|join:", "|capfirst }} are saved against the group but
+      nothing reads them yet — ticking or clearing them changes no behaviour.
+      View, Add, Edit, Delete and Print are enforced.
+    </p>
+    {% endif %}
 
     <!-- Data scoping -->
     <div class="wa-section-title"><i class="fas fa-sitemap"></i>Data Scope</div>

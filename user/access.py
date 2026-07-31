@@ -21,6 +21,14 @@ entry here for it to appear in the permission matrix and be enforced.
 # Print/Update/Favorite). Each becomes a boolean column on GroupTabPermission.
 ACTIONS = ["view", "add", "edit", "delete", "print", "save", "update", "favorite"]
 
+# Columns that are stored but that nothing consults. "update" cannot ever be the
+# deciding factor because _ACTION_SUFFIX maps an ``*_update`` url to *edit*;
+# "save" has no meaning distinct from add/edit; "favorite" has no feature behind
+# it. The editor marks these so nobody trusts a tick that does nothing — the
+# honest options are to wire them up or drop them, not to keep rendering them
+# as if they worked.
+UNENFORCED_ACTIONS = ["save", "update", "favorite"]
+
 # Module (navbar dropdown) -> list of sections; each section -> list of tabs.
 # tab = (code / url-name, human label). `extra_urls` (optional 3rd item) lists
 # additional url-names that belong to the same tab so the view-guard treats
@@ -644,15 +652,23 @@ def _user_is_unrestricted(user):
 
 
 def user_has_any_matrix_config(user):
-    """True if any of the user's groups has at least one saved tab-permission.
+    """True if the matrix has been applied to any of the user's groups.
 
-    When a user belongs only to groups that were never configured in the
-    Web-Access editor, the matrix is treated as *not yet applied* for them and
-    everything is allowed. This keeps pre-existing accounts working until an
-    admin actually locks a group down.
+    A group nobody has opened in the Web-Access editor is treated as *not yet
+    configured*, and everything is allowed — that fail-open is what keeps
+    pre-existing accounts working.
+
+    "Configured" means either a saved tab-permission **or** an access profile.
+    The profile matters: saving the editor calls get_or_create on it, so a group
+    that was deliberately saved with nothing ticked has one. Counting only tab
+    rows made that group look untouched and handed its members every tab — the
+    opposite of what the person ticking nothing intended.
     """
-    from .models import GroupTabPermission
-    return GroupTabPermission.objects.filter(group__in=user.groups.all()).exists()
+    from .models import GroupAccessProfile, GroupTabPermission
+
+    groups = user.groups.all()
+    return (GroupTabPermission.objects.filter(group__in=groups).exists()
+            or GroupAccessProfile.objects.filter(group__in=groups).exists())
 
 
 def _any_action_q():

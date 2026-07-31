@@ -158,3 +158,104 @@ class WebAccessAuditCommandTests(TestCase):
                                       verdict="unmapped", username="u")
         call_command("webaccess_audit", clear=True, stdout=StringIO())
         self.assertEqual(WebAccessAudit.objects.count(), 0)
+
+
+class NoConfigDefaultTests(TestCase):
+    """A group saved with nothing ticked must grant nothing.
+
+    Counting only tab rows made such a group look untouched, so its members got
+    every tab — the opposite of what ticking nothing means.
+    """
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def user_in(self, group_name, with_profile=False, with_tab=None):
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        user = User.objects.create_user(group_name.lower().replace(" ", ""),
+                                        f"{group_name}@x.com", "Str0ngPass!")
+        group = Group.objects.create(name=group_name)
+        user.groups.add(group)
+        if with_profile:
+            GroupAccessProfile.objects.create(group=group)
+        if with_tab:
+            GroupTabPermission.objects.create(group=group, tab_code=with_tab,
+                                              can_view=True)
+        return get_user_model().objects.get(pk=user.pk)
+
+    def test_an_untouched_group_is_still_unrestricted(self):
+        """The fail-open that keeps pre-existing accounts working."""
+        from user.access import ALL_TAB_CODES, allowed_view_tabs
+
+        user = self.user_in("Untouched Group")
+        self.assertEqual(allowed_view_tabs(user), set(ALL_TAB_CODES))
+
+    def test_a_group_saved_with_nothing_ticked_grants_nothing(self):
+        from user.access import allowed_view_tabs, user_can
+
+        user = self.user_in("Saved Empty", with_profile=True)
+        self.assertEqual(allowed_view_tabs(user), set())
+        self.assertFalse(user_can(user, "coa", "view"))
+        self.assertFalse(user_can(user, "coa", "delete"))
+
+    def test_a_group_with_one_tab_is_held_to_it(self):
+        from user.access import allowed_view_tabs
+
+        user = self.user_in("One Tab", with_profile=True, with_tab="items")
+        self.assertEqual(allowed_view_tabs(user), {"items"})
+
+
+class PrintRightTests(TestCase):
+    """Exporting is the Print column, which nothing had ever checked."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        from user.models import GroupAccessProfile
+
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("pr_user", "pr@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Report Readers")
+        self.user.groups.add(self.group)
+        GroupAccessProfile.objects.create(group=self.group)
+        self.perm = GroupTabPermission.objects.create(
+            group=self.group, tab_code="negative_stock_report", can_view=True)
+        self.client.force_login(self.user)
+
+    def test_viewing_a_report_is_allowed(self):
+        self.assertEqual(
+            self.client.get(reverse("negative_stock_report")).status_code, 200)
+
+    def test_exporting_it_without_the_print_right_is_refused(self):
+        response = self.client.get(reverse("negative_stock_report"),
+                                   {"export": "excel"})
+        self.assertEqual(response.status_code, 302)
+
+    def test_exporting_with_the_print_right_is_allowed(self):
+        self.perm.can_print = True
+        self.perm.save()
+        response = self.client.get(reverse("negative_stock_report"),
+                                   {"export": "excel"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_export_display_is_not_an_export(self):
+        """Several reports pass export=display for the on-screen view."""
+        response = self.client.get(reverse("negative_stock_report"),
+                                   {"export": "display"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_editor_marks_the_columns_that_still_do_nothing(self):
+        from user.access import UNENFORCED_ACTIONS
+
+        self.assertEqual(UNENFORCED_ACTIONS, ["save", "update", "favorite"])
+        self.assertNotIn("print", UNENFORCED_ACTIONS)
+
+        boss = get_user_model().objects.create_superuser("pr_boss", "pb@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        html = self.client.get(reverse("user_groups"),
+                               {"group": self.group.id}).content.decode()
+        self.assertIn("nothing reads them yet", html)

@@ -317,6 +317,27 @@ $(function () {
   }
   $("#edit-chicks-ordered, #edit-transit-mortality, #edit-shortage, #edit-culls").on("input", recalcEditPlacementQty);
 
+  // Rate follows the Item Price Master price effective on the row's date, the
+  // same rule the Add form and the save-time validation use. Only a changed
+  // Item/Date re-fetches it — opening the modal keeps the rate the row was
+  // saved with.
+  async function refreshEditRate() {
+    const itemId = $("#edit-item").val();
+    const $rate = $("#edit-rate").removeClass("is-invalid");
+    if (!itemId) { $rate.val(""); return; }
+    try {
+      const resp = await fetch(`{% url 'stock_transfer_item_lookup' %}?item=${itemId}&date=${$("#edit-date").val() || ""}`);
+      const data = await resp.json();
+      if (data.price_missing) {
+        $rate.val("").addClass("is-invalid").attr("title", data.message);
+        window.showToast('warning', data.message);
+        return;
+      }
+      $rate.val(data.rate || "").attr("title", "Item Price Master rate for this date");
+    } catch (err) { /* leave the current rate alone if the lookup fails */ }
+  }
+  $("#edit-item, #edit-date").on("change", refreshEditRate);
+
   let editingId = null;
   $(document).on("click", ".edit-button", function () {
     editingId = $(this).data("id");

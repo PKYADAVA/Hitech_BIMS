@@ -19,7 +19,7 @@ from hr.models import Designation, Employee
 from hr.models import Group as HrGroup
 from inventory.models import Warehouse
 from .models import UserProfile, GroupTabPermission, GroupAccessProfile
-from .access import MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES
+from .access import MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES, UNENFORCED_ACTIONS
 
 
 from django.contrib.auth import login as auth_login, logout as auth_logout
@@ -477,6 +477,9 @@ def manage_groups(request):
         "creating": request.GET.get("new") == "1",
     }
     context.update(build_web_access_context(request.GET.get("group")))
+    # Four of the eight columns were decorative; Print is now enforced on
+    # exports, and the editor says which of the rest still are.
+    context["unenforced_actions"] = UNENFORCED_ACTIONS
     return render(request, "manage_groups.html", context)
 
 
