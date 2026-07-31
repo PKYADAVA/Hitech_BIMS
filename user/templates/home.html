@@ -37,7 +37,10 @@
 </style>
 {% endif %}
 <style>
-  .dashboard-shell { padding:8px 0 18px; color:#15233b; }
+  /* .container-cstm pads every page by 28px top; the dashboard leads with a
+     search box that belongs tight under the navbar, so trim it here only. */
+  .container-cstm { padding-top:10px; }
+  .dashboard-shell { padding:0 0 18px; color:#15233b; }
   .bims-hero, .quick-access-grid, .legacy-calendar, .home-cal-card:not(.dash-calendar .home-cal-card), .section-heading, .feature-card { display:none; }
   .dash-calendar .home-cal-card { display:block !important; }
   /* The original stacked layout — eyebrow, greeting, blurb — kept compact but
@@ -109,13 +112,15 @@
   @keyframes dw-shimmer { 0% { background-position:100% 50%; } 100% { background-position:0 50%; } }
 
   /* ---- Global search ---------------------------------------------------- */
-  .gs-wrap { position:relative; margin:-8px 0 22px; }
-  .gs-box { display:flex; align-items:center; gap:11px; padding:13px 17px; background:#fff;
-            border:1px solid #e7edf5; border-radius:14px; box-shadow:0 4px 14px rgba(22,42,79,.05);
+  /* Sits in the strip between the navbar and the banner, pushed right so the
+     empty space there is what gets used. */
+  .gs-wrap { position:relative; max-width:460px; margin:0 0 10px auto; }
+  .gs-box { display:flex; align-items:center; gap:9px; padding:7px 13px; background:#fff;
+            border:1px solid #e7edf5; border-radius:10px; box-shadow:0 3px 10px rgba(22,42,79,.06);
             transition:.16s ease; }
   .gs-wrap.is-open .gs-box, .gs-box:focus-within { border-color:#a9c8f5; box-shadow:0 6px 20px rgba(37,99,235,.13); }
   .gs-box > i { color:#93a4bd; font-size:.95rem; }
-  .gs-input { flex:1; border:0; outline:0; background:transparent; font-size:.92rem; color:#15233b; min-width:0; }
+  .gs-input { flex:1; border:0; outline:0; background:transparent; font-size:.84rem; color:#15233b; min-width:0; }
   .gs-input::placeholder { color:#93a4bd; }
   .gs-kbd { border:1px solid #e2e8f2; border-radius:6px; padding:2px 7px; font-size:.68rem;
             color:#8494ab; background:#f7fafd; white-space:nowrap; }
@@ -123,7 +128,10 @@
   .gs-wrap.has-text .gs-clear { display:block; }
   .gs-wrap.has-text .gs-kbd { display:none; }
 
-  .gs-panel { display:none; position:absolute; z-index:1050; left:0; right:0; top:calc(100% + 7px);
+  /* Wider than the input it hangs off — results carry a subtitle each, and the
+     box itself is deliberately narrow to fit the strip. */
+  .gs-panel { display:none; position:absolute; z-index:1050; left:auto; right:0;
+              width:min(560px, calc(100vw - 3rem)); top:calc(100% + 7px);
               max-height:min(64vh, 460px); overflow-y:auto; background:#fff; border:1px solid #e2eaf4;
               border-radius:14px; box-shadow:0 16px 40px rgba(22,42,79,.16); padding:7px; }
   .gs-wrap.is-open .gs-panel { display:block; }
@@ -141,6 +149,7 @@
   .gs-blue{background:#e8f0ff;color:#2563eb}.gs-green{background:#e6f7f3;color:#078b75}
   .gs-orange{background:#fff1df;color:#d97706}.gs-purple{background:#f1ebff;color:#7c3aed}
   .gs-red{background:#ffecee;color:#dc465b}.gs-cyan{background:#e5f7fb;color:#0087a5}
+  @media (max-width:767.98px) { .gs-wrap { max-width:none; } }
   @media (max-width:575.98px) { .gs-kbd { display:none; } }
 </style>
 {% endblock %}
@@ -216,6 +225,20 @@
       </div>
     </div>
 
+    <!-- Global search: pages + master records, permission-filtered server-side -->
+    <div class="gs-wrap" id="gs-wrap">
+      <div class="gs-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" class="gs-input" id="gs-input" autocomplete="off" spellcheck="false"
+               placeholder="Search pages, suppliers, items, farms…"
+               aria-label="Global search" role="combobox" aria-expanded="false" aria-controls="gs-panel">
+        <button type="button" class="gs-clear" id="gs-clear" aria-label="Clear search">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <span class="gs-kbd">Ctrl + K</span>
+      </div>
+      <div class="gs-panel" id="gs-panel" role="listbox"></div>
+    </div>
     <div class="dash-welcome mb-3">
       <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
         <div>
@@ -225,20 +248,6 @@
         </div>
         <div class="dash-date"><i class="fas fa-clock"></i><span id="navClock"></span></div>
       </div>
-    </div>
-    <!-- Global search: pages + master records, permission-filtered server-side -->
-    <div class="gs-wrap" id="gs-wrap">
-      <div class="gs-box">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" class="gs-input" id="gs-input" autocomplete="off" spellcheck="false"
-               placeholder="Search anything — pages, suppliers, customers, items, farms, employees…"
-               aria-label="Global search" role="combobox" aria-expanded="false" aria-controls="gs-panel">
-        <button type="button" class="gs-clear" id="gs-clear" aria-label="Clear search">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-        <span class="gs-kbd">Ctrl + K</span>
-      </div>
-      <div class="gs-panel" id="gs-panel" role="listbox"></div>
     </div>
 
     <div class="mb-3"><h2 class="dash-section-title">Workspace</h2><p class="dash-section-copy">Jump straight into the area you need.</p></div>
