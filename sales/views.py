@@ -1,6 +1,10 @@
 #pylint: disable=no-member
 
 from django.shortcuts import render, get_object_or_404, redirect
+
+# Data scoping: party lists are narrowed to the customer / supplier
+# groups the signed-in user is scoped to.
+from user.services.scoping import customers_for
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -27,7 +31,7 @@ states_and_union_territories = STATES_AND_TERRITORIES
 @login_required
 def customer(request):
     return render(request, "customer.html", {
-        "customers": Customer.objects.select_related("customer_group").all()
+        "customers": customers_for(request.user, Customer.objects.select_related("customer_group").all())
     })
 
 
@@ -446,14 +450,14 @@ def _sales_invoice_item_dict(row):
     }
 
 
-def _sales_invoice_form_context(inv=None):
+def _sales_invoice_form_context(user, inv=None):
     from account.models import TermsConditions, BankCashMaster, CompanyProfile
     items = list(Item.objects.order_by("item_code").values(
         "id", "item_code", "description", "hsn_code", "storage_uom", "standard_cost_per_unit"))
     return {
         "invoice": inv,
         "next_no": SalesInvoice._next_no() if not inv else None,
-        "customers": Customer.objects.order_by("name"),
+        "customers": customers_for(user, Customer.objects.order_by("name")),
         "branches": Warehouse.objects.order_by("name"),
         "org_centres": __import__("account.models", fromlist=["OrganizationCentre"]).OrganizationCentre.objects.order_by("name"),
         "items_json": json.dumps(items, default=str),
@@ -563,7 +567,7 @@ def create_sales_invoice(request):
             return redirect("sales_invoice_list")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, "sales_invoice_form.html", _sales_invoice_form_context())
+    return render(request, "sales_invoice_form.html", _sales_invoice_form_context(request.user, ))
 
 
 @login_required(login_url="login")
@@ -584,7 +588,7 @@ def edit_sales_invoice(request, id):
             return redirect("sales_invoice_list")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, "sales_invoice_form.html", _sales_invoice_form_context(instance))
+    return render(request, "sales_invoice_form.html", _sales_invoice_form_context(request.user, instance))
 
 
 @login_required(login_url="login")
@@ -891,7 +895,7 @@ def customer_ledger_report(request):
     }
     company = CompanyProfile.get_solo()
     ctx = {
-        "customers": Customer.objects.order_by("name"),
+        "customers": customers_for(request.user, Customer.objects.order_by("name")),
         "customer": customer, "customer_id": customer_id,
         "from_date": from_date, "to_date": to_date,
         "groups": groups,
@@ -1161,7 +1165,7 @@ def sales_receipt_form(request, id=None):
     return render(request, "sales_receipt_form.html", {
         "instance": SalesReceipt.objects.filter(id=id).first() if id else None,
         "locations": Warehouse.objects.order_by("name"),
-        "customers": Customer.objects.order_by("name"),
+        "customers": customers_for(request.user, Customer.objects.order_by("name")),
         "accounts": bank_cash_accounts(),   # receipt into a Bank/Cash master account
         "payment_modes": active_payment_modes("receipt"),
         "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
@@ -1339,7 +1343,7 @@ def _customer_note_row_dict(n):
     }
 
 
-def _customer_note_form_context(model, instance=None):
+def _customer_note_form_context(user, model, instance=None):
     from account.models import ChartOfAccount
     from inventory.models import Warehouse
     return {
@@ -1347,7 +1351,7 @@ def _customer_note_form_context(model, instance=None):
         "next_no": model._next_no() if not instance else None,
         "note_kind": ("Customer Debit Note" if model is CustomerDebitNote
                       else "Customer Credit Note"),
-        "customers": Customer.objects.order_by("name"),
+        "customers": customers_for(user, Customer.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "sectors": Warehouse.objects.order_by("name"),
         "today": timezone.localdate().isoformat(),
@@ -1406,7 +1410,7 @@ def _save_customer_notes(request, model, kind, template, redirect_name, instance
             return redirect(redirect_name)
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, template, _customer_note_form_context(model, instance))
+    return render(request, template, _customer_note_form_context(request.user, model, instance))
 
 
 def _customer_note_api(request, model):

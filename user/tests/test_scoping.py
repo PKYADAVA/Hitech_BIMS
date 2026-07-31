@@ -442,3 +442,135 @@ class CrossModuleScopingTests(TestCase):
         html = self.client.get(reverse("stock_report")).content.decode()
         self.assertIn("Akbarpur Warehouse", html)
         self.assertIn("Bahraich Warehouse", html)
+
+
+class PartyScopingTests(TestCase):
+    """Customer and supplier groups — the two dimensions the editor offers that
+    nothing had ever read."""
+
+    def setUp(self):
+        cache.clear()
+        from purchase.models import Supplier, VendorGroup
+        from sales.models import Customer, CustomerGroup
+
+        User = get_user_model()
+        self.user = User.objects.create_user("pt_user", "p@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Retail Only")
+        self.user.groups.add(self.group)
+
+        self.retail = CustomerGroup.objects.create(code="RET", description="Retail")
+        self.trade = CustomerGroup.objects.create(code="TRD", description="Trade")
+        # Contact.phone and .mobile are both unique, so each fixture needs its
+        # own of each.
+        for n, (label, cgroup) in enumerate([("Retail Buyer", self.retail),
+                                             ("Trade Buyer", self.trade),
+                                             ("Unfiled Buyer", None)], start=1):
+            Customer.objects.create(name=label, customer_group=cgroup,
+                                    phone=f"900000000{n}", mobile=f"800000000{n}")
+
+        self.feed = VendorGroup.objects.create(code="FD", description="Feed Vendors")
+        VendorGroup.objects.create(code="EQ", description="Equipment Vendors")
+        for n, (label, sgroup) in enumerate([("Feed Co", "Feed Vendors"),
+                                             ("Equipment Co", "Equipment Vendors"),
+                                             ("Unfiled Co", "")], start=1):
+            Supplier.objects.create(name=label, supplier_group=sgroup,
+                                    mobile=f"700000000{n}")
+
+    def fresh(self):
+        return get_user_model().objects.get(pk=self.user.pk)
+
+    def test_customers_narrow_to_the_permitted_groups(self):
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_customer_groups=False)
+        profile.customer_groups.add(self.retail)
+        names = {c.name for c in scoping.customers_for(self.fresh())}
+        self.assertIn("Retail Buyer", names)
+        self.assertNotIn("Trade Buyer", names)
+
+    def test_a_customer_with_no_group_is_kept(self):
+        """An unfiled record is not evidence the user should be denied it, and
+        dropping it would change balance totals rather than restrict access."""
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_customer_groups=False)
+        profile.customer_groups.add(self.retail)
+        self.assertIn("Unfiled Buyer",
+                      {c.name for c in scoping.customers_for(self.fresh())})
+
+    def test_suppliers_match_the_free_text_group_against_the_master(self):
+        """Supplier.supplier_group is free text while the scope holds
+        VendorGroup rows, so the match is by description."""
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_supplier_groups=False)
+        profile.supplier_groups.add(self.feed)
+        names = {s.name for s in scoping.suppliers_for(self.fresh())}
+        self.assertIn("Feed Co", names)
+        self.assertIn("Unfiled Co", names)
+        self.assertNotIn("Equipment Co", names)
+
+    def test_all_groups_means_no_limit(self):
+        GroupAccessProfile.objects.create(group=self.group)
+        self.assertEqual(scoping.customers_for(self.fresh()).count(), 3)
+        self.assertEqual(scoping.suppliers_for(self.fresh()).count(), 3)
+
+
+class TransactionRowScopingTests(TestCase):
+    """Rows, not just dropdowns.
+
+    Narrowing the filter bar only limits what can be asked for; without this the
+    grid still answers a question the filter bar would not let you type.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from broiler.models import DailyEntry
+
+        User = get_user_model()
+        self.user = User.objects.create_user("tr_user", "t@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Rows")
+        self.user.groups.add(self.group)
+        for tab in ("daily_entry_list", "bird_sale_list"):
+            GroupTabPermission.objects.create(group=self.group, tab_code=tab,
+                                              can_view=True)
+
+        region = Region.objects.create(description="East")
+        mine = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                     prefix="AKB")
+        theirs = Branch.objects.create(branch_name="Bahraich", region=region,
+                                       prefix="BHR")
+        farmer = Farmer.objects.create(farmer_name="F")
+        self.farms = {}
+        for branch, name in ((mine, "MineFarm"), (theirs, "TheirFarm")):
+            supervisor = Supervisor.objects.create(branch=branch, name=f"S{name}")
+            farm = BroilerFarm.objects.create(
+                branch=branch, supervisor=supervisor, farmer=farmer, region=region,
+                line="L1", farm_name=name, farm_capacity=100)
+            self.farms[name] = farm
+            DailyEntry.objects.create(farm=farm, supervisor=supervisor,
+                                      date=timezone.localdate(), mortality=1)
+
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_branches=False)
+        profile.branches.add(mine)
+        self.client.force_login(self.user)
+
+    def test_the_daily_entry_grid_shows_only_the_users_rows(self):
+        response = self.client.get(reverse("daily_entry_api_list"))
+        body = response.content.decode()
+        self.assertIn("MineFarm", body)
+        self.assertNotIn("TheirFarm", body)
+
+    def test_fetching_another_branch_row_by_id_fails(self):
+        """A row id in the url is not a permission."""
+        from broiler.models import DailyEntry
+
+        row = DailyEntry.objects.get(farm=self.farms["TheirFarm"])
+        response = self.client.get(reverse("daily_entry_api", args=[row.id]))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_an_unscoped_user_sees_every_row(self):
+        boss = get_user_model().objects.create_superuser("tr_boss", "tb@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        body = self.client.get(reverse("daily_entry_api_list")).content.decode()
+        self.assertIn("MineFarm", body)
+        self.assertIn("TheirFarm", body)

@@ -7,7 +7,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for,
+from user.services.scoping import (suppliers_for, branches_for, farms_for,
                                    supervisors_for, warehouses_for)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -441,7 +441,7 @@ def _general_purchase_form_context(user, gp=None):
     return {
         "general_purchase": gp,
         "next_purchase_no": GeneralPurchase._next_purchase_no() if not gp else None,
-        "suppliers": Supplier.objects.order_by("name"),
+        "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
         "items": Item.objects.order_by("item_code"),
         "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
@@ -650,7 +650,7 @@ def _chicks_purchase_form_context(user, cp=None):
     return {
         "chicks_purchase": cp,
         "next_purchase_no": ChicksPurchase._next_purchase_no() if not cp else None,
-        "suppliers": Supplier.objects.order_by("name"),
+        "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
         "items": Item.objects.order_by("item_code"),
         "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
@@ -837,11 +837,11 @@ def _bank_cash_accounts():
             .order_by("code"))
 
 
-def _payment_form_context(p=None):
+def _payment_form_context(user, p=None):
     return {
         "payment": p,
         "next_payment_no": SupplierPayment._next_payment_no() if not p else None,
-        "suppliers": Supplier.objects.order_by("name"),
+        "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
         "locations": Warehouse.objects.order_by("name"),
         "accounts": _bank_cash_accounts(),
         "today": timezone.localdate().isoformat(),
@@ -901,7 +901,7 @@ def create_payment(request):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "payment_form.html", _payment_form_context())
+    return render(request, "payment_form.html", _payment_form_context(request.user, ))
 
 
 @login_required(login_url="login")
@@ -923,7 +923,7 @@ def edit_payment(request, id):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "payment_form.html", _payment_form_context(instance))
+    return render(request, "payment_form.html", _payment_form_context(request.user, instance))
 
 
 @login_required(login_url="login")
@@ -979,13 +979,13 @@ def _note_row_dict(n):
     }
 
 
-def _note_form_context(model, instance=None):
+def _note_form_context(user, model, instance=None):
     from inventory.models import Warehouse
     return {
         "note": instance,
         "next_no": model._next_no() if not instance else None,
         "note_kind": "Debit Note" if model is DebitNote else "Credit Note",
-        "suppliers": Supplier.objects.order_by("name"),
+        "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "sectors": Warehouse.objects.order_by("name"),
         "today": timezone.localdate().isoformat(),
@@ -1044,7 +1044,7 @@ def _save_notes(request, model, kind, template, redirect_name, instance=None):
             return redirect(redirect_name)
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, template, _note_form_context(model, instance))
+    return render(request, template, _note_form_context(request.user, model, instance))
 
 
 def _note_api(request, model):
@@ -1384,7 +1384,7 @@ def supplier_ledger_report(request):
     }
     company = CompanyProfile.get_solo()
     ctx = {
-        "suppliers": Supplier.objects.order_by("name"),
+        "suppliers": suppliers_for(request.user, Supplier.objects.order_by("name")),
         "supplier": supplier, "supplier_id": supplier_id,
         "from_date": from_date, "to_date": to_date,
         "groups": groups,
@@ -1825,7 +1825,7 @@ def purchase_report(request):
         "supplier_id": supplier_id, "category": category, "item_id": item_id,
         "branch_id": branch_id, "warehouse_id": warehouse_id,
         "upload_status": upload_status, "purchase_type": purchase_type,
-        "suppliers": Supplier.objects.order_by("name"),
+        "suppliers": suppliers_for(request.user, Supplier.objects.order_by("name")),
         "categories": ItemCategory.objects.order_by("name"),
         "items": Item.objects.order_by("description"),
         "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),

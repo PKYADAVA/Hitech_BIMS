@@ -153,6 +153,36 @@ def supervisors_for(user, qs=None):
     return scope_queryset(user, qs, "branches", "branch_id")
 
 
+def customers_for(user, qs=None):
+    """Customers, narrowed by the customer-group scope."""
+    from sales.models import Customer
+
+    qs = qs if qs is not None else Customer.objects.all()
+    return scope_or_null(user, qs, "customer_groups", "customer_group_id")
+
+
+def suppliers_for(user, qs=None):
+    """Suppliers, narrowed by the supplier-group scope.
+
+    ``Supplier.supplier_group`` is free text while the scope holds VendorGroup
+    rows, so the allowed groups are resolved to their descriptions and matched
+    on that. A supplier with no group set is kept: an unfiled record is not
+    evidence that this user should be denied it, and dropping such rows would
+    change balance totals rather than restrict access.
+    """
+    from purchase.models import Supplier, VendorGroup
+
+    qs = qs if qs is not None else Supplier.objects.all()
+    ids = allowed_ids(user, "supplier_groups")
+    if ids is None:
+        return qs
+    names = list(VendorGroup.objects.filter(id__in=ids)
+                 .values_list("description", flat=True))
+    return qs.filter(Q(supplier_group__in=names)
+                     | Q(supplier_group__isnull=True)
+                     | Q(supplier_group=""))
+
+
 def describe(user):
     """Human summary of a user's scope, for showing on a scoped page."""
     labels = {"branches": "branch", "lines": "line", "farms": "farm",

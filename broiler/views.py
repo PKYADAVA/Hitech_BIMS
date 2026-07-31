@@ -1816,6 +1816,19 @@ def _recompute_stock_chain(farm_id, item_id):
             r.save(update_fields=["feed_1_stock", "feed_2_stock"])
 
 
+def _scope_rows(user, qs, farm_field="farm"):
+    """Narrow a transaction queryset to the farms and branches a user may see.
+
+    Scoping the dropdowns only narrows what can be *asked for*; the rows behind
+    them still have to be filtered, or the grid answers a question the filter
+    bar would not let you type.
+    """
+    from user.services.scoping import scope_multi
+
+    return scope_multi(user, qs, farms=f"{farm_field}_id",
+                       branches=f"{farm_field}__branch_id")
+
+
 @method_decorator(login_required, name="dispatch")
 class DailyEntryListTemplateView(View):
     def get(self, request):
@@ -1860,10 +1873,15 @@ class DailyEntryAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                row = DailyEntry.objects.select_related("farm__branch", "batch", "feed_1", "feed_2").get(id=id)
+                # Scoped on the single fetch too: a row id in the url is not a
+                # permission, and the list below is the only thing that would
+                # otherwise have hidden it.
+                row = _scope_rows(request.user, DailyEntry.objects.select_related(
+                    "farm__branch", "batch", "feed_1", "feed_2")).get(id=id)
                 return JsonResponse(_daily_entry_to_dict(row))
 
-            qs = DailyEntry.objects.select_related("farm__branch", "batch", "feed_1", "feed_2")
+            qs = _scope_rows(request.user, DailyEntry.objects.select_related(
+                "farm__branch", "batch", "feed_1", "feed_2"))
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             status = (request.GET.get("status") or "").strip()
@@ -2536,11 +2554,12 @@ class BirdSaleAPI(BaseAPIView):
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
         try:
             if id:
-                row = BirdSale.objects.select_related(
-                    "customer", "farmer", "farm", "batch", "lifting_supervisor").get(id=id)
+                row = _scope_rows(request.user, BirdSale.objects.select_related(
+                    "customer", "farmer", "farm", "batch", "lifting_supervisor")).get(id=id)
                 return JsonResponse(_bird_sale_to_dict(row))
 
-            qs = BirdSale.objects.select_related("customer", "farmer", "farm", "batch", "lifting_supervisor")
+            qs = _scope_rows(request.user, BirdSale.objects.select_related(
+                "customer", "farmer", "farm", "batch", "lifting_supervisor"))
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:
