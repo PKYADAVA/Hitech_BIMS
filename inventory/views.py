@@ -940,6 +940,14 @@ def _stock_transfer_to_dict(row):
         "to_batch": row.to_batch_id, "to_batch_name": row.to_batch.batch_name if row.to_batch_id else "",
         "source_hatchery": row.source_hatchery_id,
         "source_hatchery_name": row.source_hatchery.hatchery_name if row.source_hatchery_id else "",
+        "source_supplier": row.source_supplier_id,
+        "source_supplier_name": row.source_supplier.name or "" if row.source_supplier_id else "",
+        # Prefixed key the Chicks Placement source picker round-trips, so one
+        # select can offer Hatcheries and Suppliers without the form having to
+        # track which column a value belongs in.
+        "source": (f"h:{row.source_hatchery_id}" if row.source_hatchery_id
+                   else f"s:{row.source_supplier_id}" if row.source_supplier_id else ""),
+        "source_name": row.source_name,
         "vehicle_no": row.vehicle_no, "driver_name": row.driver_name,
         "remarks": row.remarks,
     }
@@ -976,7 +984,17 @@ def _apply_stock_transfer_row(instance, row, user):
     instance.to_farm_id = to_id if to_type == "farm" else None
     instance.to_batch_id = row.get("to_batch") if to_type == "farm" else None
 
-    instance.source_hatchery_id = row.get("source_hatchery") or None
+    # Chicks Placement sends one prefixed "source" ("h:<id>" / "s:<id>"); the
+    # generic Stock Transfer screens still send source_hatchery on its own.
+    # Whichever arrives, only one of the two columns ends up set.
+    source = (row.get("source") or "").strip()
+    if source:
+        kind, _, source_id = source.partition(":")
+        instance.source_hatchery_id = source_id if kind == "h" and source_id else None
+        instance.source_supplier_id = source_id if kind == "s" and source_id else None
+    else:
+        instance.source_hatchery_id = row.get("source_hatchery") or None
+        instance.source_supplier_id = row.get("source_supplier") or None
     instance.vehicle_no = row.get("vehicle_no") or ""
     instance.driver_name = row.get("driver_name") or ""
     instance.remarks = row.get("remarks") or ""
@@ -1035,14 +1053,15 @@ class StockTransferAPI(View):
             try:
                 row = StockTransfer.objects.select_related(
                     "item__category", "from_warehouse", "from_farm", "from_batch",
-                    "to_warehouse", "to_farm", "to_batch", "source_hatchery").get(id=id)
+                    "to_warehouse", "to_farm", "to_batch",
+                    "source_hatchery", "source_supplier").get(id=id)
                 return JsonResponse(_stock_transfer_to_dict(row))
             except StockTransfer.DoesNotExist:
                 raise Http404("Stock transfer not found")
 
         qs = StockTransfer.objects.select_related(
             "item__category", "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch",
-            "source_hatchery")
+            "source_hatchery", "source_supplier")
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()

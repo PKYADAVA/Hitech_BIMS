@@ -26,7 +26,7 @@
             <tr>
               <th style="min-width:120px">Date <span class="text-danger">*</span></th>
               <th style="min-width:110px">DC No.</th>
-              <th style="min-width:160px">Source Hatchery <span class="text-danger">*</span></th>
+              <th style="min-width:190px">Source Hatchery / Supplier <span class="text-danger">*</span></th>
               <th style="min-width:180px">From Warehouse</th>
               <th style="min-width:180px">To Farm <span class="text-danger">*</span></th>
               <th style="min-width:140px">Batch</th>
@@ -62,7 +62,11 @@
 <script>
 const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
-const hatcheryOptions = `<option value="">select</option>{% for h in hatcheries %}<option value="{{ h.id }}" data-warehouse="{{ h.warehouse_id|default:'' }}">{{ h.hatchery_name|escapejs }}</option>{% endfor %}`;
+// Hatcheries and Suppliers in one picker, grouped. Values are prefixed
+// ("h:<id>" / "s:<id>") — see _chicks_sources() — and posted as `source`,
+// which the API splits back into the right column. Only hatcheries carry
+// data-warehouse, so picking a supplier simply doesn't auto-select a warehouse.
+const sourceOptions = `<option value="">select</option>{% regroup sources by group as source_groups %}{% for grp in source_groups %}<optgroup label="{{ grp.grouper|escapejs }}">{% for s in grp.list %}<option value="{{ s.value }}" data-warehouse="{{ s.warehouse_id }}">{{ s.label|escapejs }}</option>{% endfor %}</optgroup>{% endfor %}`;
 const itemOptions = `<option value="">select</option>{% for item in chick_items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
@@ -72,7 +76,7 @@ function row() {
   tr.innerHTML = `
     <td><input class="form-control date" type="date" value="${TODAY}" required></td>
     <td><input class="form-control dc-no"></td>
-    <td><select class="form-select source-hatchery" required>${hatcheryOptions}</select></td>
+    <td><select class="form-select source" required>${sourceOptions}</select></td>
     <td><select class="form-select warehouse" required>${warehouseOptions}</select></td>
     <td><select class="form-select farm" required>${farmOptions}</select></td>
     <td><select class="form-select batch" disabled><option value="">select a farm</option></select></td>
@@ -147,13 +151,14 @@ async function refreshBatchBox(tr) {
 // A Warehouse can have several Hatcheries mapped to it (Inventory > Office
 // Mapping); picking a Warehouse just soft-selects the matching Hatchery if
 // there's exactly one — it never hides other options, since the mapping
-// data may be incomplete.
+// data may be incomplete. Suppliers have no such mapping, so they're never
+// auto-selected; they stay a deliberate choice.
 function autoSelectHatchery(tr) {
   const warehouseId = tr.querySelector('.warehouse').value;
   if (!warehouseId) return;
-  const hatcherySelect = tr.querySelector('.source-hatchery');
-  const matches = [...hatcherySelect.options].filter(o => o.value && o.dataset.warehouse === warehouseId);
-  if (matches.length === 1) { hatcherySelect.value = matches[0].value; }
+  const sourceSelect = tr.querySelector('.source');
+  const matches = [...sourceSelect.options].filter(o => o.value && o.dataset.warehouse === warehouseId);
+  if (matches.length === 1) { sourceSelect.value = matches[0].value; }
 }
 
 // Stock of the chosen item at the From Warehouse on the row's date — the same
@@ -239,13 +244,11 @@ get('row-table').addEventListener('click', e => {
 get('chicks-placement-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => {
-    const hatcherySelect = tr.querySelector('.source-hatchery');
-    const hatcheryId = hatcherySelect.value;
     const warehouseId = tr.querySelector('.warehouse').value;
     return {
       date: tr.querySelector('.date').value,
       dc_no: tr.querySelector('.dc-no').value,
-      source_hatchery: hatcheryId,
+      source: tr.querySelector('.source').value,
       item: tr.querySelector('.item').value,
       chicks_ordered: tr.querySelector('.chicks-ordered').value,
       transit_mortality: tr.querySelector('.transit-mortality').value,
@@ -264,8 +267,8 @@ get('chicks-placement-form').addEventListener('submit', function (e) {
       remarks: tr.querySelector('.remarks').value,
     };
   });
-  if (!rows.length || rows.some(r => !r.item || !r.source_hatchery || !r.from_location_id || !r.to_location_id)) {
-    alert('Add at least one row with Chicks Item, Source Hatchery, Warehouse and Farm selected.');
+  if (!rows.length || rows.some(r => !r.item || !r.source || !r.from_location_id || !r.to_location_id)) {
+    alert('Add at least one row with Chicks Item, Source Hatchery / Supplier, Warehouse and Farm selected.');
     return;
   }
   if (rows.some(r => !Number(r.chicks_ordered))) {

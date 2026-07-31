@@ -33,14 +33,14 @@ class WebAccessAuditTests(TestCase):
     # ---- audit mode changes nothing --------------------------------------
 
     def test_an_unmapped_url_still_works_in_audit_mode(self):
-        """/branch_list/ is not claimed by any tab. Today it is open, and audit
-        mode must not change that."""
-        response = self.client.get("/branch_list/")
+        """/medicine_entry_api/ is not claimed by any tab. Today it is open,
+        and audit mode must not change that."""
+        response = self.client.get("/medicine_entry_api/")
         self.assertEqual(response.status_code, 200)
 
     def test_the_unmapped_url_is_recorded(self):
-        self.client.get("/branch_list/")
-        row = WebAccessAudit.objects.get(url_name="branch_list")
+        self.client.get("/medicine_entry_api/")
+        row = WebAccessAudit.objects.get(url_name="medicine_entry_api_list")
         self.assertEqual(row.verdict, WebAccessAudit.UNMAPPED)
         self.assertEqual(row.username, "auditclerk")
         self.assertEqual(row.method, "GET")
@@ -72,15 +72,15 @@ class WebAccessAuditTests(TestCase):
 
         for _ in range(3):
             cache.clear()                 # bypass the write throttle
-            self.client.get("/branch_list/")
-        rows = WebAccessAudit.objects.filter(url_name="branch_list")
+            self.client.get("/medicine_entry_api/")
+        rows = WebAccessAudit.objects.filter(url_name="medicine_entry_api_list")
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().hits, 3)
 
     def test_the_throttle_stops_a_row_per_request(self):
         for _ in range(3):
-            self.client.get("/branch_list/")   # no cache.clear() this time
-        self.assertEqual(WebAccessAudit.objects.get(url_name="branch_list").hits, 1)
+            self.client.get("/medicine_entry_api/")   # no cache.clear() this time
+        self.assertEqual(WebAccessAudit.objects.get(url_name="medicine_entry_api_list").hits, 1)
 
     def test_different_users_are_recorded_separately(self):
         from django.core.cache import cache
@@ -88,12 +88,12 @@ class WebAccessAuditTests(TestCase):
         User = get_user_model()
         other = User.objects.create_user("auditclerk2", "b@x.com", "Str0ngPass!")
         other.groups.add(Group.objects.get(name="Items Only"))
-        self.client.get("/branch_list/")
+        self.client.get("/medicine_entry_api/")
         cache.clear()
         self.client.force_login(other)
-        self.client.get("/branch_list/")
+        self.client.get("/medicine_entry_api/")
         self.assertEqual(
-            set(WebAccessAudit.objects.filter(url_name="branch_list")
+            set(WebAccessAudit.objects.filter(url_name="medicine_entry_api_list")
                 .values_list("username", flat=True)),
             {"auditclerk", "auditclerk2"})
 
@@ -111,7 +111,7 @@ class WebAccessAuditTests(TestCase):
 
     @override_settings(WEB_ACCESS_ENFORCE=True)
     def test_enforcing_closes_the_unmapped_url(self):
-        response = self.client.get("/branch_list/")
+        response = self.client.get("/medicine_entry_api/")
         self.assertEqual(response.status_code, 302)
 
     @override_settings(WEB_ACCESS_ENFORCE=True)
@@ -120,7 +120,7 @@ class WebAccessAuditTests(TestCase):
 
     @override_settings(WEB_ACCESS_ENFORCE=True)
     def test_enforcing_answers_ajax_with_403_not_a_redirect(self):
-        response = self.client.get("/branch_list/",
+        response = self.client.get("/medicine_entry_api/",
                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 403)
 
@@ -317,6 +317,77 @@ class MappedFromAuditTests(TestCase):
         response = self.client.get("/daily_entry_api/",
                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 403)
+
+
+class ProductionAuditMappingTests(TestCase):
+    """Everything the first production audit reported is now claimed.
+
+    30 urls, 6 of them accepting writes. A url that falls back out of the
+    mapping does not raise — it silently becomes open again.
+    """
+
+    PRODUCTION_AUDIT = """
+        broiler_farm_shed_create broiler_line_list farmer_create farmer_update
+        stock_transfer_api stock_transfer_api_list alert-unread-count branch_list
+        broiler_batch_list broiler_farm_detail broiler_farm_list
+        broiler_farm_shed_list change_request_api_list chicks_purchase_api_list
+        daily_entry_api_list daily_entry_farm_lookup farmer_detail
+        farmer_group_list farmer_list feed_phase_master_api_list
+        get_branches_by_region get_lines_by_branch get_supervisors
+        payment_api_list region_list sms_transaction_source
+        stock_transfer_farm_batches stock_transfer_item_lookup
+        stock_transfer_stock_lookup supervisor_list
+    """.split()
+
+    def test_none_of_them_is_still_unmapped(self):
+        from user.access import PUBLIC_URL_NAMES, URLNAME_TO_TAB, resolve_action
+
+        unmapped = [n for n in self.PRODUCTION_AUDIT
+                    if n not in PUBLIC_URL_NAMES and n not in URLNAME_TO_TAB
+                    and resolve_action(n) is None]
+        self.assertEqual(unmapped, [])
+
+    def test_the_mutations_need_their_own_right_not_merely_view(self):
+        """Routed through the action-suffix map rather than extra_urls, so
+        creating a farmer needs add and updating one needs edit."""
+        from user.access import resolve_action
+
+        self.assertEqual(resolve_action("farmer_create"), ("branch_farm", "add"))
+        self.assertEqual(resolve_action("farmer_update"), ("branch_farm", "edit"))
+        self.assertEqual(resolve_action("broiler_farm_shed_create"),
+                         ("broiler_farm_shed", "add"))
+
+    def test_a_write_endpoint_is_refused_without_the_right(self):
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        clerk = User.objects.create_user("pa_clerk", "pa@x.com", "Str0ngPass!")
+        group = Group.objects.create(name="Farm Viewers")
+        clerk.groups.add(group)
+        GroupAccessProfile.objects.create(group=group)
+        GroupTabPermission.objects.create(group=group, tab_code="branch_farm",
+                                          can_view=True)
+        self.client.force_login(clerk)
+
+        response = self.client.post("/create-farmer/", {"farmer_name": "Sneaked"},
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_same_write_is_allowed_with_the_add_right(self):
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        clerk = User.objects.create_user("pa_clerk2", "pa2@x.com", "Str0ngPass!")
+        group = Group.objects.create(name="Farm Editors")
+        clerk.groups.add(group)
+        GroupAccessProfile.objects.create(group=group)
+        GroupTabPermission.objects.create(group=group, tab_code="branch_farm",
+                                          can_view=True, can_add=True)
+        self.client.force_login(clerk)
+
+        response = self.client.post("/create-farmer/", {"farmer_name": "Allowed"},
+                                    content_type="application/json")
+        self.assertNotEqual(response.status_code, 403)
 
 
 class ScopedPickerTests(TestCase):

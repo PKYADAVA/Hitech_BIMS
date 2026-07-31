@@ -241,7 +241,7 @@ class ChicksPlacementReportView(V1ViewMixin, APIView):
         qs = (
             StockTransfer.objects
             .filter(to_location_type="farm", item__category__name__icontains="chick")
-            .select_related("to_farm", "to_batch", "source_hatchery")
+            .select_related("to_farm", "to_batch", "source_hatchery", "source_supplier")
             .order_by("-date", "-id")[:100]
         )
         rows, t_ord, t_recv, t_mort = [], 0, 0, 0
@@ -257,7 +257,7 @@ class ChicksPlacementReportView(V1ViewMixin, APIView):
                 "date": str(t.date) if t.date else "",
                 "farm": t.to_farm.farm_name if t.to_farm_id else "—",
                 "batch": t.to_batch.batch_name if t.to_batch_id else "—",
-                "hatchery": t.source_hatchery.hatchery_name if t.source_hatchery_id else "—",
+                "hatchery": t.source_name or "—",
                 "ordered": ordered,
                 "received": received,
                 "transit_mortality": mortality,

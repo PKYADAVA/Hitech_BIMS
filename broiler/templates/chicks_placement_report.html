@@ -187,7 +187,10 @@
           <label class="form-label">Hatchery / Supplier</label>
           <select class="form-select" name="hatchery">
             <option value="">All</option>
-            {% for h in hatcheries %}<option value="{{ h.id }}" {% if hatchery_id == h.id|stringformat:"s" %}selected{% endif %}>{{ h.hatchery_name }}</option>{% endfor %}
+            {% regroup sources by group as source_groups %}
+            {% for grp in source_groups %}<optgroup label="{{ grp.grouper }}">
+              {% for s in grp.list %}<option value="{{ s.value }}" {% if hatchery_id == s.value %}selected{% endif %}>{{ s.label }}</option>{% endfor %}
+            </optgroup>{% endfor %}
           </select>
         </div>
         <div class="filter-field">
@@ -225,7 +228,7 @@
         <thead class="table-light">
           <tr>
             <th>Date</th><th>Transaction No.</th><th>Dc No.</th><th>Branch</th><th>Line</th><th>Supervisor</th>
-            <th>Farm Code</th><th>Farm Name</th><th>Batch</th><th>Source Hatchery</th><th>Warehouse</th>
+            <th>Farm Code</th><th>Farm Name</th><th>Batch</th><th>Source Hatchery / Supplier</th><th>Warehouse</th>
             <th>Quantity Sent</th><th>Mortality</th><th>Mort%</th><th>Shortage</th>
             <th>Weeks/Culls</th><th>Weeks/Cull%</th><th>Excess</th>
             <th>Total Chicks Placed</th>
@@ -309,7 +312,7 @@
 $(function () {
   const COLUMN_LABELS = [
     'Date', 'Transaction No.', 'Dc No.', 'Branch', 'Line', 'Supervisor',
-    'Farm Code', 'Farm Name', 'Batch', 'Source Hatchery', 'Warehouse',
+    'Farm Code', 'Farm Name', 'Batch', 'Source Hatchery / Supplier', 'Warehouse',
     'Quantity Sent', 'Mortality', 'Mort%', 'Shortage',
     'Weeks/Culls', 'Weeks/Cull%', 'Excess',
     'Total Chicks Placed', 'Rate', 'Amount', 'Farm Capacity',

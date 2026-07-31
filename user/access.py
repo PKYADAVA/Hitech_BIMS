@@ -41,18 +41,19 @@ MODULE_REGISTRY = [
             {
                 "label": "Master",
                 "tabs": [
-                    ("farmer_group", "Farmer Group"),
-                    ("region", "Region"),
-                    ("branch_template", "Branch"),
-                    ("supervisor_template", "Supervisor"),
-                    ("broiler_line", "Broiler Line"),
+                    ("farmer_group", "Farmer Group", ("farmer_group_list",)),
+                    ("region", "Region", ("region_list",)),
+                    ("branch_template", "Branch", ("branch_list",)),
+                    ("supervisor_template", "Supervisor", ("supervisor_list",)),
+                    ("broiler_line", "Broiler Line", ("broiler_line_list",)),
                     ("branch_farm", "Broiler Farm",
                      ("broiler_farm_list", "broiler_farm_detail",
                       "farmer_list", "farmer_detail")),
                     ("broiler_farm_shed", "Broiler Farm Shed",
                      ("broiler_farm_shed_list",)),
                     ("broiler_batch", "Broiler Batch", ("broiler_batch_list",)),
-                    ("feed_phase_master_list", "Feed Phase Master"),
+                    ("feed_phase_master_list", "Feed Phase Master",
+                     ("feed_phase_master_api_list",)),
                     ("broiler_disease", "Broiler Disease"),
                 ],
             },
@@ -69,7 +70,8 @@ MODULE_REGISTRY = [
                 "label": "Transactions",
                 "tabs": [
                     ("daily_entry_list", "Daily Entry",
-                     ("daily_entry_api_list", "daily_entry_api")),
+                     ("daily_entry_api_list", "daily_entry_api",
+                      "daily_entry_farm_lookup")),
                     ("medicine_entry_list", "Medicine Vaccine Consumption"),
                     ("daily_entry_single_list", "Single Batch Daily Entry"),
                     ("bird_sale_list", "Bird Sale",
@@ -168,8 +170,8 @@ MODULE_REGISTRY = [
                 "label": "Transactions",
                 "tabs": [
                     ("general_purchase_list", "General Purchase"),
-                    ("chicks_purchase_list", "Chicks Purchase"),
-                    ("payment_list", "Payment"),
+                    ("chicks_purchase_list", "Chicks Purchase", ("chicks_purchase_api_list",)),
+                    ("payment_list", "Payment", ("payment_api_list",)),
                     ("debit_note_list", "Debit Note", ("debit_note_api_list",)),
                     ("credit_note_list", "Credit Note", ("credit_note_api_list",)),
                 ],
@@ -303,7 +305,8 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("stock_transfer_list", "Stock Transfer",
                      ("stock_transfer_api_list", "stock_transfer_api",
-                      "stock_transfer_farm_batches", "stock_transfer_item_lookup")),
+                      "stock_transfer_farm_batches", "stock_transfer_item_lookup",
+                      "stock_transfer_stock_lookup")),
                     ("medicine_transfer_list", "Medicine Vaccine Transfer"),
                     ("inventory_adjustment_list", "Inventory Adjustment"),
                     ("stock_issue_list", "Stock Issued"),
@@ -401,7 +404,7 @@ MODULE_REGISTRY = [
             {
                 "label": "Requests",
                 "tabs": [
-                    ("change_requests", "Change Requests"),
+                    ("change_requests", "Change Requests", ("change_request_api_list",)),
                 ],
             },
         ],
@@ -439,7 +442,7 @@ MODULE_REGISTRY = [
             {
                 "label": "Transactions",
                 "tabs": [
-                    ("sms_transaction", "SMS Transaction"),
+                    ("sms_transaction", "SMS Transaction", ("sms_transaction_source",)),
                 ],
             },
             {
@@ -590,6 +593,8 @@ _ACTION_BASE_TO_TAB = {
     "sales_price": "sales_price_master",
     # Account
     "dashboard_access": "dashboard_access",
+    "farmer": "branch_farm",
+    "broiler_farm_shed": "broiler_farm_shed",
     "chart_of_accounts": "coa",
     "financial_year": "fin_year",
     "terms_conditions": "terms",

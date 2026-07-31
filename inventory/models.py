@@ -282,10 +282,14 @@ class StockTransfer(models.Model):
     to_batch = models.ForeignKey('broiler.BroilerBatch', on_delete=models.PROTECT, null=True, blank=True,
                                  related_name='stock_transfers_in')
 
-    # Reference-only: the hatchery chicks actually originated from, for
-    # transfers recorded via Broiler > Chicks Placement — the transfer
-    # itself is still Warehouse -> Farm; this doesn't change that flow.
+    # Reference-only: where the chicks actually originated from, for transfers
+    # recorded via Broiler > Chicks Placement — the transfer itself is still
+    # Warehouse -> Farm; this doesn't change that flow. A source is either a
+    # Hatchery or a Supplier (chicks are also bought from vendors that aren't
+    # registered hatcheries), never both — see `source_name`.
     source_hatchery = models.ForeignKey('hatchery_master.Hatchery', on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='stock_transfers_sourced')
+    source_supplier = models.ForeignKey('purchase.Supplier', on_delete=models.SET_NULL, null=True, blank=True,
                                         related_name='stock_transfers_sourced')
 
     vehicle_no = models.CharField(max_length=50, blank=True)
@@ -309,6 +313,17 @@ class StockTransfer(models.Model):
     @property
     def to_location(self):
         return self.to_farm if self.to_location_type == 'farm' else self.to_warehouse
+
+    @property
+    def source_name(self):
+        """Display name of the chicks source, whichever kind it is — the one
+        thing lists and reports should print, so neither side has to know a
+        placement can be sourced from a Supplier as well as a Hatchery."""
+        if self.source_hatchery_id:
+            return self.source_hatchery.hatchery_name
+        if self.source_supplier_id:
+            return self.source_supplier.name or ""
+        return ""
 
     def _location_key(self, side):
         """(location_type, location_id) for 'from' or 'to' — the identity a

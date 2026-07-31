@@ -47,7 +47,7 @@
       <table class="table table-hover table-bordered mb-0" id="placement-table">
         <thead class="table-dark">
           <tr>
-            <th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Source Hatchery</th><th>From Warehouse</th>
+            <th>Date</th><th>Transaction No.</th><th>DC No.</th><th>Source Hatchery / Supplier</th><th>From Warehouse</th>
             <th>To Farm</th><th>Batch</th><th>Item</th>
             <th>Chicks Ordered</th><th>Transit Mortality</th><th>Shortage</th><th>Culls</th><th>Placement Qty</th>
             <th>Rate</th><th>Amount</th>
@@ -86,10 +86,13 @@
               <input type="text" class="form-control" id="edit-dc-no">
             </div>
             <div class="col-md-3">
-              <label class="form-label">Source Hatchery <span class="text-danger">*</span></label>
-              <select class="form-select" id="edit-source-hatchery" required>
+              <label class="form-label">Source Hatchery / Supplier <span class="text-danger">*</span></label>
+              <select class="form-select" id="edit-source" required>
                 <option value="">select</option>
-                {% for h in hatcheries %}<option value="{{ h.id }}" data-warehouse="{{ h.warehouse_id|default:'' }}">{{ h.hatchery_name|escapejs }}</option>{% endfor %}
+                {% regroup sources by group as source_groups %}
+                {% for grp in source_groups %}<optgroup label="{{ grp.grouper }}">
+                  {% for s in grp.list %}<option value="{{ s.value }}" data-warehouse="{{ s.warehouse_id }}">{{ s.label }}</option>{% endfor %}
+                </optgroup>{% endfor %}
               </select>
             </div>
             <div class="col-md-3">
@@ -213,7 +216,7 @@ $(function () {
         <td>${escapeHtml(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
-        <td>${escapeHtml(row.source_hatchery_name) || "-"}</td>
+        <td>${escapeHtml(row.source_name) || "-"}</td>
         <td>${escapeHtml(row.from_location_name)}</td>
         <td>${escapeHtml(row.to_location_name)}</td>
         <td>${escapeHtml(row.to_batch_name) || "-"}</td>
@@ -290,14 +293,15 @@ $(function () {
   // Same soft auto-select + Direct-mode toggle as the Add form: picking a
   // Warehouse suggests the matching Hatchery (if exactly one is mapped to
   // it) without hiding other options; Direct mode disables Warehouse and
-  // derives it from the chosen Hatchery's own mapping on submit.
+  // derives it from the chosen Hatchery's own mapping on submit. Suppliers
+  // carry no mapping, so they never match and are never auto-selected.
   $("#edit-warehouse").on("change", function () {
     const warehouseId = this.value;
     if (!warehouseId) return;
-    const matches = $("#edit-source-hatchery option").filter(function () {
+    const matches = $("#edit-source option").filter(function () {
       return $(this).val() && $(this).data("warehouse") == warehouseId;
     });
-    if (matches.length === 1) { $("#edit-source-hatchery").val(matches.val()); }
+    if (matches.length === 1) { $("#edit-source").val(matches.val()); }
   });
 
   $("#edit-direct-hatchery").on("change", function () {
@@ -353,7 +357,7 @@ $(function () {
       $("#edit-vehicle-no").val(row.vehicle_no);
       $("#edit-driver-name").val(row.driver_name);
       $("#edit-remarks").val(row.remarks);
-      $("#edit-source-hatchery").val(row.source_hatchery);
+      $("#edit-source").val(row.source);
       $("#edit-direct-hatchery").prop("checked", false);
       $("#edit-warehouse").prop("disabled", false).prop("required", true).removeClass("bg-light");
       $("#edit-warehouse").val(row.from_location_id);
@@ -366,13 +370,13 @@ $(function () {
 
   $("#edit-form").on("submit", function (e) {
     e.preventDefault();
-    const hatcherySelect = $("#edit-source-hatchery");
-    const hatcheryId = hatcherySelect.val();
+    const sourceSelect = $("#edit-source");
+    const sourceValue = sourceSelect.val();
     let warehouseId = $("#edit-warehouse").val();
     if ($("#edit-direct-hatchery").is(":checked")) {
-      warehouseId = hatcherySelect.find(":selected").data("warehouse") || "";
-      if (hatcheryId && !warehouseId) {
-        window.showToast('danger', "Selected Hatchery (Direct) has no Warehouse mapped to it — map one under Hatchery Master first, or untick Direct.");
+      warehouseId = sourceSelect.find(":selected").data("warehouse") || "";
+      if (sourceValue && !warehouseId) {
+        window.showToast('danger', "The selected source (Direct) has no Warehouse mapped to it — map one under Inventory > Office Mapping (hatcheries only), or untick Direct and pick a Warehouse.");
         return;
       }
     }
@@ -383,7 +387,7 @@ $(function () {
       headers: { "X-CSRFToken": csrfToken },
       data: JSON.stringify({
         date: $("#edit-date").val(), dc_no: $("#edit-dc-no").val(),
-        source_hatchery: hatcheryId,
+        source: sourceValue,
         item: $("#edit-item").val(),
         chicks_ordered: $("#edit-chicks-ordered").val(),
         transit_mortality: $("#edit-transit-mortality").val(),

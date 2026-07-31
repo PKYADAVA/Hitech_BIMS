@@ -4234,7 +4234,6 @@ def chicks_placement_report(request):
     """
     from account.models import CompanyProfile
     from inventory.models import StockTransfer
-    from hatchery_master.models import Hatchery
 
     region_id = (request.GET.get("region") or "").strip()
     branch_id = (request.GET.get("branch") or "").strip()
@@ -4254,7 +4253,7 @@ def chicks_placement_report(request):
         qs = (StockTransfer.objects
               .filter(to_location_type="farm", item__category__name__icontains="chick")
               .select_related("to_farm__branch", "to_farm__supervisor", "to_batch",
-                              "from_warehouse", "source_hatchery", "item")
+                              "from_warehouse", "source_hatchery", "source_supplier", "item")
               .order_by("date", "id"))
         if region_id:
             qs = qs.filter(to_farm__branch__region_id=region_id)
@@ -4267,7 +4266,15 @@ def chicks_placement_report(request):
         if farm_id:
             qs = qs.filter(to_farm_id=farm_id)
         if hatchery_id:
-            qs = qs.filter(source_hatchery_id=hatchery_id)
+            # Prefixed "h:<id>" / "s:<id>" (see _chicks_sources). A bare number
+            # is an older bookmarked URL, back when only hatcheries existed.
+            kind, _, source_pk = hatchery_id.partition(":")
+            if not source_pk:
+                qs = qs.filter(source_hatchery_id=kind)
+            elif kind == "s":
+                qs = qs.filter(source_supplier_id=source_pk)
+            else:
+                qs = qs.filter(source_hatchery_id=source_pk)
         if from_date:
             qs = qs.filter(date__gte=from_date)
         if to_date:
@@ -4319,7 +4326,7 @@ def chicks_placement_report(request):
                 "farm_code": t.to_farm.farm_code if t.to_farm_id else "",
                 "farm_name": t.to_farm.farm_name if t.to_farm_id else "",
                 "batch_name": t.to_batch.batch_name if t.to_batch_id else "",
-                "source_hatchery_name": t.source_hatchery.hatchery_name if t.source_hatchery_id else "",
+                "source_hatchery_name": t.source_name,
                 "warehouse_name": t.from_warehouse.name if t.from_warehouse_id else "",
                 "chicks_ordered": ordered, "transit_mortality": mortality,
                 "mort_pct": row_mort_pct,
@@ -4384,7 +4391,7 @@ def chicks_placement_report(request):
         "lines": lines,
         "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
-        "hatcheries": Hatchery.objects.order_by("hatchery_name"),
+        "sources": _chicks_sources(),
         "region_id": region_id, "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id, "hatchery_id": hatchery_id,
         "from_date": from_date, "to_date": to_date, "status": status,
@@ -5670,6 +5677,29 @@ def _hatcheries_with_warehouse():
     )
 
 
+def _chicks_sources():
+    """Options for the "Source Hatchery / Supplier" picker — every Hatchery
+    followed by every Supplier, as one list the templates render in two
+    optgroups.
+
+    Values are prefixed ("h:<id>" / "s:<id>") because the two sides are
+    separate masters stored in separate columns; the prefix is what lets a
+    single select round-trip either without the form tracking which is which.
+    Only hatcheries carry a `warehouse_id` (from Inventory > Office Mapping) —
+    suppliers have no such mapping, so choosing one just leaves From Warehouse
+    to be picked by hand.
+    """
+    from purchase.models import Supplier
+
+    sources = [{"value": f"h:{h.id}", "label": h.hatchery_name or "",
+                "group": "Hatcheries", "warehouse_id": h.warehouse_id or ""}
+               for h in _hatcheries_with_warehouse()]
+    sources += [{"value": f"s:{s.id}", "label": s.name or "",
+                 "group": "Suppliers", "warehouse_id": ""}
+                for s in Supplier.objects.order_by("name")]
+    return sources
+
+
 @method_decorator(login_required, name="dispatch")
 class ChicksPlacementListTemplateView(View):
     def get(self, request):
@@ -5677,7 +5707,7 @@ class ChicksPlacementListTemplateView(View):
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
-            "hatcheries": _hatcheries_with_warehouse(),
+            "sources": _chicks_sources(),
         })
 
 
@@ -5688,7 +5718,7 @@ class ChicksPlacementFormTemplateView(View):
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
-            "hatcheries": _hatcheries_with_warehouse(),
+            "sources": _chicks_sources(),
             "today": timezone.localdate().isoformat(),
         })
 
