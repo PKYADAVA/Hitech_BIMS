@@ -617,3 +617,53 @@ class ManagerOrderTests(TestCase):
     def test_a_superuser_in_no_configured_group_is_unaffected(self):
         self.client.force_login(self.admin)
         self.assertEqual(self.cards(self.client), ALL_KEYS)
+
+
+class DefaultPanelOrderTests(TestCase):
+    """Quick Actions leads the dashboard unless a group says otherwise."""
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("dp_admin", "d2@x.com",
+                                                   "Str0ngPass!")
+        self.group = Group.objects.create(name="Defaults Group")
+
+    def test_quick_actions_is_first_in_the_registry(self):
+        from user.services.dashboard_widgets import DEFAULT_PANEL_ORDER
+
+        self.assertEqual([k for k, *_ in all_panels()][0], "quick_actions")
+        self.assertEqual(DEFAULT_PANEL_ORDER[0], "quick_actions")
+
+    def test_an_unconfigured_group_gets_quick_actions_at_the_top(self):
+        from user.services.dashboard_widgets import dashboard_panels
+
+        panels = dashboard_panels(None, as_group=self.group)
+        self.assertEqual(panels["quick_actions"], 0)
+        self.assertEqual(min(panels.values()), panels["quick_actions"])
+
+    def test_the_editor_lists_it_first_for_a_new_group(self):
+        import re
+
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard_access_form"),
+                               {"group": self.group.id}).content.decode()
+        self.assertEqual(re.findall(r'data-key="(\w+)"', html)[0], "quick_actions")
+
+    def test_a_configured_group_keeps_its_own_order(self):
+        """The default must not reach in and move a saved dashboard."""
+        from user.services.dashboard_widgets import dashboard_panels
+
+        for position, key in enumerate(["field_team", "quick_actions"]):
+            GroupDashboardWidget.objects.create(group=self.group, widget_key=key,
+                                                enabled=True, position=position)
+        panels = dashboard_panels(None, as_group=self.group)
+        self.assertEqual(panels["field_team"], 0)
+        self.assertEqual(panels["quick_actions"], 1)
+
+    def test_every_registry_panel_is_placed_in_the_default_order(self):
+        """A panel added to WIDGETS but forgotten in DEFAULT_PANEL_ORDER still
+        appears, but this fails first so the order stays deliberate."""
+        from user.services.dashboard_widgets import DEFAULT_PANEL_ORDER
+
+        self.assertEqual(set(k for k, *_ in all_panels()), set(DEFAULT_PANEL_ORDER))

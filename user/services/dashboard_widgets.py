@@ -381,11 +381,31 @@ EXTRA_PANELS = [
 ]
 
 
+#: Default top-to-bottom order of the dashboard, and so the order a group is
+#: offered when it has never been configured. Quick Actions leads: it is the one
+#: block people act on rather than read.
+#:
+#: Only the default. A group with saved rows carries its own positions, so
+#: changing this never moves anybody's configured dashboard.
+DEFAULT_PANEL_ORDER = (
+    "quick_actions",
+    "live_flock", "daily_entries", "balances", "stock_alerts",
+    "field_team",
+)
+
+
 def all_panels():
-    """``(key, title, tabs, icon, colour)`` for every switchable block."""
-    for key, title, tabs, _url, icon, colour, _build in WIDGETS:
-        yield key, title, tabs, icon, colour
-    yield from EXTRA_PANELS
+    """``(key, title, tabs, icon, colour)`` for every switchable block,
+    in DEFAULT_PANEL_ORDER."""
+    by_key = {key: (key, title, tabs, icon, colour)
+              for key, title, tabs, _url, icon, colour, _build in WIDGETS}
+    by_key.update({row[0]: row for row in EXTRA_PANELS})
+
+    ordered = [by_key.pop(key) for key in DEFAULT_PANEL_ORDER if key in by_key]
+    # A panel added to the registry but not yet placed above still appears,
+    # after the ones that were — better than silently vanishing.
+    ordered.extend(by_key.values())
+    return ordered
 
 
 def dashboard_panels(user, as_group=None, prefs_override=None):
