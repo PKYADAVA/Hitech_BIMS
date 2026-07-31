@@ -9,8 +9,32 @@ from django.shortcuts import render
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for,
+from user.services.scoping import (branches_for, farms_for, scope_any,
                                    supervisors_for, warehouses_for)
+
+
+def _scope_transfer(user, qs):
+    """A transfer is visible when either end is in the user's scope.
+
+    Requiring both would hide a movement out of their own warehouse to
+    somewhere else — the movement they most need to see, and hiding it makes
+    their own store's ledger wrong rather than restricted.
+    """
+    return scope_any(user, qs,
+                     sectors=("from_warehouse_id", "to_warehouse_id"),
+                     farms=("from_farm_id", "to_farm_id"))
+
+
+def _scope_adjustment(user, qs):
+    """An adjustment sits at one location, recorded as either a warehouse or a
+    farm — so still an either/or, over one pair of columns."""
+    return scope_any(user, qs, sectors="warehouse_id", farms="farm_id")
+
+
+def _scope_by_items(user, qs):
+    """Issues and receives keep their location on the lines, not the header."""
+    return scope_any(user, qs, sectors="items__warehouse_id",
+                     farms="items__farm_id")
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -1059,9 +1083,9 @@ class StockTransferAPI(View):
             except StockTransfer.DoesNotExist:
                 raise Http404("Stock transfer not found")
 
-        qs = StockTransfer.objects.select_related(
+        qs = _scope_transfer(request.user, StockTransfer.objects.select_related(
             "item__category", "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch",
-            "source_hatchery", "source_supplier")
+            "source_hatchery", "source_supplier"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -1382,9 +1406,9 @@ class MedicineTransferAPI(View):
             except MedicineTransfer.DoesNotExist:
                 raise Http404("Medicine transfer not found")
 
-        qs = MedicineTransfer.objects.select_related(
+        qs = _scope_transfer(request.user, MedicineTransfer.objects.select_related(
             "from_warehouse", "from_farm", "from_batch", "to_warehouse", "to_farm", "to_batch"
-        ).prefetch_related("items__item")
+        ).prefetch_related("items__item"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -1770,8 +1794,8 @@ class InventoryAdjustmentAPI(View):
             except InventoryAdjustment.DoesNotExist:
                 raise Http404("Inventory adjustment not found")
 
-        qs = InventoryAdjustment.objects.select_related(
-            "warehouse", "farm", "batch", "chart_of_account").prefetch_related("items__item")
+        qs = _scope_adjustment(request.user, InventoryAdjustment.objects.select_related(
+            "warehouse", "farm", "batch", "chart_of_account").prefetch_related("items__item"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -2055,8 +2079,9 @@ class StockIssueAPI(View):
             except StockIssue.DoesNotExist:
                 raise Http404("Stock issue not found")
 
-        qs = StockIssue.objects.select_related("chart_of_account").prefetch_related(
-            "items__item", "items__warehouse", "items__farm", "items__batch")
+        qs = _scope_by_items(request.user, StockIssue.objects.select_related(
+            "chart_of_account").prefetch_related(
+            "items__item", "items__warehouse", "items__farm", "items__batch"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()
@@ -2298,8 +2323,9 @@ class StockReceiveAPI(View):
             except StockReceive.DoesNotExist:
                 raise Http404("Stock receive not found")
 
-        qs = StockReceive.objects.select_related("chart_of_account").prefetch_related(
-            "items__item", "items__warehouse", "items__farm", "items__batch")
+        qs = _scope_by_items(request.user, StockReceive.objects.select_related(
+            "chart_of_account").prefetch_related(
+            "items__item", "items__warehouse", "items__farm", "items__batch"))
         from_date = (request.GET.get("from_date") or "").strip()
         to_date = (request.GET.get("to_date") or "").strip()
         category = (request.GET.get("category") or "").strip()

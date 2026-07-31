@@ -427,10 +427,10 @@ MODULE_REGISTRY = [
             {
                 "label": "User Management",
                 "tabs": [
+                    ("create_user", "Create User"),
                     ("user_groups", "User Access Groups"),
                     ("dashboard_access", "Dashboard Access",
                      ("dashboard_access_form", "dashboard_access_preview")),
-                    ("create_user", "Create User"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
                     ("picklists", "Picklists"),

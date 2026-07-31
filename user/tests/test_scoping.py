@@ -574,3 +574,89 @@ class TransactionRowScopingTests(TestCase):
         body = self.client.get(reverse("daily_entry_api_list")).content.decode()
         self.assertIn("MineFarm", body)
         self.assertIn("TheirFarm", body)
+
+
+class InventoryRowScopingTests(TestCase):
+    """Inventory transaction grids, not just their dropdowns.
+
+    A transfer has two ends, so the rule here is either-end rather than the
+    all-must-match used for single-location rows.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from inventory.models import StockTransfer
+
+        User = get_user_model()
+        self.user = User.objects.create_user("iv_user", "iv@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Store")
+        self.user.groups.add(self.group)
+        for tab in ("stock_transfer_list", "inventory_adjustment_list"):
+            GroupTabPermission.objects.create(group=self.group, tab_code=tab,
+                                              can_view=True)
+
+        self.mine = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.theirs = Warehouse.objects.create(name="Bahraich Warehouse")
+        self.third = Warehouse.objects.create(name="Gorakhpur Warehouse")
+        self.item = Item.objects.create(
+            description="Feed", category=ItemCategory.objects.create(name="Feed"),
+            valuation_method="Weighted Average", standard_cost_per_unit=50,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+        today = timezone.localdate()
+        # out of the user's warehouse, into it, and one they touch neither end of
+        StockTransfer.objects.create(item=self.item, date=today, quantity=10,
+                                     from_location_type="warehouse",
+                                     from_warehouse=self.mine,
+                                     to_location_type="warehouse",
+                                     to_warehouse=self.theirs, dc_no="T-OUT")
+        StockTransfer.objects.create(item=self.item, date=today, quantity=20,
+                                     from_location_type="warehouse",
+                                     from_warehouse=self.theirs,
+                                     to_location_type="warehouse",
+                                     to_warehouse=self.mine, dc_no="T-IN")
+        StockTransfer.objects.create(item=self.item, date=today, quantity=30,
+                                     from_location_type="warehouse",
+                                     from_warehouse=self.theirs,
+                                     to_location_type="warehouse",
+                                     to_warehouse=self.third, dc_no="T-OTHER")
+
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_sectors=False)
+        profile.sectors.add(self.mine)
+        self.client.force_login(self.user)
+
+    def test_either_end_in_scope_is_enough(self):
+        """Hiding a transfer *out* of their own store would make their own
+        ledger wrong rather than restricted."""
+        body = self.client.get("/stock_transfer_api/").content.decode()
+        self.assertIn("T-OUT", body)
+        self.assertIn("T-IN", body)
+
+    def test_a_transfer_touching_neither_end_is_hidden(self):
+        body = self.client.get("/stock_transfer_api/").content.decode()
+        self.assertNotIn("T-OTHER", body)
+
+    def test_an_unscoped_user_sees_all_three(self):
+        boss = get_user_model().objects.create_superuser("iv_boss", "ivb@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        body = self.client.get("/stock_transfer_api/").content.decode()
+        for ref in ("T-OUT", "T-IN", "T-OTHER"):
+            self.assertIn(ref, body)
+
+    def test_scope_any_keeps_rows_with_no_location_at_all(self):
+        """An unfiled row is not evidence the user should be denied it."""
+        from inventory.models import StockTransfer
+        from user.services.scoping import scope_any
+
+        StockTransfer.objects.create(item=self.item, date=timezone.localdate(),
+                                     quantity=5, dc_no="T-NULL")
+        user = get_user_model().objects.get(pk=self.user.pk)
+        refs = set(scope_any(user, StockTransfer.objects.all(),
+                             sectors=("from_warehouse_id", "to_warehouse_id"),
+                             farms=("from_farm_id", "to_farm_id"))
+                   .values_list("dc_no", flat=True))
+        self.assertIn("T-NULL", refs)
+        self.assertNotIn("T-OTHER", refs)

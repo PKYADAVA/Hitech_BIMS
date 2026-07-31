@@ -4,7 +4,7 @@
 {% block title %}Dashboard Access — BIMS{% endblock %}
 
 {% block nav %}
-  {% include '_user_management_subnavbar.html' with active_tab='dashboard_access' %}
+  {% include 'main_top_navbar.html' with active_tab='user' %}
 {% endblock %}
 
 {% block css %}
@@ -41,6 +41,7 @@
 {% endblock %}
 
 {% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='dashboard_access' %}
 <div class="container-fluid px-0">
   <div class="da-head">
     <i class="fas fa-gauge-high fa-lg"></i>

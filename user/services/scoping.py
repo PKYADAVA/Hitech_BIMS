@@ -110,6 +110,41 @@ def scope_or_null(user, qs, scope, field):
     return qs.filter(Q(**{f"{field}__in": ids}) | Q(**{f"{field}__isnull": True}))
 
 
+def scope_any(user, qs, **scope_fields):
+    """Keep a row when *any* named field is in scope, or when all of them are
+    empty.
+
+    Transfers have two ends. Requiring both to be in scope would hide a transfer
+    out of the user's own warehouse to somewhere else — which is exactly the
+    movement they most need to see, and hiding it would make their own store's
+    ledger wrong rather than restricted. So one end in scope is enough.
+
+    ``scope_multi`` is the opposite and remains right for single-location rows,
+    where each dimension is a separate restriction.
+    """
+    # One allowed_ids call per dimension, applied to each of its fields.
+    limits = {}
+    for scope, fields in scope_fields.items():
+        ids = allowed_ids(user, scope)
+        if ids is None:
+            continue                       # this dimension is unrestricted
+        for field in _as_list(fields):
+            limits[field] = ids
+    if not limits:
+        return qs
+
+    match = Q()
+    empty = Q()
+    for field, ids in limits.items():
+        match |= Q(**{f"{field}__in": ids})
+        empty &= Q(**{f"{field}__isnull": True})
+    return qs.filter(match | empty).distinct()
+
+
+def _as_list(value):
+    return [value] if isinstance(value, str) else list(value)
+
+
 # ---------------------------------------------------------------------------
 # The option lists people actually see
 # ---------------------------------------------------------------------------
