@@ -283,3 +283,96 @@ class ScopedDashboardTests(TestCase):
 
         self.assertEqual(birds(mine), "1,000")
         self.assertEqual(birds(theirs), "500")
+
+
+class BroilerModuleScopingTests(TestCase):
+    """Every user-facing option list in the Broiler module is narrowed.
+
+    Checked by rendering the real pages rather than by calling the helpers, so
+    a page that forgot to use them fails here.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("bm_user", "b@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Broiler")
+        self.user.groups.add(self.group)
+
+        region = Region.objects.create(description="East")
+        self.mine = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                          prefix="AKB")
+        self.theirs = Branch.objects.create(branch_name="Bahraich", region=region,
+                                            prefix="BHR")
+        farmer = Farmer.objects.create(farmer_name="F")
+        for branch, name, line in ((self.mine, "MineFarm", "LineMine"),
+                                   (self.theirs, "TheirFarm", "LineTheirs")):
+            supervisor = Supervisor.objects.create(branch=branch, name=f"Sup{name}")
+            BroilerFarm.objects.create(branch=branch, supervisor=supervisor,
+                                       farmer=farmer, region=region, line=line,
+                                       farm_name=name, farm_capacity=100)
+
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_branches=False)
+        profile.branches.add(self.mine)
+
+        # Every broiler tab, so the guard is never what is being measured.
+        from user.access import MODULE_REGISTRY
+        for module in MODULE_REGISTRY:
+            if module["nav"] != "broiler":
+                continue
+            for section in module["sections"]:
+                for tab in section["tabs"]:
+                    GroupTabPermission.objects.get_or_create(
+                        group=self.group, tab_code=tab[0],
+                        defaults={"can_view": True})
+        self.client.force_login(self.user)
+
+    def assertScoped(self, url_name):
+        html = self.client.get(reverse(url_name)).content.decode()
+        with self.subTest(page=url_name):
+            self.assertIn("MineFarm", html)
+            self.assertNotIn("TheirFarm", html)
+            self.assertNotIn("Bahraich", html)
+
+    def test_the_broiler_reports_offer_only_the_users_farms(self):
+        for url_name in ("day_record_report", "farm_detailed_daily_entry_report",
+                         "lifting_report", "chicks_placement_report",
+                         "batch_wise_feed_scheduling_report",
+                         "broiler_batch_report"):
+            self.assertScoped(url_name)
+
+    def test_the_line_options_narrow_with_the_farms(self):
+        html = self.client.get(reverse("day_record_report")).content.decode()
+        self.assertIn("LineMine", html)
+        self.assertNotIn("LineTheirs", html)
+
+    def test_the_farm_location_capture_form_is_scoped(self):
+        html = self.client.get(reverse("farm_location_capture_list")).content.decode()
+        self.assertIn("MineFarm", html)
+        self.assertNotIn("TheirFarm", html)
+
+    def test_the_cached_branch_list_is_not_shared_between_scopes(self):
+        """A single global cache key would serve one user's branches to the
+        next request from someone else."""
+        from user.services.dashboard_widgets import _scope_signature
+
+        other = get_user_model().objects.create_user("bm_other", "o@x.com",
+                                                     "Str0ngPass!")
+        other_group = Group.objects.create(name="Bahraich Broiler")
+        other.groups.add(other_group)
+        profile = GroupAccessProfile.objects.create(group=other_group,
+                                                    all_branches=False)
+        profile.branches.add(self.theirs)
+
+        self.assertNotEqual(
+            _scope_signature(get_user_model().objects.get(pk=self.user.pk)),
+            _scope_signature(get_user_model().objects.get(pk=other.pk)))
+
+    def test_an_unscoped_user_still_sees_everything(self):
+        boss = get_user_model().objects.create_superuser("bm_boss", "z@x.com",
+                                                         "Str0ngPass!")
+        self.client.force_login(boss)
+        html = self.client.get(reverse("day_record_report")).content.decode()
+        self.assertIn("MineFarm", html)
+        self.assertIn("TheirFarm", html)

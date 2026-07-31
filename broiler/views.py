@@ -2,6 +2,11 @@
 
 from typing import Dict, List, Optional, Union
 from django.shortcuts import render, get_object_or_404, redirect
+
+# Data scoping: every user-facing option list below is narrowed to the
+# branches / farms / warehouses the signed-in user is scoped to.
+from user.services.scoping import (branches_for, farms_for,
+                                   supervisors_for, warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -787,10 +792,14 @@ class SupervisorTemplateView(View):
     def get(self, request):
         from hr.models import Employee
 
-        cache_key = "branch_list"
+        # Cached per scope, not globally: a single "branch_list" key would hand
+        # one user's branches to the next request from another.
+        from user.services.dashboard_widgets import _scope_signature
+
+        cache_key = "branch_list:%s" % _scope_signature(request.user)
         branches = cache.get(cache_key)
         if not branches:
-            branches = list(Branch.objects.values())
+            branches = list(branches_for(request.user, Branch.objects.all()).values())
             cache.set(cache_key, branches)
         context = {
             "branches": branches,
@@ -1811,7 +1820,7 @@ def _recompute_stock_chain(farm_id, item_id):
 class DailyEntryListTemplateView(View):
     def get(self, request):
         return render(request, "daily_entry_list.html", {
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
         })
 
@@ -1828,8 +1837,8 @@ class SingleBatchDailyEntryListTemplateView(View):
 class SingleBatchDailyEntryFormTemplateView(View):
     def get(self, request):
         return render(request, "daily_entry_single_form.html", {
-            "supervisors": Supervisor.objects.order_by("name"),
-            "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+            "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -1839,8 +1848,8 @@ class SingleBatchDailyEntryFormTemplateView(View):
 class DailyEntryFormTemplateView(View):
     def get(self, request):
         return render(request, "daily_entry_form.html", {
-            "supervisors": Supervisor.objects.order_by("name"),
-            "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+            "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -2242,7 +2251,7 @@ def _recompute_medicine_stock_chain(farm_id, item_id):
 class MedicineEntryListTemplateView(View):
     def get(self, request):
         return render(request, "medicine_entry_list.html", {
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
         })
 
@@ -2251,8 +2260,8 @@ class MedicineEntryListTemplateView(View):
 class MedicineEntryFormTemplateView(View):
     def get(self, request):
         return render(request, "medicine_entry_form.html", {
-            "supervisors": Supervisor.objects.order_by("name"),
-            "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+            "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
             "items": Item.objects.order_by("item_code"),
             "today": timezone.localdate().isoformat(),
         })
@@ -2513,7 +2522,7 @@ class BirdSaleFormTemplateView(View):
         from hr.models import Employee
         return render(request, "bird_sale_form.html", {
             "instance": BirdSale.objects.filter(id=id).first() if id else None,
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "customers": Customer.objects.order_by("name"),
             "farmers": Farmer.objects.order_by("farmer_name"),
             # Lifting supervisor can be any active employee.
@@ -3386,7 +3395,7 @@ def broiler_batch_report(request):
     schemes = schemes.order_by("schema_name")
 
     return render(request, "broiler_batch_report.html", {
-        "farms": BroilerFarm.objects.order_by("farm_name"),
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         "batches": BroilerBatch.objects.select_related("broiler_farm").order_by("-start_date", "-id"),
         "schemes": schemes,
         "batch": batch,
@@ -3708,8 +3717,8 @@ def live_flock_summary_report(request):
     return render(request, "live_flock_summary_report.html", {
         "rows": rows,
         "regions": Region.objects.order_by("description"),
-        "branches": Branch.objects.order_by("branch_name"),
-        "supervisors": Supervisor.objects.order_by("name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
         "breeds": Breed.objects.filter(is_active=True).order_by("description"),
         "region_id": region_id, "branch_id": branch_id,
         "supervisor_id": supervisor_id, "breed_id": breed_id,
@@ -3914,16 +3923,16 @@ def day_record_report(request):
     totals["mort_pct"] = _div(totals["mort"] * 100, totals["opening"]).quantize(Decimal("0.01"))
     totals["cum_mort_pct"] = _div(totals["cum_mort"] * 100, totals["placed"]).quantize(Decimal("0.01"))
 
-    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+    lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
 
     return render(request, "day_record_report.html", {
         "rows": rows, "totals": totals, "sel_date": sel_date,
         "regions": Region.objects.order_by("description"),
-        "branches": Branch.objects.order_by("branch_name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "lines": lines,
-        "supervisors": Supervisor.objects.order_by("name"),
-        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "region_id": region_id, "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id,
         "company": CompanyProfile.get_solo(),
@@ -3976,7 +3985,7 @@ def farm_detailed_daily_entry_report(request):
              "feed_in", "feed_out", "feed_con", "feed_1_con", "feed_2_con"]
     totals = {k: sum((_num(r[k]) for r in rows), Decimal("0")) for k in tkeys}
 
-    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+    lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
 
     columns = [
@@ -4004,10 +4013,10 @@ def farm_detailed_daily_entry_report(request):
     return render(request, "farm_detailed_daily_entry_report.html", {
         "rows": rows, "totals": totals, "from_date": from_date, "to_date": to_date,
         "columns": columns,
-        "branches": Branch.objects.order_by("branch_name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "lines": lines,
-        "supervisors": Supervisor.objects.order_by("name"),
-        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id,
         "company": CompanyProfile.get_solo(),
@@ -4164,17 +4173,17 @@ def lifting_report(request):
         totals[k] = totals[k].quantize(q2)
     totals["birds"] = int(totals["birds"])
 
-    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+    lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
 
     return render(request, "lifting_report.html", {
         "rows": rows, "totals": totals,
         "customers": Customer.objects.order_by("name"),
         "regions": Region.objects.order_by("description"),
-        "branches": Branch.objects.order_by("branch_name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "lines": lines,
         "supervisors": Employee.objects.filter(relieve=False).order_by("full_name"),
-        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "from_date": from_date, "to_date": to_date, "customer_id": customer_id,
         "region_id": region_id, "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id, "sale_type": sale_type,
@@ -4333,15 +4342,15 @@ def chicks_placement_report(request):
                "total_culls": 0, "culls_pct": Decimal("0"),
                "farms_count": 0, "branches_count": 0, "warehouses_count": 0}
 
-    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+    lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
 
     return render(request, "chicks_placement_report.html", {
         "regions": Region.objects.order_by("description"),
-        "branches": Branch.objects.order_by("branch_name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "lines": lines,
-        "supervisors": Supervisor.objects.order_by("name"),
-        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "hatcheries": Hatchery.objects.order_by("hatchery_name"),
         "region_id": region_id, "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id, "hatchery_id": hatchery_id,
@@ -5001,14 +5010,14 @@ def batch_wise_feed_scheduling_report(request):
         if export in ("csv", "excel"):
             return _feed_scheduling_export(rows, totals, export, feed_summary)
 
-    lines = (BroilerFarm.objects.exclude(line="").order_by("line")
+    lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
 
     return render(request, "batch_wise_feed_scheduling_report.html", {
-        "branches": Branch.objects.order_by("branch_name"),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "lines": lines,
-        "supervisors": Supervisor.objects.order_by("name"),
-        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "branch_id": branch_id, "line": line, "supervisor_id": supervisor_id, "farm_id": farm_id,
         "excess_only": excess_only, "export": export, "sort": sort, "status": status,
         "submitted": submitted, "rows": rows, "totals": totals, "feed_summary": feed_summary,
@@ -5632,8 +5641,8 @@ def _hatcheries_with_warehouse():
 class ChicksPlacementListTemplateView(View):
     def get(self, request):
         return render(request, "chicks_placement_list.html", {
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
             "hatcheries": _hatcheries_with_warehouse(),
         })
@@ -5643,8 +5652,8 @@ class ChicksPlacementListTemplateView(View):
 class ChicksPlacementFormTemplateView(View):
     def get(self, request):
         return render(request, "chicks_placement_form.html", {
-            "warehouses": Warehouse.objects.order_by("name"),
-            "farms": BroilerFarm.objects.order_by("farm_name"),
+            "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
+            "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
             "hatcheries": _hatcheries_with_warehouse(),
             "today": timezone.localdate().isoformat(),
@@ -5680,7 +5689,7 @@ class GrowingChargeSchemeTemplateView(View):
     def get(self, request):
         context = {
             "regions": Region.objects.order_by("description"),
-            "branches": Branch.objects.select_related("region").order_by("branch_name"),
+            "branches": branches_for(request.user, Branch.objects.select_related("region").order_by("branch_name")),
             "medicine_basis_choices": GrowingChargeScheme.MedicineCostBasis.choices,
             "shortage_basis_choices": GrowingChargeScheme.ShortageBasis.choices,
             "summer_incentive_on_choices": GCSummerIncentive.IncentiveOn.choices,
@@ -6223,7 +6232,7 @@ class GCSettlementTemplateView(View):
 
     def get(self, request):
         return render(request, "gc_settlement_form.html", {
-            "farms": BroilerFarm.objects.select_related("branch", "supervisor").order_by("farm_name"),
+            "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch", "supervisor").order_by("farm_name")),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -6806,7 +6815,7 @@ def _capture_row(c):
 def farm_location_capture_list(request):
     """Broiler > Transactions > Farm Location & Photos — the register."""
     return render(request, "farm_location_capture_list.html", {
-        "farms": BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name"),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name")),
         "slots": [(k, dict(FarmCaptureFile.KIND_CHOICES)[k])
                   for k in FarmCaptureFile.SLOT_TARGETS
                   if k != FarmCaptureFile.KIND_DOCUMENT],
@@ -6831,13 +6840,13 @@ def farm_location_capture_api(request):
     return JsonResponse([_capture_row(c) for c in qs.order_by("-date", "-id")], safe=False)
 
 
-def _capture_form_context(instance=None):
+def _capture_form_context(user, instance=None):
     grouped = _capture_files_by_slot(instance)
     return {
         "capture": instance,
         "next_no": FarmLocationCapture._next_no() if not instance else None,
-        "farms": BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name"),
-        "branches": Branch.objects.order_by("branch_name"),
+        "farms": farms_for(user, BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name")),
+        "branches": branches_for(user, Branch.objects.order_by("branch_name")),
         "today": timezone.localdate().isoformat(),
         # (code, label, files) per slot: carrying the files in the row lets the
         # template show each one under its own input without indexing a dict by
@@ -6916,7 +6925,7 @@ def farm_location_capture_add(request):
             return redirect("farm_location_capture_list")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, "farm_location_capture_form.html", _capture_form_context())
+    return render(request, "farm_location_capture_form.html", _capture_form_context(request.user))
 
 
 @login_required(login_url="login")
@@ -6930,7 +6939,7 @@ def farm_location_capture_edit(request, id):
             return redirect("farm_location_capture_list")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, "farm_location_capture_form.html", _capture_form_context(instance))
+    return render(request, "farm_location_capture_form.html", _capture_form_context(request.user, instance))
 
 
 @login_required(login_url="login")
