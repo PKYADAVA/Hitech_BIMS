@@ -486,8 +486,14 @@ PUBLIC_URL_NAMES = {
     "login", "logout", "home", "dashboard", "forgot_password",
     "update_password", "reset_password", "user_profile",
     "global_search_api", "dashboard_widgets_api",
-    # Polled by every page's alert bell.
-    "alert-unread-count",
+    # The alert bell and its centre. Every page polls the unread count and any
+    # user may read their own notifications, so these belong to no module's
+    # tab. Leaving the rest unmapped also created a loop: opening the centre
+    # hit alert-list, which recorded an audit row, which raised an alert, which
+    # appeared in the centre you were reading.
+    "alert-unread-count", "alert_center",
+    "alert-list", "alert-detail", "alert-mark-read", "alert-mark-all-read",
+    "auditlog-list", "auditlog-detail",
     # Cascade pickers shared by forms across several modules, so they belong to
     # no single tab. They return scoped data instead — see the broiler views.
     "get_branches_by_region", "get_lines_by_branch", "get_supervisors",

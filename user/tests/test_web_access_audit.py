@@ -567,3 +567,33 @@ class AuditIsNotItselfAudited(TestCase):
         from broiler.models import Region
 
         self.assertTrue(registry.is_registered(Region))
+
+    def test_the_purge_command_removes_only_the_audit_tables_own_rows(self):
+        from io import StringIO
+        from django.core.management import call_command
+
+        from alerts.models import Alert
+
+        mine = Alert.objects.create(model_name="WebAccessAudit", title="noise",
+                                    message="unmapped: GET alert-list")
+        theirs = Alert.objects.create(model_name="BroilerFarm", title="real",
+                                      message="someone edited a farm")
+
+        out = StringIO()
+        call_command("purge_audit_alerts", dry_run=True, stdout=out)
+        self.assertIn("would be removed", out.getvalue())
+        self.assertTrue(Alert.objects.filter(pk=mine.pk).exists())   # dry run
+
+        call_command("purge_audit_alerts", stdout=StringIO())
+        self.assertFalse(Alert.objects.filter(pk=mine.pk).exists())
+        self.assertTrue(Alert.objects.filter(pk=theirs.pk).exists())
+
+    def test_the_alert_endpoints_no_longer_feed_the_loop(self):
+        """Opening the alert centre recorded an audit row, which raised an
+        alert, which appeared in the centre being read."""
+        from user.access import PUBLIC_URL_NAMES
+
+        for url_name in ("alert_center", "alert-list", "alert-unread-count",
+                         "alert-mark-all-read"):
+            with self.subTest(url=url_name):
+                self.assertIn(url_name, PUBLIC_URL_NAMES)
