@@ -84,6 +84,17 @@
   .dw-bar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:7px; }
   .dw-field { flex:1 1 125px; min-width:0; }
   .dw-actions { flex:0 0 auto; display:flex; align-items:flex-end; gap:6px; }
+  /* One height for every control in the bar. Left alone they disagree: a native
+     date input is taller than a form-control-sm because of Chrome's picker
+     button, and main.js swaps the selects for Select2, which sizes its own
+     selection box. Pinning 31px is what keeps the row level. */
+  .dw-bar .form-control-sm,
+  .dw-bar .form-select-sm,
+  .dw-bar .btn-sm,
+  .dw-bar .gs-box,
+  .dw-bar .select2-container--bootstrap-5 .select2-selection { height:31px; min-height:31px; }
+  .dw-bar input[type="date"] { padding-top:0; padding-bottom:0; line-height:1; }
+  .dw-bar .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered { line-height:29px; }
   .dw-bar .gs-wrap { flex:1 1 200px; min-width:0; max-width:none; margin:0; }
   @media (min-width:1400px) { .dw-bar { flex-wrap:nowrap; } }
   .dw-filter.is-busy { opacity:.6; pointer-events:none; }
