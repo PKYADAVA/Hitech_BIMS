@@ -32,6 +32,16 @@
     .wa-editor-head small { opacity:.85; }
     .wa-editor-body { padding:20px; }
     .wa-section-title { font-weight:700; color:#3d2c66; margin:22px 0 12px; display:flex; align-items:center; gap:8px; }
+    /* Shown while Access Type is Admin, which bypasses the matrix entirely. */
+    .wa-admin-note { display:none; align-items:flex-start; gap:10px; margin:16px 0 0;
+                     padding:11px 14px; border:1px solid #f0c36d; border-radius:10px;
+                     background:#fffaf0; color:#7a4f01; font-size:.83rem; line-height:1.45; }
+    .wa-admin-note i { margin-top:2px; }
+    .wa-admin-note b { display:block; margin-bottom:2px; }
+    body.wa-is-admin .wa-admin-note { display:flex; }
+    /* The matrix still submits its values, so switching back to Sub-Admin keeps
+       whatever was ticked. It is only shown as inert, not disabled. */
+    body.wa-is-admin .wa-scroll, body.wa-is-admin .wa-scope-grid { opacity:.45; }
     .wa-section-title:first-child { margin-top:4px; }
 
     /* ---- Matrix ---- */
@@ -235,6 +245,15 @@
 
     <!-- Access flags -->
     <div class="wa-section-title"><i class="fas fa-user-shield"></i>Access Settings</div>
+    <div class="wa-admin-note" id="wa-admin-note">
+      <i class="fas fa-triangle-exclamation"></i>
+      <span>
+        <b>Access Type is Admin — the permissions below are ignored.</b>
+        Anyone in this group gets every module, tab and action regardless of what
+        is ticked, and being in this group overrides every other group they
+        belong to. Choose <strong>Sub-Admin</strong> for the matrix to apply.
+      </span>
+    </div>
     <div class="wa-flags">
         <div class="wa-flag">
             <span class="wa-flag-label">Is Superuser</span>
@@ -336,6 +355,16 @@
     $(document).ready(function () {
         // ---- Matrix "select all" cascades ----------------------------------
         // Whole matrix
+        // Access Type = Admin bypasses the whole matrix (user.access
+        // ._user_is_unrestricted), so say so rather than let the editor imply a
+        // restriction that is not applied.
+        function syncAdminNote() {
+            var admin = $("input[name='access_type']:checked").val() === "admin";
+            $("body").toggleClass("wa-is-admin", admin);
+        }
+        $(document).on("change", "input[name='access_type']", syncAdminNote);
+        syncAdminNote();
+
         $(".wa-all").on("change", function () {
             $(".wa-cell").prop("checked", this.checked);
             syncAll();
