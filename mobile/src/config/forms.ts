@@ -12,7 +12,18 @@ import { http } from "@/api/client";
 import { Envelope } from "@/api/types";
 import { isDocumentForm } from "@/config/documents";
 
-export type FieldType = "text" | "textarea" | "number" | "decimal" | "date" | "boolean" | "select";
+export type FieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "decimal"
+  | "date"
+  | "boolean"
+  | "select"
+  /** Camera / gallery capture; the value is a local file URI or a stored URL. */
+  | "photo"
+  /** One-tap GPS stamp; writes the pair of lat/long fields named in `geoFields`. */
+  | "geo";
 
 export interface FormField {
   name: string;
@@ -25,6 +36,8 @@ export interface FormField {
   readOnly?: boolean;
   /** Display-only helper (e.g. a running total) — shown but never sent to the API. */
   transient?: boolean;
+  /** For `geo`: the [latitude, longitude] field names this control fills. */
+  geoFields?: [string, string];
 }
 
 export interface FormSchema {
@@ -98,6 +111,12 @@ const area = (name: string, label: string): FormField => ({ name, label, type: "
 const num = (name: string, label: string, required = false): FormField => ({ name, label, type: "number", required });
 const dec = (name: string, label: string, required = false): FormField => ({ name, label, type: "decimal", required });
 const date = (name: string, label: string, required = false): FormField => ({ name, label, type: "date", required });
+/** Camera / gallery capture. */
+const photo = (name: string, label: string): FormField => ({ name, label, type: "photo" });
+/** GPS stamp writing a [latitude, longitude] pair; holds no value of its own. */
+const geo = (name: string, label: string, fields: [string, string]): FormField => ({
+  name, label, type: "geo", transient: true, geoFields: fields,
+});
 const bool = (name: string, label: string): FormField => ({ name, label, type: "boolean" });
 const sel = (
   name: string,
@@ -141,6 +160,13 @@ export const FORMS: Record<string, FormSchema> = {
       dec("feed_2_qty", "Feed 2 Qty"),
       dec("avg_weight_gms", "Avg Weight (g)"),
       text("remarks", "Remarks"),
+      // Field capture — the model reserves these for the mobile app; the web
+      // form has no equivalent. All optional: a refused camera/GPS prompt must
+      // still leave the entry saveable.
+      photo("mort_image", "Mortality Photo"),
+      photo("cull_image", "Culls Photo"),
+      photo("feed_image", "Feed Photo"),
+      geo("entry_location", "Location", ["entry_latitude", "entry_longitude"]),
     ],
     // Farm → active batch, age, and next entry date (web daily_entry_farm_lookup).
     autofill: {

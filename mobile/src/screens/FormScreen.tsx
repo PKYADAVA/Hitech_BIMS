@@ -4,6 +4,7 @@ import { Alert, Text, View } from "react-native";
 
 import { createResource, deleteResource, updateResource } from "@/api/resources";
 import { ApiError, Row } from "@/api/types";
+import { appendImage, isLocalCapture } from "@/capture";
 import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
@@ -39,6 +40,11 @@ export function FormScreen({ route, navigation }: Props) {
           : isEmpty(raw)
           ? ""
           : String(raw);
+      // A geo control's coordinates are API fields with no control of their
+      // own, so seed them here or an edit would drop the saved position.
+      for (const coord of f.geoFields ?? []) {
+        v[coord] = isEmpty(row?.[coord]) ? "" : String(row?.[coord]);
+      }
     }
     return v;
   }, [schema, row]);
@@ -78,12 +84,54 @@ export function FormScreen({ route, navigation }: Props) {
   const buildPayload = () => {
     const payload: Record<string, unknown> = { ...(preset ?? {}) };
     for (const f of schema.fields) {
+      // A geo control holds no value itself — it persists the coordinate pair
+      // it writes, which are real API fields but never rendered on their own.
+      if (f.type === "geo") {
+        for (const coord of f.geoFields ?? []) {
+          if (!isEmpty(values[coord])) payload[coord] = values[coord];
+        }
+        continue;
+      }
       if (f.transient) continue; // display-only helper, never persisted
       const val = derived[f.name] ?? values[f.name];
       if (f.type === "boolean") payload[f.name] = val === "true";
       else if (!isEmpty(val)) payload[f.name] = val;
     }
     return payload;
+  };
+
+  /** Photo fields holding a freshly captured file — these force a multipart send. */
+  const pendingPhotos = () =>
+    schema.fields.filter(
+      (f) => f.type === "photo" && !f.transient && isLocalCapture(values[f.name] ?? "")
+    );
+
+  /**
+   * A JSON object normally; FormData when a photo was captured, since a file
+   * can't be expressed in JSON. An untouched photo field is left out entirely
+   * so an edit that doesn't retake the shot keeps the stored image — sending
+   * its URL back as a string would make Django try to store the URL as a file.
+   */
+  const buildBody = async (): Promise<Record<string, unknown> | FormData> => {
+    const photos = pendingPhotos();
+    const payload = buildPayload();
+    if (!photos.length) {
+      for (const f of schema.fields) {
+        if (f.type === "photo") delete payload[f.name];
+      }
+      return payload;
+    }
+
+    const form = new FormData();
+    const photoNames = new Set(photos.map((f) => f.name));
+    for (const [k, v] of Object.entries(payload)) {
+      if (schema.fields.some((f) => f.type === "photo" && f.name === k)) continue;
+      form.append(k, typeof v === "boolean" ? String(v) : String(v));
+    }
+    for (const f of photoNames) {
+      await appendImage(form, f, values[f]);
+    }
+    return form;
   };
 
   const validate = (): boolean => {
@@ -101,8 +149,9 @@ export function FormScreen({ route, navigation }: Props) {
     if (!validate()) return;
     setSaving(true);
     try {
-      if (mode === "create") await createResource(config.path, buildPayload());
-      else await updateResource(config.path, (row as Row).id, buildPayload());
+      const body = await buildBody();
+      if (mode === "create") await createResource(config.path, body);
+      else await updateResource(config.path, (row as Row).id, body);
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
       finish();
     } catch (e) {
@@ -153,9 +202,11 @@ export function FormScreen({ route, navigation }: Props) {
             key={f.name}
             field={f}
             value={shown(f.name)}
+            values={values}
             fallbackLabel={row ? (row[`${f.name}_label`] as string) : undefined}
             error={errors[f.name]}
             onChange={set(f.name)}
+            onPatch={(patch) => setValues((cur) => ({ ...cur, ...patch }))}
           />
         ))}
 

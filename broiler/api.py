@@ -11,6 +11,9 @@ Registered under ``/api/v1/broiler/…`` by :func:`register` (called from
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -89,6 +92,94 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
         return super().create(validated_data)
 
 
+class DailyEntrySerializer(serializer_factory(DailyEntry)):
+    """Daily Entry write logic identical to the web form's
+    ``broiler.views._apply_daily_entry_row``: the batch, the birds' age and the
+    running feed stock are all derived server-side, never trusted from (or
+    expected from) the client.
+
+    ``age_days``, ``feed_1_stock`` and ``feed_2_stock`` are ``editable=False``,
+    so DRF never accepts them from the request and they would otherwise save as
+    0. That matters well beyond the one row: ``DailyEntry.previous_stock``
+    chains each entry's opening balance off the previous entry's closing
+    balance, so a single zeroed row silently corrupts the feed-stock ledger for
+    every later entry on that farm.
+
+    After the write, the affected feed items' whole chain is recomputed — an
+    edit to a row's date, quantity or feed item changes the opening balance of
+    every row after it (same reason the web form calls it).
+    """
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        farm = attrs.get("farm") or getattr(self.instance, "farm", None)
+        if farm is not None:
+            attrs["batch"] = _active_batch_for_farm(farm.id)
+        return attrs
+
+    def _current(self, validated_data, name, default=None):
+        """Field value for this write: the incoming value when supplied,
+        otherwise the instance's existing one (PATCH sends partial data)."""
+        if name in validated_data:
+            return validated_data[name]
+        return getattr(self.instance, name, default) if self.instance else default
+
+    def _apply_derived(self, validated_data):
+        entry_date = self._current(validated_data, "date") or timezone.localdate()
+        batch = self._current(validated_data, "batch")
+        farm = self._current(validated_data, "farm")
+        farm_id = farm.id if farm else None
+
+        # Placement day is Age 0; the first entry day (the day after placement)
+        # is Age 1 — same rule as the web form.
+        if batch and batch.start_date:
+            validated_data["age_days"] = max((entry_date - batch.start_date).days, 0)
+        else:
+            validated_data["age_days"] = 0
+
+        # An existing row must exclude itself from its own "previous" lookup;
+        # a new row has no pk to compare against yet.
+        before_id = self.instance.pk if self.instance else None
+        for slot in ("feed_1", "feed_2"):
+            item = self._current(validated_data, slot)
+            qty = self._current(validated_data, f"{slot}_qty") or Decimal("0")
+            if item:
+                prev = DailyEntry.previous_stock(farm_id, item.id, entry_date, before_id)
+                validated_data[f"{slot}_stock"] = Decimal(str(prev)) - Decimal(str(qty))
+            else:
+                validated_data[f"{slot}_stock"] = Decimal("0")
+        return validated_data
+
+    def _recompute_chains(self, instance):
+        from .views import _recompute_stock_chain
+
+        _recompute_stock_chain(instance.farm_id, instance.feed_1_id)
+        _recompute_stock_chain(instance.farm_id, instance.feed_2_id)
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request is not None and not validated_data.get("entry_by"):
+            validated_data["entry_by"] = request.user
+        instance = super().create(self._apply_derived(validated_data))
+        self._recompute_chains(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        # Capture the pre-edit items too: moving a row off a feed item still
+        # changes that item's chain for every row that followed it.
+        previous_items = (instance.feed_1_id, instance.feed_2_id)
+        previous_farm_id = instance.farm_id
+        instance = super().update(instance, self._apply_derived(validated_data))
+        self._recompute_chains(instance)
+
+        from .views import _recompute_stock_chain
+
+        for item_id in previous_items:
+            if item_id and item_id not in (instance.feed_1_id, instance.feed_2_id):
+                _recompute_stock_chain(previous_farm_id, item_id)
+        return instance
+
+
 class BirdSaleFarmLookupView(V1ViewMixin, APIView):
     """GET /api/v1/broiler/farm-lookup?farm=<id> — the farm's active batch,
     owning farmer, batch age, and next entry date. Serves the auto-filled
@@ -100,20 +191,26 @@ class BirdSaleFarmLookupView(V1ViewMixin, APIView):
     def get(self, request):
         from datetime import timedelta
 
-        from django.utils import timezone
+        from django.utils.dateparse import parse_date
 
         farm_id = request.query_params.get("farm")
         batch = _active_batch_for_farm(farm_id) if farm_id else None
         farm = (BroilerFarm.objects.filter(id=farm_id).select_related("farmer").first()
                 if farm_id else None)
 
-        age_days = 0
-        if batch and batch.start_date:
-            age_days = max((timezone.localdate() - batch.start_date).days, 0)
-
         last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by("-date", "-id").first()
                       if farm_id else None)
         next_date = (last_entry.date + timedelta(days=1)) if last_entry else timezone.localdate()
+
+        # Age is resolved as of the date the row will be saved with — the
+        # caller's `date` when it has one, else next_date. Using today instead
+        # gives backfilled and edited entries the wrong age (web parity:
+        # ``daily_entry_farm_lookup``).
+        entry_date = parse_date(request.query_params.get("date") or "") or next_date
+
+        age_days = 0
+        if batch and batch.start_date:
+            age_days = max((entry_date - batch.start_date).days, 0)
 
         return Response({
             "batch": batch.id if batch else None,
@@ -156,7 +253,8 @@ def register(router) -> None:
                    search_fields=["disease_code", "disease_name"], ordering=["disease_name"])
 
     # --- Transactions (full CRUD, cursor-paginated feeds) ---------------
-    register_model(router, "broiler/daily-entries", DailyEntry, cursor=True)
+    register_model(router, "broiler/daily-entries", DailyEntry,
+                   serializer=DailyEntrySerializer, cursor=True)
     register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry, cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, serializer=BirdSaleSerializer,
                    search_fields=["sale_no", "doc_no", "vehicle", "driver"], cursor=True)

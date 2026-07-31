@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/bottom-tabs": "^6.6.1",
@@ -22,14 +23,18 @@
     "expo": "^54.0.36",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
+    "expo-image-picker": "~17.0.11",
     "expo-local-authentication": "~17.0.8",
+    "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.17",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-web": "^0.21.0",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

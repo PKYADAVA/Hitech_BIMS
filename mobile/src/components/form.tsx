@@ -2,6 +2,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CapturedImage, capturePhoto, captureLocation, pickPhoto } from "@/capture";
 import { FormField } from "@/config/forms";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
@@ -48,15 +50,21 @@ function FieldShell({
 export function FormControl({
   field,
   value,
+  values,
   fallbackLabel,
   error,
   onChange,
+  onPatch,
 }: {
   field: FormField;
   value: string;
+  /** All current values — a `geo` control reads the pair it writes. */
+  values?: Record<string, string>;
   fallbackLabel?: string;
   error?: string;
   onChange: (v: string) => void;
+  /** Set several fields at once (a GPS stamp fills latitude *and* longitude). */
+  onPatch?: (patch: Record<string, string>) => void;
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -98,6 +106,28 @@ export function FormControl({
     return (
       <FieldShell label={field.label} required={field.required} error={error}>
         <SelectControl field={field} value={value} fallbackLabel={fallbackLabel} onChange={onChange} />
+      </FieldShell>
+    );
+  }
+
+  if (field.type === "photo") {
+    return (
+      <FieldShell label={field.label} required={field.required} error={error}>
+        <PhotoControl value={value} onChange={onChange} />
+      </FieldShell>
+    );
+  }
+
+  if (field.type === "geo") {
+    const [latName, lngName] = field.geoFields ?? ["latitude", "longitude"];
+    return (
+      <FieldShell label={field.label} required={field.required} error={error}>
+        <GeoControl
+          latitude={values?.[latName] ?? ""}
+          longitude={values?.[lngName] ?? ""}
+          onCapture={(p) => onPatch?.({ [latName]: p.latitude, [lngName]: p.longitude })}
+          onClear={() => onPatch?.({ [latName]: "", [lngName]: "" })}
+        />
       </FieldShell>
     );
   }
@@ -231,6 +261,126 @@ function SelectControl({
   );
 }
 
+/**
+ * Photo evidence: take one, or pick an already-taken shot. The value is a local
+ * file URI for a fresh capture and a stored URL when editing a saved entry —
+ * both render the same, so an existing photo is visible before it's replaced.
+ */
+function PhotoControl({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [busy, setBusy] = useState(false);
+
+  const run = async (grab: () => Promise<CapturedImage | null>) => {
+    setBusy(true);
+    try {
+      const shot = await grab();
+      if (shot) onChange(shot.uri);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (value) {
+    return (
+      <View style={styles.photoRow}>
+        <Image source={{ uri: value }} style={styles.thumb} />
+        <View style={styles.photoActions}>
+          <Pressable onPress={() => run(capturePhoto)} disabled={busy}>
+            <Text style={styles.photoAction}>Retake</Text>
+          </Pressable>
+          <Pressable onPress={() => onChange("")} disabled={busy}>
+            <Text style={[styles.photoAction, { color: colors.danger }]}>Remove</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.photoRow}>
+      <Pressable
+        style={[styles.input, styles.photoButton]}
+        onPress={() => run(capturePhoto)}
+        disabled={busy}
+      >
+        <AppIcon name="camera-outline" size={18} color={colors.tint} />
+        <Text style={styles.photoButtonText}>{busy ? "Opening…" : "Take photo"}</Text>
+      </Pressable>
+      <Pressable onPress={() => run(pickPhoto)} disabled={busy}>
+        <Text style={styles.photoAction}>Gallery</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * One-tap GPS stamp for the entry. Writes both coordinate fields at once, so
+ * they can never be saved half-set.
+ */
+function GeoControl({
+  latitude,
+  longitude,
+  onCapture,
+  onClear,
+}: {
+  latitude: string;
+  longitude: string;
+  onCapture: (p: { latitude: string; longitude: string }) => void;
+  onClear: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const stamp = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const point = await captureLocation();
+      if (point) onCapture(point);
+      else setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const has = !!latitude && !!longitude;
+  return (
+    <>
+      <View style={styles.photoRow}>
+        <Pressable style={[styles.input, styles.photoButton]} onPress={stamp} disabled={busy}>
+          <AppIcon name="crosshairs-gps" size={18} color={colors.tint} />
+          <Text style={styles.photoButtonText}>
+            {busy
+              ? "Locating…"
+              : has
+              ? `${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}`
+              : "Stamp location"}
+          </Text>
+        </Pressable>
+        {has ? (
+          <Pressable onPress={onClear} disabled={busy}>
+            <Text style={[styles.photoAction, { color: colors.danger }]}>Clear</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {failed ? (
+        <Text style={styles.error}>
+          Couldn&apos;t get a location — check that location permission and GPS are on.
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
 function toISODate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -273,6 +423,17 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.surface,
   },
   switchText: { ...type.body, color: colors.text },
+  photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  photoButton: { flex: 1, gap: spacing.sm, justifyContent: "flex-start" },
+  photoButtonText: { ...type.body, color: colors.text },
+  photoAction: { ...type.label, color: colors.tint },
+  photoActions: { gap: spacing.sm },
+  thumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
 
   modal: { flex: 1, backgroundColor: colors.bg },
   modalHeader: {

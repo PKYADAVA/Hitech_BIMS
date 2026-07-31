@@ -34,12 +34,26 @@
     "extra": {
       "apiBaseUrl": "https://hitechfarms.co.in/api/v1",
       "eas": {
-        "projectId": "5d635b88-b87b-4998-97e9-818546c72b9e"
+        "projectId": "93819148-ac24-4028-a814-96e3f605cd03"
       }
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-notifications"
-    ]
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Hitech BIMS to use the camera to attach mortality, cull and feed photos to a daily entry.",
+          "photosPermission": "Allow Hitech BIMS to attach photos from your library to a daily entry."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Hitech BIMS to record where a daily entry was captured."
+        }
+      ]
+    ],
+    "owner": "akash17s"
   }
 }

@@ -1,5 +1,6 @@
-import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
+
+import { storage } from "@/storage";
 
 const KEY = "app_lock_enabled";
 
@@ -10,20 +11,20 @@ interface SettingsState {
   setAppLock: (v: boolean) => Promise<void>;
 }
 
-/** Local device preferences (persisted in the Keychain/Keystore via SecureStore). */
+/** Local device preferences (Keychain/Keystore on native, localStorage on web). */
 export const useSettingsStore = create<SettingsState>((set) => ({
   appLockEnabled: false,
   hydrated: false,
   hydrate: async () => {
     try {
-      const v = await SecureStore.getItemAsync(KEY);
+      const v = await storage.get(KEY);
       set({ appLockEnabled: v === "1", hydrated: true });
     } catch {
       set({ hydrated: true });
     }
   },
   setAppLock: async (v) => {
-    await SecureStore.setItemAsync(KEY, v ? "1" : "0");
+    await storage.set(KEY, v ? "1" : "0");
     set({ appLockEnabled: v });
   },
 }));
