@@ -73,18 +73,20 @@
   .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
 
   /* ---- Widgets ---------------------------------------------------------- */
-  .dw-filter { background:#fff; border:1px solid #e7edf5; border-radius:14px;
-               padding:10px 14px; margin-bottom:12px; }
-  .dw-filter .form-label { font-size:.72rem; font-weight:700; color:#48566d;
-                           margin-bottom:3px; }
+  .dw-filter { background:#fff; border:1px solid #e7edf5; border-radius:11px;
+               padding:6px 12px; margin-bottom:10px; }
+  /* The label line is pure overhead in a toolbar, so it is set as small and
+     tight as it can be while still naming the field. */
+  .dw-filter .form-label { font-size:.65rem; font-weight:700; color:#48566d;
+                           margin-bottom:1px; line-height:1.25; }
   /* Filter fields, the buttons and the search box share one line. Bottom
      alignment puts every control on the same baseline while the labels sit
      above it; the fields flex so nothing has to be sized by hand. */
-  .dw-row { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; }
+  .dw-bar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:7px; }
   .dw-field { flex:1 1 125px; min-width:0; }
   .dw-actions { flex:0 0 auto; display:flex; align-items:flex-end; gap:6px; }
-  .dw-row .gs-wrap { flex:1 1 200px; min-width:0; max-width:none; margin:0; }
-  @media (min-width:1400px) { .dw-row { flex-wrap:nowrap; } }
+  .dw-bar .gs-wrap { flex:1 1 200px; min-width:0; max-width:none; margin:0; }
+  @media (min-width:1400px) { .dw-bar { flex-wrap:nowrap; } }
   .dw-filter.is-busy { opacity:.6; pointer-events:none; }
   .dw-ignored { display:block; font-size:.71rem; color:#b45309; margin-top:9px; }
   .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
@@ -236,7 +238,7 @@
          width is left over. Bottoms align, so the labels sit above the row and
          every control lines up. -->
     <div class="dw-filter" id="dash-filter">
-      <div class="dw-row">
+      <div class="dw-bar">
         <div class="dw-field">
           <label class="form-label" for="dwf-date">Date</label>
           <input type="date" id="dwf-date" name="date" class="form-control form-control-sm">
