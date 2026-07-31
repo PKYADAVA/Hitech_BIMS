@@ -37,8 +37,8 @@
 </style>
 {% endif %}
 <style>
-  /* .container-cstm pads every page by 28px top; the dashboard leads with a
-     search box that belongs tight under the navbar, so trim it here only. */
+  /* .container-cstm pads every page by 28px top; the dashboard leads with the
+     filter bar, which belongs tight under the navbar, so trim it here only. */
   .container-cstm { padding-top:10px; }
   .dashboard-shell { padding:0 0 18px; color:#15233b; }
   .bims-hero, .quick-access-grid, .legacy-calendar, .home-cal-card:not(.dash-calendar .home-cal-card), .section-heading, .feature-card { display:none; }
@@ -74,9 +74,17 @@
 
   /* ---- Widgets ---------------------------------------------------------- */
   .dw-filter { background:#fff; border:1px solid #e7edf5; border-radius:14px;
-               padding:13px 16px; margin-bottom:14px; }
+               padding:10px 14px; margin-bottom:12px; }
   .dw-filter .form-label { font-size:.72rem; font-weight:700; color:#48566d;
                            margin-bottom:3px; }
+  /* Filter fields, the buttons and the search box share one line. Bottom
+     alignment puts every control on the same baseline while the labels sit
+     above it; the fields flex so nothing has to be sized by hand. */
+  .dw-row { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; }
+  .dw-field { flex:1 1 125px; min-width:0; }
+  .dw-actions { flex:0 0 auto; display:flex; align-items:flex-end; gap:6px; }
+  .dw-row .gs-wrap { flex:1 1 200px; min-width:0; max-width:none; margin:0; }
+  @media (min-width:1400px) { .dw-row { flex-wrap:nowrap; } }
   .dw-filter.is-busy { opacity:.6; pointer-events:none; }
   .dw-ignored { display:block; font-size:.71rem; color:#b45309; margin-top:9px; }
   .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
@@ -112,17 +120,17 @@
   @keyframes dw-shimmer { 0% { background-position:100% 50%; } 100% { background-position:0 50%; } }
 
   /* ---- Global search ---------------------------------------------------- */
-  /* Sits in the strip between the navbar and the banner, pushed right so the
-     empty space there is what gets used. */
-  .gs-wrap { position:relative; max-width:460px; margin:0 0 10px auto; }
-  .gs-box { display:flex; align-items:center; gap:9px; padding:7px 13px; background:#fff;
-            border:1px solid #e7edf5; border-radius:10px; box-shadow:0 3px 10px rgba(22,42,79,.06);
+  /* Rides in the filter toolbar, so it matches a form-control-sm exactly:
+     31px tall, same border radius, no shadow that would break the row. */
+  .gs-wrap { position:relative; }
+  .gs-box { display:flex; align-items:center; gap:8px; min-height:31px; padding:2px 11px;
+            background:#fff; border:1px solid #ced4da; border-radius:.25rem;
             transition:.16s ease; }
-  .gs-wrap.is-open .gs-box, .gs-box:focus-within { border-color:#a9c8f5; box-shadow:0 6px 20px rgba(37,99,235,.13); }
+  .gs-wrap.is-open .gs-box, .gs-box:focus-within { border-color:#86b7fe; box-shadow:0 0 0 .2rem rgba(13,110,253,.2); }
   .gs-box > i { color:#93a4bd; font-size:.95rem; }
-  .gs-input { flex:1; border:0; outline:0; background:transparent; font-size:.84rem; color:#15233b; min-width:0; }
+  .gs-input { flex:1; border:0; outline:0; background:transparent; font-size:.8rem; color:#15233b; min-width:0; }
   .gs-input::placeholder { color:#93a4bd; }
-  .gs-kbd { border:1px solid #e2e8f2; border-radius:6px; padding:2px 7px; font-size:.68rem;
+  .gs-kbd { border:1px solid #e2e8f2; border-radius:5px; padding:1px 6px; font-size:.64rem;
             color:#8494ab; background:#f7fafd; white-space:nowrap; }
   .gs-clear { display:none; border:0; background:transparent; color:#93a4bd; font-size:.85rem; padding:0 2px; cursor:pointer; }
   .gs-wrap.has-text .gs-clear { display:block; }
@@ -149,8 +157,7 @@
   .gs-blue{background:#e8f0ff;color:#2563eb}.gs-green{background:#e6f7f3;color:#078b75}
   .gs-orange{background:#fff1df;color:#d97706}.gs-purple{background:#f1ebff;color:#7c3aed}
   .gs-red{background:#ffecee;color:#dc465b}.gs-cyan{background:#e5f7fb;color:#0087a5}
-  @media (max-width:767.98px) { .gs-wrap { max-width:none; } }
-  @media (max-width:575.98px) { .gs-kbd { display:none; } }
+  @media (max-width:1599.98px) { .gs-kbd { display:none; } }
 </style>
 {% endblock %}
 
@@ -225,20 +232,69 @@
       </div>
     </div>
 
-    <!-- Global search: pages + master records, permission-filtered server-side -->
-    <div class="gs-wrap" id="gs-wrap">
-      <div class="gs-box">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" class="gs-input" id="gs-input" autocomplete="off" spellcheck="false"
-               placeholder="Search pages, suppliers, items, farms…"
-               aria-label="Global search" role="combobox" aria-expanded="false" aria-controls="gs-panel">
-        <button type="button" class="gs-clear" id="gs-clear" aria-label="Clear search">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-        <span class="gs-kbd">Ctrl + K</span>
+    <!-- One toolbar: widget filter on the left, global search in whatever
+         width is left over. Bottoms align, so the labels sit above the row and
+         every control lines up. -->
+    <div class="dw-filter" id="dash-filter">
+      <div class="dw-row">
+        <div class="dw-field">
+          <label class="form-label" for="dwf-date">Date</label>
+          <input type="date" id="dwf-date" name="date" class="form-control form-control-sm">
+        </div>
+        <div class="dw-field">
+          <label class="form-label" for="dwf-branch">Branch</label>
+          <select id="dwf-branch" name="branch" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for b in dash_branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="dw-field">
+          <label class="form-label" for="dwf-line">Line</label>
+          <select id="dwf-line" name="line" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for l in dash_lines %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="dw-field">
+          <label class="form-label" for="dwf-supervisor">Supervisor</label>
+          <select id="dwf-supervisor" name="supervisor" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for s in dash_supervisors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="dw-field">
+          <label class="form-label" for="dwf-farm">Farm</label>
+          <select id="dwf-farm" name="farm" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for f in dash_farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="dw-actions">
+          <button class="btn btn-success btn-sm" type="button" id="dwf-submit">
+            <i class="fas fa-search me-1"></i>Submit
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" type="button" id="dwf-reset" title="Reset">
+            <i class="fas fa-rotate-left"></i>
+          </button>
+        </div>
+
+        <!-- Global search: pages + master records, permission-filtered server-side -->
+        <div class="gs-wrap" id="gs-wrap">
+          <div class="gs-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" class="gs-input" id="gs-input" autocomplete="off" spellcheck="false"
+                   placeholder="Search pages, suppliers, items…"
+                   aria-label="Global search" role="combobox" aria-expanded="false" aria-controls="gs-panel">
+            <button type="button" class="gs-clear" id="gs-clear" aria-label="Clear search">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+            <span class="gs-kbd">Ctrl + K</span>
+          </div>
+          <div class="gs-panel" id="gs-panel" role="listbox"></div>
+        </div>
       </div>
-      <div class="gs-panel" id="gs-panel" role="listbox"></div>
     </div>
+
     <div class="dash-welcome mb-3">
       <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
         <div>
@@ -259,52 +315,6 @@
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'item_category' %}" class="dash-module"><div class="dash-module-icon dash-icon-red"><i class="fas fa-boxes-stacked"></i></div><div><span class="dash-module-name">Inventory</span><span class="dash-module-action">Items &amp; warehouses</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'employee_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-cyan"><i class="fas fa-users"></i></div><div><span class="dash-module-name">HR</span><span class="dash-module-action">People &amp; payroll</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
     </div>
-    <!-- Widget filter: submits to the widgets API, not a page reload -->
-    <div class="dw-filter" id="dash-filter">
-      <div class="row g-2 align-items-end">
-        <div class="col-6 col-md-2">
-          <label class="form-label" for="dwf-date">Date</label>
-          <input type="date" id="dwf-date" name="date" class="form-control form-control-sm">
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label" for="dwf-branch">Branch</label>
-          <select id="dwf-branch" name="branch" class="form-select form-select-sm">
-            <option value="">-All-</option>
-            {% for b in dash_branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label" for="dwf-line">Line</label>
-          <select id="dwf-line" name="line" class="form-select form-select-sm">
-            <option value="">-All-</option>
-            {% for l in dash_lines %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label" for="dwf-supervisor">Supervisor</label>
-          <select id="dwf-supervisor" name="supervisor" class="form-select form-select-sm">
-            <option value="">-All-</option>
-            {% for s in dash_supervisors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="col-12 col-md-2">
-          <label class="form-label" for="dwf-farm">Farm</label>
-          <select id="dwf-farm" name="farm" class="form-select form-select-sm">
-            <option value="">-All-</option>
-            {% for f in dash_farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="col-12 col-md-2 d-flex gap-2">
-          <button class="btn btn-success btn-sm flex-grow-1" type="button" id="dwf-submit">
-            <i class="fas fa-search me-1"></i>Submit
-          </button>
-          <button class="btn btn-outline-secondary btn-sm" type="button" id="dwf-reset" title="Reset">
-            <i class="fas fa-rotate-left"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
     <div class="row g-3 mb-4" id="dash-widgets"></div>
 
