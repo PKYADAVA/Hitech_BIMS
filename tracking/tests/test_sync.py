@@ -267,9 +267,18 @@ class SyncCommandTests(TestCase):
             TrackingSync.objects.filter(sync_type="history")
             .order_by("-started_at").first().window_start
         )
-        # Without --reset-cursor, the wider lookback made no difference —
-        # it resumed near the first run's end, not 48h back from now.
-        self.assertGreater(second_window_start, first_window_start)
+        # Without --reset-cursor, the wider lookback made no difference — it
+        # resumed near the first run's end, not 48h back from now.
+        #
+        # Asserted on the distance from 48h ago rather than on the second start
+        # being strictly later than the first: when both runs land in the same
+        # instant those two timestamps are equal, which made this fail roughly
+        # one full-suite run in six while the behaviour it documents was fine.
+        # "It ignored the wider lookback" is the claim, and this states it
+        # directly instead of inferring it from the clock having moved.
+        self.assertGreaterEqual(second_window_start, first_window_start)
+        self.assertGreater(second_window_start,
+                           timezone.now() - timedelta(hours=47))
         self.assertEqual(TrackingSync.objects.filter(sync_type="history").count(), 2)
 
     def test_reset_cursor_makes_lookback_hours_take_effect(self):
