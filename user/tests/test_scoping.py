@@ -1,0 +1,285 @@
+"""Data scoping — the half of the Web-Access matrix that was never enforced.
+
+The reported case: a user limited to Akbarpur branch and Akbarpur warehouse was
+offered every branch and warehouse in the report filters, and the report read
+every warehouse's data.
+"""
+from datetime import timedelta
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.core.cache import cache
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from broiler.models import (Branch, BroilerBatch, BroilerFarm, Farmer, Region,
+                            Supervisor)
+from inventory.models import Item, ItemCategory, StockTransfer, Warehouse
+from user.models import GroupAccessProfile, GroupTabPermission
+from user.services import scoping
+
+
+class ScopeResolutionTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("sc_user", "s@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Team")
+        self.user.groups.add(self.group)
+        GroupTabPermission.objects.create(group=self.group, tab_code="items",
+                                          can_view=True)
+
+        region = Region.objects.create(description="East")
+        self.akbarpur = Branch.objects.create(branch_name="Akbarpur",
+                                              region=region, prefix="AKB")
+        self.bahraich = Branch.objects.create(branch_name="Bahraich",
+                                              region=region, prefix="BHR")
+        self.wh_akbarpur = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.wh_bahraich = Warehouse.objects.create(name="Bahraich Warehouse")
+
+    def fresh(self):
+        return get_user_model().objects.get(pk=self.user.pk)
+
+    def limit_to_akbarpur(self):
+        profile = GroupAccessProfile.objects.create(
+            group=self.group, access_type="sub_admin",
+            all_branches=False, all_sectors=False)
+        profile.branches.add(self.akbarpur)
+        profile.sectors.add(self.wh_akbarpur)
+        return profile
+
+    # ---- the defaults must not lock anyone out ---------------------------
+
+    def test_a_user_with_no_access_profile_is_unscoped(self):
+        """Same fail-open the tab matrix uses, so adding scoping cannot break
+        an account that was working yesterday."""
+        self.assertTrue(scoping.is_unscoped(self.fresh()))
+        self.assertIsNone(scoping.allowed_ids(self.fresh(), "branches"))
+
+    def test_all_flags_mean_no_limit(self):
+        GroupAccessProfile.objects.create(group=self.group)   # all_* default True
+        self.assertIsNone(scoping.allowed_ids(self.fresh(), "branches"))
+        self.assertIsNone(scoping.allowed_ids(self.fresh(), "sectors"))
+
+    def test_a_superuser_is_unscoped(self):
+        User = get_user_model()
+        boss = User.objects.create_superuser("sc_boss", "b@x.com", "Str0ngPass!")
+        boss.groups.add(self.group)
+        self.limit_to_akbarpur()
+        self.assertTrue(scoping.is_unscoped(boss))
+
+    def test_an_admin_access_type_is_unscoped(self):
+        profile = self.limit_to_akbarpur()
+        profile.access_type = "admin"
+        profile.save()
+        self.assertTrue(scoping.is_unscoped(self.fresh()))
+
+    # ---- a real limit -----------------------------------------------------
+
+    def test_a_limited_group_narrows_the_ids(self):
+        self.limit_to_akbarpur()
+        self.assertEqual(scoping.allowed_ids(self.fresh(), "branches"),
+                         {self.akbarpur.id})
+        self.assertEqual(scoping.allowed_ids(self.fresh(), "sectors"),
+                         {self.wh_akbarpur.id})
+
+    def test_an_empty_selection_permits_nothing(self):
+        """Not the same as 'no limit'. Collapsing the two would hand over
+        everything, which is the failure this exists to fix."""
+        GroupAccessProfile.objects.create(group=self.group, all_branches=False)
+        self.assertEqual(scoping.allowed_ids(self.fresh(), "branches"), set())
+        self.assertEqual(list(scoping.branches_for(self.fresh())), [])
+
+    def test_one_group_with_all_opens_the_dimension(self):
+        """Granted anywhere is granted — the tab matrix combines groups the
+        same way."""
+        self.limit_to_akbarpur()
+        wide = Group.objects.create(name="Everywhere")
+        GroupAccessProfile.objects.create(group=wide, all_branches=True)
+        self.user.groups.add(wide)
+        self.assertIsNone(scoping.allowed_ids(self.fresh(), "branches"))
+
+    def test_two_limited_groups_union(self):
+        self.limit_to_akbarpur()
+        other = Group.objects.create(name="Bahraich Team")
+        profile = GroupAccessProfile.objects.create(group=other, all_branches=False)
+        profile.branches.add(self.bahraich)
+        self.user.groups.add(other)
+        self.assertEqual(scoping.allowed_ids(self.fresh(), "branches"),
+                         {self.akbarpur.id, self.bahraich.id})
+
+    # ---- the option lists people see -------------------------------------
+
+    def test_branch_and_warehouse_options_are_narrowed(self):
+        self.limit_to_akbarpur()
+        user = self.fresh()
+        self.assertEqual([b.branch_name for b in scoping.branches_for(user)],
+                         ["Akbarpur"])
+        self.assertEqual([w.name for w in scoping.warehouses_for(user)],
+                         ["Akbarpur Warehouse"])
+
+    def test_farms_follow_the_branch_scope_even_with_no_farm_limit(self):
+        """A branch limit already implies its farms; nobody should have to list
+        them twice."""
+        self.limit_to_akbarpur()
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        for branch, name in ((self.akbarpur, "Mine"), (self.bahraich, "Theirs")):
+            supervisor = Supervisor.objects.create(branch=branch, name=f"S {name}")
+            BroilerFarm.objects.create(branch=branch, supervisor=supervisor,
+                                       farmer=farmer, region=branch.region,
+                                       line="L1", farm_name=name, farm_capacity=100)
+        self.assertEqual([f.farm_name for f in scoping.farms_for(self.fresh())],
+                         ["Mine"])
+
+    def test_supervisors_follow_the_branch_scope(self):
+        self.limit_to_akbarpur()
+        Supervisor.objects.create(branch=self.akbarpur, name="A")
+        Supervisor.objects.create(branch=self.bahraich, name="B")
+        self.assertEqual([s.name for s in scoping.supervisors_for(self.fresh())],
+                         ["A"])
+
+
+class ScopedReportTests(TestCase):
+    """The Feed Dispatch report from the report screenshot."""
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("rp_user", "r@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Only")
+        self.user.groups.add(self.group)
+        GroupTabPermission.objects.create(group=self.group, can_view=True,
+                                          tab_code="feed_dispatch_stock_report")
+
+        region = Region.objects.create(description="East")
+        self.akbarpur = Branch.objects.create(branch_name="Akbarpur",
+                                              region=region, prefix="AKB")
+        Branch.objects.create(branch_name="Bahraich", region=region, prefix="BHR")
+        self.mine = Warehouse.objects.create(name="Akbarpur Warehouse")
+        self.theirs = Warehouse.objects.create(name="Bahraich Warehouse")
+
+        profile = GroupAccessProfile.objects.create(
+            group=self.group, all_branches=False, all_sectors=False)
+        profile.branches.add(self.akbarpur)
+        profile.sectors.add(self.mine)
+        self.client.force_login(self.user)
+
+    def page(self, **params):
+        return self.client.get(reverse("feed_dispatch_stock_report"),
+                               params).content.decode()
+
+    def test_the_dropdowns_offer_only_what_the_user_may_see(self):
+        html = self.page()
+        self.assertIn("Akbarpur Warehouse", html)
+        self.assertNotIn("Bahraich Warehouse", html)
+        self.assertIn("Akbarpur", html)
+        self.assertNotIn("Bahraich Branch", html)
+
+    def test_a_hand_typed_warehouse_id_is_ignored(self):
+        """A querystring is not a permission."""
+        html = self.page(warehouse=self.theirs.id, submit="1")
+        self.assertNotIn(f'value="{self.theirs.id}" selected', html)
+
+    def test_the_page_states_the_scope(self):
+        self.assertIn("warehouse", self.page().lower())
+
+
+class ScopedDashboardTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("db_user", "d@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Akbarpur Dash")
+        self.user.groups.add(self.group)
+        for tab in ("live_flock_summary_report", "daily_entry_list"):
+            GroupTabPermission.objects.create(group=self.group, tab_code=tab,
+                                              can_view=True)
+
+        region = Region.objects.create(description="East")
+        self.mine = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                          prefix="AKB")
+        self.theirs = Branch.objects.create(branch_name="Bahraich", region=region,
+                                            prefix="BHR")
+        farmer = Farmer.objects.create(farmer_name="F")
+        self.chick = Item.objects.create(
+            description="Day Old Chicks",
+            category=ItemCategory.objects.create(name="Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=40,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+        today = timezone.localdate()
+        self.farms = {}
+        for branch, name, birds in ((self.mine, "Mine", 1000),
+                                    (self.theirs, "Theirs", 500)):
+            supervisor = Supervisor.objects.create(branch=branch, name=f"S{name}")
+            farm = BroilerFarm.objects.create(
+                branch=branch, supervisor=supervisor, farmer=farmer,
+                region=region, line="L1", farm_name=name, farm_capacity=5000)
+            self.farms[name] = farm
+            batch = BroilerBatch.objects.create(broiler_farm=farm, batch_name=name,
+                                                start_date=today - timedelta(days=10))
+            StockTransfer.objects.create(item=self.chick, to_batch=batch,
+                                         quantity=Decimal(birds),
+                                         date=today - timedelta(days=10))
+
+        profile = GroupAccessProfile.objects.create(group=self.group,
+                                                    all_branches=False)
+        profile.branches.add(self.mine)
+        self.client.force_login(self.user)
+
+    def flock(self):
+        from user.services.dashboard_widgets import dashboard_widgets
+
+        user = get_user_model().objects.get(pk=self.user.pk)
+        card = next(w for w in dashboard_widgets(user, use_cache=False)
+                    if w["key"] == "live_flock")
+        return {s["label"]: s["value"] for s in card["stats"]}
+
+    def test_the_widget_counts_only_the_users_branch(self):
+        stats = self.flock()
+        self.assertEqual(stats["Open batches"], "1")
+        self.assertEqual(stats["Birds alive"], "1,000")     # not 1,500
+
+    def test_the_filter_dropdowns_are_narrowed(self):
+        html = self.client.get(reverse("dashboard")).content.decode()
+        self.assertIn("Akbarpur", html)
+        self.assertNotIn("Bahraich", html)
+
+    def test_a_hand_typed_farm_outside_the_scope_yields_nothing(self):
+        from user.services.dashboard_widgets import dashboard_widgets
+
+        user = get_user_model().objects.get(pk=self.user.pk)
+        card = next(w for w in dashboard_widgets(
+            user, {"farm": self.farms["Theirs"].id, "date": None, "branch": None,
+                   "line": None, "supervisor": None}, use_cache=False)
+            if w["key"] == "live_flock")
+        stats = {s["label"]: s["value"] for s in card["stats"]}
+        self.assertEqual(stats["Open batches"], "0")
+
+    def test_the_cache_is_not_shared_across_scopes(self):
+        """Two users, different branches — one must not be served the other's
+        numbers."""
+        from user.services.dashboard_widgets import dashboard_widgets
+
+        User = get_user_model()
+        other = User.objects.create_user("db_other", "o@x.com", "Str0ngPass!")
+        other_group = Group.objects.create(name="Bahraich Dash")
+        other.groups.add(other_group)
+        GroupTabPermission.objects.create(group=other_group, can_view=True,
+                                          tab_code="live_flock_summary_report")
+        profile = GroupAccessProfile.objects.create(group=other_group,
+                                                    all_branches=False)
+        profile.branches.add(self.theirs)
+
+        mine = dashboard_widgets(get_user_model().objects.get(pk=self.user.pk))
+        theirs = dashboard_widgets(get_user_model().objects.get(pk=other.pk))
+
+        def birds(cards):
+            card = next(c for c in cards if c["key"] == "live_flock")
+            return {s["label"]: s["value"] for s in card["stats"]}["Birds alive"]
+
+        self.assertEqual(birds(mine), "1,000")
+        self.assertEqual(birds(theirs), "500")

@@ -80,9 +80,11 @@ def _home_context(request):
     """Filter-option lists for the Field Team widget and the widget filter bar
     (cheap; harmless to compute even for users without access — both are
     permission-gated in the template)."""
-    from broiler.models import Branch, BroilerFarm, Supervisor
+    from broiler.models import BroilerFarm
     from .services.dashboard_widgets import dashboard_panels, withheld_panels
+    from .services.scoping import branches_for, farms_for, supervisors_for
 
+    user = getattr(request, "user", None)
     preview = _preview_group(request)
     panels = dashboard_panels(getattr(request, "user", None), as_group=preview,
                               prefs_override=_preview_prefs(request))
@@ -108,14 +110,16 @@ def _home_context(request):
         "trk_warehouses": Warehouse.objects.all().order_by("name"),
         "trk_groups": HrGroup.objects.all().order_by("name"),
         "trk_designations": Designation.objects.all().order_by("title"),
-        "dash_branches": Branch.objects.order_by("branch_name"),
+        # Scoped: a user limited to one branch is offered that branch only.
+        "dash_branches": branches_for(user).order_by("branch_name"),
         # BroilerFarm.line is free text, not a foreign key, so the options are
         # the values actually in use — same source as the Day Record report,
-        # which guarantees every option can match something.
-        "dash_lines": (BroilerFarm.objects.exclude(line="").order_by("line")
+        # which guarantees every option can match something. Taken from the
+        # farms the user may see, so the line list narrows with them.
+        "dash_lines": (farms_for(user).exclude(line="").order_by("line")
                        .values_list("line", flat=True).distinct()),
-        "dash_supervisors": Supervisor.objects.order_by("name"),
-        "dash_farms": BroilerFarm.objects.order_by("farm_name"),
+        "dash_supervisors": supervisors_for(user).order_by("name"),
+        "dash_farms": farms_for(user).order_by("farm_name"),
     }
 
 

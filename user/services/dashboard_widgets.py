@@ -83,7 +83,20 @@ def _scope_farms(qs, filters, prefix):
     return qs
 
 
-def _batches_live_on(day, filters):
+def _scope_to_user(qs, user, prefix):
+    """Narrow a farm-linked queryset to the branches and farms the user may see.
+
+    The filter bar only offers what they are scoped to, but a querystring is not
+    a permission — the totals have to be scoped too, or a hand-typed farm id
+    reads another branch's flock.
+    """
+    from user.services.scoping import scope_multi
+
+    p = f"{prefix}__" if prefix else ""
+    return scope_multi(user, qs, branches=f"{p}branch_id", farms=f"{p}id")
+
+
+def _batches_live_on(day, filters, user=None):
     """Flocks that were live on ``day``, narrowed by the farm-side filters.
 
     A batch counts as live if it had started by then and had not ended: either
@@ -98,7 +111,10 @@ def _batches_live_on(day, filters):
     ).filter(
         Q(end_date__isnull=True, is_closed=False) | Q(end_date__gt=day)
     )
-    return _scope_farms(qs, filters, "broiler_farm")
+    qs = _scope_farms(qs, filters, "broiler_farm")
+    if user is not None:
+        qs = _scope_to_user(qs, user, "broiler_farm")
+    return qs
 
 
 def _inr(value):
@@ -156,7 +172,7 @@ def _tone_under(value, warn, bad):
 # can be honest about which parts of the filter bar it could act on.
 # ---------------------------------------------------------------------------
 
-def _live_flock(viewable, filters):
+def _live_flock(viewable, filters, user=None):
     """Flocks live on the chosen date: birds alive, mortality, average age.
 
     Aggregated across the batches in a handful of queries rather than by running
@@ -170,7 +186,8 @@ def _live_flock(viewable, filters):
     day = filters.get("date") or timezone.localdate()
     used = list(FILTER_KEYS)          # this widget can act on all five
 
-    batches = list(_batches_live_on(day, filters).values_list("id", "start_date"))
+    batches = list(_batches_live_on(day, filters, user)
+                   .values_list("id", "start_date"))
     if not batches:
         return {"stats": [{"label": "Open batches", "value": "0"}],
                 "note": "No live flocks match this filter.", "filters_used": used}
@@ -217,7 +234,7 @@ def _live_flock(viewable, filters):
     }
 
 
-def _daily_entries(viewable, filters):
+def _daily_entries(viewable, filters, user=None):
     """Which live flocks have reported on the chosen day — and which have not.
 
     The point of this one is same-day: a missing entry is fixable this evening
@@ -228,7 +245,8 @@ def _daily_entries(viewable, filters):
     day = filters.get("date") or timezone.localdate()
     used = list(FILTER_KEYS)
 
-    batches = list(_batches_live_on(day, filters).select_related("broiler_farm"))
+    batches = list(_batches_live_on(day, filters, user)
+                   .select_related("broiler_farm"))
     if not batches:
         return {"stats": [{"label": "Expected", "value": "0"}],
                 "note": "No live flocks match this filter.", "filters_used": used}
@@ -260,7 +278,7 @@ def _daily_entries(viewable, filters):
     }
 
 
-def _balances(viewable, filters):
+def _balances(viewable, filters, user=None):
     """Receivables and payables, each half shown only to those who may see it.
 
     Both halves call the balance reports' own per-party row builders, so the
@@ -313,7 +331,7 @@ def _balances(viewable, filters):
     }
 
 
-def _stock_alerts(viewable, filters):
+def _stock_alerts(viewable, filters, user=None):
     """Negative balances — stock booked out of somewhere it was never booked in.
 
     These are always data errors, and they silently corrupt valuation until
@@ -323,11 +341,24 @@ def _stock_alerts(viewable, filters):
     """
     from inventory.services.item_summary import negative_stock
 
+    from user.services.scoping import allowed_ids
+
     farm_id = filters.get("farm")
     rows = negative_stock(as_of_date=filters.get("date"),
                           location_type="farm" if farm_id else None,
                           location_id=farm_id)
     used = ["date", "farm"]
+
+    # Stock sits at a location, so the warehouse and farm scopes apply. Done
+    # here rather than in negative_stock because that engine is shared with the
+    # report, which does its own filtering.
+    if user is not None:
+        limits = {"warehouse": allowed_ids(user, "sectors"),
+                  "farm": allowed_ids(user, "farms")}
+        if any(v is not None for v in limits.values()):
+            rows = [r for r in rows
+                    if limits.get(r["location_type"]) is None
+                    or r["location_id"] in limits[r["location_type"]]]
 
     if not rows:
         return {"stats": [{"label": "Negative balances", "value": "0", "tone": "good"}],
@@ -610,6 +641,19 @@ def _ignored_note(filters, used):
     return f"{', '.join(ignored[:-1])} and {ignored[-1]} do not apply here."
 
 
+def _scope_signature(user):
+    """Short, stable key for a user's data scope, for the widget cache."""
+    from user.services.scoping import SCOPES, allowed_ids, is_unscoped
+
+    if is_unscoped(user):
+        return "all"
+    parts = []
+    for scope in sorted(SCOPES):
+        ids = allowed_ids(user, scope)
+        parts.append("*" if ids is None else ",".join(str(i) for i in sorted(ids)))
+    return "|".join(parts)
+
+
 def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
                       prefs_override=None):
     """Widget payloads for everything ``user`` is allowed to see.
@@ -646,12 +690,14 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
                 "url": _link(url_name, viewable, filters)}
         # The visible tabs are part of the key: Receivables & Payables builds a
         # different body for someone who may see only one of its two halves.
+        # So is the data scope — without it a user limited to one branch would
+        # be served the figures computed for another.
         seen = "|".join(sorted(t for t in tabs if t in viewable))
-        cache_key = f"dash:widget:{key}:{seen}"
+        cache_key = f"dash:widget:{key}:{seen}:{_scope_signature(user)}"
         body = cache.get(cache_key) if use_cache else None
         if body is None:
             try:
-                body = build(viewable, filters) or {}
+                body = build(viewable, filters, user) or {}
             except Exception:
                 logger.exception("dashboard widget %r failed", key)
                 body = {"error": True,

@@ -5172,6 +5172,19 @@ def feed_dispatch_stock_report(request):
     # A Warehouse (Office) has no direct Branch FK — resolved via inventory.
     # Mapping (TYPE_SECTOR_BRANCH: from_id=warehouse, to_id=branch). Region
     # narrows to every Branch in it, Branch narrows to its mapped Warehouse(s).
+    from user.services.scoping import (allowed_ids, branches_for, describe,
+                                       warehouses_for)
+
+    # Data scoping. The querystring is not a permission: an id outside the
+    # user's scope is dropped rather than honoured, so a hand-typed
+    # ?warehouse=<other branch> cannot read another branch's ledger.
+    scoped_branches = branches_for(request.user)
+    scoped_warehouses = warehouses_for(request.user)
+    if branch_id and not scoped_branches.filter(id=branch_id).exists():
+        branch_id = ""
+    if warehouse_id and not scoped_warehouses.filter(id=warehouse_id).exists():
+        warehouse_id = ""
+
     branch_obj = Branch.objects.filter(id=branch_id).first() if branch_id else None
     region_obj = Region.objects.filter(id=region_id).first() if region_id else None
 
@@ -5204,6 +5217,13 @@ def feed_dispatch_stock_report(request):
                 type=Mapping.TYPE_SECTOR_BRANCH, to_id__in=branch_ids_in_region).values_list("from_id", flat=True))
         else:
             scoped_warehouse_ids = None
+
+        # ...and "All Warehouses" means all the *user* may see. Without this the
+        # unfiltered path would read every warehouse in the company.
+        permitted = allowed_ids(request.user, "sectors")
+        if permitted is not None:
+            scoped_warehouse_ids = (permitted if scoped_warehouse_ids is None
+                                    else scoped_warehouse_ids & permitted)
 
         # Warehouse -> Branch, resolved once per warehouse and cached (a
         # Warehouse/Office has no direct Branch FK — only via inventory.
@@ -5564,8 +5584,9 @@ def feed_dispatch_stock_report(request):
 
     return render(request, "feed_dispatch_stock_report.html", {
         "regions": Region.objects.order_by("description"),
-        "branches": Branch.objects.order_by("branch_name"),
-        "warehouses": Warehouse.objects.order_by("name"),
+        "branches": scoped_branches.order_by("branch_name"),
+        "warehouses": scoped_warehouses.order_by("name"),
+        "scope_note": describe(request.user),
         "feed_labels": [label_name[l] for l in label_ids],
         "total_columns": total_columns, "opening_label_colspan": opening_label_colspan,
         "region_id": region_id, "branch_id": branch_id, "warehouse_id": warehouse_id,
