@@ -1,0 +1,101 @@
+{% comment %}
+Dashboard widget — Alerts & Notifications.
+
+Server-rendered shell, hydrated from /api/alerthub/notifications/summary/ and
+/recent/. Reading the counts from the same scoped API the bell uses means the
+dashboard can never show a number the notification centre would not show — the
+failure the other widgets avoid by calling the engine that owns their figure.
+
+Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
+{% endcomment %}
+<div class="ah-card p-3 mb-3" id="ahWidget">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="h6 fw-bold mb-0 d-flex align-items-center gap-2">
+      <i class="fa-solid fa-bell text-danger"></i> Alerts &amp; Notifications
+      <span class="badge rounded-pill bg-danger d-none" id="ahWidgetUnread">0</span>
+    </h2>
+    <a href="{% url 'alerthub:notification_center' %}" class="btn btn-sm btn-outline-primary">
+      View All <i class="fa-solid fa-arrow-right ms-1"></i>
+    </a>
+  </div>
+
+  {# Priority split. Each is a link into the centre pre-filtered to that level.
+     Written out rather than looped so the widget needs nothing from the view
+     that includes it — home.html only has to decide whether to show it. #}
+  <div class="ah-counts mb-3">
+    <a class="ah-count critical text-decoration-none"
+       href="{% url 'alerthub:notification_center' %}?priority=critical">
+      <span class="ah-count-n" data-count="critical">–</span>
+      <span class="ah-count-l">Critical Alerts</span>
+    </a>
+    <a class="ah-count high text-decoration-none"
+       href="{% url 'alerthub:notification_center' %}?priority=high">
+      <span class="ah-count-n" data-count="high">–</span>
+      <span class="ah-count-l">High Priority</span>
+    </a>
+    <a class="ah-count medium text-decoration-none"
+       href="{% url 'alerthub:notification_center' %}?priority=medium">
+      <span class="ah-count-n" data-count="medium">–</span>
+      <span class="ah-count-l">Medium Priority</span>
+    </a>
+    <a class="ah-count low text-decoration-none"
+       href="{% url 'alerthub:notification_center' %}?priority=low">
+      <span class="ah-count-n" data-count="low">–</span>
+      <span class="ah-count-l">Low Priority</span>
+    </a>
+  </div>
+
+  {# The named tiles from the spec: approvals, stock, payments, vaccination… #}
+  <div class="ah-widget-tiles" id="ahWidgetTiles"></div>
+
+  <div class="ah-widget-list" id="ahWidgetList">
+    <div class="ah-empty py-3">Loading…</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById("ahWidget");
+  if (!root || !window.AlertHub) return;
+
+  var tiles = document.getElementById("ahWidgetTiles");
+  var list = document.getElementById("ahWidgetList");
+  var unread = document.getElementById("ahWidgetUnread");
+  var CENTRE = "{% url 'alerthub:notification_center' %}";
+
+  AlertHub.request(AlertHub.API + "summary/").then(function (data) {
+    ["critical", "high", "medium", "low"].forEach(function (key) {
+      var el = root.querySelector('[data-count="' + key + '"]');
+      if (el) el.textContent = data[key] || 0;
+    });
+
+    if (data.unread > 0) {
+      unread.textContent = data.unread > 99 ? "99+" : data.unread;
+      unread.classList.remove("d-none");
+    }
+
+    tiles.innerHTML = (data.tiles || []).map(function (tile) {
+      return '<a class="ah-tile' + (tile.count ? " has-alerts" : "") +
+        '" href="' + CENTRE + '">' +
+        '<i class="' + AlertHub.esc(tile.icon) + '"></i>' +
+        "<span>" +
+          '<span class="ah-tile-n">' + tile.count + "</span><br>" +
+          '<span class="ah-tile-l">' + AlertHub.esc(tile.label) + "</span>" +
+        "</span></a>";
+    }).join("");
+  }).catch(function () {
+    tiles.innerHTML = '<div class="text-muted small">Could not load alert counts.</div>';
+  });
+
+  AlertHub.request(AlertHub.API + "recent/").then(function (data) {
+    var rows = (data.results || []).slice(0, 5);
+    list.innerHTML = rows.length
+      ? rows.map(function (n) { return AlertHub.itemHTML(n); }).join("")
+      : AlertHub.emptyHTML("No open alerts — you're all caught up");
+  }).catch(function () {
+    list.innerHTML = AlertHub.emptyHTML("Could not load alerts",
+                                        "fa-solid fa-triangle-exclamation");
+  });
+})();
+</script>

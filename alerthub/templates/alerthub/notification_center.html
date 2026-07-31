@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% load static %}
+{% comment %}
+Notification Centre — the full feed.
+
+A static shell hydrated from /api/alerthub/notifications/, so this page, the
+navbar bell and the dashboard widget all read one implementation of "what may
+this user see". No alert querying happens in the view.
+
+The filter bar only offers branches, farms and warehouses the viewer is scoped
+to; the server filters again regardless, since a querystring is not a
+permission.
+{% endcomment %}
+
+{% block title %}Notifications — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap" id="ahCentre" data-csrf="{{ csrf_token }}">
+
+  <div class="ah-head">
+    <div>
+      <h1 class="ah-title"><i class="fa-solid fa-bell text-primary"></i> Notifications</h1>
+      <p class="ah-sub">Everything the system needs you to look at, newest first.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'alerthub:notification_history' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fa-solid fa-clock-rotate-left me-1"></i>History
+      </a>
+      <a href="{% url 'alerthub:preferences' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fa-solid fa-gear me-1"></i>Preferences
+      </a>
+      <button class="btn btn-primary btn-sm" id="ahMarkAllPage">
+        <i class="fa-solid fa-check-double me-1"></i>Mark all read
+      </button>
+    </div>
+  </div>
+
+  {# Priority strip. Clicking a card filters the feed to that priority. #}
+  <div class="ah-counts" id="ahCounts">
+    <div class="ah-count critical" data-priority="critical">
+      <span class="ah-count-n" data-count="critical">–</span>
+      <span class="ah-count-l">Critical</span>
+    </div>
+    <div class="ah-count high" data-priority="high">
+      <span class="ah-count-n" data-count="high">–</span>
+      <span class="ah-count-l">High Priority</span>
+    </div>
+    <div class="ah-count medium" data-priority="medium">
+      <span class="ah-count-n" data-count="medium">–</span>
+      <span class="ah-count-l">Medium Priority</span>
+    </div>
+    <div class="ah-count low" data-priority="low">
+      <span class="ah-count-n" data-count="low">–</span>
+      <span class="ah-count-l">Low Priority</span>
+    </div>
+  </div>
+
+  <div class="ah-filters">
+    <input type="search" id="fSearch" placeholder="Search title, message or voucher…" />
+    <select id="fModule">
+      <option value="">All modules</option>
+      {% for value, label in modules %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="fPriority">
+      <option value="">All priorities</option>
+      {% for value, label in priorities %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="fBranch">
+      <option value="">All branches</option>
+      {% for branch in branches %}<option value="{{ branch.id }}">{{ branch }}</option>{% endfor %}
+    </select>
+    <select id="fFarm">
+      <option value="">All farms</option>
+      {% for farm in farms %}<option value="{{ farm.id }}">{{ farm.farm_name }}</option>{% endfor %}
+    </select>
+    <select id="fWarehouse">
+      <option value="">All warehouses</option>
+      {% for wh in warehouses %}<option value="{{ wh.id }}">{{ wh.name }}</option>{% endfor %}
+    </select>
+    <select id="fRead">
+      <option value="false">Unread only</option>
+      <option value="">Read &amp; unread</option>
+      <option value="true">Read only</option>
+    </select>
+    <input type="date" id="fFrom" title="From date" />
+    <input type="date" id="fTo" title="To date" />
+    <button class="btn btn-sm btn-outline-secondary" id="fReset">Reset</button>
+  </div>
+
+  <div class="ah-card">
+    <div id="ahList"><div class="ah-empty">Loading…</div></div>
+    <div class="ah-foot">
+      <span class="text-muted small" id="ahMeta"></span>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" id="ahPrev" disabled>Previous</button>
+        <button class="btn btn-sm btn-outline-secondary" id="ahNext" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  var root = document.getElementById("ahCentre");
+  var CSRF = root.dataset.csrf;
+  var list = document.getElementById("ahList");
+  var meta = document.getElementById("ahMeta");
+  var page = 1, pages = 1;
+
+  var controls = {
+    search: document.getElementById("fSearch"),
+    module: document.getElementById("fModule"),
+    priority: document.getElementById("fPriority"),
+    branch: document.getElementById("fBranch"),
+    farm: document.getElementById("fFarm"),
+    warehouse: document.getElementById("fWarehouse"),
+    is_read: document.getElementById("fRead"),
+    date_from: document.getElementById("fFrom"),
+    date_to: document.getElementById("fTo"),
+  };
+
+  function query() {
+    var params = new URLSearchParams({ page: page, page_size: 25 });
+    Object.keys(controls).forEach(function (key) {
+      var value = (controls[key].value || "").trim();
+      if (!value) return;
+      params.set(key === "search" ? "search" : key, value);
+    });
+    return params.toString();
+  }
+
+  function load() {
+    list.innerHTML = '<div class="ah-empty">Loading…</div>';
+    AlertHub.request(AlertHub.API + "?" + query())
+      .then(function (data) {
+        var rows = data.results || [];
+        list.innerHTML = rows.length
+          ? AlertHub.groupedHTML(rows)
+          : AlertHub.emptyHTML("Nothing matches these filters");
+        pages = Math.max(1, Math.ceil((data.count || 0) / 25));
+        meta.textContent = (data.count || 0) + " notification" +
+          ((data.count === 1) ? "" : "s") + " · page " + page + " of " + pages;
+        document.getElementById("ahPrev").disabled = page <= 1;
+        document.getElementById("ahNext").disabled = page >= pages;
+        wire();
+      })
+      .catch(function () {
+        list.innerHTML = AlertHub.emptyHTML("Could not load notifications",
+                                            "fa-solid fa-triangle-exclamation");
+      });
+  }
+
+  function wire() {
+    list.querySelectorAll(".ah-item").forEach(function (el) {
+      el.addEventListener("click", function () {
+        AlertHub.post(AlertHub.API + el.dataset.id + "/mark_read/", CSRF)
+          .catch(function () {});
+      });
+    });
+  }
+
+  function refreshCounts() {
+    AlertHub.request(AlertHub.API + "summary/").then(function (data) {
+      ["critical", "high", "medium", "low"].forEach(function (key) {
+        var el = document.querySelector('[data-count="' + key + '"]');
+        if (el) el.textContent = data[key] || 0;
+      });
+    }).catch(function () {});
+  }
+
+  /* Debounced so typing in the search box does not fire a request per key. */
+  var timer;
+  function reload() {
+    clearTimeout(timer);
+    timer = setTimeout(function () { page = 1; load(); }, 220);
+  }
+
+  Object.keys(controls).forEach(function (key) {
+    var el = controls[key];
+    el.addEventListener(el.tagName === "SELECT" ? "change" : "input", reload);
+  });
+
+  document.querySelectorAll(".ah-count").forEach(function (card) {
+    card.addEventListener("click", function () {
+      var value = card.dataset.priority;
+      var already = controls.priority.value === value;
+      controls.priority.value = already ? "" : value;
+      document.querySelectorAll(".ah-count").forEach(function (c) {
+        c.classList.remove("active");
+      });
+      if (!already) card.classList.add("active");
+      reload();
+    });
+  });
+
+  document.getElementById("fReset").addEventListener("click", function () {
+    Object.keys(controls).forEach(function (key) { controls[key].value = ""; });
+    controls.is_read.value = "false";
+    document.querySelectorAll(".ah-count").forEach(function (c) {
+      c.classList.remove("active");
+    });
+    reload();
+  });
+
+  document.getElementById("ahPrev").addEventListener("click", function () {
+    if (page > 1) { page--; load(); }
+  });
+  document.getElementById("ahNext").addEventListener("click", function () {
+    if (page < pages) { page++; load(); }
+  });
+
+  document.getElementById("ahMarkAllPage").addEventListener("click", function () {
+    AlertHub.post(AlertHub.API + "mark_all_read/", CSRF).then(function () {
+      load(); refreshCounts();
+    }).catch(function () {});
+  });
+
+  load();
+  refreshCounts();
+})();
+</script>
+{% endblock %}

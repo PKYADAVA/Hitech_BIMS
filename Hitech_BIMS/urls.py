@@ -30,6 +30,9 @@ urlpatterns = [
     path("", include("picklist.urls")),
     # Alert & Audit module: /alerts/center/ page + /api/alerts/ REST API.
     path("", include("alerts.urls")),
+    # Business Alerts & Notifications: /notifications/, /alert-config/ and the
+    # /api/alerthub/ REST API that the bell, centre and dashboard widget read.
+    path("", include("alerthub.urls")),
     # Mobile API v1 (JWT-authenticated; additive, does not affect the web app).
     path("api/v1/", include("api.urls")),
 ]

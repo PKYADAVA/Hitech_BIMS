@@ -409,6 +409,10 @@ EXTRA_PANELS = [
      "fa-solid fa-bolt", "gs-purple"),
     ("field_team", "Field Team — Live", ("tracking_dashboard",),
      "fa-solid fa-location-dot", "gs-cyan"),
+    # No tab gate: alerts are addressed to a person, not granted by a module.
+    # See the empty-tabs note in dashboard_panels.
+    ("alerts_widget", "Alerts & Notifications", (),
+     "fa-solid fa-bell", "gs-red"),
 ]
 
 
@@ -420,6 +424,10 @@ EXTRA_PANELS = [
 #: changing this never moves anybody's configured dashboard.
 DEFAULT_PANEL_ORDER = (
     "quick_actions",
+    # Alerts sit directly under Quick Actions: the dashboard's job is to show
+    # what needs doing before what happened, and an unread critical alert
+    # outranks every figure below it.
+    "alerts_widget",
     "live_flock", "daily_entries", "balances", "stock_alerts",
     "field_team",
 )
@@ -454,7 +462,13 @@ def dashboard_panels(user, as_group=None, prefs_override=None):
         prefs = prefs_override
     out = {}
     for index, (key, _title, tabs, _icon, _colour) in enumerate(all_panels()):
-        if not any(t in viewable for t in tabs):
+        # An empty tabs tuple means the panel is not owned by any module page,
+        # so there is no report permission to inherit. Only Alerts uses this:
+        # every user reads the notifications addressed to them regardless of
+        # which modules they can open, and the payload is scoped per user
+        # anyway. Dashboard Access can still switch it off, which is the point
+        # of listing it here rather than hard-coding it into home.html.
+        if tabs and not any(t in viewable for t in tabs):
             continue
         if prefs is not None and key not in prefs:
             continue
@@ -516,7 +530,10 @@ def withheld_panels(group, prefs_override=None):
     out = []
     for key, title, tabs, _icon, _colour in all_panels():
         wanted = key in prefs if prefs is not None else True
-        if wanted and not any(t in viewable for t in tabs):
+        # A panel with no tabs cannot be withheld — there is no report
+        # permission behind it. Same rule as dashboard_panels/panels_for_group;
+        # all three have to agree or the preview contradicts the dashboard.
+        if wanted and tabs and not any(t in viewable for t in tabs):
             out.append(title)
     return out
 
@@ -554,7 +571,9 @@ def panels_for_group(group):
         out.append({
             "key": key, "title": title, "icon": icon, "colour": colour,
             "tabs": list(tabs),
-            "permitted": any(t in allowed for t in tabs),
+            # No tabs means no report permission to inherit, so the matrix has
+            # nothing to withhold — the same rule dashboard_panels applies.
+            "permitted": not tabs or any(t in allowed for t in tabs),
             "switched_on": row.enabled if row else not configured or False,
             "position": row.position if row else index,
         })

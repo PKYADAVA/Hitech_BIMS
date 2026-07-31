@@ -845,10 +845,42 @@
       </li>
       {% endif %}
 
+      <!-- Alerts (business alerting: configuration + catalogue) -->
+      {% if 'alerts' in allowed_nav %}
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle {% if active_tab == 'alerts' %}active{% endif %}"
+           href="#" id="alertsDd" data-bs-toggle="dropdown">
+          <i class="fa-solid fa-bell-concierge me-1"></i>Alerts
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="alertsDd">
+          <li><h6 class="dropdown-header">Alerts &amp; Notifications</h6></li>
+          <li><a class="dropdown-item" href="{% url 'alerthub:notification_center' %}">
+            <i class="fas fa-bell"></i>Notification Centre
+          </a></li>
+          <li><a class="dropdown-item" href="{% url 'alerthub:notification_history' %}">
+            <i class="fas fa-clock-rotate-left"></i>Notification History
+          </a></li>
+          <li><hr class="dropdown-divider"></li>
+          {% if 'alert_rule_list' in allowed_tabs %}<li>
+            <a class="dropdown-item" href="{% url 'alerthub:alert_rule_list' %}">
+              <i class="fas fa-sliders"></i>Alert Configuration
+            </a></li>{% endif %}
+          {% if 'alert_catalog' in allowed_tabs %}<li>
+            <a class="dropdown-item" href="{% url 'alerthub:alert_catalog' %}">
+              <i class="fas fa-book"></i>Alert Catalogue
+            </a></li>{% endif %}
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url 'alerthub:preferences' %}">
+            <i class="fas fa-gear"></i>My Preferences
+          </a></li>
+        </ul>
+      </li>
+      {% endif %}
+
     </ul>
 
-    <!-- Notification Bell (alerts module) -->
-    {% include "_alerts_bell.html" %}
+    <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
+    {% include "_alerthub_bell.html" %}
 
     <!-- User Profile -->
     <div class="ms-xl-3 mt-3 mt-xl-0 mb-3 mb-xl-0">

@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% comment %}
+The alert catalogue — every alert the ERP knows how to raise.
+
+Its job is to answer "can the system tell me about X?" in one screen. Alerts
+with no data source behind them are listed with the reason, not hidden: knowing
+that Vaccination Due needs a schedule master is more useful than not finding it
+at all and assuming the module forgot about vaccines.
+{% endcomment %}
+
+{% block title %}Alert Catalogue — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap">
+
+  <div class="ah-head">
+    <div>
+      <a href="{% url 'alerthub:alert_rule_list' %}" class="text-muted small text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back to Alert Configuration
+      </a>
+      <h1 class="ah-title mt-2"><i class="fa-solid fa-book text-primary"></i> Alert Catalogue</h1>
+      <p class="ah-sub">
+        {{ supported_count }} of {{ total }} alert types have a working detector.
+        The rest are configurable and will fire once the data they need exists.
+      </p>
+    </div>
+    <a href="{% url 'alerthub:alert_rule_create' %}" class="btn btn-primary btn-sm">
+      <i class="fa-solid fa-plus me-1"></i>Configure an alert
+    </a>
+  </div>
+
+  {% for module, specs in by_module.items %}
+    <div class="ah-card mb-3">
+      <div class="px-3 py-2 fw-semibold" style="background:#f4f7fa;border-bottom:1px solid #e9edf2">
+        {{ module }}
+      </div>
+      <div class="ah-scroll">
+        <table class="ah-table">
+          <thead>
+            <tr>
+              <th style="width:16rem">Alert</th>
+              <th>What it watches</th>
+              <th class="ah-nowrap">Default</th>
+              <th class="ah-nowrap">Priority</th>
+              <th class="ah-nowrap">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for spec in specs %}
+              <tr>
+                <td>
+                  <strong>{{ spec.label }}</strong>
+                  {% if spec.key in configured %}
+                    <span class="badge bg-primary-subtle text-primary ms-1">configured</span>
+                  {% endif %}
+                  <div class="text-muted" style="font-size:.7rem">{{ spec.key }}</div>
+                </td>
+                <td class="small">
+                  {% if spec.supported %}
+                    {{ spec.description }}
+                  {% else %}
+                    <span class="text-muted">{{ spec.requires }}</span>
+                  {% endif %}
+                </td>
+                <td class="ah-nowrap small">
+                  {% if spec.threshold %}
+                    {{ spec.threshold.default|floatformat:"-2" }} {{ spec.threshold.unit }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><span class="ah-pill {{ spec.priority }}">{{ spec.priority }}</span></td>
+                <td class="ah-nowrap">
+                  {% if spec.supported %}
+                    <span class="badge bg-success-subtle text-success">
+                      <i class="fa-solid fa-check me-1"></i>Ready
+                    </span>
+                  {% else %}
+                    <span class="badge bg-warning-subtle text-warning">
+                      <i class="fa-solid fa-hourglass-half me-1"></i>Needs data
+                    </span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

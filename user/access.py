@@ -464,6 +464,25 @@ MODULE_REGISTRY = [
             },
         ],
     },
+    {
+        # Business alerts. Only the administrative screens are matrix-controlled;
+        # the notification centre, the detail page and preferences are in
+        # PUBLIC_URL_NAMES because every user reads their own alerts regardless
+        # of which modules they can open.
+        "nav": "alerts",
+        "label": "Alerts",
+        "sections": [
+            {
+                "label": "Configuration",
+                "tabs": [
+                    ("alert_rule_list", "Alert Configuration",
+                     ("alert_rule_create", "alert_rule_edit",
+                      "alert_rule_delete")),
+                    ("alert_catalog", "Alert Catalogue"),
+                ],
+            },
+        ],
+    },
 ]
 
 
@@ -494,6 +513,17 @@ PUBLIC_URL_NAMES = {
     "alert-unread-count", "alert_center",
     "alert-list", "alert-detail", "alert-mark-read", "alert-mark-all-read",
     "auditlog-list", "auditlog-detail",
+    # The business-alert bell, centre and preferences. Same reasoning as the
+    # audit bell above: every page polls the unread count, and any user may
+    # read the notifications addressed to them and set their own preferences —
+    # none of that belongs to a module's tab. The API is scoped per user by
+    # alerthub.scoping, so "public" here means "no tab owns it", not "open".
+    "notification-list", "notification-detail",
+    "notification-unread-count", "notification-mark-read",
+    "notification-mark-all-read", "notification-summary", "notification-recent",
+    "preference-list", "preference-detail",
+    "notification_center", "notification_detail", "notification_history",
+    "preferences",
     # Cascade pickers shared by forms across several modules, so they belong to
     # no single tab. They return scoped data instead — see the broiler views.
     "get_branches_by_region", "get_lines_by_branch", "get_supervisors",

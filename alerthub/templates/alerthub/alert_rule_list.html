@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% comment %}
+Alert Configuration master — every configured watch.
+
+Rules whose catalogue entry has no detector are shown with a warning rather than
+hidden. Someone configured them expecting alerts; saying plainly that the data
+source is missing is the only honest way to explain a rule that never fires.
+{% endcomment %}
+
+{% block title %}Alert Configuration — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap">
+
+  <div class="ah-head">
+    <div>
+      <h1 class="ah-title"><i class="fa-solid fa-sliders text-primary"></i> Alert Configuration</h1>
+      <p class="ah-sub">
+        {{ configured }} rule{{ configured|pluralize }} configured from a catalogue of
+        {{ catalog_total }} alert types.
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'alerthub:alert_catalog' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fa-solid fa-book me-1"></i>Alert catalogue
+      </a>
+      <a href="{% url 'alerthub:alert_rule_create' %}" class="btn btn-primary btn-sm">
+        <i class="fa-solid fa-plus me-1"></i>New alert rule
+      </a>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="get" class="ah-filters">
+    <select name="module" class="form-select" onchange="this.form.submit()">
+      <option value="">All modules</option>
+      {% for value, label in modules %}
+        <option value="{{ value }}" {% if value == selected_module %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <noscript><button class="btn btn-sm btn-outline-secondary">Filter</button></noscript>
+  </form>
+
+  <div class="ah-card">
+    <div class="ah-scroll">
+      <table class="ah-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Module</th><th>Alert type</th><th>Priority</th>
+            <th>Condition</th><th>Notify</th><th>Channels</th>
+            <th>Cooldown</th><th>Raised</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <strong>{{ row.rule.name }}</strong>
+                {% if not row.supported %}
+                  <div class="text-warning small mt-1" title="{{ row.requires }}">
+                    <i class="fa-solid fa-triangle-exclamation me-1"></i>Needs a data source
+                  </div>
+                {% endif %}
+              </td>
+              <td><span class="ah-chip">{{ row.rule.get_module_display }}</span></td>
+              <td class="small text-muted">{% if row.spec %}{{ row.spec.label }}{% else %}{{ row.rule.rule_key }}{% endif %}</td>
+              <td><span class="ah-pill {{ row.rule.priority }}">{{ row.rule.get_priority_display }}</span></td>
+              <td class="ah-nowrap small">
+                {% if row.rule.threshold is not None %}
+                  {{ row.rule.get_operator_display|lower }} {{ row.rule.threshold|floatformat:"-2" }}
+                  {% if row.spec and row.spec.threshold %}{{ row.spec.threshold.unit }}{% endif %}
+                {% else %}
+                  <span class="text-muted">on condition</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% for group in row.rule.notify_groups.all %}
+                  <span class="ah-chip mb-1">{{ group.name }}</span>
+                {% empty %}
+                  <span class="text-muted">Everyone in scope</span>
+                {% endfor %}
+              </td>
+              <td class="ah-nowrap small">
+                {% if row.rule.via_in_app %}<i class="fa-solid fa-bell text-primary" title="In-App"></i>{% endif %}
+                {% if row.rule.via_email %}<i class="fa-solid fa-envelope text-muted ms-1" title="Email (not yet delivered)"></i>{% endif %}
+                {% if row.rule.via_sms %}<i class="fa-solid fa-comment-sms text-muted ms-1" title="SMS (not yet delivered)"></i>{% endif %}
+                {% if row.rule.via_whatsapp %}<i class="fa-brands fa-whatsapp text-muted ms-1" title="WhatsApp (not yet delivered)"></i>{% endif %}
+              </td>
+              <td class="ah-nowrap small">{{ row.rule.cooldown_hours }}h</td>
+              <td class="small">{{ row.rule.raised }}</td>
+              <td>
+                {% if row.rule.is_active %}
+                  <span class="badge bg-success-subtle text-success">Enabled</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">Disabled</span>
+                {% endif %}
+              </td>
+              <td class="ah-nowrap">
+                <a href="{% url 'alerthub:alert_rule_edit' row.rule.pk %}"
+                   class="btn btn-sm btn-outline-primary">Edit</a>
+                <a href="{% url 'alerthub:alert_rule_delete' row.rule.pk %}"
+                   class="btn btn-sm btn-outline-danger">Delete</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="11" class="ah-empty">
+                <i class="fa-solid fa-sliders"></i>
+                No alert rules configured yet.
+                <div class="mt-2">
+                  <a href="{% url 'alerthub:alert_rule_create' %}" class="btn btn-primary btn-sm">
+                    Create the first one
+                  </a>
+                </div>
+                <p class="small text-muted mt-3 mb-0">
+                  Or seed a starter set for every supported alert:<br>
+                  <code>python manage.py seed_alert_rules</code>
+                </p>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

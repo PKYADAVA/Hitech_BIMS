@@ -1,0 +1,488 @@
+/* Alerts & Notifications — shared styling for the bell, the centre, the
+   history table, the configuration master and the dashboard widget.
+
+   One stylesheet for the whole module so a priority colour is defined once.
+   The four priority tokens below are the only place red/orange/blue/green are
+   decided; every component reads them through var(--ah-<tone>), which is what
+   keeps a "Critical" badge in the bell the same red as one in the widget.
+
+   Bump the ?v= in the <link> when this changes — WhiteNoise serves the copy in
+   staticfiles/, so an edit here is invisible until collectstatic runs. */
+
+:root {
+  --ah-critical: #dc2626;
+  --ah-critical-soft: #fef2f2;
+  --ah-high: #ea580c;
+  --ah-high-soft: #fff7ed;
+  --ah-medium: #2563eb;
+  --ah-medium-soft: #eff6ff;
+  --ah-low: #16a34a;
+  --ah-low-soft: #f0fdf4;
+
+  --ah-ink: #1f2937;
+  --ah-muted: #6b7280;
+  --ah-faint: #9aa2af;
+  --ah-line: #e9edf2;
+  --ah-surface: #ffffff;
+  --ah-canvas: #f6f8fb;
+  --ah-radius: .85rem;
+  --ah-shadow: 0 2px 14px rgba(15, 23, 42, .06);
+  --ah-shadow-lg: 0 12px 40px rgba(15, 23, 42, .16);
+}
+
+/* ---------------------------------------------------------------- primitives */
+
+.ah-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  border-radius: 1rem;
+  padding: .1rem .55rem;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ah-pill.critical { background: var(--ah-critical); color: #fff; }
+.ah-pill.high     { background: var(--ah-high);     color: #fff; }
+.ah-pill.medium   { background: var(--ah-medium);   color: #fff; }
+.ah-pill.low      { background: var(--ah-low);      color: #fff; }
+
+.ah-chip {
+  display: inline-block;
+  background: #eef1f5;
+  color: #475569;
+  border-radius: 1rem;
+  padding: .05rem .5rem;
+  font-size: .7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
+/* The coloured square that carries the module icon. */
+.ah-ic {
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: .6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: .95rem;
+}
+.ah-ic.critical { background: var(--ah-critical); }
+.ah-ic.high     { background: var(--ah-high); }
+.ah-ic.medium   { background: var(--ah-medium); }
+.ah-ic.low      { background: var(--ah-low); }
+
+/* A 3px rail down the left of a card, tinted by priority. Cheaper to scan
+   than a badge when a list is long. */
+.ah-rail { border-left: 3px solid transparent; }
+.ah-rail.critical { border-left-color: var(--ah-critical); }
+.ah-rail.high     { border-left-color: var(--ah-high); }
+.ah-rail.medium   { border-left-color: var(--ah-medium); }
+.ah-rail.low      { border-left-color: var(--ah-low); }
+
+.ah-card {
+  background: var(--ah-surface);
+  border-radius: var(--ah-radius);
+  box-shadow: var(--ah-shadow);
+  overflow: hidden;
+}
+
+.ah-empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--ah-faint);
+}
+.ah-empty i { font-size: 1.8rem; display: block; margin-bottom: .6rem; }
+
+/* ---------------------------------------------------------------- the bell */
+
+#ahBellWrap .dropdown { position: relative; }
+
+.ah-bell-btn {
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-size: 1.05rem;
+  line-height: 1;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  transition: background .15s;
+}
+.ah-bell-btn:hover,
+.ah-bell-btn:focus { background: rgba(255, 255, 255, .15); color: #fff; box-shadow: none; }
+
+.ah-bell-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: .6rem;
+  line-height: 1;
+  min-width: 1.05rem;
+  padding: .2em .35em;
+  transform: translate(15%, -15%);
+}
+/* One pulse when the count goes up, so a new alert is noticed without the
+   badge animating forever and becoming wallpaper. */
+.ah-bell-badge.ah-bump { animation: ah-bump .5s ease; }
+@keyframes ah-bump {
+  0%   { transform: translate(15%, -15%) scale(1); }
+  35%  { transform: translate(15%, -15%) scale(1.45); }
+  100% { transform: translate(15%, -15%) scale(1); }
+}
+
+/* Pinned to the viewport's right edge; `top` is set from the button on open.
+   !important beats Popper's left-anchored inline styles. */
+.ah-bell-menu {
+  width: min(400px, calc(100vw - 1rem));
+  position: fixed !important;
+  right: 1rem !important;
+  left: auto !important;
+  transform: none !important;
+  border: 0;
+  box-shadow: var(--ah-shadow-lg);
+  border-radius: var(--ah-radius);
+  overflow: hidden;
+  padding: 0;
+}
+.ah-bell-head {
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--ah-line);
+  background: #f8f9fb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.ah-bell-list { max-height: 62vh; overflow-y: auto; }
+
+.ah-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f2f5f9;
+  color: var(--ah-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: .35rem 1rem;
+  border-bottom: 1px solid var(--ah-line);
+}
+
+.ah-item {
+  display: flex;
+  gap: .7rem;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid #f2f3f5;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background .12s;
+}
+.ah-item:hover { background: #f6f8fc; color: inherit; }
+.ah-item.unread { background: #f8fbff; }
+.ah-item.unread:hover { background: #eff5ff; }
+
+/* New arrivals slide in rather than appearing, so the eye follows the change
+   instead of re-reading the list. */
+.ah-item.ah-new { animation: ah-slide .32s ease both; }
+@keyframes ah-slide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ah-item-body { flex: 1 1 auto; min-width: 0; }
+.ah-item-title {
+  font-size: .85rem;
+  font-weight: 600;
+  margin: 0 0 .1rem;
+  color: var(--ah-ink);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.ah-item-msg {
+  font-size: .78rem;
+  color: #5b6472;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.ah-item-meta {
+  font-size: .7rem;
+  color: var(--ah-faint);
+  margin-top: .25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+.ah-dot {
+  flex: 0 0 auto;
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: transparent;
+  margin-top: .5rem;
+}
+.ah-item.unread .ah-dot { background: var(--ah-medium); }
+
+.ah-bell-foot {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--ah-line);
+  background: #f8f9fb;
+}
+.ah-bell-foot a {
+  flex: 1;
+  padding: .65rem 1rem;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--ah-medium);
+  text-decoration: none;
+  text-align: center;
+}
+.ah-bell-foot a:hover { background: #eef2f9; }
+.ah-bell-foot a + a { border-left: 1px solid var(--ah-line); }
+
+@media (max-width: 575.98px) {
+  .ah-bell-menu { right: .5rem !important; left: .5rem !important; width: auto !important; }
+}
+
+/* -------------------------------------------------------------- page shells */
+
+.ah-wrap { max-width: 1180px; margin: 1.5rem auto; padding: 0 1rem; }
+.ah-wrap.narrow { max-width: 860px; }
+
+.ah-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.ah-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--ah-ink);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.ah-sub { font-size: .85rem; color: var(--ah-muted); margin: .2rem 0 0; }
+
+.ah-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  background: var(--ah-surface);
+  padding: .75rem;
+  border-radius: var(--ah-radius);
+  box-shadow: var(--ah-shadow);
+  margin-bottom: 1rem;
+}
+.ah-filters select,
+.ah-filters input {
+  font-size: .85rem;
+  border: 1px solid #dfe3e8;
+  border-radius: .5rem;
+  padding: .4rem .6rem;
+  min-width: 9rem;
+}
+.ah-filters input[type="search"] { flex: 1 1 12rem; min-width: 12rem; }
+
+/* Priority summary strip above the feed. */
+.ah-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.ah-count {
+  background: var(--ah-surface);
+  border-radius: var(--ah-radius);
+  box-shadow: var(--ah-shadow);
+  padding: .8rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color .15s, transform .12s;
+}
+.ah-count:hover { transform: translateY(-1px); }
+.ah-count.active { border-color: currentColor; }
+.ah-count.critical { color: var(--ah-critical); }
+.ah-count.high     { color: var(--ah-high); }
+.ah-count.medium   { color: var(--ah-medium); }
+.ah-count.low      { color: var(--ah-low); }
+.ah-count-n { font-size: 1.45rem; font-weight: 700; line-height: 1; }
+.ah-count-l { font-size: .75rem; color: var(--ah-muted); text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+
+.ah-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem 1.1rem;
+  background: #f8f9fb;
+  border-top: 1px solid var(--ah-line);
+}
+
+/* --------------------------------------------------------- dashboard widget */
+
+.ah-widget-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .6rem;
+  margin-bottom: .9rem;
+}
+.ah-tile {
+  background: var(--ah-canvas);
+  border-radius: .65rem;
+  padding: .6rem .7rem;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--ah-line);
+  transition: background .12s, transform .12s;
+}
+.ah-tile:hover { background: #eef2f8; transform: translateY(-1px); color: inherit; }
+.ah-tile i { color: var(--ah-muted); font-size: .95rem; width: 1.1rem; text-align: center; }
+.ah-tile-n { font-weight: 700; font-size: 1.05rem; line-height: 1; }
+.ah-tile-l { font-size: .72rem; color: var(--ah-muted); }
+.ah-tile.has-alerts .ah-tile-n { color: var(--ah-critical); }
+
+.ah-widget-list { display: flex; flex-direction: column; gap: .5rem; }
+.ah-widget-item {
+  display: flex;
+  gap: .6rem;
+  align-items: flex-start;
+  padding: .55rem .7rem;
+  border-radius: .6rem;
+  background: var(--ah-canvas);
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--ah-line);
+}
+.ah-widget-item:hover { background: #eef2f8; color: inherit; }
+
+/* ------------------------------------------------------------------ tables */
+
+.ah-table { width: 100%; font-size: .84rem; }
+.ah-table th {
+  background: #f4f7fa;
+  color: #475569;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-weight: 700;
+  padding: .55rem .7rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ah-line);
+}
+.ah-table td {
+  padding: .55rem .7rem;
+  border-bottom: 1px solid #f2f4f7;
+  vertical-align: middle;
+}
+.ah-table tr:hover td { background: #fafbfd; }
+.ah-table .ah-nowrap { white-space: nowrap; }
+
+/* Wide tables scroll inside their own box; the page never scrolls sideways. */
+.ah-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ------------------------------------------------------------- config forms */
+
+.ah-form-card {
+  background: var(--ah-surface);
+  border-radius: var(--ah-radius);
+  box-shadow: var(--ah-shadow);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.ah-form-card h2 {
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--ah-ink);
+  margin: 0 0 .25rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+.ah-form-card .ah-hint { font-size: .8rem; color: var(--ah-muted); margin: 0 0 1rem; }
+
+.ah-note {
+  border-radius: .6rem;
+  padding: .6rem .8rem;
+  font-size: .82rem;
+  display: flex;
+  gap: .55rem;
+  align-items: flex-start;
+}
+.ah-note.info { background: var(--ah-medium-soft); color: #1e40af; }
+.ah-note.warn { background: var(--ah-high-soft); color: #9a3412; }
+
+label.ah-check {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--ah-line);
+  border-radius: .6rem;
+  font-size: .85rem;
+  cursor: pointer;
+  background: #fff;
+}
+label.ah-check:hover { background: #f8fafc; }
+label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
+
+/* ------------------------------------------------------------------ detail */
+
+.ah-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: .9rem;
+}
+.ah-field-l {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ah-faint);
+  font-weight: 700;
+  margin-bottom: .15rem;
+}
+.ah-field-v { font-size: .9rem; color: var(--ah-ink); font-weight: 500; word-break: break-word; }
+
+.ah-measure {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+.ah-measure small { font-size: .8rem; font-weight: 500; color: var(--ah-muted); }
+
+@media (max-width: 575.98px) {
+  .ah-filters select, .ah-filters input { min-width: 0; width: 100%; }
+  .ah-head { align-items: flex-start; }
+}

@@ -101,6 +101,9 @@ INSTALLED_APPS = [
     "tracking",
     "picklist",
     "alerts",
+    # Business alerting (thresholds, notification centre). Distinct from
+    # "alerts" above, which is the CRUD audit trail.
+    "alerthub",
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
@@ -147,6 +150,9 @@ TEMPLATES = [
                 "user.context_processors.web_access",
                 # `company` for the shared report letterhead / printed documents.
                 "Hitech_BIMS.context_processors.company",
+                # `alert_prefs` so the navbar bell knows about sound/desktop
+                # popups before the session's first alert arrives.
+                "alerthub.context_processors.alert_preferences",
             ],
         },
     },
@@ -484,4 +490,12 @@ ALERT_SETTINGS = {
     # (refreshed every sync cycle) — dropping it stops the heartbeat-only saves
     # from flooding the feed while real mapping/config changes are still audited.
     "IGNORE_FIELDS": ["last_synced_at", "last_sync_status", "last_seen_at"],
+    # The business-alert module must never be audited by the CRUD alert module.
+    # Every notification it writes is a row create, which would raise an audit
+    # alert, which is itself a row create — the same loop that made the alert
+    # centre report on the act of reading it (commit 9afdc1b). Excluding the app
+    # label covers Notification, NotificationRecipient and the read-state
+    # updates; AlertRule config changes are excluded with them, which is the
+    # right trade for keeping the two systems from feeding each other.
+    "IGNORE_APP_LABELS": ["alerthub"],
 }

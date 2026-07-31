@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Alert Rule — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap narrow">
+  <div class="ah-form-card">
+    <h2><i class="fa-solid fa-triangle-exclamation text-danger"></i> Delete this alert rule?</h2>
+    <p class="ah-hint mb-3">
+      <strong>{{ rule.name }}</strong> — {{ rule.get_module_display }},
+      {{ rule.get_priority_display }} priority.
+    </p>
+
+    <div class="ah-note info mb-3">
+      <i class="fa-solid fa-circle-info mt-1"></i>
+      <span>
+        {% if raised %}
+          The {{ raised }} notification{{ raised|pluralize }} this rule has already
+          raised will be kept — deleting the rule stops future alerts, it does not
+          rewrite the record of past ones.
+        {% else %}
+          This rule has not raised any notifications yet.
+        {% endif %}
+      </span>
+    </div>
+
+    <form method="post" class="d-flex gap-2">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i class="fa-solid fa-trash me-1"></i>Delete rule
+      </button>
+      <a href="{% url 'alerthub:alert_rule_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -385,6 +385,14 @@
 
     {% endif %}
 
+    {% if 'alerts_widget' in dash_panels %}
+    <!-- Alerts & Notifications: priority split, named tiles and the newest few.
+         Hydrated from /api/alerthub/ so it can never disagree with the bell. -->
+    <div style="order:{{ dash_panels.alerts_widget }};">
+      {% include "_alerthub_widget.html" %}
+    </div>
+    {% endif %}
+
     <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
     <div class="row g-3 mb-4" id="dash-widgets" style="order:{{ dash_widgets_order }};"></div>
 
