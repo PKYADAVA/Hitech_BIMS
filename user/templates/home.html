@@ -52,7 +52,6 @@
   .dash-welcome p { margin:0; max-width:590px; color:#dbeafe; font-size:.75rem; line-height:1.45; }
   .dash-date { display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border:1px solid rgba(255,255,255,.2); border-radius:8px; background:rgba(8,27,59,.18); font-size:.74rem; color:#eff6ff; white-space:nowrap; }
   .dash-section-title { font-size:1rem; font-weight:700; margin:0; }.dash-section-copy { color:#6b7890; font-size:.79rem; margin:.15rem 0 0; }
-  .dash-module { display:flex; align-items:center; gap:13px; height:100%; padding:15px; background:#fff; border:1px solid #e7edf5; border-radius:14px; color:#15233b; text-decoration:none; transition:.18s ease; }.dash-module:hover { color:#15233b; transform:translateY(-3px); border-color:#cdddf5; box-shadow:0 9px 20px rgba(22,42,79,.09); }.dash-module-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; font-size:1rem; flex:0 0 42px; }.dash-module-name { display:block; font-size:.87rem; font-weight:700; }.dash-module-action { display:block; margin-top:2px; color:#6b7890; font-size:.72rem; }.dash-module-arrow { margin-left:auto; color:#a3afc2; font-size:.75rem; }
   .dash-icon-blue{background:#e8f0ff;color:#2563eb}.dash-icon-green{background:#e6f7f3;color:#078b75}.dash-icon-orange{background:#fff1df;color:#d97706}.dash-icon-purple{background:#f1ebff;color:#7c3aed}.dash-icon-red{background:#ffecee;color:#dc465b}.dash-icon-cyan{background:#e5f7fb;color:#0087a5}
   .dash-panel { background:#fff; border:1px solid #e7edf5; border-radius:16px; padding:20px; height:100%; }.dash-panel-head { margin-bottom:17px; }.dash-activity { display:flex; align-items:flex-start; gap:11px; padding:12px 0; border-bottom:1px solid #edf1f6; }.dash-activity:last-child { border-bottom:0; padding-bottom:0; }.dash-activity-icon { width:31px; height:31px; border-radius:9px; background:#f2f6fd; color:#4370b6; display:grid; place-items:center; flex:0 0 31px; font-size:.75rem; }.dash-activity b { font-size:.8rem; display:block; }.dash-activity span { display:block; margin-top:2px; font-size:.73rem; color:#6b7890; }
   .dash-mini-stat { padding:13px; border:1px solid #eaf0f7; border-radius:12px; background:#fbfdff; }.dash-mini-stat span { color:#6b7890; display:block; font-size:.72rem; }.dash-mini-stat b { display:block; font-size:1rem; margin-top:4px; }.dash-mini-stat i { float:right; color:#93a4bd; }.dashboard-shell .home-cal-card { max-width:none; border:0; box-shadow:none; }.dashboard-shell .home-cal-card .card-header { padding:0 0 14px; border:0; background:transparent; font-weight:700; color:#15233b; }.dashboard-shell .home-cal-card .card-body { padding:0; }.dashboard-shell .home-cal-grid { gap:4px; }.dashboard-shell .home-cal-grid .home-cal-day { padding:.34rem 0; font-size:.74rem; color:#475569; }.dashboard-shell .home-cal-grid .home-cal-day.is-today { background:#2563eb; box-shadow:0 3px 8px rgba(37,99,235,.25); }
@@ -71,6 +70,20 @@
   .home-cal-grid .home-cal-day.is-blank { visibility:hidden; }
   .home-cal-grid .home-cal-day.is-today { background:#0d6efd; color:#fff; font-weight:600; }
   .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
+
+  /* ---- Quick Actions ---------------------------------------------------- */
+  /* Flex rather than a 7-column grid: cards are permission-gated, so the count
+     varies per user and fixed columns would leave holes. Equal flex basis keeps
+     whatever is shown filling the row. */
+  .qa-row { display:flex; flex-wrap:wrap; gap:9px; align-items:stretch; }
+  .qa-card { flex:1 1 150px; min-width:0; display:flex; align-items:center; gap:9px;
+             padding:9px 11px; background:#fff; border:1px solid #e7edf5; border-radius:12px;
+             color:#15233b; text-decoration:none; transition:.16s ease; }
+  .qa-card:hover { color:#15233b; transform:translateY(-2px); border-color:#cdddf5;
+                   box-shadow:0 7px 16px rgba(22,42,79,.09); }
+  .qa-icon { width:30px; height:30px; flex:0 0 30px; border-radius:9px; display:grid;
+             place-items:center; font-size:.76rem; }
+  .qa-label { font-size:.77rem; font-weight:600; line-height:1.25; }
 
   /* ---- Widgets ---------------------------------------------------------- */
   .dw-filter { padding:0; margin-bottom:10px; }
@@ -318,15 +331,36 @@
       </div>
     </div>
 
-    <div class="mb-3"><h2 class="dash-section-title">Workspace</h2><p class="dash-section-copy">Jump straight into the area you need.</p></div>
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-md-4 col-xl"><a href="{% url 'branch_template' %}" class="dash-module"><div class="dash-module-icon dash-icon-blue"><i class="fa-solid fa-egg"></i></div><div><span class="dash-module-name">Broiler</span><span class="dash-module-action">Farm operations</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
-      <div class="col-6 col-md-4 col-xl"><a href="{% url 'hatchery_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-purple"><i class="fa-solid fa-kiwi-bird"></i></div><div><span class="dash-module-name">Hatchery</span><span class="dash-module-action">Hatch &amp; grading</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
-      <div class="col-6 col-md-4 col-xl"><a href="{% url 'supplier' %}" class="dash-module"><div class="dash-module-icon dash-icon-orange"><i class="fas fa-cart-shopping"></i></div><div><span class="dash-module-name">Purchase</span><span class="dash-module-action">Suppliers &amp; orders</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
-      <div class="col-6 col-md-4 col-xl"><a href="{% url 'customer_groups' %}" class="dash-module"><div class="dash-module-icon dash-icon-green"><i class="fa-solid fa-indian-rupee-sign"></i></div><div><span class="dash-module-name">Sales</span><span class="dash-module-action">Customers &amp; pricing</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
-      <div class="col-6 col-md-4 col-xl"><a href="{% url 'item_category' %}" class="dash-module"><div class="dash-module-icon dash-icon-red"><i class="fas fa-boxes-stacked"></i></div><div><span class="dash-module-name">Inventory</span><span class="dash-module-action">Items &amp; warehouses</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
-      <div class="col-6 col-md-4 col-xl"><a href="{% url 'employee_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-cyan"><i class="fas fa-users"></i></div><div><span class="dash-module-name">HR</span><span class="dash-module-action">People &amp; payroll</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
+
+    <!-- Quick Actions: straight into a transaction, without walking the menus.
+         Each card is gated on the same tab code the nav and the view-guard use,
+         so nothing is offered that would bounce the user at the door. They open
+         in a new tab, like the search results, so the dashboard stays put. -->
+    <div class="mb-2"><h2 class="dash-section-title">Quick Actions</h2><p class="dash-section-copy">Start a transaction without hunting through the menus.</p></div>
+    <div class="qa-row mb-4">
+      {% if 'broiler_batch' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'broiler_batch' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-blue"><i class="fa-solid fa-layer-group"></i></span><span class="qa-label">Batch Creation</span></a>
+      {% endif %}
+      {% if 'chicks_placement_list' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'chicks_placement_list' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-purple"><i class="fa-solid fa-kiwi-bird"></i></span><span class="qa-label">Chicks Placement</span></a>
+      {% endif %}
+      {% if 'stock_transfer_list' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'stock_transfer_list' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-orange"><i class="fa-solid fa-truck-fast"></i></span><span class="qa-label">Feed Transfer</span></a>
+      {% endif %}
+      {% if 'daily_entry_list' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'daily_entry_list' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-green"><i class="fa-solid fa-pen-to-square"></i></span><span class="qa-label">Daily Entry</span></a>
+      {% endif %}
+      {% if 'medicine_entry_list' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'medicine_entry_list' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-red"><i class="fa-solid fa-syringe"></i></span><span class="qa-label">Medicine &amp; Vaccine Consumption</span></a>
+      {% endif %}
+      {% if 'bird_sale_list' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'bird_sale_list' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-cyan"><i class="fa-solid fa-cart-shopping"></i></span><span class="qa-label">Bird Sale</span></a>
+      {% endif %}
+      {% if 'bird_sale_receipt_list' in allowed_tabs %}
+      <a class="qa-card" href="{% url 'bird_sale_receipt_list' %}" target="_blank" rel="noopener"><span class="qa-icon dash-icon-green"><i class="fa-solid fa-receipt"></i></span><span class="qa-label">Bird Receipt</span></a>
+      {% endif %}
     </div>
+
     <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
     <div class="row g-3 mb-4" id="dash-widgets"></div>
 
