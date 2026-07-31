@@ -634,6 +634,57 @@ _ACTION_URL_OVERRIDES = {
 }
 
 
+# Suffixes an endpoint name carries when it is the data behind a tab, and the
+# right each implies. Reads take the tab's view right; the two toggles and the
+# bulk delete are mutations and take theirs.
+_DERIVED_SUFFIXES = {
+    "group_delete": "delete",
+    "toggle_active": "edit",
+    "toggle_lock": "edit",
+    "save": "edit",
+    "api_list": "view",
+    "api": "view",
+    "list": "view",
+    "detail": "view",
+    "lookup": "view",
+    "source": "view",
+    "data": "view",
+}
+
+
+def derive_tab(url_name):
+    """``(tab, action)`` for an endpoint named after the tab it serves.
+
+    Most of the unmapped URL surface is the JSON behind a page the matrix
+    already governs, and it is named for that page — ``broiler_disease_list``,
+    ``medicine_entry_api_list``, ``daily_entry_stock_lookup``. One rule reads
+    all of them, and keeps reading endpoints added later that follow the same
+    convention; the alternative was a hand-written list of 183 that would be out
+    of date by the next feature.
+
+    Deliberately strict: after stripping the suffix the remainder has to *be* a
+    tab code (or a tab code with ``_list`` appended, which is how the
+    transaction tabs are named). A near-miss maps to nothing rather than to the
+    wrong tab, since a wrong mapping refuses what the web app allows.
+    """
+    if not url_name:
+        return None
+    for suffix, action in sorted(_DERIVED_SUFFIXES.items(), key=lambda kv: -len(kv[0])):
+        if not url_name.endswith("_" + suffix):
+            continue
+        base = url_name[: -len(suffix) - 1]
+        # Drop trailing words one at a time: daily_entry_stock -> daily_entry.
+        while base:
+            for candidate in (base, base + "_list"):
+                if candidate in ALL_TAB_CODES:
+                    return candidate, action
+            if "_" not in base:
+                break
+            base = base.rsplit("_", 1)[0]
+        return None
+    return None
+
+
 def resolve_action(url_name):
     """Return ``(tab_code, action)`` for a create/edit/delete url-name, else None."""
     if not url_name:

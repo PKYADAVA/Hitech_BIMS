@@ -68,16 +68,22 @@
     </div>
     <div class="card-body">
       <div class="row g-3">
+        <!-- Read-only on purpose: a capture records where the visit actually
+             happened, so the pin may only come from the device's GPS via "Use
+             my current location", never from typing. readonly (not disabled)
+             so the values still post. -->
         <div class="col-md-3">
           <label class="form-label">Latitude</label>
           <input type="number" step="any" min="-90" max="90" name="latitude" id="latitude"
-                 class="form-control" placeholder="e.g. 26.760600"
+                 class="form-control bg-light" readonly placeholder="Use my current location"
+                 title="Captured from the device — use the Use my current location button"
                  value="{% if capture and capture.latitude != None %}{{ capture.latitude }}{% endif %}">
         </div>
         <div class="col-md-3">
           <label class="form-label">Longitude</label>
           <input type="number" step="any" min="-180" max="180" name="longitude" id="longitude"
-                 class="form-control" placeholder="e.g. 83.373200"
+                 class="form-control bg-light" readonly placeholder="Use my current location"
+                 title="Captured from the device — use the Use my current location button"
                  value="{% if capture and capture.longitude != None %}{{ capture.longitude }}{% endif %}">
         </div>
         <div class="col-md-6 d-flex align-items-end">
@@ -249,13 +255,13 @@
   if (chosen && chosen.dataset.branch) branch.value = chosen.dataset.branch;
   applyBranch();
 
+  // The pin only ever changes through the location button, which calls this
+  // itself — the boxes are read-only, so there are no keystrokes to listen for.
   function refreshPreview() {
     const ok = lat.value !== '' && lng.value !== '';
     preview.classList.toggle('d-none', !ok);
     if (ok) preview.href = `https://www.google.com/maps?q=${lat.value},${lng.value}`;
   }
-  lat.addEventListener('input', refreshPreview);
-  lng.addEventListener('input', refreshPreview);
   refreshPreview();
 
   // Look the pin up as an address. Typed text is never overwritten — the
@@ -296,7 +302,7 @@
 
   document.getElementById('use-my-location').addEventListener('click', function () {
     if (!navigator.geolocation) {
-      note.textContent = 'This browser cannot report a location.';
+      note.textContent = 'This browser cannot report a location, so the pin cannot be captured here.';
       return;
     }
     note.textContent = 'Reading location…';
@@ -304,13 +310,16 @@
       lat.value = pos.coords.latitude.toFixed(6);
       lng.value = pos.coords.longitude.toFixed(6);
       refreshPreview();
-      note.textContent = 'Accurate to about ' + Math.round(pos.coords.accuracy) + ' m — edit if needed.';
+      note.textContent = 'Accurate to about ' + Math.round(pos.coords.accuracy)
+                       + ' m — press again to re-read.';
       fillAddressFrom(lat.value, lng.value);
     }, function (err) {
       // The usual causes are a denied prompt or a page served over plain HTTP.
+      // The coordinate boxes are read-only, so there is no manual fallback —
+      // the fix is to grant the permission (or open the site over HTTPS).
       note.textContent = err.code === err.PERMISSION_DENIED
-        ? 'Location permission denied — enter the coordinates manually.'
-        : 'Could not read the location — enter the coordinates manually.';
+        ? 'Location permission denied — allow location for this site, then press again.'
+        : 'Could not read the location — check that the site is opened over HTTPS, then press again.';
     }, { enableHighAccuracy: true, timeout: 10000 });
   });
 

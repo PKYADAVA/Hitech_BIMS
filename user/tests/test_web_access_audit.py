@@ -33,14 +33,14 @@ class WebAccessAuditTests(TestCase):
     # ---- audit mode changes nothing --------------------------------------
 
     def test_an_unmapped_url_still_works_in_audit_mode(self):
-        """/medicine_entry_api/ is not claimed by any tab. Today it is open,
-        and audit mode must not change that."""
-        response = self.client.get("/medicine_entry_api/")
+        """/gc_settlement_batches/ is claimed by no tab and matches no naming
+        convention. Today it is open, and audit mode must not change that."""
+        response = self.client.get("/gc_settlement_batches/")
         self.assertEqual(response.status_code, 200)
 
     def test_the_unmapped_url_is_recorded(self):
-        self.client.get("/medicine_entry_api/")
-        row = WebAccessAudit.objects.get(url_name="medicine_entry_api_list")
+        self.client.get("/gc_settlement_batches/")
+        row = WebAccessAudit.objects.get(url_name="gc_settlement_batches")
         self.assertEqual(row.verdict, WebAccessAudit.UNMAPPED)
         self.assertEqual(row.username, "auditclerk")
         self.assertEqual(row.method, "GET")
@@ -72,15 +72,15 @@ class WebAccessAuditTests(TestCase):
 
         for _ in range(3):
             cache.clear()                 # bypass the write throttle
-            self.client.get("/medicine_entry_api/")
-        rows = WebAccessAudit.objects.filter(url_name="medicine_entry_api_list")
+            self.client.get("/gc_settlement_batches/")
+        rows = WebAccessAudit.objects.filter(url_name="gc_settlement_batches")
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().hits, 3)
 
     def test_the_throttle_stops_a_row_per_request(self):
         for _ in range(3):
-            self.client.get("/medicine_entry_api/")   # no cache.clear() this time
-        self.assertEqual(WebAccessAudit.objects.get(url_name="medicine_entry_api_list").hits, 1)
+            self.client.get("/gc_settlement_batches/")   # no cache.clear() this time
+        self.assertEqual(WebAccessAudit.objects.get(url_name="gc_settlement_batches").hits, 1)
 
     def test_different_users_are_recorded_separately(self):
         from django.core.cache import cache
@@ -88,12 +88,12 @@ class WebAccessAuditTests(TestCase):
         User = get_user_model()
         other = User.objects.create_user("auditclerk2", "b@x.com", "Str0ngPass!")
         other.groups.add(Group.objects.get(name="Items Only"))
-        self.client.get("/medicine_entry_api/")
+        self.client.get("/gc_settlement_batches/")
         cache.clear()
         self.client.force_login(other)
-        self.client.get("/medicine_entry_api/")
+        self.client.get("/gc_settlement_batches/")
         self.assertEqual(
-            set(WebAccessAudit.objects.filter(url_name="medicine_entry_api_list")
+            set(WebAccessAudit.objects.filter(url_name="gc_settlement_batches")
                 .values_list("username", flat=True)),
             {"auditclerk", "auditclerk2"})
 
@@ -111,7 +111,7 @@ class WebAccessAuditTests(TestCase):
 
     @override_settings(WEB_ACCESS_ENFORCE=True)
     def test_enforcing_closes_the_unmapped_url(self):
-        response = self.client.get("/medicine_entry_api/")
+        response = self.client.get("/gc_settlement_batches/")
         self.assertEqual(response.status_code, 302)
 
     @override_settings(WEB_ACCESS_ENFORCE=True)
@@ -120,7 +120,7 @@ class WebAccessAuditTests(TestCase):
 
     @override_settings(WEB_ACCESS_ENFORCE=True)
     def test_enforcing_answers_ajax_with_403_not_a_redirect(self):
-        response = self.client.get("/medicine_entry_api/",
+        response = self.client.get("/gc_settlement_batches/",
                                    HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 403)
 
@@ -425,3 +425,81 @@ class ScopedPickerTests(TestCase):
         body = self.client.get("/get-supervisors/",
                                {"branch_id": self.theirs.id}).content.decode()
         self.assertNotIn("Their Supervisor", body)
+
+
+class DerivedTabTests(TestCase):
+    """Endpoints named after the tab they serve are claimed by one rule.
+
+    Most of the unmapped surface is the JSON behind a page the matrix already
+    governs. A hand-written list would be out of date by the next feature.
+    """
+
+    def test_read_endpoints_take_the_tabs_view_right(self):
+        from user.access import derive_tab
+
+        cases = {
+            "broiler_disease_list": ("broiler_disease", "view"),
+            "medicine_entry_api_list": ("medicine_entry_list", "view"),
+            "daily_entry_stock_lookup": ("daily_entry_list", "view"),
+            "user_analytics_data": ("user_analytics", "view"),
+        }
+        for url_name, expected in cases.items():
+            with self.subTest(url=url_name):
+                self.assertEqual(derive_tab(url_name), expected)
+
+    def test_mutations_take_their_own_right(self):
+        """The toggles and bulk deletes the first audit flagged as open."""
+        from user.access import derive_tab
+
+        self.assertEqual(derive_tab("region_toggle_active"), ("region", "edit"))
+        self.assertEqual(derive_tab("farmer_group_toggle_lock"),
+                         ("farmer_group", "edit"))
+        self.assertEqual(derive_tab("daily_entry_group_delete"),
+                         ("daily_entry_list", "delete"))
+
+    def test_a_near_miss_maps_to_nothing_rather_than_the_wrong_tab(self):
+        """A wrong mapping refuses what the web app allows, which is worse than
+        leaving it for the audit."""
+        from user.access import derive_tab
+
+        self.assertIsNone(derive_tab("something_unrelated_list"))
+        self.assertIsNone(derive_tab("list"))
+        self.assertIsNone(derive_tab(""))
+        self.assertIsNone(derive_tab("items"))          # no suffix at all
+
+    def test_a_derived_read_endpoint_now_obeys_the_matrix(self):
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        clerk = User.objects.create_user("dv_clerk", "dv@x.com", "Str0ngPass!")
+        group = Group.objects.create(name="Items Only Derived")
+        clerk.groups.add(group)
+        GroupAccessProfile.objects.create(group=group)
+        GroupTabPermission.objects.create(group=group, tab_code="items",
+                                          can_view=True)
+        self.client.force_login(clerk)
+
+        response = self.client.get("/medicine_entry_api/",
+                                   HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_derived_mutation_needs_the_edit_right(self):
+        from broiler.models import Region
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        clerk = User.objects.create_user("dv_clerk2", "dv2@x.com", "Str0ngPass!")
+        group = Group.objects.create(name="Region Viewers")
+        clerk.groups.add(group)
+        GroupAccessProfile.objects.create(group=group)
+        perm = GroupTabPermission.objects.create(group=group, tab_code="region",
+                                                 can_view=True)
+        region = Region.objects.create(description="Toggle Me")
+        self.client.force_login(clerk)
+
+        url = f"/region/{region.id}/toggle-active/"
+        self.assertEqual(self.client.post(url).status_code, 403)
+
+        perm.can_edit = True
+        perm.save()
+        self.assertNotEqual(self.client.post(url).status_code, 403)

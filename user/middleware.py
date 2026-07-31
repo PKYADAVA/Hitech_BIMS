@@ -7,7 +7,8 @@ from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import redirect
 
-from .access import PUBLIC_URL_NAMES, URLNAME_TO_TAB, resolve_action, user_can
+from .access import (PUBLIC_URL_NAMES, URLNAME_TO_TAB, derive_tab,
+                     resolve_action, user_can)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,10 @@ class WebAccessMiddleware:
         if tab is not None:
             action = "view"
         else:
-            resolved = resolve_action(url_name)
+            # Explicit action urls first, then the naming convention: most of
+            # what is left is the JSON behind a page the matrix already governs
+            # and is named for it.
+            resolved = resolve_action(url_name) or derive_tab(url_name)
             if resolved is None:
                 return self._unmapped(request, view_func, url_name, user)
             tab, action = resolved
