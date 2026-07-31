@@ -532,11 +532,18 @@ def widget_preferences(user):
 
     Enabled in *any* group wins, at the earliest position any group gives it,
     which is how the tab matrix combines groups too.
+
+    Deliberately *not* skipped for unrestricted users. The Admin access type
+    and the superuser flag are about what someone may reach; which cards they
+    want and in what order is a preference, and skipping it here meant
+    configuring a manager group's dashboard silently did nothing — the preview
+    showed the chosen order and their real dashboard showed the registry one.
+    A user in no configured group still gets None, so nothing changes for a
+    superuser who is not in one.
     """
-    from user.access import _user_is_unrestricted
     from user.models import GroupDashboardWidget
 
-    if not user or not user.is_authenticated or _user_is_unrestricted(user):
+    if not user or not user.is_authenticated:
         return None
     rows = list(GroupDashboardWidget.objects.filter(group__in=user.groups.all()))
     if not rows:

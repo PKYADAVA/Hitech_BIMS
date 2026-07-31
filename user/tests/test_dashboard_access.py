@@ -557,3 +557,63 @@ class GroupTabResolutionTests(TestCase):
         cards = self.client.get(reverse("dashboard_widgets_api"),
                                 {"preview_group": self.group.id, "panels": live})
         self.assertEqual([w["key"] for w in cards.json()["widgets"]], ALL_KEYS)
+
+
+class ManagerOrderTests(TestCase):
+    """A manager's own dashboard must match its group's preview.
+
+    The Admin access type bypasses the permission matrix, and that bypass was
+    also discarding the group's widget order — so the preview showed the chosen
+    layout and the manager's real dashboard showed the registry one.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("mo_admin", "ma@x.com",
+                                                   "Str0ngPass!")
+        self.group = Group.objects.create(name="Managers")
+        GroupAccessProfile.objects.create(group=self.group, access_type="admin")
+        self.manager = User.objects.create_user("mo_mgr", "mm@x.com", "Str0ngPass!")
+        self.manager.groups.add(self.group)
+
+        self.order = list(reversed(ALL_PANEL_KEYS))
+        for position, key in enumerate(self.order):
+            GroupDashboardWidget.objects.create(group=self.group, widget_key=key,
+                                                enabled=True, position=position)
+
+    def cards(self, client, **params):
+        return [w["key"] for w in
+                client.get(reverse("dashboard_widgets_api"), params).json()["widgets"]]
+
+    def test_a_manager_gets_the_order_configured_for_their_group(self):
+        self.client.force_login(self.manager)
+        expected = [k for k in self.order if k in ALL_KEYS]
+        self.assertEqual(self.cards(self.client), expected)
+
+    def test_the_manager_dashboard_matches_its_own_preview(self):
+        self.client.force_login(self.manager)
+        mine = self.cards(self.client)
+
+        self.client.force_login(self.admin)
+        preview = self.cards(self.client, preview_group=self.group.id)
+        self.assertEqual(mine, preview)
+
+    def test_a_manager_still_bypasses_the_permission_matrix(self):
+        """Order is a preference; access is not. The bypass must survive."""
+        from user.access import allowed_view_tabs, ALL_TAB_CODES
+
+        manager = get_user_model().objects.get(pk=self.manager.pk)
+        self.assertEqual(allowed_view_tabs(manager), set(ALL_TAB_CODES))
+
+    def test_switching_a_widget_off_applies_to_a_manager_too(self):
+        GroupDashboardWidget.objects.filter(
+            group=self.group, widget_key="balances").update(enabled=False)
+        self.client.force_login(self.manager)
+        self.assertNotIn("balances", self.cards(self.client))
+
+    def test_a_superuser_in_no_configured_group_is_unaffected(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.cards(self.client), ALL_KEYS)
