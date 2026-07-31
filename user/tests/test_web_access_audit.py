@@ -259,3 +259,98 @@ class PrintRightTests(TestCase):
         html = self.client.get(reverse("user_groups"),
                                {"group": self.group.id}).content.decode()
         self.assertIn("nothing reads them yet", html)
+
+
+class MappedFromAuditTests(TestCase):
+    """The urls the audit surfaced are now claimed, and stay claimed.
+
+    A url that slips back out of the mapping does not raise — it just becomes
+    open again, which is exactly the failure this whole exercise is about.
+    """
+
+    #: What `manage.py webaccess_audit` reported, and how each was resolved.
+    RECORDED = {
+        "bird_sale_api_list": "bird_sale_list",
+        "broiler_batch_list": "broiler_batch",
+        "broiler_farm_detail": "branch_farm",
+        "broiler_farm_list": "branch_farm",
+        "broiler_farm_shed_list": "broiler_farm_shed",
+        "daily_entry_api_list": "daily_entry_list",
+        "farmer_detail": "branch_farm",
+        "farmer_list": "branch_farm",
+        "stock_transfer_api": "stock_transfer_list",
+        "stock_transfer_api_list": "stock_transfer_list",
+        "stock_transfer_farm_batches": "stock_transfer_list",
+        "stock_transfer_item_lookup": "stock_transfer_list",
+    }
+    PUBLIC = ["alert-unread-count", "get_branches_by_region",
+              "get_lines_by_branch", "get_supervisors"]
+
+    def test_each_audited_url_now_belongs_to_its_tab(self):
+        from user.access import URLNAME_TO_TAB
+
+        for url_name, tab in self.RECORDED.items():
+            with self.subTest(url=url_name):
+                self.assertEqual(URLNAME_TO_TAB.get(url_name), tab)
+
+    def test_the_shared_pickers_are_public_rather_than_misassigned(self):
+        from user.access import PUBLIC_URL_NAMES
+
+        for url_name in self.PUBLIC:
+            with self.subTest(url=url_name):
+                self.assertIn(url_name, PUBLIC_URL_NAMES)
+
+    def test_a_mapped_json_endpoint_now_obeys_the_matrix(self):
+        """/daily_entry_api/ was open; it was the data behind a page the matrix
+        already refused."""
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        clerk = User.objects.create_user("map_clerk", "m@x.com", "Str0ngPass!")
+        group = Group.objects.create(name="Items Only Map")
+        clerk.groups.add(group)
+        GroupAccessProfile.objects.create(group=group)
+        GroupTabPermission.objects.create(group=group, tab_code="items",
+                                          can_view=True)
+        self.client.force_login(clerk)
+
+        response = self.client.get("/daily_entry_api/",
+                                   HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 403)
+
+
+class ScopedPickerTests(TestCase):
+    """The shared pickers are public, so their data has to be scoped instead."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        from broiler.models import Branch, Region, Supervisor
+        from user.models import GroupAccessProfile
+
+        cache.clear()
+        User = get_user_model()
+        self.user = User.objects.create_user("pick_user", "pk@x.com", "Str0ngPass!")
+        group = Group.objects.create(name="Akbarpur Picker")
+        self.user.groups.add(group)
+
+        self.region = Region.objects.create(description="East")
+        self.mine = Branch.objects.create(branch_name="Akbarpur", region=self.region,
+                                          prefix="AKB")
+        self.theirs = Branch.objects.create(branch_name="Bahraich",
+                                            region=self.region, prefix="BHR")
+        Supervisor.objects.create(branch=self.theirs, name="Their Supervisor")
+
+        profile = GroupAccessProfile.objects.create(group=group, all_branches=False)
+        profile.branches.add(self.mine)
+        self.client.force_login(self.user)
+
+    def test_the_branch_picker_lists_only_permitted_branches(self):
+        body = self.client.get("/get-branches-by-region/",
+                               {"region_id": self.region.id}).content.decode()
+        self.assertIn("Akbarpur", body)
+        self.assertNotIn("Bahraich", body)
+
+    def test_the_supervisor_picker_refuses_another_branch(self):
+        body = self.client.get("/get-supervisors/",
+                               {"branch_id": self.theirs.id}).content.decode()
+        self.assertNotIn("Their Supervisor", body)

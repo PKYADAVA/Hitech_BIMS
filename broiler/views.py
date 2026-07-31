@@ -1100,7 +1100,10 @@ def get_branches_by_region(request) -> JsonResponse:
     """Get branches for a specific region."""
     try:
         region_id = request.GET.get('region_id')
-        branches = list(Branch.objects.filter(region_id=region_id, is_active=True).values('id', 'branch_name'))
+        # Shared by many forms, so it stays reachable for any signed-in user —
+        # but it must not list branches outside their scope.
+        branches = list(branches_for(request.user, Branch.objects.filter(
+            region_id=region_id, is_active=True)).values('id', 'branch_name'))
         return JsonResponse({'branches': branches})
     except Exception as e:
         logger.error(f"Error in get_branches_by_region: {str(e)}", exc_info=True)
@@ -1111,6 +1114,8 @@ def get_lines_by_branch(request) -> JsonResponse:
     """Get broiler lines for a specific branch."""
     try:
         branch_id = request.GET.get('branch_id')
+        if not branches_for(request.user).filter(id=branch_id).exists():
+            return JsonResponse({'lines': []})
         lines = list(BroilerLine.objects.filter(branch_id=branch_id, is_active=True).values('id', 'description'))
         return JsonResponse({'lines': lines})
     except Exception as e:
@@ -1716,6 +1721,10 @@ def get_supervisors(request) -> JsonResponse:
     """Get supervisors for a specific branch."""
     try:
         branch_id = request.GET.get('branch_id')
+        # A branch the user cannot see has no supervisors as far as they are
+        # concerned; checked before the cache so a warm entry cannot leak one.
+        if branch_id and not branches_for(request.user).filter(id=branch_id).exists():
+            return JsonResponse({'supervisors': []})
         cache_key = f"supervisors_branch_{branch_id}"
         
         cached_data = cache.get(cache_key)

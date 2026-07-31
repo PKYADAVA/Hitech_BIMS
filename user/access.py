@@ -46,9 +46,12 @@ MODULE_REGISTRY = [
                     ("branch_template", "Branch"),
                     ("supervisor_template", "Supervisor"),
                     ("broiler_line", "Broiler Line"),
-                    ("branch_farm", "Broiler Farm"),
-                    ("broiler_farm_shed", "Broiler Farm Shed"),
-                    ("broiler_batch", "Broiler Batch"),
+                    ("branch_farm", "Broiler Farm",
+                     ("broiler_farm_list", "broiler_farm_detail",
+                      "farmer_list", "farmer_detail")),
+                    ("broiler_farm_shed", "Broiler Farm Shed",
+                     ("broiler_farm_shed_list",)),
+                    ("broiler_batch", "Broiler Batch", ("broiler_batch_list",)),
                     ("feed_phase_master_list", "Feed Phase Master"),
                     ("broiler_disease", "Broiler Disease"),
                 ],
@@ -65,10 +68,12 @@ MODULE_REGISTRY = [
             {
                 "label": "Transactions",
                 "tabs": [
-                    ("daily_entry_list", "Daily Entry"),
+                    ("daily_entry_list", "Daily Entry",
+                     ("daily_entry_api_list", "daily_entry_api")),
                     ("medicine_entry_list", "Medicine Vaccine Consumption"),
                     ("daily_entry_single_list", "Single Batch Daily Entry"),
-                    ("bird_sale_list", "Bird Sale"),
+                    ("bird_sale_list", "Bird Sale",
+                     ("bird_sale_api_list", "bird_sale_api")),
                     ("bird_sale_receipt_list", "Bird Receipt"),
                     ("chicks_placement_list", "Chicks Placement"),
                     ("farm_location_capture_list", "Farm Location & Photos",
@@ -296,7 +301,9 @@ MODULE_REGISTRY = [
             {
                 "label": "Transactions",
                 "tabs": [
-                    ("stock_transfer_list", "Stock Transfer"),
+                    ("stock_transfer_list", "Stock Transfer",
+                     ("stock_transfer_api_list", "stock_transfer_api",
+                      "stock_transfer_farm_batches", "stock_transfer_item_lookup")),
                     ("medicine_transfer_list", "Medicine Vaccine Transfer"),
                     ("inventory_adjustment_list", "Inventory Adjustment"),
                     ("stock_issue_list", "Stock Issued"),
@@ -465,6 +472,11 @@ PUBLIC_URL_NAMES = {
     "login", "logout", "home", "dashboard", "forgot_password",
     "update_password", "reset_password", "user_profile",
     "global_search_api", "dashboard_widgets_api",
+    # Polled by every page's alert bell.
+    "alert-unread-count",
+    # Cascade pickers shared by forms across several modules, so they belong to
+    # no single tab. They return scoped data instead — see the broiler views.
+    "get_branches_by_region", "get_lines_by_branch", "get_supervisors",
 }
 
 # All tab codes (url-names) that participate in the matrix.
