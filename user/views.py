@@ -19,7 +19,8 @@ from hr.models import Designation, Employee
 from hr.models import Group as HrGroup
 from inventory.models import Warehouse
 from .models import UserProfile, GroupTabPermission, GroupAccessProfile
-from .access import MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES, UNENFORCED_ACTIONS
+from .access import (MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES,
+                     UNENFORCED_ACTIONS, UNENFORCED_FLAGS)
 
 
 from django.contrib.auth import login as auth_login, logout as auth_logout
@@ -268,13 +269,29 @@ def dashboard_widgets_api(request):
 # X_FRAME_OPTIONS is DENY site-wide. The Dashboard Access preview frames this
 # page from the same origin, so relax it here only — external sites still
 # cannot frame the dashboard.
+def _dashboard_or_landing(request):
+    """The dashboard, or the first page they can open if it is switched off.
+
+    Not enforced through the middleware: its denial redirects *to* home, so
+    refusing home there would loop. If there is nowhere else to send them the
+    dashboard still renders — an empty page beats a redirect cycle.
+    """
+    from .access import first_landing_url, user_sees_dashboard
+
+    if not user_sees_dashboard(request.user):
+        landing = first_landing_url(request.user)
+        if landing and landing != request.path:
+            return redirect(landing)
+    return render(request, "home.html", _home_context(request))
+
+
 @xframe_options_sameorigin
 def dashboard(request):
-    return render(request, "home.html", _home_context(request))
+    return _dashboard_or_landing(request)
 
 
 def home(request):
-    return render(request, "home.html", _home_context(request))
+    return _dashboard_or_landing(request)
 
 
 def forgot_password_view(request):
@@ -480,6 +497,7 @@ def manage_groups(request):
     # Four of the eight columns were decorative; Print is now enforced on
     # exports, and the editor says which of the rest still are.
     context["unenforced_actions"] = UNENFORCED_ACTIONS
+    context["unenforced_flags"] = UNENFORCED_FLAGS
     return render(request, "manage_groups.html", context)
 
 

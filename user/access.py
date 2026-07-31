@@ -29,6 +29,17 @@ ACTIONS = ["view", "add", "edit", "delete", "print", "save", "update", "favorite
 # as if they worked.
 UNENFORCED_ACTIONS = ["save", "update", "favorite"]
 
+# Access-Settings switches that are stored and never read, and why. Dashboard
+# used to be on this list and is now enforced; these four cannot be until the
+# feature behind each exists:
+#   is_superuser        — access_type = Admin already does this; a second,
+#                         quieter way to grant everything is worse than none.
+#   login_type          — there is no OTP flow to select.
+#   sale_multiple_edit  — there is no bulk edit or delete in Sales; the
+#   sale_multiple_delete  group-delete endpoints belong to Broiler daily entry.
+UNENFORCED_FLAGS = ["is_superuser", "login_type",
+                    "sale_multiple_edit", "sale_multiple_delete"]
+
 # Module (navbar dropdown) -> list of sections; each section -> list of tabs.
 # tab = (code / url-name, human label). `extra_urls` (optional 3rd item) lists
 # additional url-names that belong to the same tab so the view-guard treats
@@ -785,6 +796,41 @@ def user_can(user, tab_code, action="view"):
 def tab_action_perms(user, tab_code):
     """Dict of ``{action: bool}`` for *tab_code* — used to hide/show page buttons."""
     return {a: user_can(user, tab_code, a) for a in ACTIONS}
+
+
+def user_sees_dashboard(user):
+    """Whether the dashboard is available to this user.
+
+    ``GroupAccessProfile.dashboard`` was stored and never read, so a group with
+    it switched off still landed on the full dashboard. Combined the same way as
+    every other permission here: granted in any group is granted, and a user
+    with no profile at all is unrestricted.
+    """
+    from .models import GroupAccessProfile
+
+    if _user_is_unrestricted(user):
+        return True
+    if not user or not user.is_authenticated:
+        return False
+    profiles = GroupAccessProfile.objects.filter(group__in=user.groups.all())
+    if not profiles.exists():
+        return True
+    return profiles.filter(dashboard=True).exists()
+
+
+def first_landing_url(user):
+    """Where to send someone who has no dashboard — the first page they can
+    open. ``None`` when there is nowhere to send them."""
+    from django.urls import NoReverseMatch, reverse
+
+    viewable = allowed_view_tabs(user)
+    for _nav, _section, code, _label, _extra in iter_tabs():
+        if code in viewable:
+            try:
+                return reverse(code)
+            except NoReverseMatch:
+                continue
+    return None
 
 
 def allowed_view_tabs(user):

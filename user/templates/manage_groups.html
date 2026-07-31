@@ -256,6 +256,14 @@
 
     <!-- Access flags -->
     <div class="wa-section-title"><i class="fas fa-user-shield"></i>Access Settings</div>
+    {% if unenforced_flags %}
+    <p class="wa-inert-note">
+      <span class="wa-inert">*</span>
+      These switches are saved against the group but nothing reads them yet.
+      Dashboard is enforced — a group with it off lands on its first permitted
+      page instead.
+    </p>
+    {% endif %}
     <div class="wa-admin-note" id="wa-admin-note">
       <i class="fas fa-triangle-exclamation"></i>
       <span>
@@ -267,7 +275,7 @@
     </div>
     <div class="wa-flags">
         <div class="wa-flag">
-            <span class="wa-flag-label">Is Superuser</span>
+            <span class="wa-flag-label">Is Superuser<sup class="wa-inert" title="Stored, but nothing reads this — use Access Type = Admin">*</sup></span>
             <span class="form-check form-switch m-0">
                 <input type="checkbox" role="switch" class="form-check-input" name="is_superuser" id="is_superuser" {% if profile.is_superuser %}checked{% endif %}>
                 <label class="form-check-label small" for="is_superuser">Full unrestricted access</label>
@@ -281,21 +289,21 @@
             </span>
         </div>
         <div class="wa-flag">
-            <span class="wa-flag-label">Login Type</span>
+            <span class="wa-flag-label">Login Type<sup class="wa-inert" title="Stored, but there is no OTP flow to select">*</sup></span>
             <span class="wa-seg">
                 <label><input type="radio" name="login_type" value="password" {% if not profile or profile.login_type == 'password' %}checked{% endif %}><span>Password</span></label>
                 <label><input type="radio" name="login_type" value="otp" {% if profile.login_type == 'otp' %}checked{% endif %}><span>OTP</span></label>
             </span>
         </div>
         <div class="wa-flag">
-            <span class="wa-flag-label">Sale (Multiple-Edit)</span>
+            <span class="wa-flag-label">Sale (Multiple-Edit)<sup class="wa-inert" title="Stored, but Sales has no bulk edit">*</sup></span>
             <span class="wa-seg">
                 <label><input type="radio" name="sale_multiple_edit" value="yes" {% if profile.sale_multiple_edit %}checked{% endif %}><span>Yes</span></label>
                 <label><input type="radio" name="sale_multiple_edit" value="no" {% if not profile or not profile.sale_multiple_edit %}checked{% endif %}><span>No</span></label>
             </span>
         </div>
         <div class="wa-flag">
-            <span class="wa-flag-label">Sale (Multiple-Delete)</span>
+            <span class="wa-flag-label">Sale (Multiple-Delete)<sup class="wa-inert" title="Stored, but Sales has no bulk delete">*</sup></span>
             <span class="wa-seg">
                 <label><input type="radio" name="sale_multiple_delete" value="yes" {% if profile.sale_multiple_delete %}checked{% endif %}><span>Yes</span></label>
                 <label><input type="radio" name="sale_multiple_delete" value="no" {% if not profile or not profile.sale_multiple_delete %}checked{% endif %}><span>No</span></label>

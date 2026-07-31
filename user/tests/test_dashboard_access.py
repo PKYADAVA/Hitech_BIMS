@@ -667,3 +667,83 @@ class DefaultPanelOrderTests(TestCase):
         from user.services.dashboard_widgets import DEFAULT_PANEL_ORDER
 
         self.assertEqual(set(k for k, *_ in all_panels()), set(DEFAULT_PANEL_ORDER))
+
+
+class DashboardFlagTests(TestCase):
+    """GroupAccessProfile.dashboard was stored and never read.
+
+    A group with it switched off still landed on the full dashboard.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from user.models import GroupAccessProfile
+
+        User = get_user_model()
+        self.user = User.objects.create_user("df_user", "df@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="No Dashboard")
+        self.user.groups.add(self.group)
+        GroupTabPermission.objects.create(group=self.group, tab_code="items",
+                                          can_view=True)
+        self.profile = GroupAccessProfile.objects.create(group=self.group,
+                                                         dashboard=True)
+        self.client.force_login(self.user)
+
+    def test_with_the_flag_on_the_dashboard_renders(self):
+        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+
+    def test_with_it_off_they_land_on_their_first_permitted_page(self):
+        self.profile.dashboard = False
+        self.profile.save()
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("items"))
+
+    def test_home_behaves_the_same_way(self):
+        self.profile.dashboard = False
+        self.profile.save()
+        self.assertEqual(self.client.get(reverse("home")).status_code, 302)
+
+    def test_granted_in_any_group_is_granted(self):
+        """Combined like every other permission here."""
+        from user.models import GroupAccessProfile
+
+        self.profile.dashboard = False
+        self.profile.save()
+        other = Group.objects.create(name="Has Dashboard")
+        self.user.groups.add(other)
+        GroupAccessProfile.objects.create(group=other, dashboard=True)
+        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+
+    def test_it_still_renders_when_there_is_nowhere_else_to_go(self):
+        """The middleware's denial redirects to home, so refusing home would
+        loop. An empty dashboard beats a redirect cycle."""
+        self.profile.dashboard = False
+        self.profile.save()
+        GroupTabPermission.objects.filter(group=self.group).delete()
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_a_superuser_is_unaffected(self):
+        self.profile.dashboard = False
+        self.profile.save()
+        boss = get_user_model().objects.create_superuser("df_boss", "dfb@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+
+    def test_the_editor_marks_the_flags_that_still_do_nothing(self):
+        from user.access import UNENFORCED_FLAGS
+
+        self.assertNotIn("dashboard", UNENFORCED_FLAGS)
+        self.assertEqual(sorted(UNENFORCED_FLAGS),
+                         ["is_superuser", "login_type",
+                          "sale_multiple_delete", "sale_multiple_edit"])
+
+        boss = get_user_model().objects.create_superuser("df_boss2", "dfb2@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(boss)
+        html = self.client.get(reverse("user_groups"),
+                               {"group": self.group.id}).content.decode()
+        self.assertIn("nothing reads them yet", html)
+        self.assertIn("Dashboard is enforced", html)
