@@ -9,8 +9,8 @@ from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from broiler.models import (BirdSale, Branch, BroilerBatch, BroilerFarm, BroilerLine,
-                            DailyEntry, Farmer, Region, Supervisor)
+from broiler.models import (BirdSale, Branch, BroilerBatch, BroilerFarm, DailyEntry,
+                            Farmer, Region, Supervisor)
 from inventory.models import Item, ItemCategory, StockTransfer
 from user.models import GroupTabPermission
 from user.services.dashboard_widgets import WIDGETS, dashboard_widgets
@@ -26,11 +26,10 @@ class DashboardWidgetTests(TestCase):
         region = Region.objects.create(description="East")
         branch = Branch.objects.create(branch_name="Akbarpur", region=region, prefix="AKB")
         supervisor = Supervisor.objects.create(branch=branch, name="R. Verma")
-        line = BroilerLine.objects.create(description="Line 1", region=region, branch=branch)
         farmer = Farmer.objects.create(farmer_name="S. Yadav")
         self.farm = BroilerFarm.objects.create(
             branch=branch, supervisor=supervisor, farmer=farmer, region=region,
-            line=line, farm_name="Yadav Farm", farm_capacity=5000)
+            line="Line A", farm_name="Yadav Farm", farm_capacity=5000)
         self.supervisor = supervisor
 
         self.chick = Item.objects.create(
@@ -51,8 +50,12 @@ class DashboardWidgetTests(TestCase):
                 date=self.today - timedelta(days=age))
         return b
 
-    def widget(self, user, key):
-        return next((w for w in dashboard_widgets(user, use_cache=False)
+    def widget(self, user, key, filters=None):
+        from user.services.dashboard_widgets import FILTER_KEYS
+
+        full = dict.fromkeys(FILTER_KEYS)
+        full.update(filters or {})
+        return next((w for w in dashboard_widgets(user, full, use_cache=False)
                      if w["key"] == key), None)
 
     def stat(self, widget, label):
@@ -123,6 +126,169 @@ class DashboardWidgetTests(TestCase):
         w = self.widget(self.admin, "daily_entries")
         self.assertEqual(self.stat(w, "Not yet in")["tone"], "good")
         self.assertEqual(w["rows"], [])
+
+    # ---- the filter bar ---------------------------------------------------
+
+    def other_farm(self):
+        """A second farm under its own branch / line / supervisor."""
+        region = Region.objects.create(description="West")
+        branch = Branch.objects.create(branch_name="Bahraich", region=region, prefix="BHR")
+        supervisor = Supervisor.objects.create(branch=branch, name="K. Singh")
+        farmer = Farmer.objects.create(farmer_name="M. Kumar")
+        return BroilerFarm.objects.create(
+            branch=branch, supervisor=supervisor, farmer=farmer, region=region,
+            line="Line B", farm_name="Kumar Farm", farm_capacity=4000)
+
+    def test_farm_filter_narrows_the_flock(self):
+        self.batch("Mine", placed=1000)
+        other = self.other_farm()
+        BroilerBatch.objects.create(broiler_farm=other, batch_name="Theirs",
+                                    start_date=self.today - timedelta(days=10))
+
+        w = self.widget(self.admin, "live_flock", {"farm": self.farm.id})
+        self.assertEqual(self.stat(w, "Open batches")["value"], "1")
+        self.assertEqual(self.stat(w, "Birds alive")["value"], "1,000")
+
+    def test_branch_line_and_supervisor_all_narrow_the_flock(self):
+        self.batch("Mine", placed=500)
+        other = self.other_farm()
+        BroilerBatch.objects.create(broiler_farm=other, batch_name="Theirs",
+                                    start_date=self.today - timedelta(days=10))
+
+        for key, value in (("branch", self.farm.branch_id),
+                           ("line", self.farm.line),
+                           ("supervisor", self.farm.supervisor_id)):
+            with self.subTest(filter=key):
+                w = self.widget(self.admin, "live_flock", {key: value})
+                self.assertEqual(self.stat(w, "Open batches")["value"], "1")
+
+    def test_filters_combine_rather_than_override(self):
+        """Branch of farm A with the farm of B must match nothing, not fall
+        back to whichever filter was applied last."""
+        self.batch("Mine", placed=500)
+        other = self.other_farm()
+        BroilerBatch.objects.create(broiler_farm=other, batch_name="Theirs",
+                                    start_date=self.today - timedelta(days=10))
+
+        w = self.widget(self.admin, "live_flock",
+                        {"branch": self.farm.branch_id, "farm": other.id})
+        self.assertEqual(self.stat(w, "Open batches")["value"], "0")
+
+    def test_the_date_filter_rewinds_the_flock(self):
+        b = self.batch("B-1", placed=1000, age=30)
+        DailyEntry.objects.create(batch=b, farm=self.farm, supervisor=self.supervisor,
+                                  date=self.today - timedelta(days=20), mortality=10)
+        DailyEntry.objects.create(batch=b, farm=self.farm, supervisor=self.supervisor,
+                                  date=self.today, mortality=50)
+
+        back = self.widget(self.admin, "live_flock",
+                           {"date": self.today - timedelta(days=10)})
+        # only the older loss counts as at that date
+        self.assertEqual(self.stat(back, "Birds alive")["value"], "990")
+        self.assertEqual(self.stat(back, "Avg age")["value"], "20 d")
+        # and today still sees both
+        self.assertEqual(self.stat(self.widget(self.admin, "live_flock"),
+                                   "Birds alive")["value"], "940")
+
+    def test_a_batch_that_ended_before_the_date_is_not_live_then(self):
+        b = self.batch("Ended", placed=500, age=40)
+        b.end_date = self.today - timedelta(days=5)
+        b.is_closed = True
+        b.save()
+        recent = self.widget(self.admin, "live_flock",
+                             {"date": self.today - timedelta(days=1)})
+        self.assertEqual(self.stat(recent, "Open batches")["value"], "0")
+        # but it was live a fortnight ago
+        older = self.widget(self.admin, "live_flock",
+                            {"date": self.today - timedelta(days=14)})
+        self.assertEqual(self.stat(older, "Open batches")["value"], "1")
+
+    def test_daily_entries_follows_the_chosen_day(self):
+        b = self.batch("B-1", placed=500, age=30)
+        yesterday = self.today - timedelta(days=1)
+        DailyEntry.objects.create(batch=b, farm=self.farm, supervisor=self.supervisor,
+                                  date=yesterday, mortality=1)
+
+        self.assertEqual(self.stat(self.widget(self.admin, "daily_entries"),
+                                   "Not yet in")["value"], "1")
+        w = self.widget(self.admin, "daily_entries", {"date": yesterday})
+        self.assertEqual(self.stat(w, "Reported")["value"], "1 of 1")
+
+    def test_a_widget_says_which_filters_it_could_not_apply(self):
+        """Receivables has no farm dimension; the card must admit that rather
+        than show an unfiltered figure under a filter."""
+        w = self.widget(self.admin, "balances",
+                        {"branch": self.farm.branch_id, "farm": self.farm.id})
+        self.assertIn("Branch", w["ignored"])
+        self.assertIn("Farm", w["ignored"])
+
+    def test_no_note_when_every_active_filter_applied(self):
+        w = self.widget(self.admin, "live_flock", {"farm": self.farm.id})
+        self.assertIsNone(w["ignored"])
+        # and none at all when nothing is filtered
+        self.assertIsNone(self.widget(self.admin, "balances")["ignored"])
+
+    def test_stock_alerts_takes_the_farm_but_not_the_supervisor(self):
+        w = self.widget(self.admin, "stock_alerts",
+                        {"farm": self.farm.id, "supervisor": self.supervisor.id})
+        self.assertIn("Supervisor", w["ignored"])
+        self.assertNotIn("Farm", w["ignored"])
+
+    def test_a_filtered_dashboard_is_not_served_from_cache(self):
+        """The unfiltered payload must never be handed back for a filter."""
+        self.batch("Mine", placed=1000)
+        unfiltered = dashboard_widgets(self.admin)          # caching on, warms it
+        self.assertEqual(self.stat(
+            next(w for w in unfiltered if w["key"] == "live_flock"),
+            "Birds alive")["value"], "1,000")
+
+        other = self.other_farm()
+        filtered = dashboard_widgets(self.admin, {"farm": other.id})
+        self.assertEqual(self.stat(
+            next(w for w in filtered if w["key"] == "live_flock"),
+            "Open batches")["value"], "0")
+
+    def test_parse_filters_ignores_rubbish(self):
+        from user.services.dashboard_widgets import parse_filters
+
+        parsed = parse_filters({"date": "not-a-date", "branch": "abc",
+                                "farm": "", "supervisor": "7", "line": " Line A "})
+        self.assertIsNone(parsed["date"])
+        self.assertIsNone(parsed["branch"])
+        self.assertIsNone(parsed["farm"])
+        self.assertEqual(parsed["supervisor"], 7)
+        # Line is free text on the farm, not an id, so it stays a string
+        self.assertEqual(parsed["line"], "Line A")
+        self.assertIsNone(parse_filters({"line": "   "})["line"])
+
+    def test_the_endpoint_accepts_the_filter_querystring(self):
+        self.batch("Mine", placed=1000)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("dashboard_widgets_api"),
+                                   {"farm": self.other_farm().id})
+        self.assertEqual(response.status_code, 200)
+        flock = next(w for w in response.json()["widgets"]
+                     if w["key"] == "live_flock")
+        self.assertEqual(self.stat(flock, "Open batches")["value"], "0")
+
+    def test_the_broiler_report_link_carries_the_filter(self):
+        w = self.widget(self.admin, "live_flock",
+                        {"farm": self.farm.id, "date": self.today})
+        self.assertIn(f"farm={self.farm.id}", w["url"])
+        self.assertIn(f"date={self.today.isoformat()}", w["url"])
+
+    def test_a_non_broiler_report_link_is_left_clean(self):
+        """Sending branch=3 to the Customer Balance report is just noise."""
+        w = self.widget(self.admin, "balances", {"farm": self.farm.id})
+        self.assertNotIn("?", w["url"])
+
+    def test_the_dashboard_renders_the_filter_bar(self):
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard")).content.decode()
+        for field in ("dwf-date", "dwf-branch", "dwf-line", "dwf-supervisor",
+                      "dwf-farm", "dwf-submit"):
+            self.assertIn(f'id="{field}"', html)
+        self.assertIn("Yadav Farm", html)          # options are populated
 
     # ---- permissions ------------------------------------------------------
 

@@ -47,13 +47,23 @@ def logout(request):
 
 
 def _home_context():
-    """Filter-option lists for the Field Team widget (cheap; harmless to
-    compute even for users without tracking access — the widget itself is
+    """Filter-option lists for the Field Team widget and the widget filter bar
+    (cheap; harmless to compute even for users without access — both are
     permission-gated in the template)."""
+    from broiler.models import Branch, BroilerFarm, Supervisor
+
     return {
         "trk_warehouses": Warehouse.objects.all().order_by("name"),
         "trk_groups": HrGroup.objects.all().order_by("name"),
         "trk_designations": Designation.objects.all().order_by("title"),
+        "dash_branches": Branch.objects.order_by("branch_name"),
+        # BroilerFarm.line is free text, not a foreign key, so the options are
+        # the values actually in use — same source as the Day Record report,
+        # which guarantees every option can match something.
+        "dash_lines": (BroilerFarm.objects.exclude(line="").order_by("line")
+                       .values_list("line", flat=True).distinct()),
+        "dash_supervisors": Supervisor.objects.order_by("name"),
+        "dash_farms": BroilerFarm.objects.order_by("farm_name"),
     }
 
 
@@ -78,9 +88,10 @@ def dashboard_widgets_api(request):
     walk every supplier and customer, so the shell renders immediately and the
     numbers arrive here rather than blocking the first paint.
     """
-    from .services.dashboard_widgets import dashboard_widgets
+    from .services.dashboard_widgets import dashboard_widgets, parse_filters
 
-    return JsonResponse({"widgets": dashboard_widgets(request.user)})
+    filters = parse_filters(request.GET)
+    return JsonResponse({"widgets": dashboard_widgets(request.user, filters)})
 
 
 def dashboard(request):

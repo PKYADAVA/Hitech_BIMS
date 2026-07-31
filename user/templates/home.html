@@ -64,6 +64,12 @@
   .home-cal-grid .home-cal-day.is-weekend:not(.is-today) { opacity:.55; }
 
   /* ---- Widgets ---------------------------------------------------------- */
+  .dw-filter { background:#fff; border:1px solid #e7edf5; border-radius:14px;
+               padding:13px 16px; margin-bottom:14px; }
+  .dw-filter .form-label { font-size:.72rem; font-weight:700; color:#48566d;
+                           margin-bottom:3px; }
+  .dw-filter.is-busy { opacity:.6; pointer-events:none; }
+  .dw-ignored { display:block; font-size:.71rem; color:#b45309; margin-top:9px; }
   .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
              border:1px solid #e7edf5; border-radius:16px; padding:17px 18px; }
   .dw-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
@@ -229,6 +235,52 @@
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'item_category' %}" class="dash-module"><div class="dash-module-icon dash-icon-red"><i class="fas fa-boxes-stacked"></i></div><div><span class="dash-module-name">Inventory</span><span class="dash-module-action">Items &amp; warehouses</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
       <div class="col-6 col-md-4 col-xl"><a href="{% url 'employee_list' %}" class="dash-module"><div class="dash-module-icon dash-icon-cyan"><i class="fas fa-users"></i></div><div><span class="dash-module-name">HR</span><span class="dash-module-action">People &amp; payroll</span></div><i class="fa-solid fa-arrow-right dash-module-arrow"></i></a></div>
     </div>
+    <!-- Widget filter: submits to the widgets API, not a page reload -->
+    <div class="dw-filter" id="dash-filter">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+          <label class="form-label" for="dwf-date">Date</label>
+          <input type="date" id="dwf-date" name="date" class="form-control form-control-sm">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label" for="dwf-branch">Branch</label>
+          <select id="dwf-branch" name="branch" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for b in dash_branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label" for="dwf-line">Line</label>
+          <select id="dwf-line" name="line" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for l in dash_lines %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label" for="dwf-supervisor">Supervisor</label>
+          <select id="dwf-supervisor" name="supervisor" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for s in dash_supervisors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label" for="dwf-farm">Farm</label>
+          <select id="dwf-farm" name="farm" class="form-select form-select-sm">
+            <option value="">-All-</option>
+            {% for f in dash_farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-2">
+          <button class="btn btn-success btn-sm flex-grow-1" type="button" id="dwf-submit">
+            <i class="fas fa-search me-1"></i>Submit
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" type="button" id="dwf-reset" title="Reset">
+            <i class="fas fa-rotate-left"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
     <div class="row g-3 mb-4" id="dash-widgets"></div>
 
@@ -464,6 +516,10 @@
               + '</div>';
       }
       if (w.note) body += '<div class="dw-note">' + esc(w.note) + '</div>';
+      // Say so when a filter could not be applied — a figure that quietly
+      // ignored the filter bar is a wrong figure.
+      if (w.ignored) body += '<span class="dw-ignored"><i class="fa-solid fa-circle-info"></i> '
+                           + esc(w.ignored) + '</span>';
 
       return '<div class="col-12 col-md-6 col-xl-3">'
            + '<div class="dw-card' + (w.error ? ' is-error' : '') + '">'
@@ -475,18 +531,83 @@
            + '</div>' + body + '</div></div>';
     }
 
-    grid.innerHTML = new Array(4).join('|').split('|')
-      .map(function () { return '<div class="col-12 col-md-6 col-xl-3"><div class="dw-skel"></div></div>'; })
-      .join('');
+    var bar = document.getElementById('dash-filter');
+    var fields = ['date', 'branch', 'line', 'supervisor', 'farm'];
+    var token = 0;
 
-    fetch('{% url "dashboard_widgets_api" %}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-      .then(function (data) {
-        // No widgets is a legitimate answer: a user may have access to none of
-        // the four reports these are drawn from.
-        grid.innerHTML = (data.widgets || []).map(card).join('');
-      })
-      .catch(function () { grid.innerHTML = ''; });
+    function control(name) { return document.getElementById('dwf-' + name); }
+
+    function query() {
+      var params = new URLSearchParams();
+      fields.forEach(function (name) {
+        var el = control(name);
+        if (el && el.value) params.set(name, el.value);
+      });
+      return params;
+    }
+
+    function skeletons() {
+      grid.innerHTML = new Array(5).join('|').split('|')
+        .map(function () {
+          return '<div class="col-12 col-md-6 col-xl-3"><div class="dw-skel"></div></div>';
+        }).join('');
+    }
+
+    function load(pushUrl) {
+      var params = query();
+      var mine = ++token;
+      if (bar) bar.classList.add('is-busy');
+      skeletons();
+      if (pushUrl && window.history && history.replaceState) {
+        // Keep the filter in the URL so a filtered dashboard survives a reload
+        // and can be shared.
+        history.replaceState(null, '',
+          location.pathname + (params.toString() ? '?' + params : ''));
+      }
+      fetch('{% url "dashboard_widgets_api" %}?' + params,
+            { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (data) {
+          if (mine !== token) return;
+          // No widgets is a legitimate answer: a user may have access to none
+          // of the four reports these are drawn from.
+          grid.innerHTML = (data.widgets || []).map(card).join('');
+        })
+        .catch(function () { if (mine === token) grid.innerHTML = ''; })
+        .then(function () { if (bar) bar.classList.remove('is-busy'); });
+    }
+
+    // Restore whatever the URL carries, so a reload keeps the filter.
+    var initial = new URLSearchParams(location.search);
+    fields.forEach(function (name) {
+      var el = control(name);
+      if (el && initial.get(name)) el.value = initial.get(name);
+    });
+
+    var submit = document.getElementById('dwf-submit');
+    if (submit) submit.addEventListener('click', function () { load(true); });
+
+    var reset = document.getElementById('dwf-reset');
+    if (reset) reset.addEventListener('click', function () {
+      fields.forEach(function (name) {
+        var el = control(name);
+        if (!el) return;
+        el.value = '';
+        // Select2 mirrors these selects; tell it the value changed.
+        if (window.jQuery && jQuery(el).hasClass('select2-hidden-accessible')) {
+          jQuery(el).trigger('change.select2');
+        }
+      });
+      load(true);
+    });
+
+    if (bar) {
+      bar.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); load(true); }
+      });
+    }
+
+    load(false);
   })();
 </script>
 
