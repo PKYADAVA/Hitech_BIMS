@@ -131,7 +131,7 @@
           </button>
           <a class="btn btn-outline-secondary btn-sm" href="{% url 'dashboard_access' %}">Cancel</a>
           <button type="button" class="btn btn-outline-secondary btn-sm ms-auto"
-                  onclick="dashboardAccessPreview({{ selected_group.id }})">
+                  id="da-preview-btn">
             <i class="fas fa-eye me-1"></i>Preview
           </button>
         </div>
@@ -202,6 +202,24 @@
     });
 
     syncAll();
+
+    // Preview the switches as they stand, not as they were last saved —
+    // otherwise the button shows the database while you are mid-edit.
+    var previewBtn = document.getElementById('da-preview-btn');
+    if (previewBtn) {
+      previewBtn.addEventListener('click', function () {
+        var live = rows()
+          .filter(function (input) { return input.checked; })
+          .map(function (input) {
+            var tr = input.closest('tr');
+            return tr.dataset.key + ':' + (tr.querySelector('.da-pos').value || 0);
+          })
+          .join(',');
+        dashboardAccessPreview({{ selected_group.id }}, live);
+        var note = document.getElementById('da-preview-live');
+        if (note) note.textContent = ' Showing your unsaved changes.';
+      });
+    }
   })();
 </script>
 {% endblock %}

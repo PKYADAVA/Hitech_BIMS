@@ -275,6 +275,10 @@ class DashboardAccessPreviewTests(TestCase):
         return {p["key"]: p for p in response.json()["panels"]}
 
     def test_a_panel_the_group_cannot_reach_is_marked_not_permitted(self):
+        # One row elsewhere, so the group counts as configured — with no rows
+        # at all it would be unconfigured, which means unrestricted.
+        GroupTabPermission.objects.create(group=self.group, tab_code="items",
+                                          can_view=True)
         panels = self.preview()
         self.assertFalse(panels["live_flock"]["permitted"])
         self.assertFalse(panels["live_flock"]["shown"])
@@ -318,7 +322,9 @@ class DashboardAccessPreviewTests(TestCase):
             with self.subTest(url=url):
                 html = self.client.get(url).content.decode()
                 self.assertIn('id="da-preview"', html)
-                self.assertIn(f"dashboardAccessPreview({self.group.id})", html)
+                # The list passes the group alone (saved state); the form adds
+                # its live switches.
+                self.assertIn(f"dashboardAccessPreview({self.group.id}", html)
 
 
 class DashboardPreviewRenderTests(TestCase):
@@ -378,3 +384,176 @@ class DashboardPreviewRenderTests(TestCase):
                                    {"preview_group": self.group.id})
         # falls back to their own (empty) dashboard rather than the group's
         self.assertEqual(response.json()["widgets"], [])
+
+
+class UnsavedPreviewTests(TestCase):
+    """The editor's Preview shows the form, not the database.
+
+    Previewing the saved state while mid-edit is worse than no preview: it
+    quietly answers a different question from the one being asked.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("up_admin", "u@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Unsaved Group")
+        for tab in ("live_flock_summary_report", "negative_stock_report"):
+            GroupTabPermission.objects.create(group=self.group, tab_code=tab,
+                                              can_view=True)
+        # Saved: only Live Flock.
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="live_flock",
+                                            enabled=True, position=0)
+        GroupDashboardWidget.objects.create(group=self.group, widget_key="stock_alerts",
+                                            enabled=False, position=1)
+        self.client.force_login(self.admin)
+
+    def widgets(self, **params):
+        response = self.client.get(reverse("dashboard_widgets_api"),
+                                   {"preview_group": self.group.id, **params})
+        return [w["key"] for w in response.json()["widgets"]]
+
+    def test_without_an_override_the_saved_state_is_used(self):
+        self.assertEqual(self.widgets(), ["live_flock"])
+
+    def test_an_override_wins_over_the_saved_rows(self):
+        self.assertEqual(self.widgets(panels="stock_alerts:0"), ["stock_alerts"])
+
+    def test_the_override_carries_the_order(self):
+        self.assertEqual(self.widgets(panels="stock_alerts:0,live_flock:1"),
+                         ["stock_alerts", "live_flock"])
+
+    def test_an_empty_override_means_nothing_enabled(self):
+        """Not 'unconfigured' — the editor with every switch off must preview
+        as an empty dashboard, not as a full one."""
+        self.assertEqual(self.widgets(panels=""), [])
+
+    def test_the_override_still_cannot_beat_the_tab_matrix(self):
+        self.assertEqual(self.widgets(panels="balances:0"), [])
+
+    def test_rubbish_in_the_override_is_ignored(self):
+        self.assertEqual(self.widgets(panels="not_a_widget:0,live_flock:x"),
+                         ["live_flock"])
+
+    def test_the_override_needs_the_dashboard_access_right(self):
+        User = get_user_model()
+        outsider = User.objects.create_user("up_out", "x@x.com", "Str0ngPass!")
+        plain = Group.objects.create(name="Plain Group")
+        outsider.groups.add(plain)
+        GroupTabPermission.objects.create(group=plain, tab_code="items", can_view=True)
+        self.client.force_login(outsider)
+        self.assertEqual(self.widgets(panels="stock_alerts:0"), [])
+
+    def test_the_form_button_sends_its_live_state(self):
+        html = self.client.get(reverse("dashboard_access_form"),
+                               {"group": self.group.id}).content.decode()
+        self.assertIn('id="da-preview-btn"', html)
+        self.assertIn("dashboardAccessPreview({}, live)".format(self.group.id), html)
+
+    def test_the_list_button_sends_no_override(self):
+        """From the list there is nothing unsaved, so it must show the saved
+        state — no panels argument at all."""
+        html = self.client.get(reverse("dashboard_access")).content.decode()
+        self.assertIn(f"dashboardAccessPreview({self.group.id})", html)
+
+    def test_the_preview_page_passes_the_override_to_the_widget_fetch(self):
+        """The four data cards are fetched by JS, so the override has to reach
+        that request too. Without this the cards showed the saved state while
+        the server-rendered panels showed the live one."""
+        html = self.client.get(reverse("dashboard"),
+                               {"preview": "1", "preview_group": self.group.id,
+                                "panels": "stock_alerts:0"}).content.decode()
+        self.assertIn("params.set('panels', 'stock_alerts:0')", html)
+
+    def test_no_panels_param_when_there_is_no_override(self):
+        html = self.client.get(reverse("dashboard"),
+                               {"preview": "1",
+                                "preview_group": self.group.id}).content.decode()
+        self.assertNotIn("params.set('panels'", html)
+
+    def test_every_toggled_on_widget_reaches_the_preview(self):
+        keys = self.widgets(panels="stock_alerts:0,live_flock:1")
+        self.assertEqual(keys, ["stock_alerts", "live_flock"])
+
+
+class GroupTabResolutionTests(TestCase):
+    """group_viewable_tabs must reproduce every rule allowed_view_tabs uses.
+
+    It originally read only the permission rows, so the preview withheld panels
+    the group really would get: six switched on, three shown.
+    """
+
+    def setUp(self):
+        cache.clear()
+        from django.contrib.auth.models import User as AuthUser
+
+        self.admin = AuthUser.objects.create_superuser("gt_admin", "g@x.com",
+                                                       "Str0ngPass!")
+        self.group = Group.objects.create(name="Resolution Group")
+        for key, *_ in all_panels():
+            GroupDashboardWidget.objects.create(group=self.group, widget_key=key,
+                                                enabled=True, position=0)
+
+    def tabs(self):
+        from user.services.dashboard_widgets import group_viewable_tabs
+        return group_viewable_tabs(self.group)
+
+    def shown(self):
+        from user.services.dashboard_widgets import panels_for_group
+        return [p["key"] for p in panels_for_group(self.group) if p["shown"]]
+
+    def test_an_unconfigured_group_counts_as_unrestricted(self):
+        """user_can treats a user with no matrix rows as unrestricted, so the
+        preview has to as well or it shows a stricter dashboard than reality."""
+        from user.access import ALL_TAB_CODES
+
+        self.assertEqual(self.tabs(), set(ALL_TAB_CODES))
+        self.assertEqual(self.shown(), ALL_PANEL_KEYS)
+
+    def test_an_admin_access_type_bypasses_the_matrix(self):
+        from user.access import ALL_TAB_CODES
+        from user.models import GroupAccessProfile
+
+        GroupTabPermission.objects.create(group=self.group, tab_code="items",
+                                          can_view=True)
+        self.assertEqual(self.tabs(), {"items"})       # sub-admin: just that one
+
+        GroupAccessProfile.objects.create(group=self.group, access_type="admin")
+        self.assertEqual(self.tabs(), set(ALL_TAB_CODES))
+
+    def test_a_configured_group_is_held_to_its_rows(self):
+        GroupTabPermission.objects.create(
+            group=self.group, tab_code="live_flock_summary_report", can_view=True)
+        self.assertEqual(self.tabs(), {"live_flock_summary_report"})
+        self.assertEqual(self.shown(), ["live_flock"])
+
+    def test_the_preview_names_what_it_withholds(self):
+        from user.services.dashboard_widgets import withheld_panels
+
+        GroupTabPermission.objects.create(
+            group=self.group, tab_code="live_flock_summary_report", can_view=True)
+        withheld = withheld_panels(self.group)
+        self.assertNotIn("Live Flock", withheld)
+        self.assertIn("Stock Alerts", withheld)
+
+        self.client.force_login(self.admin)
+        html = self.client.get(reverse("dashboard"),
+                               {"preview": "1",
+                                "preview_group": self.group.id}).content.decode()
+        self.assertIn("Switched on but withheld", html)
+        self.assertIn("Stock Alerts", html)
+
+    def test_all_six_panels_render_when_all_are_on(self):
+        """The reported case, end to end."""
+        self.client.force_login(self.admin)
+        live = ",".join(f"{k}:{i}" for i, (k, *_) in enumerate(all_panels()))
+        html = self.client.get(reverse("dashboard"),
+                               {"preview": "1", "preview_group": self.group.id,
+                                "panels": live}).content.decode()
+        self.assertIn('class="qa-card"', html)          # Quick Actions
+        self.assertIn('id="home-trk-map"', html)        # Field Team
+        self.assertNotIn("Switched on but withheld", html)
+
+        cards = self.client.get(reverse("dashboard_widgets_api"),
+                                {"preview_group": self.group.id, "panels": live})
+        self.assertEqual([w["key"] for w in cards.json()["widgets"]], ALL_KEYS)

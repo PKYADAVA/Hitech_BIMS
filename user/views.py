@@ -63,15 +63,29 @@ def _preview_group(request):
     return Group.objects.filter(id=raw).first()
 
 
+def _preview_prefs(request):
+    """Unsaved switches from the editor, when it is previewing its own form.
+
+    Present-but-empty is meaningful ("nothing enabled"), so absence is what
+    falls back to the saved rows — not emptiness.
+    """
+    from .services.dashboard_widgets import parse_panel_override
+
+    if "panels" not in request.GET or not _preview_group(request):
+        return None
+    return parse_panel_override(request.GET.get("panels"))
+
+
 def _home_context(request):
     """Filter-option lists for the Field Team widget and the widget filter bar
     (cheap; harmless to compute even for users without access — both are
     permission-gated in the template)."""
     from broiler.models import Branch, BroilerFarm, Supervisor
-    from .services.dashboard_widgets import dashboard_panels
+    from .services.dashboard_widgets import dashboard_panels, withheld_panels
 
     preview = _preview_group(request)
-    panels = dashboard_panels(getattr(request, "user", None), as_group=preview)
+    panels = dashboard_panels(getattr(request, "user", None), as_group=preview,
+                              prefs_override=_preview_prefs(request))
     # The widget grid sits wherever its earliest card sits, so ordering one
     # card to the top brings the row with it.
     card_positions = [v for k, v in panels.items()
@@ -80,6 +94,13 @@ def _home_context(request):
     return {
         "dash_panels": panels,
         "preview_group": preview,
+        "preview_withheld": (withheld_panels(preview, _preview_prefs(request))
+                             if preview else []),
+        # The widget cards are fetched by JS, so the override has to travel to
+        # that request too or the cards show the saved state while the
+        # server-rendered panels show the live one.
+        "preview_panels": (request.GET.get("panels")
+                           if _preview_prefs(request) is not None else None),
         # Chrome off inside the preview iframe: it is a picture of the page, not
         # a place to navigate from.
         "preview_mode": bool(preview) and request.GET.get("preview") == "1",
@@ -236,7 +257,8 @@ def dashboard_widgets_api(request):
 
     filters = parse_filters(request.GET)
     return JsonResponse({"widgets": dashboard_widgets(
-        request.user, filters, as_group=_preview_group(request))})
+        request.user, filters, as_group=_preview_group(request),
+        prefs_override=_preview_prefs(request))})
 
 
 # X_FRAME_OPTIONS is DENY site-wide. The Dashboard Access preview frames this

@@ -212,6 +212,10 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = env_bool("SESSION_EXPIRE_AT_BROWSER_CLOSE", Tr
 SESSION_SAVE_EVERY_REQUEST = True
 CSRF_COOKIE_HTTPONLY = True
 
+# The Web-Access matrix posts one checkbox per tab x action (currently ~1100
+# fields with everything ticked), which blows past Django's 1000-field default.
+DATA_UPLOAD_MAX_NUMBER_FIELDS = int(os.getenv("DATA_UPLOAD_MAX_NUMBER_FIELDS", "5000"))
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

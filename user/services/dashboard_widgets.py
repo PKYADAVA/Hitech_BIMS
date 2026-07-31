@@ -388,7 +388,7 @@ def all_panels():
     yield from EXTRA_PANELS
 
 
-def dashboard_panels(user, as_group=None):
+def dashboard_panels(user, as_group=None, prefs_override=None):
     """``{key: position}`` for the dashboard blocks this user may see.
 
     Both gates applied: the tab matrix decides what is possible, Dashboard
@@ -399,6 +399,8 @@ def dashboard_panels(user, as_group=None):
         viewable, prefs = group_viewable_tabs(as_group), group_preferences(as_group)
     else:
         viewable, prefs = allowed_view_tabs(user), widget_preferences(user)
+    if prefs_override is not None:
+        prefs = prefs_override
     out = {}
     for index, (key, _title, tabs, _icon, _colour) in enumerate(all_panels()):
         if not any(t in viewable for t in tabs):
@@ -409,13 +411,63 @@ def dashboard_panels(user, as_group=None):
     return out
 
 
+def parse_panel_override(raw):
+    """``"live_flock:0,stock_alerts:1"`` -> ``{"live_flock": 0, ...}``.
+
+    Lets the editor preview the switches as they stand rather than as they were
+    last saved. An empty string is a real answer — "nothing enabled" — so the
+    caller distinguishes absent from empty, not this function.
+
+    Unknown keys are dropped: this arrives from a querystring, and it can only
+    ever hide panels anyway, since the tab gate is applied separately.
+    """
+    known = {key for key, *_ in all_panels()}
+    prefs = {}
+    for chunk in (raw or "").split(","):
+        key, _, position = chunk.partition(":")
+        key = key.strip()
+        if key in known:
+            prefs[key] = int(position) if position.strip().isdigit() else 0
+    return prefs
+
+
 def group_viewable_tabs(group):
-    """Tabs a group may view — the group-level twin of allowed_view_tabs."""
+    """Tabs a group may view — the group-level twin of allowed_view_tabs.
+
+    It has to reproduce *all* of that function's rules, not just the permission
+    rows, or the preview quietly withholds panels the group really would get:
+
+    * Access Type = Admin bypasses the matrix entirely, and
+    * a group with no rows at all is treated as unconfigured, which ``user_can``
+      reads as unrestricted rather than as forbidden.
+    """
+    from user.access import ALL_TAB_CODES
     from user.models import GroupTabPermission
 
-    return set(GroupTabPermission.objects.filter(group=group)
+    profile = getattr(group, "access_profile", None)
+    if profile is not None and (profile.access_type == "admin"):
+        return set(ALL_TAB_CODES)
+
+    tabs = set(GroupTabPermission.objects.filter(group=group)
                .filter(_group_any_action_q())
                .values_list("tab_code", flat=True))
+    return tabs or set(ALL_TAB_CODES)
+
+
+def withheld_panels(group, prefs_override=None):
+    """Titles of panels switched on but withheld by the tab matrix.
+
+    Without this the preview just looks broken: six switched on, three shown,
+    no explanation.
+    """
+    viewable = group_viewable_tabs(group)
+    prefs = group_preferences(group) if prefs_override is None else prefs_override
+    out = []
+    for key, title, tabs, _icon, _colour in all_panels():
+        wanted = key in prefs if prefs is not None else True
+        if wanted and not any(t in viewable for t in tabs):
+            out.append(title)
+    return out
 
 
 def group_preferences(group):
@@ -436,12 +488,11 @@ def panels_for_group(group):
     halves of the decision: whether the group's tabs allow it at all, and
     whether Dashboard Access has it switched on.
     """
-    from user.models import GroupDashboardWidget, GroupTabPermission
+    from user.models import GroupDashboardWidget
 
-    allowed = set(
-        GroupTabPermission.objects.filter(group=group)
-        .filter(_group_any_action_q())
-        .values_list("tab_code", flat=True))
+    # Shared with the preview so the two can never disagree — this used to run
+    # its own query and missed the Admin bypass and the unconfigured rule.
+    allowed = group_viewable_tabs(group)
     rows = {r.widget_key: r for r in
             GroupDashboardWidget.objects.filter(group=group)}
     configured = bool(rows)
@@ -532,7 +583,8 @@ def _ignored_note(filters, used):
     return f"{', '.join(ignored[:-1])} and {ignored[-1]} do not apply here."
 
 
-def dashboard_widgets(user, filters=None, use_cache=True, as_group=None):
+def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
+                      prefs_override=None):
     """Widget payloads for everything ``user`` is allowed to see.
 
     One widget failing must not take the dashboard down with it, so a builder
@@ -549,9 +601,13 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None):
         # A second, narrower switch on top of the tab gate: it can hide a widget
         # the matrix allows, never reveal one it withholds.
         prefs = widget_preferences(user)
+    if prefs_override is not None:
+        # The editor previewing its own unsaved switches.
+        prefs = prefs_override
     # A filtered view is a deliberate question with an unbounded key space;
     # only the default dashboard is worth caching.
-    use_cache = use_cache and not _active(filters) and as_group is None
+    use_cache = (use_cache and not _active(filters)
+                 and as_group is None and prefs_override is None)
 
     out = []
     for key, title, tabs, url_name, icon, colour, build in WIDGETS:

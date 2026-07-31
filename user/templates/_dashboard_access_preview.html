@@ -22,7 +22,7 @@ Open it with: dashboardAccessPreview(groupId)
       <div class="modal-footer">
         <span class="me-auto text-muted" style="font-size:.75rem;">
           Rendered as the group, not as you — the real dashboard page with that
-          group's tabs and widget settings.
+          group's tabs and widget settings.<span id="da-preview-live"></span>
         </span>
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
@@ -37,12 +37,19 @@ Open it with: dashboardAccessPreview(groupId)
 </style>
 
 <script>
-  function dashboardAccessPreview(groupId) {
+  // `panels` is optional: the list page omits it and gets the saved state, the
+  // editor passes its live switches so the preview matches the form rather than
+  // the database. An empty string is meaningful — nothing enabled.
+  function dashboardAccessPreview(groupId, panels) {
     var modalEl = document.getElementById('da-preview');
     var frame = document.getElementById('da-preview-frame');
+    var url = '/dashboard/?preview=1&preview_group=' + encodeURIComponent(groupId);
+    if (panels !== undefined && panels !== null) {
+      url += '&panels=' + encodeURIComponent(panels);
+    }
     // Loaded on open rather than up front, so listing twenty groups does not
     // mean twenty hidden dashboards.
-    frame.src = '/dashboard/?preview=1&preview_group=' + encodeURIComponent(groupId);
+    frame.src = url;
     new bootstrap.Modal(modalEl).show();
   }
 

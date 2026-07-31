@@ -341,6 +341,14 @@
       <i class="fas fa-eye me-1"></i>Preview of what
       <strong>{{ preview_group.name }}</strong> sees. Controls are inert here.
     </div>
+    {% if preview_withheld %}
+    <div class="alert alert-warning py-2 px-3 mb-3" style="font-size:.8rem;">
+      <i class="fas fa-lock me-1"></i>Switched on but withheld, because this
+      group cannot open the report behind them:
+      <strong>{{ preview_withheld|join:", " }}</strong>.
+      Grant the tab in User Access Groups for these to appear.
+    </div>
+    {% endif %}
     {% endif %}
 
     <div class="dash-panels">
@@ -663,6 +671,7 @@
           location.pathname + (params.toString() ? '?' + params : ''));
       }
       {% if preview_group %}params.set('preview_group', '{{ preview_group.id }}');{% endif %}
+      {% if preview_panels is not None %}params.set('panels', '{{ preview_panels|escapejs }}');{% endif %}
       fetch('{% url "dashboard_widgets_api" %}?' + params,
             { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
