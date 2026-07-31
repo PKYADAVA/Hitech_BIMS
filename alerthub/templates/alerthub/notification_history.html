@@ -1,0 +1,204 @@
+{% extends 'base.html' %}
+{% comment %}
+Notification History — the same data as the centre, in a dense table.
+
+The centre is for reading today's alerts; this is for answering "what did we
+send, to whom, and did they read it" across a date range. Same API, same
+scoping, different shape — so the two can never disagree about what exists.
+{% endcomment %}
+
+{% block title %}Notification History — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap" id="ahHistory" data-csrf="{{ csrf_token }}">
+
+  <div class="ah-head">
+    <div>
+      <h1 class="ah-title"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Notification History</h1>
+      <p class="ah-sub">Every alert raised in your scope, with its delivery and read state.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'alerthub:notification_center' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fa-solid fa-bell me-1"></i>Notification Centre
+      </a>
+      <button class="btn btn-outline-secondary btn-sm" id="ahExport">
+        <i class="fa-solid fa-file-csv me-1"></i>Export CSV
+      </button>
+    </div>
+  </div>
+
+  <div class="ah-filters">
+    <input type="search" id="hSearch" placeholder="Search title, message or voucher…" />
+    <select id="hModule">
+      <option value="">All modules</option>
+      {% for value, label in modules %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="hPriority">
+      <option value="">All priorities</option>
+      {% for value, label in priorities %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="hBranch">
+      <option value="">All branches</option>
+      {% for branch in branches %}<option value="{{ branch.id }}">{{ branch }}</option>{% endfor %}
+    </select>
+    <select id="hFarm">
+      <option value="">All farms</option>
+      {% for farm in farms %}<option value="{{ farm.id }}">{{ farm.farm_name }}</option>{% endfor %}
+    </select>
+    <select id="hRead">
+      <option value="">Read &amp; unread</option>
+      <option value="false">Unread only</option>
+      <option value="true">Read only</option>
+    </select>
+    <input type="date" id="hFrom" title="From date" />
+    <input type="date" id="hTo" title="To date" />
+    <button class="btn btn-sm btn-outline-secondary" id="hReset">Reset</button>
+  </div>
+
+  <div class="ah-card">
+    <div class="ah-scroll">
+      <table class="ah-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Date</th><th>Module</th><th>Priority</th>
+            <th>Title</th><th>Message</th><th>Branch</th><th>Farm</th>
+            <th>Raised by</th><th>Status</th><th>Read time</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="hBody">
+          <tr><td colspan="12" class="ah-empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ah-foot">
+      <span class="text-muted small" id="hMeta"></span>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" id="hPrev" disabled>Previous</button>
+        <button class="btn btn-sm btn-outline-secondary" id="hNext" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  var body = document.getElementById("hBody");
+  var meta = document.getElementById("hMeta");
+  var page = 1, pages = 1, lastRows = [];
+
+  var controls = {
+    search: document.getElementById("hSearch"),
+    module: document.getElementById("hModule"),
+    priority: document.getElementById("hPriority"),
+    branch: document.getElementById("hBranch"),
+    farm: document.getElementById("hFarm"),
+    is_read: document.getElementById("hRead"),
+    date_from: document.getElementById("hFrom"),
+    date_to: document.getElementById("hTo"),
+  };
+
+  function query(pageSize) {
+    var params = new URLSearchParams({ page: page, page_size: pageSize || 50 });
+    Object.keys(controls).forEach(function (key) {
+      var value = (controls[key].value || "").trim();
+      if (value) params.set(key, value);
+    });
+    return params.toString();
+  }
+
+  function cell(text) { return "<td>" + AlertHub.esc(text || "—") + "</td>"; }
+
+  function rowHTML(n) {
+    return "<tr>" +
+      '<td class="ah-nowrap">#' + n.id + "</td>" +
+      '<td class="ah-nowrap">' + AlertHub.esc(new Date(n.created_at).toLocaleString()) + "</td>" +
+      '<td><span class="ah-chip">' + AlertHub.esc(n.module_label) + "</span></td>" +
+      '<td><span class="ah-pill ' + AlertHub.esc(n.priority) + '">' +
+        AlertHub.esc(n.priority_label) + "</span></td>" +
+      "<td><strong>" + AlertHub.esc(n.title) + "</strong></td>" +
+      '<td style="max-width:22rem">' + AlertHub.esc(n.message) + "</td>" +
+      cell(n.branch_name) +
+      cell(n.farm_name) +
+      cell("System") +
+      "<td>" + (n.is_read
+        ? '<span class="badge bg-success-subtle text-success">Read</span>'
+        : '<span class="badge bg-secondary-subtle text-secondary">Unread</span>') + "</td>" +
+      '<td class="ah-nowrap">' +
+        AlertHub.esc(n.read_at ? new Date(n.read_at).toLocaleString() : "—") + "</td>" +
+      '<td><a class="btn btn-sm btn-outline-primary" href="' +
+        AlertHub.esc(n.detail_url) + '">View</a></td>' +
+      "</tr>";
+  }
+
+  function load() {
+    body.innerHTML = '<tr><td colspan="12" class="ah-empty">Loading…</td></tr>';
+    AlertHub.request(AlertHub.API + "?" + query())
+      .then(function (data) {
+        lastRows = data.results || [];
+        body.innerHTML = lastRows.length
+          ? lastRows.map(rowHTML).join("")
+          : '<tr><td colspan="12" class="ah-empty">' +
+            '<i class="fa-regular fa-folder-open"></i>No notifications match these filters</td></tr>';
+        pages = Math.max(1, Math.ceil((data.count || 0) / 50));
+        meta.textContent = (data.count || 0) + " record(s) · page " + page + " of " + pages;
+        document.getElementById("hPrev").disabled = page <= 1;
+        document.getElementById("hNext").disabled = page >= pages;
+      })
+      .catch(function () {
+        body.innerHTML = '<tr><td colspan="12" class="ah-empty text-danger">' +
+          "Could not load the history</td></tr>";
+      });
+  }
+
+  var timer;
+  function reload() {
+    clearTimeout(timer);
+    timer = setTimeout(function () { page = 1; load(); }, 220);
+  }
+
+  Object.keys(controls).forEach(function (key) {
+    var el = controls[key];
+    el.addEventListener(el.tagName === "SELECT" ? "change" : "input", reload);
+  });
+
+  document.getElementById("hReset").addEventListener("click", function () {
+    Object.keys(controls).forEach(function (k) { controls[k].value = ""; });
+    reload();
+  });
+  document.getElementById("hPrev").addEventListener("click", function () {
+    if (page > 1) { page--; load(); }
+  });
+  document.getElementById("hNext").addEventListener("click", function () {
+    if (page < pages) { page++; load(); }
+  });
+
+  /* Exports the page on screen. Deliberately not the whole result set: pulling
+     every row would be an unbounded request, and the filters are how you
+     narrow it to what you actually want. */
+  document.getElementById("ahExport").addEventListener("click", function () {
+    if (!lastRows.length) return;
+    var head = ["ID", "Date", "Module", "Priority", "Title", "Message",
+                "Branch", "Farm", "Status", "Read time"];
+    var quote = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
+    var lines = [head.map(quote).join(",")];
+    lastRows.forEach(function (n) {
+      lines.push([n.id, n.created_at, n.module_label, n.priority_label, n.title,
+                  n.message, n.branch_name, n.farm_name,
+                  n.is_read ? "Read" : "Unread", n.read_at || ""].map(quote).join(","));
+    });
+    var blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "notification-history.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% comment %}
+One alert in full: the message, what was measured, where it happened, what it
+was about, and who else was told.
+
+Opening this page marks the alert read for the viewer — reading it is the act
+the read flag records, so making them click a second button to say so would
+only ever produce a wrong number.
+{% endcomment %}
+
+{% block title %}{{ n.title }} — Notifications{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap narrow">
+
+  <div class="ah-head">
+    <div>
+      <a href="{% url 'alerthub:notification_center' %}" class="text-muted small text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back to notifications
+      </a>
+      <h1 class="ah-title mt-2">
+        <span class="ah-ic {{ n.priority }}"><i class="{{ n.icon }}"></i></span>
+        {{ n.title }}
+      </h1>
+      <p class="ah-sub">
+        <span class="ah-pill {{ n.priority }}">{{ n.get_priority_display }}</span>
+        <span class="ah-chip ms-1">{{ n.get_module_display }}</span>
+        <span class="ms-2">{{ n.created_at|date:"d M Y, H:i" }}</span>
+      </p>
+    </div>
+    {% if n.action_url %}
+      <a href="{{ n.action_url }}" class="btn btn-primary">
+        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open related record
+      </a>
+    {% endif %}
+  </div>
+
+  <div class="ah-form-card">
+    <h2><i class="fa-solid fa-circle-info text-primary"></i> Message</h2>
+    <p class="mb-0" style="font-size:.95rem;line-height:1.6">{{ n.message|linebreaksbr|default:"—" }}</p>
+
+    {% if n.measured_value is not None %}
+      <hr class="my-3">
+      <div class="ah-measure">
+        {{ n.measured_value|floatformat:"-2" }}
+        {% if n.threshold_value is not None %}
+          <small>measured against a limit of {{ n.threshold_value|floatformat:"-2" }}</small>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if spec and spec.description %}
+      <div class="ah-note info mt-3">
+        <i class="fa-solid fa-lightbulb mt-1"></i>
+        <span>{{ spec.description }}</span>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="ah-form-card">
+    <h2><i class="fa-solid fa-location-dot text-primary"></i> Where &amp; what</h2>
+    <div class="ah-detail-grid">
+      <div>
+        <div class="ah-field-l">Branch</div>
+        <div class="ah-field-v">{{ n.branch|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Farm</div>
+        <div class="ah-field-v">{% if n.farm %}{{ n.farm.farm_name }}{% else %}—{% endif %}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Warehouse / Office</div>
+        <div class="ah-field-v">{% if n.warehouse %}{{ n.warehouse.name }}{% else %}—{% endif %}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Organization / Cost Centre</div>
+        <div class="ah-field-v">{{ n.org_centre|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Related record</div>
+        <div class="ah-field-v">{{ n.object_display|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Voucher / Document no.</div>
+        <div class="ah-field-v">{{ n.voucher_no|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Raised by</div>
+        <div class="ah-field-v">{{ n.created_by|default:"System (scheduled scan)" }}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Raised at</div>
+        <div class="ah-field-v">{{ n.created_at|date:"d M Y, H:i" }}</div>
+      </div>
+      <div>
+        <div class="ah-field-l">Configuration</div>
+        <div class="ah-field-v">
+          {% if n.rule %}{{ n.rule.name }}{% else %}Deleted configuration{% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="ah-field-l">You read this</div>
+        <div class="ah-field-v">
+          {% if recipient.read_at %}{{ recipient.read_at|date:"d M Y, H:i" }}{% else %}Just now{% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if n.metadata %}
+      <hr class="my-3">
+      <div class="ah-field-l mb-2">Additional detail</div>
+      <div class="ah-scroll">
+        <table class="ah-table">
+          <tbody>
+            {% for key, value in n.metadata.items %}
+              <tr>
+                <td class="ah-nowrap text-muted" style="width:12rem">{{ key|title }}</td>
+                <td>{{ value }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="ah-form-card">
+    <h2><i class="fa-solid fa-users text-primary"></i> Sent to</h2>
+    <p class="ah-hint">Who received this alert, and whether they have read it.</p>
+    <div class="ah-scroll">
+      <table class="ah-table">
+        <thead>
+          <tr><th>User</th><th>Status</th><th>Read at</th><th>Channels</th></tr>
+        </thead>
+        <tbody>
+          {% for r in recipients %}
+            <tr>
+              <td>{{ r.user.get_full_name|default:r.user.username }}</td>
+              <td>
+                {% if r.is_read %}
+                  <span class="badge bg-success-subtle text-success">Read</span>
+                {% else %}
+                  <span class="badge bg-secondary-subtle text-secondary">Unread</span>
+                {% endif %}
+              </td>
+              <td class="ah-nowrap">{{ r.read_at|date:"d M Y, H:i"|default:"—" }}</td>
+              <td>{{ r.delivered_channels|join:", "|default:"in_app" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">No recipients recorded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

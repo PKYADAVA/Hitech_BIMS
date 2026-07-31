@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% comment %}
+Per-user notification preferences.
+
+These can only ever narrow what a rule already asked for — switching email off
+stops your email, and no preference here can add a channel an administrator did
+not enable on the rule.
+{% endcomment %}
+
+{% block title %}Notification Preferences — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap narrow">
+
+  <div class="ah-head">
+    <div>
+      <a href="{% url 'alerthub:notification_center' %}" class="text-muted small text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back to notifications
+      </a>
+      <h1 class="ah-title mt-2"><i class="fa-solid fa-gear text-primary"></i> Notification Preferences</h1>
+      <p class="ah-sub">How and when you want to hear from the system.</p>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="ah-form-card">
+      <h2><i class="fa-solid fa-paper-plane text-primary"></i> Delivery channels</h2>
+      <p class="ah-hint">
+        In-App is delivered today. The other three record your choice now so
+        nobody has to ask everyone again on the day they are switched on.
+      </p>
+
+      <div class="row g-2">
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.receive_in_app }}
+            <span><i class="fa-solid fa-bell me-1 text-primary"></i>Receive In-App</span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.receive_email }}
+            <span><i class="fa-solid fa-envelope me-1 text-muted"></i>Receive Email
+              <small class="text-muted">(coming soon)</small></span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.receive_sms }}
+            <span><i class="fa-solid fa-comment-sms me-1 text-muted"></i>Receive SMS
+              <small class="text-muted">(coming soon)</small></span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.receive_whatsapp }}
+            <span><i class="fa-brands fa-whatsapp me-1 text-muted"></i>Receive WhatsApp
+              <small class="text-muted">(coming soon)</small></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="ah-note info mt-3">
+        <i class="fa-solid fa-circle-info mt-1"></i>
+        <span>
+          Turning In-App off stops alerts reaching your bell entirely. If you only
+          want less noise, raise the minimum priority below instead.
+        </span>
+      </div>
+    </div>
+
+    <div class="ah-form-card">
+      <h2><i class="fa-solid fa-desktop text-primary"></i> How they arrive</h2>
+      <p class="ah-hint">Behaviour in this browser when a new alert appears.</p>
+
+      <div class="row g-2">
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.sound_notification }}
+            <span><i class="fa-solid fa-volume-high me-1 text-muted"></i>Sound notification</span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.desktop_notification }}
+            <span><i class="fa-solid fa-window-maximize me-1 text-muted"></i>Desktop notification</span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.auto_mark_read }}
+            <span><i class="fa-solid fa-check-double me-1 text-muted"></i>Auto mark as read</span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label small fw-semibold">Minimum priority</label>
+          {{ form.min_priority }}
+          <div class="form-text">Anything less urgent than this will not reach you. Low shows everything.</div>
+        </div>
+      </div>
+
+      <div class="ah-note info mt-3">
+        <i class="fa-solid fa-shield-halved mt-1"></i>
+        <span>
+          Desktop notifications need your browser's permission; it will ask the
+          first time after you enable this.
+        </span>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-4">
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-floppy-disk me-1"></i>Save preferences
+      </button>
+      <a href="{% url 'alerthub:notification_center' %}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

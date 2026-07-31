@@ -1,0 +1,45 @@
+{% load static %}
+{% comment %}
+Navbar notification bell — business alerts.
+
+Markup only; the behaviour lives in static/js/alerthub.js and the styling in
+static/css/alerthub.css, both loaded by base.html. This replaced the audit
+feed's bell (templates/_alerts_bell.html): the bell now carries what the
+business needs looked at, and the CRUD audit trail keeps its own page.
+
+The user's sound/desktop preferences are rendered into data attributes so the
+client does not need a second request before it can behave correctly on the
+very first alert of the session.
+{% endcomment %}
+<div class="ms-xl-2 mt-3 mt-xl-0 me-xl-1" id="ahBellWrap"
+     data-csrf="{{ csrf_token }}"
+     data-sound="{% if alert_prefs.sound_notification %}1{% else %}0{% endif %}"
+     data-desktop="{% if alert_prefs.desktop_notification %}1{% else %}0{% endif %}">
+  <div class="dropdown">
+    <button class="ah-bell-btn btn position-relative" type="button"
+            id="ahBellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+            data-bs-display="static" aria-expanded="false" title="Alerts &amp; Notifications">
+      <i class="fa-solid fa-bell"></i>
+      <span id="ahBellBadge" class="ah-bell-badge badge rounded-pill bg-danger d-none">0</span>
+    </button>
+
+    <div class="dropdown-menu dropdown-menu-end ah-bell-menu" aria-labelledby="ahBellBtn">
+      <div class="ah-bell-head">
+        <span class="fw-semibold"><i class="fa-solid fa-bell me-2"></i>Alerts &amp; Notifications</span>
+        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
+                style="font-size:.78rem" id="ahMarkAll">Mark all read</button>
+      </div>
+
+      <div id="ahBellList" class="ah-bell-list">
+        <div class="ah-empty">Loading…</div>
+      </div>
+
+      <div class="ah-bell-foot">
+        <a href="{% url 'alerthub:notification_center' %}">View all notifications</a>
+        <a href="{% url 'alerthub:preferences' %}" title="Notification preferences">
+          <i class="fa-solid fa-gear"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

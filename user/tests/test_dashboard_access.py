@@ -522,10 +522,12 @@ class GroupTabResolutionTests(TestCase):
         self.assertEqual(self.tabs(), set(ALL_TAB_CODES))
 
     def test_a_configured_group_is_held_to_its_rows(self):
+        """Alerts rides along: it declares no tabs, so the matrix cannot
+        withhold it. Every other panel is held to the group's single row."""
         GroupTabPermission.objects.create(
             group=self.group, tab_code="live_flock_summary_report", can_view=True)
         self.assertEqual(self.tabs(), {"live_flock_summary_report"})
-        self.assertEqual(self.shown(), ["live_flock"])
+        self.assertEqual(self.shown(), ["alerts_widget", "live_flock"])
 
     def test_the_preview_names_what_it_withholds(self):
         from user.services.dashboard_widgets import withheld_panels
