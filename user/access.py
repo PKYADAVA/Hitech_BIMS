@@ -649,6 +649,16 @@ _DERIVED_SUFFIXES = {
     "lookup": "view",
     "source": "view",
     "data": "view",
+    # The CRUD verbs too. _ACTION_BASE_TO_TAB already covers these for the
+    # bases someone listed by hand; this catches the rest, which is most of
+    # them, and keeps catching endpoints added later.
+    "create": "add",
+    "add": "add",
+    "new": "add",
+    "update": "edit",
+    "edit": "edit",
+    "delete": "delete",
+    "remove": "delete",
 }
 
 

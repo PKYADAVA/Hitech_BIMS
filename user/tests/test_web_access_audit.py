@@ -503,3 +503,31 @@ class DerivedTabTests(TestCase):
         perm.can_edit = True
         perm.save()
         self.assertNotEqual(self.client.post(url).status_code, 403)
+
+    def test_crud_verbs_are_derived_too(self):
+        """_ACTION_BASE_TO_TAB covers the bases someone listed by hand; this
+        catches the rest, which is most of them."""
+        from user.access import derive_tab
+
+        cases = {
+            "bird_category_create": ("bird_category", "add"),
+            "feed_phase_master_add": ("feed_phase_master_list", "add"),
+            "farm_location_capture_add": ("farm_location_capture_list", "add"),
+        }
+        for url_name, expected in cases.items():
+            with self.subTest(url=url_name):
+                self.assertEqual(derive_tab(url_name), expected)
+
+    def test_the_hand_written_base_map_still_wins(self):
+        """resolve_action runs first, so an explicit entry is never overridden
+        by the convention — the two must agree where they overlap."""
+        from user.access import derive_tab, resolve_action
+
+        for url_name in ("farmer_create", "farmer_update",
+                         "broiler_farm_shed_create"):
+            with self.subTest(url=url_name):
+                explicit = resolve_action(url_name)
+                derived = derive_tab(url_name)
+                self.assertIsNotNone(explicit)
+                if derived is not None:
+                    self.assertEqual(explicit, derived)
