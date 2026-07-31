@@ -854,8 +854,13 @@ class BroilerBatchTemplateView(View):
                 + (f" · Unit {s.unit_no}" if s.unit_no else ""),
                 "occupied": s.id in occupied_shed_ids,
             }
-            for s in BroilerFarmShed.objects.filter(is_active=True)
-            .order_by("farm__farm_code", "unit_no")
+            # Every shed of every farm — deliberately NOT filtered on is_active.
+            # BroilerFarmShed.is_active is occupancy-driven ("has birds in it"),
+            # and birds only arrive through chicks placement on a batch, so
+            # filtering on it would hide exactly the vacant sheds a new batch
+            # needs. Sheds that already carry an open batch are flagged
+            # occupied above and rendered disabled instead.
+            for s in BroilerFarmShed.objects.order_by("farm__farm_code", "unit_no")
         ]
         context = {
             "broiler_farms": broiler_farms,

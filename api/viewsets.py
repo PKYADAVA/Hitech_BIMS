@@ -23,6 +23,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.routers import DefaultRouter
 
 from .envelope import EnvelopeJSONRenderer
+from .permissions import MatrixPermission
 from .exceptions import api_exception_handler
 from .pagination import CursorPagination, StandardPagination
 from .serializers import serializer_factory
@@ -82,13 +83,13 @@ class AutoQuerysetMixin:
         since = self.request.query_params.get("updated_since")
         if since and _has_field(model, "updated_at"):
             qs = qs.filter(updated_at__gte=since)
-        return qs
+        return scope_api_queryset(getattr(self.request, "user", None), qs)
 
 
 class BaseModelViewSet(V1ViewMixin, AutoQuerysetMixin, viewsets.ModelViewSet):
     """Full CRUD resource (list/retrieve/create/update/partial_update/destroy)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
     pagination_class = StandardPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     ordering = ["-id"]
@@ -97,10 +98,43 @@ class BaseModelViewSet(V1ViewMixin, AutoQuerysetMixin, viewsets.ModelViewSet):
 class BaseReadOnlyViewSet(V1ViewMixin, AutoQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     """List + retrieve only — for master/reference data used as mobile pickers."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, MatrixPermission]
     pagination_class = StandardPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     ordering = ["-id"]
+
+
+#: model -> the scopes that apply to it and the path from the row to each.
+#: Only where the link is unambiguous; anything else stays unscoped rather than
+#: risk hiding rows the web app would show.
+API_SCOPES = {
+    "broiler.Branch": {"branches": "id"},
+    "broiler.BroilerFarm": {"branches": "branch_id", "farms": "id"},
+    "broiler.BroilerBatch": {"branches": "broiler_farm__branch_id",
+                             "farms": "broiler_farm_id"},
+    "broiler.Supervisor": {"branches": "branch_id"},
+    "broiler.DailyEntry": {"branches": "farm__branch_id", "farms": "farm_id"},
+    "broiler.BirdSale": {"branches": "farm__branch_id", "farms": "farm_id"},
+    "broiler.BroilerFarmShed": {"farms": "farm_id"},
+    "inventory.Warehouse": {"sectors": "id"},
+    "sales.Customer": {"customer_groups": "customer_group_id"},
+}
+
+
+def scope_api_queryset(user, qs):
+    """Apply the data scope to an API queryset.
+
+    The API is the same data by another door, so the branch / farm / warehouse
+    limits that narrow the web app have to narrow it too — otherwise a token is
+    a way round the scoping as well as the matrix.
+    """
+    from user.services.scoping import scope_multi
+
+    model = qs.model
+    scopes = API_SCOPES.get(f"{model._meta.app_label}.{model.__name__}")
+    if not scopes or user is None:
+        return qs
+    return scope_multi(user, qs, **scopes)
 
 
 def _has_field(model, name: str) -> bool:
