@@ -1,6 +1,7 @@
 # user/context_processors.py
 from .access import (
     allowed_view_tabs,
+    breadcrumb_for,
     allowed_nav_groups,
     allowed_section_groups,
     section_landing_urls,
@@ -35,6 +36,11 @@ def web_access(request):
 
     allowed_tabs = allowed_view_tabs(user)
 
+    # Breadcrumb, computed from the same registry the nav uses so the two can
+    # never disagree — and so no template has to carry its own trail.
+    breadcrumb = breadcrumb_for(
+        getattr(match, "url_name", None) if match else None, allowed_tabs)
+
     # Pending change-request count for the navbar badge (only for users who
     # can see the Change Requests page at all).
     pending_change_requests = 0
@@ -48,5 +54,6 @@ def web_access(request):
         "allowed_sections": allowed_section_groups(user),
         "section_url": section_landing_urls(user),
         "page_perms": page_perms,
+        "breadcrumb": breadcrumb,
         "pending_change_requests": pending_change_requests,
     }

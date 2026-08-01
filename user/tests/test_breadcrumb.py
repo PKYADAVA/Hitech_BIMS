@@ -1,0 +1,68 @@
+"""The breadcrumb is computed from the nav registry, not written per template.
+
+That is the whole point: ~180 pages would otherwise each carry their own trail,
+and those trails would drift from the nav the first time a tab moved.
+"""
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+
+from user.access import breadcrumb_for
+
+
+class BreadcrumbTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser("bc_admin", "bc@x.com",
+                                                   "Str0ngPass!")
+        self.client.force_login(self.admin)
+
+    def labels(self, url_name):
+        return [c["label"] for c in breadcrumb_for(url_name)]
+
+    def test_a_tab_gets_module_section_and_page(self):
+        self.assertEqual(self.labels("items"), ["Inventory", "Master", "Items"])
+        self.assertEqual(self.labels("stock_transfer_list"),
+                         ["Inventory", "Transactions", "Stock Transfer"])
+        self.assertEqual(self.labels("supplier_balance"),
+                         ["Purchase", "Reports", "Supplier Balance"])
+
+    def test_an_add_page_inherits_its_tab(self):
+        """/stock-transfer/add/ is not a tab of its own; it belongs to one."""
+        self.assertEqual(self.labels("stock_transfer_add"),
+                         ["Inventory", "Transactions", "Stock Transfer"])
+
+    def test_a_page_outside_the_registry_gets_none(self):
+        self.assertEqual(breadcrumb_for("dashboard"), [])
+        self.assertEqual(breadcrumb_for("login"), [])
+        self.assertEqual(breadcrumb_for(""), [])
+        self.assertEqual(breadcrumb_for(None), [])
+
+    def test_only_the_last_crumb_is_a_link(self):
+        """A module is a dropdown, not a page, and a section's landing page
+        depends on what the user may view — so neither is linked here."""
+        crumbs = breadcrumb_for("items")
+        self.assertEqual([bool(c["url"]) for c in crumbs], [False, False, True])
+        self.assertTrue(crumbs[-1].get("current"))
+
+    def test_a_page_the_user_cannot_view_is_not_linked(self):
+        crumbs = breadcrumb_for("items", viewable=set())
+        self.assertEqual(crumbs[-1]["url"], "")
+
+    def test_it_renders_on_the_page(self):
+        html = self.client.get(reverse("items")).content.decode()
+        self.assertIn('class="ds-breadcrumb"', html)
+        self.assertIn("Inventory", html)
+        self.assertIn("Master", html)
+
+    def test_the_dashboard_has_none(self):
+        html = self.client.get(reverse("dashboard")).content.decode()
+        self.assertNotIn('class="ds-breadcrumb"', html)
+
+    def test_every_registry_tab_resolves_to_a_trail(self):
+        """A tab with no trail would render a page with no breadcrumb at all,
+        silently — this fails instead."""
+        from user.access import ALL_TAB_CODES
+
+        missing = [code for code in ALL_TAB_CODES if not breadcrumb_for(code)]
+        self.assertEqual(missing, [])

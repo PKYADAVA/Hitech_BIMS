@@ -834,6 +834,51 @@ def tab_action_perms(user, tab_code):
     return {a: user_can(user, tab_code, a) for a in ACTIONS}
 
 
+#: tab code -> (nav label, section label, tab label), for the breadcrumb.
+TAB_TRAIL = {}
+for _module in MODULE_REGISTRY:
+    for _section in _module["sections"]:
+        for _tab in _section["tabs"]:
+            TAB_TRAIL.setdefault(_tab[0], (_module["label"], _section["label"], _tab[1]))
+            for _extra in (_tab[2] if len(_tab) > 2 else ()):
+                TAB_TRAIL.setdefault(_extra, (_module["label"], _section["label"], _tab[1]))
+
+
+def breadcrumb_for(url_name, viewable=None):
+    """``[{"label", "url"}, …]`` for a page, derived from the nav registry.
+
+    The registry already knows which module and section every tab belongs to,
+    so the trail is computed rather than written into each of the ~180
+    templates — and it cannot drift from the nav, because it is the nav.
+
+    The module and section steps are unlinked: a module is a dropdown rather
+    than a page, and the section's landing page depends on what the user may
+    view, which the caller passes in.
+    """
+    from django.urls import NoReverseMatch, reverse
+
+    if not url_name:
+        return []
+    trail = TAB_TRAIL.get(url_name)
+    if trail is None:
+        resolved = resolve_action(url_name) or derive_tab(url_name)
+        if resolved:
+            trail = TAB_TRAIL.get(resolved[0])
+    if trail is None:
+        return []
+
+    nav_label, section_label, tab_label = trail
+    crumbs = [{"label": nav_label, "url": ""}, {"label": section_label, "url": ""}]
+    url = ""
+    if viewable is None or url_name in viewable:
+        try:
+            url = reverse(url_name)
+        except NoReverseMatch:
+            url = ""
+    crumbs.append({"label": tab_label, "url": url, "current": True})
+    return crumbs
+
+
 def user_sees_dashboard(user):
     """Whether the dashboard is available to this user.
 

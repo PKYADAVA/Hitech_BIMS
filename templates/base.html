@@ -65,6 +65,18 @@
 
     <!-- Page Content -->
     <div class="container-cstm fade-in">
+
+      {% if breadcrumb %}
+      <nav class="ds-breadcrumb" aria-label="Breadcrumb">
+        <a href="{% url 'dashboard' %}"><i class="fas fa-house"></i></a>
+        {% for crumb in breadcrumb %}
+          <span class="ds-crumb-sep">/</span>
+          {% if crumb.url and not crumb.current %}<a href="{{ crumb.url }}">{{ crumb.label }}</a>
+          {% elif crumb.current %}<span aria-current="page">{{ crumb.label }}</span>
+          {% else %}<span class="ds-crumb-muted">{{ crumb.label }}</span>{% endif %}
+        {% endfor %}
+      </nav>
+      {% endif %}
       {% block body %}{% endblock %}
       {% block content %}{% endblock %}
     </div>

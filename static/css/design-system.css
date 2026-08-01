@@ -82,6 +82,17 @@
 .ds .ds-group-title  { font-size: var(--ds-group-heading); font-weight: var(--ds-medium); margin: 0; }
 .ds .ds-subtitle     { font-size: var(--ds-caption); color: var(--ds-muted); margin: 2px 0 0; }
 
+/* -- breadcrumb --------------------------------------------------------- */
+.ds .ds-breadcrumb {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  font-size: var(--ds-caption); color: var(--ds-muted);
+  margin: 0 0 12px;
+}
+.ds .ds-breadcrumb a { color: var(--ds-muted); text-decoration: none; }
+.ds .ds-breadcrumb a:hover { color: var(--ds-primary); }
+.ds .ds-breadcrumb [aria-current="page"] { color: var(--ds-text); font-weight: var(--ds-medium); }
+.ds .ds-crumb-sep { color: #cbd5e1; }
+
 /* -- cards -------------------------------------------------------------- */
 .ds .ds-card {
   background: var(--ds-card);

@@ -70,12 +70,6 @@
       </div>
       <form id="edit-form">
         <div class="modal-body">
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" id="edit-direct-hatchery">
-            <label class="form-check-label" for="edit-direct-hatchery">
-              <strong>Direct from Hatchery</strong>
-            </label>
-          </div>
           <div class="row g-3">
             <div class="col-md-3">
               <label class="form-label">Date</label>
@@ -290,11 +284,10 @@ $(function () {
 
   $("#edit-farm").on("change", function () { refreshEditBatches(this.value, ""); });
 
-  // Same soft auto-select + Direct-mode toggle as the Add form: picking a
-  // Warehouse suggests the matching Hatchery (if exactly one is mapped to
-  // it) without hiding other options; Direct mode disables Warehouse and
-  // derives it from the chosen Hatchery's own mapping on submit. Suppliers
-  // carry no mapping, so they never match and are never auto-selected.
+  // Same soft auto-select as the Add form: picking a Warehouse suggests the
+  // matching Hatchery (if exactly one is mapped to it) without hiding other
+  // options. Suppliers carry no mapping, so they never match and are never
+  // auto-selected.
   $("#edit-warehouse").on("change", function () {
     const warehouseId = this.value;
     if (!warehouseId) return;
@@ -302,12 +295,6 @@ $(function () {
       return $(this).val() && $(this).data("warehouse") == warehouseId;
     });
     if (matches.length === 1) { $("#edit-source").val(matches.val()); }
-  });
-
-  $("#edit-direct-hatchery").on("change", function () {
-    const direct = this.checked;
-    $("#edit-warehouse").prop("disabled", direct).prop("required", !direct).toggleClass("bg-light", direct);
-    if (direct) { $("#edit-warehouse").val(""); }
   });
 
   // Placement Qty is the only figure that ever reaches inventory/stock —
@@ -358,8 +345,6 @@ $(function () {
       $("#edit-driver-name").val(row.driver_name);
       $("#edit-remarks").val(row.remarks);
       $("#edit-source").val(row.source);
-      $("#edit-direct-hatchery").prop("checked", false);
-      $("#edit-warehouse").prop("disabled", false).prop("required", true).removeClass("bg-light");
       $("#edit-warehouse").val(row.from_location_id);
       $("#edit-farm").val(row.to_location_id);
       $("#edit-item").val(row.item);
@@ -370,16 +355,8 @@ $(function () {
 
   $("#edit-form").on("submit", function (e) {
     e.preventDefault();
-    const sourceSelect = $("#edit-source");
-    const sourceValue = sourceSelect.val();
-    let warehouseId = $("#edit-warehouse").val();
-    if ($("#edit-direct-hatchery").is(":checked")) {
-      warehouseId = sourceSelect.find(":selected").data("warehouse") || "";
-      if (sourceValue && !warehouseId) {
-        window.showToast('danger', "The selected source (Direct) has no Warehouse mapped to it — map one under Inventory > Office Mapping (hatcheries only), or untick Direct and pick a Warehouse.");
-        return;
-      }
-    }
+    const sourceValue = $("#edit-source").val();
+    const warehouseId = $("#edit-warehouse").val();
     $.ajax({
       url: `/stock_transfer_api/${editingId}/`,
       type: "PUT",
