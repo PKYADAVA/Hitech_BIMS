@@ -58,19 +58,19 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered table-sm mb-0 ds-grid" id="hatcher-candling-table">
+        <table class="table table-bordered table-sm mb-0 ds-entry" id="hatcher-candling-table">
           <thead class="table-light">
             <tr>
-              <th class="ds-mid" style="min-width:36px;">Sr.</th>
-              <th style="min-width:90px;">Hatcher No.</th>
-              <th class="ds-num" style="min-width:90px;">Infertile Qty</th>
-              <th class="ds-num" style="min-width:70px;">Infertile %</th>
-              <th style="min-width:90px;">Early Dead</th>
-              <th class="ds-num" style="min-width:70px;">ED %</th>
-              <th class="ds-num" style="min-width:90px;">Blasting Qty</th>
-              <th class="ds-num" style="min-width:70px;">BQ %</th>
-              <th class="ds-num" style="min-width:90px;">Transfer Qty</th>
-              <th class="ds-num" style="min-width:70px;">TQ %</th>
+              <th class="c-fit m-short ds-mid">Sr.</th>
+              <th class="c-fit m-short">Hatcher No.</th>
+              <th class="c-num m-num ds-num">Infertile Qty</th>
+              <th class="c-num m-num ds-num">Infertile %</th>
+              <th class="c-fit m-short">Early Dead</th>
+              <th class="c-num m-num ds-num">ED %</th>
+              <th class="c-num m-num ds-num">Blasting Qty</th>
+              <th class="c-num m-num ds-num">BQ %</th>
+              <th class="c-num m-num ds-num">Transfer Qty</th>
+              <th class="c-num m-num ds-num">TQ %</th>
             </tr>
           </thead>
           <tbody id="hatcher-candling-tbody"></tbody>
@@ -97,14 +97,14 @@
     <div class="card-header"><i class="fas fa-egg me-1"></i>Final Hatch Output Grading</div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered table-sm mb-0 ds-grid" id="hatcher-grading-table">
+        <table class="table table-bordered table-sm mb-0 ds-entry" id="hatcher-grading-table">
           <thead class="table-light">
             <tr>
-              <th class="ds-mid" style="min-width:36px;">Sr.</th>
-              <th style="min-width:100px;">Dead-In-Shell</th>
-              <th style="min-width:100px;">Culls / Malf.</th>
-              <th style="min-width:110px;">Saleable Chicks</th>
-              <th style="min-width:90px;"></th>
+              <th class="c-fit m-short ds-mid">Sr.</th>
+              <th class="c-fit m-short">Dead-In-Shell</th>
+              <th class="c-fit m-short">Culls / Malf.</th>
+              <th class="c-fit m-short">Saleable Chicks</th>
+              <th class="c-fit"></th>
             </tr>
           </thead>
           <tbody id="hatcher-grading-tbody"></tbody>
@@ -129,9 +129,9 @@
     <div class="card-header"><i class="fas fa-calculator me-1"></i>Hatch Costing</div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered mb-0 ds-grid" id="costing-table">
+        <table class="table table-bordered mb-0 ds-entry" id="costing-table">
           <thead class="table-light">
-            <tr><th style="width:34%">Description</th><th>Total / Type</th><th class="ds-num">Rate</th><th class="ds-num">Amount</th><th style="width:46px"></th></tr>
+            <tr><th class="c-grow m-long" style="width:34%">Description</th><th class="c-num m-num">Total / Type</th><th class="c-num m-num ds-num">Rate</th><th class="c-num m-num ds-num">Amount</th><th class="c-fit" style="width:46px"></th></tr>
           </thead>
           <tbody>
             <tr>
@@ -148,12 +148,12 @@
               <td><input class="form-control bg-light" id="chicks_amount" readonly value="0.00"></td>
               <td></td>
             </tr>
-            <tr class="table-primary"><th colspan="4" class="text-center">Vaccine Consumptions</th><th class="text-center"><button type="button" class="btn btn-sm btn-success" id="add-vaccine"><i class="fas fa-plus"></i></button></th></tr>
+            <tr class="table-primary"><th colspan="4" class="c-fit m-short text-center">Vaccine Consumptions</th><th class="c-fit text-center"><button type="button" class="btn btn-sm btn-success" id="add-vaccine"><i class="fas fa-plus"></i></button></th></tr>
           </tbody>
           <tbody id="vaccine-rows"></tbody>
           <tbody>
             <tr>
-              <th class="ds-num align-middle">Net Chicks Rate</th>
+              <th class="c-num m-num ds-num align-middle">Net Chicks Rate</th>
               <td></td>
               <td><input class="form-control bg-light" id="net_rate" readonly value="0.00"></td>
               <td><input class="form-control bg-light" id="net_amount" readonly value="0.00"></td>

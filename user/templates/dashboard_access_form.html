@@ -84,19 +84,19 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="group" value="{{ selected_group.id }}">
-        <table class="da-table ds-grid" id="da-table ds-grid">
+        <table class="da-table ds-entry" id="da-table ds-entry">
           <thead>
             <tr>
-              <th style="width:90px;">
+              <th class="c-fit m-short" style="width:90px;">
                 Show
                 <span class="form-check form-switch m-0 mt-1">
                   <input type="checkbox" role="switch" class="form-check-input" id="da-all"
                          title="Toggle every widget">
                 </span>
               </th>
-              <th>Widget</th>
-              <th style="width:150px;">Sort position</th>
-              <th style="width:90px;">Move</th>
+              <th class="c-fit m-short">Widget</th>
+              <th class="c-fit m-short" style="width:150px;">Sort position</th>
+              <th class="c-fit m-short" style="width:90px;">Move</th>
             </tr>
           </thead>
           <tbody>

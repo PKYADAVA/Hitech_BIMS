@@ -49,8 +49,13 @@
   --ds-header-bg: #f7f9fb;    --ds-row-hover: #eff5ff;
 
   /* -- metrics ---------------------------------------------------------- */
-  --ds-control-h: 42px;       --ds-button-h: 44px;
-  --ds-row-h: 42px;           --ds-grid-header-h: 44px;
+  /* Compact by choice. The written spec says 42px controls and rows; an ERP is
+     used all day by people who want more rows on screen, so the vertical
+     metrics come down and everything else — type, colour, spacing — stays as
+     specified. 44px is kept where it earns its place: primary buttons, and
+     every control on mobile, which §26 requires as a touch target. */
+  --ds-control-h: 36px;       --ds-button-h: 44px;
+  --ds-row-h: 36px;           --ds-grid-header-h: 40px;
   --ds-radius: 8px;           --ds-card-radius: 12px;
   --ds-field-gap: 16px;       --ds-form-gap: 24px;    --ds-section-gap: 32px;
 
@@ -145,11 +150,11 @@
    something each page has to opt into. */
 .ds table .form-control,
 .ds table .form-select {
-  height: 34px; font-size: var(--ds-grid-data); padding: 0 8px; border-radius: 6px;
+  height: 32px; font-size: var(--ds-grid-data); padding: 0 8px; border-radius: 6px;
 }
-.ds table .select2-container--bootstrap-5 .select2-selection { min-height: 34px; }
+.ds table .select2-container--bootstrap-5 .select2-selection { min-height: 32px; }
 .ds table .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
-  line-height: 32px;
+  line-height: 30px;
 }
 
 /* DataTables' export/column buttons are .btn, and at 44px they dominate the
@@ -183,7 +188,7 @@
 .ds table.ds-grid tbody td {
   height: var(--ds-row-h);
   font-size: var(--ds-grid-data);
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid #f1f4f8;
   vertical-align: middle;
 }
