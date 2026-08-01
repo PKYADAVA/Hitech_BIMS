@@ -223,6 +223,56 @@ class BirdSaleFarmLookupView(V1ViewMixin, APIView):
         })
 
 
+class DailyEntryLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/daily-entry-lookup?farm=<id>&date=<iso> — everything
+    the Daily Entry form needs to advise the user: the active batch and age,
+    plus the feed phase for that age, the breed-standard feed/weight targets,
+    the live-bird count and the feed consumed so far.
+
+    Separate from ``farm-lookup`` on purpose. That endpoint is shared with the
+    Bird Sale and Medicine Entry forms, and this payload walks every prior
+    entry of the batch to weight feed per surviving bird — cost those two
+    forms have no use for.
+
+    Delegates to ``broiler.views.daily_entry_lookup_payload``, the same
+    function backing the web form, so a rule can never apply on one client and
+    not the other.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .views import daily_entry_lookup_payload
+
+        return Response(daily_entry_lookup_payload(
+            request.query_params.get("farm"),
+            request.query_params.get("date"),
+        ))
+
+
+class DailyEntryStockLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/daily-entry-stock?farm=<id>&item=<id>&date=<iso> —
+    opening stock for a farm+feed item on that date, i.e. the closing balance
+    of the most recent entry before it (0 when there is none).
+
+    Seeds the form's running-stock preview; the client then subtracts what is
+    typed. Mirrors the web ``daily_entry_stock_lookup``.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.utils.dateparse import parse_date
+
+        farm_id = request.query_params.get("farm")
+        item_id = request.query_params.get("item")
+        entry_date = parse_date(request.query_params.get("date") or "")
+        if not farm_id or not item_id or not entry_date:
+            return Response({"stock": "0"})
+        stock = DailyEntry.previous_stock(farm_id, int(item_id), entry_date, None)
+        return Response({"stock": str(stock)})
+
+
 def register(router) -> None:
     # --- Master data (full CRUD; list also serves as picker data) -------
     register_model(router, "broiler/farmer-groups", FarmerGroup,

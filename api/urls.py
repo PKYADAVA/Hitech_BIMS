@@ -14,7 +14,11 @@ from rest_framework.routers import DefaultRouter
 
 from account.api import register as register_account
 from account.models import ChartOfAccount
-from broiler.api import BirdSaleFarmLookupView
+from broiler.api import (
+    BirdSaleFarmLookupView,
+    DailyEntryLookupView,
+    DailyEntryStockLookupView,
+)
 from broiler.api import register as register_broiler
 from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
@@ -127,6 +131,11 @@ urlpatterns = [
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
     # Bird Sale form: farm → active batch + owning farmer (declared before router).
     path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
+    # Daily Entry form: the above plus feed phase, breed standards and live birds.
+    path("broiler/daily-entry-lookup", DailyEntryLookupView.as_view(),
+         name="broiler-daily-entry-lookup"),
+    path("broiler/daily-entry-stock", DailyEntryStockLookupView.as_view(),
+         name="broiler-daily-entry-stock"),
     # Hatch Entry form: tray setting → dates + source purchase figures.
     path("hatchery/tray-setting-lookup", TraySettingLookupView.as_view(), name="hatchery-tray-setting-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),

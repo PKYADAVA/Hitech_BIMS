@@ -2089,15 +2089,25 @@ def _live_bird_count(batch, as_of=None):
     return max(int(placed) - int(de["m"] or 0) - int(de["c"] or 0) - int(sold or 0), 0)
 
 
-@login_required
-def daily_entry_farm_lookup(request):
+def daily_entry_lookup_payload(farm_id, date_str=None):
     """Returns the active batch/age for a farm, for the Add form's
     auto-filled Batch/Age fields as soon as a Farm is picked. ``next_date``
     continues the day after this farm's most recently saved entry (so
     backfilling picks up where it left off), falling back to today when
-    there's no prior entry."""
+    there's no prior entry.
+
+    Plain dict rather than a response, because the mobile API serves the same
+    payload (``broiler.api.DailyEntryLookupView``). The feed-phase, breed
+    standard and live-bird figures behind every warning on the form are
+    computed here once, so the two clients cannot drift apart.
+    """
+    # Imported up here, not in the branches below that use them: the live-bird
+    # walk needs Sum whenever there is a batch at all, while the breed-standard
+    # block that used to import it only runs for a batch whose breed has a
+    # standard. A batch with no breed (or no standard) reached that Sum unbound
+    # and 500'd the lookup — for the web form as well as the API.
+    from django.db.models import F, Max, Sum
     from django.utils.dateparse import parse_date
-    farm_id = request.GET.get("farm")
     batch = _active_batch_for_farm(farm_id) if farm_id else None
 
     last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by('-date', '-id').first()
@@ -2107,7 +2117,7 @@ def daily_entry_farm_lookup(request):
     # Everything (age, phase, live-bird count) is resolved as of the entry date —
     # the date the row will be saved with (passed by the form, else next_date) —
     # so backfilled/edited entries get the right phase and bird count.
-    entry_date = parse_date(request.GET.get("date") or "") or next_date
+    entry_date = parse_date(date_str or "") or next_date
 
     age_days = 0
     if batch and batch.start_date:
@@ -2120,7 +2130,6 @@ def daily_entry_farm_lookup(request):
     # grams/bird/day at that age) — drives the day's over-feed cap check. Only
     # trusted while the age is within the breed's defined curve; beyond it we
     # flag the gap instead of carrying forward a stale (too-low) value.
-    from django.db.models import Max
     std_feed_kg, std_weight_g, std_note = None, None, None
     if batch and batch.breed_id:
         max_age = BreedStandard.objects.filter(breed_id=batch.breed_id).aggregate(m=Max("age"))["m"]
@@ -2139,7 +2148,6 @@ def daily_entry_farm_lookup(request):
     # "Std Feed @ B.Wt" / "Std B.Wt @ Feed" (like the Live Flock report).
     bs_curve, cum_feed_before_kg = [], None
     if batch and batch.breed_id and not std_note:
-        from django.db.models import Sum, F
         bs_curve = [
             {"a": r.age, "w": float(r.body_weight), "cf": float(r.cum_feed)}
             for r in BreedStandard.objects.filter(breed_id=batch.breed_id, is_active=True).order_by("age")
@@ -2184,7 +2192,7 @@ def daily_entry_farm_lookup(request):
             alive -= (de.mortality or 0) + (de.culls or 0) + sold_by_date.get(de.date, 0)   # end-of-day losses
         consumed_per_bird_actual_g = str(cum_pb.quantize(Decimal("0.01")))
 
-    return JsonResponse({
+    return {
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
         "age_days": age_days,
@@ -2200,7 +2208,15 @@ def daily_entry_farm_lookup(request):
         "consumed_total_kg": consumed_total_kg,
         "consumed_per_bird_actual_g": consumed_per_bird_actual_g,
         "live_birds": _live_bird_count(batch, as_of=entry_date) if batch else 0,
-    })
+    }
+
+
+@login_required
+def daily_entry_farm_lookup(request):
+    """GET ?farm=&date= — the web form's wrapper around
+    ``daily_entry_lookup_payload``."""
+    return JsonResponse(daily_entry_lookup_payload(request.GET.get("farm"),
+                                                   request.GET.get("date")))
 
 
 @login_required

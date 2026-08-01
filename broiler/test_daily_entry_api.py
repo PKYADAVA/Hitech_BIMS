@@ -193,3 +193,89 @@ class DailyEntryFarmLookupTests(APITestCase):
             farm=self.farm, batch=self.batch)
         resp = self.client.get("/api/v1/broiler/farm-lookup", {"farm": self.farm.id})
         self.assertEqual(resp.json()["data"]["next_date"], "2026-07-11")
+
+
+class DailyEntryLookupTests(APITestCase):
+    """``/api/v1/broiler/daily-entry-lookup`` and ``/daily-entry-stock`` — the
+    advisory payload behind the form's warnings.
+
+    Both delegate to the same functions the web form uses, so these assert the
+    wiring and the shape the mobile client destructures, not the arithmetic
+    (``broiler.views`` owns that).
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            "advise", "a@x.com", "Str0ngPass!")
+        self.client.force_authenticate(self.user)
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(
+            branch_name="Gorakhpur", region=region, prefix="GKP")
+        supervisor = Supervisor.objects.create(name="Ramesh", branch=branch)
+        farmer = Farmer.objects.create(farmer_name="Suresh Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=supervisor, farmer=farmer,
+            region="East", line="L1", farm_name="Lacchipur Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, start_date=date(2026, 7, 1))
+        category = ItemCategory.objects.create(name="Feed")
+        self.feed = Item.objects.create(
+            description="Pre Starter", category=category,
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("50"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+    def test_lookup_carries_the_advisory_fields_the_form_needs(self):
+        resp = self.client.get(
+            "/api/v1/broiler/daily-entry-lookup",
+            {"farm": self.farm.id, "date": "2026-07-10"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()["data"]
+        # Same age rule as farm-lookup and the write path.
+        self.assertEqual(data["age_days"], 9)
+        self.assertEqual(data["batch"], self.batch.id)
+        # The keys every warning on the form reads.
+        for key in ("feed_phase", "std_feed_kg", "std_weight_g", "std_note",
+                    "bs_curve", "cum_feed_before_kg", "consumed_by_item",
+                    "consumed_total_kg", "consumed_per_bird_actual_g", "live_birds"):
+            self.assertIn(key, data)
+
+    def test_lookup_matches_the_web_form_payload(self):
+        """The endpoint must not drift from what the web form renders."""
+        from broiler.views import daily_entry_lookup_payload
+
+        resp = self.client.get(
+            "/api/v1/broiler/daily-entry-lookup",
+            {"farm": self.farm.id, "date": "2026-07-10"})
+        expected = daily_entry_lookup_payload(str(self.farm.id), "2026-07-10")
+        self.assertEqual(resp.json()["data"]["age_days"], expected["age_days"])
+        self.assertEqual(resp.json()["data"]["live_birds"], expected["live_birds"])
+
+    def test_lookup_survives_a_batch_whose_breed_has_no_standard(self):
+        """Regression: the live-bird walk needs ``Sum`` for any batch, but the
+        import sat inside the breed-standard branch, so a batch with no breed
+        (or no standard for it) raised UnboundLocalError and 500'd — on the web
+        form as much as the API."""
+        resp = self.client.get(
+            "/api/v1/broiler/daily-entry-lookup",
+            {"farm": self.farm.id, "date": "2026-07-10"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()["data"]
+        self.assertIsNone(data["std_feed_kg"])
+        self.assertEqual(data["bs_curve"], [])
+
+    def test_stock_lookup_returns_the_prior_closing_balance(self):
+        DailyEntry.objects.create(
+            date=date(2026, 7, 10), supervisor=self.farm.supervisor,
+            farm=self.farm, batch=self.batch,
+            feed_1=self.feed, feed_1_qty=Decimal("40"), feed_1_stock=Decimal("160"))
+        resp = self.client.get(
+            "/api/v1/broiler/daily-entry-stock",
+            {"farm": self.farm.id, "item": self.feed.id, "date": "2026-07-11"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["data"]["stock"], "160.00")
+
+    def test_stock_lookup_is_zero_without_the_required_params(self):
+        resp = self.client.get("/api/v1/broiler/daily-entry-stock", {"farm": self.farm.id})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["data"]["stock"], "0")
