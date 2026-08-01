@@ -306,13 +306,14 @@ export const FORMS: Record<string, FormSchema> = {
     ],
   },
   "broiler-sale-receipts": {
+    // Mirrors the web Receipt form (customer receipt): Location + Customer, no
+    // sale-type field. sale_type defaults to "customer" server-side.
     fields: [
       date("date", "Date", true),
-      text("sale_type", "Sale Type"),
-      CUSTOMER(),
-      FARMER(),
+      sel("location", "Location", "/warehouses/", ["name", "code"], true),
+      sel("customer", "Customer", "/customers/", ["name", "code"], true),
       text("mode", "Mode"),
-      ACCOUNT("receipt_account", "Receipt Account"),
+      sel("receipt_account", "Receipt Account", "/accounts/", ["description", "code"], true),
       dec("amount", "Amount", true),
       text("reference_no", "Reference No."),
       text("remarks", "Remarks"),

@@ -10,6 +10,7 @@ import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
+import { BirdSaleReceiptFormScreen } from "@/screens/BirdSaleReceiptFormScreen";
 import { DailyEntryGridScreen } from "@/screens/DailyEntryGridScreen";
 import { DocumentFormScreen } from "@/screens/DocumentFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
@@ -31,9 +32,32 @@ const Root = createNativeStackNavigator();
 const Tab = createBottomTabNavigator<TabParams>();
 const ModuleStack = createNativeStackNavigator<ModuleStackParams>();
 
+/**
+ * Bottom-tab icon with a clear "selected" affordance: the active tab gets a
+ * filled pill behind its icon (Material-style), so the current tab reads at a
+ * glance even in dark mode where the active/inactive tints are close.
+ */
+function TabBarIcon({ icon, focused, color }: { icon: string; focused: boolean; color: string }) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={{
+        minWidth: 56,
+        height: 30,
+        borderRadius: 999,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: focused ? colors.primaryLight : "transparent",
+      }}
+    >
+      <AppIcon emoji={icon} size={24} color={color} />
+    </View>
+  );
+}
+
 function tabIcon(icon: string) {
   return ({ focused, color }: { focused: boolean; color: string }) => (
-    <AppIcon emoji={icon} size={24} color={color} style={{ opacity: focused ? 1 : 0.9 }} />
+    <TabBarIcon icon={icon} focused={focused} color={color} />
   );
 }
 
@@ -117,6 +141,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
+      <ModuleStack.Screen name="BirdSaleReceiptForm" component={BirdSaleReceiptFormScreen} />
       <ModuleStack.Screen name="DailyEntryGrid" component={DailyEntryGridScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />

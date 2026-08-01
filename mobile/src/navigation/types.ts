@@ -22,6 +22,8 @@ export type ModuleStackParams = {
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
+  /** Bespoke Bird Sale Receipt form (customer/farmer toggle). */
+  BirdSaleReceiptForm: { mode: "create" | "edit"; row?: Row };
   /** Multi-farm Daily Entry — one date, several farms, one save (web grid form). */
   DailyEntryGrid: undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */
