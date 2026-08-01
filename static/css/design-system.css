@@ -362,3 +362,88 @@
   .ds .form-control, .ds .form-select { height: var(--ds-button-h); }
   .ds .ds-toolbar { padding: 12px; }
 }
+
+
+/* ===========================================================================
+   Sidebar shell (spec sections 17 and 18)
+   ---------------------------------------------------------------------------
+   Opt-in per deployment: the body only becomes a two-column shell when
+   `ds-shell` is present, so the top navbar remains the layout until someone
+   chooses otherwise, and switching back is one flag rather than a revert.
+   ======================================================================== */
+body.ds-shell { --ds-sb-w: 260px; --ds-sb-w-collapsed: 72px; }
+body.ds-shell.ds-sb-collapsed { --ds-sb-w: var(--ds-sb-w-collapsed); }
+
+.ds-sidebar {
+  position: fixed; inset: 0 auto 0 0; width: var(--ds-sb-w, 260px);
+  background: #0f172a; color: #cbd5e1;
+  display: flex; flex-direction: column;
+  transition: width .16s ease; z-index: 1040; overflow: hidden;
+}
+.ds-sb-brand {
+  display: flex; align-items: center; gap: 12px;
+  height: 64px; padding: 0 16px; flex: 0 0 64px;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+}
+.ds-sb-logo {
+  width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px;
+  background: var(--ds-primary, #2563eb); color: #fff;
+  display: grid; place-items: center; font-size: 15px;
+}
+.ds-sb-brand-text { display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap; }
+.ds-sb-brand-text strong { font-size: 14px; color: #fff; font-weight: 600; }
+.ds-sb-brand-text small { font-size: 11px; color: #7c8ba1; }
+
+.ds-sb-nav { flex: 1; overflow-y: auto; padding: 10px 8px; }
+.ds-sb-nav::-webkit-scrollbar { width: 6px; }
+.ds-sb-nav::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+
+.ds-sb-item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 0 12px; height: 42px; border: 0; background: none;
+  color: #cbd5e1; font-size: 14px; font-weight: 500;
+  border-radius: 8px; text-decoration: none; cursor: pointer; text-align: left;
+}
+.ds-sb-item > i:first-child { width: 22px; font-size: 16px; text-align: center; flex: 0 0 22px; }
+.ds-sb-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.ds-sb-item.is-active { background: var(--ds-primary, #2563eb); color: #fff; }
+.ds-sb-caret { margin-left: auto; font-size: 10px; transition: transform .16s ease; opacity: .6; }
+.ds-sb-group.is-open .ds-sb-caret { transform: rotate(90deg); }
+
+.ds-sb-sub { display: none; padding: 2px 0 6px 34px; }
+.ds-sb-group.is-open .ds-sb-sub { display: block; }
+.ds-sb-section {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+  color: #64748b; padding: 8px 10px 4px; font-weight: 600;
+}
+.ds-sb-link {
+  display: block; padding: 7px 10px; border-radius: 6px;
+  font-size: 13px; color: #94a3b8; text-decoration: none;
+}
+.ds-sb-link:hover { background: rgba(255, 255, 255, .06); color: #e2e8f0; }
+.ds-sb-link.is-active { color: #fff; background: rgba(37, 99, 235, .28); font-weight: 500; }
+
+.ds-sb-collapse {
+  height: 46px; border: 0; border-top: 1px solid rgba(255, 255, 255, .07);
+  background: none; color: #7c8ba1; font-size: 13px;
+  display: flex; align-items: center; gap: 12px; padding: 0 18px; cursor: pointer;
+}
+.ds-sb-collapse:hover { color: #fff; }
+.ds-sb-collapse i { width: 22px; text-align: center; }
+
+/* Collapsed: icons only. Labels are hidden rather than removed so the DOM and
+   the tab order stay put. */
+body.ds-sb-collapsed .ds-sb-label,
+body.ds-sb-collapsed .ds-sb-brand-text,
+body.ds-sb-collapsed .ds-sb-caret,
+body.ds-sb-collapsed .ds-sb-sub { display: none; }
+body.ds-sb-collapsed .ds-sb-item { justify-content: center; padding: 0; }
+
+/* The page sits beside the sidebar. */
+body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-left .16s ease; }
+
+@media (max-width: 1023.98px) {
+  body.ds-shell .content { margin-left: 0; }
+  .ds-sidebar { transform: translateX(-100%); transition: transform .16s ease; }
+  body.ds-sb-open .ds-sidebar { transform: none; }
+}

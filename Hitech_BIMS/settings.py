@@ -59,6 +59,11 @@ DEVELOPMENT_MODE = env_bool("DEVELOPMENT_MODE", DEBUG)
 # nobody realised were in use, so it ships dark: with this False the guard only
 # *records* those requests to user.WebAccessAudit. Review the table
 # (`manage.py webaccess_audit`), fill in the mapping, then set it True.
+# Sidebar layout (design system sections 17-18). Off by default: it replaces
+# the top navbar as the primary navigation on every page, which is a change to
+# see before it is a change to ship. DS_SIDEBAR=True switches it on.
+DS_SIDEBAR = os.getenv("DS_SIDEBAR", "False").lower() in ("true", "1", "yes")
+
 WEB_ACCESS_ENFORCE = os.getenv("WEB_ACCESS_ENFORCE", "False").lower() in ("true", "1", "yes")
 
 # Configure allowed hosts based on environment.

@@ -1,0 +1,76 @@
+{% comment %}
+Sidebar — 260px, collapsing to 72px.
+
+Generated from `sidebar` (user.services.navigation), which reads the nav
+registry. Nothing here is hand-listed, so a tab added to the registry appears
+with the right module, section and permission without touching this file.
+
+Collapsed state is remembered in localStorage, since it is a per-person habit
+rather than a per-page one.
+{% endcomment %}
+<aside class="ds-sidebar" id="dsSidebar">
+
+  <div class="ds-sb-brand">
+    <span class="ds-sb-logo"><i class="fa-solid fa-feather-pointed"></i></span>
+    <span class="ds-sb-brand-text">
+      <strong>Hi Tech Farms</strong>
+      <small>Poultry ERP</small>
+    </span>
+  </div>
+
+  <nav class="ds-sb-nav">
+    <a class="ds-sb-item {% if not breadcrumb %}is-active{% endif %}" href="{% url 'dashboard' %}">
+      <i class="fa-solid fa-gauge-high"></i><span class="ds-sb-label">Dashboard</span>
+    </a>
+
+    {% for module in sidebar %}
+    <div class="ds-sb-group {% if module.active %}is-open{% endif %}" data-module="{{ module.key }}">
+      <button type="button" class="ds-sb-item ds-sb-toggle {% if module.active %}is-active{% endif %}">
+        <i class="{{ module.icon }}"></i>
+        <span class="ds-sb-label">{{ module.label }}</span>
+        <i class="fa-solid fa-chevron-right ds-sb-caret"></i>
+      </button>
+      <div class="ds-sb-sub">
+        {% for section in module.sections %}
+        <div class="ds-sb-section">{{ section.label }}</div>
+        {% for item in section.items %}
+        <a class="ds-sb-link {% if item.active %}is-active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
+        {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </nav>
+
+  <button type="button" class="ds-sb-collapse" id="dsSidebarToggle" title="Collapse menu">
+    <i class="fa-solid fa-angles-left"></i><span class="ds-sb-label">Collapse</span>
+  </button>
+</aside>
+
+<script>
+  (function () {
+    var sidebar = document.getElementById("dsSidebar");
+    if (!sidebar) return;
+    var KEY = "ds-sidebar-collapsed";
+
+    if (localStorage.getItem(KEY) === "1") document.body.classList.add("ds-sb-collapsed");
+
+    document.getElementById("dsSidebarToggle").addEventListener("click", function () {
+      var collapsed = document.body.classList.toggle("ds-sb-collapsed");
+      localStorage.setItem(KEY, collapsed ? "1" : "0");
+    });
+
+    // One module open at a time: the full list is 139 pages, and leaving them
+    // all expanded turns the sidebar into a scroll race.
+    sidebar.addEventListener("click", function (e) {
+      var toggle = e.target.closest(".ds-sb-toggle");
+      if (!toggle) return;
+      var group = toggle.parentElement;
+      var wasOpen = group.classList.contains("is-open");
+      sidebar.querySelectorAll(".ds-sb-group.is-open").forEach(function (g) {
+        g.classList.remove("is-open");
+      });
+      if (!wasOpen) group.classList.add("is-open");
+    });
+  })();
+</script>

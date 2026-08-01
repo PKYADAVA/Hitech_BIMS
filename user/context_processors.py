@@ -41,6 +41,15 @@ def web_access(request):
     breadcrumb = breadcrumb_for(
         getattr(match, "url_name", None) if match else None, allowed_tabs)
 
+    # The sidebar layout is opt-in per deployment (DS_SIDEBAR). Off, the top
+    # navbar stays as it is; on, the shell becomes two columns. Building the
+    # menu is cheap, so it is computed either way and simply not rendered.
+    from django.conf import settings
+    from .services.navigation import sidebar_for
+
+    ds_shell = getattr(settings, "DS_SIDEBAR", False)
+    sidebar = sidebar_for(user, getattr(match, "url_name", None) if match else None)         if ds_shell else []
+
     # Pending change-request count for the navbar badge (only for users who
     # can see the Change Requests page at all).
     pending_change_requests = 0
@@ -55,5 +64,7 @@ def web_access(request):
         "section_url": section_landing_urls(user),
         "page_perms": page_perms,
         "breadcrumb": breadcrumb,
+        "sidebar": sidebar,
+        "ds_shell": ds_shell,
         "pending_change_requests": pending_change_requests,
     }
