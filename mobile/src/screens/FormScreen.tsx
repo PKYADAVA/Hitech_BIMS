@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useLayoutEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 
 import { createResource, deleteResource, updateResource } from "@/api/resources";
@@ -10,6 +10,7 @@ import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import { FORMS } from "@/config/forms";
+import { Hint } from "@/domain/dailyEntry";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -72,11 +73,41 @@ export function FormScreen({ route, navigation }: Props) {
     });
   };
 
+  // Server context behind the advisory hints (breed standards, feed phase, live
+  // birds). Reloaded only when one of the declared trigger fields changes, so
+  // typing a quantity re-advises instantly off data already in hand.
+  const [ctx, setCtx] = useState<unknown>(null);
+  const ctxKey = (schema.context?.on ?? []).map((n) => values[n] ?? "").join("|");
+  useEffect(() => {
+    const cfg = schema.context;
+    if (!cfg) return;
+    let cancelled = false;
+    cfg
+      .load(values)
+      .then((c) => {
+        if (!cancelled) setCtx(c);
+      })
+      // Advisories are a bonus, never a blocker: if the lookup fails the form
+      // stays fully usable, just without hints.
+      .catch(() => {
+        if (!cancelled) setCtx(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctxKey, schema]);
+
   // Client-side derived values (amounts, totals, derived quantities) — recomputed
   // each render from the current inputs, mirroring the web forms' calc functions.
   const derived = useMemo(
     () => (schema.compute ? schema.compute(values) : {}),
     [schema, values]
+  );
+
+  const advice = useMemo(
+    () => (schema.advise ? schema.advise(ctx, values) : null),
+    [schema, ctx, values]
   );
   // What each field shows: a computed field wins over any stored value.
   const shown = (name: string): string => derived[name] ?? values[name] ?? "";
@@ -147,6 +178,23 @@ export function FormScreen({ route, navigation }: Props) {
   const onSave = async () => {
     setFormError(null);
     if (!validate()) return;
+    // Advisory issues (wrong feed for the age, feed over standard, weight off
+    // the breed curve) are confirmed, not blocked — the person in the shed
+    // knows why a day looks unusual, and refusing the save would just lose it.
+    if (advice?.issues.length) {
+      const proceed = await new Promise<boolean>((resolve) =>
+        Alert.alert(
+          "Check before saving",
+          `${advice.issues.map((i) => `• ${i}`).join("\n")}\n\nSave anyway?`,
+          [
+            { text: "Go back", style: "cancel", onPress: () => resolve(false) },
+            { text: "Save anyway", onPress: () => resolve(true) },
+          ],
+          { cancelable: false }
+        )
+      );
+      if (!proceed) return;
+    }
     setSaving(true);
     try {
       const body = await buildBody();
@@ -198,17 +246,34 @@ export function FormScreen({ route, navigation }: Props) {
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
         {schema.fields.map((f) => (
-          <FormControl
-            key={f.name}
-            field={f}
-            value={shown(f.name)}
-            values={values}
-            fallbackLabel={row ? (row[`${f.name}_label`] as string) : undefined}
-            error={errors[f.name]}
-            onChange={set(f.name)}
-            onPatch={(patch) => setValues((cur) => ({ ...cur, ...patch }))}
-          />
+          <View key={f.name}>
+            <FormControl
+              field={f}
+              value={shown(f.name)}
+              values={values}
+              fallbackLabel={row ? (row[`${f.name}_label`] as string) : undefined}
+              error={errors[f.name]}
+              onChange={set(f.name)}
+              onPatch={(patch) => setValues((cur) => ({ ...cur, ...patch }))}
+            />
+            {advice?.fieldHints[f.name] ? (
+              <HintLine hint={advice.fieldHints[f.name]} />
+            ) : null}
+          </View>
         ))}
+
+        {advice && (advice.notes.length > 0 || advice.statusLabel) ? (
+          <View style={styles.adviceCard}>
+            {advice.statusLabel ? (
+              <Text style={[styles.statusPill, styles[`pill_${advice.status}`]]}>
+                {advice.statusLabel}
+              </Text>
+            ) : null}
+            {advice.notes.map((n, i) => (
+              <HintLine key={i} hint={n} />
+            ))}
+          </View>
+        ) : null}
 
         <Button
           title={mode === "create" ? "Create" : "Save changes"}
@@ -225,9 +290,39 @@ export function FormScreen({ route, navigation }: Props) {
   );
 }
 
+/** One advisory line, coloured by tone. */
+function HintLine({ hint }: { hint: Hint }) {
+  const styles = useStyles();
+  return <Text style={[styles.hint, styles[`hint_${hint.tone}`]]}>{hint.text}</Text>;
+}
+
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
+  hint: { ...type.label, marginTop: -spacing.xs, marginBottom: spacing.sm },
+  hint_ok: { color: colors.success },
+  hint_warn: { color: colors.warning },
+  hint_bad: { color: colors.danger },
+  hint_info: { color: colors.textMuted },
+  adviceCard: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  statusPill: {
+    ...type.label,
+    alignSelf: "flex-start",
+    overflow: "hidden",
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginBottom: spacing.xs,
+  },
+  pill_ok: { backgroundColor: colors.successLight, color: colors.success },
+  pill_near: { backgroundColor: colors.warningLight, color: colors.warning },
+  pill_warn: { backgroundColor: colors.dangerLight, color: colors.danger },
   formError: {
     ...type.label,
     color: colors.danger,

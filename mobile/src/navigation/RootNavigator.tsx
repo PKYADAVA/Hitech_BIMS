@@ -10,6 +10,7 @@ import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
+import { DailyEntryGridScreen } from "@/screens/DailyEntryGridScreen";
 import { DocumentFormScreen } from "@/screens/DocumentFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
@@ -90,12 +91,24 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
               isEditable(key) &&
               usePermissionsStore.getState().canAction(RESOURCES[key].module, "add")
               ? () => (
-                  <Pressable
-                    hitSlop={12}
-                    onPress={() => openRecordForm(navigation, key, "create")}
-                  >
-                    <AppIcon name="plus" size={24} color={colors.onDark} />
-                  </Pressable>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+                    {/* Daily Entry also has the web's multi-farm round: one
+                        date, several farms, one save. */}
+                    {key === "broiler-daily-entries" ? (
+                      <Pressable
+                        hitSlop={12}
+                        onPress={() => navigation.navigate("DailyEntryGrid")}
+                      >
+                        <AppIcon name="table" size={22} color={colors.onDark} />
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      hitSlop={12}
+                      onPress={() => openRecordForm(navigation, key, "create")}
+                    >
+                      <AppIcon name="plus" size={24} color={colors.onDark} />
+                    </Pressable>
+                  </View>
                 )
               : undefined,
           };
@@ -104,6 +117,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
+      <ModuleStack.Screen name="DailyEntryGrid" component={DailyEntryGridScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />

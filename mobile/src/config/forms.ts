@@ -11,6 +11,14 @@
 import { http } from "@/api/client";
 import { Envelope } from "@/api/types";
 import { isDocumentForm } from "@/config/documents";
+import { Advice, adviseDailyEntry, DailyEntryLookup } from "@/domain/dailyEntry";
+
+/** What the Daily Entry form's advisories are computed from. */
+interface DailyEntryContext {
+  lookup: DailyEntryLookup;
+  /** Opening feed stock keyed by slot ("feed_1" / "feed_2"). */
+  opening: Record<string, string>;
+}
 
 export type FieldType =
   | "text"
@@ -58,6 +66,21 @@ export interface FormSchema {
     on: string;
     run: (value: string, values: Record<string, string>) => Promise<Record<string, string>>;
   };
+  /**
+   * Server context behind a form's advisory hints, reloaded whenever one of
+   * `on` changes. Separate from `autofill` because it doesn't write any field —
+   * it's reference data the form reasons about (breed standards, feed phase,
+   * bird counts), and it must survive the user editing the fields it advises on.
+   */
+  context?: {
+    on: string[];
+    load: (values: Record<string, string>) => Promise<unknown>;
+  };
+  /**
+   * Turns that context plus the current values into hints. Advisory only —
+   * `FormScreen` surfaces them and asks for confirmation, never blocks a save.
+   */
+  advise?: (ctx: unknown, values: Record<string, string>) => Advice;
 }
 
 interface FarmLookup {
@@ -71,6 +94,33 @@ interface FarmLookup {
 const farmLookup = async (farmId: string): Promise<FarmLookup> =>
   (await http.get<Envelope<FarmLookup>>("/broiler/farm-lookup", { params: { farm: farmId } }))
     .data.data;
+
+/**
+ * Everything the Daily Entry form advises on: the above plus the feed phase for
+ * the age, breed-standard feed/weight, live birds and feed to date. A separate
+ * (heavier) endpoint from `farm-lookup`, which Bird Sale and Medicine Entry
+ * share and have no use for this.
+ *
+ * The date matters: age, phase and bird count are all resolved as of the day
+ * the row will be saved with, so backfilled entries are advised correctly.
+ */
+export const dailyEntryLookup = async (
+  farmId: string,
+  date?: string
+): Promise<DailyEntryLookup> =>
+  (await http.get<Envelope<DailyEntryLookup>>("/broiler/daily-entry-lookup", {
+    params: { farm: farmId, ...(date ? { date } : {}) },
+  })).data.data;
+
+/** Opening feed stock for a farm+item on a date — the running-stock preview. */
+export const dailyEntryStock = async (
+  farmId: string,
+  itemId: string,
+  date: string
+): Promise<string> =>
+  (await http.get<Envelope<{ stock: string }>>("/broiler/daily-entry-stock", {
+    params: { farm: farmId, item: itemId, date },
+  })).data.data.stock;
 
 interface TraySettingLookup {
   setting_date: string | null;
@@ -180,6 +230,36 @@ export const FORMS: Record<string, FormSchema> = {
           date: d.next_date,
         };
       },
+    },
+    // Reloaded on farm/date, because the breed standard, feed phase and
+    // live-bird count are all resolved as of the entry date — backfilling a
+    // week-old row must advise on that day, not today — and on either feed,
+    // whose opening stock is per farm+item.
+    context: {
+      on: ["farm", "date", "feed_1", "feed_2"],
+      load: async (values): Promise<DailyEntryContext | null> => {
+        if (!values.farm) return null;
+        const lookup = await dailyEntryLookup(values.farm, values.date);
+        const date = values.date || lookup.next_date;
+        // Opening balances are independent per slot; a missing one just drops
+        // that line rather than failing the whole advisory load.
+        const opening: Record<string, string> = {};
+        await Promise.all(
+          (["feed_1", "feed_2"] as const).map(async (slot) => {
+            if (!values[slot]) return;
+            try {
+              opening[slot] = await dailyEntryStock(values.farm, values[slot], date);
+            } catch {
+              /* leave it out */
+            }
+          })
+        );
+        return { lookup, opening };
+      },
+    },
+    advise: (ctx, values) => {
+      const c = ctx as DailyEntryContext | null;
+      return adviseDailyEntry(c?.lookup ?? null, values, c?.opening);
     },
   },
   "broiler-medicine-vaccine": {
