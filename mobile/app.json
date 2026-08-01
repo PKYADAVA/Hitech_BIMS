@@ -6,13 +6,7 @@
     "orientation": "portrait",
     "scheme": "hitechbims",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#15803d"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.hitechfarms.bims",
@@ -38,7 +32,6 @@
       }
     },
     "plugins": [
-      "@react-native-community/datetimepicker",
       "expo-notifications",
       [
         "expo-image-picker",
@@ -51,6 +44,18 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Hitech BIMS to record where a daily entry was captured."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#15803d"
         }
       ]
     ],
