@@ -44,6 +44,10 @@
   <!-- Alerts & Notifications module (bell, centre, widget) -->
   <link rel="stylesheet" href="{% static 'css/alerthub.css' %}?v=20260731b" />
 
+  <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
+       pages that opt in — the roll-out is page by page, not one big switch. -->
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260731" />
+
   {% block css %}{% endblock %}
 
   <!-- jQuery (loaded in head so inline scripts in templates can use $) -->

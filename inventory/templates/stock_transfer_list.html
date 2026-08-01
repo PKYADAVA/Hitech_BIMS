@@ -5,19 +5,22 @@
 {% block content %}
 {% include '_inventory_transaction_subnavbar.html' with active_tab='stock_transfer' %}
 
-<div class="page-header">
-  <div class="page-header-main">
-    <div class="page-header-title"><i class="fas fa-right-left"></i> Stock Transfer</div>
-    <div class="page-header-subtitle">Item movements between offices/warehouses and farms, with running stock balance</div>
+<div class="ds">
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+  <div>
+    <h1 class="ds-page-title"><i class="fas fa-right-left text-primary"></i> Stock Transfer</h1>
+    <p class="ds-subtitle">Item movements between offices/warehouses and farms, with running stock balance</p>
   </div>
-  <div class="page-header-right">
-    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'stock_transfer_add' %}"><i class="fas fa-plus"></i> Add</a>{% endif %}
+  <div class="ms-auto">
+    {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'stock_transfer_add' %}"><i class="fas fa-plus"></i> Add New</a>{% endif %}
   </div>
 </div>
 
 <!-- Filters -->
-<div class="card mb-3">
-  <div class="card-body">
+<div class="ds-card mb-3">
+  <div class="ds-card-body">
+    <div class="ds-section-title mb-3">Filters</div>
     <div class="row g-3 align-items-end">
       <div class="col-md-2">
         <label class="form-label">From Date:</label>
@@ -57,33 +60,45 @@
           <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
         </select>
       </div>
-      <div class="col-md-2 mt-3">
-        <button class="btn btn-primary" id="filter-submit">Submit</button>
-        <button type="button" class="btn btn-outline-secondary" id="filter-clear">Clear</button>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="filter-clear">Reset</button>
+        <button class="btn btn-primary" id="filter-submit"><i class="fas fa-search"></i> Search</button>
       </div>
     </div>
   </div>
 </div>
 
-<div class="card">
-  <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0" id="transfer-table">
-        <thead class="table-dark">
+<div class="ds-card">
+  <div class="ds-card-body flush">
+    <div class="ds-grid-wrap">
+      <table class="table ds-grid" id="transfer-table">
+        <thead>
           <tr>
-            <th>Date</th><th>Trnum</th><th>Dc No.</th><th>From Location</th>
-            <th>Item Code</th><th>Item Name</th><th>Driver</th><th>Quantity</th>
-            <th>To Location</th><th class="text-center">Action</th>
+            <th class="ds-mid w-code">Date</th>
+            <th class="w-code">Trnum</th>
+            <th class="w-code">Dc No.</th>
+            <th class="w-farm">From Location</th>
+            <th class="w-code">Item Code</th>
+            <th class="w-item">Item Name</th>
+            <th class="w-name">Driver</th>
+            <th class="ds-num w-qty">Quantity</th>
+            <th class="w-farm">To Location</th>
+            <th class="ds-mid w-action">Action</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
     </div>
+    <div class="ds-grid-foot">
+      <span id="transfer-count">—</span>
+    </div>
   </div>
 </div>
 
+</div><!-- /.ds -->
+
 <!-- Edit Modal -->
-<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade ds ds-modal" id="editModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form id="edit-form">
@@ -218,16 +233,16 @@ $(function () {
     tbody.empty();
     rows.forEach(function (row) {
       tbody.append(`<tr>
-        <td>${escapeHtml(row.date)}</td>
+        <td class="ds-mid">${escapeHtml(row.date)}</td>
         <td>${escapeHtml(row.trnum)}</td>
         <td>${escapeHtml(row.dc_no) || "-"}</td>
         <td>${escapeHtml(row.from_location_name)}</td>
         <td>${escapeHtml(row.item_code)}</td>
         <td>${escapeHtml(row.item_name)}</td>
         <td>${escapeHtml(row.driver_name) || "-"}</td>
-        <td>${Number(row.quantity).toFixed(2)}</td>
+        <td class="ds-num">${Number(row.quantity).toFixed(2)}</td>
         <td>${escapeHtml(row.to_location_name)}</td>
-        <td class="text-center">
+        <td class="ds-mid">
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm edit-button" data-id="${row.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -235,6 +250,8 @@ $(function () {
         </td>
       </tr>`);
     });
+    $("#transfer-count").text(
+      rows.length + (rows.length === 1 ? " record" : " records"));
     table = $("#transfer-table").DataTable({
       responsive: true, order: [[0, "desc"]],
       dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],

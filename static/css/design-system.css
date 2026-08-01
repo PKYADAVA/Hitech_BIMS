@@ -1,0 +1,251 @@
+/* ===========================================================================
+   BIMS Design System
+   ===========================================================================
+   One type scale, one set of controls, one grid, used by every module.
+
+   Opt in per page with `class="ds"` on a wrapper. Nothing here applies until
+   that class is present, so the system can be rolled out a page at a time
+   instead of in one commit that changes every screen at once.
+
+   Everything is expressed as a custom property first and consumed second, so a
+   change to the scale is one edit rather than a search across files.
+   ======================================================================== */
+
+.ds {
+  /* -- type ------------------------------------------------------------- */
+  --ds-font: "Inter", "Segoe UI", "IBM Plex Sans", Roboto, system-ui, sans-serif;
+
+  --ds-kpi-number: 32px;      --ds-kpi-title: 13px;
+  --ds-page-heading: 26px;    --ds-module-heading: 22px;
+  --ds-card-heading: 18px;    --ds-section-heading: 16px;
+  --ds-group-heading: 15px;
+  --ds-label: 13px;           --ds-input: 14px;
+  --ds-button: 14px;
+  --ds-grid-header: 13px;     --ds-grid-data: 13px;
+  --ds-footer-total: 14px;
+  --ds-caption: 12px;         --ds-badge: 12px;
+  --ds-nav: 14px;             --ds-tooltip: 12px;
+
+  --ds-lh-heading: 1.3;       --ds-lh-text: 1.5;      --ds-lh-table: 1.45;
+
+  --ds-medium: 500;           --ds-semibold: 600;     --ds-bold: 700;
+
+  /* -- colour ----------------------------------------------------------- */
+  --ds-primary: #2563eb;      --ds-primary-soft: #eff5ff;
+  --ds-success: #0f9d58;      --ds-success-soft: #e8f6ee;
+  --ds-warning: #d97706;      --ds-warning-soft: #fff4e5;
+  --ds-danger:  #dc2626;      --ds-danger-soft:  #fdeced;
+  --ds-info:    #0ea5e9;      --ds-info-soft:    #e6f6fe;
+
+  /* Exact values from the reference mockup, which names the hexes the written
+     spec only described ("Dark Gray", "Light Gray"). */
+  --ds-bg: #f4f6f9;           --ds-card: #ffffff;
+  --ds-border: #e3e8ef;
+  --ds-text: #111827;         /* primary text   */
+  --ds-muted: #6b7280;        /* secondary text */
+  --ds-label-text: #374151;   /* form labels    */
+  --ds-placeholder: #9ca3af;
+  --ds-disabled: #d1d5db;
+  --ds-header-bg: #f7f9fb;    --ds-row-hover: #eff5ff;
+
+  /* -- metrics ---------------------------------------------------------- */
+  --ds-control-h: 42px;       --ds-button-h: 44px;
+  --ds-row-h: 42px;           --ds-grid-header-h: 44px;
+  --ds-radius: 8px;           --ds-card-radius: 12px;
+  --ds-field-gap: 16px;       --ds-form-gap: 24px;    --ds-section-gap: 32px;
+
+  font-family: var(--ds-font);
+  color: var(--ds-text);
+  line-height: var(--ds-lh-text);
+  letter-spacing: 0;
+}
+
+/* Figures line up column-to-column whatever the digits are — the mockup calls
+   this out explicitly and it is what makes a money column readable. */
+.ds .ds-num, .ds td.ds-num, .ds tfoot td,
+.ds .ds-kpi-number, .ds input[type="number"] { font-variant-numeric: tabular-nums; }
+
+/* -- headings ----------------------------------------------------------- */
+.ds .ds-page-title   { font-size: var(--ds-page-heading); font-weight: var(--ds-bold);
+                       line-height: var(--ds-lh-heading); margin: 0; }
+.ds .ds-module-title { font-size: var(--ds-module-heading); font-weight: var(--ds-semibold);
+                       line-height: var(--ds-lh-heading); margin: 0; }
+.ds .ds-card-title   { font-size: var(--ds-card-heading); font-weight: var(--ds-semibold);
+                       line-height: var(--ds-lh-heading); margin: 0; }
+.ds .ds-section-title{ font-size: var(--ds-section-heading); font-weight: var(--ds-semibold);
+                       line-height: var(--ds-lh-heading); margin: 0; }
+.ds .ds-group-title  { font-size: var(--ds-group-heading); font-weight: var(--ds-medium); margin: 0; }
+.ds .ds-subtitle     { font-size: var(--ds-caption); color: var(--ds-muted); margin: 2px 0 0; }
+
+/* -- cards -------------------------------------------------------------- */
+.ds .ds-card {
+  background: var(--ds-card);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-card-radius);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+}
+.ds .ds-card-body { padding: 20px; }
+.ds .ds-card-body.flush { padding: 0; }
+
+/* -- form controls ------------------------------------------------------ */
+.ds .form-label,
+.ds .ds-label {
+  font-size: var(--ds-label); font-weight: var(--ds-medium);
+  color: var(--ds-label-text); margin-bottom: 6px; display: block;
+}
+.ds .form-control,
+.ds .form-select {
+  height: var(--ds-control-h);
+  font-size: var(--ds-input);
+  padding: 0 12px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+  color: var(--ds-text);
+}
+.ds textarea.form-control { height: auto; padding: 10px 12px; }
+.ds .form-control::placeholder { font-size: var(--ds-label); color: var(--ds-placeholder); }
+.ds .form-control:disabled, .ds .form-select:disabled { color: var(--ds-disabled); background: #f9fafb; }
+.ds .form-control:focus,
+.ds .form-select:focus {
+  border-color: var(--ds-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+/* Select2 stands in for every select, so it has to match the native height. */
+.ds .select2-container--bootstrap-5 .select2-selection {
+  min-height: var(--ds-control-h);
+  border-radius: var(--ds-radius);
+  border-color: var(--ds-border);
+  font-size: var(--ds-input);
+}
+.ds .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+  line-height: calc(var(--ds-control-h) - 2px);
+  padding-left: 12px;
+}
+
+/* -- buttons ------------------------------------------------------------ */
+.ds .btn {
+  height: var(--ds-button-h);
+  padding: 0 22px;
+  font-size: var(--ds-button);
+  font-weight: var(--ds-medium);
+  border-radius: var(--ds-radius);
+  display: inline-flex; align-items: center; gap: 8px;
+  line-height: 1;
+}
+.ds .btn-sm { height: 34px; padding: 0 14px; font-size: var(--ds-caption); }
+.ds .btn-primary { background: var(--ds-primary); border-color: var(--ds-primary); }
+.ds .btn-primary:hover { background: #1d4fd8; border-color: #1d4fd8; }
+.ds .btn-outline-secondary { background: #fff; border-color: var(--ds-border); color: #48566d; }
+.ds .btn-outline-secondary:hover { background: #f7f9fb; color: var(--ds-text); }
+.ds .btn-danger { background: var(--ds-danger); border-color: var(--ds-danger); }
+
+/* -- toolbar above a grid ----------------------------------------------- */
+.ds .ds-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 14px 16px; border-bottom: 1px solid var(--ds-border);
+}
+.ds .ds-toolbar .ds-toolbar-end { margin-left: auto; display: flex; gap: 8px; }
+
+/* -- grid --------------------------------------------------------------- */
+.ds .ds-grid-wrap { overflow-x: auto; }
+.ds table.ds-grid {
+  width: 100%; margin: 0; border-collapse: separate; border-spacing: 0;
+  line-height: var(--ds-lh-table);
+}
+.ds table.ds-grid thead th {
+  height: var(--ds-grid-header-h);
+  background: var(--ds-header-bg);
+  font-size: var(--ds-grid-header); font-weight: var(--ds-semibold);
+  color: #475569; text-align: left; white-space: nowrap;
+  padding: 0 12px; border-bottom: 1px solid var(--ds-border);
+  position: sticky; top: 0; z-index: 2;
+}
+.ds table.ds-grid tbody td {
+  height: var(--ds-row-h);
+  font-size: var(--ds-grid-data);
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f4f8;
+  vertical-align: middle;
+}
+.ds table.ds-grid tbody tr:hover td { background: var(--ds-row-hover); }
+.ds table.ds-grid tbody tr.is-selected td { box-shadow: inset 2px 0 0 var(--ds-primary); }
+.ds table.ds-grid tfoot td {
+  font-size: var(--ds-footer-total); font-weight: var(--ds-semibold);
+  background: var(--ds-header-bg); padding: 10px 12px;
+  border-top: 1px solid var(--ds-border);
+}
+.ds table.ds-grid .ds-check { width: 40px; text-align: center; }
+
+/* Alignment by data type, so a number is never left-aligned by accident. */
+.ds .ds-num, .ds th.ds-num, .ds td.ds-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ds .ds-mid, .ds th.ds-mid, .ds td.ds-mid { text-align: center; }
+
+/* Standard column widths, applied to the header cell. */
+.ds .w-serial { width: 60px; }   .ds .w-code   { width: 120px; }
+.ds .w-name   { width: 250px; }  .ds .w-mobile { width: 140px; }
+.ds .w-gstin  { width: 170px; }  .ds .w-farm   { width: 180px; }
+.ds .w-shed   { width: 160px; }  .ds .w-item   { width: 250px; }
+.ds .w-batch  { width: 150px; }  .ds .w-qty    { width: 110px; }
+.ds .w-weight { width: 120px; }  .ds .w-rate   { width: 120px; }
+.ds .w-amount { width: 140px; }  .ds .w-status { width: 120px; }
+.ds .w-action { width: 120px; }
+
+/* -- KPI cards ---------------------------------------------------------- */
+.ds .ds-kpi {
+  min-height: 120px; padding: 20px;
+  background: var(--ds-card); border: 1px solid var(--ds-border);
+  border-radius: var(--ds-card-radius);
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+}
+.ds .ds-kpi-title  { font-size: var(--ds-kpi-title); font-weight: var(--ds-medium);
+                     color: var(--ds-muted); }
+.ds .ds-kpi-number { font-size: var(--ds-kpi-number); font-weight: var(--ds-bold);
+                     line-height: 1.15; }
+.ds .ds-kpi-trend  { font-size: var(--ds-caption); color: var(--ds-muted); }
+
+/* -- status badges ------------------------------------------------------ */
+.ds .ds-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 26px; padding: 0 12px; border-radius: 20px;
+  font-size: var(--ds-badge); font-weight: var(--ds-medium); white-space: nowrap;
+}
+.ds .ds-badge.is-active,   .ds .ds-badge.is-approved,
+.ds .ds-badge.is-completed { background: var(--ds-success-soft); color: var(--ds-success); }
+.ds .ds-badge.is-pending,  .ds .ds-badge.is-draft,
+.ds .ds-badge.is-running   { background: var(--ds-warning-soft); color: var(--ds-warning); }
+.ds .ds-badge.is-cancelled { background: var(--ds-danger-soft);  color: var(--ds-danger); }
+.ds .ds-badge.is-inactive, .ds .ds-badge.is-closed { background: #eef1f5; color: var(--ds-muted); }
+.ds .ds-badge.is-info      { background: var(--ds-info-soft);    color: var(--ds-info); }
+
+/* -- grid footer: record count + pagination ----------------------------- */
+.ds .ds-grid-foot {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 16px; border-top: 1px solid var(--ds-border);
+  font-size: var(--ds-caption); color: var(--ds-muted);
+}
+.ds .ds-grid-foot .ds-foot-end { margin-left: auto; }
+
+/* -- form layout: two columns, never four ------------------------------- */
+.ds .ds-form-grid { display: grid; gap: var(--ds-field-gap); grid-template-columns: repeat(2, 1fr); }
+.ds .ds-form-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.ds .ds-form-section + .ds-form-section { margin-top: var(--ds-section-gap); }
+
+/* -- dialogs ------------------------------------------------------------ */
+.ds-modal .modal-dialog { max-width: 900px; }
+.ds-modal .modal-content { border-radius: var(--ds-card-radius); border: 0; }
+.ds-modal .modal-header,
+.ds-modal .modal-body,
+.ds-modal .modal-footer { padding: 24px; }
+.ds-modal .modal-header { border-bottom: 1px solid var(--ds-border); padding-bottom: 18px; }
+.ds-modal .modal-title { font-size: var(--ds-card-heading); font-weight: var(--ds-semibold); }
+.ds-modal .modal-footer { border-top: 1px solid var(--ds-border); justify-content: flex-end; gap: 8px; }
+
+/* -- responsive --------------------------------------------------------- */
+@media (max-width: 1023.98px) {
+  .ds .ds-form-grid, .ds .ds-form-grid.cols-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 767.98px) {
+  /* Touch targets stay at 44px even where the desktop control is 42. */
+  .ds .form-control, .ds .form-select { height: var(--ds-button-h); }
+  .ds .ds-toolbar { padding: 12px; }
+}
