@@ -55,7 +55,10 @@
 </head>
 
 <body>
-  <div class="content">
+  <!-- `ds` turns on the design system for every page: one type scale, one set
+       of control sizes, one palette. Grids still opt in per page with ds-grid /
+       ds-entry, because those need markup, not just styling. -->
+  <div class="content ds">
 
     <!-- Top Navigation -->
     {% block nav %}{% endblock %}

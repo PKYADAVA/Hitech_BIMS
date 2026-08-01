@@ -139,6 +139,26 @@
 .ds .btn-outline-secondary:hover { background: #f7f9fb; color: var(--ds-text); }
 .ds .btn-danger { background: var(--ds-danger); border-color: var(--ds-danger); }
 
+/* Controls inside any table are dense by default. Applying the 42px standalone
+   height to a cell control is what makes existing entry screens feel bulky, and
+   there are ~180 of them — so the compact size is the rule rather than
+   something each page has to opt into. */
+.ds table .form-control,
+.ds table .form-select {
+  height: 34px; font-size: var(--ds-grid-data); padding: 0 8px; border-radius: 6px;
+}
+.ds table .select2-container--bootstrap-5 .select2-selection { min-height: 34px; }
+.ds table .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+  line-height: 32px;
+}
+
+/* DataTables' export/column buttons are .btn, and at 44px they dominate the
+   toolbar they sit in. */
+.ds .dt-button.btn, .ds .dataTables_wrapper .btn-sm {
+  height: 32px; padding: 0 12px; font-size: var(--ds-caption);
+}
+.ds .dataTables_filter input, .ds .dataTables_length select { height: 34px; font-size: var(--ds-grid-data); }
+
 /* -- toolbar above a grid ----------------------------------------------- */
 .ds .ds-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
