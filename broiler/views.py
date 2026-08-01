@@ -2089,6 +2089,32 @@ def _live_bird_count(batch, as_of=None):
     return max(int(placed) - int(de["m"] or 0) - int(de["c"] or 0) - int(sold or 0), 0)
 
 
+def _placement_date(batch):
+    """The day the chicks went in, or None.
+
+    ``BroilerBatch.start_date`` is the obvious source but it is not always
+    filled: a batch can be created from a chicks placement without it, and one
+    such batch is enough for every date on the form to silently fall back to
+    today. The placement itself is a chick-category stock transfer into the
+    batch, which is the same definition the Live Flock figures use, so the
+    earliest of those stands in when start_date is blank.
+
+    Where both exist they agree — checked against the live data before relying
+    on it.
+    """
+    if batch is None:
+        return None
+    if batch.start_date:
+        return batch.start_date
+    from inventory.models import Item, StockTransfer
+
+    chick_ids = Item.objects.filter(
+        category__name__icontains="chick").values_list("id", flat=True)
+    return (StockTransfer.objects
+            .filter(to_batch=batch, item_id__in=chick_ids)
+            .order_by("date").values_list("date", flat=True).first())
+
+
 def daily_entry_lookup_payload(farm_id, date_str=None):
     """Returns the active batch/age for a farm, for the Add form's
     auto-filled Batch/Age fields as soon as a Farm is picked. ``next_date``
@@ -2109,6 +2135,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
     from django.db.models import F, Max, Sum
     from django.utils.dateparse import parse_date
     batch = _active_batch_for_farm(farm_id) if farm_id else None
+    placed_on = _placement_date(batch)
 
     # Scoped to the batch, not the farm: a farm re-used for a new flock would
     # otherwise inherit the previous batch's last entry and start the new one
@@ -2122,12 +2149,12 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
 
     if last_entry:
         next_date = last_entry.date + timedelta(days=1)
-    elif batch and batch.start_date:
+    elif placed_on:
         # A batch with no entries yet starts the day after placement: placement
         # day is Age 0, so the first entry is Age 1. Falling back to today here
         # skipped every day between placement and whenever someone opened the
         # form.
-        next_date = batch.start_date + timedelta(days=1)
+        next_date = placed_on + timedelta(days=1)
     else:
         next_date = timezone.localdate()
 
@@ -2137,9 +2164,9 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
     entry_date = parse_date(date_str or "") or next_date
 
     age_days = 0
-    if batch and batch.start_date:
+    if placed_on:
         # Placement day is Age 0; the first entry day is Age 1.
-        age_days = max((entry_date - batch.start_date).days, 0)
+        age_days = max((entry_date - placed_on).days, 0)
 
     phase = resolve_feed_phase(batch, entry_date, age_days) if batch else None
 

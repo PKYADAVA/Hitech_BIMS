@@ -86,3 +86,78 @@ class DailyEntryNextDateTests(TestCase):
 
     def test_a_farm_with_no_batch_falls_back_to_today(self):
         self.assertEqual(self.next_date(), self.today.isoformat())
+
+
+class PlacementWithoutStartDateTests(TestCase):
+    """A batch can exist with no start_date, and one such batch is enough for
+    every date on the form to fall back to today.
+
+    The placement is a chick-category stock transfer into the batch — the same
+    definition the Live Flock figures use — so that stands in when start_date
+    is blank. This is what the first fix missed: it read start_date only, so on
+    the batch that actually had the problem nothing changed.
+    """
+
+    def setUp(self):
+        from inventory.models import Item, ItemCategory, StockTransfer
+
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.supervisor = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.chick = Item.objects.create(
+            description="Day Old Chicks",
+            category=ItemCategory.objects.create(name="Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=40,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        self.StockTransfer = StockTransfer
+
+    def place(self, batch, days_ago, quantity=1000):
+        return self.StockTransfer.objects.create(
+            item=self.chick, to_batch=batch, quantity=quantity,
+            date=self.today - timedelta(days=days_ago))
+
+    def lookup(self):
+        return daily_entry_lookup_payload(str(self.farm.id), None)
+
+    def test_placement_is_taken_from_the_chick_transfer(self):
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+        expected = (self.today - timedelta(days=10)).isoformat()
+        self.assertEqual(self.lookup()["next_date"], expected)
+        self.assertNotEqual(self.lookup()["next_date"], self.today.isoformat())
+
+    def test_age_is_counted_from_it_too(self):
+        """Age had the same hole: without start_date it was always 0."""
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+        self.assertEqual(self.lookup()["age_days"], 1)
+
+    def test_start_date_still_wins_when_it_is_set(self):
+        batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="Both",
+            start_date=self.today - timedelta(days=5))
+        self.place(batch, days_ago=30)          # a stale transfer
+        expected = (self.today - timedelta(days=4)).isoformat()
+        self.assertEqual(self.lookup()["next_date"], expected)
+
+    def test_the_earliest_transfer_is_the_placement(self):
+        """Top-ups arrive later; the flock started with the first delivery."""
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="TopUp")
+        self.place(batch, days_ago=9)
+        self.place(batch, days_ago=12)
+        expected = (self.today - timedelta(days=11)).isoformat()
+        self.assertEqual(self.lookup()["next_date"], expected)
+
+    def test_no_placement_at_all_still_falls_back_to_today(self):
+        BroilerBatch.objects.create(broiler_farm=self.farm, batch_name="Empty")
+        self.assertEqual(self.lookup()["next_date"], self.today.isoformat())
