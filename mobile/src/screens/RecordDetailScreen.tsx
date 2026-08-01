@@ -7,7 +7,7 @@ import { retryMessage } from "@/api/sms";
 import { Row } from "@/api/types";
 import { RecordCard } from "@/components/RecordCard";
 import { AppIcon } from "@/components/AppIcon";
-import { Badge, Button, Card, DetailRow, Divider, IconCircle } from "@/components/ui";
+import { Button, Card, DetailRow, Divider } from "@/components/ui";
 import { ChildConfig, RESOURCES } from "@/config/catalog";
 import { isEditable, isRecordEditable } from "@/config/forms";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -15,7 +15,7 @@ import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
-import { makeStyles, spacing, type, useTheme } from "@/theme";
+import { makeStyles, radius, shadow, spacing, type, useTheme, withAlpha } from "@/theme";
 import { formatValue, humanizeKey, isEmpty } from "@/utils/format";
 
 /** Line-items of a parent record, fetched by FK and shown (add/edit) in detail. */
@@ -177,6 +177,17 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     ]);
   };
 
+  // The header card already surfaces the record's identity (title + subtitle).
+  // Don't repeat those same values as rows in Details — collect what the header
+  // shows (title, plus each middot-separated subtitle segment) and skip any
+  // field whose displayed value matches. e.g. for a User this drops the
+  // Username/Email/Groups rows already shown above.
+  const headerShown = new Set(
+    [view.title, ...(view.subtitle ? view.subtitle.split(/\s*·\s*/) : [])]
+      .map((s) => String(s).trim().toLowerCase())
+      .filter((s) => s.length > 0)
+  );
+
   const entries = Object.entries(row).filter(([k, v]) => {
     if (HIDDEN.test(k) || k.endsWith("_label") || isEmpty(v)) return false;
     // Many-to-many / list-of-ids fields: only show when we have a readable
@@ -184,24 +195,34 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     if (Array.isArray(v)) return !isEmpty(row[`${k}_label`]);
     return true;
   });
-  const main = entries.filter(([k]) => !AUDIT.has(k));
+  const main = entries.filter(
+    ([k, v]) => !AUDIT.has(k) && !headerShown.has(valueFor(k, v).trim().toLowerCase())
+  );
   const audit = entries.filter(([k]) => AUDIT.has(k));
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {/* Header card */}
-      <Card style={styles.header}>
-        <IconCircle icon={config.icon} color={config.accent} size={52} />
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.title}>{view.title}</Text>
-          {view.subtitle ? <Text style={styles.subtitle}>{view.subtitle}</Text> : null}
+      {/* Hero header — neutral dark card with a soft light glow for depth. The
+          icon chip carries the module accent; title/subtitle stack beneath. */}
+      <View style={[styles.hero, { backgroundColor: colors.primary }]}>
+        <View style={styles.heroGlow} pointerEvents="none" />
+        <View style={styles.heroTop}>
+          <View style={[styles.heroIcon, { backgroundColor: config.accent }]}>
+            <AppIcon emoji={config.icon} size={28} color={colors.onDark} />
+          </View>
           {view.badge ? (
-            <View style={{ flexDirection: "row", marginTop: 4 }}>
-              <Badge label={view.badge.label} tone={view.badge.tone} />
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{view.badge.label}</Text>
             </View>
           ) : null}
         </View>
-      </Card>
+        <View style={styles.heroText}>
+          <Text style={styles.title} numberOfLines={2}>
+            {view.title}
+          </Text>
+          {view.subtitle ? <Text style={styles.subtitle}>{view.subtitle}</Text> : null}
+        </View>
+      </View>
 
       {config.key === "sms-templates" ? (
         <Button title="Send SMS" onPress={() => navigation.navigate("SmsSend", { row })} />
@@ -252,9 +273,45 @@ export function RecordDetailScreen({ route, navigation }: Props) {
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
-  header: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  title: { ...type.h2, color: colors.text },
-  subtitle: { ...type.body, color: colors.textMuted },
+  hero: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    ...shadow(2),
+  },
+  // Soft off-corner highlight so the banner reads as a designed surface rather
+  // than a flat block of color.
+  heroGlow: {
+    position: "absolute",
+    top: -60,
+    right: -40,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: withAlpha("#ffffff", 0.1),
+  },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.md + 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroText: { marginTop: spacing.md, gap: 4 },
+  title: { ...type.h1, color: colors.onDark },
+  subtitle: { ...type.body, color: withAlpha("#ffffff", 0.85), lineHeight: 21 },
+  heroBadge: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: withAlpha("#ffffff", 0.22),
+  },
+  heroBadgeText: { ...type.caption, color: colors.onDark, fontWeight: "700" },
   groupTitle: {
     ...type.label,
     color: colors.textFaint,
