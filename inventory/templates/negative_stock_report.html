@@ -46,10 +46,10 @@
     entries (a missing receipt, transfer-in or opening adjustment) at the location shown.
   </div>
   <div class="rpt-scroll">
-    <table class="table table-bordered table-hover rpt-table mb-0" style="width:auto; min-width:100%; table-layout:auto;">
+    <table class="table table-bordered table-hover rpt-table mb-0 ds-grid" style="width:auto; min-width:100%; table-layout:auto;">
       <thead><tr>
-        <th>S.No</th><th>Farm/Sector</th><th>Item Name</th>
-        <th>Date</th><th>Negative Since</th><th class="num">Quantity</th>
+        <th class="ds-mid">S.No</th><th>Farm/Sector</th><th>Item Name</th>
+        <th class="ds-mid">Date</th><th>Negative Since</th><th class="ds-num num">Quantity</th>
       </tr></thead>
       <tbody>
         {% for r in rows %}

@@ -58,19 +58,19 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered table-sm mb-0" id="hatcher-candling-table">
+        <table class="table table-bordered table-sm mb-0 ds-grid" id="hatcher-candling-table">
           <thead class="table-light">
             <tr>
-              <th style="min-width:36px;">Sr.</th>
+              <th class="ds-mid" style="min-width:36px;">Sr.</th>
               <th style="min-width:90px;">Hatcher No.</th>
-              <th style="min-width:90px;">Infertile Qty</th>
-              <th style="min-width:70px;">Infertile %</th>
+              <th class="ds-num" style="min-width:90px;">Infertile Qty</th>
+              <th class="ds-num" style="min-width:70px;">Infertile %</th>
               <th style="min-width:90px;">Early Dead</th>
-              <th style="min-width:70px;">ED %</th>
-              <th style="min-width:90px;">Blasting Qty</th>
-              <th style="min-width:70px;">BQ %</th>
-              <th style="min-width:90px;">Transfer Qty</th>
-              <th style="min-width:70px;">TQ %</th>
+              <th class="ds-num" style="min-width:70px;">ED %</th>
+              <th class="ds-num" style="min-width:90px;">Blasting Qty</th>
+              <th class="ds-num" style="min-width:70px;">BQ %</th>
+              <th class="ds-num" style="min-width:90px;">Transfer Qty</th>
+              <th class="ds-num" style="min-width:70px;">TQ %</th>
             </tr>
           </thead>
           <tbody id="hatcher-candling-tbody"></tbody>
@@ -97,10 +97,10 @@
     <div class="card-header"><i class="fas fa-egg me-1"></i>Final Hatch Output Grading</div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered table-sm mb-0" id="hatcher-grading-table">
+        <table class="table table-bordered table-sm mb-0 ds-grid" id="hatcher-grading-table">
           <thead class="table-light">
             <tr>
-              <th style="min-width:36px;">Sr.</th>
+              <th class="ds-mid" style="min-width:36px;">Sr.</th>
               <th style="min-width:100px;">Dead-In-Shell</th>
               <th style="min-width:100px;">Culls / Malf.</th>
               <th style="min-width:110px;">Saleable Chicks</th>
@@ -129,9 +129,9 @@
     <div class="card-header"><i class="fas fa-calculator me-1"></i>Hatch Costing</div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-bordered mb-0" id="costing-table">
+        <table class="table table-bordered mb-0 ds-grid" id="costing-table">
           <thead class="table-light">
-            <tr><th style="width:34%">Description</th><th>Total / Type</th><th>Rate</th><th>Amount</th><th style="width:46px"></th></tr>
+            <tr><th style="width:34%">Description</th><th>Total / Type</th><th class="ds-num">Rate</th><th class="ds-num">Amount</th><th style="width:46px"></th></tr>
           </thead>
           <tbody>
             <tr>
@@ -153,7 +153,7 @@
           <tbody id="vaccine-rows"></tbody>
           <tbody>
             <tr>
-              <th class="align-middle">Net Chicks Rate</th>
+              <th class="ds-num align-middle">Net Chicks Rate</th>
               <td></td>
               <td><input class="form-control bg-light" id="net_rate" readonly value="0.00"></td>
               <td><input class="form-control bg-light" id="net_amount" readonly value="0.00"></td>

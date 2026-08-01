@@ -140,21 +140,21 @@
     <span class="fw-normal text-muted">— what to procure and send, per feed, across the whole selection</span>
   </div>
   <div class="table-responsive">
-    <table class="table table-bordered fs-table mb-0 rpt-table" style="width:auto; min-width:100%;">
+    <table class="table table-bordered fs-table mb-0 rpt-table ds-grid" style="width:auto; min-width:100%;">
       <thead>
         <tr>
           <th>Feed Item</th><th class="num">Batches</th>
-          <th class="num">Total Required <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Total Required <span class="unit">(Kg)</span></th>
           <th class="num">Already Sent <span class="unit">(Kg)</span></th>
           <th class="num">Still To Send <span class="unit">(Kg)</span></th>
-          <th class="num">Branch Warehouse Stock <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Branch Warehouse Stock <span class="unit">(Kg)</span></th>
           <th class="num">Short By <span class="unit">(Kg)</span></th>
           <th class="num">Consumed <span class="unit">(Kg)</span></th>
-          <th class="num">Farm Stock <span class="unit">(Kg)</span></th>
-          <th class="num">Farm Stock <span class="unit">(Bags)</span></th>
+          <th class="ds-num num">Farm Stock <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Farm Stock <span class="unit">(Bags)</span></th>
           <th class="num">Day's Intake <span class="unit">(Kg/day)</span></th>
-          <th class="num">Next 3 Days <span class="unit">(Kg)</span></th>
-          <th class="num">Next 3 Days <span class="unit">(Bags)</span></th>
+          <th class="ds-num num">Next 3 Days <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Next 3 Days <span class="unit">(Bags)</span></th>
         </tr>
       </thead>
       <tbody>
@@ -212,13 +212,13 @@
     </div>
   </div>
   <div class="fs-scroll">
-    <table class="table table-bordered table-hover fs-table mb-0 rpt-table" id="fs-table" style="width:auto; min-width:100%;">
+    <table class="table table-bordered table-hover fs-table mb-0 rpt-table ds-grid" id="fs-table" style="width:auto; min-width:100%;">
       <thead>
         <tr>
           <th rowspan="2">Sl.No</th><th rowspan="2">Farm</th><th rowspan="2">Batch</th>
-          <th rowspan="2">Age<br><span class="unit">(days)</span></th>
+          <th class="ds-num" rowspan="2">Age<br><span class="unit">(days)</span></th>
           <th rowspan="2">Latest<br>Entry</th>
-          <th rowspan="2">Gap<br><span class="unit">(days)</span></th>
+          <th class="ds-num" rowspan="2">Gap<br><span class="unit">(days)</span></th>
           <th rowspan="2">Item</th>
           <th colspan="2">Birds</th>
           <th colspan="3">Phase</th>
@@ -227,23 +227,23 @@
           <th>Purchase/Transfer In</th>
           <th colspan="2">Consumption</th>
           <th>Feed Transfer Out</th>
-          <th colspan="2">Farm Stock</th>
+          <th class="ds-num" colspan="2">Farm Stock</th>
           <th colspan="2">Difference</th>
           <th colspan="3">Feed Outlook</th>
-          <th rowspan="2">Action Required</th>
+          <th class="ds-mid" rowspan="2">Action Required</th>
         </tr>
         <tr>
           <th class="num">Placed</th><th class="num">Available</th>
-          <th class="num">Age Band <span class="unit">(days)</span></th><th class="num">Cap <span class="unit">(gm/bird)</span></th>
-          <th class="num">Total Required Feed <span class="unit">(Kg)</span></th>
-          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Total Qty <span class="unit">(Kg)</span></th>
-          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Feed Qty <span class="unit">(Kg)</span></th>
-          <th class="num">Feed In Qty <span class="unit">(Kg)</span></th>
-          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Consumed Qty <span class="unit">(Kg)</span></th>
-          <th class="num">Transferred Out Qty <span class="unit">(Kg)</span></th>
-          <th class="num">Available Qty <span class="unit">(Kg)</span></th><th class="num">Bags</th>
+          <th class="ds-num num">Age Band <span class="unit">(days)</span></th><th class="num">Cap <span class="unit">(gm/bird)</span></th>
+          <th class="ds-num num">Total Required Feed <span class="unit">(Kg)</span></th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="ds-num num">Total Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="ds-num num">Feed Qty <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Feed In Qty <span class="unit">(Kg)</span></th>
+          <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="ds-num num">Consumed Qty <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Transferred Out Qty <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Available Qty <span class="unit">(Kg)</span></th><th class="num">Bags</th>
           <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Feed <span class="unit">(Kg)</span></th>
-          <th class="num">Daily Rate <span class="unit">(Kg)</span></th><th class="num">Days Cover <span class="unit">(days)</span></th><th class="num">Next 3 Days <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Daily Rate <span class="unit">(Kg)</span></th><th class="ds-num num">Days Cover <span class="unit">(days)</span></th><th class="ds-num num">Next 3 Days <span class="unit">(Kg)</span></th>
         </tr>
       </thead>
       <tbody>
@@ -364,7 +364,7 @@
       <div class="modal-body">
         <div id="fsViewHead" class="small mb-2"></div>
         <div class="table-responsive">
-          <table class="table table-sm table-bordered mb-0 rpt-table" id="fsViewBody" style="font-size:.75rem;"></table>
+          <table class="table table-sm table-bordered mb-0 rpt-table ds-grid" id="fsViewBody" style="font-size:.75rem;"></table>
         </div>
       </div>
     </div>

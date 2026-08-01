@@ -22,7 +22,7 @@
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0" id="change-request-table">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="change-request-table">
         <thead>
           <tr>
             <th>Requested At</th>
@@ -31,9 +31,9 @@
             <th>Record</th>
             <th>Request</th>
             <th>Reason</th>
-            <th>Status</th>
+            <th class="ds-mid">Status</th>
             <th>Reviewed By</th>
-            <th class="text-center">Action</th>
+            <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -196,7 +196,7 @@ $(function () {
     const scalarKeys = [], arrayKeys = [];
     Object.keys(payload).forEach(k => (Array.isArray(payload[k]) ? arrayKeys : scalarKeys).push(k));
 
-    html += '<h6>Details</h6><table class="table table-bordered table-sm mb-2"><thead class="table-light"><tr><th style="width:25%">Field</th><th style="width:37%">Current (saved)</th><th style="width:38%">Proposed</th></tr></thead><tbody>';
+    html += '<h6>Details</h6><table class="table table-bordered table-sm mb-2 ds-grid"><thead class="table-light"><tr><th style="width:25%">Field</th><th style="width:37%">Current (saved)</th><th style="width:38%">Proposed</th></tr></thead><tbody>';
     scalarKeys.forEach(k => {
       const cur = current ? current[k] : undefined;
       const changed = current && (k in current) && !sameValue(cur, payload[k]);
@@ -211,7 +211,7 @@ $(function () {
       const cols = propRows.length ? Object.keys(propRows[0]) : (curRows.length ? Object.keys(curRows[0]) : []);
       html += `<h6>${labelize(k)}</h6>`;
       if (!cols.length) { html += '<div class="text-muted small mb-2">No rows.</div>'; return; }
-      html += '<table class="table table-bordered table-sm mb-2"><thead class="table-light"><tr><th>#</th>' +
+      html += '<table class="table table-bordered table-sm mb-2 ds-grid"><thead class="table-light"><tr><th class="ds-mid">#</th>' +
         cols.map(c => `<th>${labelize(c)}</th>`).join("") + "<th></th></tr></thead><tbody>";
       const count = Math.max(propRows.length, curRows.length);
       for (let i = 0; i < count; i++) {

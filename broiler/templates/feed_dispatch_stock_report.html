@@ -231,8 +231,8 @@
   <div class="col-lg-3">
     <div class="card h-100"><div class="card-body py-2 px-3">
       <div class="section-title mb-1" style="font-size:.85rem;">Warehouse Snapshot</div>
-      <table class="table table-sm mb-0 rpt-table" style="font-size:.74rem;">
-        <thead><tr><th class="text-start">Branch</th><th class="text-start">Warehouse</th><th class="text-end">Net Stock (bags)</th></tr></thead>
+      <table class="table table-sm mb-0 rpt-table ds-grid" style="font-size:.74rem;">
+        <thead><tr><th class="text-start">Branch</th><th class="text-start">Warehouse</th><th class="ds-num text-end">Net Stock (bags)</th></tr></thead>
         <tbody>
           {% for w in warehouse_snapshot %}
           <tr>
@@ -291,10 +291,10 @@
     </div>
     <div class="ledger-table-wrap">
     <div class="table-responsive">
-      <table class="table table-bordered mb-0 ledger-table rpt-table" id="ledger-table" style="width:100%">
+      <table class="table table-bordered mb-0 ledger-table rpt-table ds-grid" id="ledger-table" style="width:100%">
         <thead>
           <tr>
-            <th class="grp-date" rowspan="2">Date</th>
+            <th class="ds-mid grp-date" rowspan="2">Date</th>
             <th class="grp-date" rowspan="2">Transaction No.</th>
             <th class="grp-date" rowspan="2">Challan No.</th>
             <th class="grp-date" rowspan="2">Branch</th>
@@ -302,11 +302,11 @@
             <th class="grp-date" rowspan="2">Supplier/Farmer Name</th>
             <th class="grp-date" rowspan="2">Farm Batch No.</th>
             <th class="grp-dispatch" colspan="{{ feed_labels|length }}">Dispatched Feed (Bags)</th>
-            <th class="grp-date" rowspan="2">Total Bags</th>
-            <th class="grp-date" rowspan="2">Total Kg</th>
+            <th class="ds-num grp-date" rowspan="2">Total Bags</th>
+            <th class="ds-num grp-date" rowspan="2">Total Kg</th>
             <th class="grp-received" colspan="{{ feed_labels|length }}">Received Feed (Bags)</th>
-            <th class="grp-stock" colspan="{{ feed_labels|length }}">Total Stock (Bags)</th>
-            <th class="grp-date" rowspan="2">Net Total Bag Stock</th>
+            <th class="ds-num grp-stock" colspan="{{ feed_labels|length }}">Total Stock (Bags)</th>
+            <th class="ds-num grp-date" rowspan="2">Net Total Bag Stock</th>
             <th class="grp-other" rowspan="2">Vehicle No.<br>(Dispatch/Receive)</th>
             <th class="grp-other" rowspan="2">Freight Paid<br>(If Any)</th>
             <th class="grp-other" rowspan="2">Remarks</th>

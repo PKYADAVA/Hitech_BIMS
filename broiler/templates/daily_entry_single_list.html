@@ -44,9 +44,9 @@
 
 <div class="card">
   <div class="table-responsive">
-    <table class="table table-hover table-bordered mb-0" id="groups-table" style="width:100%">
+    <table class="table table-hover table-bordered mb-0 ds-grid" id="groups-table" style="width:100%">
       <thead class="table-dark">
-        <tr><th></th><th>Farm</th><th>Batch</th><th>Status</th><th>Entries</th><th class="text-center">Action</th></tr>
+        <tr><th></th><th>Farm</th><th>Batch</th><th class="ds-mid">Status</th><th>Entries</th><th class="ds-mid text-center">Action</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -215,9 +215,9 @@ $(function () {
     }).join("");
     return `
       <div class="table-responsive">
-        <table class="table table-hover table-bordered mb-0">
+        <table class="table table-hover table-bordered mb-0 ds-grid">
           <thead class="table-light">
-            <tr><th>Date</th><th>Trnum</th><th>Age</th><th>Mortality</th><th>Feed Qty</th><th class="text-center">Action</th></tr>
+            <tr><th class="ds-mid">Date</th><th>Trnum</th><th>Age</th><th>Mortality</th><th class="ds-num">Feed Qty</th><th class="ds-mid text-center">Action</th></tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
         </table>

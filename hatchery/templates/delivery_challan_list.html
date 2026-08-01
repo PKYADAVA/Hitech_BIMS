@@ -33,7 +33,7 @@
   </div>
 </div>
 
-<div class="card"><div class="card-header"><i class="fas fa-list"></i> Challan Register</div><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover table-bordered mb-0" id="challan-table"><thead><tr><th>Challan No.</th><th>Date</th><th>Customer</th><th>Vehicle</th><th>Quantity</th><th>Amount</th><th class="text-center">Action</th></tr></thead><tbody></tbody></table></div></div></div>
+<div class="card"><div class="card-header"><i class="fas fa-list"></i> Challan Register</div><div class="card-body p-0"><div class="table-responsive"><table class="table table-hover table-bordered mb-0 ds-grid" id="challan-table"><thead><tr><th>Challan No.</th><th class="ds-mid">Date</th><th>Customer</th><th>Vehicle</th><th class="ds-num">Quantity</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Action</th></tr></thead><tbody></tbody></table></div></div></div>
 
 <!-- View Modal (read-only) -->
 <div class="modal fade" id="viewChallanModal" tabindex="-1" aria-hidden="true">
@@ -171,7 +171,7 @@ $(function () {
       <div><b>Billing Details</b><br>Name: ${escapeHtml(c.customer_name)}<br>GSTIN: ${escapeHtml(c.customer_gstin)} | Mobile: ${escapeHtml(c.customer_mobile)}<br>Email: ${escapeHtml(c.customer_email)}<br>Address: ${escapeHtml(c.customer_address)}</div>
       <div><b>Shipping Details</b><br>Name: ${escapeHtml(c.customer_name)}<br>GSTIN: ${escapeHtml(c.customer_gstin)} | Mobile: ${escapeHtml(c.customer_mobile)}<br>Email: ${escapeHtml(c.customer_email)}<br>Address: ${escapeHtml(c.shipping_address)}</div>
     </div>`;
-    html += `<table><thead><tr><th>Sr.</th><th>Item Description</th><th>HSN/SAC</th><th>Qty</th><th>Unit</th>${priceCols ? "<th>List Price</th><th>Disc.</th><th>Tax %</th><th>Amount (₹)</th>" : ""}</tr></thead><tbody>`;
+    html += `<table><thead><tr><th class="ds-mid">Sr.</th><th>Item Description</th><th>HSN/SAC</th><th class="ds-num">Qty</th><th>Unit</th>${priceCols ? "<th class="ds-num">List Price</th><th>Disc.</th><th class="ds-num">Tax %</th><th class="ds-num">Amount (₹)</th>" : ""}</tr></thead><tbody>`;
     (c.items || []).forEach((row, i) => {
       html += `<tr><td>${i + 1}</td><td>${escapeHtml(row.item_code)} - ${escapeHtml(row.item_description)}</td><td>${escapeHtml(row.hsn_code)}</td><td>${row.quantity}</td><td>${escapeHtml(row.unit)}</td>${priceCols ? "<td>" + escapeHtml(row.price) + "</td><td>" + row.discount_percent + "%</td><td>" + row.tax_percent + "%</td><td>" + escapeHtml(row.amount) + "</td>" : ""}</tr>`;
     });

@@ -56,7 +56,7 @@ Manage Customers
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-bordered mb-0" id="customer-table">
+            <table class="table table-hover table-bordered mb-0 ds-grid" id="customer-table">
                 <thead>
                     <tr>
                         <th>Code</th>
@@ -65,9 +65,9 @@ Manage Customers
                         <th>Party Type</th>
                         <th>Party Category</th>
                         <th>Customer Group</th>
-                        <th>Credit Limit</th>
+                        <th class="ds-num">Credit Limit</th>
                         <th>State of Supply</th>
-                        <th class="text-center">Actions</th>
+                        <th class="ds-mid text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -118,9 +118,9 @@ Manage Customers
       </div>
       <div class="modal-body p-0">
         <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle mb-0">
+          <table class="table table-sm table-hover align-middle mb-0 ds-grid">
             <thead>
-              <tr><th>Date</th><th>Employee</th><th>Check In</th><th>Check Out</th>
+              <tr><th class="ds-mid">Date</th><th>Employee</th><th>Check In</th><th>Check Out</th>
                   <th>Duration</th><th>Follow-Up</th><th>Remarks</th></tr>
             </thead>
             <tbody id="visit-history-rows">

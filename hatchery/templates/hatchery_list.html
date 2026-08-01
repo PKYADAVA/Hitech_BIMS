@@ -35,7 +35,7 @@
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0" id="hatchery-table">
+      <table class="table table-hover table-bordered mb-0 ds-grid" id="hatchery-table">
         <thead>
           <tr>
             <th>Setting No (Batch ID)</th>
@@ -44,12 +44,12 @@
             <th>Setting Date</th>
             <th>Transfer Date</th>
             <th>Hatch Date</th>
-            <th>Setting Qty</th>
+            <th class="ds-num">Setting Qty</th>
             <th>Saleable Chicks</th>
-            <th>Hatch %</th>
+            <th class="ds-num">Hatch %</th>
             <th>Sold</th>
             <th>Unsold Chicks</th>
-            <th>Actions</th>
+            <th class="ds-mid">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -198,14 +198,14 @@
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
-                <table class="table table-bordered table-sm mb-0" id="complete-egg-intake-table">
+                <table class="table table-bordered table-sm mb-0 ds-grid" id="complete-egg-intake-table">
                   <thead class="table-light">
                     <tr>
                       <th style="min-width:110px;">Sub-Lot / Flock</th>
                       <th style="min-width:100px;">Setter No.</th>
                       <th style="min-width:80px;">No. Trays</th>
                       <th style="min-width:80px;">Tray Size</th>
-                      <th style="min-width:100px;">Total Eggs</th>
+                      <th class="ds-num" style="min-width:100px;">Total Eggs</th>
                       <th style="width:40px;"></th>
                     </tr>
                   </thead>
@@ -224,18 +224,18 @@
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
-                <table class="table table-bordered table-sm mb-0" id="complete-hatcher-table">
+                <table class="table table-bordered table-sm mb-0 ds-grid" id="complete-hatcher-table">
                   <thead class="table-light">
                     <tr>
                       <th style="min-width:90px;">Hatcher No.</th>
-                      <th style="min-width:90px;">Infertile Qty</th>
-                      <th style="min-width:70px;">Infertile %</th>
+                      <th class="ds-num" style="min-width:90px;">Infertile Qty</th>
+                      <th class="ds-num" style="min-width:70px;">Infertile %</th>
                       <th style="min-width:90px;">Early Dead</th>
-                      <th style="min-width:70px;">ED %</th>
-                      <th style="min-width:90px;">Blasting Qty</th>
-                      <th style="min-width:70px;">BQ %</th>
-                      <th style="min-width:90px;">Transfer Qty</th>
-                      <th style="min-width:70px;">TQ %</th>
+                      <th class="ds-num" style="min-width:70px;">ED %</th>
+                      <th class="ds-num" style="min-width:90px;">Blasting Qty</th>
+                      <th class="ds-num" style="min-width:70px;">BQ %</th>
+                      <th class="ds-num" style="min-width:90px;">Transfer Qty</th>
+                      <th class="ds-num" style="min-width:70px;">TQ %</th>
                       <th style="min-width:100px;">Dead-In-Shell</th>
                       <th style="min-width:100px;">Culls / Malf.</th>
                       <th style="min-width:100px;">Saleable Chicks</th>
@@ -297,16 +297,16 @@
             </div>
             <div class="card-body p-0">
               <div class="table-responsive">
-                <table class="table table-bordered table-sm mb-0" id="complete-sales-table">
+                <table class="table table-bordered table-sm mb-0 ds-grid" id="complete-sales-table">
                   <thead class="table-light">
                     <tr>
                       <th style="min-width:160px;">Customer Name</th>
                       <th style="min-width:90px;">Chicks Sold</th>
-                      <th style="min-width:80px;">Discount %</th>
+                      <th class="ds-num" style="min-width:80px;">Discount %</th>
                       <th style="min-width:90px;">Free Chicks</th>
                       <th style="min-width:90px;">Billed Chicks</th>
-                      <th style="min-width:90px;">Rate (₹)</th>
-                      <th style="min-width:110px;">Total Amount (₹)</th>
+                      <th class="ds-num" style="min-width:90px;">Rate (₹)</th>
+                      <th class="ds-num" style="min-width:110px;">Total Amount (₹)</th>
                       <th style="min-width:110px;">Payment Status</th>
                       <th style="min-width:160px;">Delivery / Vehicle Notes</th>
                       <th style="width:40px;"></th>
@@ -445,7 +445,7 @@ $(document).ready(function () {
     html += viewField("Setting Qty", hs.setting_qty);
     html += "</div>";
     if (hs.egg_intakes && hs.egg_intakes.length) {
-      html += '<div class="table-responsive mb-3"><table class="table table-bordered table-sm"><thead class="table-light"><tr><th>Sub-Lot/Flock</th><th>Setter No.</th><th>No. Trays</th><th>Tray Size</th><th>Total Eggs</th></tr></thead><tbody>';
+      html += '<div class="table-responsive mb-3"><table class="table table-bordered table-sm ds-grid"><thead class="table-light"><tr><th>Sub-Lot/Flock</th><th>Setter No.</th><th>No. Trays</th><th>Tray Size</th><th class="ds-num">Total Eggs</th></tr></thead><tbody>';
       hs.egg_intakes.forEach((r) => {
         html += `<tr><td>${escapeHtml(r.sub_lot_flock)}</td><td>${escapeHtml(r.setter_no)}</td><td>${escapeHtml(r.no_trays)}</td><td>${escapeHtml(r.tray_size)}</td><td>${escapeHtml(r.total_eggs)}</td></tr>`;
       });
@@ -458,7 +458,7 @@ $(document).ready(function () {
     if (hs.hatcher_outputs && hs.hatcher_outputs.length) {
       const settingQty = parseFloat(hs.setting_qty) || 0;
       const pct = (qty) => settingQty ? `(${(parseFloat(qty) / settingQty * 100).toFixed(2)}%)` : "";
-      html += '<div class="table-responsive mb-3"><table class="table table-bordered table-sm"><thead class="table-light"><tr><th>Hatcher No.</th><th>Infertile</th><th>Early Dead</th><th>Blasting</th><th>Transfer Qty</th><th>Dead-in-Shell</th><th>Culls</th><th>Saleable Chicks</th></tr></thead><tbody>';
+      html += '<div class="table-responsive mb-3"><table class="table table-bordered table-sm ds-grid"><thead class="table-light"><tr><th>Hatcher No.</th><th>Infertile</th><th>Early Dead</th><th>Blasting</th><th class="ds-num">Transfer Qty</th><th>Dead-in-Shell</th><th>Culls</th><th>Saleable Chicks</th></tr></thead><tbody>';
       hs.hatcher_outputs.forEach((r) => {
         html += `<tr><td>${escapeHtml(r.hatcher_no)}</td><td>${escapeHtml(r.infertile_qty)} ${pct(r.infertile_qty)}</td><td>${escapeHtml(r.early_dead_qty)} ${pct(r.early_dead_qty)}</td><td>${escapeHtml(r.blasting_qty)} ${pct(r.blasting_qty)}</td><td>${escapeHtml(r.transfer_qty)} ${pct(r.transfer_qty)}</td><td>${escapeHtml(r.dead_in_shell_qty)}</td><td>${escapeHtml(r.culls_malf_qty)}</td><td>${escapeHtml(r.saleable_chicks)}</td></tr>`;
       });
@@ -483,7 +483,7 @@ $(document).ready(function () {
 
     html += '<h6 class="mb-2"><i class="fas fa-truck me-1"></i>Sales</h6>';
     if (hs.sales_lines && hs.sales_lines.length) {
-      html += '<div class="table-responsive mb-3"><table class="table table-bordered table-sm"><thead class="table-light"><tr><th>Customer</th><th>Sold</th><th>Disc %</th><th>Free</th><th>Billed</th><th>Rate</th><th>Total</th><th>Status</th><th>Notes</th></tr></thead><tbody>';
+      html += '<div class="table-responsive mb-3"><table class="table table-bordered table-sm ds-grid"><thead class="table-light"><tr><th>Customer</th><th>Sold</th><th class="ds-num">Disc %</th><th>Free</th><th>Billed</th><th class="ds-num">Rate</th><th class="ds-num">Total</th><th class="ds-mid">Status</th><th>Notes</th></tr></thead><tbody>';
       hs.sales_lines.forEach((r) => {
         html += `<tr><td>${escapeHtml(r.trader_customer_name)}</td><td>${escapeHtml(r.chicks_sold)}</td><td>${escapeHtml(r.discount_percent)}</td><td>${escapeHtml(r.free_chicks)}</td><td>${escapeHtml(r.billed_chicks)}</td><td>${escapeHtml(r.rate)}</td><td>${escapeHtml(r.total_amount)}</td><td>${escapeHtml(r.payment_status)}</td><td>${escapeHtml(r.delivery_notes)}</td></tr>`;
       });

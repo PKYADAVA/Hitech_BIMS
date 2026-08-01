@@ -167,7 +167,7 @@
                 <tr>
                     <th class="link-cell">Link<br><input type="checkbox" class="form-check-input wa-all" title="Select every permission"></th>
                     {% for action in actions %}
-                    <th class="act-col">{{ action|capfirst }}{% if action in unenforced_actions %}<sup class="wa-inert" title="Stored, but nothing checks this yet">*</sup>{% endif %}<br><input type="checkbox" class="form-check-input wa-col" data-action="{{ action }}" title="Select all {{ action }}"></th>
+                    <th class="ds-num act-col">{{ action|capfirst }}{% if action in unenforced_actions %}<sup class="wa-inert" title="Stored, but nothing checks this yet">*</sup>{% endif %}<br><input type="checkbox" class="form-check-input wa-col" data-action="{{ action }}" title="Select all {{ action }}"></th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -335,12 +335,12 @@
     </div>
     <div class="card-body p-0">
     <div class="table-responsive">
-        <table class="table table-hover table-bordered mb-0">
+        <table class="table table-hover table-bordered mb-0 ds-grid">
             <thead class="text-center">
                 <tr>
                     <th style="width: 45%;">Group Name</th>
                     <th style="width: 35%;">Tabs Configured</th>
-                    <th style="width: 20%;">Actions</th>
+                    <th class="ds-mid" style="width: 20%;">Actions</th>
                 </tr>
             </thead>
             <tbody>

@@ -28,18 +28,18 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table id="attendanceTable" class="table table-hover table-bordered mb-0">
+                <table id="attendanceTable" class="table table-hover table-bordered mb-0 ds-grid">
                     <thead>
                         <tr>
                             <th>Employee ID</th>
                             <th>Name</th>
                             <th>Designation</th>
-                            <th>Date</th>
-                            <th>Status</th>
+                            <th class="ds-mid">Date</th>
+                            <th class="ds-mid">Status</th>
                             {% comment %}
                             <th>Check In</th>
                             <th>Check Out</th> {% endcomment %}
-                            <th>Actions</th>
+                            <th class="ds-mid">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="attendance-table-body">

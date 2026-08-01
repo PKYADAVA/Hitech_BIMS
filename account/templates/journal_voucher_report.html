@@ -100,15 +100,15 @@
     <button class="btn btn-outline-secondary btn-sm no-print" type="button" id="jv-toggle-all">
       <i class="fas fa-angles-down me-1"></i>Expand all</button>
   </div>
-  <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0" id="jv-table"
+  <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0 ds-grid" id="jv-table"
          style="width:auto; min-width:100%; table-layout:auto;">
     <thead><tr>
       <th style="min-width:34px"></th>
-      <th>Date</th><th>JV No.</th><th>Journal Type</th><th>Branch</th>
+      <th class="ds-mid">Date</th><th>JV No.</th><th>Journal Type</th><th>Branch</th>
       <th>Profit / Cost Centre</th>
       <th>From Account</th><th>To Account</th><th>Reference</th>
-      <th class="num">Total Debit</th><th class="num">Total Credit</th>
-      <th>Narration</th><th>Status</th><th>Created By</th><th>Created Time</th>
+      <th class="ds-num num">Total Debit</th><th class="ds-num num">Total Credit</th>
+      <th>Narration</th><th class="ds-mid">Status</th><th>Created By</th><th>Created Time</th>
     </tr></thead>
     <tbody>
       {% for r in rows %}
@@ -132,10 +132,10 @@
       <tr class="jv-lines d-none" id="jv-lines-{{ r.id }}">
         <td colspan="15">
           <div class="jv-lines-inner">
-            <table class="table table-bordered table-sm mb-0">
+            <table class="table table-bordered table-sm mb-0 ds-grid">
               <thead><tr>
                 <th>S. No.</th><th>Ledger Code</th><th>Ledger Name</th><th>Cost Centre</th>
-                <th class="num">Debit</th><th class="num">Credit</th><th>Narration</th>
+                <th class="ds-num num">Debit</th><th class="ds-num num">Credit</th><th>Narration</th>
               </tr></thead>
               <tbody>
                 {% for l in r.lines %}
@@ -151,9 +151,9 @@
                 {% endfor %}
               </tbody>
               <tfoot><tr>
-                <th colspan="4" class="text-end">Total</th>
-                <th class="num">{{ r.debit|indian_currency }}</th>
-                <th class="num">{{ r.credit|indian_currency }}</th>
+                <th colspan="4" class="ds-num text-end">Total</th>
+                <th class="ds-num num">{{ r.debit|indian_currency }}</th>
+                <th class="ds-num num">{{ r.credit|indian_currency }}</th>
                 <th></th>
               </tr></tfoot>
             </table>

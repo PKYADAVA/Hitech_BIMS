@@ -16,6 +16,41 @@ $.extend(true, $.fn.dataTable.defaults, {
 });
 
 // ---------------------------------------------------------------------------
+// Column alignment, mirrored from the header onto the body.
+//
+// The design system aligns by data type: quantities, rates and amounts right,
+// dates and statuses centred, everything else left. Marking that up per cell is
+// impossible for most of these grids because their rows are built in JS — so
+// the header carries the intent and this copies it down, once per render.
+// ---------------------------------------------------------------------------
+(function ($) {
+  var ALIGN = ["ds-num", "ds-mid"];
+
+  function mirror(table) {
+    var $table = $(table);
+    if (!$table.length) return;
+    var classes = $table.find("thead th").map(function () {
+      var th = this;
+      return ALIGN.filter(function (c) { return th.classList.contains(c); }).join(" ");
+    }).get();
+    if (!classes.some(Boolean)) return;
+    $table.find("tbody tr").each(function () {
+      $(this).children("td").each(function (i) {
+        if (classes[i]) this.className = (this.className + " " + classes[i]).trim();
+      });
+    });
+  }
+
+  $(document).on("init.dt draw.dt", function (e, settings) {
+    mirror(settings ? settings.nTable : null);
+  });
+  $(function () { $("table.ds-grid, table.ds-entry").each(function () { mirror(this); }); });
+
+  // Grids that render their own rows outside DataTables can ask for it.
+  window.dsAlignColumns = mirror;
+})(jQuery);
+
+// ---------------------------------------------------------------------------
 // Landing from the dashboard's global search: a record hit links to its list
 // page carrying ?find=<term>. Seed every DataTable on that page with the term
 // so the row the user actually picked is filtered to the top on arrival,

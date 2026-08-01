@@ -112,7 +112,7 @@ only ever produce a wrong number.
       <hr class="my-3">
       <div class="ah-field-l mb-2">Additional detail</div>
       <div class="ah-scroll">
-        <table class="ah-table">
+        <table class="ah-table ds-grid">
           <tbody>
             {% for key, value in n.metadata.items %}
               <tr>
@@ -130,9 +130,9 @@ only ever produce a wrong number.
     <h2><i class="fa-solid fa-users text-primary"></i> Sent to</h2>
     <p class="ah-hint">Who received this alert, and whether they have read it.</p>
     <div class="ah-scroll">
-      <table class="ah-table">
+      <table class="ah-table ds-grid">
         <thead>
-          <tr><th>User</th><th>Status</th><th>Read at</th><th>Channels</th></tr>
+          <tr><th>User</th><th class="ds-mid">Status</th><th>Read at</th><th>Channels</th></tr>
         </thead>
         <tbody>
           {% for r in recipients %}

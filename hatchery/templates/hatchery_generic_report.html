@@ -79,10 +79,10 @@
     </div>
 
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0 report-table rpt-table" id="generic-report-table">
+      <table class="table table-hover table-bordered mb-0 report-table rpt-table ds-grid" id="generic-report-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th class="ds-mid">#</th>
             {% for key, label, kind in columns %}
               <th class="{% if kind == 'num' or kind == 'pct' or kind == 'money' %}text-end{% endif %}">{{ label }}</th>
             {% endfor %}

@@ -235,9 +235,9 @@
           credits is posted automatically to <strong>Opening Balance Equity</strong>.
         </p>
         <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
-          <table class="table table-sm table-bordered align-middle mb-2">
+          <table class="table table-sm table-bordered align-middle mb-2 ds-grid">
             <thead style="position: sticky; top: 0;">
-              <tr><th>Code</th><th>Account</th><th style="width:180px">Amount</th><th style="width:130px">Side</th></tr>
+              <tr><th>Code</th><th>Account</th><th class="ds-num" style="width:180px">Amount</th><th style="width:130px">Side</th></tr>
             </thead>
             <tbody id="coa-opening-body"></tbody>
           </table>
@@ -540,7 +540,7 @@ $(document).ready(function () {
                     `<tr><td>${escapeHtml(step.replaceAll('_', ' '))}</td><td>${counts.created}</td><td>${counts.skipped}</td></tr>`).join('');
                 $('#coa-generate-result').html(
                     `<div class="text-success mb-1">${escapeHtml(response.message)}</div>
-                     <table class="table table-sm table-bordered w-auto">
+                     <table class="table table-sm table-bordered w-auto ds-grid">
                        <thead><tr><th>Step</th><th>Created</th><th>Skipped (already present)</th></tr></thead>
                        <tbody>${rows}</tbody></table>`);
                 loadTree();

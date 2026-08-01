@@ -76,11 +76,11 @@
   <div class="card-header"><i class="fas fa-list"></i> SMS Log</div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0 rpt-table" id="sms-history-table">
+      <table class="table table-hover table-bordered mb-0 rpt-table ds-grid" id="sms-history-table">
         <thead>
           <tr>
             <th>ID</th>
-            <th>Date</th>
+            <th class="ds-mid">Date</th>
             <th>Party</th>
             <th>Mobile</th>
             <th>Module</th>
@@ -88,10 +88,10 @@
             <th>Template</th>
             <th>Message</th>
             <th>Parts</th>
-            <th>Status</th>
+            <th class="ds-mid">Status</th>
             <th>Retries</th>
             <th>Sent By</th>
-            <th class="text-center">Action</th>
+            <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -202,16 +202,16 @@ $(function () {
     if (!m) return;
     const gw = m.gateway_response ? JSON.stringify(m.gateway_response, null, 2) : "-";
     $("#view-sms-body").html(`
-      <table class="table table-bordered table-sm rpt-table">
+      <table class="table table-bordered table-sm rpt-table ds-grid">
         <tr><th style="width:30%">Transaction ID</th><td>${m.id}</td></tr>
-        <tr><th>Date</th><td>${escapeHtml(m.created_at)}</td></tr>
+        <tr><th class="ds-mid">Date</th><td>${escapeHtml(m.created_at)}</td></tr>
         <tr><th>Party</th><td class="text-capitalize">${escapeHtml(m.party_name)} (${escapeHtml(m.party_type)})</td></tr>
         <tr><th>Mobile</th><td>${escapeHtml(m.mobile)}</td></tr>
         <tr><th>Module / Document</th><td>${escapeHtml(m.module_label)} / ${escapeHtml(m.document_no) || "-"}</td></tr>
         <tr><th>Template</th><td>${escapeHtml(m.template_name) || "-"}</td></tr>
         <tr><th>Message</th><td style="white-space:pre-wrap">${escapeHtml(m.message)}</td></tr>
         <tr><th>Characters / Parts</th><td>${m.char_count} chars, ${m.sms_parts} part(s), ${m.is_unicode ? "Unicode (UCS-2)" : "GSM"}</td></tr>
-        <tr><th>Status</th><td>${statusBadge(m.status)} ${m.error_message ? `<div class="small text-danger mt-1">${escapeHtml(m.error_message)}</div>` : ""}</td></tr>
+        <tr><th class="ds-mid">Status</th><td>${statusBadge(m.status)} ${m.error_message ? `<div class="small text-danger mt-1">${escapeHtml(m.error_message)}</div>` : ""}</td></tr>
         <tr><th>Gateway Message ID</th><td>${escapeHtml(m.gateway_message_id) || "-"}</td></tr>
         <tr><th>Retry Count</th><td>${m.retry_count}${m.retry_of ? ` (retry of #${m.retry_of})` : ""}</td></tr>
         <tr><th>Sent By</th><td>${escapeHtml(m.sent_by)}</td></tr>
