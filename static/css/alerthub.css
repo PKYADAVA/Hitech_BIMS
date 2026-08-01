@@ -268,6 +268,10 @@
 
 .ah-wrap { max-width: 1180px; margin: 1.5rem auto; padding: 0 1rem; }
 .ah-wrap.narrow { max-width: 860px; }
+/* Wide tables take the width the page actually has. 1180px is right for
+   reading prose and forms, but it squeezes an eleven-column table into a
+   scroll box while the screen still has room either side of it. */
+.ah-wrap.wide { max-width: none; }
 
 .ah-head {
   display: flex;
