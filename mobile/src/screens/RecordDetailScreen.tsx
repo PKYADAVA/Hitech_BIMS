@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
 
 import { reviewChangeRequest } from "@/api/changeRequests";
 import { retryMessage } from "@/api/sms";
@@ -83,6 +83,11 @@ type Props = NativeStackScreenProps<ModuleStackParams, "Detail">;
 
 /** Fields never shown as text (media/blobs/geo/internal). */
 const HIDDEN = /(^id$|_image$|_photo$|photo$|_upload|_file$|_copy$|documents?$|latitude$|longitude$)/;
+/** Image fields — rendered as photo thumbnails instead of hidden. */
+const IMAGE_KEY = /(_image$|image$|_photo$|photo$)/;
+/** True when a value looks like a usable image URL. */
+const isImageUrl = (v: unknown): v is string =>
+  typeof v === "string" && /^https?:\/\//i.test(v);
 /** Fields grouped under "Record" instead of the main details. */
 const AUDIT = new Set([
   "created_at",
@@ -188,6 +193,12 @@ export function RecordDetailScreen({ route, navigation }: Props) {
       .filter((s) => s.length > 0)
   );
 
+  // Image fields (mort/cull/feed photos, farmer photo, etc.) are hidden from
+  // the text rows but shown here as tappable thumbnails.
+  const images = Object.entries(row).filter(
+    ([k, v]) => IMAGE_KEY.test(k) && isImageUrl(v)
+  ) as [string, string][];
+
   const entries = Object.entries(row).filter(([k, v]) => {
     if (HIDDEN.test(k) || k.endsWith("_label") || isEmpty(v)) return false;
     // Many-to-many / list-of-ids fields: only show when we have a readable
@@ -237,6 +248,25 @@ export function RecordDetailScreen({ route, navigation }: Props) {
             <Button title="Reject" variant="danger" onPress={() => onReview("reject")} />
           </View>
         </View>
+      ) : null}
+
+      {images.length > 0 ? (
+        <Card>
+          <View style={styles.photoGrid}>
+            {images.map(([k, uri]) => (
+              <Pressable
+                key={k}
+                style={styles.photoItem}
+                onPress={() => Linking.openURL(uri)}
+              >
+                <Text style={styles.photoLabel} numberOfLines={1}>
+                  {humanizeKey(k)}
+                </Text>
+                <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
+              </Pressable>
+            ))}
+          </View>
+        </Card>
       ) : null}
 
       <Card>
@@ -324,4 +354,15 @@ const useStyles = makeStyles((colors) => ({
   addLinkRow: { flexDirection: "row", alignItems: "center", gap: 2 },
   addLink: { ...type.title, color: colors.tint },
   footnote: { ...type.caption, color: colors.textFaint, textAlign: "center", marginTop: spacing.sm },
+  photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  photoItem: { width: "31%", gap: 4 },
+  photo: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  photoLabel: { ...type.label, color: colors.textMuted },
 }));
