@@ -447,3 +447,56 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
   .ds-sidebar { transform: translateX(-100%); transition: transform .16s ease; }
   body.ds-sb-open .ds-sidebar { transform: none; }
 }
+
+
+/* ===========================================================================
+   Reports (spec section 25)
+   ======================================================================== */
+.ds .co-stamp { font-size: 11px; color: var(--ds-muted); margin-top: 2px; }
+
+/* Frozen key columns. A wide report scrolls sideways and the row loses its
+   identity — the code and name stay put so a figure three metres right is
+   still attributable. Needs the scroll on the wrapper, which the report
+   layouts already have. */
+.ds .rpt-table th:first-child,
+.ds .rpt-table td:first-child,
+.ds table.ds-grid.freeze-1 th:first-child,
+.ds table.ds-grid.freeze-1 td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--ds-card);
+}
+.ds .rpt-table thead th:first-child,
+.ds table.ds-grid.freeze-1 thead th:first-child {
+  z-index: 3; background: var(--ds-header-bg);
+}
+/* A second frozen column opts in, because its offset depends on the first. */
+.ds table.ds-grid.freeze-2 th:nth-child(2),
+.ds table.ds-grid.freeze-2 td:nth-child(2) {
+  position: sticky; left: var(--ds-freeze-1, 120px); z-index: 1;
+  background: var(--ds-card);
+}
+.ds table.ds-grid.freeze-2 thead th:nth-child(2) { z-index: 3; background: var(--ds-header-bg); }
+/* The shadow is what tells you a column is frozen rather than just first. */
+.ds .rpt-table th:first-child::after,
+.ds .rpt-table td:first-child::after,
+.ds table.ds-grid.freeze-1 th:first-child::after,
+.ds table.ds-grid.freeze-1 td:first-child::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
+  transform: translateX(100%);
+  background: linear-gradient(90deg, rgba(16, 24, 40, .06), transparent);
+  pointer-events: none;
+}
+
+@media print {
+  /* Sticky is meaningless on paper and can leave a column overlapping. */
+  .ds .rpt-table th:first-child, .ds .rpt-table td:first-child,
+  .ds table.ds-grid.freeze-1 th:first-child, .ds table.ds-grid.freeze-1 td:first-child,
+  .ds table.ds-grid.freeze-2 th:nth-child(2), .ds table.ds-grid.freeze-2 td:nth-child(2) {
+    position: static;
+  }
+  .ds .rpt-table th:first-child::after, .ds .rpt-table td:first-child::after { display: none; }
+  /* Repeat the header on every printed page. */
+  .ds thead { display: table-header-group; }
+  .ds tfoot { display: table-footer-group; }
+  .ds tr { break-inside: avoid; }
+}

@@ -14,4 +14,10 @@ Include with:
   </div>
   <div class="co-title">{{ title }}</div>
   {% if criteria %}<div class="co-crit">{{ criteria }}</div>{% endif %}
+  {# Spec 25: a printed report has to say when it was produced and by whom,
+     or a copy on someone's desk cannot be dated. #}
+  <div class="co-stamp">
+    Generated {% now "d M Y, H:i" %}
+    {% if request.user.is_authenticated %}by {{ request.user.get_full_name|default:request.user.username }}{% endif %}
+  </div>
 </div>

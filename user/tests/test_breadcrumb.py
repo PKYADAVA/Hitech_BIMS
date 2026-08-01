@@ -135,3 +135,36 @@ class SidebarTests(TestCase):
             html = self.client.get(reverse("items")).content.decode()
         self.assertIn('id="dsSidebar"', html)
         self.assertIn('class="ds-shell"', html)
+
+
+class ReportStandardTests(TestCase):
+    """Spec 25: a printed report must say when it was produced and by whom."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            "rs_admin", "rs@x.com", "Str0ngPass!",
+            first_name="Asha", last_name="Rao")
+        self.client.force_login(self.admin)
+
+    def test_every_report_carries_a_generated_stamp(self):
+        for name in ("stock_report", "item_ledger_report", "negative_stock_report",
+                     "supplier_balance", "customer_balance", "purchase_report"):
+            with self.subTest(report=name):
+                html = self.client.get(reverse(name)).content.decode()
+                self.assertIn('class="co-stamp"', html)
+                self.assertIn("Generated", html)
+
+    def test_the_stamp_names_the_person_who_ran_it(self):
+        """A copy on someone's desk should say who produced it."""
+        html = self.client.get(reverse("stock_report")).content.decode()
+        self.assertIn("Asha Rao", html)
+
+    def test_the_letterhead_is_shared_rather_than_copied(self):
+        """29 reports include it; a stamp added to one template reaches all."""
+        import pathlib
+
+        users = [p for p in pathlib.Path(".").rglob("*.html")
+                 if ".venv" not in p.parts and "staticfiles" not in p.parts
+                 and "_report_letterhead" in p.read_text(encoding="utf-8", errors="ignore")]
+        self.assertGreater(len(users), 20)
