@@ -188,6 +188,17 @@ function farmOptionsFor(supId) {
     farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
 }
 const TODAY = "{{ today }}";
+// The farm's next entry date — the day after its last recorded entry. Set when
+// a farm is chosen, and used to date rows added afterwards.
+let nextEntryDate = null;
+
+function addDaysISO(iso, n) {
+  // UTC throughout, so a timezone ahead of UTC does not drop the added day.
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 let batchStartDate = null;
@@ -705,7 +716,18 @@ get('farm').addEventListener('change', function () {
     get('batch').value = data.batch_name || 'No active batch';
     batchStartDate = data.start_date;
     const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
-    if (rows.length === 1 && data.next_date) { rows[0].querySelector('.date').value = data.next_date; }
+    // Every row is dated from the farm's next entry date, one day apart —
+    // not just the first. Guarding on rows.length === 1 left every other row
+    // sitting on today, so a sheet started before the farm was picked, or a
+    // farm changed afterwards, recorded the wrong dates.
+    nextEntryDate = data.next_date || null;
+    if (nextEntryDate) {
+      rows.forEach((tr, i) => {
+        const target = i ? addDaysISO(nextEntryDate, i) : nextEntryDate;
+        // A flock cannot be recorded into the future.
+        tr.querySelector('.date').value = target > TODAY ? TODAY : target;
+      });
+    }
     rows.forEach(tr => { recomputeAge(tr); refreshRowData(tr); });
     recomputeStockPreview();
   });
@@ -733,7 +755,9 @@ get('row-table').addEventListener('click', e => {
   if (e.target.closest('.add-row-inline')) {
     const lastRow = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].pop();
     const lastDate = lastRow ? lastRow.querySelector('.date').value : null;
-    row(lastDate ? nextDateString(lastDate) : null);
+    // Continue from the last row, or from the farm's next entry date when
+    // there is no row yet — today is only right if neither is known.
+    row(lastDate ? nextDateString(lastDate) : nextEntryDate);
     recomputeStockPreview();
   }
 });

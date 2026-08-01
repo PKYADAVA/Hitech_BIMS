@@ -2110,9 +2110,26 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
     from django.utils.dateparse import parse_date
     batch = _active_batch_for_farm(farm_id) if farm_id else None
 
-    last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by('-date', '-id').first()
-                 if farm_id else None)
-    next_date = (last_entry.date + timedelta(days=1)) if last_entry else timezone.localdate()
+    # Scoped to the batch, not the farm: a farm re-used for a new flock would
+    # otherwise inherit the previous batch's last entry and start the new one
+    # weeks late.
+    if batch:
+        last_entry = DailyEntry.objects.filter(batch=batch).order_by('-date', '-id').first()
+    elif farm_id:
+        last_entry = DailyEntry.objects.filter(farm_id=farm_id).order_by('-date', '-id').first()
+    else:
+        last_entry = None
+
+    if last_entry:
+        next_date = last_entry.date + timedelta(days=1)
+    elif batch and batch.start_date:
+        # A batch with no entries yet starts the day after placement: placement
+        # day is Age 0, so the first entry is Age 1. Falling back to today here
+        # skipped every day between placement and whenever someone opened the
+        # form.
+        next_date = batch.start_date + timedelta(days=1)
+    else:
+        next_date = timezone.localdate()
 
     # Everything (age, phase, live-bird count) is resolved as of the entry date —
     # the date the row will be saved with (passed by the form, else next_date) —
