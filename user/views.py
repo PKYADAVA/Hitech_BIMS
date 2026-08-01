@@ -238,6 +238,64 @@ def dashboard_access_delete(request, group_id):
 
 
 @login_required
+def master_import(request, tab_code):
+    """Import a spreadsheet into a master, from the master's own page.
+
+    Gated on the tab's *add* right, not on is_superuser: the people who
+    maintain a master are the ones who should be able to load it, and the
+    matrix already says who they are.
+
+    GET returns the column template. POST validates; it only writes when
+    ``commit`` is set, so a bad file is a list of row errors rather than a
+    half-imported master.
+    """
+    from django.http import HttpResponse
+
+    from .access import user_can
+    from .services.bulk_import import IMPORTABLE, run_import, template_columns
+
+    if tab_code not in IMPORTABLE:
+        return JsonResponse({"error": "This page does not support import."}, status=404)
+    if not user_can(request.user, tab_code, "add"):
+        return JsonResponse(
+            {"error": "You do not have permission to import into this page."},
+            status=403)
+
+    columns = template_columns(tab_code)
+
+    if request.method == "GET":
+        if request.GET.get("template") == "csv":
+            header = ",".join(columns) + "\r\n"
+            response = HttpResponse(header, content_type="text/csv")
+            response["Content-Disposition"] = (
+                f'attachment; filename="{tab_code}_import_template.csv"')
+            return response
+        return JsonResponse({"columns": columns})
+
+    upload = request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"error": "Choose a file to import."}, status=400)
+
+    commit = request.POST.get("commit") == "1"
+    result, errors = run_import(tab_code, upload, upload.name, commit=commit)
+    if result is None:
+        return JsonResponse({"errors": [{"row": r, "message": m} for r, m in errors]},
+                            status=400)
+
+    totals = result.totals if hasattr(result, "totals") else {}
+    return JsonResponse({
+        "committed": commit,
+        "rows": len(result.rows),
+        "new": totals.get("new", 0),
+        "updated": totals.get("update", 0),
+        "skipped": totals.get("skip", 0),
+        "invalid": totals.get("invalid", 0) + totals.get("error", 0),
+        "errors": [{"row": r, "message": m} for r, m in errors[:50]],
+        "more_errors": max(0, len(errors) - 50),
+    })
+
+
+@login_required
 def global_search_api(request):
     """Dashboard search box — pages and master records in one response.
 
