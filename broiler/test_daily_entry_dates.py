@@ -161,3 +161,35 @@ class PlacementWithoutStartDateTests(TestCase):
     def test_no_placement_at_all_still_falls_back_to_today(self):
         BroilerBatch.objects.create(broiler_farm=self.farm, batch_name="Empty")
         self.assertEqual(self.lookup()["next_date"], self.today.isoformat())
+
+    def test_the_form_receives_a_placement_it_can_compute_age_from(self):
+        """The Single Entry page fills its Age column in the browser, from
+        start_date in this payload. Sending None left that column empty on
+        exactly the batches this fix is for — the same hole, one layer out."""
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+        payload = self.lookup()
+        self.assertIsNotNone(payload["start_date"])
+        self.assertEqual(payload["start_date"],
+                         (self.today - timedelta(days=11)).isoformat())
+
+    def test_the_medicine_entry_lookup_has_the_same_answer(self):
+        """It carries its own copy of this lookup, and had the same hole."""
+        from django.test import RequestFactory
+        from django.contrib.auth import get_user_model
+        import json
+
+        from broiler.views import medicine_entry_farm_lookup
+
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+
+        request = RequestFactory().get("/x", {"farm": self.farm.id})
+        request.user = get_user_model().objects.create_superuser(
+            "med_probe", "mp@x.com", "Str0ngPass!")
+        payload = json.loads(medicine_entry_farm_lookup(request).content)
+        self.assertEqual(payload["start_date"],
+                         (self.today - timedelta(days=11)).isoformat())
+        self.assertEqual(payload["age_days"], 11)

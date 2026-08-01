@@ -2240,7 +2240,10 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
         "age_days": age_days,
-        "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
+        # The resolved placement, not the raw column: the form computes Age
+        # from this in the browser, so sending None leaves the Age box empty
+        # on exactly the batches this fix is for.
+        "start_date": placed_on.isoformat() if placed_on else None,
         "next_date": next_date.isoformat(),
         "feed_phase": phase,
         "std_feed_kg": std_feed_kg,
@@ -2471,13 +2474,14 @@ def medicine_entry_farm_lookup(request):
     farm_id = request.GET.get("farm")
     batch = _active_batch_for_farm(farm_id) if farm_id else None
     age_days = 0
-    if batch and batch.start_date:
-        age_days = max((timezone.localdate() - batch.start_date).days, 0)
+    placed_on = _placement_date(batch)
+    if placed_on:
+        age_days = max((timezone.localdate() - placed_on).days, 0)
     return JsonResponse({
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
         "age_days": age_days,
-        "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
+        "start_date": placed_on.isoformat() if placed_on else None,
     })
 
 
