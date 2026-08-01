@@ -190,6 +190,83 @@
 .ds .w-amount { width: 140px; }  .ds .w-status { width: 120px; }
 .ds .w-action { width: 120px; }
 
+/* -- entry grid (data-add screens) --------------------------------------
+   A line-item grid is a different problem from a list. Every cell holds a
+   control, so the 42px list row wastes a third of the screen, and hardcoded
+   per-column min-widths force a horizontal scrollbar whether or not the data
+   needs one.
+
+   Here the table sizes to its content: short fields shrink to fit, and the one
+   or two long ones absorb whatever is left. `field-sizing: content` lets the
+   controls themselves grow with what is typed, so a column is exactly as wide
+   as its longest value; browsers without it fall back to filling the cell,
+   which is the behaviour we had.
+   ---------------------------------------------------------------------- */
+.ds .ds-entry-wrap { overflow-x: auto; }
+.ds table.ds-entry {
+  width: 100%; margin: 0; table-layout: auto;
+  border-collapse: separate; border-spacing: 0;
+}
+.ds table.ds-entry thead th {
+  height: 36px; padding: 0 8px;
+  background: var(--ds-header-bg);
+  font-size: var(--ds-caption); font-weight: var(--ds-semibold);
+  color: #475569; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid var(--ds-border);
+  position: sticky; top: 0; z-index: 2;
+}
+.ds table.ds-entry tbody td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #f1f4f8;
+  vertical-align: middle;
+}
+.ds table.ds-entry tbody tr:hover td { background: #fbfcfe; }
+
+/* Controls inside the grid: shorter and denser than a standalone form field,
+   and quiet until focused so the data reads as a table rather than as 60 boxes. */
+.ds table.ds-entry .form-control,
+.ds table.ds-entry .form-select {
+  height: 32px; font-size: var(--ds-grid-data);
+  padding: 0 8px; border-radius: 6px;
+  border-color: #eef1f5; background: #fff; width: 100%;
+}
+.ds table.ds-entry .form-control:hover,
+.ds table.ds-entry .form-select:hover { border-color: var(--ds-border); }
+.ds table.ds-entry .form-control:focus,
+.ds table.ds-entry .form-select:focus { border-color: var(--ds-primary); }
+.ds table.ds-entry .form-control[readonly] { background: #f7f9fb; color: var(--ds-muted); }
+.ds table.ds-entry input[type="number"] { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Column sizing by role. `width:1%` with nowrap is the shrink-to-fit idiom:
+   the browser gives the column exactly what its content needs. The grow
+   column takes the remainder, so the table fills the page without scrolling
+   until it genuinely cannot. */
+.ds table.ds-entry th.c-fit  { width: 1%; white-space: nowrap; }
+.ds table.ds-entry th.c-grow { width: auto; }
+.ds table.ds-entry th.c-num  { width: 1%; white-space: nowrap; text-align: right; }
+
+/* Floors, so a column never collapses to unusable — expressed in ch, which
+   tracks the font rather than guessing pixels. */
+.ds table.ds-entry .m-date  { min-width: 8.5rem; }
+.ds table.ds-entry .m-short { min-width: 6rem; }
+.ds table.ds-entry .m-num   { min-width: 5.5rem; }
+.ds table.ds-entry .m-mid   { min-width: 9rem; }
+.ds table.ds-entry .m-long  { min-width: 12rem; }
+
+/* Where the browser supports it, the control is exactly as wide as its value.
+   Guarded so it can only ever shrink a column, never overflow one. */
+@supports (field-sizing: content) {
+  .ds table.ds-entry .form-control:not([type="date"]),
+  .ds table.ds-entry .form-select {
+    field-sizing: content;
+    min-width: 100%; max-width: 100%;
+  }
+}
+
+/* A compact action column that does not claim a fixed 120px. */
+.ds table.ds-entry td.c-act { width: 1%; white-space: nowrap; text-align: center; }
+.ds table.ds-entry .btn-sm { height: 30px; padding: 0 10px; }
+
 /* -- KPI cards ---------------------------------------------------------- */
 .ds .ds-kpi {
   min-height: 120px; padding: 20px;
