@@ -3,6 +3,7 @@ import re
 from django.db import models
 from purchase.models import VendorGroup, CreditTerm
 from inventory.models import Item, ItemCategory
+from Hitech_BIMS.storage_backends import private_media_storage
 
 
 
@@ -112,8 +113,8 @@ class Customer(models.Model):
     terms = models.TextField(blank=True, null=True, help_text="Terms and conditions")
     agreement_start_date = models.DateField(blank=True, null=True)
     agreement_months = models.PositiveIntegerField(blank=True, null=True)
-    agreement_copy = models.FileField(upload_to="customer_documents/agreements/", blank=True, null=True)
-    other_documents = models.FileField(upload_to="customer_documents/other/", blank=True, null=True)
+    agreement_copy = models.FileField(upload_to="customer_documents/agreements/", storage=private_media_storage, blank=True, null=True)
+    other_documents = models.FileField(upload_to="customer_documents/other/", storage=private_media_storage, blank=True, null=True)
 
     @classmethod
     def next_code(cls):

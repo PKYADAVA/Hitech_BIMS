@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.db import models
 from django.utils.timezone import now
 from inventory.models import ItemCategory, Item
+from Hitech_BIMS.storage_backends import private_media_storage
 
 
 def _dec(value):
@@ -74,8 +75,8 @@ class Supplier(models.Model):
     terms = models.TextField(blank=True, null=True, help_text="Terms and conditions")
     agreement_start_date = models.DateField(blank=True, null=True)
     agreement_months = models.PositiveIntegerField(blank=True, null=True)
-    agreement_copy = models.FileField(upload_to="supplier_documents/agreements/", blank=True, null=True)
-    other_documents = models.FileField(upload_to="supplier_documents/other/", blank=True, null=True)
+    agreement_copy = models.FileField(upload_to="supplier_documents/agreements/", storage=private_media_storage, blank=True, null=True)
+    other_documents = models.FileField(upload_to="supplier_documents/other/", storage=private_media_storage, blank=True, null=True)
 
     @classmethod
     def next_code(cls):
@@ -208,9 +209,9 @@ class GeneralPurchase(models.Model):
     net_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
     remarks = models.TextField(blank=True)
-    reference_document_1 = models.FileField(upload_to="purchase/references/%Y/%m/", blank=True, null=True)
-    reference_document_2 = models.FileField(upload_to="purchase/references/%Y/%m/", blank=True, null=True)
-    reference_document_3 = models.FileField(upload_to="purchase/references/%Y/%m/", blank=True, null=True)
+    reference_document_1 = models.FileField(upload_to="purchase/references/%Y/%m/", storage=private_media_storage, blank=True, null=True)
+    reference_document_2 = models.FileField(upload_to="purchase/references/%Y/%m/", storage=private_media_storage, blank=True, null=True)
+    reference_document_3 = models.FileField(upload_to="purchase/references/%Y/%m/", storage=private_media_storage, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -366,9 +367,9 @@ class ChicksPurchase(models.Model):
     net_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
     remarks = models.TextField(blank=True)
-    reference_document_1 = models.FileField(upload_to="purchase/references/%Y/%m/", blank=True, null=True)
-    reference_document_2 = models.FileField(upload_to="purchase/references/%Y/%m/", blank=True, null=True)
-    reference_document_3 = models.FileField(upload_to="purchase/references/%Y/%m/", blank=True, null=True)
+    reference_document_1 = models.FileField(upload_to="purchase/references/%Y/%m/", storage=private_media_storage, blank=True, null=True)
+    reference_document_2 = models.FileField(upload_to="purchase/references/%Y/%m/", storage=private_media_storage, blank=True, null=True)
+    reference_document_3 = models.FileField(upload_to="purchase/references/%Y/%m/", storage=private_media_storage, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

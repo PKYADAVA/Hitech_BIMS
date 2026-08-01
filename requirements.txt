@@ -22,6 +22,8 @@ whitenoise==6.7.0
 openpyxl==3.1.5
 django-import-export==4.4.1
 tablib==3.9.0
+django-storages==1.14.4
+boto3==1.35.49
 diff-match-patch==20241021
 python-kasa==0.10.2
 cryptography==49.0.0

@@ -8,6 +8,8 @@ from django.utils.timezone import now
 from django.core.exceptions import ValidationError
 import os
 
+from Hitech_BIMS.storage_backends import private_media_storage
+
 
 class FarmerGroup(models.Model):
     """
@@ -417,18 +419,21 @@ class Farmer(models.Model):
     )
     pan_upload = models.FileField(
         upload_to='farmer/pan/',
+        storage=private_media_storage,
         blank=True,
         null=True,
         help_text=_("Uploaded copy of PAN card")
     )
     aadhar_upload_front = models.FileField(
         upload_to='farmer/aadhar/',
+        storage=private_media_storage,
         blank=True,
         null=True,
         help_text=_("Uploaded copy of Aadhar card (front)")
     )
     aadhar_upload_back = models.FileField(
         upload_to='farmer/aadhar/',
+        storage=private_media_storage,
         blank=True,
         null=True,
         help_text=_("Uploaded copy of Aadhar card (back)")
@@ -625,12 +630,14 @@ class BroilerFarm(models.Model):
     )
     agreement_copy = models.FileField(
         upload_to='farm/agreements/',
+        storage=private_media_storage,
         blank=True,
         null=True,
         help_text=_("Uploaded copy of the agreement")
     )
     other_documents = models.FileField(
         upload_to='farm/documents/',
+        storage=private_media_storage,
         blank=True,
         null=True,
         help_text=_("Other supporting documents")
@@ -642,13 +649,13 @@ class BroilerFarm(models.Model):
         help_text=_("Farm area in square feet")
     )
     cheque_1_no = models.CharField(max_length=30, blank=True, help_text=_("Security cheque 1 number"))
-    cheque_1_file = models.FileField(upload_to='farm/cheques/', blank=True, null=True, help_text=_("Security cheque 1 scan"))
+    cheque_1_file = models.FileField(upload_to='farm/cheques/', storage=private_media_storage, blank=True, null=True, help_text=_("Security cheque 1 scan"))
     cheque_2_no = models.CharField(max_length=30, blank=True, help_text=_("Security cheque 2 number"))
-    cheque_2_file = models.FileField(upload_to='farm/cheques/', blank=True, null=True, help_text=_("Security cheque 2 scan"))
+    cheque_2_file = models.FileField(upload_to='farm/cheques/', storage=private_media_storage, blank=True, null=True, help_text=_("Security cheque 2 scan"))
     cheque_3_no = models.CharField(max_length=30, blank=True, help_text=_("Security cheque 3 number"))
-    cheque_3_file = models.FileField(upload_to='farm/cheques/', blank=True, null=True, help_text=_("Security cheque 3 scan"))
+    cheque_3_file = models.FileField(upload_to='farm/cheques/', storage=private_media_storage, blank=True, null=True, help_text=_("Security cheque 3 scan"))
     cheque_4_no = models.CharField(max_length=30, blank=True, help_text=_("Security cheque 4 number"))
-    cheque_4_file = models.FileField(upload_to='farm/cheques/', blank=True, null=True, help_text=_("Security cheque 4 scan"))
+    cheque_4_file = models.FileField(upload_to='farm/cheques/', storage=private_media_storage, blank=True, null=True, help_text=_("Security cheque 4 scan"))
     remarks = models.TextField(
         blank=True,
         null=True,
@@ -1954,7 +1961,9 @@ class FarmCaptureFile(models.Model):
     capture = models.ForeignKey(
         FarmLocationCapture, on_delete=models.CASCADE, related_name="files")
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_PHOTO)
-    file = models.FileField(upload_to="farm/captures/%Y/%m/")
+    # Mirrors farm KYC/cheque/document scans (see FILE_MAP above), so it lives
+    # in private storage with signed URLs.
+    file = models.FileField(upload_to="farm/captures/%Y/%m/", storage=private_media_storage)
     caption = models.CharField(max_length=150, blank=True)
     # The mirrored farm picture, so clearing a capture can take it back out.
     farm_image = models.OneToOneField(
