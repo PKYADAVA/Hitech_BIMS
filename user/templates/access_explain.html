@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Explain Access — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  .ax-head { display:flex; align-items:center; gap:10px; margin:4px 0 14px; }
+  .ax-head i { color:#6f42c1; }
+  .ax-head h5 { margin:0; font-weight:700; color:#3d2c66; }
+  .ax-head small { color:#6b7890; }
+  .ax-card { background:#fff; border:1px solid #e7edf5; border-radius:14px; padding:18px 20px; }
+  .ax-pick { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-bottom:16px; }
+  .ax-pick label { font-size:.74rem; font-weight:700; color:#48566d; display:block; margin-bottom:3px; }
+  .ax-facts { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  .ax-fact { background:#f4f7fb; border-radius:8px; padding:6px 11px; font-size:.78rem; color:#48566d; }
+  .ax-fact b { color:#3d2c66; }
+  .ax-warn { border:1px solid #ffd9a8; background:#fff8ee; color:#8a5300; border-radius:10px;
+             padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:14px; }
+  .ax-warn b { display:block; }
+  .ax-table { width:100%; border-collapse:collapse; }
+  .ax-table th { background:#f3effb; color:#6f42c1; font-size:.76rem; padding:8px 9px; text-align:center; }
+  .ax-table th.ax-first { text-align:left; }
+  .ax-table td { padding:6px 9px; border-bottom:1px solid #f1eef7; font-size:.8rem; }
+  .ax-cell { text-align:center; width:78px; }
+  .ax-name { color:#48566d; }
+  .ax-code { display:block; font-size:.68rem; color:#adb8c8; }
+  .ax-y { color:#0f9d58; font-weight:700; }
+  .ax-n { color:#d3dae5; }
+  .ax-narrow { color:#d97706; font-weight:700; }
+  .ax-na { color:#e4e9f0; }
+  .ax-row.is-narrowed td { background:#fffdf6; }
+  .ax-legend { font-size:.74rem; color:#8494ab; margin-top:10px; }
+  .ax-legend span { margin-right:14px; }
+  .ax-empty { padding:26px 10px; text-align:center; color:#6b7890; font-size:.86rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='access_explain' %}
+<div class="container-fluid px-0">
+  <div class="ax-head">
+    <i class="fas fa-magnifying-glass fa-lg"></i>
+    <div>
+      <h5>Explain Access</h5>
+      <small>Why a particular user can — or cannot — do something.</small>
+    </div>
+  </div>
+
+  <div class="ax-card">
+    <form method="get" class="ax-pick">
+      <div>
+        <label for="ax-user">User</label>
+        <select name="user" id="ax-user" class="form-select form-select-sm"
+                style="min-width:220px;" onchange="this.form.submit()">
+          <option value="">Select a user…</option>
+          {% for u in users %}
+          <option value="{{ u.id }}" {% if subject and u.id == subject.id %}selected{% endif %}>{{ u.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="ax-q">Find a screen</label>
+        <input type="search" name="q" id="ax-q" value="{{ query }}"
+               class="form-control form-control-sm" style="min-width:220px;"
+               placeholder="e.g. daily entry">
+      </div>
+      <button type="submit" class="btn btn-outline-secondary btn-sm">Search</button>
+    </form>
+
+    {% if subject %}
+      {% if facts.unrestricted %}
+      <div class="ax-warn">
+        <b><i class="fas fa-triangle-exclamation me-1"></i>{{ subject.username }} bypasses every access gate.</b>
+        They are a superuser, or belong to a group whose Access Type is Admin.
+        No matrix — web, mobile or dashboard — restricts them, so configuring
+        one for their group will appear to have no effect.
+      </div>
+      {% elif not facts.configured %}
+      <div class="ax-warn">
+        <b><i class="fas fa-circle-info me-1"></i>No permission matrix is configured for this user's groups.</b>
+        An unconfigured group is treated as unrestricted, so existing accounts
+        are never locked out by a matrix nobody has filled in yet.
+      </div>
+      {% endif %}
+
+      <div class="ax-facts">
+        <div class="ax-fact">Groups: <b>{{ facts.groups|join:", "|default:"none" }}</b></div>
+        <div class="ax-fact">Modules on web: <b>{{ facts.navs|length }}</b></div>
+        <div class="ax-fact">Tabs viewable: <b>{{ facts.tab_count }}</b></div>
+        <div class="ax-fact">Mobile modules configured: <b>{{ facts.mobile_configured|yesno:"yes,no" }}</b></div>
+        <div class="ax-fact">Mobile screens configured: <b>{{ facts.screens_configured|yesno:"yes,no" }}</b></div>
+      </div>
+
+      {% if rows %}
+      <div class="table-responsive" style="max-height:70vh;">
+        <table class="ax-table">
+          <thead>
+            <tr>
+              <th class="ax-first">Screen</th>
+              {% for action in actions %}<th class="ax-cell">{{ action|capfirst }}</th>{% endfor %}
+              <th class="ax-first" style="width:34%;">Decided by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr class="ax-row {% if row.narrowed %}is-narrowed{% endif %}">
+              <td>
+                <span class="ax-name">{{ row.label }}</span>
+                <span class="ax-code">{{ row.nav }} · {{ row.section }} · {{ row.code }}</span>
+              </td>
+              {% for v in row.verdicts %}
+              <td class="ax-cell" title="{{ v.reason }}">
+                {% if v.phone is None %}
+                  {% if v.web %}<span class="ax-y">✓</span>{% else %}<span class="ax-n">✗</span>{% endif %}
+                {% elif v.web and v.phone %}<span class="ax-y">✓</span>
+                {% elif v.web and not v.phone %}<span class="ax-narrow">◐</span>
+                {% else %}<span class="ax-n">✗</span>{% endif %}
+              </td>
+              {% endfor %}
+              <td>
+                <span class="ax-name">{{ row.verdicts.0.reason }}</span>
+                {% if row.verdicts.0.groups %}
+                <span class="ax-code">via {{ row.verdicts.0.groups|join:", " }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="ax-legend">
+        <span><span class="ax-y">✓</span> allowed</span>
+        <span><span class="ax-narrow">◐</span> allowed on the web, withheld from the phone</span>
+        <span><span class="ax-n">✗</span> not allowed</span>
+        <span>Hover a cell for the gate that decided it.</span>
+      </div>
+      {% else %}
+      <div class="ax-empty">No screen matches “{{ query }}”.</div>
+      {% endif %}
+    {% else %}
+      <p class="text-muted mb-0" style="font-size:.86rem;">
+        Pick a user to see what they can do, and which gate decides each answer.
+      </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

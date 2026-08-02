@@ -434,6 +434,7 @@ MODULE_REGISTRY = [
                     ("mobile_access", "Mobile Access",
                      ("mobile_access_form", "mobile_access_preview")),
                     ("access_changes", "Access Changes"),
+                    ("access_explain", "Explain Access"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
                     ("picklists", "Picklists"),

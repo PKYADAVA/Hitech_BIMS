@@ -250,6 +250,38 @@ def dashboard_access_delete(request, group_id):
 
 
 @login_required
+def access_explain(request):
+    """User > Explain Access — why can this user do this?
+
+    The editors answer per group; support questions are per user, and a user in
+    several groups gets a union nobody computes by eye. Everything here is
+    reported by calling the same functions the guards call, so the explanation
+    cannot drift from the rule.
+    """
+    from django.contrib.auth.models import User as AuthUser
+
+    from .services.access_explain import explain_all, summarise
+
+    user_id = (request.GET.get("user") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+    subject = AuthUser.objects.filter(id=user_id).first() if user_id.isdigit() else None
+
+    rows, facts = [], None
+    if subject:
+        facts = summarise(subject)
+        rows = explain_all(subject, query=query)
+
+    return render(request, "access_explain.html", {
+        "users": AuthUser.objects.order_by("username"),
+        "subject": subject,
+        "facts": facts,
+        "rows": rows,
+        "actions": ["view", "add", "edit", "delete"],
+        "query": query,
+    })
+
+
+@login_required
 def access_changes(request):
     """User > Access Changes — who changed whose access, and to what.
 
