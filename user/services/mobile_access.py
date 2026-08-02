@@ -176,6 +176,29 @@ PHONE_REPORTS = [
     ("chick-sale", "chick_sale_report"),
 ]
 
+#: Hub tiles that deliberately have no permission mapping, and why.
+#:
+#: A tile absent from PHONE_SCREENS is **ungated** — the app shows it to anyone
+#: who can open its module. That is defensible for these nine and was a bug for
+#: the eleven inventory screens, and nothing distinguished the two cases until
+#: this list existed. A test holds every hub tile to "mapped, or named here",
+#: so the next forgotten screen fails the suite instead of shipping open.
+UNGATED_SCREENS = {
+    "broiler-farmers":
+        "Shares the branch_farm tab with broiler-farms; a second row would "
+        "emit a duplicate checkbox name and one would overwrite the other.",
+    "hatchery-change-requests":
+        "Its tab lives under the change_requests nav, which has no phone "
+        "module, so Mobile Access has nothing to hang it on.",
+    "hr-departments": "No web page exists, so there is no permission to inherit.",
+    "hr-shifts": "No web page exists, so there is no permission to inherit.",
+    "purchase-credit-terms": "No web page exists.",
+    "purchase-shipping-addresses": "No web page exists.",
+    "sales-shipping-addresses": "No web page exists.",
+    "user-group-access": "No web page of its own; assign_groups covers the pair.",
+    "user-profiles": "No web page exists.",
+}
+
 SCREEN_TABS = [tab for _key, tab in PHONE_SCREENS]
 REPORT_TAB_LIST = [tab for _key, tab in PHONE_REPORTS]
 RESOURCE_TABS = dict(PHONE_SCREENS)

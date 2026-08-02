@@ -143,10 +143,10 @@ export const REPORT_TABS: Record<string, string> = {
   "chicks-placement": "chicks_placement_report",
   "day-record": "day_record_report",
   "feed-dispatch": "feed_dispatch_stock_report",
-  lifting: "lifting_report",
+  "lifting": "lifting_report",
   "hatch-performance": "hatchery_report",
   "egg-intake": "egg_purchase_report",
-  incubation: "incubation_report",
+  "incubation": "incubation_report",
   "delivery-challan": "delivery_challan_report",
   "chick-sale": "chick_sale_report",
 };

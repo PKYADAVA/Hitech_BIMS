@@ -501,6 +501,77 @@ class MobileModuleRegistryTests(TestCase):
         self.assertEqual(len(report_tabs), len(set(report_tabs)))
         self.assertFalse(set(tabs) & set(report_tabs))
 
+    def test_the_generator_agrees_with_the_checked_in_client(self):
+        """`sync_mobile_registry --check` is the one-command fix for drift;
+        if it disagrees with the repo, the committed client is stale."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        try:
+            call_command("sync_mobile_registry", "--check", stdout=StringIO())
+        except CommandError as exc:
+            self.fail(f"client is out of date: {exc}")
+        except FileNotFoundError:
+            self.skipTest("mobile client not present")
+
+    def test_no_hub_tile_is_silently_ungated(self):
+        """The bug that shipped twice, made impossible.
+
+        A tile missing from RESOURCE_TABS is shown to anyone who can open its
+        module — that was right for nine screens and wrong for eleven
+        inventory ones, and nothing told the two apart. Every tile must now be
+        mapped or named in UNGATED_SCREENS with a reason.
+        """
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from user.services.mobile_access import RESOURCE_TABS, UNGATED_SCREENS
+
+        catalog = Path(settings.BASE_DIR) / "mobile" / "src" / "config" / "catalog.ts"
+        if not catalog.exists():
+            self.skipTest("mobile client not present")
+
+        tiles = set()
+        for block in re.findall(r"resourceKeys:\s*\[(.*?)\]",
+                                catalog.read_text(encoding="utf-8"), re.S):
+            tiles.update(re.findall(r'"([a-z0-9-]+)"', block))
+        self.assertTrue(tiles, "no hub tiles found — has the catalog moved?")
+
+        unaccounted = sorted(tiles - set(RESOURCE_TABS) - set(UNGATED_SCREENS))
+        self.assertEqual(
+            unaccounted, [],
+            "These phone screens are ungated: anyone who can open the module "
+            "sees them. Map them in PHONE_SCREENS, or add them to "
+            "UNGATED_SCREENS with the reason.")
+
+    def test_the_ungated_list_stays_honest(self):
+        """An entry that has since been mapped, or a tile that no longer
+        exists, would leave a stale excuse sitting in the code."""
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from user.services.mobile_access import RESOURCE_TABS, UNGATED_SCREENS
+
+        for key, reason in UNGATED_SCREENS.items():
+            with self.subTest(screen=key):
+                self.assertNotIn(key, RESOURCE_TABS,
+                                 "mapped now — drop it from UNGATED_SCREENS")
+                self.assertTrue(reason.strip(), "every exemption needs a reason")
+
+        catalog = Path(settings.BASE_DIR) / "mobile" / "src" / "config" / "catalog.ts"
+        if not catalog.exists():
+            self.skipTest("mobile client not present")
+        text = catalog.read_text(encoding="utf-8")
+        for key in UNGATED_SCREENS:
+            with self.subTest(screen=key):
+                self.assertIn(f'"{key}"', text, "no such screen in the app")
+
     def test_the_report_list_matches_the_mobile_client(self):
         """Report tiles are the other copied fact; same drift guard."""
         import re
