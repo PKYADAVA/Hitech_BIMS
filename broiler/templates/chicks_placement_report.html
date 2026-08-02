@@ -227,8 +227,8 @@
       <table class="table table-hover table-bordered mb-0 rpt-table ds-grid" id="placement-table" style="width:100%">
         <thead class="table-light">
           <tr>
-            <th class="ds-mid">Date</th><th>Transaction No.</th><th>Dc No.</th><th>Branch</th><th>Line</th><th>Supervisor</th>
-            <th>Farm Code</th><th>Farm Name</th><th>Batch</th><th>Source Hatchery / Supplier</th><th>Warehouse</th>
+            <th class="ds-mid">Date</th><th>Transaction No.</th><th>Dc No.</th><th>Branch</th><th>Warehouse</th><th>Line</th><th>Supervisor</th>
+            <th>Farm Code</th><th>Farm Name</th><th>Batch</th><th>Source Hatchery / Supplier</th>
             <th class="ds-num">Quantity Sent</th><th>Mortality</th><th class="ds-num">Mort%</th><th>Shortage</th>
             <th>Weeks/Culls</th><th class="ds-num">Weeks/Cull%</th><th>Excess</th>
             <th class="ds-num">Total Chicks Placed</th>
@@ -241,9 +241,10 @@
           {% for r in rows %}
           <tr>
             <td>{{ r.date|date:"d.m.Y" }}</td><td>{{ r.trnum|default:"-" }}</td><td>{{ r.dc_no|default:"-" }}</td>
-            <td>{{ r.branch_name }}</td><td>{{ r.line }}</td><td>{{ r.supervisor_name|default:"-" }}</td>
+            <td>{{ r.branch_name }}</td><td>{{ r.warehouse_name|default:"-" }}</td>
+            <td>{{ r.line }}</td><td>{{ r.supervisor_name|default:"-" }}</td>
             <td>{{ r.farm_code }}</td><td>{{ r.farm_name }}</td><td>{{ r.batch_name|default:"-" }}</td>
-            <td>{{ r.source_hatchery_name|default:"-" }}</td><td>{{ r.warehouse_name|default:"-" }}</td>
+            <td>{{ r.source_hatchery_name|default:"-" }}</td>
             <td class="text-end">{{ r.chicks_ordered }}</td><td class="text-end">{{ r.transit_mortality }}</td>
             <td class="text-end">{{ r.mort_pct }}</td><td class="text-end">{{ r.shortage }}</td>
             <td class="text-end">{{ r.culls }}</td><td class="text-end">{{ r.culls_pct }}</td><td class="text-end">{{ r.excess }}</td>
