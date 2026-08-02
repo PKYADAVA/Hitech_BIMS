@@ -107,6 +107,13 @@ class BaseReadOnlyViewSet(V1ViewMixin, AutoQuerysetMixin, viewsets.ReadOnlyModel
 #: model -> the scopes that apply to it and the path from the row to each.
 #: Only where the link is unambiguous; anything else stays unscoped rather than
 #: risk hiding rows the web app would show.
+#: ``"mode": "any"`` switches a row from scope_multi (every dimension must
+#: pass) to scope_any (one end is enough). Which one is right is a property of
+#: the row, not a preference: a transfer has two ends, and requiring both to be
+#: in scope hides the movement out of the user's own store — the one they most
+#: need to see. Each entry below mirrors what the web view for the same model
+#: does; copying the web is the point, since the API is that data by another
+#: door and the two disagreeing is the bug.
 API_SCOPES = {
     "broiler.Branch": {"branches": "id"},
     "broiler.BroilerFarm": {"branches": "branch_id", "farms": "id"},
@@ -118,7 +125,143 @@ API_SCOPES = {
     "broiler.BroilerFarmShed": {"farms": "farm_id"},
     "inventory.Warehouse": {"sectors": "id"},
     "sales.Customer": {"customer_groups": "customer_group_id"},
+
+    # Hatchery transactions — hatchery/views.py scopes each of these with
+    # scope_any on exactly these fields.
+    "hatchery.EggPurchase": {"mode": "any", "sectors": "warehouse_id"},
+    "hatchery.ChickSale": {"mode": "any", "sectors": "warehouse_id"},
+    "hatchery.DeliveryChallan": {"mode": "any",
+                                 "sectors": "chick_sales__warehouse_id"},
+
+    # Stock movements — inventory/views.py::_scope_by_items, same fields.
+    "inventory.StockIssue": {"mode": "any", "sectors": "items__warehouse_id",
+                             "farms": "items__farm_id"},
+    "inventory.StockReceive": {"mode": "any", "sectors": "items__warehouse_id",
+                               "farms": "items__farm_id"},
 }
+
+
+#: API models with no data scope, and why — the counterpart to API_SCOPES.
+#:
+#: An unscoped model returns every row to anyone whose matrix lets them read it,
+#: which is right for reference data and wrong for anything with a location.
+#: Nothing distinguished the two until this list existed: a model added to the
+#: API simply arrived unscoped and nobody found out. A test now holds every
+#: registered model to "scoped, or named here", so the next one forces the
+#: decision instead of defaulting to open.
+#:
+#: Adding a scope is not free — a wrong path hides rows the web app shows,
+#: which is worse than an unscoped read of data the matrix already permits. So
+#: "the link exists" is not sufficient grounds; the web view for the same model
+#: has to scope it the same way.
+UNSCOPED_API_MODELS = {
+    # Reference and configuration data: no branch, farm or warehouse dimension
+    # to scope by. Everyone who may read them may read all of them.
+    "account.BankCashMaster": "Master data, no location dimension",
+    "account.ChartOfAccount": "Master data, no location dimension",
+    "account.CompanyProfile": "One row for the whole company",
+    "account.FinancialYear": "Company-wide",
+    "account.OrganizationCentre": "Master data",
+    "account.TermsConditions": "Master data",
+    "broiler.Breed": "Master data",
+    "broiler.BreedStandard": "Master data",
+    "broiler.FarmerGroup": "Master data",
+    "broiler.Region": "Above branch — scoping it would hide the tree",
+    "hr.Department": "Master data",
+    "hr.Designation": "Master data",
+    "hr.Shift": "Master data",
+    "inventory.Item": "Catalogue, not stock — quantities are scoped, items are not",
+    "inventory.ItemCategory": "Master data",
+    "inventory.ItemPriceList": "Master data",
+    "inventory.Sector": "Master data",
+    "inventory.UnitOfMeasurement": "Master data",
+    "purchase.CreditTerm": "Master data",
+    "purchase.TaxMaster": "Master data",
+    "purchase.VendorGroup": "Master data — it is itself a scope dimension",
+    "sales.CustomerGroup": "Master data — it is itself a scope dimension",
+    "sales.SalesPriceMaster": "Master data",
+
+    # Parties. Suppliers have no group scope wired; customers are scoped.
+    "broiler.Farmer": "No unambiguous branch link; the farm carries it",
+    "purchase.Supplier": "supplier_groups scope is stored but not applied anywhere yet",
+    "purchase.SupplierShippingAddress": "Follows its supplier",
+    "sales.CustomerShippingAddress": "Follows its customer",
+
+    # Line items. They are reached through their parent, which is scoped, and
+    # scoping them independently risks a different answer from the parent's.
+    "hatchery.ChickSaleItem": "Reached through ChickSale, which is scoped",
+    "hatchery.DeliveryChallanItem": "Reached through DeliveryChallan",
+    "hatchery.EggPurchaseItem": "Reached through EggPurchase",
+    "hr.LeaveSelectedDate": "Reached through EmployeeLeave",
+    "purchase.ChicksPurchaseItem": "Reached through ChicksPurchase",
+    "purchase.GeneralPurchaseItem": "Reached through GeneralPurchase",
+    "purchase.SupplierPaymentLine": "Reached through SupplierPayment",
+    "sales.SalesInvoiceItem": "Reached through SalesInvoice",
+
+    # Not yet scoped, and each needs its web view checked first. Listed so the
+    # gap is visible rather than implied by absence.
+    "account.Voucher": "TODO: web scopes with scope_any; confirm the field set",
+    "broiler.BirdSaleReceipt": "TODO: check the web view's scope",
+    "broiler.BroilerDisease": "TODO: reachable via batch__broiler_farm_id",
+    "broiler.BroilerLine": "TODO: branch_id link exists; web view unchecked",
+    "broiler.GrowingChargeScheme": "TODO: branch_id link exists",
+    "broiler.GrowingChargeSettlement": "TODO: farm_id link exists",
+    "broiler.MedicineVaccineEntry": "TODO: farm_id link exists",
+    "hatchery.ChangeRequest": "Workflow record, not location data",
+    "hatchery.EggGrading": "TODO: storage_location_id link exists",
+    "hatchery.HatchEntry": "TODO: reached through a setting, path unverified",
+    "hatchery.HatchSetting": "TODO: path to a warehouse unverified",
+    "hatchery.TraySetting": "TODO: grading__storage_location_id link exists",
+    "hr.Attendance": "TODO: employee__warehouse_id link exists",
+    "hr.Employee": "TODO: warehouse_id link exists",
+    "hr.EmployeeLeave": "TODO: employee__warehouse_id link exists",
+    "hr.Group": "TODO: warehouse_id link exists",
+    "hr.Payroll": "TODO: employee__warehouse_id link exists",
+    "inventory.InventoryAdjustment": "TODO: warehouse/farm links exist",
+    "inventory.MedicineTransfer": "TODO: two-ended, needs scope_any field set",
+    "inventory.StockTransfer": "TODO: two-ended, needs scope_any field set",
+    "purchase.ChicksPurchase": "TODO: check the web view's scope",
+    "purchase.CreditNote": "TODO: sector_id link exists",
+    "purchase.DebitNote": "TODO: sector_id link exists",
+    "purchase.GeneralPurchase": "TODO: check the web view's scope",
+    "purchase.SupplierPayment": "TODO: location_id link exists",
+    "sales.SalesInvoice": "TODO: branch_id is a Warehouse here; confirm before scoping",
+    "sales.SalesReceipt": "TODO: location_id link exists",
+
+    # RBAC configuration. Admin-only already, and not location data.
+    "user.GroupAccessProfile": "Admin-only RBAC config",
+    "user.GroupTabPermission": "Admin-only RBAC config",
+    "user.UserProfile": "Admin-only, no location dimension",
+}
+
+
+def registered_api_models():
+    """Every model the mobile API exposes, as ``app_label.ModelName``.
+
+    Read from the ``register_model`` calls rather than the router, so it can be
+    used from a test without building the whole API.
+    """
+    import re
+    from pathlib import Path
+
+    from django.apps import apps
+    from django.conf import settings
+
+    found = set()
+    for app in ("broiler", "hatchery", "inventory", "sales", "purchase", "hr",
+                "account", "user", "notification", "tracking"):
+        path = Path(settings.BASE_DIR) / app / "api.py"
+        if not path.exists():
+            continue
+        for match in re.finditer(
+                r"register_model\(\s*router,\s*\"[^\"]+\",\s*(\w+)",
+                path.read_text(encoding="utf-8")):
+            try:
+                model = apps.get_model(app, match.group(1))
+            except LookupError:
+                continue
+            found.add(f"{model._meta.app_label}.{model.__name__}")
+    return found
 
 
 def scope_api_queryset(user, qs):
@@ -128,13 +271,15 @@ def scope_api_queryset(user, qs):
     limits that narrow the web app have to narrow it too — otherwise a token is
     a way round the scoping as well as the matrix.
     """
-    from user.services.scoping import scope_multi
+    from user.services.scoping import scope_any, scope_multi
 
     model = qs.model
     scopes = API_SCOPES.get(f"{model._meta.app_label}.{model.__name__}")
     if not scopes or user is None:
         return qs
-    return scope_multi(user, qs, **scopes)
+    scopes = dict(scopes)
+    combine = scope_any if scopes.pop("mode", "all") == "any" else scope_multi
+    return combine(user, qs, **scopes)
 
 
 def _has_field(model, name: str) -> bool:
