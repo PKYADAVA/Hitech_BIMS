@@ -1779,10 +1779,14 @@ def _apply_daily_entry_row(instance, row, entry_date, user, default_farm_id=None
     instance.date = entry_date
     instance.farm_id = farm_id
     instance.batch = batch
-    if batch and batch.start_date:
+    placed_on = _placement_date(batch)
+    if placed_on:
         # Placement day is Age 0; the first entry day (the day after
-        # placement) is Age 1.
-        instance.age_days = max((entry_date - batch.start_date).days, 0)
+        # placement) is Age 1. This is the age that gets *stored*, and every
+        # figure on the advisory panel — phase, standard feed, cumulative cap —
+        # is derived from it, so a batch with no start_date recorded age 0 and
+        # took the wrong numbers with it.
+        instance.age_days = max((entry_date - placed_on).days, 0)
     else:
         instance.age_days = 0
     instance.mortality = int(row.get("mortality") or 0)
@@ -2311,10 +2315,14 @@ def _apply_medicine_entry_row(instance, row, entry_date, user):
     instance.date = entry_date
     instance.farm_id = farm_id
     instance.batch = batch
-    if batch and batch.start_date:
+    placed_on = _placement_date(batch)
+    if placed_on:
         # Placement day is Age 0; the first entry day (the day after
-        # placement) is Age 1.
-        instance.age_days = max((entry_date - batch.start_date).days, 0)
+        # placement) is Age 1. This is the age that gets *stored*, and every
+        # figure on the advisory panel — phase, standard feed, cumulative cap —
+        # is derived from it, so a batch with no start_date recorded age 0 and
+        # took the wrong numbers with it.
+        instance.age_days = max((entry_date - placed_on).days, 0)
     else:
         instance.age_days = 0
     instance.item_id = row.get("item") or None
@@ -3168,8 +3176,9 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         .values_list("from_id", flat=True)
     )
     purchase_items = GeneralPurchaseItem.objects.filter(farm_warehouse_id__in=branch_office_ids)
-    if batch.start_date:
-        purchase_items = purchase_items.filter(purchase__date__gte=batch.start_date)
+    _placed = _placement_date(batch)
+    if _placed:
+        purchase_items = purchase_items.filter(purchase__date__gte=_placed)
     if batch.end_date:
         purchase_items = purchase_items.filter(purchase__date__lte=batch.end_date)
     purchase_items = (purchase_items
@@ -3479,7 +3488,7 @@ def broiler_batch_report(request):
     schemes = GrowingChargeScheme.objects.filter(is_active=True)
     selected_schema_id = int(schema_id) if schema_id.isdigit() else None
     if batch:
-        placement = batch.start_date
+        placement = _placement_date(batch)
         region_id = batch.broiler_farm.branch.region_id
         if placement:
             schemes = schemes.filter(region_id=region_id,
@@ -4230,8 +4239,9 @@ def lifting_report(request):
                 receipt = rcpt_by_key.get(key, Decimal("0.00")).quantize(q2)
 
         mean_age = ""
-        if batch and batch.start_date and s.date:
-            mean_age = (s.date - batch.start_date).days
+        _placed = _placement_date(batch)
+        if _placed and s.date:
+            mean_age = (s.date - _placed).days
 
         party = s.customer.name if s.customer_id else (s.farmer.farmer_name if s.farmer_id else "")
         code = s.customer.code if s.customer_id else ""
@@ -6383,7 +6393,7 @@ def gc_settlement_schemes(request):
     batch = BroilerBatch.objects.select_related("broiler_farm__branch").filter(id=batch_id).first()
     if not batch:
         return JsonResponse({"schemes": [], "selected": None}, safe=False)
-    placement = batch.start_date
+    placement = _placement_date(batch)
     region_id = batch.broiler_farm.branch.region_id
     qs = GrowingChargeScheme.objects.filter(region_id=region_id, is_active=True)
     if placement:
@@ -6409,7 +6419,7 @@ def gc_settlement_autofill_api(request):
     if batch.is_closed:
         return JsonResponse({"error": "This batch is already closed/settled."}, status=400)
     scheme = GrowingChargeScheme.objects.filter(id=scheme_id).first() if scheme_id.isdigit() else \
-        _match_growing_charge_scheme(batch, batch.start_date)
+        _match_growing_charge_scheme(batch, _placement_date(batch))
 
     farm = batch.broiler_farm
     data = _gc_settlement_autofill(batch, scheme)

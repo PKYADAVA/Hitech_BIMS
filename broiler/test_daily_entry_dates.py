@@ -193,3 +193,43 @@ class PlacementWithoutStartDateTests(TestCase):
         self.assertEqual(payload["start_date"],
                          (self.today - timedelta(days=11)).isoformat())
         self.assertEqual(payload["age_days"], 11)
+
+    def test_the_saved_age_uses_the_resolved_placement(self):
+        """age_days is *stored* on the row, and every advisory figure — phase,
+        standard feed, cumulative cap — is derived from it. A batch with no
+        start_date recorded age 0 and took the wrong numbers with it."""
+        from broiler.views import daily_entry_lookup_payload
+
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+        payload = daily_entry_lookup_payload(
+            str(self.farm.id), (self.today - timedelta(days=5)).isoformat())
+        self.assertEqual(payload["age_days"], 6)      # placed 11 ago, entry 5 ago
+
+    def test_the_advisory_resolves_a_feed_phase(self):
+        """Age 0 fell outside every phase range, so the panel had no phase and
+        therefore no standard feed or cap to compare against."""
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+        self.assertGreater(self.lookup()["age_days"], 0)
+
+    def test_no_site_reads_start_date_without_a_fallback(self):
+        """This bug was fixed three times in three places before anyone looked
+        for the shape. Every read is now either inside _placement_date or has
+        an explicit `or` fallback."""
+        import pathlib
+        import re
+
+        source = pathlib.Path("broiler/views.py").read_text(encoding="utf-8")
+        bare = [
+            line.strip()
+            for line in source.splitlines()
+            if re.search(r"\bbatch\.start_date\b", line)
+            and "agreement" not in line
+            and " or " not in line
+            and "return batch.start_date" not in line
+            and "if batch.start_date:" not in line
+        ]
+        self.assertEqual(bare, [])
