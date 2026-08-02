@@ -6,6 +6,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 # Data scoping: every user-facing option list below is narrowed to the
 # branches / farms / warehouses the signed-in user is scoped to.
 from user.services.scoping import (branches_for, farms_for, scope_any,
+                                   scope_multi, scope_or_null,
                                    supervisors_for, warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -3476,8 +3477,13 @@ def broiler_batch_report(request):
     export = (request.GET.get("export") or "display").strip().lower()
     schema_id = (request.GET.get("schema") or "").strip()
 
-    batch = (BroilerBatch.objects
-             .select_related("broiler_farm__branch", "broiler_farm__supervisor", "broiler_farm__farmer")
+    batch = (scope_multi(request.user,
+                         BroilerBatch.objects
+                         .select_related("broiler_farm__branch",
+                                         "broiler_farm__supervisor",
+                                         "broiler_farm__farmer"),
+                         farms="broiler_farm_id",
+                         branches="broiler_farm__branch_id")
              .filter(id=batch_id).first()) if batch_id else None
     # A hand-picked Schema overrides the auto-matched Growing Charge Scheme.
     scheme_override = (GrowingChargeScheme.objects.filter(id=schema_id).first()
@@ -3502,7 +3508,11 @@ def broiler_batch_report(request):
 
     return render(request, "broiler_batch_report.html", {
         "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
-        "batches": BroilerBatch.objects.select_related("broiler_farm").order_by("-start_date", "-id"),
+        "batches": scope_multi(request.user,
+                               BroilerBatch.objects.select_related("broiler_farm")
+                               .order_by("-start_date", "-id"),
+                               farms="broiler_farm_id",
+                               branches="broiler_farm__branch_id"),
         "schemes": schemes,
         "batch": batch,
         "batch_requested": bool(batch_id),
@@ -3808,6 +3818,9 @@ def live_flock_summary_report(request):
                .select_related("broiler_farm__branch", "broiler_farm__supervisor",
                                "broiler_farm__farmer", "breed")
                .order_by("broiler_farm__branch__branch_name", "batch_name"))
+    batches = scope_multi(request.user, batches,
+                          farms="broiler_farm_id",
+                          branches="broiler_farm__branch_id")
     if branch_id.isdigit():
         batches = batches.filter(broiler_farm__branch_id=branch_id)
     elif region_id.isdigit():
@@ -4004,6 +4017,8 @@ def day_record_report(request):
                .select_related("farm__branch", "farm__supervisor", "farm__farmer",
                                "batch__breed", "supervisor", "entry_by", "feed_1", "feed_2")
                .order_by("farm__farm_code", "batch__batch_name", "id"))
+    entries = scope_multi(request.user, entries,
+                          farms="farm_id", branches="farm__branch_id")
     if region_id:
         entries = entries.filter(farm__branch__region_id=region_id)
     if branch_id:
@@ -4069,6 +4084,8 @@ def farm_detailed_daily_entry_report(request):
                .select_related("farm__branch", "farm__supervisor", "farm__farmer",
                                "batch__breed", "supervisor", "entry_by", "feed_1", "feed_2")
                .order_by("farm__farm_code", "batch__batch_name", "date", "id"))
+    entries = scope_multi(request.user, entries,
+                          farms="farm_id", branches="farm__branch_id")
     if branch_id:
         entries = entries.filter(farm__branch_id=branch_id)
     if line:
@@ -4159,6 +4176,8 @@ def lifting_report(request):
              .select_related("customer", "farmer", "farm__branch", "farm__supervisor",
                              "lifting_supervisor", "batch")
              .order_by("date", "id"))
+    sales = scope_multi(request.user, sales,
+                        farms="farm_id", branches="farm__branch_id")
     if fd:
         sales = sales.filter(date__gte=fd)
     if td:
@@ -4182,6 +4201,8 @@ def lifting_report(request):
     # Receipts summed per (customer, date), attributed to that customer's first
     # lifting of the day (mirrors the reference report's receipt column).
     rcpt_qs = BirdSaleReceipt.objects.filter(sale_type="customer")
+    rcpt_qs = scope_or_null(request.user, rcpt_qs,
+                            "customer_groups", "customer__customer_group_id")
     if fd:
         rcpt_qs = rcpt_qs.filter(date__gte=fd)
     if td:
@@ -4736,6 +4757,9 @@ def batch_wise_feed_scheduling_report(request):
                    .select_related("broiler_farm__branch", "broiler_farm__supervisor",
                                    "breed__bird_category")
                    .order_by("broiler_farm__farm_name", "batch_name"))
+        batches = scope_multi(request.user, batches,
+                              farms="broiler_farm_id",
+                              branches="broiler_farm__branch_id")
         if status == "closed":
             batches = batches.filter(Q(end_date__isnull=False) | Q(is_closed=True))
         elif status != "all":
@@ -6979,6 +7003,8 @@ def farm_location_capture_api(request):
     qs = (FarmLocationCapture.objects
           .select_related("farm", "farm__farmer", "farm__branch", "captured_by")
           .prefetch_related("files"))
+    qs = scope_multi(request.user, qs,
+                     farms="farm_id", branches="farm__branch_id")
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
