@@ -834,8 +834,8 @@ class TrackingSettings(models.Model):
         blank=True, help_text="Only needed when the map provider is Google Maps."
     )
     dashboard_refresh_seconds = models.PositiveIntegerField(
-        default=30, validators=[MinValueValidator(10)],
-        help_text="Auto-refresh interval of the live dashboard.",
+        default=120, validators=[MinValueValidator(10)],
+        help_text="Auto-refresh interval of the live dashboard (seconds).",
     )
     offline_after_minutes = models.PositiveIntegerField(
         default=15, help_text="Minutes without a ping before an employee is shown offline."
