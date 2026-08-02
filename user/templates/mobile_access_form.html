@@ -125,21 +125,21 @@
       </div>
 
       <div class="ma-treebar">
-        <a id="ma-expand-all"><i class="fas fa-angles-down me-1"></i>Expand all</a>
-        <a id="ma-collapse-all"><i class="fas fa-angles-up me-1"></i>Collapse all</a>
+        <a data-at-expand><i class="fas fa-angles-down me-1"></i>Expand all</a>
+        <a data-at-collapse><i class="fas fa-angles-up me-1"></i>Collapse all</a>
       </div>
 
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="group" value="{{ selected_group.id }}">
         <div class="table-responsive" style="max-height:70vh;">
-        <table class="ma-table" id="ma-table">
+        <table class="ma-table" id="ma-table" data-access-tree>
           <thead>
             <tr>
               <th class="ma-first">
                 All
                 <span class="form-check form-switch d-inline-block m-0 ms-2 align-middle">
-                  <input type="checkbox" role="switch" class="form-check-input" id="ma-all"
+                  <input type="checkbox" role="switch" class="form-check-input at-all"
                          title="Every module and every screen">
                 </span>
               </th>
@@ -147,7 +147,7 @@
               <th class="ma-act">
                 {{ action|capfirst }}
                 <div class="form-check m-0 mt-1 d-flex justify-content-center">
-                  <input type="checkbox" class="form-check-input ma-col" data-action="{{ action }}"
+                  <input type="checkbox" class="form-check-input at-all" data-action="{{ action }}"
                          title="Every screen's {{ action }}">
                 </div>
               </th>
@@ -165,43 +165,41 @@
                          title="Show this module on the phone">
                 </span>
                 <span class="ma-icon" style="background:{{ block.colour }};"><i class="{{ block.icon }}"></i></span>
-                <span class="ma-toggle" data-toggle-mod="{{ block.key }}"><i class="fas fa-folder-open ma-caret"></i></span>
+                <span class="ma-toggle at-toggle" data-at-folder="m-{{ block.key }}"><i class="fas fa-folder-open ma-caret"></i></span>
                 <span class="ma-modname">{{ block.title }}</span>
                 <span class="ma-count">{{ block.screen_count }} screens</span>
-                <input type="number" min="0" class="form-control form-control-sm ma-pos ms-2"
+                <input type="number" min="0" class="form-control form-control-sm ma-pos at-pos ms-2"
                        name="pos_{{ block.key }}" value="{{ block.position }}" title="Order on the home hub">
-                <button type="button" class="ma-move ma-up" title="Move up"><i class="fas fa-chevron-up"></i></button>
-                <button type="button" class="ma-move ma-down" title="Move down"><i class="fas fa-chevron-down"></i></button>
+                <button type="button" class="ma-move at-move" data-at-dir="up" title="Move up"><i class="fas fa-chevron-up"></i></button>
+                <button type="button" class="ma-move at-move" data-at-dir="down" title="Move down"><i class="fas fa-chevron-down"></i></button>
               </td>
               {% for action in actions %}
               <td class="ma-act">
-                <input type="checkbox" class="form-check-input ma-modcol"
-                       data-module="{{ block.key }}" data-action="{{ action }}"
+                <input type="checkbox" class="form-check-input at-all"
+                       data-scope-mod="{{ block.key }}" data-action="{{ action }}"
                        title="Every {{ block.title }} screen's {{ action }}">
               </td>
               {% endfor %}
             </tr>
 
             {% for section in block.sections %}
-            <tr class="ma-secrow child-of-mod-{{ block.key }}"
-                data-module="{{ block.key }}" data-section="{{ section.sid }}">
+            <tr class="ma-secrow child-of-m-{{ block.key }}">
               <td>
-                <span class="ma-toggle" data-toggle-sec="{{ section.sid }}"><i class="fas fa-folder-open ma-caret"></i></span>
+                <span class="ma-toggle at-toggle" data-at-folder="s-{{ section.sid }}"><i class="fas fa-folder-open ma-caret"></i></span>
                 <span class="ma-secname">{{ section.label }}</span>
                 <span class="ma-count">{{ section.screens|length }}</span>
               </td>
               {% for action in actions %}
               <td class="ma-act">
-                <input type="checkbox" class="form-check-input ma-seccol"
-                       data-section="{{ section.sid }}" data-action="{{ action }}"
+                <input type="checkbox" class="form-check-input at-all"
+                       data-scope-sec="{{ section.sid }}" data-action="{{ action }}"
                        title="Every {{ section.label }} screen's {{ action }}">
               </td>
               {% endfor %}
             </tr>
 
             {% for screen in section.screens %}
-            <tr class="ma-screen child-of-mod-{{ block.key }} child-of-sec-{{ section.sid }} {% if not screen.reachable %}ma-blocked{% endif %}"
-                data-module="{{ block.key }}" data-section="{{ section.sid }}">
+            <tr class="ma-screen child-of-m-{{ block.key }} child-of-s-{{ section.sid }} {% if not screen.reachable %}ma-blocked{% endif %}">
               <td>
                 <span class="ma-scrname">{{ screen.title }}</span>
                 {% if screen.kind == 'report' %}<span class="ma-tag">report</span>{% endif %}
@@ -212,8 +210,9 @@
               {% for action in screen.actions %}
               <td class="ma-act">
                 {% if action.applies %}
-                <input type="checkbox" class="form-check-input ma-tick"
-                       data-module="{{ block.key }}" data-action="{{ action.name }}"
+                <input type="checkbox" class="form-check-input at-cell"
+                       data-scope-mod="{{ block.key }}" data-scope-sec="{{ section.sid }}"
+                       data-action="{{ action.name }}"
                        name="p_{{ screen.tab }}_{{ action.name }}"
                        {% if action.on %}checked{% endif %}
                        {% if not action.granted %}disabled title="The web matrix does not grant this"{% endif %}>
@@ -227,7 +226,7 @@
             {% endfor %}
 
             {% if block.unbuilt %}
-            <tr class="ma-pending child-of-mod-{{ block.key }}" data-module="{{ block.key }}">
+            <tr class="ma-pending child-of-m-{{ block.key }}">
               <td colspan="{{ actions|length|add:1 }}">
                 <details>
                   <summary>
@@ -280,175 +279,34 @@
 {% endblock %}
 
 {% block js %}
+<script src="{% static 'js/access_tree.js' %}"></script>
 <script>
+  // Everything structural — cascades, folders, ordering — lives in
+  // access_tree.js and is shared with the Web Access and Dashboard Access
+  // editors. Only what is genuinely specific to this page stays here.
   (function () {
     "use strict";
     var table = document.getElementById('ma-table');
     if (!table) return;
-    var body = table.querySelector('tbody');
 
-    // A disabled box is one the web matrix does not grant. Nothing may tick it
-    // — not the column header, not the module row, not "All" — or the page
-    // would promise access it cannot deliver.
-    function settable(list) {
-      return Array.prototype.filter.call(list, function (i) { return !i.disabled; });
-    }
-    function ticks(sel) { return settable(body.querySelectorAll(sel || '.ma-tick')); }
-
-    /* ---- module show/hide dims its screens ---- */
-    body.addEventListener('change', function (e) {
-      var el = e.target;
-      if (el.classList.contains('ma-on')) {
-        el.closest('tr').classList.toggle('is-off', !el.checked);
-      } else if (el.classList.contains('ma-modcol')) {
-        ticks('.ma-tick[data-module="' + el.dataset.module + '"][data-action="' + el.dataset.action + '"]')
-          .forEach(function (i) { i.checked = el.checked; });
-        sync();
-      } else if (el.classList.contains('ma-seccol')) {
-        ticks('.ma-tick[data-section="' + el.dataset.section + '"][data-action="' + el.dataset.action + '"]')
-          .forEach(function (i) { i.checked = el.checked; });
-        sync();
-      } else if (el.classList.contains('ma-col')) {
-        ticks('.ma-tick[data-action="' + el.dataset.action + '"]')
-          .forEach(function (i) { i.checked = el.checked; });
-        sync();
-      } else if (el.classList.contains('ma-tick')) {
-        sync();
-      }
+    // Dim a module whose hub tile is switched off. This is not a cascade: the
+    // screens underneath keep their own permissions, so that turning the tile
+    // back on restores what was configured rather than a blank row.
+    table.addEventListener('change', function (e) {
+      if (!e.target.classList.contains('ma-on')) return;
+      e.target.closest('tr').classList.toggle('is-off', !e.target.checked);
     });
 
-    /* ---- reorder modules, carrying their screens ---- */
-    body.addEventListener('click', function (e) {
-      var btn = e.target.closest('.ma-up, .ma-down');
-      if (!btn) return;
-      var row = btn.closest('tr');
-      var group = [row];
-      var next = row.nextElementSibling;
-      while (next && next.classList.contains('ma-screen')) {
-        group.push(next);
-        next = next.nextElementSibling;
-      }
-      if (btn.classList.contains('ma-up')) {
-        var prev = row.previousElementSibling;
-        while (prev && prev.classList.contains('ma-screen')) prev = prev.previousElementSibling;
-        if (!prev) return;
-        group.forEach(function (n) { body.insertBefore(n, prev); });
-      } else {
-        var after = next;                       // next module row, if any
-        if (!after) return;
-        var tail = after.nextElementSibling;
-        while (tail && tail.classList.contains('ma-screen')) tail = tail.nextElementSibling;
-        var anchor = tail;
-        group.forEach(function (n) { body.insertBefore(n, anchor); });
-      }
-      renumber();
-    });
-
-    // The position inputs are what the save reads, so renumber from the row
-    // order after every move rather than keeping the two in step by hand.
-    function renumber() {
-      var i = 0;
-      body.querySelectorAll('.ma-modrow').forEach(function (tr) {
-        tr.querySelector('.ma-pos').value = i++;
-      });
-    }
-
-    /* ---- indeterminate headers: never claim a state the table is not in ---- */
-    var all = document.getElementById('ma-all');
-
-    function set(box, on, total) {
-      box.checked = total > 0 && on === total;
-      box.indeterminate = on > 0 && on < total;
-    }
-
-    function sync() {
-      var every = ticks();
-      set(all, every.filter(function (i) { return i.checked; }).length, every.length);
-
-      body.querySelectorAll('.ma-col').forEach(function (col) {
-        var list = ticks('.ma-tick[data-action="' + col.dataset.action + '"]');
-        set(col, list.filter(function (i) { return i.checked; }).length, list.length);
-      });
-      body.querySelectorAll('.ma-modcol').forEach(function (col) {
-        var list = ticks('.ma-tick[data-module="' + col.dataset.module +
-                         '"][data-action="' + col.dataset.action + '"]');
-        set(col, list.filter(function (i) { return i.checked; }).length, list.length);
-      });
-      body.querySelectorAll('.ma-seccol').forEach(function (col) {
-        var list = ticks('.ma-tick[data-section="' + col.dataset.section +
-                         '"][data-action="' + col.dataset.action + '"]');
-        set(col, list.filter(function (i) { return i.checked; }).length, list.length);
-      });
-    }
-
-    /* ---- file-explorer expand / collapse, as on the Web Access matrix ---- */
-    function folder(toggle, collapsed) {
-      var icon = toggle.querySelector('.ma-caret');
-      icon.classList.toggle('fa-folder', collapsed);
-      icon.classList.toggle('fa-folder-open', !collapsed);
-      toggle.classList.toggle('collapsed', collapsed);
-    }
-
-    body.addEventListener('click', function (e) {
-      var toggle = e.target.closest('[data-toggle-mod], [data-toggle-sec]');
-      if (!toggle) return;
-      var collapsed = !toggle.classList.contains('collapsed');
-      folder(toggle, collapsed);
-
-      if (toggle.dataset.toggleMod) {
-        var key = toggle.dataset.toggleMod;
-        // Collapsing a module hides its sections and their screens; expanding
-        // restores the sections but leaves each one's own state alone, so a
-        // section you collapsed stays collapsed.
-        body.querySelectorAll('.child-of-mod-' + CSS.escape(key)).forEach(function (tr) {
-          if (collapsed) { tr.hidden = true; return; }
-          if (tr.classList.contains('ma-secrow') || tr.classList.contains('ma-pending')) {
-            tr.hidden = false;
-          } else {
-            var sec = body.querySelector('[data-toggle-sec="' + tr.dataset.section + '"]');
-            tr.hidden = !!(sec && sec.classList.contains('collapsed'));
-          }
-        });
-      } else {
-        body.querySelectorAll('.child-of-sec-' + CSS.escape(toggle.dataset.toggleSec))
-            .forEach(function (tr) { tr.hidden = collapsed; });
-      }
-    });
-
-    var expandAll = document.getElementById('ma-expand-all');
-    var collapseAll = document.getElementById('ma-collapse-all');
-
-    function setAll(collapsed) {
-      body.querySelectorAll('[data-toggle-mod], [data-toggle-sec]')
-          .forEach(function (t) { folder(t, collapsed); });
-      body.querySelectorAll('.ma-secrow, .ma-screen, .ma-pending')
-          .forEach(function (tr) { tr.hidden = collapsed; });
-    }
-
-    if (expandAll) expandAll.addEventListener('click', function () { setAll(false); });
-    if (collapseAll) collapseAll.addEventListener('click', function () { setAll(true); });
-
-    all.addEventListener('change', function () {
-      ticks().forEach(function (i) { i.checked = all.checked; });
-      body.querySelectorAll('.ma-on').forEach(function (i) {
-        i.checked = all.checked;
-        i.closest('tr').classList.toggle('is-off', !all.checked);
-      });
-      all.indeterminate = false;
-      sync();
-    });
-
-    sync();
-
-    /* ---- preview the form, not the database ---- */
+    // Preview the switches as they stand, not as they were last saved --
+    // otherwise the button shows the database while you are mid-edit.
     var previewBtn = document.getElementById('ma-preview-btn');
     if (previewBtn) {
       previewBtn.addEventListener('click', function () {
         var live = Array.prototype.filter
-          .call(body.querySelectorAll('.ma-on'), function (i) { return i.checked; })
+          .call(table.querySelectorAll('.ma-on'), function (i) { return i.checked; })
           .map(function (i) {
             var tr = i.closest('tr');
-            return tr.dataset.key + ':' + (tr.querySelector('.ma-pos').value || 0);
+            return tr.dataset.key + ':' + (tr.querySelector('.at-pos').value || 0);
           })
           .join(',');
         mobileAccessPreview({{ selected_group.id }}, live);

@@ -84,13 +84,13 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="group" value="{{ selected_group.id }}">
-        <table class="da-table ds-entry" id="da-table">
+        <table class="da-table ds-entry" id="da-table" data-access-tree>
           <thead>
             <tr>
               <th class="c-fit m-short" style="width:90px;">
                 Show
                 <span class="form-check form-switch m-0 mt-1">
-                  <input type="checkbox" role="switch" class="form-check-input" id="da-all"
+                  <input type="checkbox" role="switch" class="form-check-input at-all"
                          title="Toggle every widget">
                 </span>
               </th>
@@ -104,7 +104,7 @@
             <tr class="da-row {% if not w.enabled %}is-off{% endif %}" data-key="{{ w.key }}">
               <td>
                 <span class="form-check form-switch m-0">
-                  <input type="checkbox" role="switch" class="form-check-input da-on"
+                  <input type="checkbox" role="switch" class="form-check-input at-cell da-on" data-action="on"
                          name="on_{{ w.key }}" id="on_{{ w.key }}" {% if w.enabled %}checked{% endif %}>
                 </span>
               </td>
@@ -114,12 +114,12 @@
                 <span class="da-tabs">needs: {{ w.tabs }}</span>
               </td>
               <td>
-                <input type="number" min="0" class="form-control form-control-sm da-pos"
+                <input type="number" min="0" class="form-control form-control-sm da-pos at-pos"
                        name="pos_{{ w.key }}" value="{{ w.position }}">
               </td>
               <td>
-                <button type="button" class="da-move da-up" title="Move up"><i class="fas fa-chevron-up"></i></button>
-                <button type="button" class="da-move da-down" title="Move down"><i class="fas fa-chevron-down"></i></button>
+                <button type="button" class="da-move at-move" data-at-dir="up" title="Move up"><i class="fas fa-chevron-up"></i></button>
+                <button type="button" class="da-move at-move" data-at-dir="down" title="Move down"><i class="fas fa-chevron-down"></i></button>
               </td>
             </tr>
             {% endfor %}
@@ -149,71 +149,30 @@
 {% endblock %}
 
 {% block js %}
+<script src="{% static 'js/access_tree.js' %}"></script>
 <script>
+  // Reordering and the "toggle every widget" switch are shared with the Web
+  // Access and Mobile Access editors — see access_tree.js. What stays here is
+  // this page's own: dimming a switched-off row, and previewing the form
+  // rather than the database.
   (function () {
     "use strict";
     var table = document.getElementById('da-table');
     if (!table) return;
-    var body = table.querySelector('tbody');
 
-    // The position inputs are the source of truth on save, so renumber from the
-    // row order after every move rather than trying to keep the two in step.
-    function renumber() {
-      body.querySelectorAll('tr').forEach(function (tr, i) {
-        tr.querySelector('.da-pos').value = i;
-      });
-    }
-
-    body.addEventListener('click', function (e) {
-      var btn = e.target.closest('.da-up, .da-down');
-      if (!btn) return;
-      var row = btn.closest('tr');
-      if (btn.classList.contains('da-up')) {
-        if (row.previousElementSibling) body.insertBefore(row, row.previousElementSibling);
-      } else if (row.nextElementSibling) {
-        body.insertBefore(row.nextElementSibling, row);
-      }
-      renumber();
-    });
-
-    body.addEventListener('change', function (e) {
+    table.addEventListener('change', function (e) {
       if (!e.target.classList.contains('da-on')) return;
       e.target.closest('tr').classList.toggle('is-off', !e.target.checked);
-      syncAll();
     });
 
-    // Toggle all. Indeterminate while the rows disagree, so the header switch
-    // never claims a state the table is not in.
-    var all = document.getElementById('da-all');
-
-    function rows() { return Array.prototype.slice.call(body.querySelectorAll('.da-on')); }
-
-    function syncAll() {
-      var on = rows().filter(function (i) { return i.checked; }).length;
-      all.checked = on === rows().length;
-      all.indeterminate = on > 0 && on < rows().length;
-    }
-
-    all.addEventListener('change', function () {
-      rows().forEach(function (input) {
-        input.checked = all.checked;
-        input.closest('tr').classList.toggle('is-off', !all.checked);
-      });
-      all.indeterminate = false;
-    });
-
-    syncAll();
-
-    // Preview the switches as they stand, not as they were last saved —
-    // otherwise the button shows the database while you are mid-edit.
     var previewBtn = document.getElementById('da-preview-btn');
     if (previewBtn) {
       previewBtn.addEventListener('click', function () {
-        var live = rows()
-          .filter(function (input) { return input.checked; })
-          .map(function (input) {
-            var tr = input.closest('tr');
-            return tr.dataset.key + ':' + (tr.querySelector('.da-pos').value || 0);
+        var live = Array.prototype.filter
+          .call(table.querySelectorAll('.da-on'), function (i) { return i.checked; })
+          .map(function (i) {
+            var tr = i.closest('tr');
+            return tr.dataset.key + ':' + (tr.querySelector('.at-pos').value || 0);
           })
           .join(',');
         dashboardAccessPreview({{ selected_group.id }}, live);

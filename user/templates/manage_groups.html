@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}User Groups{% endblock %}
 
@@ -68,7 +69,10 @@
     .wa-matrix .form-check-input:checked,
     .wa-matrix .form-check-input:indeterminate { background-color:var(--wa-purple); border-color:var(--wa-purple); }
     /* Slightly larger folder/row "select all" boxes to stand out from cell boxes. */
-    .wa-cat-all, .wa-mod-all, .wa-row-all { width:18px; height:18px; }
+    /* The category / module / tab "is this reachable" boxes. They are all
+       .at-all now (access_tree.js drives them from data-scope-*), so size them
+       by where they sit rather than by three separate class names. */
+    .wa-matrix .at-all { width:18px; height:18px; }
     .wa-matrix thead th input { margin-top:4px; width:18px; height:18px; }
     /* Tree node: indentation is driven by the level, chevron + icon + label. */
     .wa-node { display:flex; align-items:center; gap:6px; white-space:nowrap; }
@@ -156,18 +160,18 @@
     <div class="wa-header">
         <span><i class="fas fa-shield-halved me-2"></i>Web-Access Details</span>
         <span class="wa-treebar" style="padding:0;">
-            <a id="wa-expand-all" class="text-white"><i class="fas fa-angles-down me-1"></i>Expand all</a>
+            <a data-at-expand id="wa-expand-all" class="text-white"><i class="fas fa-angles-down me-1"></i>Expand all</a>
             <span style="opacity:.6;">|</span>
-            <a id="wa-collapse-all" class="text-white"><i class="fas fa-angles-up me-1"></i>Collapse all</a>
+            <a data-at-collapse id="wa-collapse-all" class="text-white"><i class="fas fa-angles-up me-1"></i>Collapse all</a>
         </span>
     </div>
     <div class="wa-scroll">
-        <table class="wa-matrix">
+        <table class="wa-matrix" data-access-tree>
             <thead>
                 <tr>
-                    <th class="link-cell">Link<br><input type="checkbox" class="form-check-input wa-all" title="Select every permission"></th>
+                    <th class="link-cell">Link<br><input type="checkbox" class="form-check-input at-all" title="Select every permission"></th>
                     {% for action in actions %}
-                    <th class="ds-num act-col">{{ action|capfirst }}{% if action in unenforced_actions %}<sup class="wa-inert" title="Stored, but nothing checks this yet">*</sup>{% endif %}<br><input type="checkbox" class="form-check-input wa-col" data-action="{{ action }}" title="Select all {{ action }}"></th>
+                    <th class="ds-num act-col">{{ action|capfirst }}{% if action in unenforced_actions %}<sup class="wa-inert" title="Stored, but nothing checks this yet">*</sup>{% endif %}<br><input type="checkbox" class="form-check-input at-all" data-action="{{ action }}" title="Select all {{ action }}"></th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -176,42 +180,42 @@
                 <tr class="wa-cat-row" data-cat="{{ section.cid }}">
                     <td class="link-cell">
                         <span class="wa-node wa-lvl0">
-                            <span class="wa-toggle" data-toggle-cat="{{ section.cid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
+                            <span class="wa-toggle at-toggle" data-at-folder="c-{{ section.cid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
                             <i class="fas fa-folder-open wa-ficon"></i>
-                            <input type="checkbox" class="form-check-input wa-cat-all" data-cat="{{ section.cid }}">
+                            <input type="checkbox" class="form-check-input at-all" data-at-mode="any" data-scope-cat="{{ section.cid }}">
                             <span>{{ section.category }}</span>
                         </span>
                     </td>
                     {% for action in actions %}
-                    <td class="act-col"><input type="checkbox" class="form-check-input wa-cat-col" data-cat="{{ section.cid }}" data-action="{{ action }}"></td>
+                    <td class="act-col"><input type="checkbox" class="form-check-input at-all" data-scope-cat="{{ section.cid }}" data-action="{{ action }}"></td>
                     {% endfor %}
                 </tr>
                 {% for module in section.modules %}
-                <tr class="wa-mod-row child-of-cat-{{ section.cid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
+                <tr class="wa-mod-row child-of-c-{{ section.cid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
                     <td class="link-cell">
                         <span class="wa-node wa-lvl1">
-                            <span class="wa-toggle" data-toggle-mod="{{ module.mid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
+                            <span class="wa-toggle at-toggle" data-at-folder="m-{{ module.mid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
                             <i class="fas fa-folder-open wa-ficon"></i>
-                            <input type="checkbox" class="form-check-input wa-mod-all" data-mod="{{ module.mid }}">
+                            <input type="checkbox" class="form-check-input at-all" data-at-mode="any" data-scope-mod="{{ module.mid }}">
                             <span>{{ module.label }}</span>
                         </span>
                     </td>
                     {% for action in actions %}
-                    <td class="act-col"><input type="checkbox" class="form-check-input wa-mod-col" data-mod="{{ module.mid }}" data-action="{{ action }}"></td>
+                    <td class="act-col"><input type="checkbox" class="form-check-input at-all" data-scope-mod="{{ module.mid }}" data-action="{{ action }}"></td>
                     {% endfor %}
                 </tr>
                 {% for tab in module.tabs %}
-                <tr class="wa-tab-row child-of-cat-{{ section.cid }} child-of-mod-{{ module.mid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
+                <tr class="wa-tab-row child-of-c-{{ section.cid }} child-of-m-{{ module.mid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
                     <td class="link-cell">
                         <span class="wa-node wa-lvl2">
                             <span class="wa-spacer"></span>
                             <i class="fas fa-file-lines wa-ficon"></i>
-                            <input type="checkbox" class="form-check-input wa-row-all" title="Select all permissions for this tab">
+                            <input type="checkbox" class="form-check-input at-all" data-at-mode="any" data-scope-tab="{{ tab.code }}" title="Select all permissions for this tab">
                             <span>{{ tab.label }}</span>
                         </span>
                     </td>
                     {% for cell in tab.cells %}
-                    <td class="act-col"><input type="checkbox" class="form-check-input wa-cell" name="perm_{{ tab.code }}_{{ cell.action }}" data-action="{{ cell.action }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}" {% if cell.checked %}checked{% endif %}></td>
+                    <td class="act-col"><input type="checkbox" class="form-check-input wa-cell at-cell" name="perm_{{ tab.code }}_{{ cell.action }}" data-action="{{ cell.action }}" data-scope-cat="{{ section.cid }}" data-scope-mod="{{ module.mid }}" data-scope-tab="{{ tab.code }}" {% if cell.checked %}checked{% endif %}></td>
                     {% endfor %}
                 </tr>
                 {% endfor %}
@@ -370,10 +374,9 @@
     </div>
 </div>
 
+<script src="{% static 'js/access_tree.js' %}"></script>
 <script>
     $(document).ready(function () {
-        // ---- Matrix "select all" cascades ----------------------------------
-        // Whole matrix
         // Access Type = Admin bypasses the whole matrix (user.access
         // ._user_is_unrestricted), so say so rather than let the editor imply a
         // restriction that is not applied.
@@ -384,126 +387,13 @@
         $(document).on("change", "input[name='access_type']", syncAdminNote);
         syncAdminNote();
 
-        $(".wa-all").on("change", function () {
-            $(".wa-cell").prop("checked", this.checked);
-            syncAll();
-        });
-        // Entire column (e.g. all "View")
-        $(".wa-col").on("change", function () {
-            var a = $(this).data("action");
-            $('.wa-cell[data-action="' + a + '"]').prop("checked", this.checked);
-            syncAll();
-        });
-        // Whole row / one tab (the Link-column checkbox on a tab row)
-        $(".wa-row-all").on("change", function () {
-            $(this).closest("tr").find(".wa-cell").prop("checked", this.checked);
-            syncAll();
-        });
-        // Whole category (label checkbox)
-        $(".wa-cat-all").on("change", function () {
-            var c = $(this).data("cat");
-            $('.wa-cell[data-cat="' + c + '"]').prop("checked", this.checked);
-            syncAll();
-        });
-        // One column within a category
-        $(".wa-cat-col").on("change", function () {
-            var c = $(this).data("cat"), a = $(this).data("action");
-            $('.wa-cell[data-cat="' + c + '"][data-action="' + a + '"]').prop("checked", this.checked);
-            syncAll();
-        });
-        // Whole module (label checkbox)
-        $(".wa-mod-all").on("change", function () {
-            var m = $(this).data("mod");
-            $('.wa-cell[data-mod="' + m + '"]').prop("checked", this.checked);
-            syncAll();
-        });
-        // One column within a module (the pink row)
-        $(".wa-mod-col").on("change", function () {
-            var m = $(this).data("mod"), a = $(this).data("action");
-            $('.wa-cell[data-mod="' + m + '"][data-action="' + a + '"]').prop("checked", this.checked);
-            syncAll();
-        });
-        // Ticking cells directly keeps the row/column "select all" boxes in sync.
-        $(".wa-cell").on("change", syncAll);
+        // Cascading select-alls and the expand/collapse tree are shared with
+        // the Mobile Access and Dashboard Access editors — see
+        // static/js/access_tree.js. The markup declares its scopes
+        // (data-scope-cat / -mod / -tab) and that file does the rest, so a
+        // fix lands on all three pages at once instead of on whichever copy
+        // someone noticed.
 
-        // Column header box reflects whether its whole column is ticked.
-        function syncColumnBoxes() {
-            $(".wa-col").each(function () {
-                var a = $(this).data("action");
-                var all = $('.wa-cell[data-action="' + a + '"]');
-                $(this).prop("checked", all.length && all.filter(":checked").length === all.length);
-            });
-        }
-        // Link-column boxes (tab / section / category) mean "this is ACTIVE":
-        // ticked when ANY action under it is on (page becomes accessible when any
-        // permission is given), shown as a dash (indeterminate) when only some
-        // actions are on, and a full tick when all are on.
-        function setActiveState($box, cells) {
-            var total = cells.length, on = cells.filter(":checked").length;
-            $box.prop("checked", on > 0);
-            $box.prop("indeterminate", on > 0 && on < total);
-        }
-        function syncRowBoxes() {
-            $(".wa-row-all").each(function () {
-                setActiveState($(this), $(this).closest("tr").find(".wa-cell"));
-            });
-        }
-        function syncFolderBoxes() {
-            $(".wa-mod-all").each(function () {
-                setActiveState($(this), $('.wa-cell[data-mod="' + $(this).data("mod") + '"]'));
-            });
-            $(".wa-cat-all").each(function () {
-                setActiveState($(this), $('.wa-cell[data-cat="' + $(this).data("cat") + '"]'));
-            });
-        }
-        function syncAll() { syncColumnBoxes(); syncRowBoxes(); syncFolderBoxes(); }
-        syncAll();
-
-        // ---- File-explorer style expand / collapse -------------------------
-        // Swap the folder icon (open when expanded, closed when collapsed).
-        function setFolderIcon($toggle, collapsed) {
-            $toggle.closest("td").find("> .wa-node > .wa-ficon.fa-folder, > .wa-node > .wa-ficon.fa-folder-open")
-                   .toggleClass("fa-folder", collapsed).toggleClass("fa-folder-open", !collapsed);
-        }
-        function setModule($toggle, collapse) {
-            $toggle.toggleClass("collapsed", collapse);
-            var m = $toggle.data("toggle-mod");
-            $(".child-of-mod-" + m).toggle(!collapse);
-            setFolderIcon($toggle, collapse);
-        }
-        function setCategory($toggle, collapse) {
-            $toggle.toggleClass("collapsed", collapse);
-            var c = $toggle.data("toggle-cat");
-            setFolderIcon($toggle, collapse);
-            if (collapse) {
-                $(".child-of-cat-" + c).hide();
-            } else {
-                // Show module rows; each module's own tabs follow its own state.
-                $('.wa-mod-row[data-cat="' + c + '"]').show();
-                $('.wa-mod-row[data-cat="' + c + '"] .wa-toggle[data-toggle-mod]').each(function () {
-                    var m = $(this).data("toggle-mod");
-                    $(".child-of-mod-" + m).toggle(!$(this).hasClass("collapsed"));
-                });
-            }
-        }
-        $(".wa-toggle[data-toggle-cat]").on("click", function () {
-            setCategory($(this), !$(this).hasClass("collapsed"));
-        });
-        $(".wa-toggle[data-toggle-mod]").on("click", function (e) {
-            e.stopPropagation();
-            setModule($(this), !$(this).hasClass("collapsed"));
-        });
-        $("#wa-collapse-all").on("click", function () {
-            $(".wa-toggle[data-toggle-mod]").each(function () { setModule($(this), true); });
-            $(".wa-toggle[data-toggle-cat]").each(function () { setCategory($(this), true); });
-        });
-        $("#wa-expand-all").on("click", function () {
-            $(".wa-toggle[data-toggle-cat]").each(function () { setCategory($(this), false); });
-            $(".wa-toggle[data-toggle-mod]").each(function () { setModule($(this), false); });
-        });
-
-        // Data-scope: "All" and specific selection are mutually exclusive, but
-        // the list stays enabled so individual records are always selectable.
         $(".scope-all").on("change", function () {
             if (this.checked) {
                 var sel = document.getElementById('sel_' + this.dataset.target);
