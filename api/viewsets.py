@@ -138,6 +138,25 @@ API_SCOPES = {
                              "farms": "items__farm_id"},
     "inventory.StockReceive": {"mode": "any", "sectors": "items__warehouse_id",
                                "farms": "items__farm_id"},
+
+    # Transfers — inventory/views.py::_scope_transfer. Both ends of the
+    # movement, either of which puts it in scope.
+    "inventory.StockTransfer": {"mode": "any",
+                                "sectors": ("from_warehouse_id", "to_warehouse_id"),
+                                "farms": ("from_farm_id", "to_farm_id")},
+    "inventory.MedicineTransfer": {"mode": "any",
+                                   "sectors": ("from_warehouse_id", "to_warehouse_id"),
+                                   "farms": ("from_farm_id", "to_farm_id")},
+
+    # One location, recorded as either a warehouse or a farm —
+    # inventory/views.py::_scope_adjustment.
+    "inventory.InventoryAdjustment": {"mode": "any", "sectors": "warehouse_id",
+                                      "farms": "farm_id"},
+
+    # Sales — sales/views.py. `branch` on an invoice is a Warehouse, which is
+    # why it maps to the sectors scope and not to branches.
+    "sales.SalesInvoice": {"mode": "any", "sectors": "branch_id"},
+    "sales.SalesReceipt": {"mode": "any", "sectors": "location_id"},
 }
 
 
@@ -217,16 +236,11 @@ UNSCOPED_API_MODELS = {
     "hr.EmployeeLeave": "TODO: employee__warehouse_id link exists",
     "hr.Group": "TODO: warehouse_id link exists",
     "hr.Payroll": "TODO: employee__warehouse_id link exists",
-    "inventory.InventoryAdjustment": "TODO: warehouse/farm links exist",
-    "inventory.MedicineTransfer": "TODO: two-ended, needs scope_any field set",
-    "inventory.StockTransfer": "TODO: two-ended, needs scope_any field set",
     "purchase.ChicksPurchase": "TODO: check the web view's scope",
     "purchase.CreditNote": "TODO: sector_id link exists",
     "purchase.DebitNote": "TODO: sector_id link exists",
     "purchase.GeneralPurchase": "TODO: check the web view's scope",
     "purchase.SupplierPayment": "TODO: location_id link exists",
-    "sales.SalesInvoice": "TODO: branch_id is a Warehouse here; confirm before scoping",
-    "sales.SalesReceipt": "TODO: location_id link exists",
 
     # RBAC configuration. Admin-only already, and not location data.
     "user.GroupAccessProfile": "Admin-only RBAC config",

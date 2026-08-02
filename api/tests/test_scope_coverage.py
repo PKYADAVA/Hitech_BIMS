@@ -45,14 +45,29 @@ class ScopeCoverageTests(TestCase):
 
         for label, scopes in API_SCOPES.items():
             model = apps.get_model(label)
-            for scope, field in scopes.items():
+            for scope, fields in scopes.items():
                 if scope == "mode":
                     continue
-                with self.subTest(model=label, scope=scope):
-                    try:
-                        model.objects.filter(**{f"{field}__in": []}).exists()
-                    except FieldError as exc:
-                        self.fail(f"{label}.{field} is not a real path: {exc}")
+                # A dimension may name several columns — a transfer has two
+                # ends, and either one puts the row in scope.
+                for field in ([fields] if isinstance(fields, str) else fields):
+                    with self.subTest(model=label, scope=scope, field=field):
+                        try:
+                            model.objects.filter(**{f"{field}__in": []}).exists()
+                        except FieldError as exc:
+                            self.fail(f"{label}.{field} is not a real path: {exc}")
+
+    def test_multi_column_dimensions_only_appear_with_mode_any(self):
+        """scope_multi takes one field per dimension and would raise on a
+        tuple. Only scope_any expands them, so the two must travel together."""
+        for label, scopes in API_SCOPES.items():
+            multi = [s for s, f in scopes.items()
+                     if s != "mode" and not isinstance(f, str)]
+            if multi:
+                with self.subTest(model=label):
+                    self.assertEqual(scopes.get("mode"), "any",
+                                     f"{label} names several columns for "
+                                     f"{multi} but does not use mode=any")
 
     def test_modes_are_spelled_correctly(self):
         """`mode` decides AND vs OR. A typo would silently fall back to AND
