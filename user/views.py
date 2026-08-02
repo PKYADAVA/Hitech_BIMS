@@ -291,6 +291,7 @@ def access_changes(request):
     question is nearly always about one group.
     """
     from .models import AccessChangeLog
+    from .services.access_log import REVERTABLE
 
     rows = AccessChangeLog.objects.select_related("group")
 
@@ -315,6 +316,9 @@ def access_changes(request):
                 for name, fields in list(changes.items())[:40]
             ],
             "more": max(0, len(changes) - 40),
+            # An entry with no recorded change has nothing to put back, and a
+            # surface with no table mapping cannot be walked backwards.
+            "revertable": bool(changes) and row.surface in REVERTABLE,
         })
 
     return render(request, "access_changes.html", {
@@ -324,6 +328,28 @@ def access_changes(request):
         "sel_group": group_id,
         "sel_surface": surface,
     })
+
+
+@login_required
+def access_change_revert(request, entry_id):
+    """Undo one recorded change, recording the undo."""
+    from .models import AccessChangeLog
+    from .services.access_log import revert
+
+    entry = get_object_or_404(AccessChangeLog, id=entry_id)
+    if request.method != "POST":
+        return redirect("access_changes")
+
+    try:
+        restored = revert(request, entry)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(
+            request,
+            f"Reverted {restored} entr{'y' if restored == 1 else 'ies'} for "
+            f"“{entry.group.name}”. The undo is recorded as its own change.")
+    return redirect(f"{reverse('access_changes')}?group={entry.group_id}")
 
 
 def _yn(value):

@@ -93,6 +93,7 @@
             <th style="width:110px;">Surface</th>
             <th>Group</th>
             <th>What changed</th>
+            <th style="width:96px;" class="text-center">Undo</th>
           </tr>
         </thead>
         <tbody>
@@ -118,6 +119,19 @@
                   {% endif %}
                 </div>
               </details>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if entry.revertable %}
+              <form method="post" action="{% url 'access_change_revert' entry.row.id %}"
+                    onsubmit="return confirm('Put back what this change replaced? The undo is recorded as its own entry — nothing is erased.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Revert this change">
+                  <i class="fas fa-rotate-left"></i>
+                </button>
+              </form>
+              {% else %}
+              <span class="ac-line">—</span>
               {% endif %}
             </td>
           </tr>
