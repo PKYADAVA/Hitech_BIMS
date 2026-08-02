@@ -189,6 +189,25 @@ function farmOptionsFor(supId) {
     farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
 }
 let currentFarmOptions = farmOptions;
+
+// Fill a row's Batch <select> from a lookup's `batches`. One open batch is
+// chosen for the user — that is the normal case and there is nothing to
+// decide. More than one has to be asked, because picking silently is how
+// entries used to end up against the wrong flock.
+function fillBatchSelect(sel, batches) {
+  const list = batches || [];
+  if (!list.length) {
+    sel.innerHTML = '<option value="">no open batch</option>';
+  } else if (list.length === 1) {
+    sel.innerHTML = `<option value="${list[0].id}">${escapeHtml(list[0].name)}</option>`;
+    sel.value = String(list[0].id);
+  } else {
+    sel.innerHTML = '<option value="">select batch</option>' +
+      list.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    sel.value = '';
+  }
+  if (window.jQuery) jQuery(sel).trigger('change.select2');
+}
 const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
@@ -197,7 +216,7 @@ function row() {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><select class="form-select farm" required>${currentFarmOptions}</select></td>
-    <td><input class="form-control bg-light batch" readonly></td>
+    <td><select class="form-select batch" required><option value="">select a farm first</option></select></td>
     <td><input class="form-control bg-light age" readonly></td>
     <td><input class="form-control bg-light date" readonly value="${TODAY}"></td>
     <td><input class="form-control mortality" type="number" min="0" step="1" value="0"></td>
@@ -286,8 +305,10 @@ function fillRowForFarm(tr, farmId) {
     let target = others > 0 ? addDaysISO(base.next_date, others) : base.next_date;
     if (target > TODAY) target = TODAY;   // never past today
     // Age / phase / std / live birds are all date-specific — resolve for target.
-    fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}&date=${target}`).then(r => r.json()).then(data => {
-      tr.querySelector('.batch').value = data.batch_name || 'No active batch';
+    const chosen = tr.querySelector('.batch').value;
+    const batchQ = chosen ? `&batch=${chosen}` : '';
+    fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}&date=${target}${batchQ}`).then(r => r.json()).then(data => {
+      if (!chosen) fillBatchSelect(tr.querySelector('.batch'), data.batches);
       tr.querySelector('.date').value = data.batch ? target : TODAY;
       tr.querySelector('.age').value = data.batch ? data.age_days : '';
       applyFeedPhase(tr, data);
@@ -300,8 +321,16 @@ get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('farm')) {
     const tr = e.target.closest('tr');
     const farmId = e.target.value;
-    if (!farmId) { tr.querySelector('.batch').value = ''; tr.querySelector('.age').value = ''; tr.querySelector('.date').value = TODAY; recomputeStockPreview(); return; }
+    if (!farmId) { fillBatchSelect(tr.querySelector('.batch'), []); tr.querySelector('.age').value = ''; tr.querySelector('.date').value = TODAY; recomputeStockPreview(); return; }
+    fillBatchSelect(tr.querySelector('.batch'), []);   // drop the old farm's batch
     fillRowForFarm(tr, farmId);
+  }
+  // Choosing a different batch re-reads everything dated from it: age, the
+  // entry date and the feed figures belong to the batch, not the farm.
+  if (e.target.classList.contains('batch')) {
+    const tr = e.target.closest('tr');
+    const farmId = tr.querySelector('.farm').value;
+    if (farmId && e.target.value) fillRowForFarm(tr, farmId);
   }
   if (e.target.classList.contains('feed-1') || e.target.classList.contains('feed-2')) {
     updateFeedFeedback();
@@ -491,13 +520,13 @@ function capProgressLine(tr) {
 // just typed for the earlier day (age 6) on top of the saved history.
 function priorListFeed(tr) {
   const farmId = tr.querySelector('.farm').value;
-  const batchName = tr.querySelector('.batch').value;
+  const batchKey = tr.querySelector('.batch').value;
   let total = 0; const byItem = {};
   const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
   for (const r of rows) {
     if (r === tr) break;                                   // only rows BEFORE this one
     if (!farmId || r.querySelector('.farm').value !== farmId) continue;
-    if (r.querySelector('.batch').value !== batchName) continue;
+    if (r.querySelector('.batch').value !== batchKey) continue;
     [['.feed-1', '.kgs-1'], ['.feed-2', '.kgs-2']].forEach(([fc, kc]) => {
       const kg = parseFloat(r.querySelector(kc).value || '0') || 0;
       if (kg <= 0) return;
@@ -764,6 +793,7 @@ get('daily-entry-form').addEventListener('submit', function (e) {
   if (!supervisor) { alert('Select a Supervisor.'); return; }
   const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].map(tr => ({
     farm: tr.querySelector('.farm').value,
+    batch: tr.querySelector('.batch').value,
     date: tr.querySelector('.date').value || TODAY,
     mortality: tr.querySelector('.mortality').value,
     culls: tr.querySelector('.culls').value,
@@ -776,6 +806,12 @@ get('daily-entry-form').addEventListener('submit', function (e) {
   }));
   if (!rows.length || rows.some(r => !r.farm)) {
     alert('Add at least one row with Farm selected.');
+    return;
+  }
+  // A farm with two open flocks leaves this blank on purpose — saving anyway
+  // is what used to file the entry against whichever batch sorted first.
+  if (rows.some(r => !r.batch)) {
+    alert('Select a Batch on every row.');
     return;
   }
   fetch("{% url 'daily_entry_api_list' %}", {
@@ -797,7 +833,7 @@ get('supervisor').addEventListener('change', function () {
     sel.value = '';
     if (window.jQuery) jQuery(sel).trigger('change.select2');   // sync Select2 display
     const tr = sel.closest('tr');
-    tr.querySelector('.batch').value = '';
+    fillBatchSelect(tr.querySelector('.batch'), []);
     tr.querySelector('.age').value = '';
     tr.querySelector('.date').value = TODAY;
   });

@@ -123,7 +123,9 @@
         </div>
         <div style="min-width:220px">
           <label class="form-label"><i class="fas fa-layer-group me-1 text-primary"></i>Batch</label>
-          <input type="text" class="form-control bg-light" id="batch" readonly>
+          <select class="form-select" id="batch" required>
+            <option value="">select a farm first</option>
+          </select>
         </div>
       </div>
     </div>
@@ -202,6 +204,26 @@ function addDaysISO(iso, n) {
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 let batchStartDate = null;
+
+// Fill a Batch <select> from a lookup's `batches`. One open batch is chosen
+// for the user — that is the normal case and there is nothing to decide. More
+// than one has to be asked, because picking silently is how entries used to
+// end up against the wrong flock.
+function fillBatchSelect(sel, batches) {
+  const list = batches || [];
+  if (!list.length) {
+    sel.innerHTML = '<option value="">no open batch</option>';
+  } else if (list.length === 1) {
+    sel.innerHTML = `<option value="${list[0].id}">${escapeHtml(list[0].name)}</option>`;
+    sel.value = String(list[0].id);
+  } else {
+    sel.innerHTML = '<option value="">select batch</option>' +
+      list.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    sel.value = '';
+  }
+  if (window.jQuery) jQuery(sel).trigger('change.select2');
+  return list.length === 1 ? list[0] : null;
+}
 const FEED_TOLERANCE = 1.1;   // allow 10% over the breed-standard daily feed
 const FEED_LOW = 0.5;         // below 50% of standard = under-feeding
 
@@ -703,7 +725,7 @@ get('supervisor').addEventListener('change', function () {
   get('farm').innerHTML = this.value ? farmOptionsFor(this.value) : allFarmOptions;
   get('farm').value = '';
   if (window.jQuery) jQuery(get('farm')).trigger('change.select2');
-  get('batch').value = ''; batchStartDate = null;
+  fillBatchSelect(get('batch'), []); batchStartDate = null;
   document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)').forEach(recomputeAge);
   recomputeStockPreview();
   updateFeedFeedback();
@@ -711,9 +733,9 @@ get('supervisor').addEventListener('change', function () {
 
 get('farm').addEventListener('change', function () {
   const farmId = this.value;
-  if (!farmId) { get('batch').value = ''; batchStartDate = null; recomputeStockPreview(); updateFeedFeedback(); return; }
+  if (!farmId) { fillBatchSelect(get('batch'), []); batchStartDate = null; recomputeStockPreview(); updateFeedFeedback(); return; }
   fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}`).then(r => r.json()).then(data => {
-    get('batch').value = data.batch_name || 'No active batch';
+    fillBatchSelect(get('batch'), data.batches);
     batchStartDate = data.start_date;
     const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
     // Every row is dated from the farm's next entry date, one day apart —
@@ -731,6 +753,26 @@ get('farm').addEventListener('change', function () {
     rows.forEach(tr => { recomputeAge(tr); refreshRowData(tr); });
     recomputeStockPreview();
   });
+});
+
+get('batch').addEventListener('change', function () {
+  const farmId = get('farm').value;
+  if (!farmId || !this.value) return;
+  fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}&batch=${this.value}`)
+    .then(r => r.json()).then(data => {
+      batchStartDate = data.start_date;
+      nextEntryDate = data.next_date || null;
+      const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
+      if (nextEntryDate) {
+        rows.forEach((tr, i) => {
+          const target = i ? addDaysISO(nextEntryDate, i) : nextEntryDate;
+          tr.querySelector('.date').value = target > TODAY ? TODAY : target;
+        });
+      }
+      rows.forEach(tr => { recomputeAge(tr); refreshRowData(tr); });
+      recomputeStockPreview();
+      updateFeedFeedback();
+    });
 });
 
 get('row-table').addEventListener('input', e => {
@@ -768,7 +810,10 @@ get('single-batch-form').addEventListener('submit', function (e) {
   const farm = value('farm');
   if (!supervisor) { alert('Select a Supervisor.'); return; }
   if (!farm) { alert('Select a Farm.'); return; }
+  const batch = get('batch').value;
+  if (!batch) { alert('Select a Batch.'); return; }
   const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].map(tr => ({
+    batch: batch,
     date: tr.querySelector('.date').value,
     mortality: tr.querySelector('.mortality').value,
     culls: tr.querySelector('.culls').value,

@@ -1765,9 +1765,49 @@ def _daily_entry_to_dict(row):
 
 
 def _active_batch_for_farm(farm_id):
-    return (BroilerBatch.objects.filter(broiler_farm_id=farm_id, end_date__isnull=True)
-            .order_by('-start_date', '-id').first()
+    return (_open_batches_for_farm(farm_id).first()
             or BroilerBatch.objects.filter(broiler_farm_id=farm_id).order_by('-start_date', '-id').first())
+
+
+def _open_batches_for_farm(farm_id):
+    """Every batch still running on a farm, newest first.
+
+    A farm normally has one, but nothing stops it having two — and until this
+    existed the forms silently took whichever sorted first, so a second open
+    flock could take another's entries with no way to tell from the screen.
+    """
+    return (BroilerBatch.objects
+            .filter(broiler_farm_id=farm_id, end_date__isnull=True, is_closed=False)
+            .order_by('-start_date', '-id'))
+
+
+def _resolve_batch(farm_id, batch_id=None):
+    """The batch an entry belongs to: the one explicitly chosen, else the
+    single open one.
+
+    A chosen batch is checked against the farm rather than trusted — the id
+    arrives from the browser, and one belonging to someone else's farm would
+    otherwise post entries straight into it.
+    """
+    if not farm_id:
+        return None
+    if batch_id:
+        chosen = BroilerBatch.objects.filter(id=batch_id,
+                                             broiler_farm_id=farm_id).first()
+        if chosen:
+            return chosen
+    return _active_batch_for_farm(farm_id)
+
+
+def _batch_options(farm_id):
+    """Open batches as the forms' Batch dropdown wants them. One entry means
+    the form fills it in and stays quiet; more means the user has to pick."""
+    if not farm_id:
+        return []
+    return [{"id": b.id, "name": b.batch_name,
+             "placed_on": (_placement_date(b).isoformat()
+                           if _placement_date(b) else None)}
+            for b in _open_batches_for_farm(farm_id)]
 
 
 def _apply_daily_entry_row(instance, row, entry_date, user, default_farm_id=None):
@@ -1777,7 +1817,7 @@ def _apply_daily_entry_row(instance, row, entry_date, user, default_farm_id=None
     farm_id = row.get("farm") or default_farm_id
     if row.get("date"):
         entry_date = timezone.datetime.fromisoformat(row["date"]).date()
-    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    batch = _resolve_batch(farm_id, row.get("batch"))
     instance.date = entry_date
     instance.farm_id = farm_id
     instance.batch = batch
@@ -2121,7 +2161,7 @@ def _placement_date(batch):
             .order_by("date").values_list("date", flat=True).first())
 
 
-def daily_entry_lookup_payload(farm_id, date_str=None):
+def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     """Returns the active batch/age for a farm, for the Add form's
     auto-filled Batch/Age fields as soon as a Farm is picked. ``next_date``
     continues the day after this farm's most recently saved entry (so
@@ -2140,7 +2180,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
     # and 500'd the lookup — for the web form as well as the API.
     from django.db.models import F, Max, Sum
     from django.utils.dateparse import parse_date
-    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    batch = _resolve_batch(farm_id, batch_id)
     placed_on = _placement_date(batch)
 
     # Scoped to the batch, not the farm: a farm re-used for a new flock would
@@ -2245,6 +2285,9 @@ def daily_entry_lookup_payload(farm_id, date_str=None):
     return {
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
+        # Every open batch on the farm, so the form can fill the Batch box in
+        # when there is one and ask when there is more than one.
+        "batches": _batch_options(farm_id),
         "age_days": age_days,
         # The resolved placement, not the raw column: the form computes Age
         # from this in the browser, so sending None leaves the Age box empty
@@ -2269,7 +2312,8 @@ def daily_entry_farm_lookup(request):
     """GET ?farm=&date= — the web form's wrapper around
     ``daily_entry_lookup_payload``."""
     return JsonResponse(daily_entry_lookup_payload(request.GET.get("farm"),
-                                                   request.GET.get("date")))
+                                                   request.GET.get("date"),
+                                                   request.GET.get("batch")))
 
 
 @login_required
@@ -2313,7 +2357,7 @@ def _apply_medicine_entry_row(instance, row, entry_date, user):
     farm_id = row.get("farm") or instance.farm_id
     if row.get("date"):
         entry_date = timezone.datetime.fromisoformat(row["date"]).date()
-    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    batch = _resolve_batch(farm_id, row.get("batch"))
     instance.date = entry_date
     instance.farm_id = farm_id
     instance.batch = batch
@@ -2482,7 +2526,7 @@ def medicine_entry_farm_lookup(request):
     """Returns the active batch/age for a farm, for the Add form's
     auto-filled Batch/Age fields as soon as a Farm is picked."""
     farm_id = request.GET.get("farm")
-    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    batch = _resolve_batch(farm_id, request.GET.get("batch"))
     age_days = 0
     placed_on = _placement_date(batch)
     if placed_on:
@@ -2490,6 +2534,7 @@ def medicine_entry_farm_lookup(request):
     return JsonResponse({
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
+        "batches": _batch_options(farm_id),
         "age_days": age_days,
         "start_date": placed_on.isoformat() if placed_on else None,
     })

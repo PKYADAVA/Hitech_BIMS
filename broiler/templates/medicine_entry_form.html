@@ -75,6 +75,38 @@
 <script>
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-unit="{% if item.consumption_uom %}{{ item.consumption_uom.symbol|default:item.consumption_uom.name|escapejs }}{% endif %}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+// Farms assigned to each supervisor (BroilerFarm.supervisor) — picking a
+// supervisor narrows the Farm dropdown to just their farms, as the two Daily
+// Entry forms already did. This form was the one left offering every farm.
+const FARMS_BY_SUPERVISOR = {};
+{% for f in farms %}(FARMS_BY_SUPERVISOR["{{ f.supervisor_id }}"] = FARMS_BY_SUPERVISOR["{{ f.supervisor_id }}"] || []).push({ id: {{ f.id }}, name: "{{ f.farm_name|escapejs }}" });
+{% endfor %}
+function farmOptionsFor(supId) {
+  const farms = FARMS_BY_SUPERVISOR[String(supId)] || [];
+  return '<option value="">select</option>' +
+    farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+}
+let currentFarmOptions = farmOptions;
+
+// Fill a row's Batch <select> from a lookup's `batches`. One open batch is
+// chosen for the user — that is the normal case and there is nothing to
+// decide. More than one has to be asked, because picking silently is how
+// entries used to end up against the wrong flock.
+function fillBatchSelect(sel, batches) {
+  const list = batches || [];
+  if (!list.length) {
+    sel.innerHTML = '<option value="">no open batch</option>';
+  } else if (list.length === 1) {
+    sel.innerHTML = `<option value="${list[0].id}">${escapeHtml(list[0].name)}</option>`;
+    sel.value = String(list[0].id);
+  } else {
+    sel.innerHTML = '<option value="">select batch</option>' +
+      list.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    sel.value = '';
+  }
+  if (window.jQuery) jQuery(sel).trigger('change.select2');
+}
+
 const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
@@ -82,8 +114,8 @@ const value = id => get(id).value;
 function row() {
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><select class="form-select farm" required>${farmOptions}</select></td>
-    <td><input class="form-control bg-light batch" readonly></td>
+    <td><select class="form-select farm" required>${currentFarmOptions}</select></td>
+    <td><select class="form-select batch" required><option value="">select a farm first</option></select></td>
     <td><input class="form-control bg-light age" readonly></td>
     <td><input class="form-control bg-light date" readonly value="${TODAY}"></td>
     <td><select class="form-select item" required>${itemOptions}</select></td>
@@ -142,16 +174,43 @@ async function recomputeStockPreview() {
   }
 }
 
+function loadBatchFor(tr, farmId, batchId) {
+  const q = batchId ? `&batch=${batchId}` : '';
+  fetch(`{% url 'medicine_entry_farm_lookup' %}?farm=${farmId}${q}`)
+    .then(r => r.json()).then(data => {
+      if (!batchId) fillBatchSelect(tr.querySelector('.batch'), data.batches);
+      tr.querySelector('.age').value = data.batch ? data.age_days : '';
+      recomputeStockPreview();
+    });
+}
+
+// Selecting a supervisor narrows every row's Farm dropdown to their farms.
+get('supervisor').addEventListener('change', function () {
+  currentFarmOptions = this.value ? farmOptionsFor(this.value) : farmOptions;
+  document.querySelectorAll('#row-table tbody tr .farm').forEach(sel => {
+    sel.innerHTML = currentFarmOptions;
+    sel.value = '';
+    if (window.jQuery) jQuery(sel).trigger('change.select2');
+    const tr = sel.closest('tr');
+    fillBatchSelect(tr.querySelector('.batch'), []);
+    tr.querySelector('.age').value = '';
+  });
+  recomputeStockPreview();
+});
+
 get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('farm')) {
     const tr = e.target.closest('tr');
     const farmId = e.target.value;
-    if (!farmId) { tr.querySelector('.batch').value = ''; tr.querySelector('.age').value = ''; recomputeStockPreview(); return; }
-    fetch(`{% url 'medicine_entry_farm_lookup' %}?farm=${farmId}`).then(r => r.json()).then(data => {
-      tr.querySelector('.batch').value = data.batch_name || 'No active batch';
-      tr.querySelector('.age').value = data.batch ? data.age_days : '';
-      recomputeStockPreview();
-    });
+    if (!farmId) { fillBatchSelect(tr.querySelector('.batch'), []); tr.querySelector('.age').value = ''; recomputeStockPreview(); return; }
+    fillBatchSelect(tr.querySelector('.batch'), []);   // drop the old farm's batch
+    loadBatchFor(tr, farmId);
+  }
+  // Choosing a different batch re-reads the age, which belongs to the batch.
+  if (e.target.classList.contains('batch')) {
+    const tr = e.target.closest('tr');
+    const farmId = tr.querySelector('.farm').value;
+    if (farmId && e.target.value) loadBatchFor(tr, farmId, e.target.value);
   }
   if (e.target.classList.contains('item')) {
     const tr = e.target.closest('tr');
@@ -178,12 +237,19 @@ get('medicine-entry-form').addEventListener('submit', function (e) {
   if (!supervisor) { alert('Select a Supervisor.'); return; }
   const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
     farm: tr.querySelector('.farm').value,
+    batch: tr.querySelector('.batch').value,
     item: tr.querySelector('.item').value,
     qty: tr.querySelector('.qty').value,
     remarks: tr.querySelector('.remarks').value,
   }));
   if (!rows.length || rows.some(r => !r.farm)) {
     alert('Add at least one row with Farm selected.');
+    return;
+  }
+  // A farm with two open flocks leaves this blank on purpose — saving anyway
+  // is what used to file the entry against whichever batch sorted first.
+  if (rows.some(r => !r.batch)) {
+    alert('Select a Batch on every row.');
     return;
   }
   if (rows.some(r => !r.item)) {
