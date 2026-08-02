@@ -23,6 +23,18 @@
   .ma-alert { border:1px solid #ffd9a8; background:#fff8ee; color:#8a5300; border-radius:10px;
               padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:14px; }
   .ma-alert b { display:block; }
+  .ma-copied { border:1px solid #cfe8d4; background:#f2fbf5; color:#1d6b39; border-radius:10px;
+               padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:14px; }
+  .ma-copied b { display:block; }
+  .ma-also { margin-top:14px; border:1px solid #e7edf5; border-radius:10px; padding:10px 13px; }
+  .ma-also summary { font-size:.8rem; font-weight:600; color:#6f42c1; cursor:pointer; list-style:none; }
+  .ma-also summary::-webkit-details-marker { display:none; }
+  .ma-also summary::before { content:"▸ "; }
+  .ma-also[open] summary::before { content:"▾ "; }
+  .ma-also-body { padding-top:8px; }
+  .ma-also-body p { font-size:.75rem; color:#8494ab; margin:0 0 8px; max-width:66ch; }
+  .ma-also-item { display:inline-flex; align-items:center; font-size:.8rem; color:#48566d;
+                  background:#f6f8fb; border-radius:6px; padding:4px 9px; margin:0 6px 6px 0; }
 
   .ma-table { width:100%; border-collapse:collapse; }
   .ma-table thead th { position:sticky; top:0; z-index:2; background:var(--ma-purple-soft);
@@ -97,9 +109,30 @@
           {% endfor %}
         </select>
       </div>
+      {% if selected_group and other_groups %}
+      <div>
+        <label for="ma-copy">Copy from</label>
+        <select name="copy_from" id="ma-copy" class="form-select form-select-sm"
+                style="min-width:210px;" onchange="this.form.submit()">
+          <option value="">Start from this group's own settings…</option>
+          {% for g in other_groups %}
+          <option value="{{ g.id }}" {% if copied_from and g.id == copied_from.id %}selected{% endif %}>{{ g.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
     </form>
 
     {% if selected_group %}
+      {% if copied_from %}
+      <div class="ma-copied">
+        <b><i class="fas fa-copy me-1"></i>Showing “{{ copied_from.name }}”'s configuration — nothing is saved yet.</b>
+        Adjust it if you need to, then Save to apply it to
+        “{{ selected_group.name }}”. Anything {{ selected_group.name }} has no
+        web permission for is disabled below and will be dropped: copying
+        cannot grant access any more than editing can.
+      </div>
+      {% endif %}
       {% if members and members == superusers %}
       <div class="ma-alert">
         <b><i class="fas fa-triangle-exclamation me-1"></i>These switches will not affect anyone in this group.</b>
@@ -256,6 +289,25 @@
           </tbody>
         </table>
         </div>
+
+        {% if other_groups %}
+        <details class="ma-also">
+          <summary>Also apply this to other groups</summary>
+          <div class="ma-also-body">
+            <p>
+              Each group is written and audited separately, and each is still
+              held to its own web permissions — a group that cannot reach a
+              screen will not gain it here.
+            </p>
+            {% for g in other_groups %}
+            <label class="ma-also-item">
+              <input type="checkbox" class="form-check-input me-1" name="also" value="{{ g.id }}">
+              {{ g.name }}
+            </label>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
 
         <div class="mt-3 d-flex gap-2">
           <button type="submit" class="btn btn-success btn-sm">

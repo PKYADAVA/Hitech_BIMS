@@ -396,44 +396,40 @@ def mobile_access_form(request):
     if request.method == "POST":
         group = get_object_or_404(Group, id=request.POST.get("group") or 0)
 
-        before_modules = {r.module_key: r.enabled for r in
-                          GroupMobileAccess.objects.filter(group=group)}
-        before_screens = group_screen_perms(group) or {}
-
-        GroupMobileAccess.objects.filter(group=group).delete()
-        GroupMobileAccess.objects.bulk_create([
-            GroupMobileAccess(
-                group=group, module_key=key,
-                enabled=request.POST.get(f"on_{key}") == "on",
-                position=int((request.POST.get(f"pos_{key}") or "").strip() or 0))
-            for key, _title, _nav, _icon, _colour in modules
-        ])
-
-        GroupMobileTabPermission.objects.filter(group=group).delete()
-        rows, after_screens = [], {}
+        # The form's answer, independent of which group it is written to, so
+        # applying it to several is the same operation run more than once
+        # rather than a second code path that can drift from the first.
+        module_state = {
+            key: {"enabled": request.POST.get(f"on_{key}") == "on",
+                  "position": int((request.POST.get(f"pos_{key}") or "").strip() or 0)}
+            for key, *_rest in modules
+        }
+        screen_state = {}
         for _key, _title, screens in sections:
             for screen in screens:
                 # Only the actions the row actually offers; a report's Add/
                 # Edit/Delete are never posted, and must not be read as "off".
-                ticks = {a: (a in screen["actions"]
-                             and request.POST.get(f"p_{screen['tab']}_{a}") == "on")
-                         for a in MOBILE_ACTIONS}
-                after_screens[screen["tab"]] = ticks
-                rows.append(GroupMobileTabPermission(
-                    group=group, tab_code=screen["tab"],
-                    **{f"can_{a}": v for a, v in ticks.items()}))
-        GroupMobileTabPermission.objects.bulk_create(rows)
+                screen_state[screen["tab"]] = {
+                    a: (a in screen["actions"]
+                        and request.POST.get(f"p_{screen['tab']}_{a}") == "on")
+                    for a in MOBILE_ACTIONS
+                }
 
-        after_modules = {key: request.POST.get(f"on_{key}") == "on"
-                         for key, *_rest in modules}
-        moved_modules = diff_flags(before_modules, after_modules)
         labels = {s["tab"]: s["title"] for _k, _t, ss in sections for s in ss}
-        record_save(
-            request, group, "mobile", before_screens, after_screens, labels,
-            extra=(f"{len(moved_modules)} module(s) toggled" if moved_modules else ""),
-        )
+        also = Group.objects.filter(id__in=request.POST.getlist("also")).exclude(
+            id=group.id)
+        targets = [group, *also]
 
-        messages.success(request, f"Mobile access saved for “{group.name}”.")
+        for target in targets:
+            _write_mobile_access(request, target, module_state, screen_state, labels)
+
+        if also:
+            names = ", ".join(g.name for g in also)
+            messages.success(
+                request,
+                f"Mobile access saved for “{group.name}” and applied to {names}.")
+        else:
+            messages.success(request, f"Mobile access saved for “{group.name}”.")
         return redirect("mobile_access")
 
     group_id = (request.GET.get("group") or "").strip()
@@ -445,6 +441,21 @@ def mobile_access_form(request):
                          GroupMobileAccess.objects.filter(group=selected)}
         saved_screens = group_screen_perms(selected)
         members, supers = superuser_only_members(selected)
+
+    # "Copy from" fills the form with another group's configuration without
+    # saving anything, so it can be reviewed and adjusted against *this*
+    # group's web permissions before it is committed. Anything the target
+    # cannot reach renders disabled and is dropped on save — copying can no
+    # more grant access than editing can.
+    copy_id = (request.GET.get("copy_from") or "").strip()
+    copied_from = (Group.objects.filter(id=copy_id).exclude(id=selected.id).first()
+                   if selected and copy_id.isdigit() else None)
+    if copied_from:
+        source_modules = {r.module_key: r for r in
+                          GroupMobileAccess.objects.filter(group=copied_from)}
+        if source_modules:
+            saved_modules = source_modules
+        saved_screens = group_screen_perms(copied_from)
 
     # What the web matrix grants, so the editor can mark a screen the group
     # cannot reach at all — ticking it there would change nothing.
@@ -487,7 +498,48 @@ def mobile_access_form(request):
         "editing": bool(saved_modules or saved_screens),
         "members": members,
         "superusers": supers,
+        "copied_from": copied_from,
+        "other_groups": (Group.objects.exclude(id=selected.id).order_by("name")
+                         if selected else Group.objects.none()),
     })
+
+
+def _write_mobile_access(request, group, module_state, screen_state, labels):
+    """Write one form's answer to one group, and record what moved.
+
+    Applying a configuration to several groups is this called several times.
+    Each group gets its own audit entry, because "changed for Supervisor" and
+    "changed for Field Staff" are two facts and reading them as one would hide
+    which group a later question is about.
+    """
+    from .models import GroupMobileAccess, GroupMobileTabPermission
+    from .services.access_log import diff_flags, record_save
+    from .services.mobile_access import MOBILE_ACTIONS, group_screen_perms
+
+    before_modules = {r.module_key: r.enabled for r in
+                      GroupMobileAccess.objects.filter(group=group)}
+    before_screens = group_screen_perms(group) or {}
+
+    GroupMobileAccess.objects.filter(group=group).delete()
+    GroupMobileAccess.objects.bulk_create([
+        GroupMobileAccess(group=group, module_key=key,
+                          enabled=state["enabled"], position=state["position"])
+        for key, state in module_state.items()
+    ])
+
+    GroupMobileTabPermission.objects.filter(group=group).delete()
+    GroupMobileTabPermission.objects.bulk_create([
+        GroupMobileTabPermission(group=group, tab_code=tab,
+                                 **{f"can_{a}": ticks[a] for a in MOBILE_ACTIONS})
+        for tab, ticks in screen_state.items()
+    ])
+
+    moved_modules = diff_flags(
+        before_modules, {k: s["enabled"] for k, s in module_state.items()})
+    record_save(
+        request, group, "mobile", before_screens, screen_state, labels,
+        extra=(f"{len(moved_modules)} module(s) toggled" if moved_modules else ""),
+    )
 
 
 def _screen_rows(screens, web, saved, actions):
@@ -509,9 +561,12 @@ def _screen_rows(screens, web, saved, actions):
             "actions": [{
                 "name": action,
                 "applies": action in applicable,
-                "on": action in applicable and (
-                    current[action] if current is not None
-                    else granted.get(action, False)),
+                # ANDed with `granted` so a tick the web matrix no longer allows
+                # shows as off rather than as checked-and-disabled. It is not in
+                # effect either way — a disabled box does not even submit — and
+                # showing it ticked claims access the group does not have.
+                "on": action in applicable and granted.get(action, False) and (
+                    current[action] if current is not None else True),
                 "granted": action in applicable and granted.get(action, False),
             } for action in actions],
             "reachable": any(granted.get(a) for a in applicable),
