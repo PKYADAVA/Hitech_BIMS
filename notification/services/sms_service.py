@@ -33,7 +33,21 @@ class SmsService:
 
     def __init__(self, config: SmsConfig = None, provider: SmsProvider = None):
         self._config = config or load_config()
+        # Only a provider we built is ours to close; an injected one (tests)
+        # stays the caller's.
+        self._owns_provider = provider is None
         self._provider = provider or self._build_provider(self._config)
+
+    def close(self) -> None:
+        """Release the underlying provider's network resources, if we own it."""
+        if self._owns_provider and self._provider is not None:
+            self._provider.close()
+
+    def __enter__(self) -> "SmsService":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
 
     @staticmethod
     def _build_provider(config: SmsConfig) -> SmsProvider:
@@ -178,6 +192,10 @@ def get_sms_service() -> SmsService:
     global _default_service, _settings_stamp  # pylint: disable=global-statement
     stamp = _current_settings_stamp()
     if _default_service is None or stamp != _settings_stamp:
+        # Close the outgoing service's HTTP session before replacing it, so a
+        # settings change doesn't abandon a live connection pool in the worker.
+        if _default_service is not None:
+            _default_service.close()
         _default_service = SmsService()
         _settings_stamp = stamp
     return _default_service

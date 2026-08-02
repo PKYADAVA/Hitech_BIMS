@@ -24,3 +24,16 @@ class SmsProvider(ABC):
         for retryable failures and
         :class:`~notification.exceptions.SmsPermanentError` otherwise.
         """
+
+    def close(self) -> None:
+        """Release any network resources (HTTP session/sockets) held.
+
+        Default no-op. Providers that open a ``requests.Session`` override this
+        so a rebuilt/discarded provider doesn't leak its connection pool.
+        """
+
+    def __enter__(self) -> "SmsProvider":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()

@@ -61,11 +61,27 @@ def _container_memory_mb():
 
 
 def _default_workers():
+    # GUNICORN_MEMORY_MB is an explicit escape hatch for platforms whose memory
+    # cap this process can't read from cgroups. Render, for one, reports the
+    # cgroup as unlimited ("uncapped" in on_starting), so without this the
+    # fallback below would size the pool blind and overcommit a small instance
+    # — e.g. 3 full app copies (~160MB each) on a 512MB box is ~94% RAM. Set
+    # GUNICORN_MEMORY_MB to the instance's real RAM (e.g. 512) and the pool is
+    # sized correctly: (512-192)//320 -> 1 worker.
+    override = os.getenv("GUNICORN_MEMORY_MB")
     memory_mb = _container_memory_mb()
+    if override:
+        try:
+            memory_mb = int(override)
+        except ValueError:
+            pass
     if memory_mb is None:
-        # Not in a memory-capped container (bare droplet, local dev). Keep the
-        # old conservative default rather than guessing from host RAM.
-        return 3
+        # Cap unknown and no override (e.g. Render, which reports the cgroup as
+        # unlimited). Default to a single worker: this app's per-worker copy is
+        # ~160-200MB, so on the small instances where the cap is unreadable one
+        # worker + threads is the safe fit that won't OOM. Raise it deliberately
+        # with WEB_CONCURRENCY or GUNICORN_MEMORY_MB when the box is bigger.
+        return 1
     usable = memory_mb - _RESERVED_MB
     return max(1, min(_MAX_WORKERS, usable // _WORKER_BUDGET_MB))
 

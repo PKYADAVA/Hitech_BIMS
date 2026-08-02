@@ -263,6 +263,16 @@
     if (timer) clearInterval(timer);
     timer = setInterval(load, REFRESH_MS);
   }
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+  // Don't keep polling the live API when the tab is in the background — a
+  // dashboard left open on a hidden tab otherwise hits the endpoint every
+  // cycle forever. Resume with a fresh load the moment it's visible again.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { stop(); }
+    else { load(); schedule(); }
+  });
 
   document.getElementById("trk-refresh").addEventListener("click", load);
   document.getElementById("trk-sync-now").addEventListener("click", () => {

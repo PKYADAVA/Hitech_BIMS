@@ -112,15 +112,20 @@ class SyncService:
             return []
 
         runs, aborted = [], False
-        for kind in (kinds or DEFAULT_KINDS):
-            if kind not in DEFAULT_KINDS or not adapter.supports(kind):
-                continue
-            try:
-                run = self._sync_kind(provider, adapter, kind, trigger)
-            except _AbortProvider:
-                aborted = True
-                break
-            runs.append(run)
+        try:
+            for kind in (kinds or DEFAULT_KINDS):
+                if kind not in DEFAULT_KINDS or not adapter.supports(kind):
+                    continue
+                try:
+                    run = self._sync_kind(provider, adapter, kind, trigger)
+                except _AbortProvider:
+                    aborted = True
+                    break
+                runs.append(run)
+        finally:
+            # Release the adapter's HTTP session/connection pool each cycle so
+            # long-lived workers (Sync Now, webhooks) don't accumulate sockets.
+            adapter.close()
 
         if aborted:
             return runs  # provider already flagged by the aborting kind

@@ -41,7 +41,15 @@ class SmsGatewayHubProvider(SmsProvider):
 
     def __init__(self, config: SmsConfig, session: requests.Session = None):
         self._config = config
+        # Only a session we created is ours to close; an injected one (tests)
+        # remains the caller's responsibility.
+        self._owns_session = session is None
         self._session = session or requests.Session()
+
+    def close(self) -> None:
+        """Close the HTTP session (and its connection pool) if we own it."""
+        if self._owns_session and self._session is not None:
+            self._session.close()
 
     def send(self, phone: str, message: str, options: dict = None) -> SmsResult:
         self._ensure_configured()
