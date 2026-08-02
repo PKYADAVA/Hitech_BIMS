@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Access Changes — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  .ac-head { display:flex; align-items:center; gap:10px; margin:4px 0 14px; }
+  .ac-head i { color:#6f42c1; }
+  .ac-head h5 { margin:0; font-weight:700; color:#3d2c66; }
+  .ac-head small { color:#6b7890; }
+  .ac-card { background:#fff; border:1px solid #e7edf5; border-radius:14px; padding:18px 20px; }
+  .ac-filters { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-bottom:16px; }
+  .ac-filters label { font-size:.74rem; font-weight:700; color:#48566d; display:block; margin-bottom:3px; }
+  .ac-note { border:1px solid #cfe2ff; background:#f3f8ff; color:#1d4f94; border-radius:10px;
+             padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:16px; }
+  .ac-when { white-space:nowrap; font-size:.78rem; color:#6b7890; }
+  .ac-who { font-weight:600; font-size:.83rem; color:#3d2c66; }
+  .ac-summary { font-size:.83rem; color:#48566d; }
+  .ac-tag { font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+            border-radius:4px; padding:2px 6px; }
+  .ac-web { background:#e8f0ff; color:#2563eb; }
+  .ac-mobile { background:#e6f7f3; color:#078b75; }
+  .ac-mobile_module { background:#e5f7fb; color:#0087a5; }
+  .ac-dashboard { background:#f1ebff; color:#7c3aed; }
+  .ac-detail summary { font-size:.75rem; color:#6f42c1; cursor:pointer; list-style:none; }
+  .ac-detail summary::-webkit-details-marker { display:none; }
+  .ac-detail summary::before { content:"▸ "; }
+  .ac-detail[open] summary::before { content:"▾ "; }
+  .ac-lines { padding:6px 0 2px; }
+  .ac-line { font-size:.75rem; color:#6b7890; padding:1px 0; }
+  .ac-line b { color:#48566d; font-weight:600; }
+  .ac-empty { padding:26px 10px; text-align:center; color:#6b7890; font-size:.86rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='access_changes' %}
+<div class="container-fluid px-0">
+  <div class="ac-head">
+    <i class="fas fa-clock-rotate-left fa-lg"></i>
+    <div>
+      <h5>Access Changes</h5>
+      <small>Who changed a group's access, when, and what moved.</small>
+    </div>
+  </div>
+
+  <div class="ac-card">
+    <div class="ac-note">
+      Every save on Web Access, Mobile Access and Dashboard Access is recorded
+      here, with the before and after of only the entries that actually changed.
+      Denied requests are a different question — those go to the Web Access
+      audit table.
+    </div>
+
+    <form method="get" class="ac-filters">
+      <div>
+        <label for="ac-group">Group</label>
+        <select name="group" id="ac-group" class="form-select form-select-sm"
+                style="min-width:210px;" onchange="this.form.submit()">
+          <option value="">All groups</option>
+          {% for g in groups %}
+          <option value="{{ g.id }}" {% if sel_group == g.id|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="ac-surface">Surface</label>
+        <select name="surface" id="ac-surface" class="form-select form-select-sm"
+                style="min-width:190px;" onchange="this.form.submit()">
+          <option value="">All surfaces</option>
+          {% for value, label in surfaces %}
+          <option value="{{ value }}" {% if sel_surface == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if sel_group or sel_surface %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'access_changes' %}">Clear</a>
+      {% endif %}
+    </form>
+
+    {% if entries %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle ds-grid">
+        <thead>
+          <tr>
+            <th style="width:150px;">When</th>
+            <th style="width:130px;">Who</th>
+            <th style="width:110px;">Surface</th>
+            <th>Group</th>
+            <th>What changed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+          <tr>
+            <td class="ac-when">{{ entry.row.at|date:"d M Y H:i" }}</td>
+            <td><span class="ac-who">{{ entry.row.changed_by }}</span></td>
+            <td>
+              <span class="ac-tag ac-{{ entry.row.surface }}">{{ entry.row.get_surface_display }}</span>
+            </td>
+            <td>{{ entry.row.group.name }}</td>
+            <td>
+              <div class="ac-summary">{{ entry.row.summary }}</div>
+              {% if entry.lines %}
+              <details class="ac-detail">
+                <summary>details</summary>
+                <div class="ac-lines">
+                  {% for line in entry.lines %}
+                  <div class="ac-line"><b>{{ line.name }}</b> — {{ line.moves|join:", " }}</div>
+                  {% endfor %}
+                  {% if entry.more %}
+                  <div class="ac-line">…and {{ entry.more }} more</div>
+                  {% endif %}
+                </div>
+              </details>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="ac-empty">
+        No access changes recorded{% if sel_group or sel_surface %} for this filter{% endif %}.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -20,7 +20,7 @@ from hr.models import Group as HrGroup
 from inventory.models import Warehouse
 from .models import UserProfile, GroupTabPermission, GroupAccessProfile
 from .access import (MODULE_REGISTRY, ACTIONS, ALL_TAB_CODES,
-                     UNENFORCED_ACTIONS, UNENFORCED_FLAGS)
+                     UNENFORCED_ACTIONS, UNENFORCED_FLAGS, iter_tabs)
 
 
 from django.contrib.auth import login as auth_login, logout as auth_logout
@@ -167,7 +167,13 @@ def dashboard_access_form(request):
     panels = list(all_panels())
 
     if request.method == "POST":
+        from .services.access_log import record_save, snapshot
+
         group = get_object_or_404(Group, id=request.POST.get("group") or 0)
+        fields = ["enabled", "position"]
+        before = snapshot(GroupDashboardWidget.objects.filter(group=group),
+                          "widget_key", fields)
+
         GroupDashboardWidget.objects.filter(group=group).delete()
         GroupDashboardWidget.objects.bulk_create([
             GroupDashboardWidget(
@@ -176,6 +182,12 @@ def dashboard_access_form(request):
                 position=int((request.POST.get(f"pos_{key}") or "").strip() or 0))
             for key, _title, _tabs, _icon, _colour in panels
         ])
+
+        after = snapshot(GroupDashboardWidget.objects.filter(group=group),
+                         "widget_key", fields)
+        record_save(request, group, "dashboard", before, after,
+                    {key: title for key, title, *_ in panels}, noun="widget")
+
         messages.success(request, f"Dashboard access saved for “{group.name}”.")
         return redirect("dashboard_access")
 
@@ -238,6 +250,58 @@ def dashboard_access_delete(request, group_id):
 
 
 @login_required
+def access_changes(request):
+    """User > Access Changes — who changed whose access, and to what.
+
+    The log was write-only until this page existed: every editor recorded its
+    saves and nothing read them, so the question it was built to answer still
+    needed a database shell. Filterable by group and surface because the real
+    question is nearly always about one group.
+    """
+    from .models import AccessChangeLog
+
+    rows = AccessChangeLog.objects.select_related("group")
+
+    group_id = (request.GET.get("group") or "").strip()
+    surface = (request.GET.get("surface") or "").strip()
+    if group_id.isdigit():
+        rows = rows.filter(group_id=int(group_id))
+    if surface:
+        rows = rows.filter(surface=surface)
+
+    entries = []
+    for row in rows[:300]:
+        changes = (row.detail or {}).get("changes") or {}
+        entries.append({
+            "row": row,
+            # Flattened for the expandable detail: one line per thing that
+            # moved, rather than raw JSON an administrator has to decode.
+            "lines": [
+                {"name": name,
+                 "moves": [f"{field}: {_yn(was)} → {_yn(now)}"
+                           for field, (was, now) in fields.items()]}
+                for name, fields in list(changes.items())[:40]
+            ],
+            "more": max(0, len(changes) - 40),
+        })
+
+    return render(request, "access_changes.html", {
+        "entries": entries,
+        "groups": Group.objects.order_by("name"),
+        "surfaces": AccessChangeLog.SURFACES,
+        "sel_group": group_id,
+        "sel_surface": surface,
+    })
+
+
+def _yn(value):
+    """Render a stored value for the change log in an administrator's terms."""
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    return "—" if value is None else str(value)
+
+
+@login_required
 def mobile_access(request):
     """User > Mobile Access — one row per configured group.
 
@@ -288,8 +352,7 @@ def mobile_access_form(request):
     other 89 web tabs would be ticks that control nothing.
     """
     from .models import GroupMobileAccess, GroupMobileTabPermission
-    from .services.access_log import (describe_matrix_change, diff_flags,
-                                      diff_matrix, log_change)
+    from .services.access_log import diff_flags, record_save
     from .services.mobile_access import (MOBILE_ACTIONS, all_modules,
                                          group_screen_perms, screens_by_module,
                                          screen_tree, superuser_only_members,
@@ -331,14 +394,11 @@ def mobile_access_form(request):
 
         after_modules = {key: request.POST.get(f"on_{key}") == "on"
                          for key, *_rest in modules}
-        moved_screens = diff_matrix(before_screens, after_screens)
         moved_modules = diff_flags(before_modules, after_modules)
         labels = {s["tab"]: s["title"] for _k, _t, ss in sections for s in ss}
-        log_change(
-            request, group, "mobile",
-            describe_matrix_change(moved_screens, labels)
-            + (f"; {len(moved_modules)} module(s) toggled" if moved_modules else ""),
-            {"screens": moved_screens, "modules": moved_modules},
+        record_save(
+            request, group, "mobile", before_screens, after_screens, labels,
+            extra=(f"{len(moved_modules)} module(s) toggled" if moved_modules else ""),
         )
 
         messages.success(request, f"Mobile access saved for “{group.name}”.")
@@ -849,6 +909,14 @@ def delete_group(request):
 def _persist_web_access(request, group):
     """Persist the Web-Access matrix + data scoping for *group*. Returns a
     redirect back to the Manage-User-Groups page with the group pre-selected."""
+    from .services.access_log import record_save, snapshot
+
+    # Read before writing, so the log can say what actually moved rather than
+    # restating the whole form. Same shape as the other two surfaces use.
+    perm_fields = [f"can_{a}" for a in ACTIONS]
+    before = snapshot(GroupTabPermission.objects.filter(group=group),
+                      "tab_code", perm_fields)
+
     # --- Permission matrix ---------------------------------------------------
     for tab_code in ALL_TAB_CODES:
         values = {
@@ -880,6 +948,11 @@ def _persist_web_access(request, group):
 
     for field in scope_fields:
         getattr(profile, field).set(request.POST.getlist(f"{field}[]"))
+
+    after = snapshot(GroupTabPermission.objects.filter(group=group),
+                     "tab_code", perm_fields)
+    labels = {code: label for _n, _s, code, label, _e in iter_tabs()}
+    record_save(request, group, "web", before, after, labels, noun="tab")
 
     messages.success(request, f"Web access saved for group '{group.name}'.")
     return redirect(f"{reverse('user_groups')}?group={group.id}#webaccess")

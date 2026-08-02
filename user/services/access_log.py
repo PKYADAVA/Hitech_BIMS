@@ -59,7 +59,37 @@ def log_change(request, group, surface, summary, detail=None, source="web"):
                          surface, getattr(group, "name", group))
 
 
-def describe_matrix_change(moved: dict, labels: dict | None = None) -> str:
+def snapshot(rows, key_field, fields):
+    """``{key: {field: value}}`` from model rows — one surface's current state.
+
+    Every editor stores a row per thing with a handful of columns, so one
+    reader serves all three and the three diffs become comparable.
+    """
+    return {
+        getattr(row, key_field): {f: getattr(row, f) for f in fields}
+        for row in rows
+    }
+
+
+def record_save(request, group, surface, before, after, labels=None,
+                noun="screen", extra="", source="web"):
+    """Diff two snapshots and record the change. Never raises.
+
+    This is the one place a save is written to the log, so a fourth editor
+    gets an audit trail by calling it rather than by remembering to. It also
+    means the three surfaces phrase their entries the same way, which matters
+    when they are read together on one page.
+    """
+    moved = diff_matrix(before, after)
+    summary = describe_matrix_change(moved, labels, noun)
+    if extra:
+        summary = f"{summary}; {extra}"
+    log_change(request, group, surface, summary, {"changes": moved}, source)
+    return moved
+
+
+def describe_matrix_change(moved: dict, labels: dict | None = None,
+                           noun: str = "screen") -> str:
     """A one-line summary of a matrix diff, e.g. "3 screens changed: …".
 
     Names the first few so the list is scannable without opening the detail.
@@ -69,5 +99,5 @@ def describe_matrix_change(moved: dict, labels: dict | None = None) -> str:
     labels = labels or {}
     names = [labels.get(tab, tab) for tab in list(moved)[:3]]
     tail = "" if len(moved) <= 3 else f" and {len(moved) - 3} more"
-    noun = "screen" if len(moved) == 1 else "screens"
-    return f"{len(moved)} {noun} changed: {', '.join(names)}{tail}"
+    word = noun if len(moved) == 1 else f"{noun}s"
+    return f"{len(moved)} {word} changed: {', '.join(names)}{tail}"

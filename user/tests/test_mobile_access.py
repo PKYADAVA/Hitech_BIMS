@@ -1030,8 +1030,11 @@ class AccessChangeLogTests(TestCase):
         self.client.post(reverse("mobile_access_form"),
                          {"group": self.group.id, "p_daily_entry_list_view": "on"})
         latest = self.entries()[0]
-        self.assertIn("daily_entry_list", latest.detail["screens"])
-        self.assertEqual(latest.detail["screens"]["daily_entry_list"]["add"], [True, False])
+        # "changes" rather than "screens": all three surfaces share one shape
+        # now, so the Access Changes page can read them together.
+        self.assertIn("daily_entry_list", latest.detail["changes"])
+        self.assertEqual(latest.detail["changes"]["daily_entry_list"]["add"],
+                         [True, False])
         self.assertIn("Daily Entry", latest.summary)
 
     def test_a_save_that_changes_nothing_says_so(self):
