@@ -1,9 +1,10 @@
 {% extends "admin/import_export/import.html" %}
 {% load i18n %}
 
-{# Prepend a downloadable sample/template link, then render the theme's normal
-   import form via block.super. Works with the jazzmin import.html (which only
-   exposes a `content` block, no import_form_additional_info hook). #}
+{% comment %}Prepend a downloadable sample/template link, then render the theme's
+normal import form via block.super. Works with the jazzmin import.html (which
+only exposes a `content` block, no import_form_additional_info hook).
+{% endcomment %}
 {% block content %}
   <div class="alert alert-info" style="margin-bottom:16px;">
     <strong>{% trans "Not sure of the format?" %}</strong>

@@ -78,8 +78,9 @@ Manage Customers
                         <td>{{ cust.mobile }}</td>
                         <td>{{ cust.contact_type }}</td>
                         <td>{{ cust.party_category|default:"—" }}</td>
-                        {# customer_group is optional; a dotted filter *argument* is not
-                           silenced when it is null, so guard it explicitly. #}
+                        {% comment %}customer_group is optional; a dotted filter
+                        *argument* is not silenced when it is null, so guard it
+                        explicitly.{% endcomment %}
                         <td>{% if cust.customer_group %}{{ cust.customer_group.description|default:cust.customer_group.code }}{% else %}—{% endif %}</td>
                         <td>{{ cust.credit_limit }}</td>
                         <td>{{ cust.state|default:"—" }}</td>

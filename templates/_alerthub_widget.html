@@ -20,9 +20,10 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
     </a>
   </div>
 
-  {# Priority split. Each is a link into the centre pre-filtered to that level.
-     Written out rather than looped so the widget needs nothing from the view
-     that includes it — home.html only has to decide whether to show it. #}
+  {% comment %}Priority split. Each is a link into the centre pre-filtered to
+  that level. Written out rather than looped so the widget needs nothing from
+  the view that includes it — home.html only decides whether to show it.
+  {% endcomment %}
   <div class="ah-counts mb-3">
     <a class="ah-count critical text-decoration-none"
        href="{% url 'alerthub:notification_center' %}?priority=critical">
