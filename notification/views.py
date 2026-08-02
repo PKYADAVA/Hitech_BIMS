@@ -19,6 +19,7 @@ from .constants import SMS_MODULE_CHOICES, SMS_MODULE_TRANSACTIONS, transaction_
 from .models import SmsMessage, SmsTemplate, SmsTemplateCategory
 from .services import get_sms_service
 from .services.template_service import extract_placeholders
+from user.services.scoping import customers_for, suppliers_for
 
 logger = logging.getLogger("notification.sms")
 
@@ -260,8 +261,8 @@ class SmsTransactionPageView(View):
                  "module_display": t.get_module_display()}
                 for t in templates_qs
             ]),
-            "customers": Customer.objects.order_by("name"),
-            "suppliers": Supplier.objects.order_by("name"),
+            "customers": customers_for(request.user, Customer.objects.order_by("name")),
+            "suppliers": suppliers_for(request.user, Supplier.objects.order_by("name")),
             "company_name": CompanyProfile.get_solo().name,
         })
 

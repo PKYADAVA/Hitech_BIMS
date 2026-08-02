@@ -7,7 +7,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (scope_any, suppliers_for, branches_for, farms_for,
+from user.services.scoping import (allowed_ids, scope_any, suppliers_for,
+                                   branches_for, farms_for,
                                    supervisors_for, warehouses_for)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -17,7 +18,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.http import Http404, JsonResponse
-from django.db.models import F
+from django.db.models import F, Q
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from hatchery_master.models import STATES_AND_TERRITORIES
@@ -35,7 +36,8 @@ states_and_union_territories = STATES_AND_TERRITORIES
 
 @login_required()
 def supplier(request):
-    return render(request, "supplier.html", {"suppliers": Supplier.objects.all()})
+    return render(request, "supplier.html",
+                  {"suppliers": suppliers_for(request.user, Supplier.objects.all())})
 
 
 def _supplier_form_context(supplier=None):
@@ -1057,6 +1059,13 @@ def _note_api(request, model):
     to_date = (request.GET.get("to_date") or "").strip()
     supplier_id = (request.GET.get("supplier") or "").strip()
     qs = model.objects.select_related("supplier", "account", "sector")
+    # Supplier.supplier_group is free text while the scope holds VendorGroup
+    # rows, so there is no group id to filter on here — reuse suppliers_for,
+    # which owns that matching. A note with no supplier is kept for the same
+    # reason an unfiled supplier is: it is not evidence of a denial.
+    if allowed_ids(request.user, "supplier_groups") is not None:
+        qs = qs.filter(Q(supplier__in=suppliers_for(request.user))
+                       | Q(supplier__isnull=True))
     if from_date:
         qs = qs.filter(date__gte=from_date)
     if to_date:

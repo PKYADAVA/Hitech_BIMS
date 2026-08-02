@@ -11,7 +11,7 @@ from django.shortcuts import render
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for,
+from user.services.scoping import (branches_for, customers_for, farms_for,
                                    supervisors_for, warehouses_for)
 
 from hr.models import Designation, Employee, Group
@@ -53,7 +53,8 @@ def tracking_visits(request):
         Employee.objects.exclude(relieve=True)
         .order_by("full_name").values("id", "full_name", "employee_id")
     )
-    customers = Customer.objects.order_by("name").values("id", "name")
+    customers = (customers_for(request.user, Customer.objects.order_by("name"))
+                 .values("id", "name"))
     return render(request, "tracking_visits.html", {
         "tracking_enabled": settings_row.enabled,
         "employees": list(employees),
@@ -95,7 +96,8 @@ def tracking_geofences(request):
     from .models import EmployeeGeofence
 
     settings_row = TrackingSettings.get_solo()
-    customers = Customer.objects.order_by("name").values("id", "name")
+    customers = (customers_for(request.user, Customer.objects.order_by("name"))
+                 .values("id", "name"))
     return render(request, "tracking_geofences.html", {
         "geofence_types": EmployeeGeofence.TYPE_CHOICES,
         "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),

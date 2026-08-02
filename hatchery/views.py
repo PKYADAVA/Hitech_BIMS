@@ -6,7 +6,8 @@ from django.shortcuts import render, get_object_or_404
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (scope_any, branches_for, farms_for,
+from user.services.scoping import (scope_any, branches_for, customers_for,
+                                   farms_for, suppliers_for,
                                    supervisors_for, warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -64,7 +65,7 @@ class HatchSettingFormTemplateView(View):
         context = {
             "hatch_setting_id": id,
             "request_mode": request_mode,
-            "suppliers": Supplier.objects.all(),
+            "suppliers": suppliers_for(request.user, Supplier.objects.all()),
             "setter_nos": (
                 Setter.objects.filter(is_active=True)
                 .values_list("setter_no", flat=True).distinct().order_by("setter_no")
@@ -310,7 +311,8 @@ class EggPurchaseFormTemplateView(View):
         context = {
             "egg_purchase_id": id,
             "request_mode": request_mode,
-            "suppliers": Supplier.objects.all().order_by("name"),
+            "suppliers": suppliers_for(request.user,
+                                       Supplier.objects.all().order_by("name")),
             "warehouses": warehouses_for(request.user, Warehouse.objects.all().order_by("name")),
             "items": Item.objects.all().order_by("item_code"),
             "pay_accounts": ChartOfAccount.objects.filter(status="Active").order_by("code"),
@@ -498,7 +500,8 @@ class EggGradingFormTemplateView(View):
         context = {
             "egg_grading_id": id,
             "request_mode": request_mode,
-            "suppliers": Supplier.objects.all().order_by("name"),
+            "suppliers": suppliers_for(request.user,
+                                       Supplier.objects.all().order_by("name")),
             "storage_locations": Warehouse.objects.all().order_by("name"),
             "items": Item.objects.all().order_by("item_code"),
             "next_transaction_no": EggGrading._next_transaction_no() if id is None else None,
@@ -1119,7 +1122,8 @@ class TraySetFormTemplateView(View):
             "hatcheries": Hatchery.objects.filter(is_active=True).order_by("hatchery_name"),
             "employees": Employee.objects.all().order_by("full_name"),
             "gradings": EggGrading.objects.all().order_by("-date", "-id"),
-            "suppliers": Supplier.objects.all().order_by("name"),
+            "suppliers": suppliers_for(request.user,
+                                       Supplier.objects.all().order_by("name")),
             "setters": Setter.objects.filter(is_active=True).select_related("hatchery").order_by("setter_no"),
             "items": Item.objects.all().order_by("item_code"),
             "next_setting_no": TraySetting.next_setting_no() if id is None else None,
@@ -1652,7 +1656,8 @@ class EggPurchaseReportView(View):
             filters={"from_date": from_date, "to_date": to_date},
             extra_filters=[{
                 "name": "supplier", "label": "Supplier", "selected": supplier,
-                "options": [(s.id, s.name) for s in Supplier.objects.order_by("name")],
+                "options": [(s.id, s.name) for s in
+                            suppliers_for(request.user, Supplier.objects.order_by("name"))],
             }],
         )
 
@@ -1824,7 +1829,8 @@ class DeliveryChallanReportView(View):
             filters={"from_date": from_date, "to_date": to_date},
             extra_filters=[{
                 "name": "customer", "label": "Customer", "selected": customer,
-                "options": [(c.id, c.name) for c in Customer.objects.order_by("name")],
+                "options": [(c.id, c.name) for c in
+                            customers_for(request.user, Customer.objects.order_by("name"))],
             }],
         )
 
@@ -1888,7 +1894,7 @@ class ChickSaleReceiptFormTemplateView(View):
         return render(request, "chick_sale_receipt_form.html", {
             "instance": ChickSaleReceipt.objects.filter(id=id).first() if id else None,
             "locations": Warehouse.objects.order_by("name"),
-            "customers": Customer.objects.order_by("name"),
+            "customers": customers_for(request.user, Customer.objects.order_by("name")),
             "accounts": bank_cash_accounts(),   # receipt into a Bank/Cash master account
             "payment_modes": active_payment_modes("receipt"),
             "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
@@ -2017,7 +2023,8 @@ class ChickSaleReportView(View):
             filters={"from_date": from_date, "to_date": to_date},
             extra_filters=[{
                 "name": "customer", "label": "Customer", "selected": customer,
-                "options": [(c.id, c.name) for c in Customer.objects.order_by("name")],
+                "options": [(c.id, c.name) for c in
+                            customers_for(request.user, Customer.objects.order_by("name"))],
             }],
         )
 

@@ -5,9 +5,10 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: every user-facing option list below is narrowed to the
 # branches / farms / warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for, scope_any,
-                                   scope_multi, scope_or_null,
-                                   supervisors_for, warehouses_for)
+from user.services.scoping import (branches_for, customers_for, farms_for,
+                                   scope_any, scope_multi, scope_or_null,
+                                   suppliers_for, supervisors_for,
+                                   warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -2628,7 +2629,7 @@ class BirdSaleFormTemplateView(View):
         return render(request, "bird_sale_form.html", {
             "instance": BirdSale.objects.filter(id=id).first() if id else None,
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
-            "customers": Customer.objects.order_by("name"),
+            "customers": customers_for(request.user, Customer.objects.order_by("name")),
             "farmers": Farmer.objects.order_by("farmer_name"),
             # Lifting supervisor can be any active employee.
             "supervisors": Employee.objects.filter(relieve=False).order_by("full_name"),
@@ -2776,7 +2777,7 @@ class BirdSaleReceiptFormTemplateView(View):
         return render(request, "bird_sale_receipt_form.html", {
             "instance": BirdSaleReceipt.objects.filter(id=id).first() if id else None,
             "locations": Warehouse.objects.order_by("name"),
-            "customers": Customer.objects.order_by("name"),
+            "customers": customers_for(request.user, Customer.objects.order_by("name")),
             "farmers": Farmer.objects.order_by("farmer_name"),
             "accounts": bank_cash_accounts(),   # receipt into a Bank/Cash master account
             "payment_modes": active_payment_modes("receipt"),
@@ -4306,7 +4307,7 @@ def lifting_report(request):
 
     return render(request, "lifting_report.html", {
         "rows": rows, "totals": totals,
-        "customers": Customer.objects.order_by("name"),
+        "customers": customers_for(request.user, Customer.objects.order_by("name")),
         "regions": Region.objects.order_by("description"),
         "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "lines": lines,
@@ -4499,7 +4500,7 @@ def chicks_placement_report(request):
         "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
-        "sources": _chicks_sources(),
+        "sources": _chicks_sources(request.user),
         "region_id": region_id, "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id,
         "warehouse_id": warehouse_id, "hatchery_id": hatchery_id,
@@ -5789,7 +5790,7 @@ def _hatcheries_with_warehouse():
     )
 
 
-def _chicks_sources():
+def _chicks_sources(user=None):
     """Options for the "Source Hatchery / Supplier" picker — every Hatchery
     followed by every Supplier, as one list the templates render in two
     optgroups.
@@ -5806,9 +5807,12 @@ def _chicks_sources():
     sources = [{"value": f"h:{h.id}", "label": h.hatchery_name or "",
                 "group": "Hatcheries", "warehouse_id": h.warehouse_id or ""}
                for h in _hatcheries_with_warehouse()]
+    supplier_qs = Supplier.objects.order_by("name")
+    if user is not None:
+        supplier_qs = suppliers_for(user, supplier_qs)
     sources += [{"value": f"s:{s.id}", "label": s.name or "",
                  "group": "Suppliers", "warehouse_id": ""}
-                for s in Supplier.objects.order_by("name")]
+                for s in supplier_qs]
     return sources
 
 
@@ -5819,7 +5823,7 @@ class ChicksPlacementListTemplateView(View):
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
-            "sources": _chicks_sources(),
+            "sources": _chicks_sources(request.user),
         })
 
 
@@ -5830,7 +5834,7 @@ class ChicksPlacementFormTemplateView(View):
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
             "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
-            "sources": _chicks_sources(),
+            "sources": _chicks_sources(request.user),
             "today": timezone.localdate().isoformat(),
         })
 

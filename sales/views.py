@@ -4,7 +4,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: party lists are narrowed to the customer / supplier
 # groups the signed-in user is scoped to.
-from user.services.scoping import customers_for, scope_any
+from user.services.scoping import (customers_for, scope_any,
+                                   scope_or_null)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -1422,7 +1423,9 @@ def _customer_note_api(request, model):
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     customer_id = (request.GET.get("customer") or "").strip()
-    qs = model.objects.select_related("customer", "account", "sector")
+    qs = scope_or_null(request.user,
+                       model.objects.select_related("customer", "account", "sector"),
+                       "customer_groups", "customer__customer_group_id")
     if from_date:
         qs = qs.filter(date__gte=from_date)
     if to_date:
