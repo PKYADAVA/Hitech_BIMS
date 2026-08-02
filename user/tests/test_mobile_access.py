@@ -528,6 +528,40 @@ class MobileModuleRegistryTests(TestCase):
             with self.subTest(report=key):
                 self.assertIn(tab, ALL_TAB_CODES)
 
+    def test_the_editor_groups_screens_into_registry_sections(self):
+        """Same three tiers as the Web Access matrix — module, section, screen
+        — so an administrator reads one tree, not two shapes."""
+        from user.services.mobile_access import screen_tree, screens_by_module
+
+        tree = {key: groups for key, _t, groups in screen_tree()}
+        flat = {key: rows for key, _t, rows in screens_by_module()}
+
+        for key, groups in tree.items():
+            with self.subTest(module=key):
+                # every screen appears exactly once, under one section
+                placed = [s["tab"] for _label, rows in groups for s in rows]
+                self.assertEqual(sorted(placed),
+                                 sorted(s["tab"] for s in flat[key]))
+                self.assertEqual(len(placed), len(set(placed)))
+
+    def test_sections_carry_real_registry_labels(self):
+        from user.services.mobile_access import screen_tree
+
+        labels = {label for _k, _t, groups in screen_tree() for label, _r in groups}
+        self.assertTrue(labels)
+        # Master / Transactions / Reports are the registry's own tiers.
+        self.assertTrue(labels & {"Master", "Transactions", "Reports"})
+
+    def test_reports_land_in_their_own_section(self):
+        from user.services.mobile_access import screen_tree
+
+        for key, _title, groups in screen_tree():
+            for label, rows in groups:
+                for row in rows:
+                    if row["kind"] == "report":
+                        with self.subTest(module=key, tab=row["tab"]):
+                            self.assertEqual(label, "Reports")
+
     def test_a_report_row_offers_view_only(self):
         """Add/Edit/Delete on a report would be three boxes deciding nothing."""
         from user.services.mobile_access import screens_by_module

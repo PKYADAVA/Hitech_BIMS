@@ -40,14 +40,21 @@
              width:24px; height:24px; line-height:1; cursor:pointer; }
   .ma-move:hover { border-color:var(--ma-purple); color:var(--ma-purple); }
 
-  .ma-screen td:first-child { padding-left:44px; }
+  .ma-treebar { display:flex; gap:14px; align-items:center; padding:0 2px 8px; }
+  .ma-treebar a { font-size:.82rem; cursor:pointer; text-decoration:none; color:var(--ma-purple); }
+  .ma-toggle { cursor:pointer; margin-right:7px; color:#a08ad0; }
+  .ma-toggle .ma-caret { font-size:.8rem; }
+  .ma-secrow td { background:#fdfcff; }
+  .ma-secrow td:first-child { padding-left:30px; }
+  .ma-secname { font-weight:600; font-size:.8rem; color:#6b5b93; }
+  .ma-screen td:first-child { padding-left:62px; }
   .ma-scrname { font-size:.83rem; color:#48566d; }
   .ma-blocked .ma-scrname { color:#adb8c8; }
   .ma-locked { font-size:.68rem; color:#adb8c8; display:block; }
   .ma-block.is-off { opacity:.45; }
   .ma-count { font-size:.72rem; color:#8494ab; font-weight:600; margin-left:8px; }
   .ma-na { color:#d3dae5; }
-  .ma-pending td { background:#fcfcfe; padding-left:44px; }
+  .ma-pending td { background:#fcfcfe; padding-left:30px; }
   .ma-pending summary { font-size:.76rem; color:#8494ab; cursor:pointer; list-style:none; }
   .ma-pending summary::-webkit-details-marker { display:none; }
   .ma-pending summary::before { content:"▸ "; }
@@ -117,6 +124,11 @@
         {% endif %}
       </div>
 
+      <div class="ma-treebar">
+        <a id="ma-expand-all"><i class="fas fa-angles-down me-1"></i>Expand all</a>
+        <a id="ma-collapse-all"><i class="fas fa-angles-up me-1"></i>Collapse all</a>
+      </div>
+
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="group" value="{{ selected_group.id }}">
@@ -153,8 +165,9 @@
                          title="Show this module on the phone">
                 </span>
                 <span class="ma-icon" style="background:{{ block.colour }};"><i class="{{ block.icon }}"></i></span>
+                <span class="ma-toggle" data-toggle-mod="{{ block.key }}"><i class="fas fa-folder-open ma-caret"></i></span>
                 <span class="ma-modname">{{ block.title }}</span>
-                <span class="ma-count">{{ block.screens|length }} screens</span>
+                <span class="ma-count">{{ block.screen_count }} screens</span>
                 <input type="number" min="0" class="form-control form-control-sm ma-pos ms-2"
                        name="pos_{{ block.key }}" value="{{ block.position }}" title="Order on the home hub">
                 <button type="button" class="ma-move ma-up" title="Move up"><i class="fas fa-chevron-up"></i></button>
@@ -169,9 +182,26 @@
               {% endfor %}
             </tr>
 
-            {% for screen in block.screens %}
-            <tr class="ma-screen {% if not screen.reachable %}ma-blocked{% endif %}"
-                data-module="{{ block.key }}">
+            {% for section in block.sections %}
+            <tr class="ma-secrow child-of-mod-{{ block.key }}"
+                data-module="{{ block.key }}" data-section="{{ section.sid }}">
+              <td>
+                <span class="ma-toggle" data-toggle-sec="{{ section.sid }}"><i class="fas fa-folder-open ma-caret"></i></span>
+                <span class="ma-secname">{{ section.label }}</span>
+                <span class="ma-count">{{ section.screens|length }}</span>
+              </td>
+              {% for action in actions %}
+              <td class="ma-act">
+                <input type="checkbox" class="form-check-input ma-seccol"
+                       data-section="{{ section.sid }}" data-action="{{ action }}"
+                       title="Every {{ section.label }} screen's {{ action }}">
+              </td>
+              {% endfor %}
+            </tr>
+
+            {% for screen in section.screens %}
+            <tr class="ma-screen child-of-mod-{{ block.key }} child-of-sec-{{ section.sid }} {% if not screen.reachable %}ma-blocked{% endif %}"
+                data-module="{{ block.key }}" data-section="{{ section.sid }}">
               <td>
                 <span class="ma-scrname">{{ screen.title }}</span>
                 {% if screen.kind == 'report' %}<span class="ma-tag">report</span>{% endif %}
@@ -194,9 +224,10 @@
               {% endfor %}
             </tr>
             {% endfor %}
+            {% endfor %}
 
             {% if block.unbuilt %}
-            <tr class="ma-pending" data-module="{{ block.key }}">
+            <tr class="ma-pending child-of-mod-{{ block.key }}" data-module="{{ block.key }}">
               <td colspan="{{ actions|length|add:1 }}">
                 <details>
                   <summary>
@@ -273,6 +304,10 @@
         ticks('.ma-tick[data-module="' + el.dataset.module + '"][data-action="' + el.dataset.action + '"]')
           .forEach(function (i) { i.checked = el.checked; });
         sync();
+      } else if (el.classList.contains('ma-seccol')) {
+        ticks('.ma-tick[data-section="' + el.dataset.section + '"][data-action="' + el.dataset.action + '"]')
+          .forEach(function (i) { i.checked = el.checked; });
+        sync();
       } else if (el.classList.contains('ma-col')) {
         ticks('.ma-tick[data-action="' + el.dataset.action + '"]')
           .forEach(function (i) { i.checked = el.checked; });
@@ -339,7 +374,59 @@
                          '"][data-action="' + col.dataset.action + '"]');
         set(col, list.filter(function (i) { return i.checked; }).length, list.length);
       });
+      body.querySelectorAll('.ma-seccol').forEach(function (col) {
+        var list = ticks('.ma-tick[data-section="' + col.dataset.section +
+                         '"][data-action="' + col.dataset.action + '"]');
+        set(col, list.filter(function (i) { return i.checked; }).length, list.length);
+      });
     }
+
+    /* ---- file-explorer expand / collapse, as on the Web Access matrix ---- */
+    function folder(toggle, collapsed) {
+      var icon = toggle.querySelector('.ma-caret');
+      icon.classList.toggle('fa-folder', collapsed);
+      icon.classList.toggle('fa-folder-open', !collapsed);
+      toggle.classList.toggle('collapsed', collapsed);
+    }
+
+    body.addEventListener('click', function (e) {
+      var toggle = e.target.closest('[data-toggle-mod], [data-toggle-sec]');
+      if (!toggle) return;
+      var collapsed = !toggle.classList.contains('collapsed');
+      folder(toggle, collapsed);
+
+      if (toggle.dataset.toggleMod) {
+        var key = toggle.dataset.toggleMod;
+        // Collapsing a module hides its sections and their screens; expanding
+        // restores the sections but leaves each one's own state alone, so a
+        // section you collapsed stays collapsed.
+        body.querySelectorAll('.child-of-mod-' + CSS.escape(key)).forEach(function (tr) {
+          if (collapsed) { tr.hidden = true; return; }
+          if (tr.classList.contains('ma-secrow') || tr.classList.contains('ma-pending')) {
+            tr.hidden = false;
+          } else {
+            var sec = body.querySelector('[data-toggle-sec="' + tr.dataset.section + '"]');
+            tr.hidden = !!(sec && sec.classList.contains('collapsed'));
+          }
+        });
+      } else {
+        body.querySelectorAll('.child-of-sec-' + CSS.escape(toggle.dataset.toggleSec))
+            .forEach(function (tr) { tr.hidden = collapsed; });
+      }
+    });
+
+    var expandAll = document.getElementById('ma-expand-all');
+    var collapseAll = document.getElementById('ma-collapse-all');
+
+    function setAll(collapsed) {
+      body.querySelectorAll('[data-toggle-mod], [data-toggle-sec]')
+          .forEach(function (t) { folder(t, collapsed); });
+      body.querySelectorAll('.ma-secrow, .ma-screen, .ma-pending')
+          .forEach(function (tr) { tr.hidden = collapsed; });
+    }
+
+    if (expandAll) expandAll.addEventListener('click', function () { setAll(false); });
+    if (collapseAll) collapseAll.addEventListener('click', function () { setAll(true); });
 
     all.addEventListener('change', function () {
       ticks().forEach(function (i) { i.checked = all.checked; });

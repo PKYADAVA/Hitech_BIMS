@@ -201,6 +201,42 @@ def _tab_navs():
     return {code: nav for nav, codes in NAV_GROUPS.items() for code in codes}
 
 
+def _tab_sections():
+    """``{tab_code: section label}`` — Master / Transactions / Reports / …
+
+    Taken from the same registry the web matrix draws its middle tier from, so
+    the two trees group identically. A screen the registry does not place falls
+    back to "Screens" rather than vanishing.
+    """
+    from user.access import iter_tabs
+
+    return {code: section for _nav, section, code, _label, _extra in iter_tabs()}
+
+
+def screen_tree():
+    """``[(module_key, title, [(section, [screen, …]), …]), …]``.
+
+    The editor's shape: module → section → screen, matching the Web Access
+    matrix tier for tier so an administrator reads one tree, not two. Sections
+    keep registry order, which is also navbar order.
+
+    ``screens_by_module`` stays flat and is what saving and the preview walk —
+    they care about every screen exactly once, not about how it is grouped.
+    """
+    sections = _tab_sections()
+    out = []
+    for key, title, rows in screens_by_module():
+        grouped, order = {}, []
+        for row in rows:
+            label = sections.get(row["tab"], "Screens")
+            if label not in grouped:
+                grouped[label] = []
+                order.append(label)
+            grouped[label].append(row)
+        out.append((key, title, [(label, grouped[label]) for label in order]))
+    return out
+
+
 def screens_by_module():
     """``[(module_key, title, [screen, …]), …]`` in MOBILE_MODULES order.
 

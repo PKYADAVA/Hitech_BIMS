@@ -292,7 +292,7 @@ def mobile_access_form(request):
                                       diff_matrix, log_change)
     from .services.mobile_access import (MOBILE_ACTIONS, all_modules,
                                          group_screen_perms, screens_by_module,
-                                         superuser_only_members,
+                                         screen_tree, superuser_only_members,
                                          unbuilt_by_module)
 
     modules = all_modules()
@@ -359,33 +359,17 @@ def mobile_access_form(request):
     web = _group_web_actions(selected) if selected else {}
 
     unbuilt = unbuilt_by_module()
+    tree = {key: groups for key, _title, groups in screen_tree()}
 
     blocks = []
     for index, (key, title, nav, icon, colour) in enumerate(modules):
         row = saved_modules.get(key)
-        screens = next((s for k, _t, s in sections if k == key), [])
-        rows = []
-        for screen in screens:
-            # First time through, a screen starts with exactly what the web
-            # matrix already allows — so saving changes nothing until someone
-            # unticks something, which is what "unconfigured" means today.
-            granted = web.get(screen["tab"], {})
-            current = (saved_screens or {}).get(screen["tab"])
-            applicable = screen["actions"]
-            rows.append({
-                **screen,
-                # A report has one meaningful action; the other three columns
-                # render as "n/a" rather than as boxes that decide nothing.
-                "actions": [{
-                    "name": action,
-                    "applies": action in applicable,
-                    "on": action in applicable and (
-                        current[action] if current is not None
-                        else granted.get(action, False)),
-                    "granted": action in applicable and granted.get(action, False),
-                } for action in MOBILE_ACTIONS],
-                "reachable": any(granted.get(a) for a in applicable),
-            })
+        groups = []
+        for gi, (section_label, screens) in enumerate(tree.get(key, [])):
+            rows = _screen_rows(screens, web, saved_screens, MOBILE_ACTIONS)
+            groups.append({"label": section_label, "sid": f"{index}-{gi}",
+                           "screens": rows})
+
         # Web tabs of this module the app has no screen for. Marked when the
         # group holds them, since "I granted this and it isn't here" is the
         # question these rows exist to answer.
@@ -396,7 +380,8 @@ def mobile_access_form(request):
             "key": key, "title": title, "nav": nav, "icon": icon, "colour": colour,
             "enabled": row.enabled if row else True,
             "position": row.position if row else index,
-            "screens": rows,
+            "sections": groups,
+            "screen_count": sum(len(g["screens"]) for g in groups),
             "unbuilt": pending,
             "unbuilt_granted": sum(1 for p in pending if p["granted"]),
         })
@@ -411,6 +396,35 @@ def mobile_access_form(request):
         "members": members,
         "superusers": supers,
     })
+
+
+def _screen_rows(screens, web, saved, actions):
+    """Render-ready rows for one section of the Mobile Access tree.
+
+    A group being configured for the first time starts with exactly what the
+    web matrix already allows, so saving changes nothing until someone unticks
+    something — which is what "unconfigured" means everywhere else here.
+    """
+    rows = []
+    for screen in screens:
+        granted = web.get(screen["tab"], {})
+        current = (saved or {}).get(screen["tab"])
+        applicable = screen["actions"]
+        rows.append({
+            **screen,
+            # A report has one meaningful action; the other three columns
+            # render as "n/a" rather than as boxes that decide nothing.
+            "actions": [{
+                "name": action,
+                "applies": action in applicable,
+                "on": action in applicable and (
+                    current[action] if current is not None
+                    else granted.get(action, False)),
+                "granted": action in applicable and granted.get(action, False),
+            } for action in actions],
+            "reachable": any(granted.get(a) for a in applicable),
+        })
+    return rows
 
 
 def _group_web_actions(group):
