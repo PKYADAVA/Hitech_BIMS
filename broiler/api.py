@@ -189,37 +189,32 @@ class BirdSaleFarmLookupView(V1ViewMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from datetime import timedelta
-
-        from django.utils.dateparse import parse_date
+        # The batch/day/age resolution is shared with the web form rather than
+        # repeated here: this endpoint's own copy had drifted on all three
+        # counts (age from a raw start_date, dating from the farm's last entry
+        # instead of the batch's, and falling back to today rather than the day
+        # after placement), so a newly placed flock reported age 0 dated today.
+        from .views import _batch_options, placement_context
 
         farm_id = request.query_params.get("farm")
-        batch = _active_batch_for_farm(farm_id) if farm_id else None
+        ctx = placement_context(farm_id, request.query_params.get("date"),
+                                request.query_params.get("batch"))
+        batch = ctx["batch"]
         farm = (BroilerFarm.objects.filter(id=farm_id).select_related("farmer").first()
                 if farm_id else None)
-
-        last_entry = (DailyEntry.objects.filter(farm_id=farm_id).order_by("-date", "-id").first()
-                      if farm_id else None)
-        next_date = (last_entry.date + timedelta(days=1)) if last_entry else timezone.localdate()
-
-        # Age is resolved as of the date the row will be saved with — the
-        # caller's `date` when it has one, else next_date. Using today instead
-        # gives backfilled and edited entries the wrong age (web parity:
-        # ``daily_entry_farm_lookup``).
-        entry_date = parse_date(request.query_params.get("date") or "") or next_date
-
-        age_days = 0
-        if batch and batch.start_date:
-            age_days = max((entry_date - batch.start_date).days, 0)
 
         return Response({
             "batch": batch.id if batch else None,
             "batch_name": batch.batch_name if batch else "",
+            "batches": _batch_options(farm_id),
             "farmer": farm.farmer_id if farm else None,
             "farmer_name": farm.farmer.farmer_name if farm and farm.farmer_id else "",
-            "age_days": age_days,
-            "start_date": batch.start_date.isoformat() if batch and batch.start_date else None,
-            "next_date": next_date.isoformat(),
+            "age_days": ctx["age_days"],
+            # The resolved placement, not the raw column: a batch placed by
+            # stock transfer has no start_date, and sending None there is what
+            # left the app computing age 0.
+            "start_date": ctx["placed_on"].isoformat() if ctx["placed_on"] else None,
+            "next_date": ctx["next_date"].isoformat(),
         })
 
 

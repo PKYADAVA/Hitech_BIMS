@@ -520,3 +520,127 @@ class SharedFutureDateRuleTests(TestCase):
         self.assertIn("isTransactionDate",
                       collected.read_text(encoding="utf-8"),
                       "staticfiles/js/main.js is stale — run collectstatic")
+
+
+class MobileFarmLookupParityTests(TestCase):
+    """The phone and the web must answer the same question the same way.
+
+    `/broiler/farm-lookup` — which the app's single Daily Entry form uses to
+    fill in date and age — had grown its own copy of that resolution and
+    drifted on three counts: it read the raw start_date column, so a batch
+    placed by stock transfer reported age 0; it dated from the farm's last
+    entry rather than the batch's, so a new flock inherited the previous one's;
+    and with no entries it fell back to today instead of the day after
+    placement. A newly placed flock therefore showed age 0 dated today, while
+    the web showed the real age and the real day.
+    """
+
+    def setUp(self):
+        from inventory.models import Item, ItemCategory
+
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.supervisor = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.chick = Item.objects.create(
+            description="Day Old Chicks",
+            category=ItemCategory.objects.create(name="Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=40,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser("mfl_user", "mf@x.com",
+                                                  "Str0ngPass!")
+        self.client.force_login(self.user)
+
+    def place(self, batch, days_ago):
+        from inventory.models import StockTransfer
+
+        return StockTransfer.objects.create(
+            item=self.chick, to_batch=batch, quantity=1000,
+            date=self.today - timedelta(days=days_ago))
+
+    def lookup(self):
+        from broiler.api import BirdSaleFarmLookupView
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/x", {"farm": self.farm.id})
+        request.user = self.user
+        return BirdSaleFarmLookupView.as_view()(request).data
+
+    # ---- a batch with a start_date ------------------------------------------
+
+    def test_a_new_batch_is_dated_the_day_after_placement_not_today(self):
+        """The reported case: placed a fortnight ago, never recorded."""
+        batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="New",
+            start_date=self.today - timedelta(days=14))
+        payload = self.lookup()
+        self.assertEqual(payload["next_date"],
+                         (batch.start_date + timedelta(days=1)).isoformat())
+        self.assertNotEqual(payload["next_date"], self.today.isoformat())
+
+    def test_the_age_is_the_flocks_real_age_not_zero(self):
+        BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="New",
+            start_date=self.today - timedelta(days=14))
+        self.assertEqual(self.lookup()["age_days"], 1)   # as of next_date
+
+    # ---- a batch placed by stock transfer, with no start_date ---------------
+
+    def test_a_batch_with_no_start_date_still_reports_its_placement(self):
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=11)
+        payload = self.lookup()
+        self.assertEqual(payload["start_date"],
+                         (self.today - timedelta(days=11)).isoformat())
+        self.assertEqual(payload["next_date"],
+                         (self.today - timedelta(days=10)).isoformat())
+        self.assertEqual(payload["age_days"], 1)
+
+    # ---- a farm re-used for a second flock ----------------------------------
+
+    def test_a_new_flock_does_not_inherit_the_previous_ones_entries(self):
+        old = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="Old", is_closed=True,
+            start_date=self.today - timedelta(days=90),
+            end_date=self.today - timedelta(days=30))
+        DailyEntry.objects.create(farm=self.farm, batch=old, supervisor=self.supervisor,
+                                  date=self.today - timedelta(days=40), mortality=1)
+        new = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="New",
+            start_date=self.today - timedelta(days=5))
+        self.assertEqual(self.lookup()["next_date"],
+                         (new.start_date + timedelta(days=1)).isoformat())
+
+    # ---- the two clients agree ----------------------------------------------
+
+    def test_it_agrees_with_the_web_payload(self):
+        """Not just 'is right' — the same, since both now resolve it once."""
+        from broiler.views import daily_entry_lookup_payload
+
+        batch = BroilerBatch.objects.create(broiler_farm=self.farm,
+                                            batch_name="NoStart")
+        self.place(batch, days_ago=9)
+        mobile = self.lookup()
+        web = daily_entry_lookup_payload(str(self.farm.id))
+        for key in ("batch", "batch_name", "age_days", "start_date", "next_date"):
+            with self.subTest(field=key):
+                self.assertEqual(mobile[key], web[key])
+
+    def test_it_offers_the_open_batches_too(self):
+        first = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="A",
+            start_date=self.today - timedelta(days=20))
+        second = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B",
+            start_date=self.today - timedelta(days=3))
+        names = {b["id"] for b in self.lookup()["batches"]}
+        self.assertEqual(names, {first.id, second.id})

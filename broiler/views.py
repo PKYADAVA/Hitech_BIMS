@@ -1800,6 +1800,50 @@ def _resolve_batch(farm_id, batch_id=None):
     return _active_batch_for_farm(farm_id)
 
 
+def placement_context(farm_id, date_str=None, batch_id=None):
+    """Which batch a farm is on, which day it is due, and its age that day.
+
+    Extracted because the mobile ``farm-lookup`` endpoint had grown its own
+    copy of it and drifted: it read the raw column rather than the resolved
+    placement, so a batch placed by stock transfer reported age 0; it dated from the
+    farm's last entry rather than the batch's, so a new flock inherited the
+    previous one's; and it fell back to today instead of the day after
+    placement. Every one of those was fixed on the web and not here.
+    """
+    from django.utils.dateparse import parse_date
+
+    batch = _resolve_batch(farm_id, batch_id)
+    placed_on = _placement_date(batch)
+
+    # Scoped to the batch, not the farm: a farm re-used for a new flock would
+    # otherwise inherit the previous batch's last entry and start weeks late.
+    if batch:
+        last_entry = DailyEntry.objects.filter(batch=batch).order_by("-date", "-id").first()
+    elif farm_id:
+        last_entry = DailyEntry.objects.filter(farm_id=farm_id).order_by("-date", "-id").first()
+    else:
+        last_entry = None
+
+    if last_entry:
+        next_date = last_entry.date + timedelta(days=1)
+    elif placed_on:
+        # Placement day is Age 0, so the first entry is the day after it.
+        # Falling back to today skipped every day in between.
+        next_date = placed_on + timedelta(days=1)
+    else:
+        next_date = timezone.localdate()
+
+    entry_date = parse_date(date_str or "") or next_date
+    age_days = max((entry_date - placed_on).days, 0) if placed_on else 0
+    return {
+        "batch": batch,
+        "placed_on": placed_on,
+        "next_date": next_date,
+        "entry_date": entry_date,
+        "age_days": age_days,
+    }
+
+
 def _batch_options(farm_id):
     """Open batches as the forms' Batch dropdown wants them. One entry means
     the form fills it in and stays quiet; more means the user has to pick."""
@@ -2182,34 +2226,15 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     # and 500'd the lookup — for the web form as well as the API.
     from django.db.models import F, Max, Sum
     from django.utils.dateparse import parse_date
-    batch = _resolve_batch(farm_id, batch_id)
-    placed_on = _placement_date(batch)
-
-    # Scoped to the batch, not the farm: a farm re-used for a new flock would
-    # otherwise inherit the previous batch's last entry and start the new one
-    # weeks late.
-    if batch:
-        last_entry = DailyEntry.objects.filter(batch=batch).order_by('-date', '-id').first()
-    elif farm_id:
-        last_entry = DailyEntry.objects.filter(farm_id=farm_id).order_by('-date', '-id').first()
-    else:
-        last_entry = None
-
-    if last_entry:
-        next_date = last_entry.date + timedelta(days=1)
-    elif placed_on:
-        # A batch with no entries yet starts the day after placement: placement
-        # day is Age 0, so the first entry is Age 1. Falling back to today here
-        # skipped every day between placement and whenever someone opened the
-        # form.
-        next_date = placed_on + timedelta(days=1)
-    else:
-        next_date = timezone.localdate()
-
-    # Everything (age, phase, live-bird count) is resolved as of the entry date —
-    # the date the row will be saved with (passed by the form, else next_date) —
-    # so backfilled/edited entries get the right phase and bird count.
-    entry_date = parse_date(date_str or "") or next_date
+    # Which batch, which day, what age — shared with the mobile endpoints via
+    # placement_context so the two cannot answer differently. Everything below
+    # (phase, standards, live birds) is then resolved as of that entry date, so
+    # a backfilled or edited row gets the right phase and bird count.
+    ctx = placement_context(farm_id, date_str, batch_id)
+    batch = ctx["batch"]
+    placed_on = ctx["placed_on"]
+    next_date = ctx["next_date"]
+    entry_date = ctx["entry_date"]
 
     age_days = 0
     if placed_on:
