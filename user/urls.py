@@ -24,6 +24,10 @@ urlpatterns = [
     path('dashboard-access/form/', views.dashboard_access_form, name='dashboard_access_form'),
     path('dashboard-access/<int:group_id>/preview/', views.dashboard_access_preview, name='dashboard_access_preview'),
     path('dashboard-access/<int:group_id>/delete/', views.dashboard_access_delete, name='dashboard_access_delete'),
+    path('mobile-access/', views.mobile_access, name='mobile_access'),
+    path('mobile-access/form/', views.mobile_access_form, name='mobile_access_form'),
+    path('mobile-access/<int:group_id>/preview/', views.mobile_access_preview, name='mobile_access_preview'),
+    path('mobile-access/<int:group_id>/delete/', views.mobile_access_delete, name='mobile_access_delete'),
     path('user_analytics/', views.user_analytics, name='user_analytics'),
      path('analytics/data/', views.user_analytics_data, name='user_analytics_data'),
 

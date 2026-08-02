@@ -1,0 +1,372 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mobile Access — BIMS{% endblock %}
+
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
+{% block css %}
+<style>
+  :root { --ma-purple:#6f42c1; --ma-purple-soft:#f3effb; }
+  .ma-head { display:flex; align-items:center; gap:10px; margin:4px 0 14px; }
+  .ma-head i { color:var(--ma-purple); }
+  .ma-head h5 { margin:0; font-weight:700; color:#3d2c66; }
+  .ma-head small { color:#6b7890; }
+  .ma-card { background:#fff; border:1px solid #e7edf5; border-radius:14px; padding:18px 20px; }
+  .ma-pick { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-bottom:18px; }
+  .ma-pick label { font-size:.74rem; font-weight:700; color:#48566d; display:block; margin-bottom:3px; }
+  .ma-note { border:1px solid #cfe2ff; background:#f3f8ff; color:#1d4f94; border-radius:10px;
+             padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:14px; }
+  .ma-note b { display:block; }
+  .ma-alert { border:1px solid #ffd9a8; background:#fff8ee; color:#8a5300; border-radius:10px;
+              padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:14px; }
+  .ma-alert b { display:block; }
+
+  .ma-table { width:100%; border-collapse:collapse; }
+  .ma-table thead th { position:sticky; top:0; z-index:2; background:var(--ma-purple-soft);
+                       color:var(--ma-purple); font-size:.78rem; padding:9px 10px; text-align:center; }
+  .ma-table thead th.ma-first { text-align:left; }
+  .ma-table td { padding:7px 10px; border-bottom:1px solid #f1eef7; vertical-align:middle; }
+  .ma-act { width:92px; text-align:center; }
+
+  .ma-modrow td { background:#faf8ff; border-top:1px solid #e6dcfa; }
+  .ma-modname { font-weight:700; font-size:.87rem; color:#3d2c66; }
+  .ma-icon { width:26px; height:26px; border-radius:8px; display:inline-grid; place-items:center;
+             font-size:.7rem; margin-right:8px; vertical-align:middle; color:#fff; }
+  .ma-pos { width:64px; display:inline-block; }
+  .ma-move { border:1px solid #e2e8f2; background:#fff; color:#6b7890; border-radius:6px;
+             width:24px; height:24px; line-height:1; cursor:pointer; }
+  .ma-move:hover { border-color:var(--ma-purple); color:var(--ma-purple); }
+
+  .ma-screen td:first-child { padding-left:44px; }
+  .ma-scrname { font-size:.83rem; color:#48566d; }
+  .ma-blocked .ma-scrname { color:#adb8c8; }
+  .ma-locked { font-size:.68rem; color:#adb8c8; display:block; }
+  .ma-block.is-off { opacity:.45; }
+  .ma-count { font-size:.72rem; color:#8494ab; font-weight:600; margin-left:8px; }
+  .ma-na { color:#d3dae5; }
+  .ma-pending td { background:#fcfcfe; padding-left:44px; }
+  .ma-pending summary { font-size:.76rem; color:#8494ab; cursor:pointer; list-style:none; }
+  .ma-pending summary::-webkit-details-marker { display:none; }
+  .ma-pending summary::before { content:"▸ "; }
+  .ma-pending details[open] summary::before { content:"▾ "; }
+  .ma-pending-hit { background:#fff3cd; color:#8a5300; border-radius:4px;
+                    padding:1px 6px; margin-left:6px; font-weight:600; }
+  .ma-pending-list { padding:8px 0 4px; }
+  .ma-pending-list p { font-size:.75rem; color:#8494ab; margin:0 0 7px; max-width:62ch; }
+  .ma-pending-item { display:inline-block; font-size:.73rem; color:#8494ab;
+                     background:#f2f5f9; border-radius:5px; padding:2px 7px; margin:0 5px 5px 0; }
+  .ma-pending-item.is-granted { background:#fff3cd; color:#8a5300; }
+  .ma-tag { font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+            color:#8a6fc4; background:#f3effb; border-radius:4px; padding:1px 5px; margin-left:6px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='mobile_access' %}
+<div class="container-fluid px-0">
+  <div class="ma-head">
+    <i class="fas fa-mobile-screen-button fa-lg"></i>
+    <div>
+      <h5>{% if editing %}Edit{% else %}Add{% endif %} Mobile Access</h5>
+      <small>What each group can see and do in the phone app, screen by screen.</small>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm ms-auto" href="{% url 'mobile_access' %}">
+      <i class="fas fa-arrow-left me-1"></i>Back to list
+    </a>
+  </div>
+
+  <div class="ma-card">
+    <form method="get" class="ma-pick">
+      <div>
+        <label for="ma-group">Group</label>
+        <select name="group" id="ma-group" class="form-select form-select-sm"
+                style="min-width:240px;" onchange="this.form.submit()">
+          <option value="">Select a group…</option>
+          {% for g in groups %}
+          <option value="{{ g.id }}" {% if selected_group and g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+
+    {% if selected_group %}
+      {% if members and members == superusers %}
+      <div class="ma-alert">
+        <b><i class="fas fa-triangle-exclamation me-1"></i>These switches will not affect anyone in this group.</b>
+        Every member ({{ members }}) is a superuser, and superusers bypass every
+        access gate in the system — on the web and on the phone. Add a
+        non-superuser to “{{ selected_group.name }}” to see this configuration
+        take effect.
+      </div>
+      {% endif %}
+
+      <div class="ma-note">
+        <b>This can only take access away, never add it.</b>
+        A screen needs the group's <em>web</em> permission first; ticks here
+        decide what of that reaches the phone. Screens the group cannot reach at
+        all are greyed out — ticking them would change nothing.
+        Only the {{ blocks|length }} phone modules are listed: web tabs with no
+        screen in the app are left out rather than shown as ticks that do nothing.
+        {% if not editing %}
+          Nothing is saved for “{{ selected_group.name }}” yet, so it currently
+          gets everything its web permissions allow. The boxes below start
+          matching that — saving pins it to exactly what is ticked.
+        {% endif %}
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="group" value="{{ selected_group.id }}">
+        <div class="table-responsive" style="max-height:70vh;">
+        <table class="ma-table" id="ma-table">
+          <thead>
+            <tr>
+              <th class="ma-first">
+                All
+                <span class="form-check form-switch d-inline-block m-0 ms-2 align-middle">
+                  <input type="checkbox" role="switch" class="form-check-input" id="ma-all"
+                         title="Every module and every screen">
+                </span>
+              </th>
+              {% for action in actions %}
+              <th class="ma-act">
+                {{ action|capfirst }}
+                <div class="form-check m-0 mt-1 d-flex justify-content-center">
+                  <input type="checkbox" class="form-check-input ma-col" data-action="{{ action }}"
+                         title="Every screen's {{ action }}">
+                </div>
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for block in blocks %}
+            <tr class="ma-modrow ma-block {% if not block.enabled %}is-off{% endif %}"
+                data-key="{{ block.key }}" data-module="{{ block.key }}">
+              <td>
+                <span class="form-check form-switch d-inline-block m-0 me-2 align-middle">
+                  <input type="checkbox" role="switch" class="form-check-input ma-on"
+                         name="on_{{ block.key }}" {% if block.enabled %}checked{% endif %}
+                         title="Show this module on the phone">
+                </span>
+                <span class="ma-icon" style="background:{{ block.colour }};"><i class="{{ block.icon }}"></i></span>
+                <span class="ma-modname">{{ block.title }}</span>
+                <span class="ma-count">{{ block.screens|length }} screens</span>
+                <input type="number" min="0" class="form-control form-control-sm ma-pos ms-2"
+                       name="pos_{{ block.key }}" value="{{ block.position }}" title="Order on the home hub">
+                <button type="button" class="ma-move ma-up" title="Move up"><i class="fas fa-chevron-up"></i></button>
+                <button type="button" class="ma-move ma-down" title="Move down"><i class="fas fa-chevron-down"></i></button>
+              </td>
+              {% for action in actions %}
+              <td class="ma-act">
+                <input type="checkbox" class="form-check-input ma-modcol"
+                       data-module="{{ block.key }}" data-action="{{ action }}"
+                       title="Every {{ block.title }} screen's {{ action }}">
+              </td>
+              {% endfor %}
+            </tr>
+
+            {% for screen in block.screens %}
+            <tr class="ma-screen {% if not screen.reachable %}ma-blocked{% endif %}"
+                data-module="{{ block.key }}">
+              <td>
+                <span class="ma-scrname">{{ screen.title }}</span>
+                {% if screen.kind == 'report' %}<span class="ma-tag">report</span>{% endif %}
+                {% if not screen.reachable %}
+                <span class="ma-locked">No web permission — grant it in User Access Groups first</span>
+                {% endif %}
+              </td>
+              {% for action in screen.actions %}
+              <td class="ma-act">
+                {% if action.applies %}
+                <input type="checkbox" class="form-check-input ma-tick"
+                       data-module="{{ block.key }}" data-action="{{ action.name }}"
+                       name="p_{{ screen.tab }}_{{ action.name }}"
+                       {% if action.on %}checked{% endif %}
+                       {% if not action.granted %}disabled title="The web matrix does not grant this"{% endif %}>
+                {% else %}
+                <span class="ma-na" title="A report can only be viewed">—</span>
+                {% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+
+            {% if block.unbuilt %}
+            <tr class="ma-pending" data-module="{{ block.key }}">
+              <td colspan="{{ actions|length|add:1 }}">
+                <details>
+                  <summary>
+                    {{ block.unbuilt|length }} more {{ block.title }} screen{{ block.unbuilt|pluralize }}
+                    not built in the app yet
+                    {% if block.unbuilt_granted %}
+                    <span class="ma-pending-hit">{{ block.unbuilt_granted }} granted on web</span>
+                    {% endif %}
+                  </summary>
+                  <div class="ma-pending-list">
+                    <p>
+                      These exist on the web but have no screen in the phone app, so
+                      there is nothing here to switch on or off. They will appear as
+                      rows automatically once the screen is built.
+                    </p>
+                    {% for item in block.unbuilt %}
+                    <span class="ma-pending-item {% if item.granted %}is-granted{% endif %}">
+                      {{ item.title }}{% if item.granted %} <i class="fas fa-check"></i>{% endif %}
+                    </span>
+                    {% endfor %}
+                  </div>
+                </details>
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+
+        <div class="mt-3 d-flex gap-2">
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="fas fa-floppy-disk me-1"></i>Save
+          </button>
+          <a class="btn btn-outline-secondary btn-sm" href="{% url 'mobile_access' %}">Cancel</a>
+          <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" id="ma-preview-btn">
+            <i class="fas fa-eye me-1"></i>Preview
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <p class="text-muted mb-0" style="font-size:.86rem;">
+        Pick a group to set what it can do in the phone app.
+      </p>
+    {% endif %}
+  </div>
+</div>
+
+{% include '_mobile_access_preview.html' %}
+{% endblock %}
+
+{% block js %}
+<script>
+  (function () {
+    "use strict";
+    var table = document.getElementById('ma-table');
+    if (!table) return;
+    var body = table.querySelector('tbody');
+
+    // A disabled box is one the web matrix does not grant. Nothing may tick it
+    // — not the column header, not the module row, not "All" — or the page
+    // would promise access it cannot deliver.
+    function settable(list) {
+      return Array.prototype.filter.call(list, function (i) { return !i.disabled; });
+    }
+    function ticks(sel) { return settable(body.querySelectorAll(sel || '.ma-tick')); }
+
+    /* ---- module show/hide dims its screens ---- */
+    body.addEventListener('change', function (e) {
+      var el = e.target;
+      if (el.classList.contains('ma-on')) {
+        el.closest('tr').classList.toggle('is-off', !el.checked);
+      } else if (el.classList.contains('ma-modcol')) {
+        ticks('.ma-tick[data-module="' + el.dataset.module + '"][data-action="' + el.dataset.action + '"]')
+          .forEach(function (i) { i.checked = el.checked; });
+        sync();
+      } else if (el.classList.contains('ma-col')) {
+        ticks('.ma-tick[data-action="' + el.dataset.action + '"]')
+          .forEach(function (i) { i.checked = el.checked; });
+        sync();
+      } else if (el.classList.contains('ma-tick')) {
+        sync();
+      }
+    });
+
+    /* ---- reorder modules, carrying their screens ---- */
+    body.addEventListener('click', function (e) {
+      var btn = e.target.closest('.ma-up, .ma-down');
+      if (!btn) return;
+      var row = btn.closest('tr');
+      var group = [row];
+      var next = row.nextElementSibling;
+      while (next && next.classList.contains('ma-screen')) {
+        group.push(next);
+        next = next.nextElementSibling;
+      }
+      if (btn.classList.contains('ma-up')) {
+        var prev = row.previousElementSibling;
+        while (prev && prev.classList.contains('ma-screen')) prev = prev.previousElementSibling;
+        if (!prev) return;
+        group.forEach(function (n) { body.insertBefore(n, prev); });
+      } else {
+        var after = next;                       // next module row, if any
+        if (!after) return;
+        var tail = after.nextElementSibling;
+        while (tail && tail.classList.contains('ma-screen')) tail = tail.nextElementSibling;
+        var anchor = tail;
+        group.forEach(function (n) { body.insertBefore(n, anchor); });
+      }
+      renumber();
+    });
+
+    // The position inputs are what the save reads, so renumber from the row
+    // order after every move rather than keeping the two in step by hand.
+    function renumber() {
+      var i = 0;
+      body.querySelectorAll('.ma-modrow').forEach(function (tr) {
+        tr.querySelector('.ma-pos').value = i++;
+      });
+    }
+
+    /* ---- indeterminate headers: never claim a state the table is not in ---- */
+    var all = document.getElementById('ma-all');
+
+    function set(box, on, total) {
+      box.checked = total > 0 && on === total;
+      box.indeterminate = on > 0 && on < total;
+    }
+
+    function sync() {
+      var every = ticks();
+      set(all, every.filter(function (i) { return i.checked; }).length, every.length);
+
+      body.querySelectorAll('.ma-col').forEach(function (col) {
+        var list = ticks('.ma-tick[data-action="' + col.dataset.action + '"]');
+        set(col, list.filter(function (i) { return i.checked; }).length, list.length);
+      });
+      body.querySelectorAll('.ma-modcol').forEach(function (col) {
+        var list = ticks('.ma-tick[data-module="' + col.dataset.module +
+                         '"][data-action="' + col.dataset.action + '"]');
+        set(col, list.filter(function (i) { return i.checked; }).length, list.length);
+      });
+    }
+
+    all.addEventListener('change', function () {
+      ticks().forEach(function (i) { i.checked = all.checked; });
+      body.querySelectorAll('.ma-on').forEach(function (i) {
+        i.checked = all.checked;
+        i.closest('tr').classList.toggle('is-off', !all.checked);
+      });
+      all.indeterminate = false;
+      sync();
+    });
+
+    sync();
+
+    /* ---- preview the form, not the database ---- */
+    var previewBtn = document.getElementById('ma-preview-btn');
+    if (previewBtn) {
+      previewBtn.addEventListener('click', function () {
+        var live = Array.prototype.filter
+          .call(body.querySelectorAll('.ma-on'), function (i) { return i.checked; })
+          .map(function (i) {
+            var tr = i.closest('tr');
+            return tr.dataset.key + ':' + (tr.querySelector('.ma-pos').value || 0);
+          })
+          .join(',');
+        mobileAccessPreview({{ selected_group.id }}, live);
+      });
+    }
+  })();
+</script>
+{% endblock %}

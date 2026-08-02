@@ -1,0 +1,117 @@
+{% comment %}
+Preview modal for Mobile Access, shared by the list and the form.
+
+The Dashboard Access preview iframes the real dashboard page. There is no
+server-rendered equivalent of the phone's home hub, so this draws the tiles from
+the JSON the preview endpoint returns instead. It shows what a *group* would
+get, not the viewer, and each hidden module says which of the two gates stopped
+it: switched off here, or no web permission on any of its screens.
+
+Open it with: mobileAccessPreview(groupId[, "key:pos,key:pos"])
+{% endcomment %}
+<div class="modal fade" id="ma-preview" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-mobile-screen-button me-2"></i>Phone preview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="ma-preview-body" class="map-phone"></div>
+      </div>
+      <div class="modal-footer">
+        <span class="me-auto text-muted" style="font-size:.75rem;">
+          The home hub as this group would see it.<span id="ma-preview-live"></span>
+        </span>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .map-phone { background:#f4f7fb; border-radius:14px; padding:16px; min-height:180px; }
+  .map-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .map-tile { background:#fff; border:1px solid #e7edf5; border-radius:12px; padding:12px 6px;
+              text-align:center; }
+  .map-tile i { font-size:1.05rem; }
+  .map-tile span { display:block; font-size:.72rem; font-weight:600; color:#48566d; margin-top:6px; }
+  .map-hidden { margin-top:14px; border-top:1px dashed #d9e2ee; padding-top:10px; }
+  .map-hidden h6 { font-size:.72rem; font-weight:700; color:#8494ab; text-transform:uppercase;
+                   letter-spacing:.4px; margin-bottom:6px; }
+  .map-off { display:flex; align-items:center; gap:8px; font-size:.76rem; color:#8494ab;
+             padding:3px 0; }
+  .map-off b { color:#6b7890; font-weight:600; }
+  .map-empty { text-align:center; color:#8494ab; font-size:.82rem; padding:22px 6px; }
+</style>
+
+<script>
+  // `modules` is optional: the list page omits it and gets the saved state, the
+  // editor passes its live switches so the preview matches the form rather than
+  // the database. An empty string is meaningful — nothing enabled.
+  function mobileAccessPreview(groupId, modules) {
+    var body = document.getElementById('ma-preview-body');
+    var note = document.getElementById('ma-preview-live');
+    var url = '/mobile-access/' + encodeURIComponent(groupId) + '/preview/';
+    if (modules !== undefined && modules !== null) {
+      url += '?modules=' + encodeURIComponent(modules);
+      if (note) note.textContent = ' Showing your unsaved changes.';
+    } else if (note) {
+      note.textContent = '';
+    }
+
+    body.innerHTML = '<div class="map-empty">Loading…</div>';
+    new bootstrap.Modal(document.getElementById('ma-preview')).show();
+
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { body.innerHTML = renderPreview(data.modules || []); })
+      .catch(function () {
+        body.innerHTML = '<div class="map-empty">Could not load the preview.</div>';
+      });
+  }
+
+  function renderPreview(modules) {
+    var shown = modules.filter(function (m) { return m.shown; });
+    var hidden = modules.filter(function (m) { return !m.shown; });
+
+    var html = '';
+    if (shown.length) {
+      html += '<div class="map-grid">';
+      shown.forEach(function (m) {
+        html += '<div class="map-tile">'
+             +  '<i class="' + esc(m.icon) + '" style="color:' + esc(m.colour) + ';"></i>'
+             +  '<span>' + esc(m.title) + '</span></div>';
+      });
+      html += '</div>';
+
+      // The hub is only half the answer — what they can do inside it is the
+      // half the matrix actually decides.
+      html += '<div class="map-hidden"><h6>Screens</h6>';
+      shown.forEach(function (m) {
+        (m.screens || []).forEach(function (s) {
+          html += '<div class="map-off"><b>' + esc(s.title) + '</b>· '
+               +  esc((s.actions || []).join(', ')) + '</div>';
+        });
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="map-empty">No modules — the app would open to an empty home screen.</div>';
+    }
+
+    if (hidden.length) {
+      html += '<div class="map-hidden"><h6>Hidden</h6>';
+      hidden.forEach(function (m) {
+        html += '<div class="map-off"><b>' + esc(m.title) + '</b>· ' + esc(m.reason) + '</div>';
+      });
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function esc(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+</script>

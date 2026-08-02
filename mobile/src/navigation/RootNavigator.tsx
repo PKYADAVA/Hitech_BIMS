@@ -113,7 +113,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
             headerTitle: headerTitleWithIcon(RESOURCES[key].icon, RESOURCES[key].title),
             headerRight:
               isEditable(key) &&
-              usePermissionsStore.getState().canAction(RESOURCES[key].module, "add")
+              usePermissionsStore.getState().canResource(key, RESOURCES[key].module, "add")
               ? () => (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
                     {/* Daily Entry also has the web's multi-farm round: one

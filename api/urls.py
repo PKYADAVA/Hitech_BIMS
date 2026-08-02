@@ -28,7 +28,8 @@ from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
 from purchase.api import register as register_purchase
 from purchase.api_write import write_urls as purchase_write_urls
-from user.api import RoleModuleView, RolesAccessView, RoleView, UserCreateView, UserRolesView
+from user.api import (RoleMobileModuleView, RoleModuleView, RolesAccessView,
+                      RoleView, UserCreateView, UserRolesView)
 from user.api import register as register_user
 from sales.api import register as register_sales
 from sales.api_write import write_urls as sales_write_urls
@@ -162,6 +163,8 @@ urlpatterns = [
     path("user/users/create", UserCreateView.as_view(), name="user-create"),
     path("user/access/roles", RolesAccessView.as_view(), name="access-roles"),
     path("user/roles/<int:pk>/module", RoleModuleView.as_view(), name="role-module"),
+    path("user/roles/<int:pk>/mobile-module", RoleMobileModuleView.as_view(),
+         name="role-mobile-module"),
     path("user/roles/<int:pk>", RoleView.as_view(), name="role-detail"),
     path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
     # Inventory + Purchase transaction writes — reuse the web posting logic

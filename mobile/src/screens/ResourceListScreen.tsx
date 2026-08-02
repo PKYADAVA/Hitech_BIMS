@@ -23,7 +23,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
-  const canAdd = usePermissionsStore((s) => s.canAction)(config.module, "add");
+  const canAdd = usePermissionsStore((s) => s.canResource)(config.key, config.module, "add");
   const { colors } = useTheme();
   const styles = useStyles();
 

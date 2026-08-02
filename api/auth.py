@@ -214,6 +214,7 @@ class PermissionsView(APIView):
             _user_is_unrestricted,
             allowed_nav_groups,
             allowed_view_tabs,
+            user_can,
             user_has_any_matrix_config,
         )
 
@@ -250,9 +251,56 @@ class PermissionsView(APIView):
                 for nav, codes in NAV_GROUPS.items()
             }
 
+        # Mobile Access is the second, phone-only gate. It can only narrow what
+        # the matrix already allows, so it is applied last and never widens the
+        # sets below. A user whose groups are unconfigured is unaffected.
+        from user.services.mobile_access import (MOBILE_ACTIONS, NAV_MODULE,
+                                                 REPORT_TAB_LIST, SCREEN_TABS,
+                                                 allowed_mobile_navs,
+                                                 module_order, screen_perms)
+
+        navs = allowed_mobile_navs(u, allowed_nav_groups(u))
+        tabs = allowed_view_tabs(u)
+        # Drop the tabs of a module the phone is not showing, or a hub tile
+        # gated by RESOURCE_TABS would survive its module being switched off.
+        # Tabs owned by no gated nav pass through untouched.
+        gated = {code for nav, codes in NAV_GROUPS.items()
+                 if nav in NAV_MODULE and nav not in navs for code in codes}
+        module_actions = {nav: acts for nav, acts in module_actions.items()
+                          if nav in navs or nav not in NAV_MODULE}
+
+        # Per-screen actions. The web matrix decides what is possible, Mobile
+        # Access decides what of that reaches the phone; the client hides
+        # buttons from this rather than from the module-wide flags, so an
+        # "Edit off for Daily Entry" tick has something to act on.
+        mobile = screen_perms(u)
+        tab_actions = {}
+        # Reports are view-only, so only that column is meaningful for them.
+        for tab in list(SCREEN_TABS) + list(REPORT_TAB_LIST):
+            if tab in gated or tab not in tabs:
+                continue
+            report = tab in REPORT_TAB_LIST
+            allowed = mobile.get(tab) if mobile is not None else None
+            tab_actions[tab] = {
+                action: (
+                    (True if open_access else user_can(u, tab, action))
+                    and (allowed is None or bool(allowed.get(action)))
+                ) if (action == "view" or not report) else False
+                for action in MOBILE_ACTIONS
+            }
+
+        # A screen whose View is unticked must leave `tabs` too — the hub
+        # filters its tiles on that set, so leaving it in would show a tile for
+        # a screen the user may not open.
+        hidden = {tab for tab, acts in tab_actions.items() if not acts["view"]}
+
         return Response({
             "unrestricted": unrestricted,
-            "nav_groups": sorted(allowed_nav_groups(u)),
-            "tabs": sorted(allowed_view_tabs(u)),
+            "nav_groups": sorted(navs),
+            # Registry/administrator order, not alphabetical — the phone lays
+            # its home hub out in this order.
+            "nav_order": module_order(u),
+            "tabs": sorted(tabs - gated - hidden),
             "module_actions": module_actions,
+            "tab_actions": tab_actions,
         })

@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 
-import { RESOURCE_TABS } from "@/api/permissions";
+import { REPORT_TABS, RESOURCE_TABS } from "@/api/permissions";
 import { Card, IconCircle, SectionHeader } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { ModuleStackParams } from "@/navigation/types";
@@ -26,6 +26,14 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
     [...keys]
       .filter((k) => !RESOURCE_TABS[k] || canTab(RESOURCE_TABS[k]))
       .sort((a, b) => RESOURCES[a].title.localeCompare(RESOURCES[b].title));
+
+  // Reports used to render unconditionally, so a user saw every report in a
+  // module they could open regardless of what the web matrix said about the
+  // report itself. Same rule as the resource tiles now: no mapping means
+  // module-gated, otherwise it needs the tab.
+  const reports = (mod.reports ?? []).filter(
+    (rep) => !REPORT_TABS[rep.key] || canTab(REPORT_TABS[rep.key])
+  );
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -60,11 +68,11 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
         );
       })}
 
-      {mod.reports && mod.reports.length > 0 ? (
+      {reports.length > 0 ? (
         <View>
           <SectionHeader title="Reports" />
           <View style={styles.grid}>
-            {mod.reports.map((rep) => (
+            {reports.map((rep) => (
               <Card
                 key={rep.key}
                 padded={false}

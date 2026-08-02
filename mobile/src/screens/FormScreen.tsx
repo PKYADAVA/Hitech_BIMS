@@ -22,7 +22,7 @@ type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
 export function FormScreen({ route, navigation }: Props) {
   const { resourceKey, mode, row, preset, onDoneGoBack } = route.params;
   const config = RESOURCES[resourceKey];
-  const canDelete = usePermissionsStore((s) => s.canAction)(config.module, "delete");
+  const canDelete = usePermissionsStore((s) => s.canResource)(config.key, config.module, "delete");
   const schema = FORMS[resourceKey];
   const styles = useStyles();
 

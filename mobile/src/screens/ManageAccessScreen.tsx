@@ -11,9 +11,11 @@ import {
   NAV_LABEL,
   renameRole,
   RoleAccess,
+  setRoleMobileModule,
   setRoleModule,
   setUserRoles,
 } from "@/api/access";
+import { MODULE_NAV } from "@/api/permissions";
 import { ApiError } from "@/api/types";
 import { listResource } from "@/api/resources";
 import { Row } from "@/api/types";
@@ -61,8 +63,12 @@ function RolesPanel() {
   const [newRole, setNewRole] = useState("");
   const [adding, setAdding] = useState(false);
   const [renameDraft, setRenameDraft] = useState<Record<number, string>>({});
+  // Which access surface the expanded role is being edited for. Web access is
+  // the one that grants; Mobile Access only narrows it, so web leads.
+  const [scope, setScope] = useState<"web" | "mobile">("web");
   useEffect(() => setRoles(q.data?.roles ?? []), [q.data]);
   const navs = q.data?.navs ?? [];
+  const mobileModules = q.data?.mobile_modules ?? [];
 
   const doRename = async (role: RoleAccess) => {
     const name = (renameDraft[role.id] ?? role.name).trim();
@@ -128,13 +134,33 @@ function RolesPanel() {
     }
   };
 
+  const toggleMobile = async (role: RoleAccess, key: string, val: boolean) => {
+    setRoles((prev) =>
+      prev.map((r) => (r.id === role.id ? { ...r, mobile: { ...r.mobile, [key]: val } } : r))
+    );
+    try {
+      // The server materialises the role's full set of rows on first edit, so
+      // the reply is the authoritative state rather than just this one key.
+      const { mobile } = await setRoleMobileModule(role.id, key, val);
+      setRoles((prev) => prev.map((r) => (r.id === role.id ? { ...r, mobile } : r)));
+    } catch (e) {
+      setRoles((prev) =>
+        prev.map((r) => (r.id === role.id ? { ...r, mobile: { ...r.mobile, [key]: !val } } : r))
+      );
+      Alert.alert("Failed", (e as Error)?.message ?? "Could not update mobile access.");
+    }
+  };
+
   if (q.isLoading) return <Loading label="Loading roles…" />;
   if (q.isError)
     return <EmptyOrError icon="⚠️" message={(q.error as Error)?.message ?? "Failed."} onRetry={q.refetch} />;
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text style={styles.hint}>Turn a module on/off for a role. Users inherit access from their roles.</Text>
+      <Text style={styles.hint}>
+        Turn a module on/off for a role. Web access grants it; mobile access only
+        decides whether it also shows in this app. Users inherit both from their roles.
+      </Text>
 
       <View style={styles.addRow}>
         <TextInput
@@ -161,28 +187,72 @@ function RolesPanel() {
 
       {roles.map((role) => {
         const on = navs.filter((n) => role.modules[n]).length;
+        // A phone module only counts as shown when web access backs it.
+        const mobileOn = mobileModules.filter(
+          (m) => role.mobile?.[m.key] && role.modules[MODULE_NAV[m.key] ?? m.key]
+        ).length;
         const open = expanded === role.id;
         return (
           <Card key={role.id} style={styles.card}>
             <Pressable style={styles.cardHead} onPress={() => setExpanded(open ? null : role.id)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.roleName}>{role.name}</Text>
-                <Text style={styles.roleMeta}>{on} of {navs.length} modules</Text>
+                <Text style={styles.roleMeta}>
+                  {on} of {navs.length} web · {mobileOn} of {mobileModules.length} on phone
+                </Text>
               </View>
               <Text style={styles.caret}>{open ? "▾" : "▸"}</Text>
             </Pressable>
             {open ? (
               <View style={styles.rows}>
-                {navs.map((nav) => (
-                  <View key={nav} style={styles.row}>
-                    <Text style={styles.rowLabel}>{NAV_LABEL[nav] ?? nav}</Text>
-                    <Switch
-                      value={!!role.modules[nav]}
-                      onValueChange={(v) => toggle(role, nav, v)}
-                      trackColor={{ true: colors.tint }}
-                    />
-                  </View>
-                ))}
+                <View style={styles.scopeBar}>
+                  {(["web", "mobile"] as const).map((s) => (
+                    <Pressable
+                      key={s}
+                      onPress={() => setScope(s)}
+                      style={[styles.scopeBtn, scope === s && styles.scopeBtnActive]}
+                    >
+                      <Text style={[styles.scopeText, scope === s && styles.scopeTextActive]}>
+                        {s === "web" ? "Web access" : "Mobile access"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {scope === "web"
+                  ? navs.map((nav) => (
+                      <View key={nav} style={styles.row}>
+                        <Text style={styles.rowLabel}>{NAV_LABEL[nav] ?? nav}</Text>
+                        <Switch
+                          value={!!role.modules[nav]}
+                          onValueChange={(v) => toggle(role, nav, v)}
+                          trackColor={{ true: colors.tint }}
+                        />
+                      </View>
+                    ))
+                  : mobileModules.map((m) => {
+                      // Subtractive: without web access the switch cannot make
+                      // the module appear, so say so rather than let someone
+                      // turn it on and wonder why nothing changed.
+                      const granted = !!role.modules[MODULE_NAV[m.key] ?? m.key];
+                      return (
+                        <View key={m.key} style={styles.row}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.rowLabel, !granted && styles.rowLabelOff]}>
+                              {m.title}
+                            </Text>
+                            {!granted ? (
+                              <Text style={styles.rowNote}>Needs web access to show</Text>
+                            ) : null}
+                          </View>
+                          <Switch
+                            value={!!role.mobile?.[m.key]}
+                            onValueChange={(v) => toggleMobile(role, m.key, v)}
+                            trackColor={{ true: colors.tint }}
+                          />
+                        </View>
+                      );
+                    })}
                 <View style={styles.roleFooter}>
                   <TextInput
                     value={renameDraft[role.id] ?? role.name}
@@ -512,6 +582,20 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   rowLabel: { ...type.body, color: colors.text },
+  rowLabelOff: { color: colors.textMuted },
+  rowNote: { ...type.caption, color: colors.textFaint, marginTop: 1 },
+  scopeBar: {
+    flexDirection: "row",
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    padding: 3,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  scopeBtn: { flex: 1, paddingVertical: spacing.xs, alignItems: "center", borderRadius: radius.sm },
+  scopeBtnActive: { backgroundColor: colors.surface },
+  scopeText: { ...type.label, color: colors.textMuted },
+  scopeTextActive: { color: colors.text },
   roleFooter: { flexDirection: "row", gap: spacing.sm, paddingVertical: spacing.md },
   renameInput: {
     flex: 1,

@@ -142,6 +142,132 @@ class WebAccessAudit(models.Model):
         return f"{self.verdict}: {self.method} {self.url_name} ({self.username})"
 
 
+class GroupMobileAccess(models.Model):
+    """Which mobile-app modules a group sees, and in what order.
+
+    The phone used to show whatever the web tab matrix allowed — there was no
+    way to give someone a screen at their desk but keep it off their phone.
+    This is that second switch, and like ``GroupDashboardWidget`` it is
+    **subtractive only**: a module appears on the phone when the tab matrix
+    allows it *and* it is enabled here. Turning one on cannot grant access the
+    matrix withholds, so this page can never widen anyone's reach.
+
+    ``position`` orders the modules on the mobile home hub, low first. A user
+    in several groups sees the union of what those groups enable, at the
+    earliest position any of them gives it — the same way the tab matrix
+    combines groups.
+
+    A group with no rows here is unconfigured and sees every module its tabs
+    allow, so existing groups keep working until someone sets this up.
+    """
+
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, related_name="mobile_modules"
+    )
+    module_key = models.CharField(
+        max_length=50,
+        help_text="Key from user.services.mobile_access.MOBILE_MODULES",
+    )
+    enabled = models.BooleanField(default=True)
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Mobile module access"
+        verbose_name_plural = "Mobile module access"
+        unique_together = ("group", "module_key")
+        ordering = ["position", "module_key"]
+
+    def __str__(self):
+        state = "on" if self.enabled else "off"
+        return f"{self.group.name} · {self.module_key} ({state}, #{self.position})"
+
+
+class GroupMobileTabPermission(models.Model):
+    """Per-group actions for one *screen of the phone app*.
+
+    The finer half of Mobile Access. ``GroupMobileAccess`` decides whether a
+    module appears on the home hub at all; this decides what can be done inside
+    it, screen by screen — the matrix an administrator actually sees.
+
+    Only the 53 tabs with a phone screen behind them get rows here, and only
+    four actions: ``save``/``update``/``favorite`` are already recorded in
+    ``user.access.UNENFORCED_ACTIONS`` as ticks nothing reads, and there is no
+    printing on a phone. Rendering a column that controls nothing is the one
+    mistake this table exists to avoid repeating.
+
+    Subtractive, like everything else on this page: an action is permitted only
+    when the web matrix grants it *and* it is ticked here. A group with no rows
+    is unconfigured and keeps whatever the web matrix allows.
+    """
+
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, related_name="mobile_tab_permissions"
+    )
+    tab_code = models.CharField(
+        max_length=100,
+        help_text="Tab code from user.services.mobile_access.PHONE_SCREENS",
+    )
+    can_view = models.BooleanField(default=False)
+    can_add = models.BooleanField(default=False)
+    can_edit = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Mobile screen permission"
+        verbose_name_plural = "Mobile screen permissions"
+        unique_together = ("group", "tab_code")
+        ordering = ["tab_code"]
+
+    def __str__(self):
+        on = [a for a in ("view", "add", "edit", "delete")
+              if getattr(self, f"can_{a}")]
+        return f"{self.group.name} · {self.tab_code} ({', '.join(on) or 'none'})"
+
+
+class AccessChangeLog(models.Model):
+    """Who changed someone's access, and to what.
+
+    Denials were already recorded (``WebAccessAudit``); *edits* were not, so
+    "who turned Sales off for Managers, and when?" had no answer. One row per
+    saved change, with the before/after so the entry is readable on its own
+    rather than only as a diff against whatever the table holds today.
+    """
+
+    WEB = "web"
+    MOBILE = "mobile"
+    MOBILE_MODULE = "mobile_module"
+    DASHBOARD = "dashboard"
+
+    SURFACES = [
+        (WEB, "Web Access"),
+        (MOBILE, "Mobile screen access"),
+        (MOBILE_MODULE, "Mobile module access"),
+        (DASHBOARD, "Dashboard Access"),
+    ]
+
+    surface = models.CharField(max_length=20, choices=SURFACES, db_index=True)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE,
+                              related_name="access_changes")
+    changed_by = models.CharField(max_length=150)
+    summary = models.CharField(
+        max_length=300, help_text="Human-readable description of the change")
+    detail = models.JSONField(
+        default=dict, blank=True,
+        help_text="{'before': …, 'after': …} for the keys that moved")
+    source = models.CharField(
+        max_length=10, default="web",
+        help_text="web or mobile — where the edit was made")
+    at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Access change"
+        verbose_name_plural = "Access changes"
+        ordering = ["-at"]
+
+    def __str__(self):
+        return f"{self.at:%Y-%m-%d %H:%M} {self.changed_by}: {self.summary}"
+
+
 class GroupDashboardWidget(models.Model):
     """Which dashboard widgets a group sees, and in what order.
 

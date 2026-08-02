@@ -4,11 +4,22 @@ import { Envelope } from "./types";
 export interface RoleAccess {
   id: number;
   name: string;
+  /** Web access: nav key -> the role has any view permission under it. */
   modules: Record<string, boolean>;
+  /** Mobile Access: phone module key -> shown in the app. Subtractive — a
+   *  module switched on here still needs the web access above to appear. */
+  mobile: Record<string, boolean>;
+}
+
+/** A phone module the app can show, with its label from the server registry. */
+export interface MobileModule {
+  key: string;
+  title: string;
 }
 
 export interface RolesAccessResp {
   navs: string[];
+  mobile_modules: MobileModule[];
   roles: RoleAccess[];
 }
 
@@ -41,6 +52,26 @@ export async function setRoleModule(
   return (
     await http.post<Envelope<{ modules: Record<string, boolean> }>>(
       `/user/roles/${roleId}/module`,
+      { module, enabled }
+    )
+  ).data.data;
+}
+
+/**
+ * Show or hide one module of the phone app for a role (User > Mobile Access).
+ *
+ * Subtractive: switching a module on cannot grant access the web matrix
+ * withholds, it only stops Mobile Access from taking it away. So a module can
+ * read as on here and still not appear, when the role has no web access to it.
+ */
+export async function setRoleMobileModule(
+  roleId: number,
+  module: string,
+  enabled: boolean
+): Promise<{ mobile: Record<string, boolean> }> {
+  return (
+    await http.post<Envelope<{ mobile: Record<string, boolean> }>>(
+      `/user/roles/${roleId}/mobile-module`,
       { module, enabled }
     )
   ).data.data;

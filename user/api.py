@@ -73,6 +73,42 @@ def _role_modules(group) -> dict:
     return {nav: bool(NAV_GROUPS.get(nav, set()) & viewable) for nav in _MANAGED_NAVS}
 
 
+def _role_mobile(group) -> dict:
+    """Which phone modules the group shows — the Mobile Access switch.
+
+    A group with no rows is unconfigured, which means every module its tabs
+    allow, so it reads back as all-on. That matches what the web editor shows
+    for a group being configured for the first time.
+    """
+    from user.models import GroupMobileAccess
+    from user.services.mobile_access import ALL_KEYS
+
+    rows = {r.module_key: r.enabled
+            for r in GroupMobileAccess.objects.filter(group=group)}
+    if not rows:
+        return {key: True for key in ALL_KEYS}
+    return {key: rows.get(key, False) for key in ALL_KEYS}
+
+
+def _materialise_mobile(group) -> None:
+    """Give an unconfigured group a full set of rows before the first edit.
+
+    Without this, switching one module off would leave the group with a single
+    disabled row — and "some rows" is what tells the system a group has been
+    configured, so every *other* module would silently switch off with it. The
+    web editor writes all nine rows on save for the same reason.
+    """
+    from user.models import GroupMobileAccess
+    from user.services.mobile_access import ALL_KEYS
+
+    if GroupMobileAccess.objects.filter(group=group).exists():
+        return
+    GroupMobileAccess.objects.bulk_create([
+        GroupMobileAccess(group=group, module_key=key, enabled=True, position=index)
+        for index, key in enumerate(ALL_KEYS)
+    ])
+
+
 class UserCreateView(V1ViewMixin, APIView):
     """POST /user/users/create — admin creates a new login user.
 
@@ -134,11 +170,21 @@ class RolesAccessView(V1ViewMixin, APIView):
     permission_classes = _ADMIN
 
     def get(self, request):
+        from user.services.mobile_access import MOBILE_MODULES
+
         roles = [
-            {"id": g.id, "name": g.name, "modules": _role_modules(g)}
+            {"id": g.id, "name": g.name,
+             "modules": _role_modules(g), "mobile": _role_mobile(g)}
             for g in AuthGroup.objects.order_by("name")
         ]
-        return Response({"navs": _MANAGED_NAVS, "roles": roles})
+        # Titles travel with the keys so the client needs no second label map
+        # to drift out of step with the registry.
+        return Response({
+            "navs": _MANAGED_NAVS,
+            "mobile_modules": [{"key": key, "title": title}
+                               for key, title, *_rest in MOBILE_MODULES],
+            "roles": roles,
+        })
 
     def post(self, request):
         """Create a new role (auth group)."""
@@ -147,7 +193,8 @@ class RolesAccessView(V1ViewMixin, APIView):
             raise ValidationError({"name": ["Role name is required."]})
         group, created = AuthGroup.objects.get_or_create(name=name)
         return Response(
-            {"id": group.id, "name": group.name, "modules": _role_modules(group), "created": created}
+            {"id": group.id, "name": group.name, "modules": _role_modules(group),
+             "mobile": _role_mobile(group), "created": created}
         )
 
 
@@ -174,6 +221,43 @@ class RoleModuleView(V1ViewMixin, APIView):
         else:
             GroupTabPermission.objects.filter(group=group, tab_code__in=tabs).delete()
         return Response({"module": nav, "enabled": enabled, "modules": _role_modules(group)})
+
+
+class RoleMobileModuleView(V1ViewMixin, APIView):
+    """POST /user/roles/<id>/mobile-module {module, enabled} — show or hide one
+    module of the phone app for a role.
+
+    The web counterpart is User > Mobile Access. Same rule applies here: this
+    is subtractive, so switching a module on cannot grant access the tab matrix
+    withholds — it only stops Mobile Access from taking it away.
+    """
+
+    permission_classes = _ADMIN
+
+    def post(self, request, pk):
+        from user.models import GroupMobileAccess
+        from user.services.mobile_access import ALL_KEYS
+
+        group = AuthGroup.objects.filter(pk=pk).first()
+        if not group:
+            raise NotFound("Role not found.")
+        key = str(request.data.get("module") or "")
+        if key not in ALL_KEYS:
+            raise ValidationError({"module": ["Unknown mobile module."]})
+        enabled = bool(request.data.get("enabled"))
+
+        _materialise_mobile(group)
+        # Only ever write ``enabled`` on an existing row — the order is set in
+        # the web editor and a toggle here has no opinion about it.
+        row, created = GroupMobileAccess.objects.get_or_create(
+            group=group, module_key=key,
+            defaults={"enabled": enabled, "position": ALL_KEYS.index(key)},
+        )
+        if not created and row.enabled != enabled:
+            row.enabled = enabled
+            row.save(update_fields=["enabled"])
+        return Response({"module": key, "enabled": enabled,
+                         "mobile": _role_mobile(group)})
 
 
 class UserRolesView(V1ViewMixin, APIView):

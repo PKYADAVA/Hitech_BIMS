@@ -198,14 +198,31 @@ export function HomeScreen({ navigation }: Props) {
   const user = useAuthStore((s) => s.user);
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
+  const navOrder = usePermissionsStore((s) => s.navOrder);
+  const refreshPerms = usePermissionsStore((s) => s.refresh);
   const { data: ov, refetch, isFetching } = useOverview();
+
+  // Lay the tiles out in the order the server gives, so the Sort position set
+  // in User > Mobile Access is what an administrator actually sees on the
+  // phone. Anything the server did not place keeps its registry position at
+  // the end rather than disappearing.
+  const tiles = React.useMemo(() => {
+    if (!navOrder.length) return TILES;
+    const rank = new Map(navOrder.map((key, i) => [key, i]));
+    return [...TILES].sort(
+      (a, b) => (rank.get(a.key) ?? TILES.length) - (rank.get(b.key) ?? TILES.length)
+    );
+  }, [navOrder]);
 
   // Re-pull KPIs whenever Home regains focus (e.g. after sending an SMS on
   // another tab) — the tab isn't remounted, so a mount-only fetch goes stale.
+  // Permissions ride along: an access change made on the web should apply on
+  // the next glance at the app, not on the next login.
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch])
+      refreshPerms();
+    }, [refetch, refreshPerms])
   );
 
   return (
@@ -227,7 +244,7 @@ export function HomeScreen({ navigation }: Props) {
         <View style={styles.body}>
           <SectionHeader title="Modules" subtitle="Jump into a workspace" />
           <View style={styles.grid}>
-            {TILES.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
+            {tiles.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
               const active = !!t.target;
               return (
                 // Outer view carries the shadow (no clipping); inner Card clips

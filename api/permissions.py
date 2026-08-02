@@ -147,10 +147,19 @@ class MatrixPermission(BasePermission):
             return self._unmapped(request, view, user)
 
         action = METHOD_ACTIONS.get(request.method, "view")
-        if user_can(user, tab, action):
-            return True
-        self._record(request, view, user, "denied", tab, action)
-        return False
+        if not user_can(user, tab, action):
+            self._record(request, view, user, "denied", tab, action)
+            return False
+
+        # Second gate, phone only: Mobile Access narrows what the matrix allows
+        # — a whole module, or one action on one screen. Subtractive, so it is
+        # only ever consulted after the matrix has already said yes.
+        from user.services.mobile_access import mobile_can
+
+        if not mobile_can(user, tab, action):
+            self._record(request, view, user, "denied", tab, action)
+            return False
+        return True
 
     def _unmapped(self, request, view, user) -> bool:
         self._record(request, view, user, "unmapped", "", "")

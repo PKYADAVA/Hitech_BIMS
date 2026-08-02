@@ -31,9 +31,9 @@ function ChildSection({
   const cfg = RESOURCES[child.resourceKey];
   const { colors } = useTheme();
   const styles = useStyles();
-  const canAction = usePermissionsStore((s) => s.canAction);
-  const canAdd = isEditable(cfg.key) && canAction(cfg.module, "add");
-  const canEdit = isEditable(cfg.key) && canAction(cfg.module, "edit");
+  const canResource = usePermissionsStore((s) => s.canResource);
+  const canAdd = isEditable(cfg.key) && canResource(cfg.key, cfg.module, "add");
+  const canEdit = isEditable(cfg.key) && canResource(cfg.key, cfg.module, "edit");
   const list = useResourceList<Row>(cfg.path, { [child.fkParam]: parentId });
   if (list.isLoading) return null;
   if (!canAdd && list.items.length === 0) return null;
@@ -107,7 +107,8 @@ export function RecordDetailScreen({ route, navigation }: Props) {
   const row: Row = route.params.row;
   const view = config.card(row);
   const canEdit =
-    isRecordEditable(config.key) && usePermissionsStore((s) => s.canAction)(config.module, "edit");
+    isRecordEditable(config.key) &&
+    usePermissionsStore((s) => s.canResource)(config.key, config.module, "edit");
 
   useLayoutEffect(() => {
     navigation.setOptions({

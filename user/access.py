@@ -431,6 +431,8 @@ MODULE_REGISTRY = [
                     ("user_groups", "User Access Groups"),
                     ("dashboard_access", "Dashboard Access",
                      ("dashboard_access_form", "dashboard_access_preview")),
+                    ("mobile_access", "Mobile Access",
+                     ("mobile_access_form", "mobile_access_preview")),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
                     ("picklists", "Picklists"),
@@ -640,6 +642,7 @@ _ACTION_BASE_TO_TAB = {
     "sales_price": "sales_price_master",
     # Account
     "dashboard_access": "dashboard_access",
+    "mobile_access": "mobile_access",
     "farmer": "branch_farm",
     "broiler_farm_shed": "broiler_farm_shed",
     "chart_of_accounts": "coa",

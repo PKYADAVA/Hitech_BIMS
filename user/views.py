@@ -238,6 +238,255 @@ def dashboard_access_delete(request, group_id):
 
 
 @login_required
+def mobile_access(request):
+    """User > Mobile Access — one row per configured group.
+
+    Only groups that have been configured appear. A group with no row is
+    unconfigured and gets every module its tabs allow, which is how the phone
+    behaved before this page existed.
+    """
+    from .models import GroupMobileAccess, GroupMobileTabPermission
+    from .services.mobile_access import (GOVERNED_TABS, all_modules,
+                                         superuser_only_members)
+
+    titles = {key: title for key, title, *_ in all_modules()}
+    total = len(titles)
+
+    rows = []
+    for group in Group.objects.order_by("name"):
+        saved = list(GroupMobileAccess.objects.filter(group=group))
+        screens = list(GroupMobileTabPermission.objects.filter(group=group))
+        if not saved and not screens:
+            continue
+        on = [r for r in sorted(saved, key=lambda r: r.position) if r.enabled]
+        members, supers = superuser_only_members(group)
+        rows.append({
+            "group": group,
+            "enabled_count": len(on),
+            "total": total,
+            "names": ", ".join(titles.get(r.module_key, r.module_key) for r in on) or "None",
+            "screens_on": sum(1 for r in screens if r.can_view),
+            "screens_total": len(GOVERNED_TABS),
+            # A group of nothing but superusers is configured and inert.
+            "inert": bool(members) and members == supers,
+        })
+
+    return render(request, "mobile_access_list.html", {
+        "rows": rows,
+        "unconfigured": Group.objects.exclude(
+            id__in=[r["group"].id for r in rows]).order_by("name"),
+    })
+
+
+@login_required
+def mobile_access_form(request):
+    """Add or edit one group's mobile access — the screen × action matrix.
+
+    Two levels on one page: a module row that shows or hides a whole hub tile
+    and sets its order, and under it a row per phone screen with View / Add /
+    Edit / Delete. Only the 53 tabs with a screen behind them are listed; the
+    other 89 web tabs would be ticks that control nothing.
+    """
+    from .models import GroupMobileAccess, GroupMobileTabPermission
+    from .services.access_log import (describe_matrix_change, diff_flags,
+                                      diff_matrix, log_change)
+    from .services.mobile_access import (MOBILE_ACTIONS, all_modules,
+                                         group_screen_perms, screens_by_module,
+                                         superuser_only_members,
+                                         unbuilt_by_module)
+
+    modules = all_modules()
+    sections = screens_by_module()
+
+    if request.method == "POST":
+        group = get_object_or_404(Group, id=request.POST.get("group") or 0)
+
+        before_modules = {r.module_key: r.enabled for r in
+                          GroupMobileAccess.objects.filter(group=group)}
+        before_screens = group_screen_perms(group) or {}
+
+        GroupMobileAccess.objects.filter(group=group).delete()
+        GroupMobileAccess.objects.bulk_create([
+            GroupMobileAccess(
+                group=group, module_key=key,
+                enabled=request.POST.get(f"on_{key}") == "on",
+                position=int((request.POST.get(f"pos_{key}") or "").strip() or 0))
+            for key, _title, _nav, _icon, _colour in modules
+        ])
+
+        GroupMobileTabPermission.objects.filter(group=group).delete()
+        rows, after_screens = [], {}
+        for _key, _title, screens in sections:
+            for screen in screens:
+                # Only the actions the row actually offers; a report's Add/
+                # Edit/Delete are never posted, and must not be read as "off".
+                ticks = {a: (a in screen["actions"]
+                             and request.POST.get(f"p_{screen['tab']}_{a}") == "on")
+                         for a in MOBILE_ACTIONS}
+                after_screens[screen["tab"]] = ticks
+                rows.append(GroupMobileTabPermission(
+                    group=group, tab_code=screen["tab"],
+                    **{f"can_{a}": v for a, v in ticks.items()}))
+        GroupMobileTabPermission.objects.bulk_create(rows)
+
+        after_modules = {key: request.POST.get(f"on_{key}") == "on"
+                         for key, *_rest in modules}
+        moved_screens = diff_matrix(before_screens, after_screens)
+        moved_modules = diff_flags(before_modules, after_modules)
+        labels = {s["tab"]: s["title"] for _k, _t, ss in sections for s in ss}
+        log_change(
+            request, group, "mobile",
+            describe_matrix_change(moved_screens, labels)
+            + (f"; {len(moved_modules)} module(s) toggled" if moved_modules else ""),
+            {"screens": moved_screens, "modules": moved_modules},
+        )
+
+        messages.success(request, f"Mobile access saved for “{group.name}”.")
+        return redirect("mobile_access")
+
+    group_id = (request.GET.get("group") or "").strip()
+    selected = Group.objects.filter(id=group_id).first() if group_id.isdigit() else None
+
+    saved_modules, saved_screens, members, supers = {}, None, 0, 0
+    if selected:
+        saved_modules = {r.module_key: r for r in
+                         GroupMobileAccess.objects.filter(group=selected)}
+        saved_screens = group_screen_perms(selected)
+        members, supers = superuser_only_members(selected)
+
+    # What the web matrix grants, so the editor can mark a screen the group
+    # cannot reach at all — ticking it there would change nothing.
+    web = _group_web_actions(selected) if selected else {}
+
+    unbuilt = unbuilt_by_module()
+
+    blocks = []
+    for index, (key, title, nav, icon, colour) in enumerate(modules):
+        row = saved_modules.get(key)
+        screens = next((s for k, _t, s in sections if k == key), [])
+        rows = []
+        for screen in screens:
+            # First time through, a screen starts with exactly what the web
+            # matrix already allows — so saving changes nothing until someone
+            # unticks something, which is what "unconfigured" means today.
+            granted = web.get(screen["tab"], {})
+            current = (saved_screens or {}).get(screen["tab"])
+            applicable = screen["actions"]
+            rows.append({
+                **screen,
+                # A report has one meaningful action; the other three columns
+                # render as "n/a" rather than as boxes that decide nothing.
+                "actions": [{
+                    "name": action,
+                    "applies": action in applicable,
+                    "on": action in applicable and (
+                        current[action] if current is not None
+                        else granted.get(action, False)),
+                    "granted": action in applicable and granted.get(action, False),
+                } for action in MOBILE_ACTIONS],
+                "reachable": any(granted.get(a) for a in applicable),
+            })
+        # Web tabs of this module the app has no screen for. Marked when the
+        # group holds them, since "I granted this and it isn't here" is the
+        # question these rows exist to answer.
+        pending = [{**item, "granted": bool(web.get(item["tab"]))}
+                   for item in unbuilt.get(key, [])]
+
+        blocks.append({
+            "key": key, "title": title, "nav": nav, "icon": icon, "colour": colour,
+            "enabled": row.enabled if row else True,
+            "position": row.position if row else index,
+            "screens": rows,
+            "unbuilt": pending,
+            "unbuilt_granted": sum(1 for p in pending if p["granted"]),
+        })
+    blocks.sort(key=lambda b: b["position"])
+
+    return render(request, "mobile_access_form.html", {
+        "groups": Group.objects.order_by("name"),
+        "selected_group": selected,
+        "blocks": blocks,
+        "actions": MOBILE_ACTIONS,
+        "editing": bool(saved_modules or saved_screens),
+        "members": members,
+        "superusers": supers,
+    })
+
+
+def _group_web_actions(group):
+    """``{tab_code: {action: bool}}`` the web matrix grants this group.
+
+    Mirrors the matrix's own rules rather than reading rows naively: a group
+    with no rows at all is unrestricted, and an ``admin`` access type bypasses
+    everything — the same two exceptions ``user_can`` makes. Without them the
+    editor would grey out screens the group really can reach.
+    """
+    from .access import ACTIONS, ALL_TAB_CODES
+    from .models import GroupAccessProfile, GroupTabPermission
+    from .services.mobile_access import MOBILE_ACTIONS
+
+    rows = list(GroupTabPermission.objects.filter(group=group))
+    profile = GroupAccessProfile.objects.filter(group=group).first()
+    unrestricted = (not rows) or (profile and profile.access_type == "admin")
+    if unrestricted:
+        return {tab: {a: True for a in MOBILE_ACTIONS} for tab in ALL_TAB_CODES}
+
+    out = {}
+    for row in rows:
+        # "View" means any action here, exactly as user_can treats it.
+        any_action = any(getattr(row, f"can_{a}", False) for a in ACTIONS)
+        out[row.tab_code] = {
+            "view": any_action,
+            "add": row.can_add,
+            "edit": row.can_edit,
+            "delete": row.can_delete,
+        }
+    return out
+
+
+@login_required
+def mobile_access_preview(request, group_id):
+    """What this group's phone home hub would show — JSON for the modal.
+
+    Says *why* a module is missing: switched off here, or not permitted by the
+    tab matrix at all.
+    """
+    from .services.mobile_access import modules_for_group
+
+    group = get_object_or_404(Group, id=group_id)
+
+    # ``modules`` is optional: the list page omits it and gets the saved state,
+    # the editor passes its live switches as "key:pos,key:pos" so the preview
+    # matches the form. An empty string is meaningful — nothing enabled.
+    raw = request.GET.get("modules")
+    override = None
+    if raw is not None:
+        override = {}
+        for chunk in raw.split(","):
+            key, _, pos = chunk.partition(":")
+            key = key.strip()
+            if key:
+                override[key] = int(pos) if pos.strip().isdigit() else 0
+
+    return JsonResponse({"group": group.name,
+                         "modules": modules_for_group(group, override)})
+
+
+@login_required
+def mobile_access_delete(request, group_id):
+    """Clear a group's mobile access, returning it to the default."""
+    from .models import GroupMobileAccess
+
+    group = get_object_or_404(Group, id=group_id)
+    GroupMobileAccess.objects.filter(group=group).delete()
+    messages.success(
+        request,
+        f"Mobile access cleared for “{group.name}” — it now sees every "
+        "module its permissions allow.")
+    return redirect("mobile_access")
+
+
+@login_required
 def master_import(request, tab_code):
     """Import a spreadsheet into a master, from the master's own page.
 

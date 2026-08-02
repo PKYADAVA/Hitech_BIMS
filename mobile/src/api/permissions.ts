@@ -7,11 +7,24 @@ export interface ModuleActions {
   delete: boolean;
 }
 
+/** Per-screen actions: what may be done inside one hub tile. */
+export interface TabActions {
+  view: boolean;
+  add: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
 export interface Permissions {
   unrestricted: boolean;
   nav_groups: string[];
+  /** Module keys in home-hub order — administrator order where one is set,
+   *  registry order otherwise. Never alphabetical. */
+  nav_order: string[];
   tabs: string[];
   module_actions: Record<string, ModuleActions>;
+  /** tab_code -> the four actions, already narrowed by Mobile Access. */
+  tab_actions: Record<string, TabActions>;
 }
 
 export type ActionKind = keyof ModuleActions;
@@ -59,8 +72,29 @@ export const RESOURCE_TABS: Record<string, string> = {
   "hatchery-hatcheries": "hatchery_master_list",
   "hatchery-setters": "setter_list",
   "hatchery-hatchers": "hatcher_list",
+  // Inventory
+  "inventory-item-categories": "item_category",
+  "inventory-items": "items",
+  "inventory-price-list": "item_price_list",
+  "inventory-sectors": "sector",
+  "inventory-uom": "unit_of_measurement",
+  "inventory-warehouses": "warehouse",
+  "inventory-stock-transfers": "stock_transfer_list",
+  "inventory-medicine-transfers": "medicine_transfer_list",
+  "inventory-adjustments": "inventory_adjustment_list",
+  "inventory-stock-issues": "stock_issue_list",
+  "inventory-stock-receives": "stock_receive_list",
+  // Account
+  "account-financial-years": "fin_year",
+  "account-chart-of-accounts": "coa",
+  "account-bank-cash": "bank_cash",
+  "account-organization-centres": "organization_centre",
+  "account-company-profiles": "company_profile",
+  "account-terms": "terms",
+  "account-vouchers": "vouchers",
   // Sales
   "sales-invoices": "sales_invoice_list",
+  "sales-receipts": "sales_receipt_list",
   "sales-customers": "customer",
   "sales-customer-groups": "customer_groups",
   "sales-prices": "sales_price_master",
@@ -77,6 +111,7 @@ export const RESOURCE_TABS: Record<string, string> = {
   "hr-employees": "employee_list",
   "hr-attendance": "employee_attendance",
   "hr-leaves": "leave_employee",
+  "hr-leave-dates": "employee_leave_details",
   "hr-payroll": "payroll",
   "hr-designations": "designation",
   "hr-groups": "employee_group",
@@ -88,6 +123,32 @@ export const RESOURCE_TABS: Record<string, string> = {
   "sms-templates": "sms_templates",
   "sms-messages": "sms_history",
   "sms-settings": "sms_settings",
+};
+
+/**
+ * Report tile key → backend tab code.
+ *
+ * The hub's report tiles used to render unconditionally: every user saw every
+ * report their module allowed, whatever the web matrix said about the report
+ * itself. These are view-only, so they are gated on `canTab` rather than given
+ * rows in the Mobile Access matrix — a report has no Add/Edit/Delete to tick,
+ * and columns that control nothing are the thing that matrix exists to avoid.
+ *
+ * `mortality-trend` has no web report behind it, so it stays ungated and is
+ * deliberately absent rather than pointed at an approximate tab.
+ */
+export const REPORT_TABS: Record<string, string> = {
+  "live-flock": "live_flock_summary_report",
+  "batch-summary": "broiler_batch_report",
+  "chicks-placement": "chicks_placement_report",
+  "day-record": "day_record_report",
+  "feed-dispatch": "feed_dispatch_stock_report",
+  lifting: "lifting_report",
+  "hatch-performance": "hatchery_report",
+  "egg-intake": "egg_purchase_report",
+  incubation: "incubation_report",
+  "delivery-challan": "delivery_challan_report",
+  "chick-sale": "chick_sale_report",
 };
 
 /** Mobile module key → backend nav group key (SMS lives under "notifications"). */
