@@ -1,5 +1,6 @@
 #pylint: disable=no-member
 
+from Hitech_BIMS.entry_dates import reject_future_date
 from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: party lists are narrowed to the customer / supplier
@@ -1147,7 +1148,7 @@ def _sales_receipt_to_dict(row):
 
 def _apply_sales_receipt(instance, data):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.location_id = data.get("location") or None
     instance.customer_id = data.get("customer") or None
     instance.mode = data.get("mode") or "Cash"

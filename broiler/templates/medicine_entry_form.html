@@ -203,6 +203,19 @@ async function recomputeStockPreview() {
   }
 }
 
+// A date typed past today is refused rather than quietly clamped: clamping
+// would leave a row the user did not ask for. The server refuses it too — a
+// max= attribute is not enforced for typed input in every browser.
+function guardFutureDate(input) {
+  if (input.value && input.value > TODAY) {
+    alert('Entry date cannot be later than today.');
+    input.value = input.dataset.lastGood || TODAY;
+    return false;
+  }
+  input.dataset.lastGood = input.value;
+  return true;
+}
+
 function recomputeAge(tr) {
   const placedOn = tr.dataset.placedOn;
   const dateVal = tr.querySelector('.date').value;
@@ -263,6 +276,7 @@ get('row-table').addEventListener('input', e => {
   if (e.target.classList.contains('qty')) { recomputeStockPreview(); }
   // Both age and the opening stock are read as of the dose's own date.
   if (e.target.classList.contains('date')) {
+    if (!guardFutureDate(e.target)) return;
     recomputeAge(e.target.closest('tr'));
     recomputeStockPreview();
   }
@@ -303,6 +317,10 @@ get('medicine-entry-form').addEventListener('submit', function (e) {
   }
   if (rows.some(r => !r.date)) {
     alert('Every row needs a Date.');
+    return;
+  }
+  if (rows.some(r => r.date > TODAY)) {
+    alert('Entry date cannot be later than today.');
     return;
   }
   fetch("{% url 'medicine_entry_api_list' %}", {

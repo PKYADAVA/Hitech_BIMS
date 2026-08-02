@@ -351,3 +351,172 @@ class InlineScriptSyntaxTests(TestCase):
 
     def test_the_medicine_form_script_parses(self):
         self.assertScriptsParse("medicine_entry_add")
+
+
+class FutureDateTests(TestCase):
+    """A flock cannot be recorded ahead of itself.
+
+    Single Entry's date box was editable with no cap at all, so a future date
+    could be picked and saved. Everything read as-of a date — age, opening
+    stock, the live-bird count — is wrong for such a row, so it is refused
+    rather than clamped: clamping would save a row nobody asked for and hide
+    the mistake.
+
+    The browser guard is a courtesy. This is the check that holds, because the
+    mobile client and a hand-made request both come through the same path.
+    """
+
+    def setUp(self):
+        from inventory.models import Item, ItemCategory
+
+        self.today = timezone.localdate()
+        self.tomorrow = self.today + timedelta(days=1)
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.supervisor = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B1",
+            start_date=self.today - timedelta(days=10))
+        self.medicine = Item.objects.create(
+            description="Vitamin AD3E",
+            category=ItemCategory.objects.create(name="Medicine"),
+            valuation_method="Weighted Average", standard_cost_per_unit=100,
+            usage="Consumed", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser("fd_user", "fd@x.com",
+                                                  "Str0ngPass!")
+        self.client.force_login(self.user)
+
+    def post_entry(self, date):
+        return self.client.post(
+            reverse("daily_entry_api_list"),
+            data=json.dumps({"supervisor": self.supervisor.id,
+                             "date": self.today.isoformat(),
+                             "rows": [{"farm": self.farm.id,
+                                       "batch": self.batch.id,
+                                       "date": date.isoformat(),
+                                       "mortality": 1}]}),
+            content_type="application/json")
+
+    def post_medicine(self, date):
+        return self.client.post(
+            reverse("medicine_entry_api_list"),
+            data=json.dumps({"supervisor": self.supervisor.id,
+                             "date": self.today.isoformat(),
+                             "rows": [{"farm": self.farm.id,
+                                       "batch": self.batch.id,
+                                       "date": date.isoformat(),
+                                       "item": self.medicine.id, "qty": 1}]}),
+            content_type="application/json")
+
+    def test_a_daily_entry_dated_tomorrow_is_refused(self):
+        response = self.post_entry(self.tomorrow)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("later than today", response.json()["error"])
+        self.assertEqual(DailyEntry.objects.count(), 0)
+
+    def test_a_medicine_entry_dated_tomorrow_is_refused(self):
+        from broiler.models import MedicineVaccineEntry
+
+        response = self.post_medicine(self.tomorrow)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("later than today", response.json()["error"])
+        self.assertEqual(MedicineVaccineEntry.objects.count(), 0)
+
+    def test_today_is_still_allowed(self):
+        """The boundary is the whole point: today must not be caught by it."""
+        self.assertIn(self.post_entry(self.today).status_code, (200, 201))
+        self.assertEqual(DailyEntry.objects.count(), 1)
+
+    def test_a_past_date_is_still_allowed(self):
+        self.assertIn(self.post_entry(self.today - timedelta(days=3)).status_code,
+                      (200, 201))
+        self.assertEqual(DailyEntry.objects.count(), 1)
+
+    def test_the_refusal_is_reported_not_swallowed(self):
+        """The client shows `error` from the body; a 500 would say nothing
+        useful and a 201 would be a silent corruption."""
+        body = self.post_entry(self.tomorrow).json()
+        self.assertIn("error", body)
+        self.assertTrue(body["error"])
+
+    def test_both_editable_date_boxes_are_capped_in_the_form(self):
+        for url_name in ("daily_entry_single_add", "medicine_entry_add"):
+            with self.subTest(page=url_name):
+                html = self.client.get(reverse(url_name)).content.decode()
+                self.assertIn('max="${TODAY}"', html)
+                self.assertIn("guardFutureDate", html)
+
+
+class SharedFutureDateRuleTests(TestCase):
+    """The rule is not Single Entry's private business.
+
+    It lives in Hitech_BIMS.entry_dates and is applied at every transaction
+    save path — broiler, inventory, sales, hatchery — and in main.js for every
+    transaction date box on every page, including rows built after load.
+    """
+
+    def test_the_rule_refuses_tomorrow_and_allows_today(self):
+        from Hitech_BIMS.entry_dates import reject_future_date
+        from django.core.exceptions import ValidationError
+
+        today = timezone.localdate()
+        self.assertEqual(reject_future_date(today), today)
+        self.assertEqual(reject_future_date(today - timedelta(days=1)),
+                         today - timedelta(days=1))
+        self.assertIsNone(reject_future_date(None))
+        with self.assertRaises(ValidationError):
+            reject_future_date(today + timedelta(days=1))
+
+    def test_every_module_that_saves_a_transaction_date_applies_it(self):
+        """A save path that parses a date and does not run it through the rule
+        is one that still accepts tomorrow."""
+        import pathlib
+        import re
+
+        offenders = []
+        for path in ("broiler/views.py", "inventory/views.py", "sales/views.py",
+                     "hatchery/views.py"):
+            source = pathlib.Path(path).read_text(encoding="utf-8")
+            for line in source.splitlines():
+                if not re.search(r"instance\.date\s*=.*fromisoformat", line):
+                    continue
+                if "reject_future_date" not in line:
+                    offenders.append("%s: %s" % (path, line.strip()[:80]))
+        self.assertEqual(offenders, [])
+
+    def test_the_browser_guard_ships_and_is_narrow(self):
+        """Scheduling dates must not be caught by it: a hatch date, a tray
+        transfer, a phase's effective_from and a financial year are all
+        legitimately in the future."""
+        import pathlib
+
+        js = pathlib.Path("static/js/main.js").read_text(encoding="utf-8")
+        self.assertIn("isTransactionDate", js)
+        self.assertIn("data-allow-future", js)
+        # Matched on the transaction-date convention only.
+        self.assertIn("el.id === 'date' || el.name === 'date'", js)
+
+    def test_the_collected_copy_is_current(self):
+        """WhiteNoise serves staticfiles/, not static/ — an uncollected change
+        is invisible in the browser however right the source is.
+
+        staticfiles/ is generated and git-ignored, so this can only check a
+        tree where collectstatic has actually been run; elsewhere there is
+        nothing to be stale.
+        """
+        import pathlib
+
+        collected = pathlib.Path("staticfiles/js/main.js")
+        if not collected.exists():
+            self.skipTest("staticfiles/ not built in this tree")
+        self.assertIn("isTransactionDate",
+                      collected.read_text(encoding="utf-8"),
+                      "staticfiles/js/main.js is stale — run collectstatic")

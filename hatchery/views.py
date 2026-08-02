@@ -26,6 +26,7 @@ from hatchery_master.models import Hatchery, Setter, Hatcher, STATES_AND_TERRITO
 from hr.models import Employee
 from sales.models import Customer, CustomerShippingAddress
 
+from Hitech_BIMS.entry_dates import reject_future_date
 from .models import (
     HatchSetting, HatchEggIntake, HatchHatcherOutput, HatchSalesLine,
     EggPurchase, EggPurchaseItem, EggGrading, EggGradingHatchItem,
@@ -1870,7 +1871,7 @@ def _chick_sale_receipt_to_dict(row):
 
 def _apply_chick_sale_receipt(instance, data):
     if data.get("date"):
-        instance.date = date.fromisoformat(data["date"])
+        instance.date = reject_future_date(date.fromisoformat(data["date"]))
     instance.location_id = data.get("location") or None
     instance.customer_id = data.get("customer") or None
     instance.mode = data.get("mode") or "Cash"

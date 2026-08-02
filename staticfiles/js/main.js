@@ -161,6 +161,72 @@ $.extend(true, $.fn.dataTable.defaults, {
 })(jQuery);
 
 // ---------------------------------------------------------------------------
+// Transaction dates cannot be in the future.
+//
+// A transaction dated ahead of today corrupts everything read as-of a date —
+// age, opening stock, live-bird counts, ledger balances — and there is no
+// legitimate reason to file one. Applied here rather than per form so every
+// transaction page gets it, including rows built in JavaScript after load.
+//
+// Scope is deliberately narrow: only a date input whose id/name is exactly
+// "date", or that carries a "date" class (this codebase's row convention).
+// Scheduling fields have their own names — hatch_date, setting_date,
+// transfer_date, effective_from, agreement dates, financial-year bounds — and
+// those are legitimately in the future, so they are left alone. Any field can
+// opt out with data-allow-future.
+// ---------------------------------------------------------------------------
+(function () {
+  function today() {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString().slice(0, 10);
+  }
+
+  function isTransactionDate(el) {
+    if (el.type !== 'date' || el.hasAttribute('data-allow-future')) return false;
+    return el.id === 'date' || el.name === 'date' || el.classList.contains('date');
+  }
+
+  function guard(el) {
+    if (!isTransactionDate(el) || el.dataset.futureGuarded) return;
+    el.dataset.futureGuarded = '1';
+    const max = today();
+    // Only tighten: a page that already set its own max keeps it.
+    if (!el.max || el.max > max) el.max = max;
+    if (el.value && el.value <= max) el.dataset.lastGood = el.value;
+  }
+
+  function check(el) {
+    if (!el.dataset.futureGuarded || !el.value) return;
+    if (el.value > today()) {
+      window.alert('Entry date cannot be later than today.');
+      // Reverted, not clamped: clamping would leave a date nobody chose.
+      el.value = el.dataset.lastGood || today();
+    } else {
+      el.dataset.lastGood = el.value;
+    }
+  }
+
+  function scan(root) {
+    if (root.nodeType !== 1) return;
+    if (root.matches && root.matches('input[type="date"]')) guard(root);
+    if (root.querySelectorAll) root.querySelectorAll('input[type="date"]').forEach(guard);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    scan(document.body);
+    new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) { m.addedNodes.forEach(scan); });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+
+  // Delegated so rows added later are covered without rebinding.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.matches && e.target.matches('input[type="date"]')) check(e.target);
+  }, true);
+})();
+
+// ---------------------------------------------------------------------------
 // Shared UI helpers (design-system single source of truth). Pages currently
 // copy-paste their own showToast()/escapeHtml() locally; those local defs still
 // shadow these globals, so adding them here is non-breaking. New/refactored

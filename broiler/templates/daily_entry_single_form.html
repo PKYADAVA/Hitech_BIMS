@@ -204,6 +204,19 @@ function addDaysISO(iso, n) {
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 let batchStartDate = null;
+// A date typed past today is refused rather than quietly clamped: clamping
+// would leave a row the user did not ask for. The server refuses it too — a
+// max= attribute is not enforced for typed input in every browser.
+function guardFutureDate(input) {
+  if (input.value && input.value > TODAY) {
+    alert('Entry date cannot be later than today.');
+    input.value = input.dataset.lastGood || TODAY;
+    return false;
+  }
+  input.dataset.lastGood = input.value;
+  return true;
+}
+
 
 // Fill a Batch <select> from a lookup's `batches`. One open batch is chosen
 // for the user — that is the normal case and there is nothing to decide. More
@@ -243,7 +256,7 @@ function row(dateVal) {
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><input class="form-control bg-light age" readonly></td>
-    <td><input class="form-control date" type="date" value="${dateVal || TODAY}"></td>
+    <td><input class="form-control date" type="date" value="${dateVal || TODAY}" max="${TODAY}"></td>
     <td><input class="form-control mortality" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control culls" type="number" min="0" step="1" value="0"></td>
     <td class="fg1"><select class="form-select feed-1">${feedOptions}</select><div class="phase-hint small mt-1"></div></td>
@@ -777,7 +790,10 @@ get('batch').addEventListener('change', function () {
 
 get('row-table').addEventListener('input', e => {
   const tr = e.target.closest('tr');
-  if (e.target.classList.contains('date')) { recomputeAge(tr); refreshRowData(tr); recomputeStockPreview(); }
+  if (e.target.classList.contains('date')) {
+    if (!guardFutureDate(e.target)) return;
+    recomputeAge(tr); refreshRowData(tr); recomputeStockPreview();
+  }
   else if (e.target.classList.contains('kgs-1') || e.target.classList.contains('kgs-2')) { updateFeedFeedback(); recomputeStockPreview(); }
   else if (e.target.classList.contains('avg-wt')) { updateFeedFeedback(); }
   else if (e.target.classList.contains('mortality') || e.target.classList.contains('culls')) { updateSummary(); }
@@ -799,7 +815,14 @@ get('row-table').addEventListener('click', e => {
     const lastDate = lastRow ? lastRow.querySelector('.date').value : null;
     // Continue from the last row, or from the farm's next entry date when
     // there is no row yet — today is only right if neither is known.
-    row(lastDate ? nextDateString(lastDate) : nextEntryDate);
+    const nextDate = lastDate ? nextDateString(lastDate) : nextEntryDate;
+    // Refused rather than clamped to today: clamping would repeat the day
+    // already on the row above, which reads as a duplicate entry.
+    if (nextDate && nextDate > TODAY) {
+      alert('This flock is already recorded up to today. There is no further day to add.');
+      return;
+    }
+    row(nextDate);
     recomputeStockPreview();
   }
 });
@@ -825,6 +848,7 @@ get('single-batch-form').addEventListener('submit', function (e) {
     remarks: tr.querySelector('.remarks').value,
   }));
   if (!rows.length || rows.some(r => !r.date)) { alert('Every row needs a Date.'); return; }
+  if (rows.some(r => r.date > TODAY)) { alert('Entry date cannot be later than today.'); return; }
   fetch("{% url 'daily_entry_api_list' %}", {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },

@@ -1,3 +1,4 @@
+from Hitech_BIMS.entry_dates import reject_future_date
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -980,7 +981,7 @@ def _stock_transfer_to_dict(row):
 
 def _apply_stock_transfer_row(instance, row, user):
     if row.get("date"):
-        instance.date = timezone.datetime.fromisoformat(row["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(row["date"]).date())
     instance.dc_no = row.get("dc_no") or ""
     instance.item_id = row.get("item") or None
     instance.quantity = Decimal(str(row.get("quantity") or 0))
@@ -1291,7 +1292,7 @@ def _medicine_transfer_detail_dict(header):
 
 def _apply_medicine_transfer_header(instance, data, user):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.dc_no = data.get("dc_no") or ""
 
     from_type = data.get("from_location_type") or "warehouse"
@@ -1698,7 +1699,7 @@ def _inventory_adjustment_detail_dict(header):
 
 def _apply_inventory_adjustment_header(instance, data, user):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.bill_no = data.get("bill_no") or ""
 
     location_type = data.get("location_type") or "warehouse"
@@ -1981,7 +1982,7 @@ def _stock_issue_detail_dict(header):
 
 def _apply_stock_issue_header(instance, data, user):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.chart_of_account_id = data.get("chart_of_account") or None
     if not instance.pk:
         instance.created_by = user
@@ -2258,7 +2259,7 @@ def _stock_receive_detail_dict(header):
 
 def _apply_stock_receive_header(instance, data, user):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.chart_of_account_id = data.get("chart_of_account") or None
     if not instance.pk:
         instance.created_by = user

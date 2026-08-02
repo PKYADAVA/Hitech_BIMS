@@ -18,6 +18,7 @@ from django.http import Http404, JsonResponse
 from django.db.models import F, Max, Min, Prefetch, Q, Sum
 from django.core.files.storage import default_storage
 from django.core.exceptions import ValidationError
+from Hitech_BIMS.entry_dates import reject_future_date
 from django.db import transaction
 from django.core.cache import cache
 from django.conf import settings
@@ -1817,6 +1818,7 @@ def _apply_daily_entry_row(instance, row, entry_date, user, default_farm_id=None
     farm_id = row.get("farm") or default_farm_id
     if row.get("date"):
         entry_date = timezone.datetime.fromisoformat(row["date"]).date()
+    reject_future_date(entry_date)
     batch = _resolve_batch(farm_id, row.get("batch"))
     instance.date = entry_date
     instance.farm_id = farm_id
@@ -2357,6 +2359,7 @@ def _apply_medicine_entry_row(instance, row, entry_date, user):
     farm_id = row.get("farm") or instance.farm_id
     if row.get("date"):
         entry_date = timezone.datetime.fromisoformat(row["date"]).date()
+    reject_future_date(entry_date)
     batch = _resolve_batch(farm_id, row.get("batch"))
     instance.date = entry_date
     instance.farm_id = farm_id
@@ -2633,7 +2636,7 @@ def _bird_sale_to_dict(row):
 
 def _apply_bird_sale(instance, data):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.doc_no = data.get("doc_no") or ""
     sale_type = data.get("sale_type") or "customer"
     instance.sale_type = sale_type
@@ -2791,7 +2794,7 @@ def _bird_sale_receipt_to_dict(row):
 
 def _apply_bird_sale_receipt(instance, data):
     if data.get("date"):
-        instance.date = timezone.datetime.fromisoformat(data["date"]).date()
+        instance.date = reject_future_date(timezone.datetime.fromisoformat(data["date"]).date())
     instance.location_id = data.get("location") or None
     sale_type = data.get("sale_type") or "customer"
     instance.sale_type = sale_type

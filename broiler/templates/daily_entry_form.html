@@ -260,7 +260,7 @@ function row() {
   // fillRowForFarm counts the rows already on this farm, so the carried row
   // lands on the next day rather than repeating the last one's date.
   const carried = carryFarmAndBatch(prev, tr);
-  if (carried) fillRowForFarm(tr, carried);
+  if (carried) fillRowForFarm(tr, carried, true);
   refreshRowAddButtons();
   return tr;
 }
@@ -320,7 +320,7 @@ function addDaysISO(iso, n) {
   return dt.toISOString().slice(0, 10);
 }
 
-function fillRowForFarm(tr, farmId) {
+function fillRowForFarm(tr, farmId, isNew) {
   // Count other rows already using this farm NOW (synchronously) — each repeat
   // advances the date one day. Order- and timing-independent.
   let others = 0;
@@ -330,7 +330,23 @@ function fillRowForFarm(tr, farmId) {
   });
   fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}`).then(r => r.json()).then(base => {
     let target = others > 0 ? addDaysISO(base.next_date, others) : base.next_date;
-    if (target > TODAY) target = TODAY;   // never past today
+    if (target > TODAY) {
+      if (isNew) {
+        // The carried flock has no day left to record — but the row itself is
+        // still wanted, because the usual reason for adding one is a *different*
+        // farm. Removing it would block that, so it is handed back empty.
+        alert('This flock is already recorded up to today. Choose another farm for this row.');
+        const farmSel = tr.querySelector('.farm');
+        farmSel.value = '';
+        if (window.jQuery) jQuery(farmSel).trigger('change.select2');
+        fillBatchSelect(tr.querySelector('.batch'), []);
+        tr.querySelector('.date').value = TODAY;
+        tr.querySelector('.age').value = '';
+        recomputeStockPreview();
+        return;
+      }
+      target = TODAY;                     // never past today
+    }
     // Age / phase / std / live birds are all date-specific — resolve for target.
     const chosen = tr.querySelector('.batch').value;
     const batchQ = chosen ? `&batch=${chosen}` : '';
