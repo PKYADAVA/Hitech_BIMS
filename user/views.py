@@ -848,14 +848,24 @@ def update_password(request):
     return render(request, "update_password.html")
 
 
-@login_required
-def create_user(request):
-    context = {
-        "users": User.objects.all().order_by("username"),
+def _user_page_context():
+    """Rebuilt per render, not per request: after creating a user the page has
+    to show them, and the free-employee list has to have lost the one just
+    attached."""
+    return {
+        "users": User.objects.select_related("employee").order_by("username"),
         # Only employees not yet linked to a user can be attached to a new account.
-        "employees": Employee.objects.filter(user__isnull=True).all(),
+        "employees": Employee.objects.filter(user__isnull=True),
+        # Every employee, for the edit dialog: it has to offer the free ones
+        # *and* the one this user already has, which is not free by definition.
+        # Each option carries its current user so the dialog can tell them apart.
+        "all_employees": Employee.objects.select_related("user").order_by("full_name"),
         "groups": Group.objects.all(),
     }
+
+
+@login_required
+def create_user(request):
 
     if request.method == "POST":
         employee_id = request.POST.get("employee")
@@ -886,11 +896,13 @@ def create_user(request):
                 emp_obj.user = user
                 emp_obj.save()
 
-            return render(request, "create_user.html", context)
+            # Rebuilt after the write, so the new account is on the list and
+            # the employee just linked is no longer offered as free.
+            return render(request, "create_user.html", _user_page_context())
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
-    return render(request, "create_user.html", context)
+    return render(request, "create_user.html", _user_page_context())
 
 
 @login_required
@@ -912,6 +924,23 @@ def update_user(request, user_id):
                 return JsonResponse({"error": "Passwords do not match."}, status=400)
             user.set_password(password)
 
+        employee_id = (request.POST.get("employee") or "").strip()
+        current = getattr(user, "employee", None)
+
+        # Employee.user is one-to-one, so re-pointing it at someone else's
+        # employee would silently unlink them. Refused instead, before anything
+        # is written.
+        if employee_id:
+            chosen = Employee.objects.filter(id=employee_id).first()
+            if not chosen:
+                return JsonResponse({"error": "That employee no longer exists."},
+                                    status=400)
+            if chosen.user_id and chosen.user_id != user.id:
+                return JsonResponse(
+                    {"error": "%s is already linked to user %s."
+                              % (chosen.full_name, chosen.user.username)},
+                    status=400)
+
         user.username = username
         user.is_superuser = is_superuser
         user.save()
@@ -919,6 +948,15 @@ def update_user(request, user_id):
         user.groups.clear()
         if group_id:
             user.groups.add(group_id)
+
+        # Detach first, so moving a user from one employee to another does not
+        # leave both pointing at them.
+        if current and str(current.id) != employee_id:
+            current.user = None
+            current.save(update_fields=["user"])
+        if employee_id and (not current or str(current.id) != employee_id):
+            chosen.user = user
+            chosen.save(update_fields=["user"])
 
         return JsonResponse({"message": "User updated successfully."})
 

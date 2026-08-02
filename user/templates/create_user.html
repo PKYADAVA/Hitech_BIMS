@@ -64,6 +64,7 @@
                             data-id="{{ user.id }}"
                             data-username="{{ user.username }}"
                             data-group-id="{% if user_group %}{{ user_group.id }}{% endif %}"
+                            data-employee-id="{% if user.employee %}{{ user.employee.id }}{% endif %}"
                             data-superuser="{{ user.is_superuser|yesno:'1,0' }}">
                             <i class="fas fa-pen"></i>
                         </button>
@@ -158,6 +159,21 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="mb-3">
+                        <label for="edit_employee" class="form-label">Employee <span class="text-muted">(optional)</span></label>
+                        <select id="edit_employee" class="form-select">
+                            <option value="">No employee (standalone user)</option>
+                            {% comment %}Every employee is listed; the ones already
+                            taken by another account are removed as the dialog opens,
+                            which needs to know who is being edited.{% endcomment %}
+                            {% for employee in all_employees %}
+                            <option value="{{ employee.id }}" data-user-id="{{ employee.user_id|default_if_none:'' }}">
+                                {{ employee.full_name }}{% if employee.user_id %} — linked to {{ employee.user.username }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Only employees not already linked to another account can be chosen.</div>
+                    </div>
                     <div class="form-check mb-3">
                         <input type="checkbox" id="edit_is_superuser" class="form-check-input">
                         <label for="edit_is_superuser" class="form-check-label">Is Superuser</label>
@@ -194,12 +210,26 @@
         });
 
         $(document).on('click', '.edit-user-btn', function () {
-            $('#edit_user_id').val($(this).data('id'));
+            var userId = String($(this).data('id'));
+            var employeeId = String($(this).data('employee-id') || '');
+            $('#edit_user_id').val(userId);
             $('#edit_username').val($(this).data('username'));
             $('#edit_group').val($(this).data('group-id') || '');
             $('#edit_is_superuser').prop('checked', $(this).data('superuser') == 1);
             $('#edit_password').val('');
             $('#edit_confirm_password').val('');
+
+            // An employee belongs to one account. Offer the free ones and the
+            // one this account already has; hide the rest rather than let a
+            // pick be made that the server will only refuse.
+            $('#edit_employee option').each(function () {
+                var owner = String($(this).data('user-id') || '');
+                var mine = owner === '' || owner === userId;
+                $(this).prop('disabled', !mine).toggle(mine);
+            });
+            $('#edit_employee').val(employeeId);
+            if (window.jQuery) $('#edit_employee').trigger('change.select2');
+
             $('#editUserModal').modal('show');
         });
 
@@ -212,6 +242,7 @@
                 password: $('#edit_password').val(),
                 confirm_password: $('#edit_confirm_password').val(),
                 group: $('#edit_group').val(),
+                employee: $('#edit_employee').val() || '',
                 is_superuser: $('#edit_is_superuser').is(':checked') ? 'on' : 'off',
                 csrfmiddlewaretoken: '{{ csrf_token }}'
             };
