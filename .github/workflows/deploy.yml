@@ -82,9 +82,41 @@ jobs:
       - name: Validate collectstatic
         run: python manage.py collectstatic --noinput --dry-run
 
+  mobile:
+    name: Mobile app
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      # `npm ci` and not `npm install`: node_modules drifted five minor
+      # versions off the lockfile once already, which broke the app in a way
+      # that looked like a source bug (RN 0.86 against Expo SDK 54).
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: mobile
+        run: npm test
+
   deploy:
     name: Deploy to droplet
-    needs: test
+    # Both gates: the phone app talks to this API, and a client that no longer
+    # compiles is as broken as a server that no longer passes.
+    needs: [test, mobile]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
