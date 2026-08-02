@@ -76,11 +76,12 @@ def _default_workers():
         except ValueError:
             pass
     if memory_mb is None:
-        # Cap unknown and no override (bare droplet, local dev). Default to 2
-        # rather than 3: on the small instances where the cap is unreadable,
-        # over-provisioning OOMs; set GUNICORN_MEMORY_MB (or WEB_CONCURRENCY)
-        # to raise it deliberately.
-        return 2
+        # Cap unknown and no override (e.g. Render, which reports the cgroup as
+        # unlimited). Default to a single worker: this app's per-worker copy is
+        # ~160-200MB, so on the small instances where the cap is unreadable one
+        # worker + threads is the safe fit that won't OOM. Raise it deliberately
+        # with WEB_CONCURRENCY or GUNICORN_MEMORY_MB when the box is bigger.
+        return 1
     usable = memory_mb - _RESERVED_MB
     return max(1, min(_MAX_WORKERS, usable // _WORKER_BUDGET_MB))
 
