@@ -11,6 +11,11 @@ is exactly one and ask when there is more, and the save path uses what was
 chosen — checked against the farm, because the id comes from the browser.
 """
 import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -294,3 +299,55 @@ class MedicineEntryDateTests(TestCase):
         html = self.client.get(reverse("medicine_entry_add")).content.decode()
         self.assertIn('class="form-control date" type="date"', html)
         self.assertNotIn('class="form-control bg-light date" readonly', html)
+
+
+class InlineScriptSyntaxTests(TestCase):
+    """The JavaScript these forms emit actually parses.
+
+    Most of the entry logic — the supervisor cascade, the batch selector, the
+    carried farm/batch — is JavaScript written inside a Django template. A
+    stray brace there is invisible to `manage.py check` and to every other test
+    here: the page still returns 200, and only the browser finds out. `node
+    --check` reads the rendered output the way the browser would.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.node = shutil.which("node")
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser("js_user", "js@x.com",
+                                                  "Str0ngPass!")
+        self.client.force_login(self.user)
+
+    def assertScriptsParse(self, url_name):
+        if not self.node:
+            self.skipTest("node is not installed")
+        html = self.client.get(reverse(url_name)).content.decode()
+        # Inline blocks only: a src= tag has nothing between the tags to check.
+        blocks = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>",
+                            html, re.S)
+        self.assertTrue(blocks, "no inline script found on %s" % url_name)
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                         encoding="utf-8") as handle:
+            handle.write("\n;\n".join(blocks))
+            path = handle.name
+        try:
+            result = subprocess.run([self.node, "--check", path],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0,
+                             "%s emits invalid JavaScript:\n%s"
+                             % (url_name, result.stderr[:2000]))
+        finally:
+            os.unlink(path)
+
+    def test_the_daily_entry_form_script_parses(self):
+        self.assertScriptsParse("daily_entry_add")
+
+    def test_the_single_entry_form_script_parses(self):
+        self.assertScriptsParse("daily_entry_single_add")
+
+    def test_the_medicine_form_script_parses(self):
+        self.assertScriptsParse("medicine_entry_add")

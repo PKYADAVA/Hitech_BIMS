@@ -111,6 +111,27 @@ const TODAY = "{{ today }}";
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
 
+// Carry a row's Farm and Batch onto the next one. A sheet is normally several
+// days of the same flock, so re-picking them for every row is the exception,
+// not the rule — and the Batch options have to come across too, or the copied
+// value would sit in a select that has never been filled.
+function carryFarmAndBatch(prev, tr) {
+  if (!prev) return null;
+  const fromFarm = prev.querySelector('.farm');
+  const fromBatch = prev.querySelector('.batch');
+  if (!fromFarm || !fromFarm.value) return null;
+  const farm = tr.querySelector('.farm');
+  farm.value = fromFarm.value;
+  if (window.jQuery) jQuery(farm).trigger('change.select2');
+  if (fromBatch && fromBatch.value) {
+    const batch = tr.querySelector('.batch');
+    batch.innerHTML = fromBatch.innerHTML;
+    batch.value = fromBatch.value;
+    if (window.jQuery) jQuery(batch).trigger('change.select2');
+  }
+  return fromFarm.value;
+}
+
 function row() {
   const tr = document.createElement('tr');
   tr.innerHTML = `
@@ -127,7 +148,15 @@ function row() {
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
+  const prev = [...get('row-table').tBodies[0].querySelectorAll('tr')].pop();
   get('row-table').tBodies[0].append(tr);
+  const carried = carryFarmAndBatch(prev, tr);
+  if (carried) {
+    const batch = tr.querySelector('.batch').value;
+    tr.dataset.placedOn = prev ? (prev.dataset.placedOn || '') : '';
+    recomputeAge(tr);
+    loadBatchFor(tr, carried, batch);
+  }
   refreshRowAddButtons();
   return tr;
 }
