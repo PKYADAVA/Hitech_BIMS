@@ -5,6 +5,7 @@ import { AppState, Text, View } from "react-native";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { AppIcon } from "@/components/AppIcon";
+import { isPrivilegedUIActive } from "@/lockSuppress";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { Button } from "./ui";
 
@@ -56,7 +57,11 @@ export function LockGate({ children }: { children: React.ReactNode }) {
     }
     setLocked(true);
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "background" || state === "inactive") setLocked(true);
+      // Don't lock when the app backgrounds to show its own OS UI (camera,
+      // photo picker, location prompt) — otherwise capturing a photo re-locks.
+      if ((state === "background" || state === "inactive") && !isPrivilegedUIActive()) {
+        setLocked(true);
+      }
     });
     return () => sub.remove();
   }, [active]);

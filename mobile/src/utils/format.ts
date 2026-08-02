@@ -60,7 +60,7 @@ export function formatMoney(value: unknown): string {
 }
 
 const DATE_KEY = /(^|_)(date|_date|received_date|created_at|updated_at|hatch_date|setting_date)$/;
-const TIME_KEY = /(_time|created_at|updated_at)$/;
+const TIME_KEY = /(_time|_at|last_login|date_joined)$/;
 const MONEY_KEY = /(amount|rate|total|freight|price|profit|final_amount|avg_amount)$/;
 
 /** Best-effort display of an arbitrary field value based on its key + type. */

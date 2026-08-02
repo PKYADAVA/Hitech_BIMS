@@ -102,7 +102,7 @@ export function LoginScreen() {
 
 const useStyles = makeStyles((colors) => ({
   bg: { flex: 1, backgroundColor: colors.primaryDark },
-  scrim: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(6,20,12,0.55)" },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(6,20,12,0.55)" },
   safe: { flex: 1 },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "flex-end", padding: spacing.lg },

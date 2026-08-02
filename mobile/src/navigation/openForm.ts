@@ -3,8 +3,9 @@ import { isDocumentForm } from "@/config/documents";
 import { ModuleStackParams } from "@/navigation/types";
 
 /** Resources whose create/edit uses a bespoke screen instead of the generic Form. */
-const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm"> = {
+const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm"> = {
   "broiler-bird-sales": "BirdSaleForm",
+  "broiler-sale-receipts": "BirdSaleReceiptForm",
 };
 
 /** Anything that can push a screen in the module stack (screen props or header options). */

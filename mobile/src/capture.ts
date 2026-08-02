@@ -2,6 +2,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
 
+import { withPrivilegedUI } from "@/lockSuppress";
+
 /**
  * Field capture for the Daily Entry form — photo evidence and a GPS stamp,
  * filling the `mort_image` / `cull_image` / `feed_image` and
@@ -21,6 +23,15 @@ export interface CapturedImage {
 
 const FALLBACK_MIME = "image/jpeg";
 
+/** Thrown when the OS permission for the camera / photo library is refused, so
+ *  the caller can prompt the user to enable it (rather than silently no-op). */
+export class CapturePermissionError extends Error {
+  constructor(public kind: "camera" | "library") {
+    super(`${kind} permission denied`);
+    this.name = "CapturePermissionError";
+  }
+}
+
 function toCaptured(asset: ImagePicker.ImagePickerAsset): CapturedImage {
   // Derive a filename the backend can store; ImagePicker omits it on some
   // Android providers, and Django needs *some* name to write the file.
@@ -29,32 +40,38 @@ function toCaptured(asset: ImagePicker.ImagePickerAsset): CapturedImage {
   return { uri: asset.uri, name, mimeType: asset.mimeType || FALLBACK_MIME };
 }
 
-/** Open the camera. Null if permission is refused or the user backs out. */
+/** Open the camera. Null if the user backs out; throws if permission is refused.
+ *  Wrapped in `withPrivilegedUI` so the permission dialog + camera backgrounding
+ *  the app doesn't trip biometric App Lock. */
 export async function capturePhoto(): Promise<CapturedImage | null> {
-  const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) return null;
+  return withPrivilegedUI(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) throw new CapturePermissionError("camera");
 
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ["images"],
-    quality: 0.6, // field photos travel over rural mobile data
-    exif: false,
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      quality: 0.6, // field photos travel over rural mobile data
+      exif: false,
+    });
+    if (result.canceled || !result.assets?.length) return null;
+    return toCaptured(result.assets[0]);
   });
-  if (result.canceled || !result.assets?.length) return null;
-  return toCaptured(result.assets[0]);
 }
 
 /** Pick from the gallery — the fallback when a photo was taken earlier. */
 export async function pickPhoto(): Promise<CapturedImage | null> {
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  return withPrivilegedUI(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) throw new CapturePermissionError("library");
 
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ["images"],
-    quality: 0.6,
-    exif: false,
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.6,
+      exif: false,
+    });
+    if (result.canceled || !result.assets?.length) return null;
+    return toCaptured(result.assets[0]);
   });
-  if (result.canceled || !result.assets?.length) return null;
-  return toCaptured(result.assets[0]);
 }
 
 export interface CapturedPoint {
@@ -68,16 +85,18 @@ export interface CapturedPoint {
  */
 export async function captureLocation(): Promise<CapturedPoint | null> {
   try {
-    const perm = await Location.requestForegroundPermissionsAsync();
-    if (!perm.granted) return null;
+    return await withPrivilegedUI(async () => {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) return null;
 
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return {
+        latitude: String(pos.coords.latitude),
+        longitude: String(pos.coords.longitude),
+      };
     });
-    return {
-      latitude: String(pos.coords.latitude),
-      longitude: String(pos.coords.longitude),
-    };
   } catch {
     // No fix, location services off, or (on web) a blocked geolocation prompt.
     return null;

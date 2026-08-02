@@ -20,7 +20,12 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#15803d"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,7 +33,7 @@
     "extra": {
       "apiBaseUrl": "https://hitechfarms.co.in/api/v1",
       "eas": {
-        "projectId": "93819148-ac24-4028-a814-96e3f605cd03"
+        "projectId": "5d635b88-b87b-4998-97e9-818546c72b9e"
       }
     },
     "plugins": [
@@ -48,7 +53,6 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
-      "expo-status-bar",
       "expo-font",
       [
         "expo-splash-screen",
@@ -59,6 +63,6 @@
         }
       ]
     ],
-    "owner": "akash17s"
+    "owner": "prabhatexpo"
   }
 }

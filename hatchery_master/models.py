@@ -2,6 +2,8 @@ from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from Hitech_BIMS.storage_backends import private_media_storage
+
 STATES_AND_TERRITORIES = [
     "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
     "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
@@ -69,6 +71,7 @@ class Hatchery(models.Model):
     )
     document = models.FileField(
         upload_to='hatchery_master/documents/',
+        storage=private_media_storage,
         blank=True,
         null=True,
         help_text=_("Supporting document (agreement copy, etc.)")

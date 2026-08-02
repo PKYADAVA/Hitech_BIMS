@@ -259,16 +259,88 @@ STATICFILES_DIRS = [
 ]
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Gzip-compresses static files at collectstatic time (served by WhiteNoise
-# above). Deliberately not CompressedManifestStaticFilesStorage: verified
-# directly that staticfiles_storage.url() keeps returning un-hashed paths
-# even though the hash manifest is generated correctly, so the hashed/
+# Storage backends (Django 4.2 STORAGES API — mutually exclusive with the
+# legacy STATICFILES_STORAGE/DEFAULT_FILE_STORAGE settings, so both live here).
+#
+# staticfiles: Gzip-compresses static files at collectstatic time (served by
+# WhiteNoise above). Deliberately not CompressedManifestStaticFilesStorage:
+# verified directly that staticfiles_storage.url() keeps returning un-hashed
+# paths even though the hash manifest is generated correctly, so the hashed/
 # cache-busting variant provides no benefit here and was reverted.
-STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+#
+# default: media (user uploads — photos, scanned documents). Local filesystem
+# by default; swapped to DigitalOcean Spaces below when USE_SPACES=True.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Sensitive uploads (KYC scans, cheques, agreements). On Spaces this becomes
+    # a private, signed-URL backend below; in local dev it's the filesystem, so
+    # fields wired to it (via Hitech_BIMS.storage_backends) still work offline.
+    "private_media": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# --- DigitalOcean Spaces (S3-compatible) for media uploads ---
+# Spaces speaks the S3 API, so django-storages' S3 backend drives it once
+# pointed at the regional Spaces endpoint. Only media is offloaded here; static
+# files continue to be served by WhiteNoise. Leave USE_SPACES unset/False for
+# local development to keep uploads on the local filesystem.
+USE_SPACES = env_bool("USE_SPACES", False)
+if USE_SPACES:
+    AWS_ACCESS_KEY_ID = os.getenv("SPACES_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.getenv("SPACES_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = os.getenv("SPACES_BUCKET_NAME")
+    if not all([AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_STORAGE_BUCKET_NAME]):
+        raise ImproperlyConfigured(
+            "USE_SPACES=True requires SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY "
+            "and SPACES_BUCKET_NAME to be set."
+        )
+    AWS_S3_REGION_NAME = os.getenv("SPACES_REGION", "nyc3")
+    AWS_S3_ENDPOINT_URL = os.getenv(
+        "SPACES_ENDPOINT_URL", f"https://{AWS_S3_REGION_NAME}.digitaloceanspaces.com"
+    )
+    # Serve stored files by plain public URL (no signed query string). Uploads
+    # are marked public-read so `<img src="…">` works without presigning.
+    AWS_DEFAULT_ACL = "public-read"
+    AWS_QUERYSTRING_AUTH = False
+    AWS_S3_FILE_OVERWRITE = False  # keep Django's collision-safe unique names
+    AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
+    # Optional: serve through the Spaces CDN edge instead of the origin.
+    SPACES_CDN_DOMAIN = os.getenv("SPACES_CDN_DOMAIN")
+    if SPACES_CDN_DOMAIN:
+        AWS_S3_CUSTOM_DOMAIN = SPACES_CDN_DOMAIN
+    # Prefix every object with this "folder" so media never collides with any
+    # other assets sharing the bucket.
+    SPACES_MEDIA_LOCATION = os.getenv("SPACES_MEDIA_LOCATION", "media")
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {"location": SPACES_MEDIA_LOCATION},
+    }
+    # Private bucket area for sensitive documents: no public ACL, and .url()
+    # returns a short-lived signed link instead of a permanent public one.
+    SPACES_PRIVATE_LOCATION = os.getenv("SPACES_PRIVATE_LOCATION", "private")
+    SPACES_PRIVATE_URL_EXPIRE = int(os.getenv("SPACES_PRIVATE_URL_EXPIRE", "3600"))
+    STORAGES["private_media"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "location": SPACES_PRIVATE_LOCATION,
+            "default_acl": "private",
+            "querystring_auth": True,
+            "querystring_expire": SPACES_PRIVATE_URL_EXPIRE,
+            "file_overwrite": False,
+        },
+    }
+    # Public base URL for stored media (the storage backend also builds correct
+    # per-file .url() values; this keeps any direct MEDIA_URL usage consistent).
+    _media_host = (
+        SPACES_CDN_DOMAIN
+        if SPACES_CDN_DOMAIN
+        else f"{AWS_STORAGE_BUCKET_NAME}.{AWS_S3_REGION_NAME}.digitaloceanspaces.com"
+    )
+    MEDIA_URL = f"https://{_media_host}/{SPACES_MEDIA_LOCATION}/"
 
 # Email configuration
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

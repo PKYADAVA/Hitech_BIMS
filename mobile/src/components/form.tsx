@@ -1,8 +1,10 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -13,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { CapturedImage, capturePhoto, captureLocation, pickPhoto } from "@/capture";
+import { CapturedImage, CapturePermissionError, capturePhoto, captureLocation, pickPhoto } from "@/capture";
 import { FormField } from "@/config/forms";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
@@ -282,6 +284,20 @@ function PhotoControl({
     try {
       const shot = await grab();
       if (shot) onChange(shot.uri);
+    } catch (e) {
+      if (e instanceof CapturePermissionError) {
+        const what = e.kind === "camera" ? "Camera" : "Photo library";
+        Alert.alert(
+          `${what} access needed`,
+          `Enable ${what.toLowerCase()} access for Hitech BIMS in Settings to attach a photo.`,
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
+      } else {
+        Alert.alert("Couldn't open", (e as Error)?.message ?? "Please try again.");
+      }
     } finally {
       setBusy(false);
     }

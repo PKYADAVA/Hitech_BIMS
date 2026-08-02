@@ -761,7 +761,7 @@ def user_analytics_data(request):
     user_data = []
     for user in users:
         last_login = (
-            localtime(user["last_login"]).strftime("%Y-%m-%d %H:%M:%S")
+            localtime(user["last_login"]).strftime("%b %d, %Y, %I:%M %p")
             if user["last_login"]
             else "Never"
         )
