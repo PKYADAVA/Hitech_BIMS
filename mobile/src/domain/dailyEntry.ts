@@ -46,9 +46,20 @@ export interface FeedPhase {
 }
 
 /** `/broiler/daily-entry-lookup` — the advisory payload for a farm on a date. */
+/** One batch still running on a farm, as offered by the lookup. */
+export interface OpenBatch {
+  id: number;
+  name: string;
+  placed_on: string | null;
+}
+
 export interface DailyEntryLookup {
   batch: number | null;
   batch_name: string;
+  /** Every open batch on the farm. One means it is settled; more has to be
+   *  asked, the same rule the web forms follow. Optional so an older server
+   *  that does not send it still parses. */
+  batches?: OpenBatch[];
   age_days: number;
   start_date: string | null;
   next_date: string;
@@ -315,4 +326,59 @@ export function adviseDailyEntry(
     status === "warn" ? "Needs Review" : status === "near" ? "Near Limit" : "Within Standard";
 
   return { fieldHints, notes, issues, status, statusLabel };
+}
+
+
+/**
+ * The day after `iso`, as an ISO date. Dates here are plain calendar days —
+ * parsing them as timestamps drags the device's timezone in and can shift the
+ * day, so the arithmetic is done on the parts.
+ */
+export function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d + days));
+  return at.toISOString().slice(0, 10);
+}
+
+/** Today as an ISO date in the device's own timezone, not UTC. */
+export function todayISO(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+
+/** One row's feed slots, as the grid holds them. */
+export interface FeedRow {
+  farm: string;
+  feed_1?: string;
+  feed_1_qty?: string;
+  feed_2?: string;
+  feed_2_qty?: string;
+}
+
+/**
+ * Feed left on the farm after a row is applied.
+ *
+ * `opening` is the farm's balance for that item before the row's date. Rows
+ * above on the same farm and item are subtracted first, then the row's own
+ * kgs — otherwise two rows feeding the same store would each claim the whole
+ * opening balance, which is the web grid's running-stock behaviour.
+ *
+ * Both slots of every earlier row are counted: the same item can be picked in
+ * Feed 1 on one row and Feed 2 on another and it is still one store.
+ */
+export function farmFeedBalance(
+  opening: number,
+  item: string,
+  rowsAbove: FeedRow[],
+  ownQty: number
+): number {
+  let balance = opening;
+  for (const r of rowsAbove) {
+    if (r.feed_1 === item) balance -= Number(r.feed_1_qty) || 0;
+    if (r.feed_2 === item) balance -= Number(r.feed_2_qty) || 0;
+  }
+  return balance - ownQty;
 }

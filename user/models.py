@@ -237,12 +237,14 @@ class AccessChangeLog(models.Model):
     MOBILE = "mobile"
     MOBILE_MODULE = "mobile_module"
     DASHBOARD = "dashboard"
+    MEMBERSHIP = "membership"
 
     SURFACES = [
         (WEB, "Web Access"),
         (MOBILE, "Mobile screen access"),
         (MOBILE_MODULE, "Mobile module access"),
         (DASHBOARD, "Dashboard Access"),
+        (MEMBERSHIP, "Group membership"),
     ]
 
     surface = models.CharField(max_length=20, choices=SURFACES, db_index=True)

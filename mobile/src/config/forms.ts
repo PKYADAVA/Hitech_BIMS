@@ -40,6 +40,13 @@ export interface FormField {
   required?: boolean;
   optionsPath?: string;
   optionLabelKeys?: string[];
+  /**
+   * Options supplied by the caller instead of fetched from `optionsPath`.
+   * For choices the server cannot express as a list endpoint — a farm's open
+   * batches, or farms narrowed to one supervisor, which the list API has no
+   * field filter for.
+   */
+  options?: { value: string; label: string }[];
   /** Computed/derived — rendered but not editable (value comes from `compute`). */
   readOnly?: boolean;
   /** Display-only helper (e.g. a running total) — shown but never sent to the API. */

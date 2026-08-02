@@ -27,6 +27,8 @@
   .ac-mobile { background:#e6f7f3; color:#078b75; }
   .ac-mobile_module { background:#e5f7fb; color:#0087a5; }
   .ac-dashboard { background:#f1ebff; color:#7c3aed; }
+  .ac-membership { background:#fff1df; color:#d97706; }
+  .ac-src { display:block; font-size:.68rem; color:#8494ab; margin-top:1px; }
   .ac-detail summary { font-size:.75rem; color:#6f42c1; cursor:pointer; list-style:none; }
   .ac-detail summary::-webkit-details-marker { display:none; }
   .ac-detail summary::before { content:"▸ "; }
@@ -100,7 +102,12 @@
           {% for entry in entries %}
           <tr>
             <td class="ac-when">{{ entry.row.at|date:"d M Y H:i" }}</td>
-            <td><span class="ac-who">{{ entry.row.changed_by }}</span></td>
+            <td>
+              <span class="ac-who">{{ entry.row.changed_by }}</span>
+              {% if entry.row.source == 'mobile' %}
+              <span class="ac-src" title="Made from the phone app"><i class="fas fa-mobile-screen-button"></i> phone</span>
+              {% endif %}
+            </td>
             <td>
               <span class="ac-tag ac-{{ entry.row.surface }}">{{ entry.row.get_surface_display }}</span>
             </td>

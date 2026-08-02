@@ -97,9 +97,12 @@ def record_save(request, group, surface, before, after, labels=None,
 #: set nothing — the attribute it looked for did not exist.
 #:
 #: Models are looked up lazily to keep this module import-light.
+#: ``membership`` is absent on purpose: it records who joined or left a group,
+#: which is not a row of fields to put back.
 REVERTABLE = {
     "web": ("user.GroupTabPermission", "tab_code", ""),
     "mobile": ("user.GroupMobileTabPermission", "tab_code", "can_"),
+    "mobile_module": ("user.GroupMobileAccess", "module_key", ""),
     "dashboard": ("user.GroupDashboardWidget", "widget_key", ""),
 }
 

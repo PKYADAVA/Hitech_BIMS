@@ -148,9 +148,11 @@ class RevertTests(TestCase):
             summary__startswith="Reverted").count(), 0)
 
     def test_an_unrevertable_surface_is_refused(self):
+        # Membership records who joined or left, which is not a row of fields
+        # to put back — unlike the four matrix surfaces, which are.
         entry = AccessChangeLog.objects.create(
-            surface="mobile_module", group=self.group, changed_by="x",
-            summary="something", detail={"changes": {"broiler": {"on": [True, False]}}})
+            surface="membership", group=self.group, changed_by="x",
+            summary="Added someone", detail={"user": "someone", "joined": True})
         self.revert(entry)
         self.assertEqual(AccessChangeLog.objects.filter(
             summary__startswith="Reverted").count(), 0)

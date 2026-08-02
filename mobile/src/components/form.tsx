@@ -192,7 +192,13 @@ function SelectControl({
   const styles = useStyles();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const { options, loading } = usePickerOptions(field.optionsPath, field.optionLabelKeys);
+  // Inline options win, and suppress the fetch: passing no path leaves the
+  // query disabled rather than firing a request whose result is discarded.
+  const { options: fetched, loading } = usePickerOptions(
+    field.options ? undefined : field.optionsPath,
+    field.optionLabelKeys
+  );
+  const options = field.options ?? fetched;
 
   const selectedLabel =
     options.find((o) => o.value === value)?.label ||
