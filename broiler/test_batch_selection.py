@@ -216,3 +216,81 @@ class FormRenderTests(TestCase):
             with self.subTest(page=url_name):
                 self.assertNotIn('class="form-control bg-light batch" readonly',
                                  self.assertRenders(url_name))
+
+
+class MedicineEntryDateTests(TestCase):
+    """Medicine consumption is recorded on the day it happened.
+
+    The row's Date box was read-only and fixed at today, and the form did not
+    even send it — the payload carried one top-level `date` for the sheet. So a
+    dose given on Tuesday and typed up on Thursday was filed as Thursday's,
+    with Thursday's age and Thursday's opening stock. The save path already
+    honoured a per-row date; nothing was sending one.
+    """
+
+    def setUp(self):
+        from inventory.models import Item, ItemCategory
+
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.supervisor = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B1",
+            start_date=self.today - timedelta(days=20))
+        self.medicine = Item.objects.create(
+            description="Vitamin AD3E",
+            category=ItemCategory.objects.create(name="Medicine"),
+            valuation_method="Weighted Average", standard_cost_per_unit=100,
+            usage="Consumed", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser("med_user", "m@x.com",
+                                                  "Str0ngPass!")
+        self.client.force_login(self.user)
+
+    def post(self, rows):
+        return self.client.post(
+            reverse("medicine_entry_api_list"),
+            data=json.dumps({"supervisor": self.supervisor.id,
+                             "date": self.today.isoformat(), "rows": rows}),
+            content_type="application/json")
+
+    def row(self, days_ago, qty=5):
+        return {"farm": self.farm.id, "batch": self.batch.id,
+                "date": (self.today - timedelta(days=days_ago)).isoformat(),
+                "item": self.medicine.id, "qty": qty}
+
+    def test_a_back_dated_dose_keeps_its_own_date(self):
+        from broiler.models import MedicineVaccineEntry
+
+        response = self.post([self.row(days_ago=4)])
+        self.assertIn(response.status_code, (200, 201))
+        entry = MedicineVaccineEntry.objects.get()
+        self.assertEqual(entry.date, self.today - timedelta(days=4))
+
+    def test_the_age_is_the_age_on_that_day(self):
+        """Placed 20 days ago, dosed 4 days ago — age 16, not 20."""
+        from broiler.models import MedicineVaccineEntry
+
+        self.post([self.row(days_ago=4)])
+        self.assertEqual(MedicineVaccineEntry.objects.get().age_days, 16)
+
+    def test_rows_may_carry_different_dates_in_one_sheet(self):
+        from broiler.models import MedicineVaccineEntry
+
+        self.post([self.row(days_ago=6), self.row(days_ago=2)])
+        dates = set(MedicineVaccineEntry.objects.values_list("date", flat=True))
+        self.assertEqual(dates, {self.today - timedelta(days=6),
+                                 self.today - timedelta(days=2)})
+
+    def test_the_form_offers_an_editable_date(self):
+        html = self.client.get(reverse("medicine_entry_add")).content.decode()
+        self.assertIn('class="form-control date" type="date"', html)
+        self.assertNotIn('class="form-control bg-light date" readonly', html)

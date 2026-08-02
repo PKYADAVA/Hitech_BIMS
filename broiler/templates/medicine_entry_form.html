@@ -117,7 +117,7 @@ function row() {
     <td><select class="form-select farm" required>${currentFarmOptions}</select></td>
     <td><select class="form-select batch" required><option value="">select a farm first</option></select></td>
     <td><input class="form-control bg-light age" readonly></td>
-    <td><input class="form-control bg-light date" readonly value="${TODAY}"></td>
+    <td><input class="form-control date" type="date" value="${TODAY}" max="${TODAY}"></td>
     <td><select class="form-select item" required>${itemOptions}</select></td>
     <td><input class="form-control bg-light unit" readonly></td>
     <td><input class="form-control qty" type="number" min="0" step=".01" value="0"></td>
@@ -174,12 +174,21 @@ async function recomputeStockPreview() {
   }
 }
 
+function recomputeAge(tr) {
+  const placedOn = tr.dataset.placedOn;
+  const dateVal = tr.querySelector('.date').value;
+  if (!placedOn || !dateVal) { tr.querySelector('.age').value = ''; return; }
+  const days = Math.max(Math.round((new Date(dateVal) - new Date(placedOn)) / 86400000), 0);
+  tr.querySelector('.age').value = days;
+}
+
 function loadBatchFor(tr, farmId, batchId) {
   const q = batchId ? `&batch=${batchId}` : '';
   fetch(`{% url 'medicine_entry_farm_lookup' %}?farm=${farmId}${q}`)
     .then(r => r.json()).then(data => {
       if (!batchId) fillBatchSelect(tr.querySelector('.batch'), data.batches);
-      tr.querySelector('.age').value = data.batch ? data.age_days : '';
+      tr.dataset.placedOn = data.batch ? (data.start_date || '') : '';
+      recomputeAge(tr);
       recomputeStockPreview();
     });
 }
@@ -193,7 +202,8 @@ get('supervisor').addEventListener('change', function () {
     if (window.jQuery) jQuery(sel).trigger('change.select2');
     const tr = sel.closest('tr');
     fillBatchSelect(tr.querySelector('.batch'), []);
-    tr.querySelector('.age').value = '';
+    tr.dataset.placedOn = '';
+    recomputeAge(tr);
   });
   recomputeStockPreview();
 });
@@ -202,7 +212,7 @@ get('row-table').addEventListener('change', e => {
   if (e.target.classList.contains('farm')) {
     const tr = e.target.closest('tr');
     const farmId = e.target.value;
-    if (!farmId) { fillBatchSelect(tr.querySelector('.batch'), []); tr.querySelector('.age').value = ''; recomputeStockPreview(); return; }
+    if (!farmId) { fillBatchSelect(tr.querySelector('.batch'), []); tr.dataset.placedOn = ''; recomputeAge(tr); recomputeStockPreview(); return; }
     fillBatchSelect(tr.querySelector('.batch'), []);   // drop the old farm's batch
     loadBatchFor(tr, farmId);
   }
@@ -222,6 +232,11 @@ get('row-table').addEventListener('change', e => {
 
 get('row-table').addEventListener('input', e => {
   if (e.target.classList.contains('qty')) { recomputeStockPreview(); }
+  // Both age and the opening stock are read as of the dose's own date.
+  if (e.target.classList.contains('date')) {
+    recomputeAge(e.target.closest('tr'));
+    recomputeStockPreview();
+  }
 });
 
 get('row-table').addEventListener('click', e => {
@@ -238,6 +253,7 @@ get('medicine-entry-form').addEventListener('submit', function (e) {
   const rows = [...document.querySelectorAll('#row-table tbody tr')].map(tr => ({
     farm: tr.querySelector('.farm').value,
     batch: tr.querySelector('.batch').value,
+    date: tr.querySelector('.date').value,
     item: tr.querySelector('.item').value,
     qty: tr.querySelector('.qty').value,
     remarks: tr.querySelector('.remarks').value,
@@ -254,6 +270,10 @@ get('medicine-entry-form').addEventListener('submit', function (e) {
   }
   if (rows.some(r => !r.item)) {
     alert('Select a Medicine/Vaccine for every row.');
+    return;
+  }
+  if (rows.some(r => !r.date)) {
+    alert('Every row needs a Date.');
     return;
   }
   fetch("{% url 'medicine_entry_api_list' %}", {
