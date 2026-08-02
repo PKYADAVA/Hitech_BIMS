@@ -157,6 +157,17 @@ API_SCOPES = {
     # why it maps to the sectors scope and not to branches.
     "sales.SalesInvoice": {"mode": "any", "sectors": "branch_id"},
     "sales.SalesReceipt": {"mode": "any", "sectors": "location_id"},
+
+    # Purchase — purchase/views.py. The two purchase headers keep their
+    # location on the lines, like stock issues and receives do.
+    "purchase.GeneralPurchase": {"mode": "any",
+                                 "sectors": "items__farm_warehouse_id"},
+    "purchase.ChicksPurchase": {"mode": "any",
+                                "sectors": "items__farm_warehouse_id"},
+    "purchase.SupplierPayment": {"mode": "any", "sectors": "location_id"},
+
+    # Account — account/views.py scopes the voucher list by its sector.
+    "account.Voucher": {"mode": "any", "sectors": "sector_id"},
 }
 
 
@@ -219,28 +230,24 @@ UNSCOPED_API_MODELS = {
 
     # Not yet scoped, and each needs its web view checked first. Listed so the
     # gap is visible rather than implied by absence.
-    "account.Voucher": "TODO: web scopes with scope_any; confirm the field set",
-    "broiler.BirdSaleReceipt": "TODO: check the web view's scope",
-    "broiler.BroilerDisease": "TODO: reachable via batch__broiler_farm_id",
-    "broiler.BroilerLine": "TODO: branch_id link exists; web view unchecked",
-    "broiler.GrowingChargeScheme": "TODO: branch_id link exists",
-    "broiler.GrowingChargeSettlement": "TODO: farm_id link exists",
-    "broiler.MedicineVaccineEntry": "TODO: farm_id link exists",
+    "broiler.BirdSaleReceipt": "The web does not scope it either (checked 2026-08-02)",
+    "broiler.BroilerDisease": "The web does not scope it either",
+    "broiler.BroilerLine": "The web does not scope it either",
+    "broiler.GrowingChargeScheme": "The web does not scope it either",
+    "broiler.GrowingChargeSettlement": "The web does not scope it either",
+    "broiler.MedicineVaccineEntry": "The web does not scope it either",
     "hatchery.ChangeRequest": "Workflow record, not location data",
-    "hatchery.EggGrading": "TODO: storage_location_id link exists",
-    "hatchery.HatchEntry": "TODO: reached through a setting, path unverified",
-    "hatchery.HatchSetting": "TODO: path to a warehouse unverified",
-    "hatchery.TraySetting": "TODO: grading__storage_location_id link exists",
-    "hr.Attendance": "TODO: employee__warehouse_id link exists",
-    "hr.Employee": "TODO: warehouse_id link exists",
-    "hr.EmployeeLeave": "TODO: employee__warehouse_id link exists",
-    "hr.Group": "TODO: warehouse_id link exists",
-    "hr.Payroll": "TODO: employee__warehouse_id link exists",
-    "purchase.ChicksPurchase": "TODO: check the web view's scope",
-    "purchase.CreditNote": "TODO: sector_id link exists",
-    "purchase.DebitNote": "TODO: sector_id link exists",
-    "purchase.GeneralPurchase": "TODO: check the web view's scope",
-    "purchase.SupplierPayment": "TODO: location_id link exists",
+    "hatchery.EggGrading": "The web does not scope it either",
+    "hatchery.HatchEntry": "The web does not scope it either",
+    "hatchery.HatchSetting": "The web does not scope it either",
+    "hatchery.TraySetting": "The web does not scope it either",
+    "hr.Attendance": "HR is unscoped on the web — no scope call anywhere in hr/views.py",
+    "hr.Employee": "HR is unscoped on the web",
+    "hr.EmployeeLeave": "HR is unscoped on the web",
+    "hr.Group": "HR is unscoped on the web",
+    "hr.Payroll": "HR is unscoped on the web",
+    "purchase.CreditNote": "The web does not scope it either",
+    "purchase.DebitNote": "The web does not scope it either",
 
     # RBAC configuration. Admin-only already, and not location data.
     "user.GroupAccessProfile": "Admin-only RBAC config",
