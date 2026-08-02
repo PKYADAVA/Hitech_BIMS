@@ -316,10 +316,13 @@ def mobile_preferences(user):
     matrix combines groups. ``None`` when no group the user belongs to has been
     configured, so an untouched system keeps working.
     """
-    from user.models import GroupMobileAccess
-
     if not getattr(user, "is_authenticated", False):
         return None
+    return _cached("prefs", user, lambda: _build_mobile_preferences(user))
+
+
+def _build_mobile_preferences(user):
+    from user.models import GroupMobileAccess
 
     rows = list(
         GroupMobileAccess.objects.filter(group__in=user.groups.all())
@@ -353,6 +356,75 @@ def allowed_mobile_navs(user, web_navs):
     }
 
 
+# ---------------------------------------------------------------------------
+# Caching
+# ---------------------------------------------------------------------------
+#
+# ``MatrixPermission`` calls ``mobile_can`` on every mobile API request, and
+# that reads two tables — so adding this gate roughly doubled the permission
+# queries the API runs. Both reads are per user and change rarely, which is the
+# shape a cache fits.
+#
+# Invalidation is by version number rather than by key: a configuration change
+# affects every member of a group, and working out who they are costs more than
+# the read it would save. Bumping one counter retires every cached answer at
+# once, which is the right trade for something that changes a few times a week.
+#
+# Note LocMemCache is per-process: with several gunicorn workers each warms its
+# own copy, so this trims repeat reads rather than guaranteeing one per change.
+# The version key lives in the same cache, so a bump only retires the entries
+# in *this* process — hence the short TTL as a backstop, which is what actually
+# bounds staleness across workers.
+
+CACHE_SECONDS = 300
+_VERSION_KEY = "mobile_access:version"
+
+
+def cache_version():
+    from django.core.cache import cache
+
+    version = cache.get(_VERSION_KEY)
+    if version is None:
+        version = 1
+        cache.set(_VERSION_KEY, version, None)
+    return version
+
+
+def invalidate():
+    """Retire every cached answer. Called whenever the inputs change."""
+    from django.core.cache import cache
+
+    try:
+        cache.incr(_VERSION_KEY)
+    except ValueError:          # key absent or expired — nothing to retire
+        cache.set(_VERSION_KEY, 1, None)
+
+
+def _cached(prefix, user, build):
+    """Read-through cache for one user's answer.
+
+    Keyed on the user, so a membership change has to bump the version too —
+    which it does, via the m2m signal in user.signals. Anonymous and
+    unsaved users are never cached; there is nothing stable to key on.
+    """
+    from django.core.cache import cache
+
+    pk = getattr(user, "pk", None)
+    if not pk:
+        return build()
+
+    key = f"mobile_access:{prefix}:{cache_version()}:{pk}"
+    hit = cache.get(key)
+    if hit is not None:
+        # ``None`` is a meaningful answer here ("unconfigured"), so it is
+        # stored wrapped — an unwrapped None is indistinguishable from a miss.
+        return hit["value"]
+
+    value = build()
+    cache.set(key, {"value": value}, CACHE_SECONDS)
+    return value
+
+
 def group_screen_perms(group):
     """``{tab_code: {action: bool}}`` for one group, or ``None`` if unconfigured.
 
@@ -376,10 +448,13 @@ def screen_perms(user):
     Union: an action granted by any group is granted, matching how the tab
     matrix combines groups. ``None`` when no group of theirs has rows.
     """
-    from user.models import GroupMobileTabPermission
-
     if not getattr(user, "is_authenticated", False):
         return None
+    return _cached("screens", user, lambda: _build_screen_perms(user))
+
+
+def _build_screen_perms(user):
+    from user.models import GroupMobileTabPermission
 
     rows = list(
         GroupMobileTabPermission.objects.filter(group__in=user.groups.all())
