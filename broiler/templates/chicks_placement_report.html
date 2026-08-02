@@ -163,6 +163,13 @@
           </select>
         </div>
         <div class="filter-field">
+          <label class="form-label">Warehouse</label>
+          <select class="form-select" name="warehouse">
+            <option value="">All</option>
+            {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
           <label class="form-label">Line</label>
           <select class="form-select" name="line">
             <option value="">All</option>

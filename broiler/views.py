@@ -5,7 +5,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 
 # Data scoping: every user-facing option list below is narrowed to the
 # branches / farms / warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for,
+from user.services.scoping import (branches_for, farms_for, scope_any,
                                    supervisors_for, warehouses_for)
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
@@ -4307,19 +4307,21 @@ def chicks_placement_report(request):
     Placement transaction itself — only Placement Qty ever reaches inventory.
     """
     from account.models import CompanyProfile
-    from inventory.models import StockTransfer
+    from inventory.models import StockTransfer, Warehouse
 
     region_id = (request.GET.get("region") or "").strip()
     branch_id = (request.GET.get("branch") or "").strip()
     line = (request.GET.get("line") or "").strip()
     supervisor_id = (request.GET.get("supervisor") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
+    warehouse_id = (request.GET.get("warehouse") or "").strip()
     hatchery_id = (request.GET.get("hatchery") or "").strip()
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     status = (request.GET.get("status") or "").strip().lower()
     export = (request.GET.get("export") or "display").strip().lower()
-    submitted = bool(region_id or branch_id or line or supervisor_id or farm_id or hatchery_id
+    submitted = bool(region_id or branch_id or line or supervisor_id or farm_id
+                     or warehouse_id or hatchery_id
                      or from_date or to_date or status or request.GET.get("submit"))
 
     rows, totals = [], None
@@ -4329,6 +4331,14 @@ def chicks_placement_report(request):
               .select_related("to_farm__branch", "to_farm__supervisor", "to_batch",
                               "from_warehouse", "source_hatchery", "source_supplier", "item")
               .order_by("date", "id"))
+        # The dropdowns below are scoped, but nothing stopped a restricted user
+        # leaving them on "All" (or editing the query string) and reading every
+        # branch's placements. A placement has two ends, so either the receiving
+        # farm/branch or the dispatching warehouse being in scope is enough.
+        qs = scope_any(request.user, qs,
+                       branches="to_farm__branch_id",
+                       farms="to_farm_id",
+                       sectors="from_warehouse_id")
         if region_id:
             qs = qs.filter(to_farm__branch__region_id=region_id)
         if branch_id:
@@ -4339,6 +4349,8 @@ def chicks_placement_report(request):
             qs = qs.filter(to_farm__supervisor_id=supervisor_id)
         if farm_id:
             qs = qs.filter(to_farm_id=farm_id)
+        if warehouse_id:
+            qs = qs.filter(from_warehouse_id=warehouse_id)
         if hatchery_id:
             # Prefixed "h:<id>" / "s:<id>" (see _chicks_sources). A bare number
             # is an older bookmarked URL, back when only hatcheries existed.
@@ -4465,9 +4477,11 @@ def chicks_placement_report(request):
         "lines": lines,
         "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
+        "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
         "sources": _chicks_sources(),
         "region_id": region_id, "branch_id": branch_id, "line": line,
-        "supervisor_id": supervisor_id, "farm_id": farm_id, "hatchery_id": hatchery_id,
+        "supervisor_id": supervisor_id, "farm_id": farm_id,
+        "warehouse_id": warehouse_id, "hatchery_id": hatchery_id,
         "from_date": from_date, "to_date": to_date, "status": status,
         "submitted": submitted, "rows": rows, "totals": totals, "kpi": kpi,
         "export": export,
