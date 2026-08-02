@@ -138,10 +138,17 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
 
 
 def item_summary(from_date=None, to_date=None, category_id=None, item_id=None,
-                 location_type=None, location_id=None):
+                 location_type=None, location_id=None, allowed_locations=None):
     """Rows of {location, item, opening/in/out/closing x (qty, price, amount)},
     grouped by storage location. Category filtering is applied after collection
-    for the daily-entry feed lines, which carry no category join."""
+    for the daily-entry feed lines, which carry no category join.
+
+    ``allowed_locations`` is ``{"warehouse": ids, "farm": ids}`` limiting which
+    storage locations may appear, for a caller enforcing data scoping. A value
+    of ``None`` for either kind means no limit on it — distinct from an empty
+    set, which is a real limit that permits nothing. Locations are dropped
+    before grouping, so each group's subtotals cover only what is shown.
+    """
     from inventory.models import Item, Warehouse
     from broiler.models import BroilerFarm
 
@@ -202,6 +209,10 @@ def item_summary(from_date=None, to_date=None, category_id=None, item_id=None,
         # Category filter for sources that could not be joined during collection.
         if category_id and str(it.category_id) != str(category_id):
             continue
+        if allowed_locations is not None:
+            permitted = allowed_locations.get(loc[0])
+            if permitted is not None and loc[1] not in permitted:
+                continue
         rows.append({
             "location": names.get(loc, ""),
             "location_type": loc[0], "location_id": loc[1],

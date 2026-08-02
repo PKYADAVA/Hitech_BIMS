@@ -174,6 +174,22 @@ def warehouses_for(user, qs=None):
                           "sectors")
 
 
+def farm_ids_for(user):
+    """Allowed farm ids, or ``None`` when the user is not limited to any.
+
+    ``farms_for`` narrows by the farm scope *and* by the branch scope, so this
+    cannot be read off ``allowed_ids(user, "farms")`` alone — a user limited
+    only by branch has no explicit farm list but still may not see every farm.
+    The ``None`` is what keeps "no limit" distinct from "a limit that happens
+    to permit nothing".
+    """
+    if is_unscoped(user):
+        return None
+    if allowed_ids(user, "farms") is None and allowed_ids(user, "branches") is None:
+        return None
+    return set(farms_for(user).values_list("id", flat=True))
+
+
 def lines_for(user, qs=None):
     from broiler.models import BroilerLine
     return scope_queryset(user, qs if qs is not None else BroilerLine.objects.all(),

@@ -9,8 +9,9 @@ from django.shortcuts import render
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
-from user.services.scoping import (branches_for, farms_for, scope_any,
-                                   supervisors_for, warehouses_for)
+from user.services.scoping import (allowed_ids, branches_for, farm_ids_for,
+                                   farms_for, scope_any, supervisors_for,
+                                   warehouses_for)
 
 
 def _scope_transfer(user, qs):
@@ -2603,6 +2604,10 @@ def stock_transfer_report(request):
                           "from_warehouse", "from_farm", "from_farm__branch", "from_batch",
                           "to_warehouse", "to_farm", "to_farm__branch", "to_batch")
           .order_by("date", "id"))
+    qs = scope_any(request.user, qs,
+                   sectors=["from_warehouse_id", "to_warehouse_id"],
+                   farms=["from_farm_id", "to_farm_id"],
+                   branches=["from_farm__branch_id", "to_farm__branch_id"])
 
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None
@@ -2886,7 +2891,11 @@ def item_summary_report(request):
 
     groups = item_summary(from_date=fd, to_date=td,
                           category_id=category or None, item_id=item_id or None,
-                          location_type=loc_type, location_id=loc_id)
+                          location_type=loc_type, location_id=loc_id,
+                          allowed_locations={
+                              "warehouse": allowed_ids(request.user, "sectors"),
+                              "farm": farm_ids_for(request.user),
+                          })
 
     item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
     row_count = sum(len(grp["rows"]) for grp in groups)
