@@ -49,6 +49,20 @@ class TrackingProviderAdapter(ABC):
     def supports(self, kind: str) -> bool:
         return kind in self.capabilities
 
+    def close(self) -> None:
+        """Release any network resources (HTTP sessions, sockets) held.
+
+        Default no-op. Adapters that open a ``requests.Session`` (or similar)
+        override this to close it. The sync engine calls it once per cycle so
+        long-lived worker processes don't accumulate open connection pools.
+        """
+
+    def __enter__(self) -> "TrackingProviderAdapter":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
     @abstractmethod
     def test_connection(self) -> ConnectionTestResult:
         """Cheapest possible authenticated call; never raises — returns a result."""

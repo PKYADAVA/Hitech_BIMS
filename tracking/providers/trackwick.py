@@ -191,6 +191,9 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
 
     def __init__(self, provider, session: requests.Session = None):
         super().__init__(provider)
+        # Only a session we created is ours to close; an injected one (tests,
+        # or a caller pooling connections across adapters) stays the caller's.
+        self._owns_session = session is None
         self._session = session or requests.Session()
         config = provider.extra_config or {}
         self._customer_id = str(config.get("customer_id", "") or "").strip()
@@ -209,6 +212,11 @@ class TrackWickProviderAdapter(TrackingProviderAdapter):
             kind for kind in type(self).capabilities
             if self._endpoints.get(kind, {}).get("path")
         )
+
+    def close(self) -> None:
+        """Close the HTTP session (and its connection pool) if we own it."""
+        if self._owns_session and self._session is not None:
+            self._session.close()
 
     # ------------------------------------------------------------- plumbing
 
