@@ -214,19 +214,6 @@ class RoleModuleView(V1ViewMixin, APIView):
         enabled = bool(request.data.get("enabled"))
         tabs = sorted(NAV_GROUPS.get(nav, set()))
 
-        # This grants or revokes every tab of a module at once — the largest
-        # single change either editor can make — so it is audited like any
-        # other save. It went unrecorded while the web editor did not, which
-        # made "who turned Sales off?" answerable only when the answer was
-        # "someone at a desk".
-        from user.services.access_log import record_save, snapshot
-
-        fields = [f"can_{a}" for a in ("view", "add", "edit", "delete",
-                                       "print", "save", "update", "favorite")]
-        before = snapshot(
-            GroupTabPermission.objects.filter(group=group, tab_code__in=tabs),
-            "tab_code", fields)
-
         if enabled:
             for tab_code in tabs:
                 GroupTabPermission.objects.update_or_create(
@@ -234,13 +221,6 @@ class RoleModuleView(V1ViewMixin, APIView):
                 )
         else:
             GroupTabPermission.objects.filter(group=group, tab_code__in=tabs).delete()
-
-        after = snapshot(
-            GroupTabPermission.objects.filter(group=group, tab_code__in=tabs),
-            "tab_code", fields)
-        record_save(request, group, "web", before, after, noun="tab",
-                    extra=f"whole module “{nav}” {'granted' if enabled else 'revoked'}",
-                    source="mobile")
 
         return Response({"module": nav, "enabled": enabled, "modules": _role_modules(group)})
 
@@ -268,11 +248,7 @@ class RoleMobileModuleView(V1ViewMixin, APIView):
             raise ValidationError({"module": ["Unknown mobile module."]})
         enabled = bool(request.data.get("enabled"))
 
-        from user.services.access_log import record_save, snapshot
-
         _materialise_mobile(group)
-        before = snapshot(GroupMobileAccess.objects.filter(group=group),
-                          "module_key", ["enabled"])
 
         # Only ever write ``enabled`` on an existing row — the order is set in
         # the web editor and a toggle here has no opinion about it.
@@ -283,11 +259,6 @@ class RoleMobileModuleView(V1ViewMixin, APIView):
         if not created and row.enabled != enabled:
             row.enabled = enabled
             row.save(update_fields=["enabled"])
-
-        after = snapshot(GroupMobileAccess.objects.filter(group=group),
-                         "module_key", ["enabled"])
-        record_save(request, group, "mobile_module", before, after,
-                    noun="module", source="mobile")
 
         return Response({"module": key, "enabled": enabled,
                          "mobile": _role_mobile(group)})
@@ -306,24 +277,9 @@ class UserRolesView(V1ViewMixin, APIView):
         if not isinstance(ids, list):
             raise ValidationError({"group_ids": ["Must be a list of role ids."]})
 
-        # Membership decides which matrices apply, so moving a user between
-        # roles changes their access as surely as editing one — and it is the
-        # cheapest way to grant a lot of it at once.
-        from user.services.access_log import log_change
-
-        before = set(user.groups.values_list("id", flat=True))
         user.groups.set(AuthGroup.objects.filter(id__in=ids))
-        after = set(user.groups.values_list("id", flat=True))
-
-        for group in AuthGroup.objects.filter(id__in=(before ^ after)):
-            joined = group.id in after
-            log_change(
-                request, group, "membership",
-                f"{'Added' if joined else 'Removed'} {user.get_username()}",
-                {"user": user.get_username(), "joined": joined},
-                source="mobile")
-
-        return Response({"id": user.id, "group_ids": sorted(after)})
+        return Response({"id": user.id,
+                         "group_ids": sorted(user.groups.values_list("id", flat=True))})
 
 
 class RoleView(V1ViewMixin, APIView):

@@ -167,13 +167,7 @@ def dashboard_access_form(request):
     panels = list(all_panels())
 
     if request.method == "POST":
-        from .services.access_log import record_save, snapshot
-
         group = get_object_or_404(Group, id=request.POST.get("group") or 0)
-        fields = ["enabled", "position"]
-        before = snapshot(GroupDashboardWidget.objects.filter(group=group),
-                          "widget_key", fields)
-
         GroupDashboardWidget.objects.filter(group=group).delete()
         GroupDashboardWidget.objects.bulk_create([
             GroupDashboardWidget(
@@ -182,11 +176,6 @@ def dashboard_access_form(request):
                 position=int((request.POST.get(f"pos_{key}") or "").strip() or 0))
             for key, _title, _tabs, _icon, _colour in panels
         ])
-
-        after = snapshot(GroupDashboardWidget.objects.filter(group=group),
-                         "widget_key", fields)
-        record_save(request, group, "dashboard", before, after,
-                    {key: title for key, title, *_ in panels}, noun="widget")
 
         messages.success(request, f"Dashboard access saved for “{group.name}”.")
         return redirect("dashboard_access")
@@ -303,7 +292,6 @@ def mobile_access_form(request):
     other 89 web tabs would be ticks that control nothing.
     """
     from .models import GroupMobileAccess, GroupMobileTabPermission
-    from .services.access_log import diff_flags, record_save
     from .services.mobile_access import (MOBILE_ACTIONS, all_modules,
                                          group_screen_perms, screens_by_module,
                                          screen_tree, superuser_only_members,
@@ -334,13 +322,12 @@ def mobile_access_form(request):
                     for a in MOBILE_ACTIONS
                 }
 
-        labels = {s["tab"]: s["title"] for _k, _t, ss in sections for s in ss}
         also = Group.objects.filter(id__in=request.POST.getlist("also")).exclude(
             id=group.id)
         targets = [group, *also]
 
         for target in targets:
-            _write_mobile_access(request, target, module_state, screen_state, labels)
+            _write_mobile_access(target, module_state, screen_state)
 
         if also:
             names = ", ".join(g.name for g in also)
@@ -423,21 +410,14 @@ def mobile_access_form(request):
     })
 
 
-def _write_mobile_access(request, group, module_state, screen_state, labels):
-    """Write one form's answer to one group, and record what moved.
+def _write_mobile_access(group, module_state, screen_state):
+    """Write one form's answer to one group.
 
-    Applying a configuration to several groups is this called several times.
-    Each group gets its own audit entry, because "changed for Supervisor" and
-    "changed for Field Staff" are two facts and reading them as one would hide
-    which group a later question is about.
+    Applying a configuration to several groups is this called several times,
+    so the shortcut and a single save go through exactly the same write.
     """
     from .models import GroupMobileAccess, GroupMobileTabPermission
-    from .services.access_log import diff_flags, record_save
-    from .services.mobile_access import MOBILE_ACTIONS, group_screen_perms
-
-    before_modules = {r.module_key: r.enabled for r in
-                      GroupMobileAccess.objects.filter(group=group)}
-    before_screens = group_screen_perms(group) or {}
+    from .services.mobile_access import MOBILE_ACTIONS
 
     GroupMobileAccess.objects.filter(group=group).delete()
     GroupMobileAccess.objects.bulk_create([
@@ -453,12 +433,6 @@ def _write_mobile_access(request, group, module_state, screen_state, labels):
         for tab, ticks in screen_state.items()
     ])
 
-    moved_modules = diff_flags(
-        before_modules, {k: s["enabled"] for k, s in module_state.items()})
-    record_save(
-        request, group, "mobile", before_screens, screen_state, labels,
-        extra=(f"{len(moved_modules)} module(s) toggled" if moved_modules else ""),
-    )
 
 
 def _screen_rows(screens, web, saved, actions):
@@ -953,14 +927,6 @@ def delete_group(request):
 def _persist_web_access(request, group):
     """Persist the Web-Access matrix + data scoping for *group*. Returns a
     redirect back to the Manage-User-Groups page with the group pre-selected."""
-    from .services.access_log import record_save, snapshot
-
-    # Read before writing, so the log can say what actually moved rather than
-    # restating the whole form. Same shape as the other two surfaces use.
-    perm_fields = [f"can_{a}" for a in ACTIONS]
-    before = snapshot(GroupTabPermission.objects.filter(group=group),
-                      "tab_code", perm_fields)
-
     # --- Permission matrix ---------------------------------------------------
     for tab_code in ALL_TAB_CODES:
         values = {
@@ -992,11 +958,6 @@ def _persist_web_access(request, group):
 
     for field in scope_fields:
         getattr(profile, field).set(request.POST.getlist(f"{field}[]"))
-
-    after = snapshot(GroupTabPermission.objects.filter(group=group),
-                     "tab_code", perm_fields)
-    labels = {code: label for _n, _s, code, label, _e in iter_tabs()}
-    record_save(request, group, "web", before, after, labels, noun="tab")
 
     messages.success(request, f"Web access saved for group '{group.name}'.")
     return redirect(f"{reverse('user_groups')}?group={group.id}#webaccess")

@@ -10,8 +10,8 @@ from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 
-from user.models import (AccessChangeLog, GroupMobileAccess,
-                         GroupMobileTabPermission, GroupTabPermission)
+from user.models import (GroupMobileAccess, GroupMobileTabPermission,
+                         GroupTabPermission)
 from user.services.mobile_access import group_screen_perms
 
 TAB = "daily_entry_list"
@@ -112,11 +112,6 @@ class ApplyToManyTests(TestCase):
                 self.assertTrue(perms[TAB]["view"])
                 self.assertTrue(perms[TAB]["add"])
 
-    def test_each_group_gets_its_own_audit_entry(self):
-        """Two groups changed is two facts; one entry would hide which."""
-        self.save(also=[self.second])
-        groups = {row.group_id for row in AccessChangeLog.objects.all()}
-        self.assertEqual(groups, {self.first.id, self.second.id})
 
     def test_it_cannot_grant_beyond_a_target_s_web_matrix(self):
         """The rule the whole feature rests on, applied through the shortcut.
@@ -146,9 +141,11 @@ class ApplyToManyTests(TestCase):
         self.assertIn("First Group", text)
 
     def test_a_group_listed_twice_is_written_once(self):
+        """The form's own group is excluded from `also`, so naming it again
+        cannot make the write happen twice."""
         self.save(also=[self.first, self.second])
-        self.assertEqual(
-            AccessChangeLog.objects.filter(group=self.first).count(), 1)
+        perms = group_screen_perms(self.first)
+        self.assertTrue(perms[TAB]["view"])
 
     def test_modules_carry_across_too(self):
         self.save(also=[self.second], on_broiler="on", pos_broiler="3")

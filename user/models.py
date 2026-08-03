@@ -224,52 +224,6 @@ class GroupMobileTabPermission(models.Model):
         return f"{self.group.name} · {self.tab_code} ({', '.join(on) or 'none'})"
 
 
-class AccessChangeLog(models.Model):
-    """Who changed someone's access, and to what.
-
-    Denials were already recorded (``WebAccessAudit``); *edits* were not, so
-    "who turned Sales off for Managers, and when?" had no answer. One row per
-    saved change, with the before/after so the entry is readable on its own
-    rather than only as a diff against whatever the table holds today.
-    """
-
-    WEB = "web"
-    MOBILE = "mobile"
-    MOBILE_MODULE = "mobile_module"
-    DASHBOARD = "dashboard"
-    MEMBERSHIP = "membership"
-
-    SURFACES = [
-        (WEB, "Web Access"),
-        (MOBILE, "Mobile screen access"),
-        (MOBILE_MODULE, "Mobile module access"),
-        (DASHBOARD, "Dashboard Access"),
-        (MEMBERSHIP, "Group membership"),
-    ]
-
-    surface = models.CharField(max_length=20, choices=SURFACES, db_index=True)
-    group = models.ForeignKey(Group, on_delete=models.CASCADE,
-                              related_name="access_changes")
-    changed_by = models.CharField(max_length=150)
-    summary = models.CharField(
-        max_length=300, help_text="Human-readable description of the change")
-    detail = models.JSONField(
-        default=dict, blank=True,
-        help_text="{'before': …, 'after': …} for the keys that moved")
-    source = models.CharField(
-        max_length=10, default="web",
-        help_text="web or mobile — where the edit was made")
-    at = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        verbose_name = "Access change"
-        verbose_name_plural = "Access changes"
-        ordering = ["-at"]
-
-    def __str__(self):
-        return f"{self.at:%Y-%m-%d %H:%M} {self.changed_by}: {self.summary}"
-
-
 class GroupDashboardWidget(models.Model):
     """Which dashboard widgets a group sees, and in what order.
 
