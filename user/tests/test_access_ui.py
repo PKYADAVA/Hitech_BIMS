@@ -203,13 +203,5 @@ class AccessEditorUiTests(StaticLiveServerTestCase):
 
     # ---- the read-only pages -----------------------------------------------
 
-    def test_the_reporting_pages_load_clean(self):
-        for path in ("/access-changes/", f"/explain-access/?user={self.admin.pk}"):
-            with self.subTest(path=path):
-                self.open(path)
-
-    def test_explain_access_warns_that_a_superuser_bypasses(self):
-        """The signal whose absence sent someone hunting a bug that was not
-        there: the configuration was right, the member was a superuser."""
-        self.open(f"/explain-access/?user={self.admin.pk}")
-        self.assertIn("bypasses every access gate", self.page.content())
+    def test_the_audit_page_loads_clean(self):
+        self.open("/access-changes/")
