@@ -18,23 +18,28 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* A gradient rather than a photograph. The previous background was an iStock
+   preview with the watermark burned into it — "iStock / Credit: PeopleImages"
+   was legible across the login page, which is the first thing every user and
+   customer sees. The same brand colours the overlay already used, so the page
+   looks as intended without shipping an unlicensed image. */
 body {
   min-height: 100vh;
   font-family: 'Poppins', sans-serif;
-  background: url("/static/images/istockphoto-888136924-2048x2048.jpg") no-repeat center center;
-  background-size: cover;
-  background-attachment: fixed;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
 }
 
+/* Kept for the stacking context .auth-wrapper sits above, and for a little
+   depth over the flat gradient. */
 body::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(15,23,42,0.75) 0%, rgba(30,58,138,0.65) 100%);
+  background: radial-gradient(circle at 30% 20%, rgba(59,130,246,0.18) 0%, transparent 55%);
   z-index: 1;
 }
 
