@@ -28,9 +28,6 @@ urlpatterns = [
     path('mobile-access/form/', views.mobile_access_form, name='mobile_access_form'),
     path('mobile-access/<int:group_id>/preview/', views.mobile_access_preview, name='mobile_access_preview'),
     path('mobile-access/<int:group_id>/delete/', views.mobile_access_delete, name='mobile_access_delete'),
-    path('access-changes/', views.access_changes, name='access_changes'),
-    path('access-changes/<int:entry_id>/revert/', views.access_change_revert,
-         name='access_change_revert'),
     path('user_analytics/', views.user_analytics, name='user_analytics'),
      path('analytics/data/', views.user_analytics_data, name='user_analytics_data'),
 

@@ -81,21 +81,6 @@ class ApiAuditTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].detail["changes"]["sales"]["enabled"], [True, False])
 
-    def test_a_phone_module_change_can_be_reverted(self):
-        from django.urls import reverse
-
-        self.post(MOBILE_MODULE.format(self.group.id),
-                  {"module": "sales", "enabled": False})
-        self.assertFalse(GroupMobileAccess.objects.get(
-            group=self.group, module_key="sales").enabled)
-
-        entry = self.entries("mobile_module")[0]
-        self.client.post(reverse("access_change_revert", args=[entry.id]))
-        self.assertTrue(GroupMobileAccess.objects.get(
-            group=self.group, module_key="sales").enabled)
-
-    # ---- membership --------------------------------------------------------
-
     def test_adding_a_user_to_a_role_is_recorded(self):
         """Membership decides which matrices apply, so moving someone between
         roles changes their access as surely as editing one."""
@@ -120,12 +105,6 @@ class ApiAuditTests(TestCase):
         groups = {row.group_id for row in self.entries("membership")}
         self.assertEqual(groups, {self.group.id})
 
-    def test_membership_entries_are_not_revertable(self):
-        """They record who joined or left, not a row of fields to put back."""
-        from user.services.access_log import REVERTABLE
-
-        self.assertNotIn("membership", REVERTABLE)
-
     # ---- the trail as a whole ----------------------------------------------
 
     def test_every_access_writing_endpoint_leaves_a_trail(self):
@@ -141,14 +120,6 @@ class ApiAuditTests(TestCase):
             with self.subTest(surface=row.surface):
                 self.assertEqual(row.source, "mobile")
                 self.assertEqual(row.changed_by, "aa_admin")
-
-    def test_the_page_shows_a_phone_change_as_such(self):
-        from django.urls import reverse
-
-        self.post(ROLE_MODULE.format(self.group.id),
-                  {"module": "sales", "enabled": True})
-        html = self.client.get(reverse("access_changes")).content.decode()
-        self.assertIn("Made from the phone app", html)
 
     def test_auditing_never_breaks_the_endpoint(self):
         from unittest.mock import patch

@@ -1031,7 +1031,7 @@ class AccessChangeLogTests(TestCase):
                          {"group": self.group.id, "p_daily_entry_list_view": "on"})
         latest = self.entries()[0]
         # "changes" rather than "screens": all three surfaces share one shape
-        # now, so the Access Changes page can read them together.
+        # now, so entries from every surface share one shape.
         self.assertIn("daily_entry_list", latest.detail["changes"])
         self.assertEqual(latest.detail["changes"]["daily_entry_list"]["add"],
                          [True, False])

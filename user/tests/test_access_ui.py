@@ -201,7 +201,3 @@ class AccessEditorUiTests(StaticLiveServerTestCase):
         self.assertNotEqual(
             self.page.locator(".da-row").first.get_attribute("data-key"), first_key)
 
-    # ---- the read-only pages -----------------------------------------------
-
-    def test_the_audit_page_loads_clean(self):
-        self.open("/access-changes/")

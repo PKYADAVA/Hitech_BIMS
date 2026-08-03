@@ -11,6 +11,12 @@ save would be unreadable within a week, and a bare diff is meaningless once the
 registry changes underneath it.
 
 Logging must never be the reason a save fails, so every call is wrapped.
+
+**Nothing in the app reads this table.** The page that did was removed as not
+useful, so the rows are reachable only from the database or the Django admin.
+Recording is kept because the cost is a row per save and the alternative is
+having no answer at all when someone asks who changed an access setting — but
+that is a deliberate trade, not an oversight.
 """
 from __future__ import annotations
 
@@ -86,97 +92,6 @@ def record_save(request, group, surface, before, after, labels=None,
         summary = f"{summary}; {extra}"
     log_change(request, group, surface, summary, {"changes": moved}, source)
     return moved
-
-
-#: What each surface's recorded keys and fields mean, so one revert serves all
-#: three: ``(model, key field, field prefix)``.
-#:
-#: The prefix matters. Web and dashboard entries record model field names, but
-#: mobile entries record *action* names ("edit"), because that is what the
-#: matrix and the API speak. Without the mapping every mobile revert silently
-#: set nothing — the attribute it looked for did not exist.
-#:
-#: Models are looked up lazily to keep this module import-light.
-#: ``membership`` is absent on purpose: it records who joined or left a group,
-#: which is not a row of fields to put back.
-REVERTABLE = {
-    "web": ("user.GroupTabPermission", "tab_code", ""),
-    "mobile": ("user.GroupMobileTabPermission", "tab_code", "can_"),
-    "mobile_module": ("user.GroupMobileAccess", "module_key", ""),
-    "dashboard": ("user.GroupDashboardWidget", "widget_key", ""),
-}
-
-
-def revert(request, entry):
-    """Put back the "before" side of a recorded change.
-
-    Undo is cheap here only because the log already stores both sides — this
-    walks the diff backwards rather than replaying history.
-
-    Two rules it does not bend. The revert is itself recorded, as a new entry
-    rather than by deleting the old one: an audit trail that can erase its own
-    rows answers a different, weaker question. And it writes the same tables
-    the editors write, so every gate downstream still applies — reverting a
-    Mobile Access change cannot restore access the web matrix has since
-    withdrawn.
-
-    Returns the number of rows restored, or raises ValueError when the entry
-    is not one this can undo.
-    """
-    from django.apps import apps
-
-    target = REVERTABLE.get(entry.surface)
-    if target is None:
-        raise ValueError(f"{entry.get_surface_display()} changes cannot be reverted.")
-
-    changes = (entry.detail or {}).get("changes") or {}
-    if not changes:
-        raise ValueError("This entry recorded no change to undo.")
-
-    label, key_field, prefix = target
-    model = apps.get_model(label)
-
-    restored = 0
-    for key, fields in changes.items():
-        before = {f"{prefix}{field}": was for field, (was, _now) in fields.items()}
-
-        # Every "before" being None means the row did not exist. Recreating it
-        # with nulls is not the state we are restoring — and would not even
-        # save, since these columns are NOT NULL.
-        if all(value is None for value in before.values()):
-            model.objects.filter(group=entry.group, **{key_field: key}).delete()
-            restored += 1
-            continue
-
-        row, _created = model.objects.get_or_create(
-            group=entry.group, **{key_field: key})
-        for field, value in before.items():
-            # A field the model no longer has, or one absent from this entry —
-            # the registry moved on since it was written. Leave the model's
-            # own default rather than failing the whole revert.
-            if value is not None and hasattr(row, field):
-                setattr(row, field, value)
-        row.save()
-        restored += 1
-
-    # Web rows with nothing ticked are stored as absent, not as a row of
-    # falses; leaving an all-false row behind would read as "configured".
-    if entry.surface == "web":
-        for key in changes:
-            row = model.objects.filter(group=entry.group, **{key_field: key}).first()
-            if row and not any(getattr(row, f"can_{a}", False)
-                               for a in ("view", "add", "edit", "delete",
-                                         "print", "save", "update", "favorite")):
-                row.delete()
-
-    log_change(
-        request, entry.group, entry.surface,
-        f"Reverted: {entry.summary}",
-        {"changes": {k: {f: [now, was] for f, (was, now) in v.items()}
-                     for k, v in changes.items()},
-         "reverted_entry": entry.id},
-    )
-    return restored
 
 
 def describe_matrix_change(moved: dict, labels: dict | None = None,

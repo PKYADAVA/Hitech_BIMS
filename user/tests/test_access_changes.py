@@ -1,9 +1,9 @@
-"""User > Access Changes — the audit trail for access edits.
+"""The audit trail for access edits.
 
-Two gaps this covers. The log recorded only Mobile Access saves, so the other
-two editors changed people's access silently; and nothing read the table at
-all, so the question it exists to answer ("who turned this off?") still needed
-a database shell.
+The log recorded only Mobile Access saves, so the other two editors changed
+people's access silently. The page that read the table has since been removed
+as not useful, so these cover the recording alone — the rows are reachable from
+the database and the Django admin.
 """
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -110,73 +110,3 @@ class RecordingTests(TestCase):
                               "p_daily_entry_list_view": "on"})
         self.assertEqual(self.entries("mobile")[0].summary.split(";")[0],
                          "No change")
-
-
-class AccessChangesPageTests(TestCase):
-    """The page that made the log readable."""
-
-    def setUp(self):
-        cache.clear()
-        User = get_user_model()
-        self.admin = User.objects.create_superuser("ap_admin", "p@x.com", "Str0ngPass!")
-        self.group = Group.objects.create(name="Page Group")
-        self.other = Group.objects.create(name="Other Group")
-        AccessChangeLog.objects.create(
-            surface="web", group=self.group, changed_by="alice",
-            summary="1 tab changed: Daily Entry",
-            detail={"changes": {"daily_entry_list": {"can_edit": [True, False]}}})
-        AccessChangeLog.objects.create(
-            surface="mobile", group=self.other, changed_by="bob",
-            summary="1 screen changed: Bird Sale",
-            detail={"changes": {"bird_sale_list": {"can_add": [False, True]}}})
-        self.client.force_login(self.admin)
-
-    def html(self, **params):
-        return self.client.get(reverse("access_changes"), params).content.decode()
-
-    def test_the_page_lists_entries_from_every_surface(self):
-        html = self.html()
-        self.assertIn("alice", html)
-        self.assertIn("bob", html)
-        self.assertIn("Page Group", html)
-        self.assertIn("Other Group", html)
-
-    def test_it_renders_the_before_and_after(self):
-        """Raw JSON would make an administrator decode it themselves."""
-        html = self.html()
-        self.assertIn("can_edit: on → off", html)
-        self.assertIn("can_add: off → on", html)
-
-    def test_it_filters_by_group(self):
-        html = self.html(group=self.group.id)
-        self.assertIn("alice", html)
-        self.assertNotIn("bob", html)
-
-    def test_it_filters_by_surface(self):
-        html = self.html(surface="mobile")
-        self.assertIn("bob", html)
-        self.assertNotIn("alice", html)
-
-    def test_an_empty_filter_says_so_rather_than_showing_nothing(self):
-        empty = Group.objects.create(name="Never Touched")
-        self.assertIn("No access changes recorded", self.html(group=empty.id))
-
-    def test_rubbish_filters_do_not_break_the_page(self):
-        self.assertEqual(
-            self.client.get(reverse("access_changes"),
-                            {"group": "abc", "surface": "nope"}).status_code, 200)
-
-    def test_the_tab_is_registered_and_permission_gated(self):
-        from user.access import ALL_TAB_CODES, allowed_view_tabs
-
-        self.assertIn("access_changes", ALL_TAB_CODES)
-        self.assertEqual(reverse("access_changes"), "/access-changes/")
-
-        User = get_user_model()
-        member = User.objects.create_user("ap_member", "m@x.com", "Str0ngPass!")
-        plain = Group.objects.create(name="Plain")
-        member.groups.add(plain)
-        GroupTabPermission.objects.create(group=plain, tab_code="items",
-                                          can_view=True)
-        member = User.objects.get(pk=member.pk)
-        self.assertNotIn("access_changes", allowed_view_tabs(member))

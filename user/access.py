@@ -433,7 +433,6 @@ MODULE_REGISTRY = [
                      ("dashboard_access_form", "dashboard_access_preview")),
                     ("mobile_access", "Mobile Access",
                      ("mobile_access_form", "mobile_access_preview")),
-                    ("access_changes", "Access Changes"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
                     ("picklists", "Picklists"),
