@@ -20,20 +20,39 @@
   .da-note { border:1px solid #cfe2ff; background:#f3f8ff; color:#1d4f94; border-radius:10px;
              padding:10px 13px; font-size:.82rem; line-height:1.5; margin-bottom:16px; }
   .da-note b { display:block; }
-  .da-table { width:100%; border-collapse:collapse; }
-  .da-table th { background:var(--da-purple-soft); color:var(--da-purple); font-size:.78rem;
-                 padding:9px 10px; text-align:left; }
-  .da-table td { padding:9px 10px; border-bottom:1px solid #f1eef7; vertical-align:middle; }
+  /* Widths are set here rather than inherited: the shared entry-grid styles
+     stretch a number input to fill its cell, which turned "Sort position" into
+     a 700px box next to an almost empty "Show" column. */
+  .da-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .da-table th { background:var(--da-purple-soft); color:var(--da-purple); font-size:.75rem;
+                 font-weight:700; letter-spacing:.3px; text-transform:uppercase;
+                 padding:10px 12px; text-align:left; white-space:nowrap; }
+  .da-table th:first-child { border-radius:10px 0 0 0; }
+  /* Without this the header reads "SHOW ● WIDGET" as though it were one
+     label, because the master switch sits hard against the next column. */
+  .da-table th:first-child, .da-table td:first-child { padding-right:22px; }
+  .da-table th:last-child  { border-radius:0 10px 0 0; text-align:center; }
+  .da-table td { padding:10px 12px; border-bottom:1px solid #f1eef7; vertical-align:middle; }
+  .da-table tbody tr:hover td { background:#fcfbff; }
   .da-table tr:last-child td { border-bottom:0; }
-  .da-icon { width:30px; height:30px; border-radius:9px; display:inline-grid; place-items:center;
-             font-size:.76rem; margin-right:9px; vertical-align:middle; }
-  .da-name { font-weight:600; font-size:.86rem; }
-  .da-tabs { display:block; font-size:.71rem; color:#8494ab; margin-top:1px; }
-  .da-pos { width:74px; }
-  .da-move { border:1px solid #e2e8f2; background:#fff; color:#6b7890; border-radius:6px;
-             width:26px; height:26px; line-height:1; cursor:pointer; }
-  .da-move:hover { border-color:var(--da-purple); color:var(--da-purple); }
-  .da-row.is-off .da-name, .da-row.is-off .da-icon { opacity:.42; }
+
+  .da-widget { display:flex; align-items:center; gap:11px; min-width:0; }
+  .da-icon { width:32px; height:32px; border-radius:9px; display:grid; place-items:center;
+             font-size:.8rem; flex:0 0 auto; }
+  .da-text { min-width:0; }
+  .da-name { font-weight:600; font-size:.86rem; color:#3d2c66; display:block; }
+  /* One line, ellipsised, full list on hover — Quick Actions names eight tabs
+     and wrapping them made its row six times taller than the others. */
+  .da-tabs { display:block; font-size:.71rem; color:#9aa6b8; margin-top:1px;
+             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .da-pos { width:70px !important; text-align:center; }
+  .da-move { border:1px solid #e2e8f2; background:#fff; color:#6b7890; border-radius:7px;
+             width:28px; height:28px; line-height:1; cursor:pointer; }
+  .da-move:hover { border-color:var(--da-purple); color:var(--da-purple); background:#faf8ff; }
+  .da-move + .da-move { margin-left:4px; }
+  .da-row.is-off { background:#fcfcfd; }
+  .da-row.is-off .da-name, .da-row.is-off .da-icon, .da-row.is-off .da-tabs { opacity:.4; }
   .gs-blue{background:#e8f0ff;color:#2563eb}.gs-green{background:#e6f7f3;color:#078b75}
   .gs-orange{background:#fff1df;color:#d97706}.gs-purple{background:#f1ebff;color:#7c3aed}
   .gs-red{background:#ffecee;color:#dc465b}.gs-cyan{background:#e5f7fb;color:#0087a5}
@@ -84,19 +103,27 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="group" value="{{ selected_group.id }}">
-        <table class="da-table ds-entry" id="da-table" data-access-tree>
+        <table class="da-table" id="da-table" data-access-tree>
+          <colgroup>
+            <col style="width:104px;">
+            <col>
+            <col style="width:120px;">
+            <col style="width:104px;">
+          </colgroup>
           <thead>
             <tr>
-              <th class="c-fit m-short" style="width:90px;">
-                Show
-                <span class="form-check form-switch m-0 mt-1">
-                  <input type="checkbox" role="switch" class="form-check-input at-all"
-                         title="Toggle every widget">
+              <th>
+                <span class="d-inline-flex align-items-center gap-2">
+                  Show
+                  <span class="form-check form-switch m-0">
+                    <input type="checkbox" role="switch" class="form-check-input at-all"
+                           title="Toggle every widget">
+                  </span>
                 </span>
               </th>
-              <th class="c-fit m-short">Widget</th>
-              <th class="c-fit m-short" style="width:150px;">Sort position</th>
-              <th class="c-fit m-short" style="width:90px;">Move</th>
+              <th>Widget</th>
+              <th>Sort position</th>
+              <th>Move</th>
             </tr>
           </thead>
           <tbody>
@@ -109,15 +136,28 @@
                 </span>
               </td>
               <td>
-                <span class="da-icon {{ w.colour }}"><i class="{{ w.icon }}"></i></span>
-                <span class="da-name">{{ w.title }}</span>
-                <span class="da-tabs">needs: {{ w.tabs }}</span>
+                <div class="da-widget">
+                  <span class="da-icon {{ w.colour }}"><i class="{{ w.icon }}"></i></span>
+                  <span class="da-text">
+                    <span class="da-name">{{ w.title }}</span>
+                    {% comment %}
+                      Alerts declares no tabs — it has no report to inherit
+                      from — so the label is replaced rather than left as a
+                      dangling "needs:" with nothing after it.
+                    {% endcomment %}
+                    {% if w.tabs %}
+                    <span class="da-tabs" title="{{ w.tabs }}">needs {{ w.tabs }}</span>
+                    {% else %}
+                    <span class="da-tabs">shown to everyone its own data allows</span>
+                    {% endif %}
+                  </span>
+                </div>
               </td>
               <td>
                 <input type="number" min="0" class="form-control form-control-sm da-pos at-pos"
                        name="pos_{{ w.key }}" value="{{ w.position }}">
               </td>
-              <td>
+              <td class="text-center">
                 <button type="button" class="da-move at-move" data-at-dir="up" title="Move up"><i class="fas fa-chevron-up"></i></button>
                 <button type="button" class="da-move at-move" data-at-dir="down" title="Move down"><i class="fas fa-chevron-down"></i></button>
               </td>
