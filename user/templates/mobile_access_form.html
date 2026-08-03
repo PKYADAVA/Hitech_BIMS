@@ -10,11 +10,14 @@
 {% block css %}
 <style>
   :root { --ma-purple:#6f42c1; --ma-purple-soft:#f3effb; }
-  .ma-head { display:flex; align-items:center; gap:10px; margin:4px 0 14px; }
+  .ma-head { display:flex; align-items:center; gap:10px; margin:4px 0 14px; max-width:1164px; }
   .ma-head i { color:var(--ma-purple); }
   .ma-head h5 { margin:0; font-weight:700; color:#3d2c66; }
   .ma-head small { color:#6b7890; }
-  .ma-card { background:#fff; border:1px solid #e7edf5; border-radius:14px; padding:18px 20px; }
+  /* One measure for the whole panel. Capping only the table left it stranded
+     in a full-width card with a void beside it. */
+  .ma-card { background:#fff; border:1px solid #e7edf5; border-radius:14px;
+             padding:18px 20px; max-width:1164px; }
   .ma-pick { display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin-bottom:18px; }
   .ma-pick label { font-size:.74rem; font-weight:700; color:#48566d; display:block; margin-bottom:3px; }
   .ma-note { border:1px solid #cfe2ff; background:#f3f8ff; color:#1d4f94; border-radius:10px;
@@ -36,12 +39,19 @@
   .ma-also-item { display:inline-flex; align-items:center; font-size:.8rem; color:#48566d;
                   background:#f6f8fb; border-radius:6px; padding:4px 9px; margin:0 6px 6px 0; }
 
-  .ma-table { width:100%; border-collapse:collapse; }
+  /* Capped rather than full width. The screen names are short, so on a wide
+     monitor a 100%-width table left a hand-span of empty space between a name
+     and its ticks — the two things you have to read together. */
+  .ma-table { width:100%; border-collapse:collapse; table-layout:fixed; }
   .ma-table thead th { position:sticky; top:0; z-index:2; background:var(--ma-purple-soft);
                        color:var(--ma-purple); font-size:.78rem; padding:9px 10px; text-align:center; }
   .ma-table thead th.ma-first { text-align:left; }
   .ma-table td { padding:7px 10px; border-bottom:1px solid #f1eef7; vertical-align:middle; }
-  .ma-act { width:92px; text-align:center; }
+  .ma-act { width:86px; text-align:center; }
+  /* A rule between the names and the tick block, so the eye tracks along a row
+     instead of drifting across open space. */
+  .ma-table th:nth-child(2), .ma-table td:nth-child(2) { border-left:1px solid #efe9fa; }
+  .ma-table tbody tr:hover td { background:#fcfbff; }
 
   .ma-modrow td { background:#faf8ff; border-top:1px solid #e6dcfa; }
   .ma-modname { font-weight:700; font-size:.87rem; color:#3d2c66; }
@@ -52,8 +62,14 @@
              width:24px; height:24px; line-height:1; cursor:pointer; }
   .ma-move:hover { border-color:var(--ma-purple); color:var(--ma-purple); }
 
-  .ma-treebar { display:flex; gap:14px; align-items:center; padding:0 2px 8px; }
-  .ma-treebar a { font-size:.82rem; cursor:pointer; text-decoration:none; color:var(--ma-purple); }
+  .ma-banner { display:flex; align-items:center; justify-content:space-between;
+               background:var(--ma-purple); color:#fff; font-weight:700; font-size:.9rem;
+               padding:10px 14px; border-radius:10px 10px 0 0; }
+  .ma-banner-actions { font-weight:500; font-size:.82rem; }
+  .ma-banner a { color:#fff; cursor:pointer; text-decoration:none; opacity:.92; }
+  .ma-banner a:hover { opacity:1; text-decoration:underline; }
+  .ma-banner-sep { opacity:.5; margin:0 8px; }
+  .ma-leaf { color:#b6a4dd; font-size:.76rem; margin-right:7px; }
   .ma-toggle { cursor:pointer; margin-right:7px; color:#a08ad0; }
   .ma-toggle .ma-caret { font-size:.8rem; }
   .ma-secrow td { background:#fdfcff; }
@@ -157,16 +173,27 @@
         {% endif %}
       </div>
 
-      <div class="ma-treebar">
-        <a data-at-expand><i class="fas fa-angles-down me-1"></i>Expand all</a>
-        <a data-at-collapse><i class="fas fa-angles-up me-1"></i>Collapse all</a>
-      </div>
-
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="group" value="{{ selected_group.id }}">
+        {% comment %}
+          Same banner the Web-Access matrix uses, so the two trees read as one
+          control in two places rather than two different components.
+        {% endcomment %}
+        <div class="ma-banner">
+          <span>Mobile-Access Details</span>
+          <span class="ma-banner-actions">
+            <a data-at-expand><i class="fas fa-angles-down me-1"></i>Expand all</a>
+            <span class="ma-banner-sep">|</span>
+            <a data-at-collapse><i class="fas fa-angles-up me-1"></i>Collapse all</a>
+          </span>
+        </div>
         <div class="table-responsive" style="max-height:70vh;">
         <table class="ma-table" id="ma-table" data-access-tree>
+          <colgroup>
+            <col>
+            {% for action in actions %}<col style="width:86px;">{% endfor %}
+          </colgroup>
           <thead>
             <tr>
               <th class="ma-first">
@@ -234,6 +261,7 @@
             {% for screen in section.screens %}
             <tr class="ma-screen child-of-m-{{ block.key }} child-of-s-{{ section.sid }} {% if not screen.reachable %}ma-blocked{% endif %}">
               <td>
+                <i class="fa-regular fa-file-lines ma-leaf"></i>
                 <span class="ma-scrname">{{ screen.title }}</span>
                 {% if screen.kind == 'report' %}<span class="ma-tag">report</span>{% endif %}
                 {% if not screen.reachable %}

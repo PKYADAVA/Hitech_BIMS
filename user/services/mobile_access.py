@@ -224,6 +224,22 @@ def _tab_navs():
     return {code: nav for nav, codes in NAV_GROUPS.items() for code in codes}
 
 
+def _tab_order():
+    """``{tab_code: position}`` in registry order — the order the web matrix
+    and the navbar both use.
+
+    Without this the tree came out in ``PHONE_SCREENS`` order, so a module's
+    sections appeared in whatever order their first screen happened to be
+    listed: Broiler opened with Transactions because Daily Entry leads that
+    list, while the web opens with Master. Two trees over the same registry
+    disagreeing about its order is worse than either order alone.
+    """
+    from user.access import iter_tabs
+
+    return {code: index
+            for index, (_nav, _section, code, _label, _extra) in enumerate(iter_tabs())}
+
+
 def _tab_sections():
     """``{tab_code: section label}`` — Master / Transactions / Reports / …
 
@@ -246,17 +262,23 @@ def screen_tree():
     ``screens_by_module`` stays flat and is what saving and the preview walk —
     they care about every screen exactly once, not about how it is grouped.
     """
-    sections = _tab_sections()
+    sections, order = _tab_sections(), _tab_order()
+    last = len(order)
     out = []
     for key, title, rows in screens_by_module():
-        grouped, order = {}, []
+        grouped = {}
         for row in rows:
-            label = sections.get(row["tab"], "Screens")
-            if label not in grouped:
-                grouped[label] = []
-                order.append(label)
-            grouped[label].append(row)
-        out.append((key, title, [(label, grouped[label]) for label in order]))
+            grouped.setdefault(sections.get(row["tab"], "Screens"), []).append(row)
+
+        # Registry order throughout: screens within a section, and sections by
+        # where the registry first mentions them — which is what the web matrix
+        # and the navbar show.
+        blocks = []
+        for label, screens in grouped.items():
+            screens.sort(key=lambda r: order.get(r["tab"], last))
+            blocks.append((label, screens))
+        blocks.sort(key=lambda b: min(order.get(r["tab"], last) for r in b[1]))
+        out.append((key, title, blocks))
     return out
 
 

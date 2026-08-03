@@ -996,3 +996,68 @@ class MobileOrderTests(TestCase):
         self.assertNotEqual(data["nav_order"], sorted(data["nav_order"]))
 
 
+
+
+class PhoneSectionOrderTests(TestCase):
+    """The phone hub groups its tiles the way the ERP registry does.
+
+    The two drifted: the app opened Broiler with "Transactions", the access tab
+    with "Master", and the section names were different sets entirely. Reading
+    one while configuring the other meant translating between them.
+    """
+
+    def catalog_sections(self):
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        path = Path(settings.BASE_DIR) / "mobile" / "src" / "config" / "catalog.ts"
+        if not path.exists():
+            self.skipTest("mobile client not present")
+        block = re.search(r"export const MODULES[\s\S]*?\n\};",
+                          path.read_text(encoding="utf-8")).group(0)
+        mods = [(m.group(1), m.start()) for m in re.finditer(r"^  (\w+):\s*\{", block, re.M)]
+        out = {}
+        for i, (key, at) in enumerate(mods):
+            chunk = block[at: mods[i + 1][1] if i + 1 < len(mods) else len(block)]
+            out[key] = re.findall(r'title:\s*"([^"]+)",\s*\n\s*resourceKeys', chunk)
+        return out
+
+    def test_each_module_uses_the_registry_sections_in_registry_order(self):
+        from user.services.mobile_access import screen_tree
+
+        catalog = self.catalog_sections()
+        for key, _title, blocks in screen_tree():
+            if key not in catalog or not blocks:
+                continue
+            with self.subTest(module=key):
+                expected = [label for label, _screens in blocks]
+                # "Other" collects tiles the registry does not place; it always
+                # sits last and is not part of the registry's own order.
+                actual = [s for s in catalog[key] if s != "Other"]
+                self.assertEqual(actual, [e for e in expected if e in actual],
+                                 f"{key} sections differ from the registry")
+
+    def test_other_is_always_last_when_present(self):
+        for key, sections in self.catalog_sections().items():
+            if "Other" in sections:
+                with self.subTest(module=key):
+                    self.assertEqual(sections[-1], "Other")
+
+    def test_no_module_lost_a_tile_to_the_regrouping(self):
+        """Every tile still belongs to exactly one section."""
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        path = Path(settings.BASE_DIR) / "mobile" / "src" / "config" / "catalog.ts"
+        if not path.exists():
+            self.skipTest("mobile client not present")
+        block = re.search(r"export const MODULES[\s\S]*?\n\};",
+                          path.read_text(encoding="utf-8")).group(0)
+        tiles = [t for blk in re.findall(r"resourceKeys:\s*\[(.*?)\]", block, re.S)
+                 for t in re.findall(r'"([a-z0-9-]+)"', blk)]
+        self.assertEqual(len(tiles), len(set(tiles)), "a tile is listed twice")
+        self.assertGreater(len(tiles), 70)
