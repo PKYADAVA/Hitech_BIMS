@@ -32,7 +32,7 @@ MOBILE_MODULES = [
     ("hatchery",  "Hatchery",   "hatchery",      "fa-solid fa-egg",           "#d97706"),
     ("inventory", "Inventory",  "inventory",     "fa-solid fa-boxes-stacked", "#0891b2"),
     ("sales",     "Sales",      "sales",         "fa-solid fa-cart-shopping", "#7c3aed"),
-    ("purchase",  "Purchase",   "purchase",      "fa-solid fa-truck-field",   "#c2410c"),
+    ("purchase",  "Purchase",   "purchase",      "fa-solid fa-truck",         "#c2410c"),
     ("account",   "Account",    "account",       "fa-solid fa-book",          "#0369a1"),
     ("hr",        "HR",         "hr",            "fa-solid fa-user-tie",      "#be185d"),
     ("sms",       "SMS",        "notifications", "fa-solid fa-comment-sms",   "#0d9488"),

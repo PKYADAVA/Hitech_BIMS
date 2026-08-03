@@ -57,7 +57,14 @@
   .ma-modname { font-weight:700; font-size:.87rem; color:#3d2c66; }
   .ma-icon { width:26px; height:26px; border-radius:8px; display:inline-grid; place-items:center;
              font-size:.7rem; margin-right:8px; vertical-align:middle; color:#fff; }
-  .ma-pos { width:64px; display:inline-block; }
+  .ma-pos { width:64px; flex:0 0 64px; text-align:center; }
+  /* The gap absorbs the difference in name width, so the input and the move
+     buttons land in the same column on every row. */
+  .ma-modline { display:flex; align-items:center; gap:7px; }
+  .ma-modgap { flex:1 1 auto; }
+  .ma-modline .ma-icon, .ma-modline .ma-toggle { margin-right:0; }
+  .ma-modname { white-space:nowrap; }
+  .ma-modline .ma-count { margin-left:0; }
   .ma-move { border:1px solid #e2e8f2; background:#fff; color:#6b7890; border-radius:6px;
              width:24px; height:24px; line-height:1; cursor:pointer; }
   .ma-move:hover { border-color:var(--ma-purple); color:var(--ma-purple); }
@@ -219,19 +226,27 @@
             <tr class="ma-modrow ma-block {% if not block.enabled %}is-off{% endif %}"
                 data-key="{{ block.key }}" data-module="{{ block.key }}">
               <td>
-                <span class="form-check form-switch d-inline-block m-0 me-2 align-middle">
-                  <input type="checkbox" role="switch" class="form-check-input ma-on"
-                         name="on_{{ block.key }}" {% if block.enabled %}checked{% endif %}
-                         title="Show this module on the phone">
-                </span>
-                <span class="ma-icon" style="background:{{ block.colour }};"><i class="{{ block.icon }}"></i></span>
-                <span class="ma-toggle at-toggle" data-at-folder="m-{{ block.key }}"><i class="fas fa-folder-open ma-caret"></i></span>
-                <span class="ma-modname">{{ block.title }}</span>
-                <span class="ma-count">{{ block.screen_count }} screens</span>
-                <input type="number" min="0" class="form-control form-control-sm ma-pos at-pos ms-2"
-                       name="pos_{{ block.key }}" value="{{ block.position }}" title="Order on the home hub">
-                <button type="button" class="ma-move at-move" data-at-dir="up" title="Move up"><i class="fas fa-chevron-up"></i></button>
-                <button type="button" class="ma-move at-move" data-at-dir="down" title="Move down"><i class="fas fa-chevron-down"></i></button>
+                {% comment %}
+                  A flex row, not inline spans: the module names and screen
+                  counts differ in width, so laid out inline every position
+                  input and move button started at a different x.
+                {% endcomment %}
+                <div class="ma-modline">
+                  <span class="form-check form-switch m-0">
+                    <input type="checkbox" role="switch" class="form-check-input ma-on"
+                           name="on_{{ block.key }}" {% if block.enabled %}checked{% endif %}
+                           title="Show this module on the phone">
+                  </span>
+                  <span class="ma-icon" style="background:{{ block.colour }};"><i class="{{ block.icon }}"></i></span>
+                  <span class="ma-toggle at-toggle" data-at-folder="m-{{ block.key }}"><i class="fas fa-folder-open ma-caret"></i></span>
+                  <span class="ma-modname">{{ block.title }}</span>
+                  <span class="ma-count">{{ block.screen_count }} screens</span>
+                  <span class="ma-modgap"></span>
+                  <input type="number" min="0" class="form-control form-control-sm ma-pos at-pos"
+                         name="pos_{{ block.key }}" value="{{ block.position }}" title="Order on the home hub">
+                  <button type="button" class="ma-move at-move" data-at-dir="up" title="Move up"><i class="fas fa-chevron-up"></i></button>
+                  <button type="button" class="ma-move at-move" data-at-dir="down" title="Move down"><i class="fas fa-chevron-down"></i></button>
+                </div>
               </td>
               {% for action in actions %}
               <td class="ma-act">
