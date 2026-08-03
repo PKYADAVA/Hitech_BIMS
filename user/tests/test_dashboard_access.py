@@ -749,3 +749,71 @@ class DashboardFlagTests(TestCase):
                                {"group": self.group.id}).content.decode()
         self.assertIn("nothing reads them yet", html)
         self.assertIn("Dashboard is enforced", html)
+
+
+class RegistryGrowthTests(TestCase):
+    """A widget added after a group was configured must not vanish for it.
+
+    The reported symptom: Alerts & Notifications had a switch in the editor,
+    showing on, and never appeared on the dashboard. Managers had been saved
+    when the registry held six widgets; Alerts was the seventh, so it had no
+    row — and "no row" was being read as "switched off" while the editor read
+    it as "on". The two disagreed, permanently and silently.
+    """
+
+    def setUp(self):
+        cache.clear()
+        User = get_user_model()
+        self.member = User.objects.create_user("rg_member", "r@x.com", "Str0ngPass!")
+        self.group = Group.objects.create(name="Configured Early")
+        self.member.groups.add(self.group)
+        for key, _t, tabs, *_ in all_panels():
+            for tab in tabs:
+                GroupTabPermission.objects.get_or_create(
+                    group=self.group, tab_code=tab, defaults={"can_view": True})
+
+    def user(self):
+        return get_user_model().objects.get(pk=self.member.pk)
+
+    def panels(self):
+        from user.services.dashboard_widgets import dashboard_panels
+        return dashboard_panels(self.user())
+
+    def configure_all_but(self, missing):
+        """Save every widget except one — as an older registry would have."""
+        GroupDashboardWidget.objects.filter(group=self.group).delete()
+        for index, (key, *_rest) in enumerate(all_panels()):
+            if key == missing:
+                continue
+            GroupDashboardWidget.objects.create(
+                group=self.group, widget_key=key, enabled=True, position=index)
+
+    def test_a_widget_with_no_saved_row_still_shows(self):
+        self.configure_all_but("alerts_widget")
+        self.assertIn("alerts_widget", self.panels())
+
+    def test_it_matches_what_the_editor_shows_for_that_widget(self):
+        """The editor defaults an unsaved widget's switch to on; the dashboard
+        has to agree, or the page is lying about what it does."""
+        self.configure_all_but("alerts_widget")
+        admin = get_user_model().objects.create_superuser("rg_admin", "a@x.com",
+                                                          "Str0ngPass!")
+        self.client.force_login(admin)
+        html = self.client.get(reverse("dashboard_access_form"),
+                               {"group": self.group.id}).content.decode()
+        marker = 'name="on_alerts_widget"'
+        row = html[html.index(marker) - 200:html.index(marker) + 120]
+        self.assertIn("checked", row)
+        self.assertIn("alerts_widget", self.panels())
+
+    def test_an_explicitly_disabled_widget_still_stays_off(self):
+        """The fix must not turn "off" into "on" — only "unanswered"."""
+        GroupDashboardWidget.objects.filter(group=self.group).delete()
+        for index, (key, *_rest) in enumerate(all_panels()):
+            GroupDashboardWidget.objects.create(
+                group=self.group, widget_key=key,
+                enabled=key != "alerts_widget", position=index)
+        self.assertNotIn("alerts_widget", self.panels())
+
+    def test_an_unconfigured_group_is_unaffected(self):
+        self.assertEqual(set(self.panels()), {k for k, *_ in all_panels()})

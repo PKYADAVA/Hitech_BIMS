@@ -456,10 +456,14 @@ def dashboard_panels(user, as_group=None, prefs_override=None):
     """
     if as_group is not None:
         viewable, prefs = group_viewable_tabs(as_group), group_preferences(as_group)
+        decided = saved_keys(group=as_group)
     else:
         viewable, prefs = allowed_view_tabs(user), widget_preferences(user)
+        decided = saved_keys(user=user)
     if prefs_override is not None:
-        prefs = prefs_override
+        # An override is the editor's live form, which posts every widget — so
+        # it has an opinion about all of them and nothing is "undecided".
+        prefs, decided = prefs_override, {k for k, *_ in all_panels()}
     out = {}
     for index, (key, _title, tabs, _icon, _colour) in enumerate(all_panels()):
         # An empty tabs tuple means the panel is not owned by any module page,
@@ -470,7 +474,11 @@ def dashboard_panels(user, as_group=None, prefs_override=None):
         # of listing it here rather than hard-coding it into home.html.
         if tabs and not any(t in viewable for t in tabs):
             continue
-        if prefs is not None and key not in prefs:
+        # Switched off only counts when the configuration actually says so. A
+        # widget the registry gained since the last save was never offered to
+        # the administrator, so it defaults on — matching what the editor shows
+        # for it, which is a ticked switch.
+        if prefs is not None and key in decided and key not in prefs:
             continue
         out[key] = (prefs or {}).get(key, index)
     return out
@@ -546,6 +554,30 @@ def group_preferences(group):
     if not rows:
         return None
     return {r.widget_key: r.position for r in rows if r.enabled}
+
+
+def saved_keys(group=None, user=None):
+    """Which widgets a configuration has actually *decided* about.
+
+    An enabled-only map cannot tell "switched off" from "added to the registry
+    after this group was last saved", and those need opposite answers. A save
+    writes a row for every widget in the registry, so a key with no row at all
+    is one the administrator has never been shown — treating it as off hides a
+    new widget from every configured group, silently and permanently.
+
+    That is exactly what happened to Alerts & Notifications: groups configured
+    before it existed never saw it, while the editor showed its switch on.
+    """
+    from user.models import GroupDashboardWidget
+
+    rows = GroupDashboardWidget.objects.all()
+    if group is not None:
+        rows = rows.filter(group=group)
+    elif user is not None and getattr(user, "is_authenticated", False):
+        rows = rows.filter(group__in=user.groups.all())
+    else:
+        return set()
+    return set(rows.values_list("widget_key", flat=True))
 
 
 def panels_for_group(group):

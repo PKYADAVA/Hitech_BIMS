@@ -350,9 +350,14 @@ def allowed_mobile_navs(user, web_navs):
     prefs = mobile_preferences(user)
     if prefs is None:
         return set(web_navs)
+    decided = decided_modules(user)
     return {
         nav for nav in web_navs
-        if nav not in NAV_MODULE or NAV_MODULE[nav] in prefs
+        if nav not in NAV_MODULE
+        or NAV_MODULE[nav] in prefs
+        # A module the registry gained since the last save was never offered,
+        # so it is undecided rather than off.
+        or NAV_MODULE[nav] not in decided
     }
 
 
@@ -473,6 +478,41 @@ def _build_screen_perms(user):
     return out
 
 
+def decided_modules(user):
+    """Module keys this user's groups have actually saved an answer for.
+
+    Same distinction the dashboard needs: an enabled-only map cannot tell
+    "switched off" from "added to the registry after this group was last
+    saved". A save writes every module, so a key with no row was never offered
+    to the administrator — treating it as off would hide a new module from
+    every configured group while the editor showed its switch on.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return set()
+    return _cached("mod_keys", user, lambda: _build_decided_modules(user))
+
+
+def _build_decided_modules(user):
+    from user.models import GroupMobileAccess
+
+    return set(GroupMobileAccess.objects.filter(group__in=user.groups.all())
+               .values_list("module_key", flat=True))
+
+
+def decided_screens(user):
+    """Tab codes this user's groups have saved an answer for. See above."""
+    if not getattr(user, "is_authenticated", False):
+        return set()
+    return _cached("scr_keys", user, lambda: _build_decided_screens(user))
+
+
+def _build_decided_screens(user):
+    from user.models import GroupMobileTabPermission
+
+    return set(GroupMobileTabPermission.objects.filter(group__in=user.groups.all())
+               .values_list("tab_code", flat=True))
+
+
 def mobile_can(user, tab_code, action="view"):
     """The whole Mobile Access verdict for one screen and action.
 
@@ -499,6 +539,8 @@ def mobile_can(user, tab_code, action="view"):
         return True             # no phone surface owns it — not ours to refuse
     if tab_code in REPORT_TABS.values() and action != "view":
         return True             # a report has only one meaningful action
+    if tab_code not in decided_screens(user):
+        return True             # added to the registry since the last save
     return bool(perms.get(tab_code, {}).get(action, False))
 
 
