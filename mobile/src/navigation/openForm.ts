@@ -8,6 +8,18 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
   "broiler-sale-receipts": "BirdSaleReceiptForm",
 };
 
+/**
+ * Resources whose *new* record has its own screen but whose edit does not.
+ *
+ * Daily Entry is written on the Add Day Record screen — the flock panel, the
+ * standards, the photo columns and the mandatory GPS stamp all belong to
+ * recording a day in the shed. Correcting a saved row afterwards is a desk job
+ * with no round to walk, so editing stays on the generic form.
+ */
+const CUSTOM_CREATE_SCREEN: Record<string, "DailyEntryGrid"> = {
+  "broiler-daily-entries": "DailyEntryGrid",
+};
+
 /** Anything that can push a screen in the module stack (screen props or header options). */
 type Nav = { navigate: (screen: any, params?: any) => void };
 
@@ -23,8 +35,11 @@ export function openRecordForm(
   mode: "create" | "edit",
   row?: Row,
 ) {
+  const createOnly = mode === "create" ? CUSTOM_CREATE_SCREEN[resourceKey] : undefined;
   const custom = CUSTOM_FORM_SCREEN[resourceKey];
-  if (custom) {
+  if (createOnly) {
+    navigation.navigate(createOnly);
+  } else if (custom) {
     const params: ModuleStackParams["BirdSaleForm"] = { mode, row };
     navigation.navigate(custom, params);
   } else if (isDocumentForm(resourceKey)) {

@@ -2159,14 +2159,21 @@ def resolve_feed_phase(batch, on_date, age_days):
     return None
 
 
-def _live_bird_count(batch, as_of=None):
-    """Best-effort live birds in a batch as of `as_of` (default: all-time):
-    chicks placed − mortality − culls − sold, counting only records up to that
-    date. Used only for the Daily Entry feed-cap soft warning."""
+def _flock_counts(batch, as_of=None):
+    """Head count for a batch as of `as_of` (default: all-time), broken into
+    the parts rather than just the total: chicks placed, mortality, culls,
+    birds sold, and what is left alive.
+
+    The total alone answers the feed-cap warning, but the phone's Daily Entry
+    also shows each loss against the birds placed ("0.42% of opening"), and
+    deriving those from a single number is not possible. Same one pass over the
+    same records, so the parts and the total cannot disagree.
+    """
     from inventory.models import Item, StockTransfer
     from django.db.models import Sum
+    empty = {"placed": 0, "mortality": 0, "culls": 0, "sold": 0, "live": 0}
     if not batch:
-        return 0
+        return empty
     chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
     placed_q = StockTransfer.objects.filter(to_batch_id=batch.id, item_id__in=chick_ids)
     de_q = DailyEntry.objects.filter(batch_id=batch.id)
@@ -2175,10 +2182,17 @@ def _live_bird_count(batch, as_of=None):
         placed_q = placed_q.filter(date__lte=as_of)
         de_q = de_q.filter(date__lte=as_of)
         sold_q = sold_q.filter(date__lte=as_of)
-    placed = placed_q.aggregate(t=Sum("quantity"))["t"] or 0
+    placed = int(placed_q.aggregate(t=Sum("quantity"))["t"] or 0)
     de = de_q.aggregate(m=Sum("mortality"), c=Sum("culls"))
-    sold = sold_q.aggregate(b=Sum("birds"))["b"] or 0
-    return max(int(placed) - int(de["m"] or 0) - int(de["c"] or 0) - int(sold or 0), 0)
+    mortality, culls = int(de["m"] or 0), int(de["c"] or 0)
+    sold = int(sold_q.aggregate(b=Sum("birds"))["b"] or 0)
+    return {
+        "placed": placed,
+        "mortality": mortality,
+        "culls": culls,
+        "sold": sold,
+        "live": max(placed - mortality - culls - sold, 0),
+    }
 
 
 def _placement_date(batch):
@@ -2309,9 +2323,25 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
             alive -= (de.mortality or 0) + (de.culls or 0) + sold_by_date.get(de.date, 0)   # end-of-day losses
         consumed_per_bird_actual_g = str(cum_pb.quantize(Decimal("0.01")))
 
+    # Who this flock is — shed, breed, bird type. The phone heads the entry with
+    # it so a supervisor can see they are recording the flock in front of them;
+    # the web form has the same facts on screen in its Batch panel.
+    shed = batch.shed if batch and batch.shed_id else None
+    breed = batch.breed if batch and batch.breed_id else None
+    counts = _flock_counts(batch, as_of=entry_date) if batch else _flock_counts(None)
+
     return {
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
+        "shed_name": (shed.shed_name or shed.shed_no or shed.shed_code) if shed else "",
+        "breed_name": breed.description if breed else "",
+        "bird_type": (breed.bird_category.name if breed and breed.bird_category_id else ""),
+        # Chicks placed, and the losses booked against them before this entry —
+        # the phone shows each as a share of the opening count.
+        "opening_birds": counts["placed"],
+        "mortality_to_date": counts["mortality"],
+        "culls_to_date": counts["culls"],
+        "sold_to_date": counts["sold"],
         # Every open batch on the farm, so the form can fill the Batch box in
         # when there is one and ask when there is more than one.
         "batches": _batch_options(farm_id),
@@ -2330,7 +2360,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         "consumed_by_item": consumed_by_item,
         "consumed_total_kg": consumed_total_kg,
         "consumed_per_bird_actual_g": consumed_per_bird_actual_g,
-        "live_birds": _live_bird_count(batch, as_of=entry_date) if batch else 0,
+        "live_birds": counts["live"],
     }
 
 

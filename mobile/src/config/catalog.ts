@@ -51,6 +51,21 @@ export interface ResourceConfig {
   searchKeys: string[];
   card: (row: Row) => CardView;
   children?: ChildConfig[];
+  /**
+   * Collapse the list into groups instead of one card per record.
+   *
+   * For feeds where a row is one day of a longer thing — a flock's daily
+   * entries — a flat list is a wall of near-identical cards. The web list
+   * groups the same way and opens a group to reveal its days.
+   */
+  group?: {
+    /** Rows sharing this key belong together. */
+    key: (row: Row) => string;
+    /** Heading for the group, taken from any one of its rows. */
+    title: (row: Row) => string;
+    /** Line under the heading, given the group's rows newest-last. */
+    subtitle?: (rows: Row[]) => string;
+  };
 }
 
 export interface ModuleSection {
@@ -101,6 +116,21 @@ const broilerResources: ResourceConfig[] = [
     accent: B,
     emptyMessage: "No daily entries yet.",
     searchKeys: ["entry_no", "remarks"],
+    // Grouped by batch, falling back to the farm when a row has none — the
+    // same key the web list groups on, so both read the same way.
+    group: {
+      key: (r) => (r.batch ? `batch-${r.batch}` : `farm-${r.farm}`),
+      title: (r) =>
+        joinParts([pick(r, ["farm_label"]), pick(r, ["batch_label"], "No Active Batch")]) ||
+        `Entry #${r.id}`,
+      subtitle: (rows) => {
+        const last = rows[rows.length - 1];
+        const days = `${rows.length} ${rows.length === 1 ? "day" : "days"}`;
+        const mortality = rows.reduce((t, r) => t + (Number(r.mortality) || 0), 0);
+        return joinParts([days, `to ${formatDate(last.date)}`,
+          mortality ? `${mortality} mort` : ""]);
+      },
+    },
     card: (r) => ({
       title: pick(r, ["entry_no"], `Entry #${r.id}`),
       subtitle: joinParts([pick(r, ["farm_label"]), formatDate(r.date)]),
@@ -1724,6 +1754,28 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.broilerLight,
     sections: [
       {
+        title: "Master",
+        resourceKeys: [
+          "broiler-farms",
+          "broiler-sheds",
+          "broiler-batches",
+          "broiler-farmer-groups",
+          "broiler-regions",
+          "broiler-branches",
+          "broiler-lines",
+          "broiler-supervisors",
+          "broiler-diseases",
+        ],
+      },
+      {
+        title: "Growing Charges",
+        resourceKeys: [
+          "broiler-breeds",
+          "broiler-breed-standards",
+          "broiler-growing-charges",
+        ],
+      },
+      {
         title: "Transactions",
         resourceKeys: [
           "broiler-daily-entries",
@@ -1733,36 +1785,16 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         ],
       },
       {
-        title: "Farms & Batches",
+        title: "Farmer GC & Payment",
         resourceKeys: [
-          "broiler-farms",
-          "broiler-sheds",
-          "broiler-batches",
+          "broiler-gc-settlements",
+        ],
+      },
+      {
+        title: "Other",
+        resourceKeys: [
           "broiler-farmers",
-          "broiler-farmer-groups",
         ],
-      },
-      {
-        title: "Organization",
-        resourceKeys: [
-          "broiler-regions",
-          "broiler-branches",
-          "broiler-lines",
-          "broiler-supervisors",
-        ],
-      },
-      {
-        title: "Breeds & Charges",
-        resourceKeys: [
-          "broiler-breeds",
-          "broiler-breed-standards",
-          "broiler-diseases",
-          "broiler-growing-charges",
-        ],
-      },
-      {
-        title: "Settlement",
-        resourceKeys: ["broiler-gc-settlements"],
       },
     ],
     reports: [
@@ -1784,6 +1816,16 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.hatcheryLight,
     sections: [
       {
+        title: "Master",
+        resourceKeys: [
+          "hatchery-expenses",
+          "hatchery-expense-types",
+          "hatchery-hatcheries",
+          "hatchery-setters",
+          "hatchery-hatchers",
+        ],
+      },
+      {
         title: "Transactions",
         resourceKeys: [
           "hatchery-egg-purchases",
@@ -1796,16 +1838,10 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         ],
       },
       {
-        title: "Expenses",
-        resourceKeys: ["hatchery-expenses", "hatchery-expense-types"],
-      },
-      {
-        title: "Infrastructure",
-        resourceKeys: ["hatchery-hatcheries", "hatchery-setters", "hatchery-hatchers"],
-      },
-      {
-        title: "Approvals",
-        resourceKeys: ["hatchery-change-requests"],
+        title: "Other",
+        resourceKeys: [
+          "hatchery-change-requests",
+        ],
       },
     ],
     reports: [
@@ -1824,9 +1860,19 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     color: colors.sms,
     colorLight: colors.smsLight,
     sections: [
-      { title: "Templates", resourceKeys: ["sms-templates"] },
-      { title: "Activity", resourceKeys: ["sms-messages"] },
-      { title: "Configuration", resourceKeys: ["sms-settings"] },
+      {
+        title: "Master",
+        resourceKeys: [
+          "sms-templates",
+          "sms-settings",
+        ],
+      },
+      {
+        title: "Reports",
+        resourceKeys: [
+          "sms-messages",
+        ],
+      },
     ],
   },
   account: {
@@ -1838,7 +1884,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.accountLight,
     sections: [
       {
-        title: "Masters",
+        title: "Master",
         resourceKeys: [
           "account-financial-years",
           "account-chart-of-accounts",
@@ -1850,7 +1896,9 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       },
       {
         title: "Transactions",
-        resourceKeys: ["account-vouchers"],
+        resourceKeys: [
+          "account-vouchers",
+        ],
       },
     ],
   },
@@ -1863,7 +1911,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.inventoryLight,
     sections: [
       {
-        title: "Masters",
+        title: "Master",
         resourceKeys: [
           "inventory-item-categories",
           "inventory-uom",
@@ -1894,15 +1942,23 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.salesLight,
     sections: [
       {
-        title: "Transactions",
-        resourceKeys: ["sales-invoices", "sales-receipts"],
-      },
-      {
-        title: "Masters",
+        title: "Master",
         resourceKeys: [
           "sales-customers",
           "sales-customer-groups",
           "sales-prices",
+        ],
+      },
+      {
+        title: "Transactions",
+        resourceKeys: [
+          "sales-invoices",
+          "sales-receipts",
+        ],
+      },
+      {
+        title: "Other",
+        resourceKeys: [
           "sales-shipping-addresses",
         ],
       },
@@ -1917,6 +1973,14 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.purchaseLight,
     sections: [
       {
+        title: "Master",
+        resourceKeys: [
+          "purchase-suppliers",
+          "purchase-vendor-groups",
+          "purchase-tax-masters",
+        ],
+      },
+      {
         title: "Transactions",
         resourceKeys: [
           "purchase-general-purchases",
@@ -1927,12 +1991,9 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         ],
       },
       {
-        title: "Masters",
+        title: "Other",
         resourceKeys: [
-          "purchase-suppliers",
-          "purchase-vendor-groups",
           "purchase-credit-terms",
-          "purchase-tax-masters",
           "purchase-shipping-addresses",
         ],
       },
@@ -1947,12 +2008,32 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.hrLight,
     sections: [
       {
-        title: "People",
-        resourceKeys: ["hr-employees", "hr-attendance", "hr-leaves", "hr-payroll"],
+        title: "Employee Management",
+        resourceKeys: [
+          "hr-employees",
+          "hr-designations",
+          "hr-groups",
+        ],
       },
       {
-        title: "Masters",
-        resourceKeys: ["hr-departments", "hr-designations", "hr-shifts", "hr-groups"],
+        title: "Attendance",
+        resourceKeys: [
+          "hr-attendance",
+          "hr-leaves",
+        ],
+      },
+      {
+        title: "Payroll",
+        resourceKeys: [
+          "hr-payroll",
+        ],
+      },
+      {
+        title: "Other",
+        resourceKeys: [
+          "hr-departments",
+          "hr-shifts",
+        ],
       },
     ],
   },
@@ -1965,12 +2046,19 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     colorLight: colors.userLight,
     sections: [
       {
-        title: "Users",
-        resourceKeys: ["user-users", "user-profiles"],
+        title: "User Management",
+        resourceKeys: [
+          "user-users",
+          "user-groups",
+          "user-group-permissions",
+        ],
       },
       {
-        title: "Roles & Access",
-        resourceKeys: ["user-groups", "user-group-permissions", "user-group-access"],
+        title: "Other",
+        resourceKeys: [
+          "user-profiles",
+          "user-group-access",
+        ],
       },
     ],
     tools: [

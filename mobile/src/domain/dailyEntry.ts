@@ -60,6 +60,18 @@ export interface DailyEntryLookup {
    *  asked, the same rule the web forms follow. Optional so an older server
    *  that does not send it still parses. */
   batches?: OpenBatch[];
+  /** Which flock this is — shed it is housed in, breed, and bird type. All
+   *  optional: an older server does not send them, and a batch need not have a
+   *  shed or a breed on it. */
+  shed_name?: string;
+  breed_name?: string;
+  bird_type?: string;
+  /** Chicks placed, and the losses booked against them before this entry.
+   *  Optional for the same reason — the summary is simply omitted without them. */
+  opening_birds?: number;
+  mortality_to_date?: number;
+  culls_to_date?: number;
+  sold_to_date?: number;
   age_days: number;
   start_date: string | null;
   next_date: string;
@@ -88,6 +100,20 @@ export interface Hint {
 /** Overall state of the entry, mirroring the web's row status pill. */
 export type EntryStatus = "ok" | "near" | "warn";
 
+/** How far a capped feed item is through its kg/bird allowance — the web's
+ *  "cumulative feed vs cap" bar. */
+export interface CapProgress {
+  name: string;
+  /** Cumulative kg/bird of this item, including what is being typed. */
+  cum: number;
+  /** The phase's Max Feed Qty in kg/bird. */
+  cap: number;
+  pct: number;
+  /** "cap reached — switch to X" / "nearing changeover", or blank. */
+  note: string;
+  tone: Tone;
+}
+
 export interface Advice {
   /** Per-field hints, keyed by form field name (feed_1, feed_2, avg_weight_gms…). */
   fieldHints: Record<string, Hint>;
@@ -95,8 +121,65 @@ export interface Advice {
   notes: Hint[];
   /** Human-readable problems, for the confirm-before-save prompt. */
   issues: string[];
+  /** The changeover gauge, when a capped item is selected. */
+  cap: CapProgress | null;
   status: EntryStatus;
   statusLabel: string;
+}
+
+/**
+ * Feed typed on earlier rows of the same farm+batch but not yet saved.
+ *
+ * The web grid counts it (`priorListFeed`) so a row for age 7 sees the kilos
+ * just typed for age 6 on top of the saved history. Without it every row of a
+ * round would be advised as though it were the first.
+ */
+export interface PriorFeed {
+  total: number;
+  byItem: Record<string, number>;
+}
+
+export function priorListFeed(
+  lookup: DailyEntryLookup | null,
+  rowsAbove: FeedRow[]
+): PriorFeed {
+  const byItem: Record<string, number> = {};
+  let total = 0;
+  for (const r of rowsAbove) {
+    for (const slot of ["feed_1", "feed_2"] as const) {
+      const kg = num(r[`${slot}_qty`]);
+      if (kg <= 0) continue;
+      total += kg;
+      const name = phaseOf(lookup, r[slot] ?? "")?.name ?? "Feed";
+      byItem[name] = (byItem[name] ?? 0) + kg;
+    }
+  }
+  return { total, byItem };
+}
+
+/**
+ * Read one breed-standard column off the curve against another — weight at a
+ * given cumulative feed, or the feed a bird should have eaten to reach a given
+ * weight. Linear between the two rows that bracket the target, and clamped to
+ * the ends rather than extrapolated past a curve that stops. (web `interpCurve`)
+ */
+export function interpCurve(
+  curve: { a: number; w: number; cf: number }[],
+  key: "w" | "cf",
+  target: number | null,
+  out: "w" | "cf"
+): number | null {
+  if (!curve.length || target == null) return null;
+  if (target <= curve[0][key]) return curve[0][out];
+  for (let i = 1; i < curve.length; i++) {
+    if (target <= curve[i][key]) {
+      const a = curve[i - 1], b = curve[i];
+      const span = b[key] - a[key];
+      const frac = span ? (target - a[key]) / span : 0;
+      return a[out] + frac * (b[out] - a[out]);
+    }
+  }
+  return curve[curve.length - 1][out];
 }
 
 const num = (s?: string | null): number => Number(s) || 0;
@@ -117,11 +200,13 @@ export const ageInRanges = (age: number, ranges: [number, number | null][]): boo
 export const cumPerBirdForItem = (
   lookup: DailyEntryLookup | null,
   itemName: string,
-  todayKg: number
+  todayKg: number,
+  /** Kilos of this item on earlier unsaved rows of the same farm+batch. */
+  priorKg = 0
 ): number | null => {
   const birds = lookup?.live_birds ?? 0;
   if (!birds || !itemName) return null;
-  let kg = todayKg;
+  let kg = todayKg + priorKg;
   for (const it of lookup?.consumed_by_item ?? []) {
     if (it.name === itemName) kg += num(it.kg);
   }
@@ -132,8 +217,9 @@ export const cumPerBirdForItem = (
 const slotHint = (
   lookup: DailyEntryLookup | null,
   itemId: string,
-  qty: number,
-  age: number
+  age: number,
+  /** Cumulative kg/bird of a named item, counting both slots and earlier rows. */
+  cumOf: (name: string) => number | null
 ): { hint: Hint | null; issue: string | null; capReached: boolean } => {
   if (!itemId) return { hint: null, issue: null, capReached: false };
 
@@ -152,7 +238,7 @@ const slotHint = (
   }
 
   const cap = phase.max || 0;
-  const cum = cap ? cumPerBirdForItem(lookup, phase.name, qty) : null;
+  const cum = cap ? cumOf(phase.name) : null;
 
   if (cap && cum != null && cum >= cap) {
     const next = lookup?.feed_phase?.next_name;
@@ -195,14 +281,16 @@ export function adviseDailyEntry(
    * are simply omitted, which is what the grid does rather than firing two
    * extra requests per row.
    */
-  opening?: Record<string, string>
+  opening?: Record<string, string>,
+  /** Feed already typed on earlier rows of the same farm+batch (web `priorListFeed`). */
+  prior?: PriorFeed
 ): Advice {
   const fieldHints: Record<string, Hint> = {};
   const notes: Hint[] = [];
   const issues: string[] = [];
 
   if (!lookup || !lookup.batch) {
-    return { fieldHints, notes, issues, status: "ok", statusLabel: "" };
+    return { fieldHints, notes, issues, cap: null, status: "ok", statusLabel: "" };
   }
 
   const age = lookup.age_days;
@@ -211,13 +299,24 @@ export function adviseDailyEntry(
   const total = qty1 + qty2;
   const birds = lookup.live_birds;
   const std = num(lookup.std_feed_kg);
+  const priorTotal = prior?.total ?? 0;
+  const priorByItem = prior?.byItem ?? {};
+
+  /** Today's kilos of a named item, counting both slots — the same feed can be
+   *  picked in Feed 1 and Feed 2, and it is still one item against one cap. */
+  const todayKgOf = (name: string): number => {
+    let kg = 0;
+    for (const slot of ["feed_1", "feed_2"] as const) {
+      if (phaseOf(lookup, values[slot] ?? "")?.name === name) kg += num(values[`${slot}_qty`]);
+    }
+    return kg;
+  };
+  const cumOf = (name: string): number | null =>
+    cumPerBirdForItem(lookup, name, todayKgOf(name), priorByItem[name] ?? 0);
 
   let capReached = false;
-  for (const [slot, qty] of [
-    ["feed_1", qty1],
-    ["feed_2", qty2],
-  ] as const) {
-    const r = slotHint(lookup, values[slot] ?? "", qty, age);
+  for (const slot of ["feed_1", "feed_2"] as const) {
+    const r = slotHint(lookup, values[slot] ?? "", age, cumOf);
     if (r.hint) fieldHints[slot] = r.hint;
     if (r.issue) issues.push(r.issue);
     if (r.capReached) capReached = true;
@@ -288,6 +387,73 @@ export function adviseDailyEntry(
     }
   }
 
+  // Cross-references off the breed curve, as the Live Flock report reads it:
+  // what a bird at this weight should have eaten, and what a bird that has
+  // eaten this much should weigh. Two ways of asking whether the flock is
+  // getting value for the feed, and neither is answerable from today alone.
+  const curve = lookup.bs_curve ?? [];
+  const cumBeforeKg = num(lookup.cum_feed_before_kg) + priorTotal;
+  if (curve.length && birds) {
+    const cumPerBirdG = ((cumBeforeKg + total) / birds) * 1000;
+    const bits: string[] = [];
+    if (actW) {
+      const stdFeedG = interpCurve(curve, "w", actW, "cf");
+      if (stdFeedG != null) {
+        bits.push(
+          `Std feed @ this wt: ${stdFeedG.toFixed(0)} g/bird · ` +
+            `${((stdFeedG * birds) / 1000).toFixed(1)} kg total`
+        );
+      }
+    }
+    if (cumPerBirdG > 0) {
+      const stdWtG = interpCurve(curve, "cf", cumPerBirdG, "w");
+      if (stdWtG != null) bits.push(`Std wt @ this feed: ${stdWtG.toFixed(0)} g`);
+    }
+    if (bits.length) notes.push({ tone: "info", text: bits.join("   ·   ") });
+  }
+
+  // The running total this entry rolls into: everything eaten before, what is
+  // being typed, and where that leaves the flock. Split by item, because the
+  // caps above are per item.
+  const baseConsumed = num(lookup.consumed_total_kg) + priorTotal;
+  if (baseConsumed > 0 || total > 0) {
+    const merged: Record<string, number> = {};
+    for (const it of lookup.consumed_by_item ?? []) {
+      merged[it.name] = (merged[it.name] ?? 0) + num(it.kg);
+    }
+    for (const [k, v] of Object.entries(priorByItem)) merged[k] = (merged[k] ?? 0) + v;
+    const items = Object.entries(merged)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${v.toFixed(1)}`)
+      .join(" · ");
+    const pb = (kg: number) => (birds ? ` · ${((kg / birds) * 1000).toFixed(1)} g/bird` : "");
+    let text = `Consumed to date: ${baseConsumed.toFixed(1)} kg${pb(baseConsumed)}`;
+    if (items) text += ` (${items})`;
+    if (total > 0) {
+      const newTotal = baseConsumed + total;
+      text +=
+        `  + this entry ${total.toFixed(1)} kg${pb(total)}` +
+        ` → New total ${newTotal.toFixed(1)} kg${pb(newTotal)}`;
+    }
+    notes.push({ tone: "info", text });
+  }
+
+  // Feed per bird that actually survived. Divides each day's feed among the
+  // birds alive that day, so it excludes the share eaten by birds since dead —
+  // which total ÷ current-live silently credits to the survivors.
+  if (lookup.consumed_per_bird_actual_g != null && birds) {
+    const saved = num(lookup.consumed_per_bird_actual_g);
+    const base = saved + (priorTotal / birds) * 1000;
+    const next = saved + ((priorTotal + total) / birds) * 1000;
+    notes.push({
+      tone: "info",
+      text:
+        `Actual eaten / live bird: ${base.toFixed(1)} g` +
+        (total > 0 ? ` → ${next.toFixed(1)} g with this entry` : "") +
+        " (bird-day weighted, excludes dead-bird feed)",
+    });
+  }
+
   // Running feed stock, the web grid's Stock column: the opening balance the
   // server reports for this farm+item, less what this entry consumes. Shown per
   // slot because the two feeds carry independent balances.
@@ -310,24 +476,136 @@ export function adviseDailyEntry(
     }
   }
 
-  // Feed eaten so far — context for the caps above.
-  if (lookup.consumed_total_kg && num(lookup.consumed_total_kg) > 0) {
-    const perBird = lookup.consumed_per_bird_actual_g;
-    notes.push({
-      tone: "info",
-      text:
-        `Fed to date ${lookup.consumed_total_kg} kg` +
-        (perBird ? ` (${perBird} g/bird)` : ""),
-    });
+  // The changeover gauge: the first selected item that carries a kg/bird cap,
+  // and how far through it the flock is. Returned rather than written as text
+  // so the screen can draw the bar the web draws.
+  let cap: CapProgress | null = null;
+  for (const slot of ["feed_1", "feed_2"] as const) {
+    const phase = phaseOf(lookup, values[slot] ?? "");
+    if (!phase || !(phase.max > 0)) continue;
+    const cum = cumOf(phase.name);
+    if (cum == null) continue;
+    const pct = (cum / phase.max) * 100;
+    const next = lookup.feed_phase?.next_name;
+    cap = {
+      name: phase.name,
+      cum,
+      cap: phase.max,
+      pct,
+      note:
+        pct >= 100
+          ? `cap reached — switch${next ? ` to ${next}` : ""}`
+          : pct >= CAP_NEAR * 100
+          ? "nearing changeover"
+          : "",
+      tone: pct >= 100 ? "bad" : pct >= CAP_NEAR * 100 ? "warn" : "ok",
+    };
+    break;
   }
 
-  const status: EntryStatus = issues.length ? "warn" : capReached ? "near" : "ok";
+  // Hard problems read as Needs Review; a cap reached, or feed over standard
+  // but inside tolerance, as Near Limit. Matches the web's row pill exactly —
+  // the same entry must not be amber in the office and green in the shed.
+  let status: EntryStatus = "ok";
+  if (issues.length) status = "warn";
+  else if (capReached) status = "near";
+  else if (std && birds && total && total > std * birds) status = "near";
   const statusLabel =
     status === "warn" ? "Needs Review" : status === "near" ? "Near Limit" : "Within Standard";
 
-  return { fieldHints, notes, issues, status, statusLabel };
+  return { fieldHints, notes, issues, cap, status, statusLabel };
 }
 
+
+/**
+ * Where the flock stands once this entry is applied: losses to date plus what
+ * is being typed now, each as a share of the birds placed.
+ *
+ * Cumulative on purpose. The figure a supervisor is judging is the flock's
+ * total mortality, not one day's, and it has to move as the day's number is
+ * typed — a summary that only counted saved days would read 0 while a loss of
+ * 200 sits on screen above it.
+ *
+ * Null when the server did not send an opening count (an older build, or a
+ * batch with no placement recorded): a percentage of an unknown base would be
+ * an invented number.
+ */
+export interface FlockSummary {
+  opening: number;
+  mortality: number;
+  culls: number;
+  live: number;
+  /** Each as a percentage of `opening`. */
+  mortalityPct: number;
+  cullsPct: number;
+  livePct: number;
+}
+
+export function flockSummary(
+  lookup: DailyEntryLookup | null,
+  values: Record<string, string>
+): FlockSummary | null {
+  const opening = lookup?.opening_birds ?? 0;
+  if (!lookup || !opening) return null;
+  const mortality = (lookup.mortality_to_date ?? 0) + num(values.mortality);
+  const culls = (lookup.culls_to_date ?? 0) + num(values.culls);
+  const sold = lookup.sold_to_date ?? 0;
+  const live = Math.max(opening - mortality - culls - sold, 0);
+  const pct = (n: number) => (n / opening) * 100;
+  return {
+    opening,
+    mortality,
+    culls,
+    live,
+    mortalityPct: pct(mortality),
+    cullsPct: pct(culls),
+    livePct: pct(live),
+  };
+}
+
+/**
+ * Today's feed against the breed standard, as the form's progress bar reads it.
+ *
+ * Everything is per *live* birds, not birds placed: the standard is a per-bird
+ * figure and the birds that are gone are not eating. Null whenever either half
+ * is unknown, so the bar is hidden rather than drawn against a zero standard.
+ */
+export interface FeedStandard {
+  /** Kilos entered across both slots. */
+  totalKg: number;
+  /** Breed-standard kilos for the whole flock today. */
+  stdKg: number;
+  /** Grams per bird — entered, and the standard. */
+  perBirdG: number;
+  stdPerBirdG: number;
+  /** Entered as a percentage of standard, for the bar. */
+  pct: number;
+}
+
+export function feedStandard(
+  lookup: DailyEntryLookup | null,
+  values: Record<string, string>
+): FeedStandard | null {
+  const birds = lookup?.live_birds ?? 0;
+  const stdPerBirdKg = num(lookup?.std_feed_kg);
+  if (!birds || !stdPerBirdKg) return null;
+  const totalKg = num(values.feed_1_qty) + num(values.feed_2_qty);
+  const stdKg = stdPerBirdKg * birds;
+  return {
+    totalKg,
+    stdKg,
+    perBirdG: (totalKg / birds) * 1000,
+    stdPerBirdG: stdPerBirdKg * 1000,
+    pct: (totalKg / stdKg) * 100,
+  };
+}
+
+/** Grams of feed per live bird for one slot — the per-slot figure beside each
+ *  quantity. Null while the bird count is unknown. */
+export function feedPerBirdG(qtyKg: number, birds: number): number | null {
+  if (!birds) return null;
+  return (qtyKg / birds) * 1000;
+}
 
 /**
  * The day after `iso`, as an ISO date. Dates here are plain calendar days —
@@ -338,6 +616,32 @@ export function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const at = new Date(Date.UTC(y, m - 1, d + days));
   return at.toISOString().slice(0, 10);
+}
+
+/**
+ * Age of a flock on a given day, counting placement day as Age 0 — the same
+ * count the server does, so the batch picker's "(Day 3)" and the age in the
+ * flock panel cannot disagree. Null when the placement is unknown.
+ */
+export function ageOnDate(placedOn: string | null | undefined, on: string): number | null {
+  if (!placedOn || !on) return null;
+  const at = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.max(Math.round((at(on) - at(placedOn)) / 86400000), 0);
+}
+
+/**
+ * Tone for the feed bar, off the same thresholds the written advisories use —
+ * the bar turning red while the line under it reads "within standard" would be
+ * two answers to one question.
+ */
+export function feedTone(pct: number): Tone {
+  if (!pct) return "info";
+  if (pct > FEED_TOLERANCE * 100 || pct < FEED_LOW * 100) return "bad";
+  if (pct > 100) return "warn";
+  return "ok";
 }
 
 /** Today as an ISO date in the device's own timezone, not UTC. */

@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
 
 import { Row } from "@/api/types";
+import { buildGroups, GroupItem } from "@/domain/grouping";
 import { AppIcon } from "@/components/AppIcon";
 import { RecordCard } from "@/components/RecordCard";
 import { ListSkeleton } from "@/components/Skeleton";
@@ -13,10 +14,13 @@ import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { useResourceList } from "@/query/useResourceList";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { makeStyles, shadow, spacing, type, useTheme } from "@/theme";
+import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "List">;
+
+const isGroup = (item: Row | GroupItem): item is GroupItem =>
+  Array.isArray((item as GroupItem).rows);
 
 /** Generic, config-driven list screen: search + infinite scroll + modern cards. */
 export function ResourceListScreen({ route, navigation }: Props) {
@@ -38,6 +42,26 @@ export function ResourceListScreen({ route, navigation }: Props) {
       })
     );
   }, [list.items, query, config.searchKeys]);
+
+  /**
+   * Rows folded into their groups, newest group first and each group's own
+   * days oldest-first — the order the web list uses, so a flock reads top to
+   * bottom and the most recently worked flock is the one in reach.
+   */
+  const groups = useMemo(
+    () => (config.group ? buildGroups(data, config.group) : null),
+    [data, config.group]
+  );
+
+  // Collapsed by default: the point of grouping is not to face every day at once.
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setOpenKeys((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   if (list.isLoading) {
     return (
@@ -68,9 +92,10 @@ export function ResourceListScreen({ route, navigation }: Props) {
       <View style={styles.searchWrap}>
         <SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
       </View>
-      <FlatList
-        data={data}
-        keyExtractor={(row) => String(row.id)}
+      <FlatList<Row | GroupItem>
+        data={groups ?? data}
+        keyExtractor={(item) =>
+          isGroup(item) ? `g:${item.key}` : String(item.id)}
         contentContainerStyle={data.length === 0 ? styles.fill : styles.content}
         onRefresh={list.refresh}
         refreshing={list.isRefreshing}
@@ -96,16 +121,58 @@ export function ResourceListScreen({ route, navigation }: Props) {
             <ActivityIndicator style={{ margin: spacing.lg }} color={config.accent} />
           ) : null
         }
-        renderItem={({ item }) => (
-          <RecordCard
-            view={config.card(item)}
-            icon={config.icon}
-            accent={config.accent}
-            onPress={() =>
-              navigation.navigate("Detail", { resourceKey: config.key, row: item })
-            }
-          />
-        )}
+        renderItem={({ item }) => {
+          if (!isGroup(item)) {
+            return (
+              <RecordCard
+                view={config.card(item)}
+                icon={config.icon}
+                accent={config.accent}
+                onPress={() =>
+                  navigation.navigate("Detail", { resourceKey: config.key, row: item })
+                }
+              />
+            );
+          }
+          const open = openKeys.has(item.key);
+          return (
+            <View>
+              <Pressable
+                style={[styles.groupHead, { borderLeftColor: config.accent }]}
+                onPress={() => toggleGroup(item.key)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+                accessibilityLabel={`${item.title}, ${item.rows.length} entries`}
+              >
+                <View style={styles.groupText}>
+                  <Text style={styles.groupTitle} numberOfLines={1}>{item.title}</Text>
+                  {item.subtitle ? (
+                    <Text style={styles.groupSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                  ) : null}
+                </View>
+                <AppIcon
+                  name={open ? "chevron-down" : "chevron-right"}
+                  size={20}
+                  color={colors.textFaint}
+                />
+              </Pressable>
+              {open
+                ? item.rows.map((row) => (
+                    <View key={String(row.id)} style={styles.groupChild}>
+                      <RecordCard
+                        view={config.card(row)}
+                        icon={config.icon}
+                        accent={config.accent}
+                        onPress={() =>
+                          navigation.navigate("Detail", { resourceKey: config.key, row })
+                        }
+                      />
+                    </View>
+                  ))
+                : null}
+            </View>
+          );
+        }}
       />
 
       {isEditable(config.key) && canAdd ? (
@@ -133,6 +200,21 @@ const useStyles = makeStyles((colors) => ({
   searchWrap: { padding: spacing.md, paddingBottom: spacing.sm },
   fill: { flexGrow: 1 },
   content: { padding: spacing.md, paddingTop: spacing.xs, gap: spacing.sm, paddingBottom: 96 },
+  groupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderLeftWidth: 3,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  groupText: { flex: 1 },
+  groupTitle: { ...type.title, color: colors.text },
+  groupSubtitle: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  // Indented so an opened group reads as belonging to its heading.
+  groupChild: { marginTop: spacing.sm, marginLeft: spacing.md },
   fab: {
     position: "absolute",
     right: spacing.lg,

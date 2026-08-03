@@ -53,6 +53,16 @@ export interface FormField {
   transient?: boolean;
   /** For `geo`: the [latitude, longitude] field names this control fills. */
   geoFields?: [string, string];
+  /**
+   * For `photo`: render as a narrow tile rather than a full-width button, so
+   * several shots fit side by side. Daily Entry carries three (mortality,
+   * culls, feed) and stacking them would push the fields they evidence off
+   * the screen.
+   *
+   * Camera only — the tile has no gallery route, because these shots are
+   * evidence of what was in the shed today.
+   */
+  compact?: boolean;
 }
 
 export interface FormSchema {
@@ -113,10 +123,18 @@ const farmLookup = async (farmId: string): Promise<FarmLookup> =>
  */
 export const dailyEntryLookup = async (
   farmId: string,
-  date?: string
+  date?: string,
+  /** Which flock, when the farm is running more than one. Left out, the server
+   *  answers for the batch it picks itself — and the age, phase and standards
+   *  that come back would then describe the other flock. */
+  batchId?: string
 ): Promise<DailyEntryLookup> =>
   (await http.get<Envelope<DailyEntryLookup>>("/broiler/daily-entry-lookup", {
-    params: { farm: farmId, ...(date ? { date } : {}) },
+    params: {
+      farm: farmId,
+      ...(date ? { date } : {}),
+      ...(batchId ? { batch: batchId } : {}),
+    },
   })).data.data;
 
 /** Opening feed stock for a farm+item on a date — the running-stock preview. */
@@ -204,7 +222,10 @@ export const FORMS: Record<string, FormSchema> = {
   /* ------------------------------- Broiler ------------------------------ */
   "broiler-daily-entries": {
     fields: [
-      date("date", "Date", true),
+      // Derived, not typed: the day after this farm's last entry, filled by
+      // the autofill below. The web form does not let this be picked either —
+      // a hand-typed day is how entries land on the wrong date or repeat one.
+      { ...date("date", "Date", true), readOnly: true },
       SUPERVISOR(),
       FARM(true),
       BATCH(true),

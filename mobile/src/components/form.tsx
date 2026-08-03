@@ -115,7 +115,7 @@ export function FormControl({
   if (field.type === "photo") {
     return (
       <FieldShell label={field.label} required={field.required} error={error}>
-        <PhotoControl value={value} onChange={onChange} />
+        <PhotoControl value={value} onChange={onChange} compact={field.compact} />
       </FieldShell>
     );
   }
@@ -277,9 +277,12 @@ function SelectControl({
 function PhotoControl({
   value,
   onChange,
+  compact,
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** Narrow tile instead of the full-width button — see `FormField.compact`. */
+  compact?: boolean;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
@@ -308,6 +311,33 @@ function PhotoControl({
       setBusy(false);
     }
   };
+
+  // Narrow tile: the shot itself is the control, and it comes straight from the
+  // camera — no gallery. These are evidence of what was in the shed today, and
+  // a picture chosen from the roll could have been taken anywhere, any day.
+  if (compact) {
+    return (
+      <View style={styles.tile}>
+        {value ? (
+          <>
+            <Pressable onPress={() => run(capturePhoto)} disabled={busy}>
+              <Image source={{ uri: value }} style={styles.tileThumb} />
+            </Pressable>
+            <Pressable onPress={() => onChange("")} disabled={busy}>
+              <Text style={[styles.photoAction, styles.tileAction, { color: colors.danger }]}>
+                Remove
+              </Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable style={styles.tileEmpty} onPress={() => run(capturePhoto)} disabled={busy}>
+            <AppIcon name="camera-outline" size={20} color={colors.tint} />
+            <Text style={styles.tileText}>{busy ? "Opening…" : "Upload Photo"}</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
 
   if (value) {
     return (
@@ -452,6 +482,29 @@ const useStyles = makeStyles((colors) => ({
   photoActions: { gap: spacing.sm },
   thumb: {
     width: 72,
+    height: 72,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  tile: { alignItems: "stretch", gap: spacing.xs },
+  tileAction: { textAlign: "center" },
+  tileEmpty: {
+    width: "100%",
+    minHeight: 72,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  tileText: { ...type.caption, color: colors.tint, textAlign: "center" },
+  tileThumb: {
+    width: "100%",
+    minWidth: 72,
     height: 72,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceAlt,

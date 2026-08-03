@@ -115,24 +115,12 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
               isEditable(key) &&
               usePermissionsStore.getState().canResource(key, RESOURCES[key].module, "add")
               ? () => (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
-                    {/* Daily Entry also has the web's multi-farm round: one
-                        date, several farms, one save. */}
-                    {key === "broiler-daily-entries" ? (
-                      <Pressable
-                        hitSlop={12}
-                        onPress={() => navigation.navigate("DailyEntryGrid")}
-                      >
-                        <AppIcon name="table" size={22} color={colors.onDark} />
-                      </Pressable>
-                    ) : null}
-                    <Pressable
-                      hitSlop={12}
-                      onPress={() => openRecordForm(navigation, key, "create")}
-                    >
-                      <AppIcon name="plus" size={24} color={colors.onDark} />
-                    </Pressable>
-                  </View>
+                  <Pressable
+                    hitSlop={12}
+                    onPress={() => openRecordForm(navigation, key, "create")}
+                  >
+                    <AppIcon name="plus" size={24} color={colors.onDark} />
+                  </Pressable>
                 )
               : undefined,
           };

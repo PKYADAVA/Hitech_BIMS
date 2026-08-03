@@ -242,6 +242,10 @@ class DailyEntryLookupView(V1ViewMixin, APIView):
         return Response(daily_entry_lookup_payload(
             request.query_params.get("farm"),
             request.query_params.get("date"),
+            # A farm running two flocks is asked which one; without passing the
+            # answer on, age, phase and standards would come back for whichever
+            # batch the server picked by default.
+            request.query_params.get("batch"),
         ))
 
 
