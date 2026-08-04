@@ -90,6 +90,51 @@ class DailyEntryApiTests(APITestCase):
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertEqual(DailyEntry.objects.get().batch_id, self.batch.id)
 
+    def test_age_uses_the_placement_transfer_when_start_date_is_blank(self):
+        """A batch created from a chicks placement has no ``start_date``.
+
+        The web form resolves the placement day through ``_placement_date``,
+        which falls back to the chick-category transfer into the batch. Reading
+        ``batch.start_date`` here instead meant the phone stored age 0 for such
+        a flock while the register showed its real age — the same row, two
+        different ages, depending on which client saved it.
+        """
+        from broiler.views import _placement_date
+        from inventory.models import StockTransfer
+
+        placed = BroilerFarm.objects.create(
+            branch=self.branch, supervisor=self.supervisor, farmer=self.farmer,
+            region="East", line="L1", farm_name="Placement Farm", farm_capacity=900)
+        batch = BroilerBatch.objects.create(broiler_farm=placed, start_date=None)
+        chicks = Item.objects.create(
+            description="Day Old Chick", category=ItemCategory.objects.create(name="Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=Decimal("30"),
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+        StockTransfer.objects.create(
+            item=chicks, to_batch=batch, date=date(2026, 7, 1), quantity=Decimal("500"))
+        self.assertEqual(_placement_date(batch), date(2026, 7, 1))
+
+        resp = self.post(farm=placed.id, batch=batch.id, date="2026-07-10")
+        self.assertEqual(resp.status_code, 201, resp.content)
+        entry = DailyEntry.objects.get(farm=placed)
+        self.assertEqual(entry.age_days, 9)
+
+    def test_a_chosen_batch_on_the_farm_is_honoured(self):
+        """Two open flocks on one farm: the entry belongs to the one picked.
+
+        The web form's ``_resolve_batch`` takes the chosen batch when it is on
+        that farm. Replacing it with "the farm's active batch" regardless filed
+        the entry against whichever flock sorted first."""
+        second = BroilerBatch.objects.create(
+            broiler_farm=self.farm, start_date=date(2026, 7, 5))
+        resp = self.post(batch=second.id)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        entry = DailyEntry.objects.get()
+        self.assertEqual(entry.batch_id, second.id)
+        # ...and its age comes from *that* batch: 2026-07-05 → 2026-07-10 is 5.
+        self.assertEqual(entry.age_days, 5)
+
     def test_entry_by_is_stamped_from_the_request_user(self):
         self.post()
         self.assertEqual(DailyEntry.objects.get().entry_by_id, self.user.id)

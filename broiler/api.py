@@ -139,10 +139,17 @@ class DailyEntrySerializer(serializer_factory(DailyEntry)):
     """
 
     def validate(self, attrs):
+        from .views import _resolve_batch
+
         attrs = super().validate(attrs)
         farm = attrs.get("farm") or getattr(self.instance, "farm", None)
         if farm is not None:
-            attrs["batch"] = _active_batch_for_farm(farm.id)
+            # The chosen batch, checked against the farm, falling back to the
+            # farm's active one — the web form's rule. Overriding with the
+            # active batch unconditionally meant a supervisor who picked one of
+            # two open flocks had the entry filed against the other.
+            chosen = attrs.get("batch") or getattr(self.instance, "batch", None)
+            attrs["batch"] = _resolve_batch(farm.id, chosen.id if chosen else None)
         return attrs
 
     def _current(self, validated_data, name, default=None):
@@ -153,17 +160,22 @@ class DailyEntrySerializer(serializer_factory(DailyEntry)):
         return getattr(self.instance, name, default) if self.instance else default
 
     def _apply_derived(self, validated_data):
+        from .views import _placement_date
+
         entry_date = self._current(validated_data, "date") or timezone.localdate()
         batch = self._current(validated_data, "batch")
         farm = self._current(validated_data, "farm")
         farm_id = farm.id if farm else None
 
         # Placement day is Age 0; the first entry day (the day after placement)
-        # is Age 1 — same rule as the web form.
-        if batch and batch.start_date:
-            validated_data["age_days"] = max((entry_date - batch.start_date).days, 0)
-        else:
-            validated_data["age_days"] = 0
+        # is Age 1 — same rule as the web form, and the same *source* for the
+        # placement day. Reading `batch.start_date` here was the drift: a batch
+        # created from a chicks placement leaves it blank, so every entry the
+        # phone saved for such a flock stored age 0 while the ERP showed its
+        # real age. `_placement_date` falls back to the placement transfer.
+        placed_on = _placement_date(batch)
+        validated_data["age_days"] = (
+            max((entry_date - placed_on).days, 0) if placed_on else 0)
 
         # An existing row must exclude itself from its own "previous" lookup;
         # a new row has no pk to compare against yet.
@@ -205,6 +217,75 @@ class DailyEntrySerializer(serializer_factory(DailyEntry)):
         for item_id in previous_items:
             if item_id and item_id not in (instance.feed_1_id, instance.feed_2_id):
                 _recompute_stock_chain(previous_farm_id, item_id)
+        return instance
+
+
+class MedicineVaccineEntrySerializer(serializer_factory(MedicineVaccineEntry)):
+    """The Daily Entry treatment applied to Medicine/Vaccine Consumption.
+
+    Same shape, same trap: ``age_days`` and ``stock`` are ``editable=False``,
+    so DRF never takes them from the request and they save as 0 unless derived
+    here — and ``MedicineVaccineEntry.previous_stock`` chains each row's
+    opening balance off the previous row's closing balance, so one zeroed row
+    corrupts that item's ledger at that farm from then on.
+
+    New records normally arrive at ``/broiler/medicine-entries/save``, which
+    runs the web view itself. This covers the other door: correcting one saved
+    line through the generic resource route.
+    """
+
+    def validate(self, attrs):
+        from .views import _resolve_batch
+
+        attrs = super().validate(attrs)
+        farm = attrs.get("farm") or getattr(self.instance, "farm", None)
+        if farm is not None:
+            chosen = attrs.get("batch") or getattr(self.instance, "batch", None)
+            attrs["batch"] = _resolve_batch(farm.id, chosen.id if chosen else None)
+        return attrs
+
+    def _apply_derived(self, validated_data):
+        from .views import _placement_date
+
+        def current(name, default=None):
+            if name in validated_data:
+                return validated_data[name]
+            return getattr(self.instance, name, default) if self.instance else default
+
+        entry_date = current("date") or timezone.localdate()
+        farm, item = current("farm"), current("item")
+        placed_on = _placement_date(current("batch"))
+        validated_data["age_days"] = (
+            max((entry_date - placed_on).days, 0) if placed_on else 0)
+
+        before_id = self.instance.pk if self.instance else None
+        qty = current("qty") or Decimal("0")
+        prev = MedicineVaccineEntry.previous_stock(
+            farm.id if farm else None, item.id if item else None, entry_date, before_id)
+        validated_data["stock"] = Decimal(str(prev)) - Decimal(str(qty))
+        return validated_data
+
+    def _recompute(self, farm_id, item_id):
+        from .views import _recompute_medicine_stock_chain
+
+        _recompute_medicine_stock_chain(farm_id, item_id)
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request is not None and not validated_data.get("entry_by"):
+            validated_data["entry_by"] = request.user
+        instance = super().create(self._apply_derived(validated_data))
+        self._recompute(instance.farm_id, instance.item_id)
+        return instance
+
+    def update(self, instance, validated_data):
+        # Moving a row onto a different item still changes the old item's
+        # chain for every row that followed it.
+        was = (instance.farm_id, instance.item_id)
+        instance = super().update(instance, self._apply_derived(validated_data))
+        self._recompute(instance.farm_id, instance.item_id)
+        if was != (instance.farm_id, instance.item_id):
+            self._recompute(*was)
         return instance
 
 
@@ -389,7 +470,8 @@ def register(router) -> None:
     # itself, since each photo needs the entry's id to hang off.
     register_model(router, "broiler/daily-entry-photos", DailyEntryPhoto,
                    serializer=DailyEntryPhotoSerializer, ordering=["kind", "id"])
-    register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry, cursor=True)
+    register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry,
+                   serializer=MedicineVaccineEntrySerializer, cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, serializer=BirdSaleSerializer,
                    search_fields=["sale_no", "doc_no", "vehicle", "driver"], cursor=True)
     register_model(router, "broiler/bird-sale-receipts", BirdSaleReceipt, cursor=True)
