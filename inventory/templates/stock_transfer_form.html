@@ -44,9 +44,9 @@
               <th class="c-num m-num">Quantity <span class="text-danger">*</span></th>
               <th class="c-num m-num">Rate</th>
               <th class="c-fit m-mid">From Location <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid">Batch</th>
+              <th class="c-fit m-mid col-from-batch d-none">Batch</th>
               <th class="c-fit m-mid">To Location <span class="text-danger">*</span></th>
-              <th class="c-fit m-mid">Batch</th>
+              <th class="c-fit m-mid col-to-batch d-none">Batch</th>
               <th class="c-fit m-short">Vehicle</th>
               <th class="c-fit m-short">Driver</th>
               <th class="c-grow m-mid">Remarks</th>
@@ -98,9 +98,9 @@ function row() {
     <td><input class="form-control quantity" type="number" min="0" step=".01" value="0"></td>
     <td><input class="form-control rate" type="number" min="0" step=".01" value="0"></td>
     <td><select class="form-select from-location" required>${locationOptions}</select></td>
-    <td><select class="form-select from-batch" disabled><option value="">N/A</option></select></td>
+    <td class="col-from-batch d-none"><select class="form-select from-batch"><option value="">select</option></select></td>
     <td><select class="form-select to-location" required>${locationOptions}</select></td>
-    <td><select class="form-select to-batch" disabled><option value="">N/A</option></select></td>
+    <td class="col-to-batch d-none"><select class="form-select to-batch"><option value="">select</option></select></td>
     <td><input class="form-control vehicle-no"></td>
     <td><input class="form-control driver-name"></td>
     <td><input class="form-control remarks"></td>
@@ -110,6 +110,10 @@ function row() {
     </td>`;
   get('row-table').tBodies[0].append(tr);
   refreshRowAddButtons();
+  // A new row starts with its Batch cells hidden; if another row already sends
+  // stock to a farm the column is on screen, and this row's cells have to join
+  // it or the table's columns stop lining up with its header.
+  refreshBatchColumns();
   return tr;
 }
 
@@ -123,23 +127,51 @@ function refreshRowAddButtons() {
   });
 }
 
-// Each Batch box only applies when its own side's Location is a Farm — a
-// Warehouse has no batches. Re-enabling/populating it is keyed off that
-// side's Location select (side is 'from' or 'to').
+// A Batch column only applies while some row sends stock to (or takes it from)
+// a Farm — a Warehouse has no batches. Medicine Vaccine Transfer hides its
+// Batch field outright until the side is a Farm, and this is the same rule
+// applied to a grid: the whole column comes and goes, header and cells
+// together, instead of sitting there permanently greyed as "N/A".
+function refreshBatchColumns() {
+  ['from', 'to'].forEach(side => {
+    const rows = [...document.querySelectorAll('#row-table tbody tr')];
+    const wanted = rows.some(tr => {
+      const loc = parseLocation(tr.querySelector(`.${side}-location`).value);
+      return loc && loc.type === 'farm';
+    });
+    document.querySelectorAll(`#row-table .col-${side}-batch`)
+      .forEach(cell => cell.classList.toggle('d-none', !wanted));
+  });
+}
+
+// Populate one row's Batch box from its own side's Location (side is 'from'
+// or 'to'), then re-decide whether the column belongs on screen at all.
 async function refreshBatchBox(tr, side) {
   const batchSelect = tr.querySelector(`.${side}-batch`);
   const loc = parseLocation(tr.querySelector(`.${side}-location`).value);
   if (!loc || loc.type !== 'farm') {
-    batchSelect.innerHTML = '<option value="">N/A</option>';
-    batchSelect.disabled = true;
+    // A row switched back to a Warehouse must not keep the batch it had, or
+    // the payload would still carry it while the box no longer shows it.
+    batchSelect.innerHTML = '<option value="">select</option>';
+    if (window.jQuery) jQuery(batchSelect).trigger('change.select2');
+    refreshBatchColumns();
     return;
   }
-  batchSelect.disabled = false;
   batchSelect.innerHTML = '<option value="">loading…</option>';
+  refreshBatchColumns();
   const resp = await fetch(`{% url 'stock_transfer_farm_batches' %}?farm=${loc.id}`);
   const batches = await resp.json();
   batchSelect.innerHTML = '<option value="">select</option>' + batches.map(b =>
     `<option value="${b.id}">${b.batch_name}${b.is_active ? ' (Active)' : ''}</option>`).join('');
+  if (window.jQuery) jQuery(batchSelect).trigger('change.select2');
+
+  // The column appearing says a batch is now wanted; opening it says which one
+  // to pick and saves the reach across a table that scrolls sideways. Only
+  // where there is something to choose — an empty list would pop up blank.
+  if (batches.length && window.jQuery && jQuery(batchSelect).data('select2')) {
+    batchSelect.scrollIntoView({ block: 'nearest', inline: 'center' });
+    jQuery(batchSelect).select2('open');
+  }
 }
 
 // Live running-stock preview at the source (From Location), chained per
@@ -226,7 +258,8 @@ get('row-table').addEventListener('input', e => {
 
 get('row-table').addEventListener('click', e => {
   if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
-    e.target.closest('tr').remove(); refreshRowAddButtons(); recomputeStockPreview();
+    e.target.closest('tr').remove(); refreshRowAddButtons();
+    refreshBatchColumns(); recomputeStockPreview();
   }
   if (e.target.closest('.add-row-inline')) { row(); recomputeStockPreview(); }
 });

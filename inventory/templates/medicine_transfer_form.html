@@ -146,6 +146,16 @@ async function refreshBatchBox(side, selected) {
   batchSelect.innerHTML = '<option value="">select</option>' + batches.map(b =>
     `<option value="${b.id}">${b.batch_name}${b.is_active ? ' (Active)' : ''}</option>`).join('');
   if (selected) { batchSelect.value = selected; }
+  if (window.jQuery) jQuery(batchSelect).trigger('change.select2');
+
+  // The box appearing says a batch is now wanted; opening it says which one to
+  // pick. Not when `selected` is set — that call is an existing transfer being
+  // loaded for edit, where the batch is already decided and a dropdown opening
+  // by itself is just something to dismiss.
+  if (!selected && batches.length && window.jQuery && jQuery(batchSelect).data('select2')) {
+    batchSelect.scrollIntoView({ block: 'nearest', inline: 'center' });
+    jQuery(batchSelect).select2('open');
+  }
 }
 
 function row(data = {}) {
