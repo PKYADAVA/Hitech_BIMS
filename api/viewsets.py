@@ -126,6 +126,9 @@ API_SCOPES = {
     "broiler.DailyEntryPhoto": {"branches": "entry__farm__branch_id",
                                 "farms": "entry__farm_id"},
     "broiler.BirdSale": {"branches": "farm__branch_id", "farms": "farm_id"},
+    # Copied from broiler/views.py::farm_location_capture_api, which scopes the
+    # register with scope_multi on exactly these two fields.
+    "broiler.FarmLocationCapture": {"branches": "farm__branch_id", "farms": "farm_id"},
     "broiler.BroilerFarmShed": {"farms": "farm_id"},
     "inventory.Warehouse": {"sectors": "id"},
     "sales.Customer": {"customer_groups": "customer_group_id"},

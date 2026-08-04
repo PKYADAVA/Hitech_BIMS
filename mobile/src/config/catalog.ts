@@ -144,6 +144,26 @@ const broilerResources: ResourceConfig[] = [
     }),
   },
   {
+    key: "broiler-farm-location-capture",
+    module: "broiler",
+    path: "/broiler/location-captures/",
+    title: "Farm Location & Photos",
+    singular: "Farm Location Capture",
+    icon: "📍",
+    accent: B,
+    emptyMessage: "No location captures yet.",
+    searchKeys: ["capture_no", "state", "district", "area"],
+    card: (r) => ({
+      title: pick(r, ["capture_no"], `Capture #${r.id}`),
+      subtitle: joinParts([pick(r, ["farm_label"]), formatDate(r.date)]),
+      // Whether the visit actually got a pin is the one thing worth seeing
+      // from the register: a capture without one is a visit still to redo.
+      badge: isBlank(r.latitude)
+        ? { label: "no pin", tone: "warning" }
+        : { label: "pinned", tone: "success" },
+    }),
+  },
+  {
     key: "broiler-medicine-vaccine",
     module: "broiler",
     path: "/broiler/medicine-vaccine-entries/",
@@ -1780,6 +1800,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         resourceKeys: [
           "broiler-daily-entries",
           "broiler-medicine-vaccine",
+          "broiler-farm-location-capture",
           "broiler-bird-sales",
           "broiler-sale-receipts",
         ],

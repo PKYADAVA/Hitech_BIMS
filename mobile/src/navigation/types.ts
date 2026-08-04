@@ -32,6 +32,7 @@ export type ModuleStackParams = {
    */
   DailyEntryGrid: { row?: Row } | undefined;
   MedicineEntryForm: undefined;
+  FarmCaptureForm: { row?: Row } | undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */
   DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row };
 };

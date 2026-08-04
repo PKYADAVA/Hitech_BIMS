@@ -1,3 +1,4 @@
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { Platform } from "react-native";
@@ -103,6 +104,49 @@ export async function captureLocation(): Promise<CapturedPoint | null> {
   }
 }
 
+/**
+ * A file from the device's storage — a PDF scan, a photographed cheque already
+ * saved, anything the farmer has on their phone rather than in front of them.
+ *
+ * Deliberately unfiltered by type: the ERP's capture slots accept whatever the
+ * branch has on file, and refusing a format here would mean the visit cannot
+ * record something the desk can.
+ */
+export async function pickDocument(): Promise<CapturedImage | null> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: "*/*",
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled || !result.assets?.length) return null;
+  const asset = result.assets[0];
+  return {
+    uri: asset.uri,
+    name: asset.name || "document",
+    mimeType: asset.mimeType || mimeFromName(asset.name || ""),
+  };
+}
+
+/**
+ * The content type a filename implies.
+ *
+ * Uploads used to be posted as image/jpeg whatever they were, which is a lie
+ * as soon as the slot holds a PDF — the stored file is fine, but anything that
+ * trusts the declared type (a preview, a virus scan, a strict validator) is
+ * reading the wrong thing.
+ */
+export function mimeFromName(name: string): string {
+  const ext = name.toLowerCase().split(".").pop() || "";
+  return {
+    pdf: "application/pdf",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    heic: "image/heic",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  }[ext] ?? FALLBACK_MIME;
+}
+
 /** True when the value is a freshly captured local file rather than a stored URL. */
 export function isLocalCapture(value: string): boolean {
   return (
@@ -134,6 +178,6 @@ export async function appendImage(
   form.append(field, {
     uri: value,
     name,
-    type: FALLBACK_MIME,
+    type: mimeFromName(name),
   } as unknown as Blob);
 }

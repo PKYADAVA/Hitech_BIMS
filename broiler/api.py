@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from urllib.parse import quote
+
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
@@ -35,6 +38,8 @@ from .models import (
     BroilerLine,
     DailyEntry,
     DailyEntryPhoto,
+    FarmCaptureFile,
+    FarmLocationCapture,
     Farmer,
     FarmerGroup,
     GrowingChargeScheme,
@@ -289,6 +294,98 @@ class MedicineVaccineEntrySerializer(serializer_factory(MedicineVaccineEntry)):
         return instance
 
 
+class FarmLocationCaptureSerializer(serializer_factory(FarmLocationCapture)):
+    """A capture as the phone's register and form want it.
+
+    ``farmer`` is a property reading through to ``farm.farmer`` — the model
+    deliberately does not store its own copy, so a farm changing hands cannot
+    leave a capture pointing at the wrong person. It is surfaced here because
+    the form shows it, and a per-row lookup to rebuild it would be one request
+    per line of the register.
+
+    Attachments come as a list rather than a count: the form has to show which
+    slots are already filled, and "3 files" does not say whether the PAN card
+    is one of them.
+    """
+
+    farmer_label = serializers.SerializerMethodField()
+    files = serializers.SerializerMethodField()
+
+    def get_farmer_label(self, obj) -> str:
+        farmer = obj.farmer
+        return farmer.farmer_name if farmer else ""
+
+    def get_files(self, obj) -> list:
+        return [{
+            "id": f.id,
+            "kind": f.kind,
+            "label": f.get_kind_display(),
+            "name": f.file.name.rsplit("/", 1)[-1] if f.file else "",
+            "url": f.file.url if f.file else "",
+        } for f in obj.files.all()]
+
+
+class ReverseGeocodeView(V1ViewMixin, APIView):
+    """GET /api/v1/geo/reverse?lat=&lon= — a pin as an address.
+
+    Proxied rather than called from the device. Nominatim refuses a request
+    with no User-Agent (403), which is exactly what React Native's fetch sends,
+    so the phone's Farm Location Capture silently got no address while the ERP
+    — a browser, which always sends one — filled it in. Going through the
+    server also means both clients read the same reply the same way.
+
+    A failure is an empty answer, never an error: the coordinates are the
+    record and the address is a convenience on top, so a capture taken where
+    the lookup times out still saves the pin it has.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import json
+        from urllib.error import URLError
+        from urllib.request import Request, urlopen
+
+        lat = request.query_params.get("lat")
+        lon = request.query_params.get("lon")
+        if not lat or not lon:
+            return Response({"display": "", "state": "", "district": "", "area": ""})
+
+        cache_key = f"geo:reverse:{lat}:{lon}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        url = ("https://nominatim.openstreetmap.org/reverse?format=jsonv2"
+               f"&lat={quote(str(lat))}&lon={quote(str(lon))}"
+               "&zoom=18&addressdetails=1")
+        # Nominatim's usage policy wants an identifying User-Agent; without one
+        # it answers 403 rather than an address.
+        req = Request(url, headers={
+            "User-Agent": "HitechBIMS/1.0 (+farm location capture)",
+            "Accept": "application/json",
+        })
+        try:
+            with urlopen(req, timeout=8) as resp:
+                data = json.load(resp)
+        except (URLError, ValueError, TimeoutError, OSError):
+            return Response({"display": "", "state": "", "district": "", "area": ""})
+
+        a = data.get("address") or {}
+        first = lambda *keys: next((a[k] for k in keys if a.get(k)), "")
+        place = {
+            "display": data.get("display_name") or "",
+            "state": first("state"),
+            "district": first("state_district", "county", "district"),
+            "area": first("suburb", "village", "town", "city_district",
+                          "neighbourhood", "hamlet", "city"),
+        }
+        # The same pin resolves to the same place; a day is generous and keeps
+        # a supervisor re-reading their location off Nominatim entirely.
+        cache.set(cache_key, place, 60 * 60 * 24)
+        return Response(place)
+
+
 class MedicineItemLookupView(V1ViewMixin, APIView):
     """GET /api/v1/broiler/medicine-item-lookup?item=<id> — the item's
     consumption unit, for the auto-filled Unit column on the phone's
@@ -325,8 +422,6 @@ class MedicineStockLookupView(V1ViewMixin, APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from django.utils import timezone
-
         from .models import MedicineVaccineEntry
 
         farm_id = request.query_params.get("farm")
@@ -470,6 +565,15 @@ def register(router) -> None:
     # itself, since each photo needs the entry's id to hang off.
     register_model(router, "broiler/daily-entry-photos", DailyEntryPhoto,
                    serializer=DailyEntryPhotoSerializer, ordering=["kind", "id"])
+    # Creates and edits go to broiler/location-captures/save, where the web
+    # form's own _save_capture places the attached files and mirrors them onto
+    # the farm and farmer masters. Full CRUD is registered here anyway for the
+    # register's Delete, which has to run the model's delete() — a cascade
+    # would skip FarmCaptureFile.delete() and orphan the mirrored pictures.
+    register_model(router, "broiler/location-captures", FarmLocationCapture,
+                   serializer=FarmLocationCaptureSerializer,
+                   search_fields=["capture_no", "state", "district", "area"],
+                   ordering=["-date", "-id"], cursor=True)
     register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry,
                    serializer=MedicineVaccineEntrySerializer, cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, serializer=BirdSaleSerializer,

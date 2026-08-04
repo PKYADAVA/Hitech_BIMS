@@ -1,5 +1,6 @@
 import { Row } from "@/api/types";
 import { isDocumentForm } from "@/config/documents";
+import { isEditable, isRecordEditable } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 
 /** Resources whose create/edit uses a bespoke screen instead of the generic Form. */
@@ -18,10 +19,13 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
  * stamp are what make a day's numbers judgeable, and a correction made without
  * them is exactly as unverified as an original made without them.
  */
-const ROW_FORM_SCREEN: Record<string, "DailyEntryGrid" | "MedicineEntryForm"> = {
+const ROW_FORM_SCREEN: Record<string,
+  "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"> = {
   "broiler-daily-entries": "DailyEntryGrid",
   // One supervisor, farm, batch and date over several consumption lines.
   "broiler-medicine-vaccine": "MedicineEntryForm",
+  // The pin, the pictures and the scans are all taken standing on the farm.
+  "broiler-farm-location-capture": "FarmCaptureForm",
 };
 
 /**
@@ -33,6 +37,35 @@ const ROW_FORM_SCREEN: Record<string, "DailyEntryGrid" | "MedicineEntryForm"> = 
  * and the wrong shape for fixing the quantity on one saved line.
  */
 const CREATE_ONLY = new Set(["broiler-medicine-vaccine"]);
+
+/**
+ * Whether an existing record can be corrected.
+ *
+ * Same reasoning as hasCreateForm: a bespoke screen that handles edit is
+ * invisible to `isRecordEditable`, which only knows the generic and document
+ * forms, so the register would offer no Edit at all.
+ */
+export function hasEditForm(resourceKey: string): boolean {
+  if (CREATE_ONLY.has(resourceKey)) return isRecordEditable(resourceKey);
+  return resourceKey in ROW_FORM_SCREEN
+    || resourceKey in CUSTOM_FORM_SCREEN
+    || isRecordEditable(resourceKey);
+}
+
+/**
+ * Whether a new record can be started for this resource at all.
+ *
+ * `isEditable` alone answers only for the generic and document forms, so a
+ * resource served by a bespoke screen — Farm Location Capture, Medicine
+ * Consumption — had its list render with no New button and no way in. The
+ * bespoke screens are registered right here, so the question is answered here
+ * too rather than by a second list kept in step by hand.
+ */
+export function hasCreateForm(resourceKey: string): boolean {
+  return resourceKey in ROW_FORM_SCREEN
+    || resourceKey in CUSTOM_FORM_SCREEN
+    || isEditable(resourceKey);
+}
 
 /** Anything that can push a screen in the module stack (screen props or header options). */
 type Nav = { navigate: (screen: any, params?: any) => void };
