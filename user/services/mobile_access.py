@@ -26,17 +26,21 @@ from __future__ import annotations
 #: ``key``    — the mobile module key (matches MODULE_NAV in the RN app)
 #: ``nav``    — the nav group in user.access.MODULE_REGISTRY that gates it
 #: ``icon``   — Font Awesome class for the editor/preview
-#: ``colour`` — accent used by the editor card
+#: ``colour`` — the module's accent **from the phone app** (ACCENTS in
+#:              mobile/src/theme/tokens.ts). Taken from there rather than
+#:              chosen here: this page describes the phone, and showing
+#:              Broiler green while the app shows it orange is exactly how
+#:              one product starts feeling like two.
 MOBILE_MODULES = [
-    ("broiler",   "Broiler",    "broiler",       "fa-solid fa-kiwi-bird",     "#16a34a"),
+    ("broiler",   "Broiler",    "broiler",       "fa-solid fa-kiwi-bird",     "#ea580c"),
     ("hatchery",  "Hatchery",   "hatchery",      "fa-solid fa-egg",           "#d97706"),
     ("inventory", "Inventory",  "inventory",     "fa-solid fa-boxes-stacked", "#0891b2"),
-    ("sales",     "Sales",      "sales",         "fa-solid fa-cart-shopping", "#7c3aed"),
-    ("purchase",  "Purchase",   "purchase",      "fa-solid fa-truck",         "#c2410c"),
-    ("account",   "Account",    "account",       "fa-solid fa-book",          "#0369a1"),
-    ("hr",        "HR",         "hr",            "fa-solid fa-user-tie",      "#be185d"),
-    ("sms",       "SMS",        "notifications", "fa-solid fa-comment-sms",   "#0d9488"),
-    ("user",      "Users",      "user",          "fa-solid fa-user-shield",   "#4f46e5"),
+    ("sales",     "Sales",      "sales",         "fa-solid fa-cart-shopping", "#e11d48"),
+    ("purchase",  "Purchase",   "purchase",      "fa-solid fa-truck",         "#9333ea"),
+    ("account",   "Account",    "account",       "fa-solid fa-book",          "#0d9488"),
+    ("hr",        "HR",         "hr",            "fa-solid fa-user-tie",      "#db2777"),
+    ("sms",       "SMS",        "notifications", "fa-solid fa-comment-sms",   "#2563eb"),
+    ("user",      "Users",      "user",          "fa-solid fa-user-shield",   "#64748b"),
 ]
 
 #: mobile module key -> nav group key

@@ -1061,3 +1061,33 @@ class PhoneSectionOrderTests(TestCase):
                  for t in re.findall(r'"([a-z0-9-]+)"', blk)]
         self.assertEqual(len(tiles), len(set(tiles)), "a tile is listed twice")
         self.assertGreater(len(tiles), 70)
+
+
+class ModuleColourTests(TestCase):
+    """The editor paints each module in the colour the phone paints it.
+
+    Two of nine matched when this page was written, because the colours were
+    chosen here instead of read from the app. A page describing the phone that
+    shows Broiler green while the phone shows it orange is how one product
+    starts feeling like two.
+    """
+
+    def app_accents(self):
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        path = Path(settings.BASE_DIR) / "mobile" / "src" / "theme" / "tokens.ts"
+        if not path.exists():
+            self.skipTest("mobile client not present")
+        block = re.search(r"const ACCENTS = \{(.*?)\n\};",
+                          path.read_text(encoding="utf-8"), re.S).group(1)
+        return dict(re.findall(r'(\w+):\s*"(#[0-9a-f]{6})"', block))
+
+    def test_every_module_uses_the_app_accent(self):
+        accents = self.app_accents()
+        for key, _title, _nav, _icon, colour in MOBILE_MODULES:
+            with self.subTest(module=key):
+                self.assertIn(key, accents, "no accent for this module in the app")
+                self.assertEqual(colour, accents[key])
