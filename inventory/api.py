@@ -12,7 +12,7 @@ Registered under ``/api/v1/inventory/…`` by :func:`register` (called from
 """
 from __future__ import annotations
 
-from api.viewsets import register_model
+from api.viewsets import register_model, serializer_factory
 
 from .models import (
     InventoryAdjustment,
@@ -27,6 +27,49 @@ from .models import (
     UnitOfMeasurement,
     Warehouse,
 )
+
+
+class StockTransferWriteSerializer(serializer_factory(StockTransfer)):
+    """Create a Stock Transfer from the phone the way the web form does.
+
+    Saving the row is not the whole job. Running stock is stored per row and
+    walked chronologically from the source location, so a transfer inserted
+    among existing ones leaves every later row's stock wrong until the chain is
+    recomputed — the web POST does that, and a plain DRF create would not.
+
+    The date rule is shared too: a transfer cannot be dated ahead of today, or
+    everything read as-of a date is wrong from then on.
+    """
+
+    def validate_date(self, value):
+        from Hitech_BIMS.entry_dates import reject_future_date
+
+        return reject_future_date(value, "Transfer date")
+
+    def create(self, validated_data):
+        from inventory.views import _recompute_stock_transfer_chain
+
+        instance = super().create(validated_data)
+        _recompute_stock_transfer_chain(
+            instance.from_location_type,
+            instance.from_warehouse_id or instance.from_farm_id,
+            instance.item_id)
+        return instance
+
+    def update(self, instance, validated_data):
+        from inventory.views import _recompute_stock_transfer_chain
+
+        # An edit can move the row between locations; both chains need walking.
+        before = (instance.from_location_type,
+                  instance.from_warehouse_id or instance.from_farm_id,
+                  instance.item_id)
+        instance = super().update(instance, validated_data)
+        after = (instance.from_location_type,
+                 instance.from_warehouse_id or instance.from_farm_id,
+                 instance.item_id)
+        for chain in {before, after}:
+            _recompute_stock_transfer_chain(*chain)
+        return instance
 
 
 def register(router) -> None:
@@ -49,7 +92,10 @@ def register(router) -> None:
                    ordering=["item_code"])
 
     # --- Transactions (read-only: line-item children + stock movement) --
-    register_model(router, "inventory/stock-transfers", StockTransfer, read_only=True,
+    # Stock Transfer is the exception among these: the phone creates them, so
+    # it is writable through a serializer carrying the web form's side effects.
+    register_model(router, "inventory/stock-transfers", StockTransfer,
+                   serializer=StockTransferWriteSerializer,
                    search_fields=["trnum", "dc_no", "vehicle_no", "driver_name"], cursor=True)
     register_model(router, "inventory/medicine-transfers", MedicineTransfer, read_only=True,
                    search_fields=["trnum", "dc_no", "vehicle_no", "driver_name"], cursor=True)
