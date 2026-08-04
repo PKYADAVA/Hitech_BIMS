@@ -297,8 +297,14 @@
 /* Where the browser supports it, the control is exactly as wide as its value.
    Guarded so it can only ever shrink a column, never overflow one. */
 @supports (field-sizing: content) {
+  /* Not the original <select> Select2 leaves behind. Select2 hides it with
+     `width: 1px !important` and takes it out of flow; min-width beats width,
+     so `min-width: 100%` re-inflated it — and being absolutely positioned, its
+     100% resolved against the page rather than the cell. Two of them at 1550px
+     hung off the right of every entry grid, which is what made these pages
+     scroll sideways by ~700px with nothing visible out there. */
   .ds table.ds-entry .form-control:not([type="date"]),
-  .ds table.ds-entry .form-select {
+  .ds table.ds-entry .form-select:not(.select2-hidden-accessible) {
     field-sizing: content;
     min-width: 100%; max-width: 100%;
   }
