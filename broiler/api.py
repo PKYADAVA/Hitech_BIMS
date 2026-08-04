@@ -34,6 +34,7 @@ from .models import (
     BroilerFarmShed,
     BroilerLine,
     DailyEntry,
+    DailyEntryPhoto,
     Farmer,
     FarmerGroup,
     GrowingChargeScheme,
@@ -90,6 +91,33 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
         if request is not None and not validated_data.get("entry_by"):
             validated_data["entry_by"] = request.user
         return super().create(validated_data)
+
+
+class DailyEntryPhotoSerializer(serializer_factory(DailyEntryPhoto)):
+    """Extra photo evidence on a Daily Entry.
+
+    The per-category cap is enforced here rather than left to the client: the
+    phone counts what it has on screen, which is not what the server has if the
+    same entry was photographed from two devices, or if a retry re-sent a batch
+    that had already landed.
+    """
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        entry = attrs.get("entry") or getattr(self.instance, "entry", None)
+        kind = attrs.get("kind") or getattr(self.instance, "kind", None)
+        if entry is not None and kind:
+            existing = DailyEntryPhoto.objects.filter(entry=entry, kind=kind)
+            if self.instance is not None:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.count() >= DailyEntryPhoto.MAX_PER_KIND:
+                raise serializers.ValidationError({
+                    "image": (
+                        f"This entry already has {DailyEntryPhoto.MAX_PER_KIND} "
+                        f"{kind} photos, which is the limit."
+                    )
+                })
+        return attrs
 
 
 class DailyEntrySerializer(serializer_factory(DailyEntry)):
@@ -178,6 +206,59 @@ class DailyEntrySerializer(serializer_factory(DailyEntry)):
             if item_id and item_id not in (instance.feed_1_id, instance.feed_2_id):
                 _recompute_stock_chain(previous_farm_id, item_id)
         return instance
+
+
+class MedicineItemLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/medicine-item-lookup?item=<id> — the item's
+    consumption unit, for the auto-filled Unit column on the phone's
+    Medicine/Vaccine Consumption form.
+
+    Mirrors the web ``medicine_entry_item_lookup``, and reuses its label
+    helper rather than formatting the UOM again: a unit that reads "ml" on
+    the desktop and "MILLILITRE" on the phone is the same drift the shared
+    registries exist to prevent.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from inventory.models import Item
+
+        from .views import _uom_label
+
+        item_id = request.query_params.get("item")
+        item = Item.objects.filter(id=item_id).first() if item_id else None
+        return Response({"unit": _uom_label(item.consumption_uom) if item else ""})
+
+
+class MedicineStockLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/medicine-stock-lookup?farm=&item=&date= — the
+    opening stock for that farm and item on that date.
+
+    The closing balance of the last saved entry before the date, or 0. It is a
+    running balance the server owns, not a number the client can compute, which
+    is why the phone reads it rather than deriving it — the same reason the
+    field is read-only on the web form.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.utils import timezone
+
+        from .models import MedicineVaccineEntry
+
+        farm_id = request.query_params.get("farm")
+        item_id = request.query_params.get("item")
+        raw_date = request.query_params.get("date")
+        if not (farm_id and item_id and raw_date):
+            return Response({"stock": "0"})
+        try:
+            on = timezone.datetime.fromisoformat(raw_date).date()
+        except ValueError:
+            return Response({"stock": "0"})
+        stock = MedicineVaccineEntry.previous_stock(farm_id, int(item_id), on, None)
+        return Response({"stock": str(stock)})
 
 
 class BirdSaleFarmLookupView(V1ViewMixin, APIView):
@@ -304,6 +385,10 @@ def register(router) -> None:
     # --- Transactions (full CRUD, cursor-paginated feeds) ---------------
     register_model(router, "broiler/daily-entries", DailyEntry,
                    serializer=DailyEntrySerializer, cursor=True)
+    # Extra photo evidence, one row per picture. Uploaded after the entry
+    # itself, since each photo needs the entry's id to hang off.
+    register_model(router, "broiler/daily-entry-photos", DailyEntryPhoto,
+                   serializer=DailyEntryPhotoSerializer, ordering=["kind", "id"])
     register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry, cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, serializer=BirdSaleSerializer,
                    search_fields=["sale_no", "doc_no", "vehicle", "driver"], cursor=True)

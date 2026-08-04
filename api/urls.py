@@ -18,6 +18,8 @@ from broiler.api import (
     BirdSaleFarmLookupView,
     DailyEntryLookupView,
     DailyEntryStockLookupView,
+    MedicineItemLookupView,
+    MedicineStockLookupView,
 )
 from broiler.api import register as register_broiler
 from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
@@ -132,6 +134,11 @@ urlpatterns = [
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
     # Bird Sale form: farm → active batch + owning farmer (declared before router).
     path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
+    # Medicine/Vaccine Consumption: the two columns the phone form was missing.
+    path("broiler/medicine-item-lookup", MedicineItemLookupView.as_view(),
+         name="broiler-medicine-item-lookup"),
+    path("broiler/medicine-stock-lookup", MedicineStockLookupView.as_view(),
+         name="broiler-medicine-stock-lookup"),
     # Daily Entry form: the above plus feed phase, breed standards and live birds.
     path("broiler/daily-entry-lookup", DailyEntryLookupView.as_view(),
          name="broiler-daily-entry-lookup"),

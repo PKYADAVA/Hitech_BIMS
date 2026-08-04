@@ -9,7 +9,7 @@ import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
-import { FORMS } from "@/config/forms";
+import { FORMS, FormField } from "@/config/forms";
 import { Hint } from "@/domain/dailyEntry";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
@@ -18,6 +18,21 @@ import { colors, makeStyles, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
+
+/**
+ * Consecutive fields sharing a `group` become one row; everything else stays
+ * on its own line. Consecutive on purpose — a group is a visual run, not a
+ * set, so a field between two members would otherwise be silently reordered.
+ */
+function groupFields(fields: FormField[]): FormField[][] {
+  const out: FormField[][] = [];
+  for (const f of fields) {
+    const last = out[out.length - 1];
+    if (f.group && last?.length && last[0].group === f.group) last.push(f);
+    else out.push([f]);
+  }
+  return out;
+}
 
 export function FormScreen({ route, navigation }: Props) {
   const { resourceKey, mode, row, preset, onDoneGoBack } = route.params;
@@ -63,8 +78,17 @@ export function FormScreen({ route, navigation }: Props) {
     setValues((prev) => {
       const next = { ...prev, [name]: val };
       // Async auto-fill (e.g. Farm → active Batch + Age), on user change only.
-      const af = schema.autofill;
-      if (af && af.on === name) {
+      // A form may declare several derivations, and one may depend on more
+      // than one field — Available Stock re-reads whenever farm, item or date
+      // moves, since any of the three changes the answer.
+      const hooks = schema.autofill
+        ? Array.isArray(schema.autofill)
+          ? schema.autofill
+          : [schema.autofill]
+        : [];
+      for (const af of hooks) {
+        const triggers = Array.isArray(af.on) ? af.on : [af.on];
+        if (!triggers.includes(name)) continue;
         af.run(val, next)
           .then((patch) => setValues((cur) => ({ ...cur, ...patch })))
           .catch(() => {});
@@ -245,22 +269,29 @@ export function FormScreen({ route, navigation }: Props) {
     <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
         {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
-        {schema.fields.map((f) => (
-          <View key={f.name}>
-            <FormControl
-              field={f}
-              value={shown(f.name)}
-              values={values}
-              fallbackLabel={row ? (row[`${f.name}_label`] as string) : undefined}
-              error={errors[f.name]}
-              onChange={set(f.name)}
-              onPatch={(patch) => setValues((cur) => ({ ...cur, ...patch }))}
-            />
-            {advice?.fieldHints[f.name] ? (
-              <HintLine hint={advice.fieldHints[f.name]} />
-            ) : null}
-          </View>
-        ))}
+        {groupFields(schema.fields).map((chunk, i) => {
+          const control = (f: FormField) => (
+            <View key={f.name} style={chunk.length > 1 ? styles.groupCell : undefined}>
+              <FormControl
+                field={f}
+                value={shown(f.name)}
+                values={values}
+                fallbackLabel={row ? (row[`${f.name}_label`] as string) : undefined}
+                error={errors[f.name]}
+                onChange={set(f.name)}
+                onPatch={(patch) => setValues((cur) => ({ ...cur, ...patch }))}
+              />
+              {advice?.fieldHints[f.name] ? (
+                <HintLine hint={advice.fieldHints[f.name]} />
+              ) : null}
+            </View>
+          );
+          return chunk.length > 1 ? (
+            <View key={`g${i}`} style={styles.groupRow}>{chunk.map(control)}</View>
+          ) : (
+            control(chunk[0])
+          );
+        })}
 
         {advice && (advice.notes.length > 0 || advice.statusLabel) ? (
           <View style={styles.adviceCard}>
@@ -323,6 +354,8 @@ const useStyles = makeStyles((colors) => ({
   pill_ok: { backgroundColor: colors.successLight, color: colors.success },
   pill_near: { backgroundColor: colors.warningLight, color: colors.warning },
   pill_warn: { backgroundColor: colors.dangerLight, color: colors.danger },
+  groupRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+  groupCell: { flex: 1, minWidth: 0 },
   formError: {
     ...type.label,
     color: colors.danger,

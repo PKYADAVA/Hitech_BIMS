@@ -63,6 +63,15 @@ export interface FormField {
    * evidence of what was in the shed today.
    */
   compact?: boolean;
+  /**
+   * Lay consecutive fields sharing this key out on one row, as columns.
+   *
+   * The ERP shows Medicine/Vaccine, Unit, Qty and Stock as four columns of one
+   * line, and reading them together is the point: what you are giving, in what
+   * unit, how much, and how much is left. Stacked, the quantity and the stock
+   * it has to fit within end up screens apart.
+   */
+  group?: string;
 }
 
 export interface FormSchema {
@@ -79,10 +88,7 @@ export interface FormSchema {
    * web forms' lookup handlers. Receives the new value and the current form
    * values (so it can avoid clobbering fields the user already set).
    */
-  autofill?: {
-    on: string;
-    run: (value: string, values: Record<string, string>) => Promise<Record<string, string>>;
-  };
+  autofill?: AutoFill | AutoFill[];
   /**
    * Server context behind a form's advisory hints, reloaded whenever one of
    * `on` changes. Separate from `autofill` because it doesn't write any field —
@@ -100,12 +106,40 @@ export interface FormSchema {
   advise?: (ctx: unknown, values: Record<string, string>) => Advice;
 }
 
+/**
+ * One async derivation. `on` may name several fields: Available Stock depends
+ * on farm, item and date together, so it has to re-run whenever any of them
+ * moves — a single trigger would leave it stale and quietly wrong.
+ */
+interface AutoFill {
+  on: string | string[];
+  run: (value: string, values: Record<string, string>) => Promise<Record<string, string>>;
+}
+
 interface FarmLookup {
   batch: number | null;
   batch_name: string;
   age_days: number;
   next_date: string;
 }
+
+/** Item → its consumption unit (the ERP form's auto-filled Unit column). */
+const medicineUnitLookup = async (itemId: string): Promise<string> =>
+  itemId
+    ? (await http.get<Envelope<{ unit: string }>>("/broiler/medicine-item-lookup",
+        { params: { item: itemId } })).data.data.unit
+    : "";
+
+/** Farm + item + date → opening stock (the ERP's Stock column, server-owned). */
+const medicineStockLookup = async (
+  values: Record<string, string>
+): Promise<string> => {
+  const { farm, item, date } = values;
+  if (!farm || !item || !date) return "";
+  const resp = await http.get<Envelope<{ stock: string }>>(
+    "/broiler/medicine-stock-lookup", { params: { farm, item, date } });
+  return resp.data.data.stock;
+};
 
 /** Farm → active batch, age, and next entry date (shared by daily/medicine entry). */
 const farmLookup = async (farmId: string): Promise<FarmLookup> =>
@@ -297,22 +331,35 @@ export const FORMS: Record<string, FormSchema> = {
       FARM(true),
       BATCH(true),
       num("age_days", "Age (days)"),
-      ITEM("item", "Medicine / Vaccine", true),
-      dec("qty", "Quantity"),
+      // One row, as on the ERP: item · unit · qty · available stock.
+      { ...ITEM("item", "Medicine / Vaccine", true), group: "consumption" },
+      { ...text("unit", "Unit"), readOnly: true, group: "consumption" },
+      { ...dec("qty", "Quantity"), group: "consumption" },
+      { ...text("stock", "Available Stock"), readOnly: true, group: "consumption" },
       text("remarks", "Remarks"),
     ],
-    // Farm → active batch + age (web medicine_entry_farm_lookup).
-    autofill: {
-      on: "farm",
-      run: async (farmId) => {
-        if (!farmId) return { batch: "", age_days: "" };
-        const d = await farmLookup(farmId);
-        return {
-          batch: d.batch != null ? String(d.batch) : "",
-          age_days: String(d.age_days ?? ""),
-        };
+    autofill: [
+      // Farm → active batch + age (web medicine_entry_farm_lookup).
+      {
+        on: "farm",
+        run: async (farmId) => {
+          if (!farmId) return { batch: "", age_days: "" };
+          const d = await farmLookup(farmId);
+          return {
+            batch: d.batch != null ? String(d.batch) : "",
+            age_days: String(d.age_days ?? ""),
+          };
+        },
       },
-    },
+      // Item → Unit.
+      { on: "item", run: async (itemId) => ({ unit: await medicineUnitLookup(itemId) }) },
+      // Farm, item or date → Stock. All three feed the answer, so all three
+      // re-read it; the balance is the server's, never computed here.
+      {
+        on: ["farm", "item", "date"],
+        run: async (_v, values) => ({ stock: await medicineStockLookup(values) }),
+      },
+    ],
   },
   "broiler-bird-sales": {
     fields: [
