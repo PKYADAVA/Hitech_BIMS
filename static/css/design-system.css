@@ -284,7 +284,7 @@
    figure gains nothing from extra width. */
 .ds table.ds-entry th.c-fit  { white-space: nowrap; }
 .ds table.ds-entry th.c-grow { width: auto; }
-.ds table.ds-entry th.c-num  { width: 1%; white-space: nowrap; text-align: right; }
+.ds table.ds-entry th.c-num  { white-space: nowrap; text-align: right; }
 
 /* Floors, so a column never collapses to unusable — expressed in ch, which
    tracks the font rather than guessing pixels. */
