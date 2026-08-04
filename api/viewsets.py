@@ -121,6 +121,10 @@ API_SCOPES = {
                              "farms": "broiler_farm_id"},
     "broiler.Supervisor": {"branches": "branch_id"},
     "broiler.DailyEntry": {"branches": "farm__branch_id", "farms": "farm_id"},
+    # A photo has no location of its own — it inherits the entry's, so it is
+    # scoped down exactly the same path, one hop further along.
+    "broiler.DailyEntryPhoto": {"branches": "entry__farm__branch_id",
+                                "farms": "entry__farm_id"},
     "broiler.BirdSale": {"branches": "farm__branch_id", "farms": "farm_id"},
     "broiler.BroilerFarmShed": {"farms": "farm_id"},
     "inventory.Warehouse": {"sectors": "id"},

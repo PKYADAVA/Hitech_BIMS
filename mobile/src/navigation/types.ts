@@ -24,8 +24,14 @@ export type ModuleStackParams = {
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
   /** Bespoke Bird Sale Receipt form (customer/farmer toggle). */
   BirdSaleReceiptForm: { mode: "create" | "edit"; row?: Row };
-  /** Multi-farm Daily Entry — one date, several farms, one save (web grid form). */
-  DailyEntryGrid: undefined;
+  /**
+   * Daily Entry. Without params it is the multi-farm round — several farms,
+   * one save (web grid form). With `row` it edits that one saved entry, on the
+   * same layout so a correction is judged against the same standards the
+   * original was.
+   */
+  DailyEntryGrid: { row?: Row } | undefined;
+  MedicineEntryForm: undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */
   DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row };
 };

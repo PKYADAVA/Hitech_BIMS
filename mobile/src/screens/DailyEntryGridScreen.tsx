@@ -1,12 +1,14 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Image, Linking, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { createResource, listResource } from "@/api/resources";
+import { createResource, listResource, updateResource } from "@/api/resources";
 import { Row } from "@/api/types";
 import { ApiError } from "@/api/types";
-import { appendImage, CapturedPoint, captureLocation, isLocalCapture } from "@/capture";
+import {
+  appendImage, CapturedPoint, capturePhoto, CapturePermissionError, captureLocation, isLocalCapture,
+} from "@/capture";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
@@ -50,10 +52,41 @@ const PATH = "/broiler/daily-entries/";
  * is no bulk endpoint to mirror the web view's array POST. A partial failure
  * therefore leaves the successful rows saved, so the summary reports exactly
  * which farms did not go through rather than implying all-or-nothing.
+ *
+ * Given a `row`, the same screen edits that one saved entry instead. It is
+ * deliberately the same layout: a correction is judged against the same breed
+ * standards, the same flock context and the same mandatory GPS stamp as the
+ * original, so a row cannot be quietly fixed up on a form that asks less of it.
+ * Farm, batch and date are shown but locked — they identify the record, and
+ * changing them would move the entry rather than correct it.
  */
 
 /** The three photo columns, in the order the model names them. */
 const PHOTO_FIELDS = ["mort_image", "cull_image", "feed_image"] as const;
+
+const PHOTOS_PATH = "/broiler/daily-entry-photos/";
+
+/**
+ * The three categories a day's photos evidence.
+ *
+ * `kind` is what the child table stores; `legacy` is the single field on the
+ * entry itself, which the server fills from the first photo of that kind. The
+ * phone therefore uploads everything to the child table and never writes the
+ * single fields — one place decides which picture is "the" one.
+ */
+const PHOTO_KINDS = [
+  { kind: "mortality", legacy: "mort_image", label: "Photos (Mortality)" },
+  { kind: "culls", legacy: "cull_image", label: "Photos (Culls)" },
+  { kind: "feed", legacy: "feed_image", label: "Photos (Feed)" },
+] as const;
+
+type PhotoKind = (typeof PHOTO_KINDS)[number]["kind"];
+
+/** Server-side cap, mirrored here so the Add tile disappears at the limit
+ *  rather than letting a save fail on the sixth picture. */
+const MAX_PHOTOS_PER_KIND = 5;
+
+const noPhotos = (): Record<PhotoKind, string[]> => ({ mortality: [], culls: [], feed: [] });
 
 const F_BRANCH: FormField = {
   name: "branch", label: "Branch", type: "select", required: true,
@@ -64,15 +97,6 @@ const F_SUPERVISOR: FormField = {
 const F_FARM: FormField = { name: "farm", label: "Farm", type: "select", required: true };
 const F_MORTALITY: FormField = { name: "mortality", label: "Mortality (Nos)", type: "number" };
 const F_CULLS: FormField = { name: "culls", label: "Culls (Nos)", type: "number" };
-const F_MORT_PHOTO: FormField = {
-  name: "mort_image", label: "Photo (Mortality)", type: "photo", compact: true,
-};
-const F_CULL_PHOTO: FormField = {
-  name: "cull_image", label: "Photo (Culls)", type: "photo", compact: true,
-};
-const F_FEED_PHOTO: FormField = {
-  name: "feed_image", label: "Photo (Feed)", type: "photo", compact: true,
-};
 const F_FEED_1: FormField = {
   name: "feed_1", label: "Item", type: "select",
   optionsPath: "/items/", optionLabelKeys: ["description", "item_code"],
@@ -99,6 +123,12 @@ interface GridRow {
   locating: boolean;
   /** The last capture came back empty — permission off, or no fix. */
   locateFailed: boolean;
+  /**
+   * Photo evidence per category — stored URLs for pictures already saved,
+   * local file URIs for ones taken now. `isLocalCapture` tells them apart at
+   * upload time, so an existing photo is shown but never re-sent.
+   */
+  photos: Record<PhotoKind, string[]>;
 }
 
 let nextKey = 1;
@@ -113,19 +143,55 @@ const blankRow = (): GridRow => ({
   locatedAt: null,
   locating: false,
   locateFailed: false,
+  photos: noPhotos(),
 });
 
 const num = (s?: string): number => Number(s) || 0;
 
 const hasFix = (r: GridRow): boolean => !!r.values.entry_latitude && !!r.values.entry_longitude;
 
-export function DailyEntryGridScreen({ navigation }: Props) {
+/** The form values a saved record starts from. Everything is held as strings,
+ *  so a stored number and a typed one behave identically from here on. */
+const str = (v: unknown): string => (v == null ? "" : String(v));
+
+const rowFromRecord = (rec: Row): GridRow => ({
+  ...blankRow(),
+  values: {
+    farm: str(rec.farm),
+    batch: str(rec.batch),
+    mortality: str(rec.mortality ?? 0),
+    culls: str(rec.culls ?? 0),
+    feed_1: str(rec.feed_1),
+    feed_1_qty: str(rec.feed_1_qty),
+    feed_2: str(rec.feed_2),
+    feed_2_qty: str(rec.feed_2_qty),
+    avg_weight_gms: str(rec.avg_weight_gms),
+    remarks: str(rec.remarks),
+    entry_latitude: str(rec.entry_latitude),
+    entry_longitude: str(rec.entry_longitude),
+  },
+  date: str(rec.date),
+  // The single legacy field is the first photo of its category. Seeded here so
+  // an entry saved before the photo table existed still shows its picture; any
+  // extras are fetched from the child table and appended.
+  photos: {
+    mortality: str(rec.mort_image) ? [str(rec.mort_image)] : [],
+    culls: str(rec.cull_image) ? [str(rec.cull_image)] : [],
+    feed: str(rec.feed_image) ? [str(rec.feed_image)] : [],
+  },
+});
+
+export function DailyEntryGridScreen({ navigation, route }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  /** The saved entry being corrected, or null when walking a new round. */
+  const editing = route.params?.row ?? null;
   const [branch, setBranch] = useState<string>("");
-  const [supervisor, setSupervisor] = useState<string>("");
-  const [rows, setRows] = useState<GridRow[]>([blankRow()]);
+  const [supervisor, setSupervisor] = useState<string>(editing ? str(editing.supervisor) : "");
+  const [rows, setRows] = useState<GridRow[]>([
+    editing ? rowFromRecord(editing) : blankRow(),
+  ]);
   // Read inside async callbacks, which would otherwise close over a stale list.
   const rowsRef = useRef<GridRow[]>(rows);
   rowsRef.current = rows;
@@ -134,7 +200,7 @@ export function DailyEntryGridScreen({ navigation }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: "Add Day Record",
+      title: editing ? "Edit Day Record" : "Add Day Record",
       // Back to the register of saved entries — the screen this was opened from.
       headerRight: () => (
         <Pressable hitSlop={12} onPress={() => navigation.goBack()}>
@@ -145,7 +211,7 @@ export function DailyEntryGridScreen({ navigation }: Props) {
         </Pressable>
       ),
     });
-  }, [navigation, styles, colors]);
+  }, [navigation, styles, colors, editing]);
 
   const patchRow = useCallback((key: string, patch: Partial<GridRow>) => {
     setRows((cur) => cur.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -246,6 +312,72 @@ export function DailyEntryGridScreen({ navigation }: Props) {
     []
   );
 
+  /**
+   * Advise an edit on the day it was actually recorded.
+   *
+   * `loadLookup` derives the date, which is right for a new round and wrong
+   * here: a saved row keeps its own date, and asking the server for "the next
+   * day due" would advise the correction against a different day's age, phase,
+   * standards and bird count than the entry it is fixing.
+   */
+  const loadLookupAsOf = useCallback(async (key: string, farm: string, on: string, batch: string) => {
+    try {
+      const lookup = await dailyEntryLookup(farm, on, batch || undefined);
+      setRows((cur) => cur.map((r) => (r.key === key ? { ...r, lookup } : r)));
+    } catch {
+      // Advisory only — a failed lookup must not stop the correction being saved.
+    }
+  }, []);
+
+  // Bootstrap an edit: pull the flock context for the row's own date, take a
+  // fix if the saved entry has none (an entry from before GPS was required),
+  // and fetch any photos beyond the one mirrored into the legacy field.
+  const bootstrapped = useRef(false);
+  useEffect(() => {
+    if (!editing || bootstrapped.current) return;
+    bootstrapped.current = true;
+    const r = rowsRef.current[0];
+    if (!r) return;
+    if (r.values.farm) loadLookupAsOf(r.key, r.values.farm, r.date, r.values.batch ?? "");
+    if (!hasFix(r)) takeLocation(r.key);
+
+    (async () => {
+      try {
+        const page = await listResource<Row>(PHOTOS_PATH, {
+          entry: editing.id as number,
+          page_size: 100,
+        });
+        const extra = noPhotos();
+        for (const p of page.items) {
+          const kind = str(p.kind) as PhotoKind;
+          const url = str(p.image);
+          if (!url || !(kind in extra)) continue;
+          extra[kind].push(url);
+        }
+        setRows((cur) =>
+          cur.map((x) =>
+            x.key === r.key
+              ? {
+                  ...x,
+                  photos: Object.fromEntries(
+                    PHOTO_KINDS.map(({ kind }) => [
+                      kind,
+                      // The legacy field duplicates the first child row, so the
+                      // same file must not appear twice in the strip.
+                      [...new Set([...x.photos[kind], ...extra[kind]])],
+                    ])
+                  ) as Record<PhotoKind, string[]>,
+                }
+              : x
+          )
+        );
+      } catch {
+        // Advisory: the legacy photo is already on screen, and a failed fetch
+        // of the extras must not stop the correction being saved.
+      }
+    })();
+  }, [editing, loadLookupAsOf, takeLocation]);
+
   /** Clearing everything under a picker that changed: the rows below belong to
    *  the branch/supervisor that was chosen before, not the new one. */
   const resetRows = () =>
@@ -287,6 +419,71 @@ export function DailyEntryGridScreen({ navigation }: Props) {
     }
   };
 
+  /** Take one more photo for a category. Straight to the camera; the strip
+   *  refuses past the cap, which the server enforces independently. */
+  const addPhoto = async (key: string, kind: PhotoKind) => {
+    try {
+      const shot = await capturePhoto();
+      if (!shot) return;
+      setRows((cur) =>
+        cur.map((r) =>
+          r.key === key && r.photos[kind].length < MAX_PHOTOS_PER_KIND
+            ? { ...r, photos: { ...r.photos, [kind]: [...r.photos[kind], shot.uri] } }
+            : r
+        )
+      );
+    } catch (e) {
+      if (e instanceof CapturePermissionError) {
+        Alert.alert(
+          "Camera access needed",
+          "Enable camera access for Hitech BIMS in Settings to attach a photo.",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ]
+        );
+      } else {
+        Alert.alert("Couldn't open the camera", (e as Error)?.message ?? "Please try again.");
+      }
+    }
+  };
+
+  /** Drop a photo taken in this session. Saved ones are not removable here. */
+  const removePhoto = (key: string, kind: PhotoKind, uri: string) =>
+    setRows((cur) =>
+      cur.map((r) =>
+        r.key === key
+          ? { ...r, photos: { ...r.photos, [kind]: r.photos[kind].filter((u) => u !== uri) } }
+          : r
+      )
+    );
+
+  /**
+   * Send this row's new photos, once the entry they hang off exists.
+   *
+   * Reported rather than thrown: the day's numbers are already saved by this
+   * point, and failing the whole save over a photo that did not upload would
+   * push the supervisor into re-entering a record that is already filed.
+   */
+  const uploadPhotos = async (entryId: number, r: GridRow): Promise<string[]> => {
+    const failed: string[] = [];
+    for (const { kind, label } of PHOTO_KINDS) {
+      for (const uri of r.photos[kind]) {
+        if (!isLocalCapture(uri)) continue;          // already on the server
+        try {
+          const form = new FormData();
+          form.append("entry", String(entryId));
+          form.append("kind", kind);
+          await appendImage(form, "image", uri);
+          await createResource(PHOTOS_PATH, form);
+        } catch {
+          failed.push(label);
+        }
+      }
+    }
+    return [...new Set(failed)];
+  };
+
   /** A new row starts on the row above's farm — a round is normally several
    *  days of the same flock, and re-picking it every time is the exception. */
   const addRow = () =>
@@ -321,6 +518,18 @@ export function DailyEntryGridScreen({ navigation }: Props) {
     staleTime: 5 * 60 * 1000,
     queryFn: () => listResource<Row>("/broiler/farms/", { page_size: 200 }),
   });
+
+  /**
+   * An edit's Branch is not chosen, it is implied: the record names a farm and
+   * a farm belongs to exactly one branch. Filled in once the farm list arrives,
+   * so the locked Branch box reads correctly instead of sitting empty.
+   */
+  useEffect(() => {
+    if (!editing || branch) return;
+    const farmId = rowsRef.current[0]?.values.farm;
+    const farm = farmsQuery.data?.items.find((f) => String(f.id) === farmId);
+    if (farm?.branch != null) setBranch(String(farm.branch));
+  }, [editing, branch, farmsQuery.data]);
 
   const branchField = useMemo(
     (): FormField => ({
@@ -492,17 +701,21 @@ export function DailyEntryGridScreen({ navigation }: Props) {
     const values = fix
       ? { ...r.values, entry_latitude: fix.latitude, entry_longitude: fix.longitude }
       : r.values;
+    const isPhoto = (k: string) => PHOTO_FIELDS.includes(k as (typeof PHOTO_FIELDS)[number]);
     const plain: Record<string, unknown> = { date: r.date, supervisor };
     for (const [k, v] of Object.entries(values)) {
-      if (v !== "" && v != null) plain[k] = v;
+      if (v === "" || v == null) continue;
+      // Photos never travel as text. On an edit the value is the stored URL of
+      // a picture that has not been retaken — sending it would overwrite the
+      // image field with a URL string; leaving it out keeps the stored file.
+      if (isPhoto(k)) continue;
+      plain[k] = v;
     }
     const shots = PHOTO_FIELDS.filter((f) => isLocalCapture(values[f] ?? ""));
     if (!shots.length) return plain;
 
     const form = new FormData();
-    for (const [k, v] of Object.entries(plain)) {
-      if (!PHOTO_FIELDS.includes(k as (typeof PHOTO_FIELDS)[number])) form.append(k, String(v));
-    }
+    for (const [k, v] of Object.entries(plain)) form.append(k, String(v));
     for (const f of shots) await appendImage(form, f, values[f]);
     return form;
   };
@@ -581,15 +794,48 @@ export function DailyEntryGridScreen({ navigation }: Props) {
       }
     }
 
+    // An edit is one PATCH of one existing record — there is no partial-failure
+    // story to tell, so a failure is simply reported and the row stays on screen.
+    if (editing) {
+      try {
+        const r = filled[0];
+        await updateResource(PATH, editing.id as number, await buildBody(r, fixes.get(r.key)));
+        const failedPhotos = await uploadPhotos(editing.id as number, r);
+        queryClient.invalidateQueries({ queryKey: ["list", PATH] });
+        setSaving(false);
+        if (failedPhotos.length) {
+          // The correction itself is saved; only say what did not go with it.
+          setFormError(
+            `Changes saved, but these photos did not upload: ${failedPhotos.join(", ")}. ` +
+              "Open the entry again to retry them."
+          );
+          return;
+        }
+        navigation.goBack();
+      } catch (e) {
+        setSaving(false);
+        setFormError(
+          e instanceof ApiError
+            ? e.message || Object.values(e.fields || {}).flat().join(" ")
+            : (e as Error)?.message ?? "Could not save the changes."
+        );
+      }
+      return;
+    }
+
     // Keyed by row, not by label: two farms can share a batch name, and a row
     // whose lookup failed has no name at all — matching on text would drop the
     // wrong rows from the retry list.
     const failures = new Map<string, string>();
+    const photoTrouble: string[] = [];
     let saved = 0;
     for (const r of filled) {
       try {
-        await createResource(PATH, await buildBody(r, fixes.get(r.key)));
+        const created = await createResource<Row>(PATH, await buildBody(r, fixes.get(r.key)));
         saved += 1;
+        // Photos hang off the entry, so they can only go up once it has an id.
+        const missed = await uploadPhotos(created.id as number, r);
+        if (missed.length) photoTrouble.push(`${farmLabel(r)}: ${missed.join(", ")}`);
       } catch (e) {
         const msg =
           e instanceof ApiError
@@ -602,6 +848,15 @@ export function DailyEntryGridScreen({ navigation }: Props) {
     queryClient.invalidateQueries({ queryKey: ["list", PATH] });
 
     if (!failures.size) {
+      if (photoTrouble.length) {
+        // Every entry is saved — only the pictures fell short, and saying so is
+        // better than a silent success that loses the evidence.
+        setFormError(
+          `Saved ${saved} ${saved === 1 ? "entry" : "entries"}, but these photos did not ` +
+            `upload:\n${photoTrouble.join("\n")}`
+        );
+        return;
+      }
       navigation.goBack();
       return;
     }
@@ -627,15 +882,28 @@ export function DailyEntryGridScreen({ navigation }: Props) {
         <View style={styles.card}>
           <View style={styles.pairRow}>
             <View style={styles.pairCell}>
-              <FormControl field={branchField} value={branch} onChange={onBranchChange} />
+              {editing ? (
+                <LockedField label="Branch" value={labelOf(branchField, branch)} />
+              ) : (
+                <FormControl field={branchField} value={branch} onChange={onBranchChange} />
+              )}
             </View>
             <View style={styles.pairCell}>
-              <FormControl field={supervisorField} value={supervisor} onChange={onSupervisorChange} />
+              {editing ? (
+                <LockedField label="Supervisor" value={labelOf(supervisorField, supervisor)} />
+              ) : (
+                <FormControl
+                  field={supervisorField}
+                  value={supervisor}
+                  onChange={onSupervisorChange}
+                />
+              )}
             </View>
           </View>
           <Text style={styles.headerNote}>
-            Applied to every farm below. Each row is dated the day after that
-            farm&apos;s last entry.
+            {editing
+              ? "Correcting a saved entry. Farm, batch and date identify the record and cannot be changed here."
+              : "Applied to every farm below. Each row is dated the day after that farm's last entry."}
           </Text>
         </View>
 
@@ -658,26 +926,44 @@ export function DailyEntryGridScreen({ navigation }: Props) {
                       {a.statusLabel}
                     </Text>
                   ) : null}
-                  <Pressable onPress={() => removeRow(r.key)} hitSlop={8}>
-                    <Text style={styles.remove}>Remove</Text>
-                  </Pressable>
+                  {/* Nothing to remove when there is one saved record on screen. */}
+                  {editing ? null : (
+                    <Pressable onPress={() => removeRow(r.key)} hitSlop={8}>
+                      <Text style={styles.remove}>Remove</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
 
               <View style={styles.pairRow}>
                 <View style={styles.pairCell}>
-                  <FormControl
-                    field={farmField}
-                    value={r.values.farm ?? ""}
-                    onChange={setRowValue(r.key, "farm")}
-                  />
+                  {editing ? (
+                    <LockedField label="Farm" value={farmNameOf(r) || `#${r.values.farm}`} />
+                  ) : (
+                    <FormControl
+                      field={farmField}
+                      value={r.values.farm ?? ""}
+                      onChange={setRowValue(r.key, "farm")}
+                    />
+                  )}
                 </View>
                 <View style={styles.pairCell}>
-                  <FormControl
-                    field={batchField(r)}
-                    value={r.values.batch ?? ""}
-                    onChange={setRowValue(r.key, "batch")}
-                  />
+                  {editing ? (
+                    <LockedField
+                      label="Batch / Day"
+                      value={
+                        r.lookup?.batch_name
+                          ? `${r.lookup.batch_name} (Day ${r.lookup.age_days})`
+                          : `#${r.values.batch}`
+                      }
+                    />
+                  ) : (
+                    <FormControl
+                      field={batchField(r)}
+                      value={r.values.batch ?? ""}
+                      onChange={setRowValue(r.key, "batch")}
+                    />
+                  )}
                 </View>
               </View>
 
@@ -712,22 +998,18 @@ export function DailyEntryGridScreen({ navigation }: Props) {
               {a?.fieldHints.avg_weight_gms ? (
                 <HintLine hint={a.fieldHints.avg_weight_gms} />
               ) : null}
-              <View style={styles.pairRow}>
-                <View style={styles.pairCell}>
-                  <FormControl
-                    field={F_MORT_PHOTO}
-                    value={r.values.mort_image ?? ""}
-                    onChange={setRowValue(r.key, "mort_image")}
-                  />
-                </View>
-                <View style={styles.pairCell}>
-                  <FormControl
-                    field={F_CULL_PHOTO}
-                    value={r.values.cull_image ?? ""}
-                    onChange={setRowValue(r.key, "cull_image")}
-                  />
-                </View>
-              </View>
+              <PhotoStrip
+                label="Photos (Mortality)"
+                uris={r.photos.mortality}
+                onAdd={() => addPhoto(r.key, "mortality")}
+                onRemove={(u) => removePhoto(r.key, "mortality", u)}
+              />
+              <PhotoStrip
+                label="Photos (Culls)"
+                uris={r.photos.culls}
+                onAdd={() => addPhoto(r.key, "culls")}
+                onRemove={(u) => removePhoto(r.key, "culls", u)}
+              />
 
               <SectionHead n={2} title="Feed Consumption" icon="sack" />
               <Text style={styles.slotHead}>Primary Feed</Text>
@@ -749,16 +1031,15 @@ export function DailyEntryGridScreen({ navigation }: Props) {
                     onChange={setRowValue(r.key, "feed_1_qty")}
                   />
                 </View>
-                <View style={styles.pairCell}>
-                  <FormControl
-                    field={F_FEED_PHOTO}
-                    value={r.values.feed_image ?? ""}
-                    onChange={setRowValue(r.key, "feed_image")}
-                  />
-                </View>
               </View>
               <PerBirdLine qty={num(r.values.feed_1_qty)} birds={birds} />
               {a?.fieldHints.feed_1_qty ? <HintLine hint={a.fieldHints.feed_1_qty} /> : null}
+              <PhotoStrip
+                label="Photos (Feed)"
+                uris={r.photos.feed}
+                onAdd={() => addPhoto(r.key, "feed")}
+                onRemove={(u) => removePhoto(r.key, "feed", u)}
+              />
 
               <Text style={styles.slotHead}>Optional Feed</Text>
               <FormControl
@@ -803,15 +1084,19 @@ export function DailyEntryGridScreen({ navigation }: Props) {
           );
         })}
 
-        <Button title="Add another farm" variant="ghost" onPress={addRow} />
+        {editing ? null : <Button title="Add another farm" variant="ghost" onPress={addRow} />}
       </KeyboardAwareScrollView>
 
       {/* Sticky footer: the round's running totals, and the two ways out. */}
       <View style={[styles.footer, { paddingBottom: spacing.md + insets.bottom }]}>
         <Text style={styles.footerSummary} numberOfLines={1}>
-          <Text style={styles.footerStrong}>{summary.rows}</Text>
-          {summary.rows === 1 ? " farm" : " farms"}
-          {"  ·  Feed "}
+          {editing ? null : (
+            <>
+              <Text style={styles.footerStrong}>{summary.rows}</Text>
+              {summary.rows === 1 ? " farm  ·  " : " farms  ·  "}
+            </>
+          )}
+          {"Feed "}
           <Text style={styles.footerStrong}>{summary.feed.toFixed(1)} kg</Text>
           {"  ·  Mort "}
           <Text style={styles.footerStrong}>{summary.mortality}</Text>
@@ -825,7 +1110,13 @@ export function DailyEntryGridScreen({ navigation }: Props) {
           </View>
           <View style={styles.footerSubmit}>
             <Button
-              title={saving ? "Submitting…" : "Submit Day Record"}
+              title={
+                saving
+                  ? "Saving…"
+                  : editing
+                  ? "Save Changes"
+                  : "Submit Day Record"
+              }
               onPress={onSave}
               loading={saving}
             />
@@ -837,6 +1128,98 @@ export function DailyEntryGridScreen({ navigation }: Props) {
 }
 
 const farmLabel = (r: GridRow): string => r.lookup?.batch_name || `Farm ${r.values.farm}`;
+
+/**
+ * Several photos for one category.
+ *
+ * A day's mortality is rarely one photograph, so each category holds a strip:
+ * thumbnails of what is already attached, plus one tile to add another until
+ * the cap is reached. Straight to the camera, no gallery — these are evidence
+ * of what was in the shed today, and a picture off the roll could be anything.
+ *
+ * Saved photos are shown but not removable here: deleting evidence from a
+ * record that has already been filed is not a field action.
+ */
+function PhotoStrip({
+  label,
+  uris,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  uris: string[];
+  onAdd: () => void;
+  onRemove: (uri: string) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [busy, setBusy] = useState(false);
+  const full = uris.length >= MAX_PHOTOS_PER_KIND;
+
+  const add = async () => {
+    setBusy(true);
+    try {
+      await onAdd();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={styles.strip}>
+      <Text style={styles.stripLabel}>
+        {label}
+        <Text style={styles.stripCount}>
+          {"  "}
+          {uris.length}/{MAX_PHOTOS_PER_KIND}
+        </Text>
+      </Text>
+      <View style={styles.stripRow}>
+        {uris.map((uri) => (
+          <View key={uri} style={styles.stripItem}>
+            <Image source={{ uri }} style={styles.stripThumb} />
+            {isLocalCapture(uri) ? (
+              <Pressable onPress={() => onRemove(uri)} hitSlop={6} style={styles.stripRemove}>
+                <AppIcon name="close-circle" size={18} color={colors.danger} />
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+        {full ? null : (
+          <Pressable style={styles.stripAdd} onPress={add} disabled={busy}>
+            <AppIcon name="camera-plus-outline" size={20} color={colors.tint} />
+            <Text style={styles.stripAddText}>{busy ? "Opening…" : "Add"}</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** A select's display text for a value — the name, never the raw id. */
+const labelOf = (field: FormField, value: string): string =>
+  field.options?.find((o) => o.value === value)?.label ?? (value ? `#${value}` : "—");
+
+/**
+ * A field shown but not editable, because changing it would not correct the
+ * record — it would point at a different one. Rendered as a field rather than
+ * hidden, so an edit still shows which flock and which day it belongs to.
+ */
+function LockedField({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.locked}>
+      <Text style={styles.lockedLabel}>{label}</Text>
+      <View style={styles.lockedBox}>
+        <Text style={styles.lockedValue} numberOfLines={1}>
+          {value}
+        </Text>
+        <AppIcon name="lock-outline" size={14} color={colors.textFaint} />
+      </View>
+    </View>
+  );
+}
 
 /** Who this flock is — the facts the supervisor checks before typing anything. */
 function FlockPanel({ row, farmName }: { row: GridRow; farmName: string }) {
@@ -1258,6 +1641,53 @@ const useStyles = makeStyles((colors) => ({
   },
   sectionTitle: { ...type.label, color: colors.text, letterSpacing: 0.5, flex: 1 },
   slotHead: { ...type.caption, color: colors.broiler, marginBottom: spacing.xs },
+
+  strip: { marginBottom: spacing.lg },
+  stripLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },
+  stripCount: { ...type.caption, color: colors.textMuted },
+  stripRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  stripItem: { position: "relative" },
+  stripThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  stripRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+  },
+  stripAdd: {
+    width: 64,
+    height: 64,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  stripAddText: { ...type.caption, fontSize: 10, color: colors.tint },
+
+  locked: { marginBottom: spacing.lg },
+  lockedLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },
+  lockedBox: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: spacing.md,
+  },
+  lockedValue: { ...type.body, color: colors.textMuted, flex: 1 },
 
   stockCell: { marginBottom: spacing.lg },
   stockLabel: { ...type.label, color: colors.text, marginBottom: spacing.xs },

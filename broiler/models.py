@@ -1117,6 +1117,78 @@ class DailyEntry(models.Model):
         return 0
 
 
+class DailyEntryPhoto(models.Model):
+    """Photo evidence attached to a Daily Entry — several per category.
+
+    ``DailyEntry`` carries one ``mort_image`` / ``cull_image`` / ``feed_image``
+    each, which is one picture per category and no more. A bad mortality day is
+    not one photograph, so the extras live here, keyed by which category they
+    evidence.
+
+    The single fields on ``DailyEntry`` are kept, not replaced: every saved
+    entry already populates them and both Day Record reports render them. The
+    first photo of a category is mirrored into its legacy field (see ``save``),
+    so existing records and existing reports carry on working untouched while
+    the phone uploads as many as it needs.
+    """
+
+    KIND_MORTALITY = "mortality"
+    KIND_CULLS = "culls"
+    KIND_FEED = "feed"
+    KIND_CHOICES = [
+        (KIND_MORTALITY, _("Mortality")),
+        (KIND_CULLS, _("Culls")),
+        (KIND_FEED, _("Feed")),
+    ]
+
+    #: Cap per entry per category. Field photos travel over rural mobile data,
+    #: and an uncapped set is how a save stops finishing at all.
+    MAX_PER_KIND = 5
+
+    #: Which single field on the parent each category's first photo mirrors into.
+    LEGACY_FIELD = {
+        KIND_MORTALITY: "mort_image",
+        KIND_CULLS: "cull_image",
+        KIND_FEED: "feed_image",
+    }
+
+    entry = models.ForeignKey(
+        DailyEntry, on_delete=models.CASCADE, related_name="photos",
+        help_text=_("Daily Entry this photo evidences"),
+    )
+    kind = models.CharField(
+        max_length=20, choices=KIND_CHOICES,
+        help_text=_("What the photo is evidence of"),
+    )
+    image = models.ImageField(
+        upload_to="daily_entry/photos/%Y/%m/",
+        help_text=_("The photograph"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Daily Entry Photo")
+        verbose_name_plural = _("Daily Entry Photos")
+        ordering = ["kind", "id"]
+        indexes = [models.Index(fields=["entry", "kind"])]
+
+    def __str__(self):
+        return f"{self.entry.entry_no} — {self.get_kind_display()}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Mirror into the parent's single field when that field is still empty,
+        # so the Day Record reports keep showing a thumbnail without knowing
+        # this table exists. Written with .update() rather than entry.save():
+        # re-saving the parent would re-run its entry-number logic for nothing.
+        field = self.LEGACY_FIELD.get(self.kind)
+        if not field:
+            return
+        parent = DailyEntry.objects.filter(pk=self.entry_id).values_list(field, flat=True).first()
+        if not parent:
+            DailyEntry.objects.filter(pk=self.entry_id).update(**{field: self.image.name})
+
+
 class MedicineVaccineEntry(models.Model):
     """A medicine/vaccine issued to one Farm/Batch on a given day, with a
     running closing-stock balance for that item at that farm (Broiler >

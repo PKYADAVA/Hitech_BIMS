@@ -9,16 +9,30 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
 };
 
 /**
- * Resources whose *new* record has its own screen but whose edit does not.
+ * Resources handled by a bespoke screen that takes the row as `row` rather than
+ * the generic `{resourceKey, mode, row}`.
  *
- * Daily Entry is written on the Add Day Record screen — the flock panel, the
- * standards, the photo columns and the mandatory GPS stamp all belong to
- * recording a day in the shed. Correcting a saved row afterwards is a desk job
- * with no round to walk, so editing stays on the generic form.
+ * Daily Entry uses the Day Record screen for both: creating walks a round of
+ * farms, editing opens one saved row on the same layout. Editing has to be the
+ * same screen — the flock panel, the breed standards and the mandatory GPS
+ * stamp are what make a day's numbers judgeable, and a correction made without
+ * them is exactly as unverified as an original made without them.
  */
-const CUSTOM_CREATE_SCREEN: Record<string, "DailyEntryGrid"> = {
+const ROW_FORM_SCREEN: Record<string, "DailyEntryGrid" | "MedicineEntryForm"> = {
   "broiler-daily-entries": "DailyEntryGrid",
+  // One supervisor, farm, batch and date over several consumption lines.
+  "broiler-medicine-vaccine": "MedicineEntryForm",
 };
+
+/**
+ * Bespoke screens that only write new records, so a correction stays on the
+ * generic form.
+ *
+ * The Medicine screen writes a *document* — one header over several
+ * consumption lines — which is the right shape for recording a round of doses
+ * and the wrong shape for fixing the quantity on one saved line.
+ */
+const CREATE_ONLY = new Set(["broiler-medicine-vaccine"]);
 
 /** Anything that can push a screen in the module stack (screen props or header options). */
 type Nav = { navigate: (screen: any, params?: any) => void };
@@ -35,10 +49,14 @@ export function openRecordForm(
   mode: "create" | "edit",
   row?: Row,
 ) {
-  const createOnly = mode === "create" ? CUSTOM_CREATE_SCREEN[resourceKey] : undefined;
+  const rowForm = mode === "edit" && CREATE_ONLY.has(resourceKey)
+    ? undefined
+    : ROW_FORM_SCREEN[resourceKey];
   const custom = CUSTOM_FORM_SCREEN[resourceKey];
-  if (createOnly) {
-    navigation.navigate(createOnly);
+  if (rowForm) {
+    // Create carries no row; edit carries the one being corrected.
+    const params: ModuleStackParams["DailyEntryGrid"] = mode === "edit" ? { row } : undefined;
+    navigation.navigate(rowForm, params);
   } else if (custom) {
     const params: ModuleStackParams["BirdSaleForm"] = { mode, row };
     navigation.navigate(custom, params);
