@@ -1,19 +1,25 @@
-"""Versioned static assets carry a stamp at least as new as their content.
+"""Versioned static assets carry a stamp newer than their content.
 
 This project serves static files un-hashed and busts caches by hand, with a
-`?v=YYYYMMDD` on each `<link>`/`<script>` in base.html. Manifest hashing was
-tried and reverted (see the STORAGES comment in settings), so the stamp is the
-only thing standing between an edited stylesheet and a browser that keeps the
-old one.
+`?v=` on each `<link>`/`<script>` in base.html. Manifest hashing was tried and
+reverted (see the STORAGES comment in settings), so the stamp is the only
+thing standing between an edited stylesheet and a browser that keeps the old
+one.
 
-Forgetting the bump is invisible: collectstatic succeeds, the file on disk is
-right, a fresh browser shows the change, and only returning users see the old
-page. It cost a round of "why does it still look the same?" to find, hence
-this.
+Forgetting the bump is invisible from this side: collectstatic succeeds, the
+file on disk is right, a fresh browser shows the change, and only returning
+users see the old page.
 
-Compared against each file's last commit date rather than its mtime: git does
-not preserve mtimes, so in a fresh clone every file looks newer than every
-stamp. Skipped where git history is not available.
+The check is against the commit that last touched base.html, not against the
+date inside the stamp. A date is too coarse — the first version of this test
+compared them and passed while the bug was live, because the stylesheet was
+edited twice more on the same day it was stamped. base.html is the right
+yardstick because it holds every stamp: bumping one necessarily commits
+base.html at that moment or later, so an asset committed after it is an asset
+whose stamp was not bumped.
+
+Against git rather than mtimes, since git does not preserve mtimes and every
+file in a fresh clone would otherwise look newer than its stamp.
 """
 import datetime
 import pathlib
@@ -24,17 +30,21 @@ import subprocess
 from django.test import SimpleTestCase
 
 BASE = pathlib.Path("templates/base.html")
-#: `{% static 'css/x.css' %}?v=20260804` — the trailing letter some stamps
-#: carry (20260731b) is a same-day rebuild and is ignored for the comparison.
-VERSIONED = re.compile(r"\{%\s*static '([^']+)'\s*%\}\?v=(\d{8})[a-z]?")
+#: `{% static 'css/x.css' %}?v=20260804b` — the trailing letter marks a
+#: same-day re-stamp, which is why the letter has to be allowed for.
+VERSIONED = re.compile(r"\{%\s*static '([^']+)'\s*%\}\?v=(\d{8}[a-z]?)")
 
 
-def last_commit_date(path):
-    out = subprocess.run(["git", "log", "-1", "--format=%cd",
-                          "--date=format:%Y%m%d", "--", str(path)],
+def last_commit_time(path):
+    """Unix time of the commit that last touched ``path``; None if untracked."""
+    out = subprocess.run(["git", "log", "-1", "--format=%ct", "--", str(path)],
                          capture_output=True, text=True)
     stamp = out.stdout.strip()
-    return datetime.datetime.strptime(stamp, "%Y%m%d").date() if stamp else None
+    return int(stamp) if stamp.isdigit() else None
+
+
+def when(unix_time):
+    return datetime.datetime.fromtimestamp(unix_time).isoformat(" ", "seconds")
 
 
 class CacheBustingTests(SimpleTestCase):
@@ -50,20 +60,22 @@ class CacheBustingTests(SimpleTestCase):
         self.assertEqual(missing, [])
 
     def test_no_asset_was_changed_without_bumping_its_stamp(self):
-        """A file committed after the stamp it is served under is a file
-        returning users are still seeing the old copy of."""
+        stamped_at = last_commit_time(BASE)
+        if stamped_at is None:
+            self.skipTest("base.html is not committed yet")
+
         stale = []
-        for rel, stamp in VERSIONED.findall(BASE.read_text(encoding="utf-8")):
+        for rel, _ in VERSIONED.findall(BASE.read_text(encoding="utf-8")):
             source = pathlib.Path("static") / rel
             if not source.exists():
                 continue
-            committed = last_commit_date(source)
-            if committed is None:
+            changed_at = last_commit_time(source)
+            if changed_at is None:
                 continue                     # never committed; nothing to compare
-            stamped = datetime.datetime.strptime(stamp, "%Y%m%d").date()
-            if committed > stamped:
-                stale.append("%s: last changed %s but served as ?v=%s"
-                             % (rel, committed, stamp))
+            if changed_at > stamped_at:
+                stale.append("%s changed at %s, but base.html — which holds its "
+                             "?v= — was last committed at %s"
+                             % (rel, when(changed_at), when(stamped_at)))
 
         self.assertEqual(stale, [], "\n".join(
             ["static files edited without bumping ?v= in templates/base.html —"
