@@ -262,28 +262,6 @@ const active = () => bool("is_active", "Active");
 
 export const FORMS: Record<string, FormSchema> = {
   /* ------------------------------- Broiler ------------------------------ */
-  /* ------------------------------ Inventory ----------------------------- */
-  "inventory-stock-transfers": {
-    fields: [
-      // Same order the web form asks for them in: what, how much, where from,
-      // where to, then who carried it.
-      { ...date("date", "Date", true), readOnly: true },
-      text("dc_no", "DC No."),
-      ITEM("item", "Item", true),
-      dec("quantity", "Quantity", true),
-      dec("rate", "Rate"),
-      WAREHOUSE("from_warehouse", "From Location"),
-      WAREHOUSE("to_warehouse", "To Location"),
-      // Batches belong to a farm-side transfer; left optional so a plain
-      // warehouse-to-warehouse move does not have to answer them.
-      sel("from_batch", "Source Batch", "/broiler/batches/", ["batch_name", "lot_no"]),
-      sel("to_batch", "Destination Batch", "/broiler/batches/", ["batch_name", "lot_no"]),
-      text("vehicle_no", "Vehicle No."),
-      text("driver_name", "Driver Name"),
-      area("remarks", "Remarks"),
-    ],
-  },
-
   "broiler-daily-entries": {
     fields: [
       // Derived, not typed: the day after this farm's last entry, filled by
