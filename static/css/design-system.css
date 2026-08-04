@@ -286,6 +286,14 @@
 .ds table.ds-entry th.c-grow { width: auto; }
 .ds table.ds-entry th.c-num  { white-space: nowrap; text-align: right; }
 
+/* A grid of three or four columns cannot fill a wide screen without every
+   column becoming absurd — an item picker 880px across, a quantity box 540px
+   for a two-digit number. Such a grid opts out of stretching and sizes to its
+   content instead, leaving the slack as margin at the end of the row rather
+   than pouring it into the fields. Dense grids keep the full width, where
+   filling it is what makes the row readable. */
+.ds table.ds-entry.ds-fit { width: auto; min-width: 0; }
+
 /* Floors, so a column never collapses to unusable — expressed in ch, which
    tracks the font rather than guessing pixels. */
 .ds table.ds-entry .m-date  { min-width: 8.5rem; }
