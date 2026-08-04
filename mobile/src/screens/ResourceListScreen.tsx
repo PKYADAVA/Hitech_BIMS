@@ -1,17 +1,18 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from "react-native";
 
+import { deleteResource } from "@/api/resources";
 import { Row } from "@/api/types";
 import { buildGroups, GroupItem } from "@/domain/grouping";
 import { AppIcon } from "@/components/AppIcon";
-import { RecordCard } from "@/components/RecordCard";
+import { RecordAction, RecordCard } from "@/components/RecordCard";
 import { ListSkeleton } from "@/components/Skeleton";
 import { EmptyOrError, SearchBar } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
-import { isEditable } from "@/config/forms";
-import { openRecordForm } from "@/navigation/openForm";
+import { hasCreateForm, hasEditForm, openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
+import { queryClient } from "@/query/queryClient";
 import { useResourceList } from "@/query/useResourceList";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
@@ -27,9 +28,64 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
-  const canAdd = usePermissionsStore((s) => s.canResource)(config.key, config.module, "add");
+  const can = usePermissionsStore((s) => s.canResource);
+  const canAdd = can(config.key, config.module, "add");
+  const canEdit = can(config.key, config.module, "edit");
+  const canDelete = can(config.key, config.module, "delete");
   const { colors } = useTheme();
   const styles = useStyles();
+
+  /**
+   * The register's Actions column, as a row under each card.
+   *
+   * Same three the ERP registers offer, gated by the same permissions, so a
+   * user who may only look sees only View. Reaching a record used to mean
+   * knowing the card was tappable and that Edit and Delete lived one screen
+   * further in; on the web they are right there on the row.
+   */
+  const actionsFor = (row: Row): RecordAction[] => {
+    const actions: RecordAction[] = [{
+      key: "view", label: "View", icon: "eye-outline",
+      onPress: () => navigation.navigate("Detail", { resourceKey: config.key, row }),
+    }];
+    if (canEdit && hasEditForm(config.key)) {
+      actions.push({
+        key: "edit", label: "Edit", icon: "pencil-outline",
+        onPress: () => openRecordForm(navigation, config.key, "edit", row),
+      });
+    }
+    if (canDelete) {
+      actions.push({
+        key: "delete", label: "Delete", icon: "trash-can-outline", danger: true,
+        onPress: () => confirmDelete(row),
+      });
+    }
+    return actions;
+  };
+
+  /** Deleting is destructive and off a small button, so it always asks first. */
+  const confirmDelete = (row: Row) => {
+    const label = config.card(row).title;
+    Alert.alert(
+      `Delete ${config.singular}?`,
+      `${label} will be removed. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteResource(config.path, row.id as number);
+              queryClient.invalidateQueries({ queryKey: ["resource", config.path] });
+            } catch (e) {
+              Alert.alert("Could not delete",
+                          (e as Error)?.message ?? "Please try again.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
   // Server feeds have no search_fields, so filter the loaded rows client-side.
   const data = useMemo(() => {
@@ -128,6 +184,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
                 view={config.card(item)}
                 icon={config.icon}
                 accent={config.accent}
+                actions={actionsFor(item)}
                 onPress={() =>
                   navigation.navigate("Detail", { resourceKey: config.key, row: item })
                 }
@@ -175,7 +232,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
         }}
       />
 
-      {isEditable(config.key) && canAdd ? (
+      {hasCreateForm(config.key) && canAdd ? (
         <Pressable
           style={({ pressed }) => [
             styles.fab,

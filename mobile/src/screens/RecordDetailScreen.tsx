@@ -10,6 +10,7 @@ import { AppIcon } from "@/components/AppIcon";
 import { Button, Card, DetailRow, Divider } from "@/components/ui";
 import { ChildConfig, RESOURCES } from "@/config/catalog";
 import { isEditable, isRecordEditable } from "@/config/forms";
+import { hasCreateForm } from "@/navigation/openForm";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
@@ -32,7 +33,7 @@ function ChildSection({
   const { colors } = useTheme();
   const styles = useStyles();
   const canResource = usePermissionsStore((s) => s.canResource);
-  const canAdd = isEditable(cfg.key) && canResource(cfg.key, cfg.module, "add");
+  const canAdd = hasCreateForm(cfg.key) && canResource(cfg.key, cfg.module, "add");
   const canEdit = isEditable(cfg.key) && canResource(cfg.key, cfg.module, "edit");
   const list = useResourceList<Row>(cfg.path, { [child.fkParam]: parentId });
   if (list.isLoading) return null;
