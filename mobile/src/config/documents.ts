@@ -9,7 +9,11 @@
  * header + items into the exact payload each web API expects.
  */
 export type DocFieldType =
-  | "text" | "date" | "decimal" | "number" | "select" | "toggle" | "location";
+  | "text" | "date" | "decimal" | "number" | "select" | "toggle" | "location"
+  /** Multi-line, with a character budget shown as you type. */
+  | "textarea"
+  /** Derived and not editable — shown so the row reads complete. */
+  | "readonly";
 
 export interface DocField {
   name: string;
@@ -23,6 +27,26 @@ export interface DocField {
   /** location: allow a Farm (+ batch) as well as a Warehouse */
   allowFarm?: boolean;
   withBatch?: boolean;
+  /** textarea: character budget, shown as a counter. */
+  maxLength?: number;
+  /** Placeholder for a field the user does not fill in. */
+  placeholder?: string;
+  /** Lay this field beside the previous one instead of under it. */
+  half?: boolean;
+}
+
+/**
+ * A titled group inside an item card.
+ *
+ * A stock transfer row carries three unrelated things — what is moving, where
+ * it is going, and who is driving it — and read as one flat list of ten fields
+ * they blur together. `tone` picks the heading colour so the groups are
+ * distinguishable at a glance rather than by reading each label.
+ */
+export interface DocSection {
+  title: string;
+  tone: "item" | "location" | "logistics";
+  fields: DocField[];
 }
 
 type Dict = Record<string, string>;
@@ -32,8 +56,18 @@ export interface DocConfig {
   title: string;
   savePath: string;
   itemTitle: string;
+  /** Heading above the header card; omitted leaves it untitled. */
+  headerTitle?: string;
+  /** Singular noun for the row counter — "1 Row", "2 Rows". */
+  itemNoun?: string;
   header: DocField[];
   itemFields: DocField[];
+  /**
+   * Item fields grouped under titled headings. When present the card renders
+   * these instead of `itemFields`, which stays the flat fallback every other
+   * document still uses.
+   */
+  itemSections?: DocSection[];
   build: (header: Dict, items: Dict[]) => Record<string, unknown>;
   /**
    * Payload for *edit* (PUT), when it differs from create. The row-based
@@ -90,28 +124,58 @@ const fDec = (name: string, label: string, required = false): DocField => ({ nam
 /* ------------------------------ documents ------------------------------- */
 
 export const DOCUMENTS: Record<string, DocConfig> = {
-  // Stock Transfer — one From/To for the doc; each item becomes a transfer row.
+  // Stock Transfer — every row carries its own locations and logistics, as the
+  // ERP grid does: one sheet can move different items between different pairs
+  // of stores on the same day. Only the date and DC number are shared.
   "inventory-stock-transfers": {
     resourceKey: "inventory-stock-transfers",
     title: "Stock Transfer",
     savePath: "/inventory/stock-transfers/save",
-    itemTitle: "Items",
+    headerTitle: "Transaction Header",
+    itemTitle: "Transfer Items",
+    itemNoun: "Row",
     header: [
-      fDate(),
-      { name: "dc_no", label: "DC No.", type: "text" },
-      fLoc("from", "From"),
-      fLoc("to", "To"),
-      { name: "vehicle_no", label: "Vehicle No.", type: "text" },
-      { name: "driver_name", label: "Driver", type: "text" },
+      { ...fDate(), half: true },
+      { name: "dc_no", label: "DC No.", type: "text", placeholder: "Enter DC#", half: true },
+    ],
+    itemSections: [
+      {
+        title: "Item Details",
+        tone: "item",
+        fields: [
+          fItem(),
+          { name: "uom_label", label: "UOM", type: "readonly", placeholder: "auto", half: true },
+          { name: "stock_label", label: "Available Stock", type: "readonly", placeholder: "auto", half: true },
+          { ...fRate(), half: true },
+          { ...fQty(), half: true },
+        ],
+      },
+      {
+        title: "Location & Movement",
+        tone: "location",
+        fields: [fLoc("from", "From Location"), fLoc("to", "To Location")],
+      },
+      {
+        title: "Logistics & Remarks",
+        tone: "logistics",
+        fields: [
+          { name: "vehicle_no", label: "Vehicle No.", type: "text",
+            placeholder: "UP53 XX 1234", half: true },
+          { name: "driver_name", label: "Driver Name", type: "text",
+            placeholder: "Driver Name", half: true },
+          { name: "remarks", label: "Remarks", type: "textarea", maxLength: 200,
+            placeholder: "Add transport / transfer notes" },
+        ],
+      },
     ],
     itemFields: [fItem(), fQty(), fRate(), fRemarks()],
-    build: (h, items) => {
-      const from = loc(h, "from");
-      const to = loc(h, "to");
-      return {
-        rows: items
-          .filter((it) => has(it.item))
-          .map((it) => ({
+    build: (h, items) => ({
+      rows: items
+        .filter((it) => has(it.item))
+        .map((it) => {
+          const from = loc(it, "from");
+          const to = loc(it, "to");
+          return {
             date: h.date,
             dc_no: h.dc_no || "",
             item: it.item,
@@ -124,17 +188,20 @@ export const DOCUMENTS: Record<string, DocConfig> = {
             to_location_type: to.type,
             to_location_id: to.id,
             to_batch: to.batch,
-            vehicle_no: h.vehicle_no || "",
-            driver_name: h.driver_name || "",
+            vehicle_no: it.vehicle_no || "",
+            driver_name: it.driver_name || "",
             remarks: it.remarks || "",
-          })),
-      };
-    },
+          };
+        }),
+    }),
     // Edit updates one transfer record — flat row, not `{rows:[…]}`.
     buildEdit: (h, items) => {
-      const from = loc(h, "from");
-      const to = loc(h, "to");
+      // Editing touches one transfer, and its locations and logistics now live
+      // on the row like they do on create — reading them off the header would
+      // silently blank them.
       const it = items[0] ?? {};
+      const from = loc(it, "from");
+      const to = loc(it, "to");
       return {
         date: h.date,
         dc_no: h.dc_no || "",
@@ -148,8 +215,8 @@ export const DOCUMENTS: Record<string, DocConfig> = {
         to_location_type: to.type,
         to_location_id: to.id,
         to_batch: to.batch,
-        vehicle_no: h.vehicle_no || "",
-        driver_name: h.driver_name || "",
+        vehicle_no: it.vehicle_no || "",
+        driver_name: it.driver_name || "",
         remarks: it.remarks || "",
       };
     },

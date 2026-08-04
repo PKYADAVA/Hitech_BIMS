@@ -14,12 +14,15 @@ from rest_framework.routers import DefaultRouter
 
 from account.api import register as register_account
 from account.models import ChartOfAccount
+from inventory.api import (StockTransferItemLookupView,
+                           StockTransferStockLookupView)
 from broiler.api import (
     BirdSaleFarmLookupView,
     DailyEntryLookupView,
     DailyEntryStockLookupView,
     MedicineItemLookupView,
     MedicineStockLookupView,
+    ReverseGeocodeView,
 )
 from broiler.api import register as register_broiler
 from broiler.api_write import write_urls as broiler_write_urls
@@ -136,6 +139,8 @@ urlpatterns = [
     # Bird Sale form: farm → active batch + owning farmer (declared before router).
     path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
     # Medicine/Vaccine Consumption: the two columns the phone form was missing.
+    # A pin as an address, proxied so the phone gets what the browser gets.
+    path("geo/reverse", ReverseGeocodeView.as_view(), name="geo-reverse"),
     path("broiler/medicine-item-lookup", MedicineItemLookupView.as_view(),
          name="broiler-medicine-item-lookup"),
     path("broiler/medicine-stock-lookup", MedicineStockLookupView.as_view(),
@@ -145,6 +150,12 @@ urlpatterns = [
          name="broiler-daily-entry-lookup"),
     path("broiler/daily-entry-stock", DailyEntryStockLookupView.as_view(),
          name="broiler-daily-entry-stock"),
+    # Stock Transfer row lookups — the UOM/price of an item, and what is
+    # actually at the source location on the row's date.
+    path("inventory/stock-transfer-item", StockTransferItemLookupView.as_view(),
+         name="inventory-stock-transfer-item"),
+    path("inventory/stock-transfer-stock", StockTransferStockLookupView.as_view(),
+         name="inventory-stock-transfer-stock"),
     # Hatch Entry form: tray setting → dates + source purchase figures.
     path("hatchery/tray-setting-lookup", TraySettingLookupView.as_view(), name="hatchery-tray-setting-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),

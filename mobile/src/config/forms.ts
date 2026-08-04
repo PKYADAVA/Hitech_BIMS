@@ -189,6 +189,27 @@ export const dailyEntryStock = async (
     params: { farm: farmId, item: itemId, date },
   })).data.data.stock;
 
+/** A transfer row's item: its UOM and the price effective on the row's date. */
+export const stockTransferItem = async (
+  itemId: string,
+  date?: string
+): Promise<{ unit: string; rate: string; price_missing: boolean; message: string }> =>
+  (await http.get<Envelope<{ unit: string; rate: string; price_missing: boolean; message: string }>>(
+    "/inventory/stock-transfer-item",
+    { params: { item: itemId, ...(date ? { date } : {}) } }
+  )).data.data;
+
+/** What is actually at a location on a date — the figure the save enforces. */
+export const stockTransferStock = async (
+  locationType: string,
+  locationId: string,
+  itemId: string,
+  date: string
+): Promise<string> =>
+  (await http.get<Envelope<{ stock: string }>>("/inventory/stock-transfer-stock", {
+    params: { location_type: locationType, location_id: locationId, item: itemId, date },
+  })).data.data.stock;
+
 interface TraySettingLookup {
   setting_date: string | null;
   hatch_date: string | null;

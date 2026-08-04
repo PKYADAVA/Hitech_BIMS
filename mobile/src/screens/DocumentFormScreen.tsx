@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 
 import { deleteDocument, loadDocument, saveDocument } from "@/api/documents";
 import { ApiError } from "@/api/types";
@@ -12,12 +12,14 @@ import {
   BATCH_OPTIONS_PATH,
   DOCUMENTS,
   DocField,
+  DocSection,
   FARM_OPTIONS_PATH,
   WAREHOUSE_OPTIONS_PATH,
 } from "@/config/documents";
-import { FormField } from "@/config/forms";
+import { FormField, stockTransferItem, stockTransferStock } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
+import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
 
@@ -32,9 +34,51 @@ const asFormField = (f: DocField): FormField => ({
   required: f.required,
   optionsPath: f.optionsPath,
   optionLabelKeys: f.optionLabelKeys,
+  placeholder: f.placeholder,
 });
 
-/** Warehouse/Farm segmented toggle + location picker (+ batch when a farm). */
+/**
+ * Lay a field list out, pairing neighbours marked `half`.
+ *
+ * A date beside a document number, a UOM beside a stock figure: short fields
+ * read as a pair and stacking them turns a six-line card into a twelve-line
+ * one. Anything not marked `half`, and an odd one at the end, takes the full
+ * width on its own.
+ */
+function FieldRows({
+  fields,
+  values,
+  set,
+}: {
+  fields: DocField[];
+  values: Dict;
+  set: (key: string, val: string) => void;
+}) {
+  const styles = useStyles();
+  const out: React.ReactNode[] = [];
+  for (let i = 0; i < fields.length; i += 1) {
+    const f = fields[i];
+    const next = fields[i + 1];
+    if (f.half && next?.half) {
+      out.push(
+        <View key={f.name} style={styles.pair}>
+          <View style={styles.pairHalf}>
+            <DocFieldControl field={f} values={values} set={set} />
+          </View>
+          <View style={styles.pairHalf}>
+            <DocFieldControl field={next} values={values} set={set} />
+          </View>
+        </View>
+      );
+      i += 1;
+      continue;
+    }
+    out.push(<DocFieldControl key={f.name} field={f} values={values} set={set} />);
+  }
+  return <>{out}</>;
+}
+
+/** One grouped Warehouse/Farm picker (+ batch when a farm), as the ERP has. */
 function LocationControl({
   field,
   values,
@@ -46,50 +90,50 @@ function LocationControl({
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const type = values[`${field.name}_type`] || "warehouse";
   const idKey = `${field.name}_id`;
+  const typeKey = `${field.name}_type`;
   const batchKey = `${field.name}_batch`;
+  const type = values[typeKey] || "warehouse";
   const onFarm = type === "farm";
+
+  // One list of both kinds, the way the ERP's single dropdown groups Warehouse
+  // and Farm under one control — rather than making the user first say which
+  // kind it is and then pick. Same "type:id" encoding the web form posts.
+  const warehouses = usePickerOptions(WAREHOUSE_OPTIONS_PATH, ["name", "code"]);
+  const farms = usePickerOptions(field.allowFarm ? FARM_OPTIONS_PATH : undefined,
+                                 ["farm_name", "farm_code"]);
+  const options = useMemo(() => {
+    const w = warehouses.options.map((o) => ({
+      value: `warehouse:${o.value}`, label: `Warehouse · ${o.label}`,
+    }));
+    const f = farms.options.map((o) => ({
+      value: `farm:${o.value}`, label: `Farm · ${o.label}`,
+    }));
+    return field.allowFarm ? [...w, ...f] : w;
+  }, [warehouses.options, farms.options, field.allowFarm]);
+
+  const selected = values[idKey] ? `${type}:${values[idKey]}` : "";
 
   return (
     <View style={styles.locBlock}>
-      <Text style={styles.locLabel}>
-        {field.label}
-        {field.required ? <Text style={{ color: colors.danger }}> *</Text> : null}
-      </Text>
-      {field.allowFarm ? (
-        <View style={styles.toggleRow}>
-          {(["warehouse", "farm"] as const).map((t) => {
-            const on = type === t;
-            return (
-              <Pressable
-                key={t}
-                onPress={() => {
-                  set(`${field.name}_type`, t);
-                  set(idKey, "");
-                  set(batchKey, "");
-                }}
-                style={[styles.toggle, on && styles.toggleOn]}
-              >
-                <Text style={[styles.toggleText, on && styles.toggleTextOn]}>
-                  {t === "warehouse" ? "Warehouse" : "Farm"}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
       <FormControl
         field={{
           name: idKey,
-          label: onFarm ? "Farm" : "Warehouse",
+          label: field.label,
           type: "select",
-          optionsPath: onFarm ? FARM_OPTIONS_PATH : WAREHOUSE_OPTIONS_PATH,
-          optionLabelKeys: onFarm ? ["farm_name", "farm_code"] : ["name", "code"],
+          options,
           required: field.required,
+          placeholder: field.placeholder,
         }}
-        value={values[idKey] ?? ""}
-        onChange={(v) => set(idKey, v)}
+        value={selected}
+        onChange={(v) => {
+          const [kind, id] = v.split(":");
+          set(typeKey, kind || "warehouse");
+          set(idKey, id || "");
+          // A batch belongs to the farm that was chosen; keeping the old one
+          // would attach this movement to a flock on a different farm.
+          set(batchKey, "");
+        }}
       />
       {field.withBatch && onFarm ? (
         <FormControl
@@ -107,6 +151,7 @@ function LocationControl({
     </View>
   );
 }
+
 
 /** Add/Less style segmented toggle for a plain-choice field. */
 function ToggleControl({
@@ -159,6 +204,16 @@ function DocFieldControl({
   if (field.type === "location") return <LocationControl field={field} values={values} set={set} />;
   if (field.type === "toggle")
     return <ToggleControl field={field} value={values[field.name] ?? ""} onChange={(v) => set(field.name, v)} />;
+  if (field.type === "readonly")
+    return <ReadonlyControl field={field} value={values[field.name] ?? ""} />;
+  if (field.type === "textarea")
+    return (
+      <NotesControl
+        field={field}
+        value={values[field.name] ?? ""}
+        onChange={(v) => set(field.name, v)}
+      />
+    );
   return (
     <FormControl
       field={asFormField(field)}
@@ -166,6 +221,53 @@ function DocFieldControl({
       error={error}
       onChange={(v) => set(field.name, v)}
     />
+  );
+}
+
+/** A value the row derives rather than asks for. Shown so the row reads
+ *  complete, greyed so it is plainly not an input. */
+function ReadonlyControl({ field, value }: { field: DocField; value: string }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{field.label}</Text>
+      <View style={[styles.input, styles.readonly]}>
+        <Text style={value ? styles.readonlyValue : styles.readonlyHint}>
+          {value || field.placeholder || "auto"}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** Multi-line notes with the remaining budget shown, so the limit is visible
+ *  before it is hit rather than as silently truncated text afterwards. */
+function NotesControl({
+  field,
+  value,
+  onChange,
+}: {
+  field: DocField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const max = field.maxLength ?? 200;
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{field.label}</Text>
+      <TextInput
+        style={[styles.input, styles.notes]}
+        value={value}
+        onChangeText={(t) => onChange(t.slice(0, max))}
+        placeholder={field.placeholder}
+        placeholderTextColor={colors.textFaint}
+        multiline
+        maxLength={max}
+      />
+      <Text style={styles.counter}>{value.length}/{max}</Text>
+    </View>
   );
 }
 
@@ -225,8 +327,48 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   }, [editId, doc]);
 
   const setHeaderKey = (key: string, val: string) => setHeader((p) => ({ ...p, [key]: val }));
-  const setItemKey = (idx: number, key: string, val: string) =>
+  const setItemKey = (idx: number, key: string, val: string) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [key]: val } : it)));
+    // The derived half of the row — UOM, price, what is actually in stock —
+    // depends on the item, the source location and the date, so any of the
+    // three changing re-reads it. Only documents that declare the readonly
+    // fields ask for them.
+    if (doc.resourceKey === "inventory-stock-transfers"
+        && ["item", "from_id", "from_type"].includes(key)) {
+      void refreshDerived(idx, { [key]: val });
+    }
+  };
+
+  /**
+   * Fill a row's UOM, rate and available stock from the server.
+   *
+   * Advisory: a lookup that fails leaves the row usable rather than blocking
+   * the sheet, and the save re-checks the stock anyway.
+   */
+  const refreshDerived = async (idx: number, patch: Dict) => {
+    const row = { ...(items[idx] ?? {}), ...patch };
+    const itemId = row.item;
+    if (!itemId) return;
+    try {
+      const info = await stockTransferItem(itemId, header.date);
+      setItems((prev) => prev.map((it, i) => (i === idx
+        ? { ...it, uom_label: info.unit || "", rate: it.rate || info.rate || "" }
+        : it)));
+    } catch {
+      /* advisory */
+    }
+    const fromType = row.from_type || "warehouse";
+    const fromId = row.from_id;
+    if (!fromId || !header.date) return;
+    try {
+      const stock = await stockTransferStock(fromType, fromId, itemId, header.date);
+      setItems((prev) => prev.map((it, i) => (i === idx
+        ? { ...it, stock_label: stock }
+        : it)));
+    } catch {
+      /* advisory */
+    }
+  };
   const addItem = () => setItems((prev) => [...prev, initValues(doc.itemFields)]);
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
@@ -295,42 +437,84 @@ export function DocumentFormScreen({ route, navigation }: Props) {
       {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
       {/* Header */}
+      {doc.headerTitle ? (
+        <Text style={styles.groupHeading}>{doc.headerTitle.toUpperCase()}</Text>
+      ) : null}
       <Card style={styles.section}>
-        {doc.header.map((f) => (
-          <DocFieldControl key={f.name} field={f} values={header} set={setHeaderKey} />
-        ))}
+        <FieldRows fields={doc.header} values={header} set={setHeaderKey} />
       </Card>
 
       {/* Line items. Row-based docs edit a single record, so no add/remove there. */}
       <View style={styles.itemsHeader}>
-        <Text style={styles.itemsTitle}>{doc.itemTitle}</Text>
+        <Text style={styles.itemsTitle}>
+          {doc.itemTitle.toUpperCase()}
+          {doc.itemNoun ? (
+            <Text style={styles.itemsCount}>
+              {"  "}({items.length} {doc.itemNoun}{items.length === 1 ? "" : "s"})
+            </Text>
+          ) : null}
+        </Text>
         {editId != null && doc.buildEdit ? null : (
-          <Pressable hitSlop={8} onPress={addItem}>
-            <Text style={styles.addLink}>＋ Add line</Text>
+          <Pressable hitSlop={8} onPress={addItem} style={styles.addRowButton}>
+            <Text style={styles.addLink}>＋ Add {doc.itemNoun ?? "line"}</Text>
           </Pressable>
         )}
       </View>
 
       {items.map((it, idx) => (
         <Card key={idx} style={styles.itemCard}>
-          <View style={styles.itemCardHead}>
-            <Text style={styles.itemCardTitle}>Line {idx + 1}</Text>
-            {items.length > 1 ? (
-              <Pressable hitSlop={8} onPress={() => removeItem(idx)}>
-                <Text style={styles.removeLink}>Remove</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          {doc.itemFields.map((f) => (
-            <DocFieldControl
-              key={f.name}
-              field={f}
-              values={it}
-              set={(key, val) => setItemKey(idx, key, val)}
-            />
-          ))}
+          {doc.itemSections ? (
+            doc.itemSections.map((section, sIdx) => (
+              <View key={section.title}>
+                <View style={[styles.sectionHead, styles[`tone_${section.tone}`]]}>
+                  <Text style={[styles.sectionTitle, styles[`toneText_${section.tone}`]]}>
+                    {section.title.toUpperCase()}
+                  </Text>
+                  {/* Only the first heading carries the delete, so a row has
+                      one obvious way out rather than three. */}
+                  {sIdx === 0 && items.length > 1 ? (
+                    <Pressable hitSlop={8} onPress={() => removeItem(idx)}>
+                      <Text style={styles.removeLink}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                <FieldRows
+                  fields={section.fields}
+                  values={it}
+                  set={(key, val) => setItemKey(idx, key, val)}
+                />
+              </View>
+            ))
+          ) : (
+            <>
+              <View style={styles.itemCardHead}>
+                <Text style={styles.itemCardTitle}>Line {idx + 1}</Text>
+                {items.length > 1 ? (
+                  <Pressable hitSlop={8} onPress={() => removeItem(idx)}>
+                    <Text style={styles.removeLink}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {doc.itemFields.map((f) => (
+                <DocFieldControl
+                  key={f.name}
+                  field={f}
+                  values={it}
+                  set={(key, val) => setItemKey(idx, key, val)}
+                />
+              ))}
+            </>
+          )}
         </Card>
       ))}
+
+      {/* A second way to add, at the end of the list where the last row ends —
+          the top button is out of sight by then on a long sheet. */}
+      {doc.itemSections && !(editId != null && doc.buildEdit) ? (
+        <Pressable onPress={addItem} style={styles.addItemDashed}>
+          <Text style={styles.addLink}>＋ Add {doc.itemNoun ?? "line"}</Text>
+        </Pressable>
+      ) : null}
 
       <Button title={editId != null ? "Save changes" : "Create"} onPress={onSave} loading={saving} />
       {editId != null ? (
@@ -362,7 +546,73 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   itemsTitle: { ...type.h3, color: colors.text },
+  itemsCount: { ...type.body, color: colors.textMuted, fontWeight: "400" },
+  pair: { flexDirection: "row", gap: spacing.md },
+  pairHalf: { flex: 1 },
+  groupHeading: {
+    ...type.label,
+    fontWeight: "700",
+    color: colors.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: spacing.sm,
+  },
+  addRowButton: {
+    borderWidth: 1,
+    borderColor: colors.tint,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  addItemDashed: {
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.tint,
+    borderRadius: radius.md,
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+  },
   addLink: { ...type.title, color: colors.tint },
+
+  /* Section headings inside an item card. The tones separate what is moving
+     from where it goes from who is driving it, so ten fields read as three
+     short groups rather than one long list. */
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: { ...type.label, fontWeight: "700", letterSpacing: 0.6 },
+  tone_item: { backgroundColor: "rgba(99,102,241,0.10)" },
+  tone_location: { backgroundColor: "rgba(22,163,74,0.10)" },
+  tone_logistics: { backgroundColor: "rgba(234,88,12,0.10)" },
+  toneText_item: { color: "#4f46e5" },
+  toneText_location: { color: "#15803d" },
+  toneText_logistics: { color: "#c2410c" },
+
+  /* Derived values and notes. */
+  field: { marginBottom: spacing.md },
+  fieldLabel: { ...type.label, color: colors.textMuted, marginBottom: spacing.xs },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+    justifyContent: "center",
+    color: colors.text,
+  },
+  readonly: { backgroundColor: "rgba(0,0,0,0.04)" },
+  readonlyValue: { ...type.body, color: colors.text },
+  readonlyHint: { ...type.body, color: colors.textFaint },
+  notes: { minHeight: 96, textAlignVertical: "top", paddingTop: spacing.sm },
+  counter: { ...type.caption, color: colors.textFaint, alignSelf: "flex-end", marginTop: 2 },
   itemCard: { marginBottom: spacing.md },
   itemCardHead: {
     flexDirection: "row",

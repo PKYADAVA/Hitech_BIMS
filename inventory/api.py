@@ -29,6 +29,51 @@ from .models import (
 )
 
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from api.viewsets import V1ViewMixin
+
+
+class StockTransferItemLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/inventory/stock-transfer-item?item=<id>&date=<iso> — the
+    item's UOM and its issue price on that date.
+
+    The phone shows both on the transfer row the way the web form does. Both
+    call the same view function, so a price rule can never apply on one client
+    and not the other.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import json
+
+        from inventory.views import stock_transfer_item_lookup
+
+        return Response(json.loads(stock_transfer_item_lookup(request).content))
+
+
+class StockTransferStockLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/inventory/stock-transfer-stock?location_type=&location_id=
+    &item=<id>&date=<iso> — what is actually at that location on that date.
+
+    Reconciled across every transaction type, not just prior transfers, and it
+    is the same figure StockTransfer.clean() enforces on save — so what the row
+    shows and what the save allows cannot disagree.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import json
+
+        from inventory.views import stock_transfer_stock_lookup
+
+        return Response(json.loads(stock_transfer_stock_lookup(request).content))
+
+
 def register(router) -> None:
     # --- Master data (full CRUD; list also serves as picker data) -------
     register_model(router, "inventory/item-categories", ItemCategory,
