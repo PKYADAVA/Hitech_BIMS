@@ -43,6 +43,13 @@ def last_commit_time(path):
     return int(stamp) if stamp.isdigit() else None
 
 
+def is_dirty(path):
+    """True when `path` has changes not yet committed."""
+    out = subprocess.run(["git", "status", "--porcelain", "--", str(path)],
+                         capture_output=True, text=True)
+    return bool(out.stdout.strip())
+
+
 def when(unix_time):
     return datetime.datetime.fromtimestamp(unix_time).isoformat(" ", "seconds")
 
@@ -68,6 +75,14 @@ class CacheBustingTests(SimpleTestCase):
         for rel, _ in VERSIONED.findall(BASE.read_text(encoding="utf-8")):
             source = pathlib.Path("static") / rel
             if not source.exists():
+                continue
+            # An edit still sitting in the working tree has no commit time at
+            # all, so comparing those alone reports OK while the browser is
+            # already being served something older. If the asset is dirty,
+            # base.html has to be dirty too — that is the bump.
+            if is_dirty(source) and not is_dirty(BASE):
+                stale.append("%s has uncommitted edits but base.html — which "
+                             "holds its ?v= — does not" % rel)
                 continue
             changed_at = last_commit_time(source)
             if changed_at is None:

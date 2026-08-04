@@ -80,12 +80,13 @@
       <hr class="my-4">
 
       <div class="table-responsive">
-        <table class="table table-bordered align-middle ds-entry ds-fit" id="hatch-item-rows-table">
+        <table class="table table-bordered align-middle ds-entry" id="hatch-item-rows-table">
           <thead class="table-light">
             <tr>
-              <th class="c-fit m-field">Hatch Item</th>
-              <th class="c-num m-short ds-num">Quantity</th>
+              <th class="c-fit" style="width:16.666%">Hatch Item</th>
+              <th class="c-num ds-num" style="width:8.333%">Quantity</th>
               <th class="c-fit" style="width:90px;"></th>
+              <th class="ds-spacer"></th>
             </tr>
           </thead>
           <tbody id="hatch-item-rows-body"></tbody>
@@ -168,6 +169,7 @@ $(document).ready(function () {
                         <button type="button" class="btn btn-outline-danger btn-sm remove-row" title="Remove row"><i class="fas fa-times"></i></button>
                     </div>
                 </td>
+                <td class="ds-spacer"></td>
             </tr>
         `);
         $("#hatch-item-rows-body").append(row);

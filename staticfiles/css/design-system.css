@@ -301,9 +301,17 @@
 .ds table.ds-entry .m-num   { min-width: 5.5rem; }
 .ds table.ds-entry .m-mid   { min-width: 9rem; }
 .ds table.ds-entry .m-long  { min-width: 12rem; }
-/* Matches a col-md-2 form field (~238px), so a compact grid sitting under
-   a form row lines up with it instead of reading as a stray small box. */
-.ds table.ds-entry .m-field { min-width: 15rem; }
+/* A grid with only two or three real fields keeps the full width of the form
+   above it — a percentage column tracks col-md-2 at every screen size, where a
+   fixed width matched at one and drifted at the rest — and parks the leftover
+   in a spacer that draws nothing. Without it the slack lands in the actions
+   cell, which then reads as an enormous empty box. */
+.ds table.ds-entry th.ds-spacer,
+.ds table.ds-entry td.ds-spacer {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
 
 /* Where the browser supports it, the control is exactly as wide as its value.
    Guarded so it can only ever shrink a column, never overflow one. */
