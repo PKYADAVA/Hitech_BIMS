@@ -325,12 +325,17 @@ export const FORMS: Record<string, FormSchema> = {
     },
   },
   "broiler-medicine-vaccine": {
+    // Ordered and paired as on the ERP form: who, then where and when, then
+    // what was given, then the note. Supervisor leads because it is the one
+    // field that governs the whole entry rather than describing it.
     fields: [
-      date("date", "Date", true),
       SUPERVISOR(),
-      FARM(true),
-      BATCH(true),
-      num("age_days", "Age (days)"),
+      // Where: farm and its batch, read together.
+      { ...FARM(true), group: "where" },
+      { ...BATCH(true), group: "where" },
+      // When: the age the farm implies, beside the date it applies to.
+      { ...num("age_days", "Age (days)"), readOnly: true, group: "when" },
+      { ...date("date", "Date", true), group: "when" },
       // The item picker takes the full width: at phone width, four controls on
       // one line crushed it to "Selec..." and wrapped its label. The three that
       // follow are short — a unit, a number, a read-only balance — and read as
