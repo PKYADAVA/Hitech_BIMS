@@ -49,6 +49,10 @@ function FieldShell({
   );
 }
 
+/** Fields whose empty value is honestly a zero rather than nothing yet. */
+const numericType = (field: FormField) =>
+  field.type === "number" || field.type === "decimal";
+
 export function FormControl({
   field,
   value,
@@ -75,7 +79,13 @@ export function FormControl({
     return (
       <FieldShell label={field.label} error={error}>
         <View style={[styles.input, styles.readonly]}>
-          <Text style={styles.readonlyText}>{value || "0"}</Text>
+          {/* An empty derived field showed "0" whatever it held, so a Capture
+              No. still to be assigned and a Farmer not yet looked up both read
+              as the number zero. A zero is only the honest empty value for the
+              numeric ones; everything else says what will fill it. */}
+          <Text style={value ? styles.readonlyText : styles.placeholder}>
+            {value || field.placeholder || (numericType(field) ? "0" : "—")}
+          </Text>
         </View>
       </FieldShell>
     );
@@ -134,7 +144,7 @@ export function FormControl({
     );
   }
 
-  const numeric = field.type === "number" || field.type === "decimal";
+  const numeric = numericType(field);
   return (
     <FieldShell label={field.label} required={field.required} error={error}>
       <TextInput
