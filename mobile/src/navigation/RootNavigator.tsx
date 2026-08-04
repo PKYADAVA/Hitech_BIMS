@@ -16,6 +16,7 @@ import { DocumentFormScreen } from "@/screens/DocumentFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
+import { MedicineEntryFormScreen } from "@/screens/MedicineEntryFormScreen";
 import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
@@ -131,6 +132,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
       <ModuleStack.Screen name="BirdSaleReceiptForm" component={BirdSaleReceiptFormScreen} />
       <ModuleStack.Screen name="DailyEntryGrid" component={DailyEntryGridScreen} />
+      <ModuleStack.Screen name="MedicineEntryForm" component={MedicineEntryFormScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />

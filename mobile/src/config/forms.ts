@@ -47,6 +47,14 @@ export interface FormField {
    * field filter for.
    */
   options?: { value: string; label: string }[];
+  /**
+   * Replaces the default "Select <label>" prompt on an empty `select`.
+   *
+   * For a field whose options depend on an earlier one: an empty Farm picker
+   * is not "no farms", it is "pick a supervisor first", and saying so is the
+   * difference between a form that guides and one that looks broken.
+   */
+  placeholder?: string;
   /** Computed/derived — rendered but not editable (value comes from `compute`). */
   readOnly?: boolean;
   /** Display-only helper (e.g. a running total) — shown but never sent to the API. */

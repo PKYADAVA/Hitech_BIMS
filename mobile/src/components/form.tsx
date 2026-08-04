@@ -213,7 +213,7 @@ function SelectControl({
     <>
       <Pressable style={styles.input} onPress={() => setOpen(true)}>
         <Text style={selectedLabel ? styles.inputText : styles.placeholder} numberOfLines={1}>
-          {selectedLabel || `Select ${field.label.toLowerCase()}`}
+          {selectedLabel || field.placeholder || `Select ${field.label.toLowerCase()}`}
         </Text>
         <AppIcon name="chevron-down" size={20} color={colors.textFaint} />
       </Pressable>

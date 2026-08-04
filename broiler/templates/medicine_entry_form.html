@@ -73,7 +73,6 @@
 
 {% block js %}
 <script>
-const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-unit="{% if item.consumption_uom %}{{ item.consumption_uom.symbol|default:item.consumption_uom.name|escapejs }}{% endif %}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 // Farms assigned to each supervisor (BroilerFarm.supervisor) — picking a
 // supervisor narrows the Farm dropdown to just their farms, as the two Daily
@@ -86,7 +85,12 @@ function farmOptionsFor(supId) {
   return '<option value="">select</option>' +
     farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
 }
-let currentFarmOptions = farmOptions;
+// Farm is picked *through* the supervisor, not beside them: until one is
+// chosen there is no meaningful farm list, and offering every farm in the
+// company invited a row against a farm the supervisor does not run. Batch is
+// gated on Farm the same way, one step further down.
+const noSupervisorOptions = '<option value="">select a supervisor first</option>';
+let currentFarmOptions = noSupervisorOptions;
 
 // Fill a row's Batch <select> from a lookup's `batches`. One open batch is
 // chosen for the user — that is the normal case and there is nothing to
@@ -237,7 +241,7 @@ function loadBatchFor(tr, farmId, batchId) {
 
 // Selecting a supervisor narrows every row's Farm dropdown to their farms.
 get('supervisor').addEventListener('change', function () {
-  currentFarmOptions = this.value ? farmOptionsFor(this.value) : farmOptions;
+  currentFarmOptions = this.value ? farmOptionsFor(this.value) : noSupervisorOptions;
   document.querySelectorAll('#row-table tbody tr .farm').forEach(sel => {
     sel.innerHTML = currentFarmOptions;
     sel.value = '';
