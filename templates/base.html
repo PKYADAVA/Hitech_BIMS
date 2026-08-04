@@ -42,11 +42,11 @@
   <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v=20260730" />
 
   <!-- Alerts & Notifications module (bell, centre, widget) -->
-  <link rel="stylesheet" href="{% static 'css/alerthub.css' %}?v=20260731b" />
+  <link rel="stylesheet" href="{% static 'css/alerthub.css' %}?v=20260804" />
 
   <!-- Design system: tokens + components. Scoped to `.ds`, so it only styles
        pages that opt in — the roll-out is page by page, not one big switch. -->
-  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260731" />
+  <link rel="stylesheet" href="{% static 'css/design-system.css' %}?v=20260804" />
 
   {% block css %}{% endblock %}
 
@@ -119,7 +119,7 @@
   <!-- Alerts & Notifications client: shared by the bell, the notification
        centre and the dashboard widget. Must load before the per-page js block
        below so those pages can call AlertHub.* -->
-  <script src="{% static 'js/alerthub.js' %}?v=20260731"></script>
+  <script src="{% static 'js/alerthub.js' %}?v=20260804"></script>
 
   {% block js %}{% endblock %}
 </body>
