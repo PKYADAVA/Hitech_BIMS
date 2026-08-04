@@ -301,6 +301,9 @@
 .ds table.ds-entry .m-num   { min-width: 5.5rem; }
 .ds table.ds-entry .m-mid   { min-width: 9rem; }
 .ds table.ds-entry .m-long  { min-width: 12rem; }
+/* Matches a col-md-2 form field (~238px), so a compact grid sitting under
+   a form row lines up with it instead of reading as a stray small box. */
+.ds table.ds-entry .m-field { min-width: 15rem; }
 
 /* Where the browser supports it, the control is exactly as wide as its value.
    Guarded so it can only ever shrink a column, never overflow one. */
