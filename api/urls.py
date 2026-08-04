@@ -22,6 +22,7 @@ from broiler.api import (
     MedicineStockLookupView,
 )
 from broiler.api import register as register_broiler
+from broiler.api_write import write_urls as broiler_write_urls
 from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
 from inventory.api import register as register_inventory
@@ -176,6 +177,7 @@ urlpatterns = [
     path("user/users/<int:pk>/roles", UserRolesView.as_view(), name="user-roles"),
     # Inventory + Purchase transaction writes — reuse the web posting logic
     # (declared before the router so they win over the read-only resource routes).
+    *broiler_write_urls(),
     *inventory_write_urls(),
     *purchase_write_urls(),
     *sales_write_urls(),
