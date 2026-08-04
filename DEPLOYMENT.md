@@ -523,20 +523,24 @@ sudo systemctl status gunicorn nginx postgresql
 sudo journalctl -u gunicorn -n 50 --no-pager
 ```
 
-## B11. GitHub Actions CI/CD
+## B11. GitHub Actions CI
 
-Workflow: `.github/workflows/deploy.yml`. On push to `main`: runs Django
-checks/tests against an ephemeral Postgres service container, then (only on
-`main`, only if tests pass) SSHes into the droplet and runs `deploy.sh`.
+Workflow: `.github/workflows/ci.yml`. On push to `main` and on pull requests:
+runs the Django checks/tests against an ephemeral Postgres service container,
+and the phone app's typecheck and Jest suite.
 
-Required GitHub Secrets (Settings → Secrets and variables → Actions):
+**It does not deploy.** Production is DigitalOcean App Platform (Appendix A),
+which builds from `main` by itself on every push. CI is not a gate on that
+deploy — App Platform starts building as soon as the commit lands, whether or
+not the tests have finished, let alone passed.
 
-| Secret | Value |
-|---|---|
-| `DROPLET_HOST` | Droplet IP or domain |
-| `DROPLET_USER` | `deploy` |
-| `SSH_PRIVATE_KEY` | The private key from B3 |
-| `PROJECT_PATH` | `/home/deploy/hitech_bims` |
+The workflow used to carry a third job that SSHed into a droplet and ran
+`deploy.sh`. It never once succeeded: `DROPLET_HOST`, `DROPLET_USER`,
+`SSH_PRIVATE_KEY` and `PROJECT_PATH` were never set on the repo, so the SSH
+action stopped on "missing server host" every time — while the test jobs
+underneath it passed. It was removed once App Platform was confirmed as
+production. B12 below describes `deploy.sh` for the droplet path, which is no
+longer wired to CI; it is also no longer in the repo (removed in 650dc41).
 
 Ruff/Pylint steps in the workflow only run if this repo has a config for
 them (`ruff.toml`/`.pylintrc`/relevant `pyproject.toml` sections) — currently
