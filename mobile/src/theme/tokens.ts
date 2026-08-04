@@ -32,9 +32,9 @@ const ACCENTS = {
   user: "#64748b", // slate-500
   accent: "#f59e0b", // amber-500 — warm highlight pop
   danger: "#dc2626",
-  success: "#16a34a",
-  warning: "#f59e0b",
-  info: "#2563eb",
+  success: "#0f9d58", // matches --ds-success in the ERP design system
+  warning: "#d97706", // --ds-warning (amber-600) in the ERP design system
+  info: "#0ea5e9", // --ds-info; distinct from the blue used for actions
 };
 
 export const lightColors = {
@@ -44,7 +44,11 @@ export const lightColors = {
   primaryLight: "#e2e8f0", // slate-200 — subtle tints
   // Interactive FOREGROUND brand color (links, active tab, accent text/icons).
   // Kept dark in light mode, but bright in dark mode so it stays legible.
-  tint: "#1e293b",
+  // Actions — buttons, links, active states — are the ERP's --ds-primary
+  // blue. Chrome stays charcoal (see `primary`), which the ERP navbar
+  // already uses, so the two products share both: charcoal frame, blue
+  // action. Picking one for each is what stops them reading as two apps.
+  tint: "#2563eb",
 
   ...ACCENTS,
 
@@ -90,7 +94,7 @@ export const darkColors: Palette = {
   primaryDark: "#0f172a",
   primaryLight: withAlpha("#94a3b8", 0.16),
   // Bright foreground brand color so links / active tab / accent text read on dark.
-  tint: "#cbd5e1", // slate-300
+  tint: "#60a5fa", // blue-400 — the action blue, lifted for dark surfaces
 
   ...ACCENTS,
 
