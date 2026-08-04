@@ -331,8 +331,11 @@ export const FORMS: Record<string, FormSchema> = {
       FARM(true),
       BATCH(true),
       num("age_days", "Age (days)"),
-      // One row, as on the ERP: item · unit · qty · available stock.
-      { ...ITEM("item", "Medicine / Vaccine", true), group: "consumption" },
+      // The item picker takes the full width: at phone width, four controls on
+      // one line crushed it to "Selec..." and wrapped its label. The three that
+      // follow are short — a unit, a number, a read-only balance — and read as
+      // the ERP's row without squeezing the one control that needs room.
+      ITEM("item", "Medicine / Vaccine", true),
       { ...text("unit", "Unit"), readOnly: true, group: "consumption" },
       { ...dec("qty", "Quantity"), group: "consumption" },
       { ...text("stock", "Available Stock"), readOnly: true, group: "consumption" },
