@@ -121,7 +121,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # DROPLET_HOST has never been set on this repo, so every run since the
+      # workflow was added went red here on "missing server host" — while the
+      # tests underneath it passed. A red tick that means "a deploy nobody
+      # configured did not happen" teaches people to ignore the tick, and then
+      # a genuinely broken build looks exactly the same.
+      #
+      # Skipped, not passed: the job is visibly skipped in the run, and starts
+      # deploying for real the moment the four secrets exist.
+      #
+      # `secrets` is not available to a job-level `if`, hence the step.
+      - name: Is the droplet configured?
+        id: cfg
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+        run: |
+          if [ -z "$DROPLET_HOST" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No DROPLET_HOST secret — skipping the droplet deploy."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy over SSH
+        if: steps.cfg.outputs.configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DROPLET_HOST }}
