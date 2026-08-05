@@ -1,9 +1,10 @@
 /**
  * Design tokens for a modern, business-oriented BIMS.
  *
- * A near-black charcoal-slate brand (premium monochrome dashboard language)
- * carries the chrome — headers, primary buttons, full-bleed auth screens — and
- * lets the per-module accent colors supply all the life. Everything non-color
+ * A deep navy-indigo brand carries the chrome — headers, primary buttons,
+ * full-bleed auth screens — and the per-module accents supply the life. Both
+ * come from the ERP dashboard reference, so a module reads the same colour on
+ * the phone as it does there. Everything non-color
  * (spacing, radius, type scale, elevation) is theme-independent and lives here;
  * colors come in a light and a dark palette with identical keys so any screen
  * can switch by reading the active one from `useTheme()`.
@@ -21,15 +22,15 @@ export function withAlpha(hex: string, alpha: number): string {
 // Module + semantic accents are vivid enough to read on either background, so
 // they're shared. Only their pale *Light tints and the neutrals differ per theme.
 const ACCENTS = {
-  broiler: "#ea580c", // orange-600
-  hatchery: "#d97706", // amber-600
-  sms: "#2563eb", // blue-600
-  account: "#0d9488", // teal-600
-  inventory: "#0891b2", // cyan-600
-  sales: "#e11d48", // rose-600
-  purchase: "#9333ea", // purple-600
-  hr: "#db2777", // pink-600
-  user: "#64748b", // slate-500
+  broiler: "#ea580c", // orange — Broiler Production
+  hatchery: "#4338ca", // indigo — Hatchery Management
+  sms: "#2563eb", // blue — messaging
+  account: "#1d4ed8", // blue — Finance & Accounts
+  inventory: "#0891b2", // cyan — Inventory & Stock
+  sales: "#16a34a", // green — Sales & Dispatch
+  purchase: "#f59e0b", // amber — Purchase Management
+  hr: "#0d9488", // teal — HR & Attendance
+  user: "#4f46e5", // indigo — User & Role
   accent: "#f59e0b", // amber-500 — warm highlight pop
   danger: "#dc2626",
   success: "#0f9d58", // matches --ds-success in the ERP design system
@@ -39,9 +40,9 @@ const ACCENTS = {
 
 export const lightColors = {
   // Brand — charcoal slate (monochrome premium)
-  primary: "#1e293b", // slate-800 — near-black charcoal (button/header BACKGROUND)
-  primaryDark: "#0f172a", // slate-900 — deepest: auth backdrops, pressed states
-  primaryLight: "#e2e8f0", // slate-200 — subtle tints
+  primary: "#1e2a5a", // deep navy indigo — the reference's sidebar/chrome
+  primaryDark: "#141c3d", // deeper still: auth backdrops, pressed states
+  primaryLight: "#e0e7ff", // indigo-100 — subtle tints
   // Interactive FOREGROUND brand color (links, active tab, accent text/icons).
   // Kept dark in light mode, but bright in dark mode so it stays legible.
   // Actions — buttons, links, active states — are the ERP's --ds-primary
@@ -54,14 +55,14 @@ export const lightColors = {
 
   // Per-module pale tints
   broilerLight: "#ffedd5",
-  hatcheryLight: "#fef3c7",
+  hatcheryLight: "#e0e7ff",
   smsLight: "#dbeafe",
-  accountLight: "#ccfbf1",
+  accountLight: "#dbeafe",
   inventoryLight: "#cffafe",
-  salesLight: "#ffe4e6",
-  purchaseLight: "#f3e8ff",
-  hrLight: "#fce7f3",
-  userLight: "#e2e8f0",
+  salesLight: "#dcfce7",
+  purchaseLight: "#fef3c7",
+  hrLight: "#ccfbf1",
+  userLight: "#e0e7ff",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",
@@ -90,9 +91,9 @@ export type Palette = typeof lightColors;
 
 export const darkColors: Palette = {
   // Brand — lift the charcoal so it stays visible (and white-text-safe) on dark.
-  primary: "#334155", // slate-700 — button/header background (white text)
-  primaryDark: "#0f172a",
-  primaryLight: withAlpha("#94a3b8", 0.16),
+  primary: "#2c3a6e", // the navy lifted so white text still reads on dark
+  primaryDark: "#141c3d",
+  primaryLight: withAlpha("#a5b4fc", 0.16),
   // Bright foreground brand color so links / active tab / accent text read on dark.
   tint: "#60a5fa", // blue-400 — the action blue, lifted for dark surfaces
 

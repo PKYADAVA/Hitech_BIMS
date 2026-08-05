@@ -118,6 +118,48 @@ const TILES: Tile[] = [
   { key: "user", title: "Users", subtitle: "Roles & permissions", icon: "👤", color: colors.user, target: "UserModule" },
 ];
 
+/**
+ * The ERP dashboard's Quick Action row, on the phone.
+ *
+ * Deliberately the same seven in the same order as `user/templates/home.html`
+ * rather than a mobile-only selection: someone who works both screens should
+ * not have to learn two sets of shortcuts. Each opens that resource's list,
+ * which is where the web links land too.
+ *
+ * Chicks Placement is the exception — the phone has no placement *transaction*
+ * list, only the register — so it opens the report of the same name.
+ */
+interface QuickAction {
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+  tab: NonNullable<Tile["target"]>;
+  resourceKey?: string;
+  report?: { title: string; path: string };
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { key: "batch", label: "Batch Creation", icon: "📦", color: colors.broiler,
+    tab: "Broiler", resourceKey: "broiler-batches" },
+  { key: "placement", label: "Chicks Placement", icon: "🐥", color: colors.hatchery,
+    tab: "Broiler", report: { title: "Chicks Placement", path: "/reports/chicks-placement" } },
+  { key: "feed", label: "Feed Transfer", icon: "🚚", color: colors.inventory,
+    tab: "InventoryModule", resourceKey: "inventory-stock-transfers" },
+  { key: "daily", label: "Daily Entry", icon: "📋", color: colors.broiler,
+    tab: "Broiler", resourceKey: "broiler-daily-entries" },
+  { key: "medicine", label: "Medicine & Vaccine", icon: "💉", color: colors.danger,
+    tab: "Broiler", resourceKey: "broiler-medicine-vaccine" },
+  { key: "sale", label: "Bird Sale", icon: "🐔", color: colors.sales,
+    tab: "Broiler", resourceKey: "broiler-bird-sales" },
+  { key: "receipt", label: "Bird Receipt", icon: "🧾", color: colors.account,
+    tab: "Broiler", resourceKey: "broiler-sale-receipts" },
+];
+
+/** Which module governs an action, so permissions hide it with its module. */
+const moduleOf = (a: QuickAction): string =>
+  a.tab === "InventoryModule" ? "inventory" : String(a.tab).toLowerCase();
+
 function initialsOf(user: AuthUser | null): string {
   return (user?.full_name || user?.username || "?")
     .split(" ")
@@ -242,6 +284,30 @@ export function HomeScreen({ navigation }: Props) {
         <IndicatorCarousel indicators={buildIndicators(ov)} />
 
         <View style={styles.body}>
+          <SectionHeader title="Quick Access" subtitle="The dashboard's shortcuts" />
+          <View style={styles.quickGrid}>
+            {QUICK_ACTIONS.filter((a) => !permsLoaded || canModule(moduleOf(a))).map((a) => (
+              <Pressable
+                key={a.key}
+                style={styles.quickCard}
+                onPress={() =>
+                  a.report
+                    ? navigation.navigate(a.tab as any, { screen: "Report", params: a.report })
+                    : navigation.navigate(a.tab as any, {
+                        screen: "List", params: { resourceKey: a.resourceKey },
+                      })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={a.label}
+              >
+                <View style={[styles.quickIcon, { backgroundColor: withAlpha(a.color, 0.14) }]}>
+                  <AppIcon emoji={a.icon} size={20} color={a.color} />
+                </View>
+                <Text style={styles.quickLabel} numberOfLines={2}>{a.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
           <SectionHeader title="Modules" subtitle="Jump into a workspace" />
           <View style={styles.grid}>
             {tiles.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
@@ -344,6 +410,27 @@ const useStyles = makeStyles((colors) => ({
   chartTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
 
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  quickCard: {
+    // Four to a row on a phone, so seven actions read as two tidy lines.
+    width: "22.7%",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  quickIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickLabel: { ...type.caption, color: colors.text, textAlign: "center" },
   tileShadow: {
     width: "48%",
     borderRadius: radius.lg,
