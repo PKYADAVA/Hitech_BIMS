@@ -16,6 +16,14 @@ export interface Overview {
     active_batches: number;
     farms: number;
     mortality_7d: TrendPoint[];
+    /* Today's Overview. Optional so an older server still parses. */
+    birds_placed_today?: number;
+    feed_kg_today?: number;
+    /** A share of the birds alive, not a raw count. */
+    mortality_pct_today?: number;
+    /** Live indicator: feed eaten against live weight, across open batches. */
+    fcr?: number;
+    live_birds?: number;
   };
   hatchery: {
     egg_purchases_today: number;
@@ -26,6 +34,26 @@ export interface Overview {
   // Optional: only present once the extended /stats/overview backend is deployed.
   inventory?: { items: number; transfers_today: number };
   account?: { vouchers_today: number; accounts: number };
+  /** Today's farm visits — the count, how many are finished, and the first few. */
+  visits?: {
+    today: number;
+    completed: number;
+    rows: { farm: string; purpose: string; at: string; done: boolean }[];
+  };
+  /** Unread alerts: the totals for the KPI tiles and the newest few to list. */
+  alerts?: {
+    pending: number;
+    high: number;
+    rows: { title: string; severity: string; at: string }[];
+  };
+  /** The System Summary strip. */
+  system?: {
+    users: number;
+    farms: number;
+    stores: number;
+    items: number;
+    batches: number;
+  };
 }
 
 export async function fetchOverview(): Promise<Overview> {

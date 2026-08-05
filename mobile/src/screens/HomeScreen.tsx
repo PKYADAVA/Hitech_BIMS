@@ -160,6 +160,86 @@ const QUICK_ACTIONS: QuickAction[] = [
 const moduleOf = (a: QuickAction): string =>
   a.tab === "InventoryModule" ? "inventory" : String(a.tab).toLowerCase();
 
+const num = (v?: number, dp = 0) =>
+  v === undefined || v === null ? "–" : v.toLocaleString(undefined, {
+    minimumFractionDigits: dp, maximumFractionDigits: dp,
+  });
+
+/** Today's Overview — the day's four headline figures, as one short list. */
+function TodayOverview({ ov }: { ov?: Overview }) {
+  const styles = useStyles();
+  const b = ov?.broiler;
+  const rows: [string, string][] = [
+    ["Birds Placed Today", num(b?.birds_placed_today)],
+    ["Feed Consumption (kg)", num(b?.feed_kg_today)],
+    ["Mortality Today (%)", b?.mortality_pct_today === undefined
+      ? "–" : `${num(b.mortality_pct_today, 2)}%`],
+    // null means nothing weighed or sold yet — a dash, not a number.
+    ["FCR (Current Avg.)", b?.fcr == null ? "–" : num(b.fcr, 3)],
+  ];
+  return (
+    <Card style={styles.panel}>
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.panelRow}>
+          <Text style={styles.panelLabel}>{label}</Text>
+          <Text style={styles.panelValue}>{value}</Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+/** Recent Alerts and Farm Visit Today, side by side in the reference and
+ *  stacked here — a phone column cannot carry two lists abreast. */
+function ListPanel({
+  rows,
+  empty,
+}: {
+  rows: { key: string; title: string; meta: string; tone?: string }[];
+  empty: string;
+}) {
+  const styles = useStyles();
+  if (!rows.length) return <Card style={styles.panel}><Text style={styles.panelEmpty}>{empty}</Text></Card>;
+  return (
+    <Card style={styles.panel}>
+      {rows.map((r) => (
+        <View key={r.key} style={styles.panelRow}>
+          <View style={styles.panelMain}>
+            <Text style={styles.panelTitle} numberOfLines={1}>{r.title}</Text>
+            {r.meta ? <Text style={styles.panelMeta}>{r.meta}</Text> : null}
+          </View>
+          {r.tone ? <Badge label={r.tone} tone={r.tone === "Done" ? "success" : "neutral"} /> : null}
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+/** The System Summary strip: five counts of what exists, not of what happened. */
+function SystemSummary({ ov }: { ov?: Overview }) {
+  const styles = useStyles();
+  const s = ov?.system;
+  const cells: [string, string][] = [
+    ["Users", num(s?.users)],
+    ["Farms", num(s?.farms)],
+    ["Stores", num(s?.stores)],
+    ["Items", num(s?.items)],
+    ["Batches", num(s?.batches)],
+  ];
+  return (
+    <Card style={styles.panel}>
+      <View style={styles.summaryRow}>
+        {cells.map(([label, value]) => (
+          <View key={label} style={styles.summaryCell}>
+            <Text style={styles.summaryValue}>{value}</Text>
+            <Text style={styles.summaryLabel}>{label}</Text>
+          </View>
+        ))}
+      </View>
+    </Card>
+  );
+}
+
 function initialsOf(user: AuthUser | null): string {
   return (user?.full_name || user?.username || "?")
     .split(" ")
@@ -284,6 +364,9 @@ export function HomeScreen({ navigation }: Props) {
         <IndicatorCarousel indicators={buildIndicators(ov)} />
 
         <View style={styles.body}>
+          <SectionHeader title="Today's Overview" subtitle="The day so far" />
+          <TodayOverview ov={ov} />
+
           <SectionHeader title="Quick Access" subtitle="The dashboard's shortcuts" />
           <View style={styles.quickGrid}>
             {QUICK_ACTIONS.filter((a) => !permsLoaded || canModule(moduleOf(a))).map((a) => (
@@ -307,6 +390,29 @@ export function HomeScreen({ navigation }: Props) {
               </Pressable>
             ))}
           </View>
+
+          <SectionHeader title="Recent Alerts" subtitle={`${ov?.alerts?.pending ?? 0} unread`} />
+          <ListPanel
+            empty="Nothing unread."
+            rows={(ov?.alerts?.rows ?? []).map((a, i) => ({
+              key: `a${i}`, title: a.title, meta: a.at, tone: a.severity,
+            }))}
+          />
+
+          <SectionHeader
+            title="Farm Visit Today"
+            subtitle={`${ov?.visits?.completed ?? 0} of ${ov?.visits?.today ?? 0} done`}
+          />
+          <ListPanel
+            empty="No visits logged today."
+            rows={(ov?.visits?.rows ?? []).map((v, i) => ({
+              key: `v${i}`, title: v.farm, meta: [v.purpose, v.at].filter(Boolean).join(" · "),
+              tone: v.done ? "Done" : "Open",
+            }))}
+          />
+
+          <SectionHeader title="System Summary" subtitle="What is on the books" />
+          <SystemSummary ov={ov} />
 
           <SectionHeader title="Modules" subtitle="Jump into a workspace" />
           <View style={styles.grid}>
@@ -410,6 +516,24 @@ const useStyles = makeStyles((colors) => ({
   chartTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
 
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
+  panel: { marginBottom: spacing.lg, paddingVertical: spacing.xs },
+  panelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  panelMain: { flex: 1 },
+  panelLabel: { ...type.body, color: colors.textMuted },
+  panelValue: { ...type.title, color: colors.text },
+  panelTitle: { ...type.body, color: colors.text },
+  panelMeta: { ...type.caption, color: colors.textMuted, marginTop: 1 },
+  panelEmpty: { ...type.body, color: colors.textFaint, paddingVertical: spacing.sm },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: spacing.xs },
+  summaryCell: { alignItems: "center", flex: 1 },
+  summaryValue: { ...type.h3, color: colors.text },
+  summaryLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   quickGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
