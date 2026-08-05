@@ -13,6 +13,7 @@ import { Overview, useOverview } from "@/api/stats";
 import { IndicatorCarousel, Indicator } from "@/components/IndicatorCarousel";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
+import { useSideNav } from "@/store/sideNavStore";
 
 const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
 
@@ -89,34 +90,11 @@ function buildIndicators(ov?: Overview): Indicator[] {
 
 type Props = BottomTabScreenProps<TabParams, "Home">;
 
-interface Tile {
-  key: string;
-  title: string;
-  subtitle: string;
-  icon: string;
-  color: string;
-  /** Route to navigate to — a bottom tab or a Root-presented module screen. */
-  target?:
-    | keyof TabParams
-    | "AccountModule"
-    | "InventoryModule"
-    | "SalesModule"
-    | "PurchaseModule"
-    | "HrModule"
-    | "UserModule";
-}
-
-const TILES: Tile[] = [
-  { key: "account", title: "Accounts", subtitle: "Books, masters & vouchers", icon: "📒", color: colors.account, target: "AccountModule" },
-  { key: "broiler", title: "Broiler", subtitle: "Farm operations", icon: "🐔", color: colors.broiler, target: "Broiler" },
-  { key: "hatchery", title: "Hatchery", subtitle: "Egg to chick", icon: "🥚", color: colors.hatchery, target: "Hatchery" },
-  { key: "hr", title: "HR", subtitle: "People & payroll", icon: "👥", color: colors.hr, target: "HrModule" },
-  { key: "inventory", title: "Inventory", subtitle: "Items, stock & movements", icon: "📦", color: colors.inventory, target: "InventoryModule" },
-  { key: "purchase", title: "Purchase", subtitle: "Suppliers & purchases", icon: "🛒", color: colors.purchase, target: "PurchaseModule" },
-  { key: "sales", title: "Sales", subtitle: "Customers & invoices", icon: "💰", color: colors.sales, target: "SalesModule" },
-  { key: "sms", title: "SMS", subtitle: "Templates & history", icon: "💬", color: colors.sms, target: "SMS" },
-  { key: "user", title: "Users", subtitle: "Roles & permissions", icon: "👤", color: colors.user, target: "UserModule" },
-];
+/** A route the sidebar and the quick actions can both reach. */
+type NavTarget =
+  | keyof TabParams
+  | "AccountModule" | "InventoryModule" | "SalesModule"
+  | "PurchaseModule" | "HrModule" | "UserModule";
 
 /**
  * The ERP dashboard's Quick Action row, on the phone.
@@ -134,7 +112,7 @@ interface QuickAction {
   label: string;
   icon: string;
   color: string;
-  tab: NonNullable<Tile["target"]>;
+  tab: NavTarget;
   resourceKey?: string;
   report?: { title: string; path: string };
 }
@@ -277,6 +255,15 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
       {/* Brand row */}
       <View style={styles.brandRow}>
         <View style={styles.brand}>
+          <Pressable
+            onPress={() => useSideNav.getState().openNav("dashboard")}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+            style={styles.menuButton}
+          >
+            <AppIcon name="menu" size={22} color={colors.onDark} />
+          </Pressable>
           <View style={styles.logo}>
             <AppIcon emoji="🐔" size={22} color={colors.onDark} />
           </View>
@@ -323,18 +310,6 @@ export function HomeScreen({ navigation }: Props) {
   const navOrder = usePermissionsStore((s) => s.navOrder);
   const refreshPerms = usePermissionsStore((s) => s.refresh);
   const { data: ov, refetch, isFetching } = useOverview();
-
-  // Lay the tiles out in the order the server gives, so the Sort position set
-  // in User > Mobile Access is what an administrator actually sees on the
-  // phone. Anything the server did not place keeps its registry position at
-  // the end rather than disappearing.
-  const tiles = React.useMemo(() => {
-    if (!navOrder.length) return TILES;
-    const rank = new Map(navOrder.map((key, i) => [key, i]));
-    return [...TILES].sort(
-      (a, b) => (rank.get(a.key) ?? TILES.length) - (rank.get(b.key) ?? TILES.length)
-    );
-  }, [navOrder]);
 
   // Re-pull KPIs whenever Home regains focus (e.g. after sending an SMS on
   // another tab) — the tab isn't remounted, so a mount-only fetch goes stale.
@@ -413,39 +388,6 @@ export function HomeScreen({ navigation }: Props) {
 
           <SectionHeader title="System Summary" subtitle="What is on the books" />
           <SystemSummary ov={ov} />
-
-          <SectionHeader title="Modules" subtitle="Jump into a workspace" />
-          <View style={styles.grid}>
-            {tiles.filter((t) => !permsLoaded || canModule(t.key)).map((t) => {
-              const active = !!t.target;
-              return (
-                // Outer view carries the shadow (no clipping); inner Card clips
-                // the accent bar to the rounded corners. One view can't do both
-                // on Android (elevation + overflow:hidden fight), hence the wrap.
-                <View key={t.key} style={styles.tileShadow}>
-                  <Card
-                    padded={false}
-                    style={styles.tile}
-                    onPress={active ? () => navigation.navigate(t.target as any) : undefined}
-                  >
-                    <View style={styles.tileInner}>
-                      <View style={[styles.tileIcon, { backgroundColor: withAlpha(t.color, 0.14) }]}>
-                        <AppIcon emoji={t.icon} size={22} color={t.color} />
-                      </View>
-                      <Text style={styles.tileTitle}>{t.title}</Text>
-                      <Text style={styles.tileSub}>{t.subtitle}</Text>
-                      {!active ? (
-                        <View style={styles.soon}>
-                          <Badge label="Soon" tone="neutral" />
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={[styles.tileBar, { backgroundColor: t.color }]} />
-                  </Card>
-                </View>
-              );
-            })}
-          </View>
         </View>
       </ScrollView>
     </Screen>
@@ -516,6 +458,7 @@ const useStyles = makeStyles((colors) => ({
   chartTitle: { ...type.label, color: colors.textMuted, marginBottom: spacing.md },
 
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
+  menuButton: { paddingRight: spacing.xs },
   panel: { marginBottom: spacing.lg, paddingVertical: spacing.xs },
   panelRow: {
     flexDirection: "row",

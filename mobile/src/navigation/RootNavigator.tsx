@@ -5,6 +5,8 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { AppIcon } from "@/components/AppIcon";
+import { SideNav, SideNavButton } from "@/components/SideNav";
+import { useSideNav } from "@/store/sideNavStore";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
@@ -25,6 +27,7 @@ import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
+import { SupervisorTripFormScreen } from "@/screens/SupervisorTripFormScreen";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, shadow, useTheme } from "@/theme";
@@ -95,12 +98,15 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
     >
       <ModuleStack.Screen
         name="Hub"
+        listeners={{ focus: () => useSideNav.getState().setActive(moduleKey) }}
         options={{
           title: mod.title,
           headerTitle: headerTitleWithIcon(mod.icon, mod.title),
           // Root-presented modules (Accounts/Inventory) otherwise get a native
-          // back button on this first screen — hide it; return via swipe/back.
+          // back button on this first screen — hide it; the sidebar below is
+          // the way out, and swipe/back still works.
           headerBackVisible: false,
+          headerLeft: () => <SideNavButton tint={colors.onDark} />,
         }}
       >
         {(props) => <ModuleHubScreen {...props} moduleKey={moduleKey} />}
@@ -135,6 +141,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="DailyEntryGrid" component={DailyEntryGridScreen} />
       <ModuleStack.Screen name="MedicineEntryForm" component={MedicineEntryFormScreen} />
       <ModuleStack.Screen name="FarmCaptureForm" component={FarmCaptureFormScreen} />
+      <ModuleStack.Screen name="SupervisorTripForm" component={SupervisorTripFormScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />
@@ -218,6 +225,9 @@ export function RootNavigator() {
           <Root.Screen name="Login" component={LoginScreen} />
         )}
       </Root.Navigator>
+      {/* Rendered inside the container so it can navigate, and outside the
+          navigator so it floats over whatever screen is showing. */}
+      {status === "signedIn" ? <SideNav /> : null}
     </NavigationContainer>
   );
 }
