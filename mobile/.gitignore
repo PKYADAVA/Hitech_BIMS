@@ -12,3 +12,7 @@ web-build/
 # Native build output (managed workflow regenerates these)
 /ios
 /android
+
+# Release signing. Losing the keystore means never updating the Play listing
+# again, so this is backed up out of band, not committed.
+/credentials

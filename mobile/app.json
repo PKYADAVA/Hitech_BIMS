@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hitech BIMS",
     "slug": "hitech-bims-mobile",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "scheme": "hitechbims",
     "userInterfaceStyle": "automatic",
@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "com.hitechfarms.bims",
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -37,6 +38,7 @@
       }
     },
     "plugins": [
+      "./plugins/withReleaseSigning",
       "expo-notifications",
       [
         "expo-image-picker",
