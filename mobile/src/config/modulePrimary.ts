@@ -58,3 +58,30 @@ export const MODULE_SHORTCUT: Partial<Record<ModuleKey, ModuleShortcut>> = {
   account: { resourceKey: "account-vouchers", label: "Vouchers", icon: "book-outline" },
   hr: { resourceKey: "hr-employees", label: "Employees", icon: "account-group-outline" },
 };
+
+
+/**
+ * Each module's icon, matching the ERP's.
+ *
+ * The registry in `user/services/mobile_access.py` names a Font Awesome glyph
+ * per module; the app draws MaterialCommunityIcons. These are the MCI
+ * equivalents of those exact choices, so a module looks the same in both
+ * products.
+ *
+ * It replaces a set of emoji picked independently, which had drifted: Sales
+ * showed a banknote and Purchase a trolley, while the web had a trolley for
+ * Sales and a lorry for Purchase — the two were not merely different, they
+ * were crossed.
+ */
+export const MODULE_ICON: Record<ModuleKey, string> = {
+  broiler: "bird",                       // fa-kiwi-bird
+  hatchery: "egg",                       // fa-egg
+  inventory: "package-variant-closed",   // fa-boxes-stacked
+  sales: "cart",                         // fa-cart-shopping
+  purchase: "truck",                     // fa-truck
+  account: "book-open-variant",          // fa-book
+  hr: "account-tie",                     // fa-user-tie
+  sms: "message-text",                   // fa-comment-sms
+  user: "shield-account",                // fa-user-shield
+  change_requests: "file-document-edit", // fa-file-pen
+};

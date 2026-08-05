@@ -15,7 +15,7 @@ import React from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppIcon } from "@/components/AppIcon";
+import { AppIcon, IconName } from "@/components/AppIcon";
 import { colors, makeStyles, radius, spacing, type, withAlpha } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -25,6 +25,7 @@ import { useSideNav } from "@/store/sideNavStore";
 export interface NavItem {
   key: string;
   title: string;
+  /** MaterialCommunityIcons name — see MODULE_ICON. */
   icon: string;
   color: string;
   target?: string;
@@ -38,22 +39,22 @@ export interface NavItem {
  * cannot open, so this list is a lookup rather than the running order.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", title: "Dashboard", icon: "🏠", color: colors.tint, target: "Home" },
-  { key: "broiler", title: "Broiler", icon: "🐔", color: colors.broiler, target: "Broiler" },
-  { key: "hatchery", title: "Hatchery", icon: "🥚", color: colors.hatchery, target: "Hatchery" },
-  { key: "purchase", title: "Purchase", icon: "🛒", color: colors.purchase, target: "PurchaseModule" },
-  { key: "sales", title: "Sales", icon: "💰", color: colors.sales, target: "SalesModule" },
-  { key: "account", title: "Account", icon: "📒", color: colors.account, target: "AccountModule" },
-  { key: "inventory", title: "Inventory", icon: "📦", color: colors.inventory, target: "InventoryModule" },
-  { key: "hr", title: "Human Resource", icon: "👥", color: colors.hr, target: "HrModule" },
-  { key: "user", title: "User", icon: "👤", color: colors.user, target: "UserModule" },
-  { key: "sms", title: "SMS Management", icon: "💬", color: colors.sms, target: "SMS" },
-  { key: "change_requests", title: "Change Requests", icon: "📝",
+  { key: "dashboard", title: "Dashboard", icon: "view-dashboard-outline", color: colors.tint, target: "Home" },
+  { key: "broiler", title: "Broiler", icon: "bird", color: colors.broiler, target: "Broiler" },
+  { key: "hatchery", title: "Hatchery", icon: "egg", color: colors.hatchery, target: "Hatchery" },
+  { key: "purchase", title: "Purchase", icon: "truck", color: colors.purchase, target: "PurchaseModule" },
+  { key: "sales", title: "Sales", icon: "cart", color: colors.sales, target: "SalesModule" },
+  { key: "account", title: "Account", icon: "book-open-variant", color: colors.account, target: "AccountModule" },
+  { key: "inventory", title: "Inventory", icon: "package-variant-closed", color: colors.inventory, target: "InventoryModule" },
+  { key: "hr", title: "Human Resource", icon: "account-tie", color: colors.hr, target: "HrModule" },
+  { key: "user", title: "User", icon: "shield-account", color: colors.user, target: "UserModule" },
+  { key: "sms", title: "SMS Management", icon: "message-text", color: colors.sms, target: "SMS" },
+  { key: "change_requests", title: "Change Requests", icon: "file-document-edit",
     color: colors.change_requests, target: "ChangeRequestModule" },
   // Not a nav group of its own on the web — reports live inside each module
   // there — but the reference gives them one, and it is where someone looks
   // for "the mortality report" without first deciding which module owns it.
-  { key: "reports", title: "Reports & Analytics", icon: "📊",
+  { key: "reports", title: "Reports & Analytics", icon: "chart-bar",
     color: colors.tint, target: "ReportsModule" },
 ];
 
@@ -120,7 +121,7 @@ export function SideNav() {
                     accessibilityState={{ selected: on }}
                   >
                     <View style={[styles.rowIcon, { backgroundColor: withAlpha(item.color, on ? 0.24 : 0.14) }]}>
-                      <AppIcon emoji={item.icon} size={18} color={item.color} />
+                      <AppIcon name={item.icon as IconName} size={18} color={item.color} />
                     </View>
                     <Text style={[styles.rowText, on && styles.rowTextOn]} numberOfLines={1}>
                       {item.title}

@@ -1063,6 +1063,60 @@ class PhoneSectionOrderTests(TestCase):
         self.assertGreater(len(tiles), 70)
 
 
+class ModuleIconTests(TestCase):
+    """A module wears the same icon in both products.
+
+    The two sets were picked independently and had drifted apart — Sales showed
+    a banknote on the phone and a trolley on the web, Purchase a trolley on the
+    phone and a lorry on the web. Not merely different: crossed, so the icon
+    actively misled.
+
+    The registry names a Font Awesome glyph; the app draws
+    MaterialCommunityIcons, so they cannot be the same string. What is checked
+    is that every module the registry knows has a deliberate icon on the app
+    side, and that the app records which Font Awesome glyph it was chosen to
+    match — the comment beside each entry is the evidence, and a module added
+    without one fails here rather than quietly picking a default.
+    """
+
+    def app_icons(self):
+        """{key: (glyph, fa-name)} read from the client's MODULE_ICON."""
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        path = (Path(settings.BASE_DIR) / "mobile" / "src" / "config"
+                / "modulePrimary.ts")
+        if not path.exists():
+            self.skipTest("mobile client not present")
+        source = path.read_text(encoding="utf-8")
+        # key: "glyph", // fa-whatever
+        pairs = re.findall(
+            r'(\w+):\s*"([a-z0-9-]+)",\s*//\s*(fa-[a-z-]+)', source)
+        if not pairs:
+            self.skipTest("MODULE_ICON not found in the client")
+        return {key: (glyph, fa) for key, glyph, fa in pairs}
+
+    def test_every_module_has_an_icon_in_the_app(self):
+        icons = self.app_icons()
+        for key, _title, _nav, _icon, _colour in MOBILE_MODULES:
+            with self.subTest(module=key):
+                self.assertIn(key, icons, "no icon for this module in the app")
+
+    def test_the_app_records_which_web_glyph_each_matches(self):
+        """Without the note nobody can tell whether the pair still agrees."""
+        icons = self.app_icons()
+        for key, _title, _nav, fa_icon, _colour in MOBILE_MODULES:
+            if key not in icons:
+                continue
+            _glyph, noted = icons[key]
+            with self.subTest(module=key):
+                self.assertIn(noted, fa_icon,
+                              "the app says it matches %s, the registry uses %s"
+                              % (noted, fa_icon))
+
+
 class ModuleColourTests(TestCase):
     """The editor paints each module in the colour the phone paints it.
 

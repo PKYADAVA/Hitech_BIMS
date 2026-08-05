@@ -11,7 +11,7 @@ import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
 import { ModuleTabBar } from "@/components/ModuleTabBar";
-import { MODULE_PRIMARY } from "@/config/modulePrimary";
+import { MODULE_ICON, MODULE_PRIMARY } from "@/config/modulePrimary";
 import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
 import { BirdSaleReceiptFormScreen } from "@/screens/BirdSaleReceiptFormScreen";
@@ -70,6 +70,16 @@ function tabIcon(icon: string) {
 }
 
 /** Native header title that leads with the screen's icon, then its name. */
+/** Header title with a glyph, for the module chrome (see MODULE_ICON). */
+function headerTitleWithIconName(icon: string, title: string) {
+  return () => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <AppIcon name={icon as any} size={19} color={colors.onDark} />
+      <Text style={{ color: colors.onDark, fontSize: 17, fontWeight: "800" }}>{title}</Text>
+    </View>
+  );
+}
+
 function headerTitleWithIcon(icon: string, title: string) {
   return () => (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -127,7 +137,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
         listeners={{ focus: () => useSideNav.getState().setActive(moduleKey) }}
         options={{
           title: mod.title,
-          headerTitle: headerTitleWithIcon(mod.icon, mod.title),
+          headerTitle: headerTitleWithIconName(MODULE_ICON[moduleKey], mod.title),
           // Root-presented modules (Accounts/Inventory) otherwise get a native
           // back button on this first screen — hide it; the bar below is the
           // way out, and swipe/back still works.
