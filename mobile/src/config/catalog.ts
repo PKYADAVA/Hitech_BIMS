@@ -24,7 +24,8 @@ export type ModuleKey =
   | "sales"
   | "purchase"
   | "hr"
-  | "user";
+  | "user"
+  | "change_requests";
 
 export interface CardView {
   title: string;
@@ -678,7 +679,10 @@ const hatcheryResources: ResourceConfig[] = [
   },
   {
     key: "hatchery-change-requests",
-    module: "hatchery",
+    // Filed under its own module, not Hatchery: a request is raised against
+    // any transaction, and the resource key keeps the "hatchery-" prefix only
+    // because the API path does.
+    module: "change_requests",
     path: "/hatchery/change-requests/",
     title: "Change Requests",
     singular: "Change Request",
@@ -1858,12 +1862,6 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "hatchery-delivery-challans",
         ],
       },
-      {
-        title: "Other",
-        resourceKeys: [
-          "hatchery-change-requests",
-        ],
-      },
     ],
     reports: [
       { key: "hatch-performance", title: "Hatch Performance", icon: "📊", path: "/reports/hatch-performance" },
@@ -2058,6 +2056,22 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       },
     ],
   },
+  change_requests: {
+    key: "change_requests",
+    title: "Change Requests",
+    tagline: "Approvals for edits & deletions",
+    icon: "📝",
+    color: colors.change_requests,
+    colorLight: colors.change_requestsLight,
+    sections: [
+      {
+        title: "Requests",
+        resourceKeys: ["hatchery-change-requests"],
+      },
+    ],
+    reports: [],
+  },
+
   user: {
     key: "user",
     title: "Users",

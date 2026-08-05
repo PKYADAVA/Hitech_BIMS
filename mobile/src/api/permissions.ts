@@ -73,6 +73,7 @@ export const RESOURCE_TABS: Record<string, string> = {
   "hatchery-hatcheries": "hatchery_master_list",
   "hatchery-setters": "setter_list",
   "hatchery-hatchers": "hatcher_list",
+  "hatchery-change-requests": "change_requests",
   // Inventory
   "inventory-item-categories": "item_category",
   "inventory-items": "items",

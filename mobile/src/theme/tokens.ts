@@ -31,6 +31,8 @@ const ACCENTS = {
   purchase: "#f59e0b", // amber — Purchase Management
   hr: "#0d9488", // teal — HR & Attendance
   user: "#4f46e5", // indigo — User & Role
+  // Approvals are cross-cutting rather than one module's colour, so slate.
+  change_requests: "#64748b",
   accent: "#f59e0b", // amber-500 — warm highlight pop
   danger: "#dc2626",
   success: "#0f9d58", // matches --ds-success in the ERP design system
@@ -63,6 +65,7 @@ export const lightColors = {
   purchaseLight: "#fef3c7",
   hrLight: "#ccfbf1",
   userLight: "#e0e7ff",
+  change_requestsLight: "#e2e8f0",
 
   // Surfaces / neutrals (slate)
   bg: "#f8fafc",
@@ -109,6 +112,7 @@ export const darkColors: Palette = {
   purchaseLight: withAlpha(ACCENTS.purchase, 0.22),
   hrLight: withAlpha(ACCENTS.hr, 0.22),
   userLight: withAlpha(ACCENTS.user, 0.22),
+  change_requestsLight: withAlpha(ACCENTS.change_requests, 0.22),
 
   // Surfaces / neutrals — deep slate stack
   bg: "#0b1120",

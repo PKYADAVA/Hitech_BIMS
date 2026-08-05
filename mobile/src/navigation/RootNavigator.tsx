@@ -159,6 +159,7 @@ const SalesStack = () => <ModuleStackScreen moduleKey="sales" />;
 const PurchaseStack = () => <ModuleStackScreen moduleKey="purchase" />;
 const HrStack = () => <ModuleStackScreen moduleKey="hr" />;
 const UserStack = () => <ModuleStackScreen moduleKey="user" />;
+const ChangeRequestStack = () => <ModuleStackScreen moduleKey="change_requests" />;
 
 function AppTabs() {
   const { colors } = useTheme();
@@ -220,6 +221,7 @@ export function RootNavigator() {
             <Root.Screen name="PurchaseModule" component={PurchaseStack} />
             <Root.Screen name="HrModule" component={HrStack} />
             <Root.Screen name="UserModule" component={UserStack} />
+            <Root.Screen name="ChangeRequestModule" component={ChangeRequestStack} />
           </>
         ) : (
           <Root.Screen name="Login" component={LoginScreen} />

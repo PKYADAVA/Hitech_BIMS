@@ -33,14 +33,19 @@ from __future__ import annotations
 #:              one product starts feeling like two.
 MOBILE_MODULES = [
     ("broiler",   "Broiler",    "broiler",       "fa-solid fa-kiwi-bird",     "#ea580c"),
-    ("hatchery",  "Hatchery",   "hatchery",      "fa-solid fa-egg",           "#d97706"),
+    ("hatchery",  "Hatchery",   "hatchery",      "fa-solid fa-egg",           "#4338ca"),
     ("inventory", "Inventory",  "inventory",     "fa-solid fa-boxes-stacked", "#0891b2"),
-    ("sales",     "Sales",      "sales",         "fa-solid fa-cart-shopping", "#e11d48"),
-    ("purchase",  "Purchase",   "purchase",      "fa-solid fa-truck",         "#9333ea"),
-    ("account",   "Account",    "account",       "fa-solid fa-book",          "#0d9488"),
-    ("hr",        "HR",         "hr",            "fa-solid fa-user-tie",      "#db2777"),
+    ("sales",     "Sales",      "sales",         "fa-solid fa-cart-shopping", "#16a34a"),
+    ("purchase",  "Purchase",   "purchase",      "fa-solid fa-truck",         "#f59e0b"),
+    ("account",   "Account",    "account",       "fa-solid fa-book",          "#1d4ed8"),
+    ("hr",        "HR",         "hr",            "fa-solid fa-user-tie",      "#0d9488"),
     ("sms",       "SMS",        "notifications", "fa-solid fa-comment-sms",   "#2563eb"),
-    ("user",      "Users",      "user",          "fa-solid fa-user-shield",   "#64748b"),
+    ("user",      "Users",      "user",          "fa-solid fa-user-shield",   "#4f46e5"),
+    # Its own module, as on the web. A change request is raised against any
+    # transaction — the model happens to live in hatchery/models.py, which is
+    # the only reason the phone had it filed under Hatchery.
+    ("change_requests", "Change Requests", "change_requests",
+     "fa-solid fa-file-pen", "#64748b"),
 ]
 
 #: mobile module key -> nav group key
@@ -102,6 +107,10 @@ PHONE_SCREENS = [
     ("hatchery-hatcheries", "hatchery_master_list"),
     ("hatchery-setters", "setter_list"),
     ("hatchery-hatchers", "hatcher_list"),
+
+    # Change Requests — its own nav on the web, and now its own phone module,
+    # so the screen can finally be gated rather than listed as ungatable.
+    ("hatchery-change-requests", "change_requests"),
     # Inventory
     ("inventory-item-categories", "item_category"),
     ("inventory-items", "items"),
@@ -192,9 +201,6 @@ UNGATED_SCREENS = {
     "broiler-farmers":
         "Shares the branch_farm tab with broiler-farms; a second row would "
         "emit a duplicate checkbox name and one would overwrite the other.",
-    "hatchery-change-requests":
-        "Its tab lives under the change_requests nav, which has no phone "
-        "module, so Mobile Access has nothing to hang it on.",
     "hr-departments": "No web page exists, so there is no permission to inherit.",
     "hr-shifts": "No web page exists, so there is no permission to inherit.",
     "purchase-credit-terms": "No web page exists.",

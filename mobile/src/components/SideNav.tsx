@@ -48,6 +48,8 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "hr", title: "Human Resource", icon: "👥", color: colors.hr, target: "HrModule" },
   { key: "user", title: "User", icon: "👤", color: colors.user, target: "UserModule" },
   { key: "sms", title: "SMS Management", icon: "💬", color: colors.sms, target: "SMS" },
+  { key: "change_requests", title: "Change Requests", icon: "📝",
+    color: colors.change_requests, target: "ChangeRequestModule" },
 ];
 
 export function SideNav() {
