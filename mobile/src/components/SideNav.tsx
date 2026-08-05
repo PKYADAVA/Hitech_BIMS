@@ -50,6 +50,11 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "sms", title: "SMS Management", icon: "💬", color: colors.sms, target: "SMS" },
   { key: "change_requests", title: "Change Requests", icon: "📝",
     color: colors.change_requests, target: "ChangeRequestModule" },
+  // Not a nav group of its own on the web — reports live inside each module
+  // there — but the reference gives them one, and it is where someone looks
+  // for "the mortality report" without first deciding which module owns it.
+  { key: "reports", title: "Reports & Analytics", icon: "📊",
+    color: colors.tint, target: "ReportsModule" },
 ];
 
 export function SideNav() {
@@ -71,7 +76,8 @@ export function SideNav() {
     const dashboard = byKey.get("dashboard")!;
     if (!navOrder.length) return NAV_ITEMS;
     const ordered = navOrder.map((k) => byKey.get(k)).filter(Boolean) as NavItem[];
-    return [dashboard, ...ordered];
+    const reports = byKey.get("reports")!;
+    return [dashboard, ...ordered, reports];
   }, [navOrder]);
 
   const go = (item: NavItem) => {
@@ -101,7 +107,8 @@ export function SideNav() {
 
           <ScrollView showsVerticalScrollIndicator={false}>
             {items
-              .filter((i) => i.key === "dashboard" || !permsLoaded || canModule(i.key))
+              .filter((i) => ["dashboard", "reports"].includes(i.key)
+                             || !permsLoaded || canModule(i.key))
               .map((item) => {
                 const on = active === item.key;
                 return (

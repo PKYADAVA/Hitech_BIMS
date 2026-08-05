@@ -27,6 +27,7 @@ import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
+import { ReportsHubScreen, ReportsStackParams } from "@/screens/ReportsHubScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
 import { SupervisorTripFormScreen } from "@/screens/SupervisorTripFormScreen";
@@ -193,6 +194,37 @@ const HrStack = () => <ModuleStackScreen moduleKey="hr" />;
 const UserStack = () => <ModuleStackScreen moduleKey="user" />;
 const ChangeRequestStack = () => <ModuleStackScreen moduleKey="change_requests" />;
 
+/** Reports & Analytics: the index, and whichever report is opened from it. */
+const ReportsStackNav = createNativeStackNavigator<ReportsStackParams>();
+function ReportsStack() {
+  const { colors } = useTheme();
+  return (
+    <ReportsStackNav.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.tint },
+        headerTintColor: colors.onDark,
+        headerTitleStyle: { fontWeight: "800" },
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.bg },
+      }}
+    >
+      <ReportsStackNav.Screen
+        name="ReportsHub"
+        component={ReportsHubScreen}
+        options={{
+          title: "Reports & Analytics",
+          headerLeft: () => <SideNavButton tint={colors.onDark} />,
+        }}
+      />
+      <ReportsStackNav.Screen
+        name="Report"
+        component={ReportScreen}
+        options={({ route }) => ({ title: (route.params as any)?.title ?? "Report" })}
+      />
+    </ReportsStackNav.Navigator>
+  );
+}
+
 function AppTabs() {
   const { colors } = useTheme();
   const canModule = usePermissionsStore((s) => s.canModule);
@@ -254,6 +286,7 @@ export function RootNavigator() {
             <Root.Screen name="HrModule" component={HrStack} />
             <Root.Screen name="UserModule" component={UserStack} />
             <Root.Screen name="ChangeRequestModule" component={ChangeRequestStack} />
+            <Root.Screen name="ReportsModule" component={ReportsStack} />
           </>
         ) : (
           <Root.Screen name="Login" component={LoginScreen} />
