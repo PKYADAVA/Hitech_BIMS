@@ -47,6 +47,10 @@ export interface Overview {
     rows: { title: string; severity: string; at: string }[];
   };
   /** The System Summary strip. */
+  /** What was actually applied, echoed back. */
+  filters?: { farm: string; period: string };
+  /** The farm picker's options — the user's own farms. */
+  farm_options?: { id: number; name: string }[];
   system?: {
     users: number;
     farms: number;
@@ -56,16 +60,29 @@ export interface Overview {
   };
 }
 
-export async function fetchOverview(): Promise<Overview> {
-  const resp = await http.get<Envelope<Overview>>("/stats/overview");
+/** The dashboard's filters: a farm (blank = all) and how wide a window. */
+export interface OverviewFilters {
+  farm?: string;
+  period?: "today" | "week" | "month";
+}
+
+export async function fetchOverview(filters: OverviewFilters = {}): Promise<Overview> {
+  const resp = await http.get<Envelope<Overview>>("/stats/overview", {
+    params: {
+      ...(filters.farm ? { farm: filters.farm } : {}),
+      ...(filters.period && filters.period !== "today" ? { period: filters.period } : {}),
+    },
+  });
   return resp.data.data;
 }
 
 /** Cached dashboard KPIs for the Home screen. */
-export function useOverview() {
+export function useOverview(filters: OverviewFilters = {}) {
   return useQuery({
-    queryKey: ["stats-overview"],
-    queryFn: fetchOverview,
+    // The filters are part of the key, so switching farm or window fetches
+    // rather than showing the previous selection's numbers.
+    queryKey: ["stats-overview", filters.farm ?? "", filters.period ?? "today"],
+    queryFn: () => fetchOverview(filters),
     staleTime: 60_000,
   });
 }

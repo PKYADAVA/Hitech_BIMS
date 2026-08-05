@@ -42,6 +42,20 @@ class StatsOverviewView(V1ViewMixin, APIView):
         # had, one layer further out.
         farms = farms_for(request.user)
         farm_ids = list(farms.values_list("id", flat=True))
+
+        # The dashboard's two filters. A farm named in the query string is
+        # intersected with what the user may see rather than trusted — the
+        # picker only offers their own farms, but the query string is not the
+        # picker.
+        chosen = (request.query_params.get("farm") or "").strip()
+        if chosen.isdigit() and int(chosen) in farm_ids:
+            farm_ids = [int(chosen)]
+
+        # "Today" is the default; the others widen the window the day figures
+        # cover, so the same panel answers "this week" without a second screen.
+        period = (request.query_params.get("period") or "today").strip().lower()
+        span = {"today": 1, "week": 7, "month": 30}.get(period, 1)
+        since = today - timedelta(days=span - 1)
         days = [today - timedelta(days=i) for i in range(6, -1, -1)]  # oldest → today
 
         de_today = DailyEntry.objects.filter(date=today, farm_id__in=farm_ids)
@@ -84,7 +98,7 @@ class StatsOverviewView(V1ViewMixin, APIView):
             "transfers_today": StockTransfer.objects.filter(date=today).count(),
         }
 
-        broiler.update(self._today_overview(today, farm_ids))
+        broiler.update(self._today_overview(today, farm_ids, since))
 
         visits_today = SupervisorTripVisit.objects.filter(
             checked_in_at__date=today, farm_id__in=farm_ids)
@@ -147,6 +161,11 @@ class StatsOverviewView(V1ViewMixin, APIView):
 
         return Response({
             "date": str(today),
+            "filters": {"farm": chosen if chosen.isdigit() else "",
+                        "period": period if period in ("today", "week", "month") else "today"},
+            # The picker's options: the farms this user may look at.
+            "farm_options": [{"id": f.id, "name": f.farm_name}
+                             for f in farms.order_by("farm_name")[:200]],
             "broiler": broiler,
             "hatchery": hatchery,
             "sms": sms,
@@ -158,7 +177,7 @@ class StatsOverviewView(V1ViewMixin, APIView):
         })
 
     @staticmethod
-    def _today_overview(today, farm_ids):
+    def _today_overview(today, farm_ids, since=None):
         """The four figures the dashboard's Today's Overview panel shows.
 
         Mortality is a percentage of the birds actually alive, not a raw count:
@@ -173,12 +192,17 @@ class StatsOverviewView(V1ViewMixin, APIView):
         """
         from broiler.models import BirdSale
 
-        entries_today = DailyEntry.objects.filter(date=today, farm_id__in=farm_ids)
+        # `since` is the start of the chosen window — the same day as `today`
+        # unless the user widened it to a week or a month.
+        since = since or today
+        entries_today = DailyEntry.objects.filter(date__gte=since, date__lte=today,
+                                                  farm_id__in=farm_ids)
         feed_today = entries_today.aggregate(a=Sum("feed_1_qty"), b=Sum("feed_2_qty"))
         feed_kg_today = float((feed_today["a"] or 0) + (feed_today["b"] or 0))
 
         placed_today = (StockTransfer.objects
-                        .filter(date=today, to_location_type="farm",
+                        .filter(date__gte=since, date__lte=today,
+                                to_location_type="farm",
                                 to_farm_id__in=farm_ids,
                                 item__category__name__icontains="chick")
                         .aggregate(s=Sum("quantity"))["s"] or 0)

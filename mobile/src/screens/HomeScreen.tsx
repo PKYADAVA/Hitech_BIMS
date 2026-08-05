@@ -1,7 +1,7 @@
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
@@ -218,6 +218,29 @@ function SystemSummary({ ov }: { ov?: Overview }) {
   );
 }
 
+/** One filter chip that cycles through, or opens, its choices. */
+function FilterChip({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  return (
+    <Pressable style={styles.chip} onPress={onPress} accessibilityRole="button">
+      <Text style={styles.chipText} numberOfLines={1}>{label}</Text>
+      <AppIcon name="chevron-down" size={16} color={colors.onDark} />
+    </Pressable>
+  );
+}
+
+const PERIODS: { key: "today" | "week" | "month"; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+];
+
 function initialsOf(user: AuthUser | null): string {
   return (user?.full_name || user?.username || "?")
     .split(" ")
@@ -240,7 +263,15 @@ function greetingFor(date = new Date()): string {
   return "Good evening";
 }
 
-function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () => void }) {
+function HomeHeader({
+  user,
+  onProfile,
+  filters,
+}: {
+  user: AuthUser | null;
+  onProfile: () => void;
+  filters?: React.ReactNode;
+}) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const today = new Date().toLocaleDateString(undefined, {
@@ -297,6 +328,7 @@ function HomeHeader({ user, onProfile }: { user: AuthUser | null; onProfile: () 
           </Text>
         </View>
       ) : null}
+      {filters}
     </View>
   );
 }
@@ -309,7 +341,18 @@ export function HomeScreen({ navigation }: Props) {
   const permsLoaded = usePermissionsStore((s) => s.loaded);
   const navOrder = usePermissionsStore((s) => s.navOrder);
   const refreshPerms = usePermissionsStore((s) => s.refresh);
-  const { data: ov, refetch, isFetching } = useOverview();
+  const [farm, setFarm] = React.useState("");
+  const [period, setPeriod] = React.useState<"today" | "week" | "month">("today");
+  const [pickFarm, setPickFarm] = React.useState(false);
+  const { data: ov, refetch, isFetching } = useOverview({ farm, period });
+
+  const farmName = farm
+    ? ov?.farm_options?.find((f) => String(f.id) === farm)?.name ?? "Farm"
+    : "All Farms";
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "Today";
+  // Three choices cycle faster than they pick from a sheet.
+  const nextPeriod = () =>
+    setPeriod(PERIODS[(PERIODS.findIndex((p) => p.key === period) + 1) % PERIODS.length].key);
 
   // Re-pull KPIs whenever Home regains focus (e.g. after sending an SMS on
   // another tab) — the tab isn't remounted, so a mount-only fetch goes stale.
@@ -331,7 +374,16 @@ export function HomeScreen({ navigation }: Props) {
           <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={theme.primary} />
         }
       >
-        <HomeHeader user={user} onProfile={() => navigation.navigate("Profile")} />
+        <HomeHeader
+          user={user}
+          onProfile={() => navigation.navigate("Profile")}
+          filters={
+            <View style={styles.filterRow}>
+              <FilterChip label={farmName} onPress={() => setPickFarm(true)} />
+              <FilterChip label={periodLabel} onPress={nextPeriod} />
+            </View>
+          }
+        />
 
         <View style={styles.body}>
           <SectionHeader title="At a glance" subtitle="Today's key numbers across your farm" />
@@ -390,6 +442,36 @@ export function HomeScreen({ navigation }: Props) {
           <SystemSummary ov={ov} />
         </View>
       </ScrollView>
+
+      {/* Farm picker. "All Farms" leads, because it is the default and the one
+          someone returns to. */}
+      <Modal visible={pickFarm} animationType="slide" onRequestClose={() => setPickFarm(false)}>
+        <Screen edges={["top", "left", "right"]}>
+          <View style={styles.sheetHead}>
+            <Text style={styles.sheetTitle}>Farm</Text>
+            <Pressable onPress={() => setPickFarm(false)} hitSlop={8}>
+              <Text style={styles.sheetClose}>Close</Text>
+            </Pressable>
+          </View>
+          <ScrollView>
+            {[{ id: 0, name: "All Farms" }, ...(ov?.farm_options ?? [])].map((f) => {
+              const value = f.id ? String(f.id) : "";
+              return (
+                <Pressable
+                  key={f.id}
+                  style={styles.sheetRow}
+                  onPress={() => { setFarm(value); setPickFarm(false); }}
+                >
+                  <Text style={styles.sheetRowText}>{f.name}</Text>
+                  {farm === value ? (
+                    <AppIcon name="check" size={18} color={colors.tint} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Screen>
+      </Modal>
     </Screen>
   );
 }
@@ -459,6 +541,38 @@ const useStyles = makeStyles((colors) => ({
 
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
   menuButton: { paddingRight: spacing.xs },
+  filterRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  sheetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sheetTitle: { ...type.h3, color: colors.text },
+  sheetClose: { ...type.title, color: colors.tint },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sheetRowText: { ...type.body, color: colors.text },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill ?? 999,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    maxWidth: "48%",
+  },
+  chipText: { ...type.label, color: colors.onDark },
   panel: { marginBottom: spacing.lg, paddingVertical: spacing.xs },
   panelRow: {
     flexDirection: "row",

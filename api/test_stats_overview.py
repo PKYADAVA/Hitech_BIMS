@@ -305,3 +305,106 @@ class StatsOverviewScopingTests(TestCase):
         system = self.overview()["system"]
         self.assertEqual(system["farms"], 1)
         self.assertEqual(system["batches"], 1)
+
+
+class StatsOverviewFilterTests(TestCase):
+    """The dashboard's two filters: which farm, and how wide a window.
+
+    The farm one is intersected with the user's scope rather than trusted. The
+    picker only offers their own farms, but a query string is not a picker.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.chick = Item.objects.create(
+            description="Day Old Chicks",
+            category=ItemCategory.objects.create(name="Chicks"),
+            valuation_method="Weighted Average", standard_cost_per_unit=40,
+            usage="Produced", source="Purchased", type="Raw Material",
+            item_account="Expense")
+
+        self.a = self.farm("Alpha", branch, farmer, region, placed=1000)
+        self.b = self.farm("Beta", branch, farmer, region, placed=400)
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser("filt_user", "f@x.com",
+                                                  "Str0ngPass!")
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def farm(self, name, branch, farmer, region, placed):
+        supervisor = Supervisor.objects.create(branch=branch, name="%s Sup" % name)
+        farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=supervisor, farmer=farmer, region=region,
+            line="L1", farm_name=name, farm_capacity=5000)
+        batch = BroilerBatch.objects.create(
+            broiler_farm=farm, batch_name="%s-B1" % name,
+            start_date=self.today - timedelta(days=10))
+        StockTransfer.objects.create(item=self.chick, quantity=placed,
+                                     to_batch=batch, to_farm=farm,
+                                     to_location_type="farm", date=self.today)
+        # An older placement, outside "today" but inside a week.
+        StockTransfer.objects.create(item=self.chick, quantity=50,
+                                     to_batch=batch, to_farm=farm,
+                                     to_location_type="farm",
+                                     date=self.today - timedelta(days=3))
+        return farm
+
+    def overview(self, **params):
+        return self.client.get(URL, params).json()["data"]
+
+    def test_no_filter_covers_every_farm_and_today_only(self):
+        data = self.overview()
+        self.assertEqual(data["broiler"]["birds_placed_today"], 1400)
+        self.assertEqual(data["filters"]["period"], "today")
+
+    def test_choosing_a_farm_narrows_the_figures(self):
+        self.assertEqual(
+            self.overview(farm=str(self.a.id))["broiler"]["birds_placed_today"],
+            1000)
+
+    def test_widening_to_a_week_takes_in_the_earlier_days(self):
+        data = self.overview(period="week")
+        self.assertEqual(data["broiler"]["birds_placed_today"], 1500)
+        self.assertEqual(data["filters"]["period"], "week")
+
+    def test_the_two_filters_combine(self):
+        self.assertEqual(
+            self.overview(farm=str(self.a.id), period="week")
+            ["broiler"]["birds_placed_today"], 1050)
+
+    def test_the_picker_offers_the_user_s_farms(self):
+        names = {f["name"] for f in self.overview()["farm_options"]}
+        self.assertEqual(names, {"Alpha", "Beta"})
+
+    def test_a_nonsense_period_falls_back_to_today(self):
+        data = self.overview(period="decade")
+        self.assertEqual(data["filters"]["period"], "today")
+        self.assertEqual(data["broiler"]["birds_placed_today"], 1400)
+
+    def test_a_farm_outside_the_scope_is_ignored_not_obeyed(self):
+        """The query string is not the picker."""
+        from django.contrib.auth.models import Group
+
+        from user.models import GroupAccessProfile, GroupTabPermission
+
+        limited = get_user_model().objects.create_user("limited_ov", "l@x.com",
+                                                       "Str0ngPass!")
+        group = Group.objects.create(name="Alpha Only")
+        limited.groups.add(group)
+        GroupTabPermission.objects.create(group=group, tab_code="items",
+                                          can_view=True)
+        profile = GroupAccessProfile.objects.create(
+            group=group, access_type="sub_admin", all_farms=False)
+        profile.farms.add(self.a)
+
+        client = APIClient()
+        client.force_authenticate(limited)
+        data = client.get(URL, {"farm": str(self.b.id)}).json()["data"]
+        # Beta is not theirs, so the filter is dropped and they still see only
+        # Alpha — never Beta's numbers.
+        self.assertEqual(data["broiler"]["birds_placed_today"], 1000)
