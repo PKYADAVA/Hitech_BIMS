@@ -644,3 +644,87 @@ class MobileFarmLookupParityTests(TestCase):
             start_date=self.today - timedelta(days=3))
         names = {b["id"] for b in self.lookup()["batches"]}
         self.assertEqual(names, {first.id, second.id})
+
+
+class BirdSaleBatchTests(TestCase):
+    """A Bird Sale is filed against the batch the user chose.
+
+    This carried the same silent pick the entry forms did — whichever open
+    batch sorted first — and it matters more here: a sale takes birds off a
+    flock, so the wrong batch moves stock and follows through to the
+    settlement's mortality and FCR.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.supervisor = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.other_farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.supervisor, farmer=farmer,
+            region=region, line="L1", farm_name="Other Farm", farm_capacity=5000)
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser("bsale_user", "bs2@x.com",
+                                                  "Str0ngPass!")
+        self.client.force_login(self.user)
+
+    def batch(self, farm, name, days_ago=10):
+        return BroilerBatch.objects.create(
+            broiler_farm=farm, batch_name=name,
+            start_date=self.today - timedelta(days=days_ago))
+
+    def lookup(self):
+        from django.test import RequestFactory
+
+        from broiler.views import bird_sale_farm_lookup
+
+        request = RequestFactory().get("/x", {"farm": self.farm.id})
+        request.user = self.user
+        return json.loads(bird_sale_farm_lookup(request).content)
+
+    def test_the_lookup_reports_every_open_batch(self):
+        first = self.batch(self.farm, "B1", days_ago=30)
+        second = self.batch(self.farm, "B2", days_ago=4)
+        self.assertEqual({b["id"] for b in self.lookup()["batches"]},
+                         {first.id, second.id})
+
+    def test_the_sale_is_saved_against_the_chosen_batch(self):
+        from broiler.models import BirdSale
+        from broiler.views import _apply_bird_sale
+
+        older = self.batch(self.farm, "Older", days_ago=30)
+        self.batch(self.farm, "Newer", days_ago=4)      # would win by default
+
+        sale = BirdSale()
+        _apply_bird_sale(sale, {"farm": self.farm.id, "batch": older.id,
+                                "sale_type": "farmer",
+                                "date": self.today.isoformat()})
+        self.assertEqual(sale.batch, older)
+
+    def test_no_batch_sent_still_falls_back_to_the_open_one(self):
+        from broiler.models import BirdSale
+        from broiler.views import _apply_bird_sale
+
+        only = self.batch(self.farm, "Only")
+        sale = BirdSale()
+        _apply_bird_sale(sale, {"farm": self.farm.id, "sale_type": "farmer",
+                                "date": self.today.isoformat()})
+        self.assertEqual(sale.batch, only)
+
+    def test_a_batch_from_another_farm_is_refused(self):
+        from broiler.models import BirdSale
+        from broiler.views import _apply_bird_sale
+
+        mine = self.batch(self.farm, "Mine")
+        theirs = self.batch(self.other_farm, "Theirs")
+        sale = BirdSale()
+        _apply_bird_sale(sale, {"farm": self.farm.id, "batch": theirs.id,
+                                "sale_type": "farmer",
+                                "date": self.today.isoformat()})
+        self.assertEqual(sale.batch, mine)

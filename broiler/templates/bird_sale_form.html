@@ -103,7 +103,7 @@ function row() {
                placeholder="—" title="Outstanding ledger balance"></td>
     <td><input class="form-control form-control-sm doc-no"></td>
     <td><select class="form-select form-select-sm farm" required>${farmOptions}</select></td>
-    <td><input class="form-control form-control-sm bg-light batch" readonly></td>
+    <td><select class="form-select form-select-sm batch" required><option value="">select a farm first</option></select></td>
     <td><input class="form-control form-control-sm birds" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control form-control-sm net-weight" type="number" min="0" step="0.01" value="0" required></td>
     <td><input class="form-control form-control-sm bg-light avg-weight" readonly value="0.00"></td>
@@ -199,17 +199,34 @@ get('row-table').addEventListener('change', e => {
     const farmId = e.target.value;
     const farmerDisplay = tr.querySelector('.farmer-display');
     if (!farmId) {
-      tr.querySelector('.batch').value = '';
+      fillBatchSelect(tr.querySelector('.batch'), []);
       farmerDisplay.value = ''; farmerDisplay.dataset.farmerId = '';
       return;
     }
     fetch(`{% url 'bird_sale_farm_lookup' %}?farm=${farmId}`).then(r => r.json()).then(data => {
-      tr.querySelector('.batch').value = data.batch_name || 'No active batch';
+      fillBatchSelect(tr.querySelector('.batch'), data.batches);
       farmerDisplay.value = data.farmer_name || 'No farmer on record for this farm';
       farmerDisplay.dataset.farmerId = data.farmer || '';
     });
   }
 });
+
+// One open batch is chosen for the user; more than one has to be asked,
+// because a sale takes birds off whichever flock it names.
+function fillBatchSelect(sel, batches) {
+  const list = batches || [];
+  if (!list.length) {
+    sel.innerHTML = '<option value="">no open batch</option>';
+  } else if (list.length === 1) {
+    sel.innerHTML = `<option value="${list[0].id}">${escapeHtml(list[0].name)}</option>`;
+    sel.value = String(list[0].id);
+  } else {
+    sel.innerHTML = '<option value="">select batch</option>' +
+      list.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('');
+    sel.value = '';
+  }
+  if (window.jQuery) jQuery(sel).trigger('change.select2');
+}
 
 get('row-table').addEventListener('click', e => {
   if (e.target.closest('.remove') && !e.target.closest('.remove').disabled) {
@@ -228,6 +245,7 @@ get('bird-sale-form').addEventListener('submit', function (e) {
     farmer: saleType === 'farmer' ? tr.querySelector('.farmer-display').dataset.farmerId : '',
     doc_no: tr.querySelector('.doc-no').value,
     farm: tr.querySelector('.farm').value,
+    batch: tr.querySelector('.batch').value,
     birds: tr.querySelector('.birds').value,
     net_weight: tr.querySelector('.net-weight').value,
     rate: tr.querySelector('.rate').value,
@@ -270,7 +288,12 @@ get('bird-sale-form').addEventListener('submit', function (e) {
   tr.querySelector('.customer').value = "{{ instance.customer_id|default:'' }}";
   tr.querySelector('.doc-no').value = "{{ instance.doc_no|escapejs }}";
   tr.querySelector('.farm').value = "{{ instance.farm_id }}";
-  tr.querySelector('.batch').value = "{{ instance.batch.batch_name|default:''|escapejs }}";
+  // Editing: show the saved batch as the chosen one.
+  {% if instance and instance.batch_id %}
+  fillBatchSelect(tr.querySelector('.batch'),
+                  [{ id: {{ instance.batch_id }},
+                     name: "{{ instance.batch.batch_name|escapejs }}" }]);
+  {% endif %}
   const farmerDisplay = tr.querySelector('.farmer-display');
   farmerDisplay.value = "{{ instance.farmer.farmer_name|default:''|escapejs }}";
   farmerDisplay.dataset.farmerId = "{{ instance.farmer_id|default:'' }}";

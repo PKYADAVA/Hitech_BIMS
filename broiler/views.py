@@ -2697,7 +2697,7 @@ def _apply_bird_sale(instance, data):
     instance.sale_type = sale_type
     farm_id = data.get("farm") or None
     instance.farm_id = farm_id
-    instance.batch = _active_batch_for_farm(farm_id) if farm_id else None
+    instance.batch = _resolve_batch(farm_id, data.get("batch"))
     if sale_type == "customer":
         instance.customer_id = data.get("customer") or None
         instance.farmer_id = None
@@ -2816,11 +2816,15 @@ def bird_sale_farm_lookup(request):
     form's auto-filled Batch field and Farmer Sale buyer (always the same
     farmer who grew the birds on this farm) as soon as a Farm is picked."""
     farm_id = request.GET.get("farm")
-    batch = _active_batch_for_farm(farm_id) if farm_id else None
+    batch = _resolve_batch(farm_id, request.GET.get("batch"))
     farm = BroilerFarm.objects.filter(id=farm_id).select_related("farmer").first() if farm_id else None
     return JsonResponse({
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
+        # Every open batch, so the form can fill the box in when there is one
+        # and ask when there is more — a sale filed against the wrong flock
+        # takes birds off it, which the stock and the settlement both carry.
+        "batches": _batch_options(farm_id),
         "farmer": farm.farmer_id if farm else None,
         "farmer_name": farm.farmer.farmer_name if farm and farm.farmer_id else "",
     })
