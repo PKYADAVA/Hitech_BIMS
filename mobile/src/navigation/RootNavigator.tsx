@@ -1,5 +1,5 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, NavigationContainer, useNavigation } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
@@ -10,6 +10,7 @@ import { useSideNav } from "@/store/sideNavStore";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { MODULE_PRIMARY } from "@/config/modulePrimary";
 import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
 import { BirdSaleReceiptFormScreen } from "@/screens/BirdSaleReceiptFormScreen";
@@ -82,6 +83,28 @@ function headerTitleWithIcon(icon: string, title: string) {
  * Root-presented ones (Accounts, Inventory), which return via the swipe/back
  * gesture rather than a header button.
  */
+/** The module header's create button, or nothing. */
+function ModulePrimaryButton({ moduleKey }: { moduleKey: ModuleKey }) {
+  const navigation = useNavigation<any>();
+  const { colors } = useTheme();
+  const primary = MODULE_PRIMARY[moduleKey];
+  const canResource = usePermissionsStore((s) => s.canResource);
+  if (!primary || !isEditable(primary.resourceKey)) return null;
+  if (!canResource(primary.resourceKey, moduleKey, "add")) return null;
+  return (
+    <Pressable
+      hitSlop={12}
+      onPress={() => openRecordForm(navigation, primary.resourceKey, "create")}
+      accessibilityRole="button"
+      accessibilityLabel={primary.label}
+      style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+    >
+      <AppIcon name="plus" size={18} color={colors.onDark} />
+      <Text style={{ color: colors.onDark, fontWeight: "700" }}>{primary.label}</Text>
+    </Pressable>
+  );
+}
+
 function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
   const { colors } = useTheme();
   const mod = MODULES[moduleKey];
@@ -107,6 +130,10 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           // the way out, and swipe/back still works.
           headerBackVisible: false,
           headerLeft: () => <SideNavButton tint={colors.onDark} />,
+          // The module's one create action, beside its title as the reference
+          // has it — hidden when the user may not add, and absent for modules
+          // with nothing obvious to create.
+          headerRight: () => <ModulePrimaryButton moduleKey={moduleKey} />,
         }}
       >
         {(props) => <ModuleHubScreen {...props} moduleKey={moduleKey} />}
