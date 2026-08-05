@@ -32,6 +32,7 @@ from inventory.api import register as register_inventory
 from inventory.api_write import write_urls as inventory_write_urls
 from inventory.models import Item, Warehouse
 from hr.api import register as register_hr
+from hr.api_write import write_urls as hr_write_urls
 from purchase.api import register as register_purchase
 from purchase.api_write import write_urls as purchase_write_urls
 from user.api import (RoleMobileModuleView, RoleModuleView, RolesAccessView,
@@ -189,6 +190,7 @@ urlpatterns = [
     # Inventory + Purchase transaction writes — reuse the web posting logic
     # (declared before the router so they win over the read-only resource routes).
     *broiler_write_urls(),
+    *hr_write_urls(),
     *inventory_write_urls(),
     *purchase_write_urls(),
     *sales_write_urls(),

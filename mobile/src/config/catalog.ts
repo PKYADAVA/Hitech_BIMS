@@ -46,6 +46,18 @@ export interface ResourceConfig {
   path: string;
   title: string; // plural, e.g. "Daily Entries"
   singular: string;
+  /**
+   * Field to offer a From/To range on, above the list. Registers people look
+   * up by *when* rather than by name — a day's trips, a month's — want this;
+   * a list of masters does not.
+   */
+  dateField?: string;
+  /**
+   * What the create button says, when "New" is not the verb. A trip is
+   * started, not added — the register's button is the instruction for how a
+   * supervisor begins their day.
+   */
+  createLabel?: string;
   icon: string;
   accent: string;
   emptyMessage: string;
@@ -1500,6 +1512,49 @@ const HR = colors.hr;
 
 const hrResources: ResourceConfig[] = [
   {
+    key: "hr-vehicles",
+    module: "hr",
+    path: "/hr/vehicles/",
+    title: "My Vehicles",
+    singular: "Vehicle",
+    createLabel: "Add Vehicle",
+    icon: "🏍",
+    accent: HR,
+    emptyMessage: "No vehicles registered yet. Add one and it is offered on every trip.",
+    searchKeys: ["registration", "nickname", "vehicle_type"],
+    card: (r) => ({
+      title: pick(r, ["registration"], `Vehicle #${r.id}`),
+      subtitle: joinParts([pick(r, ["nickname"]), pick(r, ["vehicle_type"])]),
+      // Which one is picked by default is the only thing worth seeing here.
+      badge: r.is_retired
+        ? { label: "retired", tone: "warning" }
+        : r.is_default ? { label: "usual", tone: "success" } : undefined,
+    }),
+  },
+  {
+    key: "hr-supervisor-trips",
+    module: "hr",
+    path: "/hr/trips/",
+    title: "Supervisor Daily Trip",
+    singular: "Daily Trip",
+    createLabel: "Start Trip",
+    dateField: "date",
+    icon: "🚗",
+    accent: HR,
+    emptyMessage: "No trips logged yet.",
+    searchKeys: ["employee_name", "trip_no", "registration", "date"],
+    card: (r) => ({
+      title: pick(r, ["trip_no"], `Trip #${r.id}`),
+      subtitle: joinParts([pick(r, ["employee_name"]), formatDate(r.date)]),
+      trailing: { value: `${r.distance_km ?? 0}`, caption: "km" },
+      // A trip still open is the one that needs finishing, so it says so
+      // rather than looking the same as yesterday's settled log.
+      badge: r.status === "Completed"
+        ? { label: "completed", tone: "success" }
+        : { label: "in progress", tone: "warning" },
+    }),
+  },
+  {
     key: "hr-employees",
     module: "hr",
     path: "/hr/employees/",
@@ -2045,6 +2100,12 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         title: "Payroll",
         resourceKeys: [
           "hr-payroll",
+        ],
+      },
+      {
+        title: "Employee Trip And Route",
+        resourceKeys: [
+          "hr-supervisor-trips",
         ],
       },
       {

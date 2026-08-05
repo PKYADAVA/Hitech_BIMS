@@ -110,6 +110,7 @@ export const RESOURCE_TABS: Record<string, string> = {
   "purchase-vendor-groups": "vendor_groups",
   "purchase-tax-masters": "tax_master",
   // HR
+  "hr-supervisor-trips": "supervisor_trip_report",
   "hr-employees": "employee_list",
   "hr-attendance": "employee_attendance",
   "hr-leaves": "leave_employee",

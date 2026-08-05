@@ -37,6 +37,9 @@ export interface AuthUser {
   username: string;
   email: string;
   full_name: string;
+  /** The Employee this login *is*, or null when it maps to no one. */
+  employee?: number | null;
+  employee_name?: string;
   is_staff: boolean;
   is_superuser: boolean;
   role: string;

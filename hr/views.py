@@ -47,7 +47,12 @@ logger = logging.getLogger(__name__)
 @login_required(login_url="login")
 def employee_list(request):
     """Display a list of employees."""
-    employees = Employee.objects.all().order_by("id")
+    # Vehicles come with the row: a driver registers them on the phone and this
+    # is where anyone in HR looks to see what someone travels on. Prefetched so
+    # the column costs one query rather than one per employee.
+    employees = (Employee.objects.all()
+                 .prefetch_related("vehicles")
+                 .order_by("id"))
 
     paginator = Paginator(employees, 10)
     page_number = request.GET.get("page")
@@ -1371,3 +1376,102 @@ def save_attendance(request):
         )
         saved += 1
     return JsonResponse({"message": f"Attendance saved for {saved} employee(s).", "saved": saved})
+
+
+# --- Supervisor Daily Trip report -------------------------------------------
+
+@login_required(login_url="login")
+def supervisor_trip_report(request):
+    """HR > Employee Trip And Route > Supervisor Daily Trip.
+
+    The trip itself is recorded on the phone — the photographs, the GPS
+    stamps and the odometer shots all have to be taken on the road — so this
+    end is a report over what came back, not a second place to enter one.
+
+    It answers the question the travel allowance is settled on: who went out,
+    how far they went, which farms they actually reached, and whether the
+    evidence for it is there. A trip with no odometer shot is a claim, not a
+    record, so the report says so on the row rather than leaving someone to
+    open each one to find out.
+    """
+    from django.db.models import Count, Sum
+    from hr.models import Employee, SupervisorTrip
+    from inventory.models import Warehouse
+    from user.services.scoping import scope_multi
+
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    from_date, to_date = g("from_date"), g("to_date")
+    employee_id, branch_id, status = g("employee"), g("branch"), g("status")
+
+    qs = (SupervisorTrip.objects
+          .select_related("employee", "employee__warehouse", "created_by")
+          .prefetch_related("visits", "visits__farm")
+          .annotate(visit_count=Count("visits", distinct=True))
+          .order_by("-date", "-id"))
+    qs = scope_multi(request.user, qs, sectors="employee__warehouse_id")
+
+    # Visibility is the branch/warehouse allotted to the viewer, not the row's
+    # owner: a branch manager is meant to see their people's travel, which is
+    # the whole point of a settlement report. scope_multi above applies it —
+    # an employee's branch is their Warehouse on the HR side.
+    #
+    # Deliberately *not* narrowed to the viewer's own employee record. That
+    # would be right for the phone, where a driver logs their own day, and
+    # wrong here, where the report exists to be reviewed.
+
+    # Kept before the request's own filters are applied: the dropdown should
+    # offer everyone in the viewer's scope, not collapse to the one name they
+    # have currently selected with no way back.
+    in_scope = qs
+
+    if from_date:
+        qs = qs.filter(date__gte=parse_date(from_date))
+    if to_date:
+        qs = qs.filter(date__lte=parse_date(to_date))
+    if employee_id.isdigit():
+        qs = qs.filter(employee_id=employee_id)
+    if branch_id.isdigit():
+        qs = qs.filter(employee__warehouse_id=branch_id)
+    if status:
+        qs = qs.filter(status=status)
+
+    trips = list(qs)
+    totals = qs.aggregate(distance=Sum("distance_km"))
+    summary = {
+        "trips": len(trips),
+        "distance": totals["distance"] or 0,
+        "visits": sum(t.visit_count for t in trips),
+        # Worth its own figure: these are the rows a settlement should query.
+        "missing_evidence": sum(1 for t in trips if not _trip_has_evidence(t)),
+    }
+
+    criteria = []
+    if from_date or to_date:
+        criteria.append(f"Dates: {from_date or 'start'} to {to_date or 'today'}")
+    if employee_id.isdigit():
+        criteria.append(f"Employee: {Employee.objects.filter(id=employee_id).first()}")
+    if status:
+        criteria.append(f"Status: {status}")
+
+    return render(request, "supervisor_trip_report.html", {
+        "trips": trips,
+        "summary": summary,
+        "criteria": " | ".join(criteria),
+        "from_date": from_date, "to_date": to_date,
+        "employee_id": employee_id, "branch_id": branch_id, "status": status,
+        # Only the people the viewer's scope can actually return rows for, so
+        # the dropdown cannot promise a name the report will never show.
+        "employees": Employee.objects.filter(
+            id__in=in_scope.values_list("employee_id", flat=True)).order_by("full_name"),
+        "branches": Warehouse.objects.order_by("name"),
+        "statuses": [c[0] for c in SupervisorTrip.STATUS_CHOICES],
+    })
+
+
+def _trip_has_evidence(trip):
+    """A trip is only settleable with both end photographs and both readings."""
+    return bool(trip.start_photo and trip.end_photo
+                and trip.start_odometer is not None
+                and trip.end_odometer is not None)

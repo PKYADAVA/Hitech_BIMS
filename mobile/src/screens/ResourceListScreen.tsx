@@ -9,7 +9,9 @@ import { AppIcon } from "@/components/AppIcon";
 import { RecordAction, RecordCard } from "@/components/RecordCard";
 import { ListSkeleton } from "@/components/Skeleton";
 import { EmptyOrError, SearchBar } from "@/components/ui";
+import { FormControl } from "@/components/form";
 import { RESOURCES } from "@/config/catalog";
+import { extraRowActions } from "@/config/rowActions";
 import { hasCreateForm, hasEditForm, openRecordForm } from "@/navigation/openForm";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
@@ -28,6 +30,8 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const can = usePermissionsStore((s) => s.canResource);
   const canAdd = can(config.key, config.module, "add");
   const canEdit = can(config.key, config.module, "edit");
@@ -60,6 +64,12 @@ export function ResourceListScreen({ route, navigation }: Props) {
         onPress: () => confirmDelete(row),
       });
     }
+    // Resource-specific actions (ending a trip, say) sit after the standard
+    // three, and only where that resource offers them.
+    if (canEdit) {
+      actions.push(...extraRowActions(config.key, row,
+        (screen, params) => navigation.navigate(screen, params)));
+    }
     return actions;
   };
 
@@ -90,14 +100,22 @@ export function ResourceListScreen({ route, navigation }: Props) {
   // Server feeds have no search_fields, so filter the loaded rows client-side.
   const data = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return list.items;
-    return list.items.filter((row) =>
-      config.searchKeys.some((k) => {
+    const field = config.dateField;
+    return list.items.filter((row) => {
+      if (q && !config.searchKeys.some((k) => {
         const v = row[k];
         return !isEmpty(v) && String(v).toLowerCase().includes(q);
-      })
-    );
-  }, [list.items, query, config.searchKeys]);
+      })) return false;
+      if (!field || (!from && !to)) return true;
+      // ISO dates compare correctly as strings, which is why the rows keep
+      // them in that form rather than something friendlier.
+      const on = String(row[field] ?? "").slice(0, 10);
+      if (!on) return false;
+      if (from && on < from) return false;
+      if (to && on > to) return false;
+      return true;
+    });
+  }, [list.items, query, from, to, config.searchKeys, config.dateField]);
 
   /**
    * Rows folded into their groups, newest group first and each group's own
@@ -123,7 +141,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
     return (
       <View style={styles.screen}>
         <View style={styles.searchWrap}>
-          <SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
+<SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
         </View>
         <ListSkeleton />
       </View>
@@ -146,6 +164,27 @@ export function ResourceListScreen({ route, navigation }: Props) {
   return (
     <View style={styles.screen}>
       <View style={styles.searchWrap}>
+        {/* A From/To range above the search, as the ERP reports have it: these
+            registers are looked up by when, not by name. */}
+        {config.dateField ? (
+          <View style={styles.dateRange}>
+            <View style={styles.dateCell}>
+              <FormControl field={{ name: "from", label: "From", type: "date" }}
+                           value={from} onChange={setFrom} />
+            </View>
+            <View style={styles.dateCell}>
+              <FormControl field={{ name: "to", label: "To", type: "date" }}
+                           value={to} onChange={setTo} />
+            </View>
+            {from || to ? (
+              <Pressable style={styles.dateClear} hitSlop={8}
+                         accessibilityLabel="Clear the date range"
+                         onPress={() => { setFrom(""); setTo(""); }}>
+                <AppIcon name="close-circle-outline" size={20} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
       </View>
       <FlatList<Row | GroupItem>
@@ -242,10 +281,10 @@ export function ResourceListScreen({ route, navigation }: Props) {
           ]}
           onPress={() => openRecordForm(navigation, config.key, "create")}
           accessibilityRole="button"
-          accessibilityLabel={`Add ${config.singular}`}
+          accessibilityLabel={config.createLabel ?? `Add ${config.singular}`}
         >
           <AppIcon name="plus" size={22} color="#fff" />
-          <Text style={styles.fabText}>New</Text>
+          <Text style={styles.fabText}>{config.createLabel ?? "New"}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -254,6 +293,9 @@ export function ResourceListScreen({ route, navigation }: Props) {
 
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
+  dateRange: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
+  dateCell: { flex: 1, minWidth: 0 },
+  dateClear: { paddingBottom: spacing.md },
   searchWrap: { padding: spacing.md, paddingBottom: spacing.sm },
   fill: { flexGrow: 1 },
   content: { padding: spacing.md, paddingTop: spacing.xs, gap: spacing.sm, paddingBottom: 96 },

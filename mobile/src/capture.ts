@@ -33,6 +33,58 @@ export class CapturePermissionError extends Error {
   }
 }
 
+/**
+ * Why a location could not be read.
+ *
+ * `captureLocation` collapses every failure into null, which is right where a
+ * pin is a bonus. Where it is *required* — a trip that cannot be started
+ * without one — the caller has to tell "switch your GPS on" from "this app
+ * needs permission", because they are fixed in different places.
+ */
+export type LocationProblem = "services-off" | "denied" | "no-fix";
+
+export class LocationUnavailableError extends Error {
+  constructor(public reason: LocationProblem) {
+    super(`location unavailable: ${reason}`);
+    this.name = "LocationUnavailableError";
+  }
+}
+
+/** Current position, or a typed error saying what to fix. */
+export async function requireLocation(): Promise<CapturedPoint> {
+  return withPrivilegedUI(async () => {
+    if (!(await Location.hasServicesEnabledAsync())) {
+      throw new LocationUnavailableError("services-off");
+    }
+    const perm = await Location.requestForegroundPermissionsAsync();
+    if (!perm.granted) throw new LocationUnavailableError("denied");
+    try {
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return {
+        latitude: String(pos.coords.latitude),
+        longitude: String(pos.coords.longitude),
+      };
+    } catch {
+      throw new LocationUnavailableError("no-fix");
+    }
+  });
+}
+
+/** Open the place the user has to go to fix it: the device's location
+ *  settings on Android, this app's settings elsewhere. */
+export async function openLocationSettings(): Promise<void> {
+  if (Platform.OS === "android") {
+    const IntentLauncher = await import("expo-intent-launcher");
+    await IntentLauncher.startActivityAsync(
+      IntentLauncher.ActivityAction.LOCATION_SOURCE_SETTINGS);
+    return;
+  }
+  const { Linking } = await import("react-native");
+  await Linking.openSettings();
+}
+
 function toCaptured(asset: ImagePicker.ImagePickerAsset): CapturedImage {
   // Derive a filename the backend can store; ImagePicker omits it on some
   // Android providers, and Django needs *some* name to write the file.

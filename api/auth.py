@@ -85,6 +85,20 @@ def _user_payload(user) -> dict:
         "role": getattr(profile, "role", "") or "",
         "department": getattr(profile, "department", "") or "",
         "groups": list(user.groups.values_list("name", flat=True)),
+        # Which employee this login *is*, if any. Null for a login with no
+        # employee record, which is the signal a form needs to decide between
+        # "your name, fixed" and "choose whose".
+        **_employee_identity(user),
+    }
+
+
+def _employee_identity(user) -> dict:
+    from hr.models import Employee
+
+    found = Employee.objects.filter(user=user).values("id", "full_name").first()
+    return {
+        "employee": found["id"] if found else None,
+        "employee_name": found["full_name"] if found else "",
     }
 
 

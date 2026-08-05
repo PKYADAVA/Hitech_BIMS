@@ -70,14 +70,27 @@ class AutoQuerysetMixin:
         # Generic exact-match filtering: ?<field>=<value> for any concrete,
         # non-text field (incl. FK ids, so line items filter by ?parent=<id>).
         filterable = {
-            f.name: f.attname if f.is_relation else f.name
+            f.name: (f.attname if f.is_relation else f.name, f.get_internal_type())
             for f in model._meta.concrete_fields
             if f.get_internal_type() not in _NON_FILTER_TYPES
         }
         for key, value in self.request.query_params.items():
             if key in _RESERVED_PARAMS or key not in filterable:
                 continue
-            qs = qs.filter(**{filterable[key]: value})
+            lookup, kind = filterable[key]
+            if kind == "BooleanField":
+                # A query string carries "true"/"false", and Django hands those
+                # straight to the field, which rejects them — so any boolean
+                # filter on any resource answered 500 rather than filtering.
+                # Anything unrecognisable is ignored rather than guessed at.
+                truthy = str(value).strip().lower()
+                if truthy in ("true", "1", "yes"):
+                    value = True
+                elif truthy in ("false", "0", "no"):
+                    value = False
+                else:
+                    continue
+            qs = qs.filter(**{lookup: value})
 
         # Incremental sync: return only rows changed since a timestamp.
         since = self.request.query_params.get("updated_since")
@@ -130,6 +143,16 @@ API_SCOPES = {
     # register with scope_multi on exactly these two fields.
     "broiler.FarmLocationCapture": {"branches": "farm__branch_id", "farms": "farm_id"},
     "broiler.BroilerFarmShed": {"farms": "farm_id"},
+
+    # A trip is one employee's day, and an employee belongs to a branch
+    # (Warehouse on the HR side), so a branch login sees their own people's
+    # travel. The visits inherit it a hop further along, or come in through the
+    # farm they called at.
+    "hr.EmployeeVehicle": {"sectors": "employee__warehouse_id"},
+    "hr.SupervisorTrip": {"sectors": "employee__warehouse_id"},
+    "hr.SupervisorTripVisit": {"mode": "any",
+                               "sectors": "trip__employee__warehouse_id",
+                               "farms": "farm_id"},
     "inventory.Warehouse": {"sectors": "id"},
     "sales.Customer": {"customer_groups": "customer_group_id"},
 
@@ -192,6 +215,32 @@ API_SCOPES = {
 #: "the link exists" is not sufficient grounds; the web view for the same model
 #: has to scope it the same way.
 UNSCOPED_API_MODELS = {
+    # --- Surfaced when this guard began reading the router --------------
+    # These were exposed all along but invisible to the check, which used to
+    # scan each app's api.py for register_model calls: it never saw resources
+    # registered from api/urls.py (the SMS and shared groups), from an app not
+    # on its hardcoded list (hatchery_master), or under a different app label
+    # from the module registering them (auth.User via user/api.py).
+    #
+    # Recorded here as found, not blessed. Two of them deserve a real decision
+    # rather than a default, and are marked as such.
+    "auth.User": "Admin-only endpoint (IsAdminUser); user administration is company-wide",
+    "auth.Group": "Admin-only endpoint (IsAdminUser); groups are company-wide",
+    "hatchery_master.Hatchery": "Master data, no location dimension of its own",
+    "hatchery_master.Hatcher": "Master data, no location dimension of its own",
+    "hatchery_master.Setter": "Master data, no location dimension of its own",
+    "hatchery_master.ExpenseType": "Master data, no location dimension",
+    "hatchery_master.HatcheryExpense": (
+        "REVIEW: a transaction, not a master — it belongs to one hatchery and "
+        "arguably wants a sector scope. Left unscoped only because it was "
+        "already so before this guard could see it"),
+    "notification.SmsTemplate": "Company-wide message templates",
+    "notification.SmsSettings": "One gateway configuration for the company",
+    "notification.SmsMessage": (
+        "REVIEW: a log of messages sent, carrying party name and mobile "
+        "number. Unscoped as found; worth deciding whether a branch login "
+        "should read every branch's messages"),
+
     # Reference and configuration data: no branch, farm or warehouse dimension
     # to scope by. Everyone who may read them may read all of them.
     "account.BankCashMaster": "Master data, no location dimension",
@@ -266,28 +315,23 @@ UNSCOPED_API_MODELS = {
 def registered_api_models():
     """Every model the mobile API exposes, as ``app_label.ModelName``.
 
-    Read from the ``register_model`` calls rather than the router, so it can be
-    used from a test without building the whole API.
+    Read from the router, which is the only thing that actually decides what is
+    exposed. This used to regex-scan each app's ``api.py`` for
+    ``register_model`` calls, which missed any resource registered directly —
+    and a resource whose queryset needs narrowing (hr/trips) has to be, because
+    the generic registration cannot express that. The scan reported such a
+    model as unexposed and the scope-coverage guard failed on a model that was
+    both exposed and scoped.
     """
-    import re
-    from pathlib import Path
-
-    from django.apps import apps
-    from django.conf import settings
+    from .urls import router
 
     found = set()
-    for app in ("broiler", "hatchery", "inventory", "sales", "purchase", "hr",
-                "account", "user", "notification", "tracking"):
-        path = Path(settings.BASE_DIR) / app / "api.py"
-        if not path.exists():
-            continue
-        for match in re.finditer(
-                r"register_model\(\s*router,\s*\"[^\"]+\",\s*(\w+)",
-                path.read_text(encoding="utf-8")):
-            try:
-                model = apps.get_model(app, match.group(1))
-            except LookupError:
-                continue
+    for _prefix, viewset, _basename in router.registry:
+        model = getattr(getattr(viewset, "queryset", None), "model", None)
+        if model is None:
+            serializer = getattr(viewset, "serializer_class", None)
+            model = getattr(getattr(serializer, "Meta", None), "model", None)
+        if model is not None:
             found.add(f"{model._meta.app_label}.{model.__name__}")
     return found
 

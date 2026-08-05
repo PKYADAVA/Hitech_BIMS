@@ -742,6 +742,9 @@
               {% if 'tracking_visits' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_visits' %}">
                 <i class="fas fa-handshake"></i>Customer Visits
               </a></li>{% endif %}
+              {% if 'supervisor_trip_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supervisor_trip_report' %}">
+                <i class="fas fa-car-side"></i>Supervisor Daily Trip
+              </a></li>{% endif %}
               {% if 'tracking_routes' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'tracking_routes' %}">
                 <i class="fas fa-route"></i>Route History
               </a></li>{% endif %}

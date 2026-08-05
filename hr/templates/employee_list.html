@@ -163,6 +163,7 @@
             <th>Salary Type</th>
             <th>Personal Contact</th>
             <th>Emergency Contact</th>
+            <th>Vehicles</th>
             <th>Relieved</th>
             <th>Photo</th>
             <th class="ds-mid">Actions</th>
@@ -186,6 +187,17 @@
             </td>
             <td>{{ employee.personal_contact }}</td>
             <td>{{ employee.emergency_contact }}</td>
+            <td>
+              {% for v in employee.vehicles.all %}
+                <span class="badge {% if v.is_default %}bg-success{% else %}bg-secondary{% endif %}"
+                      title="{{ v.vehicle_type }}{% if v.is_default %} — usual vehicle{% endif %}{% if v.is_retired %} — off the road{% endif %}"
+                      style="{% if v.is_retired %}opacity:.55;{% endif %}">
+                  {{ v.registration }}{% if v.nickname %} ({{ v.nickname }}){% endif %}
+                </span>
+              {% empty %}
+                <span class="text-muted">—</span>
+              {% endfor %}
+            </td>
             <td id="statusCell-{{ employee.id }}">
               {% if employee.relieve %}
                 <span class="badge bg-danger">Yes</span>

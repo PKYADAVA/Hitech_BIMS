@@ -79,6 +79,7 @@ PHONE_SCREENS = [
     ("broiler-daily-entries", "daily_entry_list"),
     ("broiler-medicine-vaccine", "medicine_entry_list"),
     ("broiler-farm-location-capture", "farm_location_capture_list"),
+    ("hr-supervisor-trips", "supervisor_trip_report"),
     ("broiler-bird-sales", "bird_sale_list"),
     ("broiler-sale-receipts", "bird_sale_receipt_list"),
     ("broiler-farms", "branch_farm"),
@@ -201,6 +202,12 @@ UNGATED_SCREENS = {
     "broiler-farmers":
         "Shares the branch_farm tab with broiler-farms; a second row would "
         "emit a duplicate checkbox name and one would overwrite the other.",
+    "hr-vehicles":
+        "A driver's own vehicles, narrowed to them by the API. There is no web "
+        "page and no permission to inherit: it is their reference data, like a "
+        "profile, and gating it would only stop someone maintaining their own "
+        "list. Sharing the trip tab was the alternative and would emit that "
+        "tab twice in the editor.",
     "hr-departments": "No web page exists, so there is no permission to inherit.",
     "hr-shifts": "No web page exists, so there is no permission to inherit.",
     "purchase-credit-terms": "No web page exists.",

@@ -26,6 +26,7 @@ from hr.views import (
     daily_attendance,
     mark_attendance,
     save_attendance,
+    supervisor_trip_report,
 )
 
 
@@ -74,6 +75,8 @@ urlpatterns = [
     path("daily-attendance/", daily_attendance, name="daily_attendance"),
     path("mark-attendance/", mark_attendance, name="mark_attendance"),
     path("save-attendance/", save_attendance, name="save_attendance"),
+    path('supervisor-trip-report/', supervisor_trip_report,
+         name='supervisor_trip_report'),
 ]
 if settings.DEBUG:  # Only serve media files in development
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

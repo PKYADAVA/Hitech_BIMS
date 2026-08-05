@@ -16,8 +16,17 @@ export interface RecordAction {
   icon: IconName;
   /** Destructive actions read in the danger colour, as they do on the web. */
   danger?: boolean;
+  /**
+   * Shown but not offered. Greying an action out says the record is past the
+   * point where it applies; removing it leaves the row looking as though the
+   * action never existed, and the buttons shifting about between rows.
+   */
+  disabled?: boolean;
   onPress: () => void;
 }
+
+const actionColour = (a: RecordAction, colors: { danger: string; tint: string; textFaint: string }) =>
+  a.disabled ? colors.textFaint : a.danger ? colors.danger : colors.tint;
 
 /** Renders one catalog CardView: leading icon, title/subtitle, trailing value + badge. */
 export function RecordCard({
@@ -68,12 +77,14 @@ export function RecordCard({
       {actions?.length ? (
         <View style={styles.actions}>
           {actions.map((a) => (
-            <Pressable key={a.key} onPress={a.onPress} hitSlop={6}
-                       accessibilityLabel={a.label} style={styles.action}>
+            <Pressable key={a.key} onPress={a.disabled ? undefined : a.onPress}
+                       hitSlop={6} disabled={a.disabled}
+                       accessibilityLabel={a.label}
+                       accessibilityState={{ disabled: !!a.disabled }}
+                       style={[styles.action, a.disabled && styles.actionOff]}>
               <AppIcon name={a.icon} size={16}
-                       color={a.danger ? colors.danger : colors.tint} />
-              <Text style={[styles.actionText,
-                            { color: a.danger ? colors.danger : colors.tint }]}>
+                       color={actionColour(a, colors)} />
+              <Text style={[styles.actionText, { color: actionColour(a, colors) }]}>
                 {a.label}
               </Text>
             </Pressable>
@@ -101,6 +112,7 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
   },
   actionText: { ...type.caption, fontWeight: "700" },
+  actionOff: { opacity: 0.55 },
   body: { flex: 1, gap: 3 },
   title: { ...type.title, color: colors.text },
   subtitle: { ...type.caption, color: colors.textMuted },

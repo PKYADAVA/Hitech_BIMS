@@ -353,6 +353,35 @@ export const FORMS: Record<string, FormSchema> = {
       return adviseDailyEntry(c?.lookup ?? null, values, c?.opening);
     },
   },
+  /**
+   * A vehicle is registered once and picked on every trip afterwards, so this
+   * is a short form deliberately: the number, what the driver calls it, and
+   * whether it is the usual one.
+   */
+  "hr-vehicles": {
+    fields: [
+      // Whose vehicle. A driver leaves it alone — the server fills in their
+      // own — but a back-office login maps to no employee and has to say.
+      {
+        name: "employee", label: "Employee (leave blank if it is yours)",
+        type: "select", optionsPath: "/hr/employees/",
+        optionLabelKeys: ["full_name", "employee_id"],
+      },
+      {
+        name: "vehicle_type", label: "Vehicle Type", type: "select", required: true,
+        options: [
+          { value: "Two Wheeler", label: "Two Wheeler" },
+          { value: "Four Wheeler", label: "Four Wheeler" },
+          { value: "Public Transport", label: "Public Transport" },
+          { value: "Other", label: "Other" },
+        ],
+      },
+      { ...text("registration", "Registration"), required: true },
+      text("nickname", "Nickname (optional)"),
+      { name: "is_default", label: "My usual vehicle", type: "boolean" },
+      { name: "is_retired", label: "Sold or off the road", type: "boolean" },
+    ],
+  },
   "broiler-medicine-vaccine": {
     // Ordered and paired as on the ERP form: who, then where and when, then
     // what was given, then the note. Supervisor leads because it is the one

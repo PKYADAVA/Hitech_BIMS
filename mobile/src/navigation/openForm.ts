@@ -20,12 +20,15 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
  * them is exactly as unverified as an original made without them.
  */
 const ROW_FORM_SCREEN: Record<string,
-  "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"> = {
+  "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"
+  | "SupervisorTripForm"> = {
   "broiler-daily-entries": "DailyEntryGrid",
   // One supervisor, farm, batch and date over several consumption lines.
   "broiler-medicine-vaccine": "MedicineEntryForm",
   // The pin, the pictures and the scans are all taken standing on the farm.
   "broiler-farm-location-capture": "FarmCaptureForm",
+  // Photographs, GPS stamps and odometer shots, all taken on the road.
+  "hr-supervisor-trips": "SupervisorTripForm",
 };
 
 /**

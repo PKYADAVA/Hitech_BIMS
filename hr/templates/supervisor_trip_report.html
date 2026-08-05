@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Supervisor Daily Trip Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">
+<style>
+  /* Thumbnails stay small enough that a page of trips is still a table, and
+     the stamp reads as a caption under its own picture rather than a column
+     of loose dates. */
+  .rpt-capture { min-width: 150px; }
+  .rpt-thumb { width: 72px; height: 54px; object-fit: cover; border-radius: 4px;
+               border: 1px solid var(--ds-border, #dee2e6); }
+  .rpt-stamp { display: block; font-size: .7rem; color: #6c757d; line-height: 1.3; }
+  /* The address is the useful part but also the longest; clamped to two lines
+     so one verbose result cannot make a row taller than the rest of the page.
+     The full text stays in the title attribute. */
+  .rpt-address { font-size: .68rem; color: #495057; line-height: 1.25; max-width: 150px;
+                 display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+                 overflow: hidden; margin: 2px auto 0; }
+  @media print { .rpt-thumb { width: 56px; height: 42px; } }
+</style>{% endblock %}
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='hr' %}
+{% endblock %}
+{% block content %}
+{% include '_hr_tracking_subnavbar.html' with active_tab='supervisor_trip_report' %}
+
+{% include '_report_letterhead.html' with title='Supervisor Daily Trip Report' criteria=criteria %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">Employee</label>
+      <select name="employee" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for e in employees %}<option value="{{ e.id }}" {% if employee_id == e.id|stringformat:'s' %}selected{% endif %}>{{ e.full_name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Status</label>
+      <select name="status" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for s in statuses %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select></div>
+    <div class="rpt-actions">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-filter"></i> Apply</button>
+      <a href="{% url 'supervisor_trip_report' %}" class="btn btn-outline-secondary btn-sm">Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+    </div>
+  </form>
+</div>
+
+<div class="rpt-summary">
+  <div class="rpt-stat"><span class="rpt-stat-label">Trips</span><span class="rpt-stat-value">{{ summary.trips }}</span></div>
+  <div class="rpt-stat"><span class="rpt-stat-label">Distance</span><span class="rpt-stat-value">{{ summary.distance }} km</span></div>
+  <div class="rpt-stat"><span class="rpt-stat-label">Farm Visits</span><span class="rpt-stat-value">{{ summary.visits }}</span></div>
+  {% comment %}
+    Called out rather than buried in the rows: these are the trips a travel
+    settlement should not pay without asking, and a reviewer should be able to
+    see there are none without reading the table.
+  {% endcomment %}
+  <div class="rpt-stat {% if summary.missing_evidence %}rpt-stat-warn{% endif %}">
+    <span class="rpt-stat-label">Missing Evidence</span>
+    <span class="rpt-stat-value">{{ summary.missing_evidence }}</span>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered report-table rpt-table ds-grid">
+    <thead>
+      <tr>
+        <th>Trip No.</th>
+        <th class="ds-mid">Date</th>
+        <th>Employee</th>
+        <th>Branch</th>
+        <th>Vehicle</th>
+        <th>Registration</th>
+        <th class="ds-num text-end">Start Km</th>
+        <th class="text-center">Start Capture</th>
+        <th class="ds-num text-end">End Km</th>
+        <th class="text-center">End Capture</th>
+        <th class="ds-num text-end">Distance</th>
+        <th class="text-center">Visits</th>
+        <th class="text-center">Evidence</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in trips %}
+      <tr>
+        <td>{{ t.trip_no }}</td>
+        <td>{{ t.date|date:"d M Y" }}</td>
+        <td>{{ t.employee.full_name }}</td>
+        <td>{{ t.employee.warehouse.name|default:"—" }}</td>
+        <td>{{ t.vehicle_type }}</td>
+        <td>{{ t.registration|default:"—" }}</td>
+        <td class="text-end">{{ t.start_odometer|default_if_none:"—" }}</td>
+        <td class="text-center rpt-capture">
+          {% if t.start_photo %}
+            <a href="{{ t.start_photo.url }}" target="_blank" rel="noopener">
+              <img src="{{ t.start_photo.url }}" alt="Start capture" class="rpt-thumb">
+            </a>
+            <div class="rpt-stamp">{{ t.start_photo_at|date:"d M Y H:i"|default:"—" }}</div>
+            {% if t.start_address %}
+              <div class="rpt-address" title="{{ t.start_address }}">{{ t.start_address }}</div>
+            {% endif %}
+            {% if t.start_latitude and t.start_longitude %}
+              <a class="rpt-stamp" target="_blank" rel="noopener"
+                 href="https://www.google.com/maps?q={{ t.start_latitude }},{{ t.start_longitude }}">pin</a>
+            {% endif %}
+          {% else %}<span class="text-muted">not uploaded</span>{% endif %}
+        </td>
+        <td class="text-end">{{ t.end_odometer|default_if_none:"—" }}</td>
+        <td class="text-center rpt-capture">
+          {% if t.end_photo %}
+            <a href="{{ t.end_photo.url }}" target="_blank" rel="noopener">
+              <img src="{{ t.end_photo.url }}" alt="End capture" class="rpt-thumb">
+            </a>
+            <div class="rpt-stamp">{{ t.end_photo_at|date:"d M Y H:i"|default:"—" }}</div>
+            {% if t.end_address %}
+              <div class="rpt-address" title="{{ t.end_address }}">{{ t.end_address }}</div>
+            {% endif %}
+            {% if t.end_latitude and t.end_longitude %}
+              <a class="rpt-stamp" target="_blank" rel="noopener"
+                 href="https://www.google.com/maps?q={{ t.end_latitude }},{{ t.end_longitude }}">pin</a>
+            {% endif %}
+          {% else %}<span class="text-muted">not uploaded</span>{% endif %}
+        </td>
+        <td class="text-end">{{ t.distance_km }}</td>
+        <td class="text-center">{{ t.visit_count }}</td>
+        <td class="text-center">
+          {% if t.start_photo %}<i class="fas fa-camera text-success" title="Start photo"></i>{% else %}<i class="fas fa-camera text-muted" title="No start photo"></i>{% endif %}
+          {% if t.end_photo %}<i class="fas fa-camera text-success" title="End photo"></i>{% else %}<i class="fas fa-camera text-muted" title="No end photo"></i>{% endif %}
+          {% if t.start_odometer is not None and t.end_odometer is not None %}<i class="fas fa-gauge text-success" title="Both readings"></i>{% else %}<i class="fas fa-gauge text-muted" title="A reading is missing"></i>{% endif %}
+        </td>
+        <td>
+          <span class="badge {% if t.status == 'Completed' %}bg-success{% else %}bg-warning text-dark{% endif %}">{{ t.status }}</span>
+        </td>
+      </tr>
+      {% if t.visits.all %}
+      <tr class="rpt-subrow">
+        <td></td>
+        <td colspan="13">
+          <table class="table table-sm mb-0 rpt-inner">
+            <thead><tr><th>Checked In</th><th>Farm</th><th>Purpose</th><th>Duration</th><th>Pin</th></tr></thead>
+            <tbody>
+              {% for v in t.visits.all %}
+              <tr>
+                <td>{{ v.checked_in_at|date:"d M Y H:i"|default:"—" }}</td>
+                <td>{{ v.farm.farm_name }}</td>
+                <td>{{ v.purpose|default:"—" }}</td>
+                <td>{{ v.duration_label|default:"—" }}</td>
+                <td>
+                  {% if v.latitude and v.longitude %}
+                    <a href="https://www.google.com/maps?q={{ v.latitude }},{{ v.longitude }}"
+                       target="_blank" rel="noopener">{{ v.latitude|floatformat:5 }}, {{ v.longitude|floatformat:5 }}</a>
+                  {% else %}<span class="text-muted">no pin</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </td>
+      </tr>
+      {% endif %}
+      {% empty %}
+      <tr><td colspan="14" class="text-center text-muted py-4">No trips for these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if trips %}
+    <tfoot>
+      <tr class="report-total-row">
+        <td colspan="10">Total</td>
+        <td class="text-end">{{ summary.distance }} km</td>
+        <td class="text-center">{{ summary.visits }}</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+{% endblock %}
