@@ -295,9 +295,6 @@ function HomeHeader({
           >
             <AppIcon name="menu" size={22} color={colors.onDark} />
           </Pressable>
-          <View style={styles.logo}>
-            <AppIcon emoji="🐔" size={22} color={colors.onDark} />
-          </View>
           <View>
             <Text style={styles.brandName}>Hi Tech BIMS</Text>
             <Text style={styles.brandTag}>Farm management</Text>
@@ -497,14 +494,6 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.lg,
   },
   brand: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  logo: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: withAlpha(colors.onDark, 0.16),
-    alignItems: "center",
-    justifyContent: "center",
-  },
   logoGlyph: { fontSize: 22 },
   brandName: { ...type.h3, color: colors.onDark },
   brandTag: { ...type.caption, color: ON_DARK_SOFT },

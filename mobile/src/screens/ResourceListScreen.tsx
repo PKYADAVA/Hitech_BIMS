@@ -4,6 +4,8 @@ import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from "react
 
 import { deleteResource } from "@/api/resources";
 import { Row } from "@/api/types";
+import { useOverview } from "@/api/stats";
+import { LIST_KPIS } from "@/config/modulePrimary";
 import { buildGroups, GroupItem } from "@/domain/grouping";
 import { AppIcon } from "@/components/AppIcon";
 import { RecordAction, RecordCard } from "@/components/RecordCard";
@@ -24,6 +26,41 @@ type Props = NativeStackScreenProps<ModuleStackParams, "List">;
 
 const isGroup = (item: Row | GroupItem): item is GroupItem =>
   Array.isArray((item as GroupItem).rows);
+
+/** Read a dotted path out of the overview payload. */
+const at = (obj: unknown, path: string): number | undefined =>
+  path.split(".").reduce<any>((o, k) => (o == null ? o : o[k]), obj);
+
+/**
+ * The figures the reference puts above a list — today's purchase, this month's
+ * — for the few lists that have any. A list with nothing worth stating shows
+ * nothing rather than a count of its own rows.
+ */
+function ListKpiStrip({ resourceKey, accent }: { resourceKey: string; accent: string }) {
+  const styles = useStyles();
+  const cells = LIST_KPIS[resourceKey];
+  const { data: ov } = useOverview();
+  if (!cells?.length) return null;
+  return (
+    <View style={styles.kpiRow}>
+      {cells.map((cell) => {
+        const value = at(ov, cell.path);
+        return (
+          <View key={cell.label} style={[styles.kpiCell, { borderTopColor: accent }]}>
+            <Text style={styles.kpiValue}>
+              {value === undefined
+                ? "–"
+                : cell.money
+                  ? `₹${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : value.toLocaleString()}
+            </Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>{cell.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 /** Generic, config-driven list screen: search + infinite scroll + modern cards. */
 export function ResourceListScreen({ route, navigation }: Props) {
@@ -187,6 +224,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
         ) : null}
         <SearchBar value={query} onChangeText={setQuery} placeholder={`Search ${config.title}`} />
       </View>
+      <ListKpiStrip resourceKey={config.key} accent={config.accent} />
       <FlatList<Row | GroupItem>
         data={groups ?? data}
         keyExtractor={(item) =>
@@ -299,6 +337,19 @@ const useStyles = makeStyles((colors) => ({
   searchWrap: { padding: spacing.md, paddingBottom: spacing.sm },
   fill: { flexGrow: 1 },
   content: { padding: spacing.md, paddingTop: spacing.xs, gap: spacing.sm, paddingBottom: 96 },
+  kpiRow: { flexDirection: "row", gap: spacing.sm,
+            paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  kpiCell: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    // A hairline of the list's own colour, matching the module hubs.
+    borderTopWidth: 3,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  kpiValue: { ...type.h3, color: colors.text },
+  kpiLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
   groupHead: {
     flexDirection: "row",
     alignItems: "center",

@@ -85,3 +85,43 @@ export const MODULE_ICON: Record<ModuleKey, string> = {
   user: "shield-account",                // fa-user-shield
   change_requests: "file-document-edit", // fa-file-pen
 };
+
+
+/**
+ * The figures shown above a list, where that list has any.
+ *
+ * The reference heads Purchase with "Today Purchase / This Month" and Sales
+ * with today's billing. Only lists with something worth stating get a strip —
+ * most are masters, where a count of rows says nothing the list itself does
+ * not already show.
+ *
+ * `money` is rendered as currency; anything else as a plain number. The values
+ * are read from /stats/overview, which scopes them to the signed-in user.
+ */
+export interface ListKpi {
+  label: string;
+  /** Dotted path into the overview payload. */
+  path: string;
+  money?: boolean;
+}
+
+export const LIST_KPIS: Record<string, ListKpi[]> = {
+  "purchase-general-purchases": [
+    { label: "Today Purchase", path: "purchase.today", money: true },
+    { label: "This Month", path: "purchase.month", money: true },
+  ],
+  "sales-invoices": [
+    { label: "Today Sales", path: "sales.today", money: true },
+    { label: "This Month", path: "sales.month", money: true },
+  ],
+  "broiler-daily-entries": [
+    { label: "Entries Today", path: "broiler.entries_today" },
+    { label: "Mortality Today", path: "broiler.mortality_today" },
+  ],
+  "inventory-stock-transfers": [
+    { label: "Transfers Today", path: "inventory.transfers_today" },
+  ],
+  "account-vouchers": [
+    { label: "Vouchers Today", path: "account.vouchers_today" },
+  ],
+};

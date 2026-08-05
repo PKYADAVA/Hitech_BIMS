@@ -21,7 +21,10 @@ from api.viewsets import V1ViewMixin
 from broiler.models import BroilerBatch, BroilerFarm, DailyEntry
 from hatchery.models import EggPurchase, HatchEntry
 from hr.models import SupervisorTripVisit
-from user.services.scoping import farms_for, warehouses_for
+from purchase.models import GeneralPurchase
+from sales.models import SalesInvoice
+from user.services.scoping import (customers_for, farms_for, is_unscoped,
+                                   suppliers_for, warehouses_for)
 from inventory.models import Item, StockTransfer, Warehouse
 from notification.models import SmsMessage
 
@@ -154,6 +157,29 @@ class StatsOverviewView(V1ViewMixin, APIView):
                 is_closed=False, broiler_farm_id__in=farm_ids).count(),
         }
 
+        # Purchase and Sales money, for the strips above those lists: what was
+        # billed today and what has been billed this month. Scoped by the
+        # party the user may see, the same rule their registers use.
+        month_start = today.replace(day=1)
+
+        def billed(model, party_field, allowed):
+            qs = model.objects.filter(date__lte=today)
+            if allowed is not None:
+                qs = qs.filter(**{"%s__in" % party_field: allowed})
+            return {
+                "today": float(qs.filter(date=today)
+                               .aggregate(s=Sum("net_amount"))["s"] or 0),
+                "month": float(qs.filter(date__gte=month_start)
+                               .aggregate(s=Sum("net_amount"))["s"] or 0),
+            }
+
+        suppliers = (None if is_unscoped(request.user)
+                     else suppliers_for(request.user).values_list("id", flat=True))
+        customers = (None if is_unscoped(request.user)
+                     else customers_for(request.user).values_list("id", flat=True))
+        purchase = billed(GeneralPurchase, "supplier_id", suppliers)
+        sales = billed(SalesInvoice, "customer_id", customers)
+
         account = {
             "vouchers_today": Voucher.objects.filter(date=today).count(),
             "accounts": ChartOfAccount.objects.count(),
@@ -171,6 +197,8 @@ class StatsOverviewView(V1ViewMixin, APIView):
             "sms": sms,
             "inventory": inventory,
             "account": account,
+            "purchase": purchase,
+            "sales": sales,
             "visits": visits,
             "alerts": alerts,
             "system": system,

@@ -408,3 +408,72 @@ class StatsOverviewFilterTests(TestCase):
         # Beta is not theirs, so the filter is dropped and they still see only
         # Alpha — never Beta's numbers.
         self.assertEqual(data["broiler"]["birds_placed_today"], 1000)
+
+
+class StatsOverviewMoneyTests(TestCase):
+    """What was billed today and this month, for the strips above the Purchase
+    and Sales lists.
+
+    Scoped by party, the same rule those registers use: a buyer limited to one
+    vendor group should not be told the company's whole purchase figure.
+    """
+
+    def setUp(self):
+        from purchase.models import GeneralPurchase, Supplier
+        from sales.models import Customer, CustomerGroup, SalesInvoice
+
+        self.today = timezone.localdate()
+        self.month_start = self.today.replace(day=1)
+        self.GeneralPurchase = GeneralPurchase
+        self.SalesInvoice = SalesInvoice
+
+        self.supplier = Supplier.objects.create(name="Feedmill",
+                                                party_category="Company",
+                                                credit_limit=0)
+        group = CustomerGroup.objects.create(code="CG1", description="Retail")
+        self.customer = Customer.objects.create(
+            name="Retailer", address="x", mobile="9000000101",
+            contact_type="Customer", party_category="Company",
+            customer_group=group, credit_limit=0, state="Uttar Pradesh")
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser("money_ov", "m@x.com",
+                                                  "Str0ngPass!")
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def purchase(self, amount, date):
+        return self.GeneralPurchase.objects.create(
+            supplier=self.supplier, date=date, net_amount=amount)
+
+    def invoice(self, amount, date):
+        return self.SalesInvoice.objects.create(
+            customer=self.customer, date=date, net_amount=amount)
+
+    def overview(self):
+        return self.client.get(URL).json()["data"]
+
+    def test_today_counts_only_today(self):
+        self.purchase(1000, self.today)
+        self.purchase(500, self.today - timedelta(days=1))
+        self.assertEqual(self.overview()["purchase"]["today"], 1000.0)
+
+    def test_the_month_takes_in_the_days_before(self):
+        self.purchase(1000, self.today)
+        self.purchase(500, self.month_start)
+        self.assertEqual(self.overview()["purchase"]["month"], 1500.0)
+
+    def test_last_month_is_not_counted(self):
+        self.purchase(700, self.month_start - timedelta(days=1))
+        self.assertEqual(self.overview()["purchase"]["month"], 0.0)
+
+    def test_sales_are_reported_the_same_way(self):
+        self.invoice(2500, self.today)
+        data = self.overview()["sales"]
+        self.assertEqual(data["today"], 2500.0)
+        self.assertEqual(data["month"], 2500.0)
+
+    def test_nothing_billed_is_zero_not_an_error(self):
+        data = self.overview()
+        self.assertEqual(data["purchase"]["today"], 0.0)
+        self.assertEqual(data["sales"]["month"], 0.0)
