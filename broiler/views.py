@@ -2238,7 +2238,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     # block that used to import it only runs for a batch whose breed has a
     # standard. A batch with no breed (or no standard) reached that Sum unbound
     # and 500'd the lookup — for the web form as well as the API.
-    from django.db.models import F, Max, Sum
+    from django.db.models import F, Max, Min, Sum
     from django.utils.dateparse import parse_date
     # Which batch, which day, what age — shared with the mobile endpoints via
     # placement_context so the two cannot answer differently. Everything below
@@ -2264,10 +2264,15 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     std_feed_kg, std_weight_g, std_note = None, None, None
     if batch and batch.breed_id:
         max_age = BreedStandard.objects.filter(breed_id=batch.breed_id).aggregate(m=Max("age"))["m"]
+        min_age = BreedStandard.objects.filter(breed_id=batch.breed_id).aggregate(m=Min("age"))["m"]
         if max_age is None:
             std_note = "No breed standard for this breed"
         elif age_days > max_age:
             std_note = f"No breed standard beyond age {max_age} - add rows to Breed Standard"
+        elif min_age is not None and age_days < min_age:
+            # The other end of the same gap, and the one that used to pass
+            # silently: the curve was read at its first row instead.
+            std_note = f"No breed standard below age {min_age} - add rows to Breed Standard"
         else:
             std = _breed_standard_at(batch.breed_id, age_days)
             if std and std.feed_intake:
@@ -3640,18 +3645,19 @@ def broiler_batch_report(request):
 # ---------------------------------------------------------------------------
 
 def _breed_standard_at(breed_id, age):
-    """The breed's standard row at `age` — exact, else the nearest row at/below
-    that age (curve carried forward). If the breed's curve doesn't reach that
-    low, fall back to its earliest defined row so the Std columns still show a
-    value rather than blank. None only when the breed has no standard rows."""
+    """The breed's standard row at `age` — exact, else the nearest row at or
+    below it, carrying the curve forward.
+
+    None when the age is below the curve's first row. It used to return that
+    first row instead, so a flock on day 12 against a breed whose standards
+    start at day 20 was measured against a 20-day-old bird and read as badly
+    behind. A blank says "no standard for this age", which is true; a wrong
+    number does not announce itself.
+    """
     if not breed_id or age is None:
         return None
-    std = (BreedStandard.objects.filter(breed_id=breed_id, age__lte=age)
-           .order_by("-age").first())
-    if std:
-        return std
-    return (BreedStandard.objects.filter(breed_id=breed_id, age__gt=age)
-            .order_by("age").first())
+    return (BreedStandard.objects.filter(breed_id=breed_id, age__lte=age)
+            .order_by("-age").first())
 
 
 def _interp_standard(breed_id, key_field, target, out_field):
