@@ -10,6 +10,7 @@ import { useSideNav } from "@/store/sideNavStore";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
 import { isEditable } from "@/config/forms";
+import { ModuleTabBar } from "@/components/ModuleTabBar";
 import { MODULE_PRIMARY } from "@/config/modulePrimary";
 import { openRecordForm } from "@/navigation/openForm";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
@@ -109,6 +110,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
   const { colors } = useTheme();
   const mod = MODULES[moduleKey];
   return (
+    <View style={{ flex: 1 }}>
     <ModuleStack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: mod.color },
@@ -174,6 +176,9 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="Report" component={ReportScreen} />
       <ModuleStack.Screen name="ManageAccess" component={ManageAccessScreen} />
     </ModuleStack.Navigator>
+    {/* One bar for the whole module, so pushing a list or a form keeps it. */}
+    <ModuleTabBar moduleKey={moduleKey} />
+    </View>
   );
 }
 
@@ -209,13 +214,13 @@ function AppTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: tabIcon("🏠") }} />
       {show("broiler") && (
-        <Tab.Screen name="Broiler" component={BroilerStack} options={{ tabBarIcon: tabIcon("🐔") }} />
+        <Tab.Screen name="Broiler" component={BroilerStack} options={{ tabBarIcon: tabIcon("🐔"), tabBarStyle: { display: "none" } }} />
       )}
       {show("hatchery") && (
-        <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚") }} />
+        <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚"), tabBarStyle: { display: "none" } }} />
       )}
       {show("sms") && (
-        <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬") }} />
+        <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬"), tabBarStyle: { display: "none" } }} />
       )}
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: tabIcon("👤") }} />
     </Tab.Navigator>
