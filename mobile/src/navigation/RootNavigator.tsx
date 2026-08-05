@@ -129,10 +129,13 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           title: mod.title,
           headerTitle: headerTitleWithIcon(mod.icon, mod.title),
           // Root-presented modules (Accounts/Inventory) otherwise get a native
-          // back button on this first screen — hide it; the sidebar below is
-          // the way out, and swipe/back still works.
+          // back button on this first screen — hide it; the bar below is the
+          // way out, and swipe/back still works.
+          //
+          // No hamburger here: this screen already carries a module bar with
+          // Menu on it, and two buttons opening the same sidebar is one too
+          // many. Home and Reports have no such bar and keep theirs.
           headerBackVisible: false,
-          headerLeft: () => <SideNavButton tint={colors.onDark} />,
           // The module's one create action, beside its title as the reference
           // has it — hidden when the user may not add, and absent for modules
           // with nothing obvious to create.
