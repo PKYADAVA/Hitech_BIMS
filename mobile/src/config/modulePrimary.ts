@@ -29,3 +29,32 @@ export const MODULE_PRIMARY: Partial<Record<ModuleKey, ModulePrimary>> = {
   // the module header — an approval is raised from the record it concerns, not
   // from a menu — so they get no button rather than an arbitrary one.
 };
+
+
+/**
+ * The one list each module's bottom bar reaches directly.
+ *
+ * The reference gives every module bar a shortcut of its own — "Farms" under
+ * Farm Management, "Batches" under Broiler Production, "Incubators" under
+ * Hatchery. This is that, one per module: the thing someone in this module
+ * opens most often, which is not always the thing they create.
+ *
+ * A module with no obvious answer is left out and its bar stays short rather
+ * than carrying a button chosen to fill the space.
+ */
+export interface ModuleShortcut {
+  resourceKey: string;
+  label: string;
+  /** MaterialCommunityIcons name. */
+  icon: string;
+}
+
+export const MODULE_SHORTCUT: Partial<Record<ModuleKey, ModuleShortcut>> = {
+  broiler: { resourceKey: "broiler-farms", label: "Farms", icon: "home-city-outline" },
+  hatchery: { resourceKey: "hatchery-hatch-entries", label: "Hatches", icon: "egg-outline" },
+  inventory: { resourceKey: "inventory-items", label: "Items", icon: "package-variant-closed" },
+  purchase: { resourceKey: "purchase-suppliers", label: "Suppliers", icon: "truck-outline" },
+  sales: { resourceKey: "sales-invoices", label: "Invoices", icon: "file-document-outline" },
+  account: { resourceKey: "account-vouchers", label: "Vouchers", icon: "book-outline" },
+  hr: { resourceKey: "hr-employees", label: "Employees", icon: "account-group-outline" },
+};
