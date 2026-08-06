@@ -40,7 +40,7 @@
           {% csrf_token %}
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label" for="broiler_farm">Broiler Farm</label>
+              <label class="form-label" for="broiler_farm">Broiler Farm<span class="text-danger">*</span></label>
               <select id="broiler_farm" class="form-select" required>
                 <option value="" selected disabled>Select a broiler farm</option>
                 {% for farm in broiler_farms %}
@@ -49,8 +49,8 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="shed">Shed / Unit</label>
-              <select id="shed" class="form-select" disabled>
+              <label class="form-label" for="shed">Shed / Unit<span class="text-danger">*</span></label>
+              <select id="shed" class="form-select" required disabled>
                 <option value="">Select a farm first</option>
               </select>
             </div>
@@ -68,9 +68,9 @@
               <input type="text" id="lot_no" class="form-control" placeholder="Enter lot no">
             </div>
             <div class="col-md-6">
-              <label class="form-label" for="breed">Breed</label>
-              <select id="breed" class="form-select">
-                <option value="">select</option>
+              <label class="form-label" for="breed">Breed<span class="text-danger">*</span></label>
+              <select id="breed" class="form-select" required>
+                <option value="" selected disabled>select</option>
                 {% for b in breeds %}<option value="{{ b.id }}">{{ b.description }}</option>{% endfor %}
               </select>
             </div>
@@ -236,8 +236,8 @@ $(document).ready(function () {
                         <input type="text" class="form-control bg-light" value="${escapeHtml(batch.batch_name)}" readonly>
                       </div>
                       <div class="mb-3">
-                        <label class="form-label">Shed / Unit</label>
-                        <select class="form-select" name="shed">
+                        <label class="form-label">Shed / Unit<span class="text-danger">*</span></label>
+                        <select class="form-select" name="shed" required>
                           <option value="">select</option>
                           ${shedOptions(batch.broiler_farm_id, batch.shed_id)}
                         </select>
@@ -251,8 +251,8 @@ $(document).ready(function () {
                         <input type="text" class="form-control" name="lot_no" value="${escapeHtml(batch.lot_no)}">
                       </div>
                       <div class="mb-3">
-                        <label class="form-label">Breed</label>
-                        <select class="form-select" name="breed">
+                        <label class="form-label">Breed<span class="text-danger">*</span></label>
+                        <select class="form-select" name="breed" required>
                           <option value="">select</option>
                           ${BREEDS.map(b => `<option value="${b.id}" ${b.id == batch.breed_id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
                         </select>

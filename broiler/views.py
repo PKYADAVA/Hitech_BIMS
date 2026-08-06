@@ -1276,6 +1276,22 @@ class BroilerBatchAPI(BaseAPIView):
             data = request.POST
             farm_obj = BroilerFarm.objects.get(id=data["broiler_farm_id"])
             shed_id = data.get("shed") or None
+            # A flock is housed somewhere and is of some breed: the shed is
+            # what occupancy, placement and the growing charge all hang off,
+            # and the breed is what the daily numbers are judged against.
+            # Enforced here rather than only in the markup, so the browser
+            # form, the inline edit and the phone all get the same answer.
+            missing = [name for name, value in
+                       (("shed", shed_id), ("breed", data.get("breed") or None))
+                       if not value]
+            if missing:
+                return JsonResponse(
+                    {"error": "Choose the "
+                              + " and the ".join({"shed": "shed / unit",
+                                                  "breed": "breed"}[m]
+                                                 for m in missing) + "."},
+                    status=400,
+                )
             occupied_by = _active_batch_on_shed(shed_id)
             if occupied_by:
                 return JsonResponse(
@@ -1310,6 +1326,14 @@ class BroilerBatchAPI(BaseAPIView):
                     broiler_batch.book_number = data["book_number"] or ""
                 if "lot_no" in data:
                     broiler_batch.lot_no = data["lot_no"] or ""
+                # Sent-and-empty is someone clearing a field that a batch
+                # cannot be without; a key simply absent is a partial update
+                # and leaves what is already there alone.
+                if "breed" in data and not data["breed"]:
+                    return JsonResponse({"error": "Choose the breed."}, status=400)
+                if "shed" in data and not data["shed"]:
+                    return JsonResponse({"error": "Choose the shed / unit."},
+                                        status=400)
                 if "breed" in data:
                     broiler_batch.breed_id = data["breed"] or None
                 if "shed" in data:

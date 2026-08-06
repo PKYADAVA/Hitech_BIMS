@@ -44,13 +44,16 @@ const FARM_FIXED: FormField = {
   placeholder: "—",
 };
 /**
- * The mockup marks this required; the ERP does not, and the ERP is the rule.
- * Batches without a shed already exist — the field was added after them — and
- * a phone refusing what the desktop accepts is the drift this screen exists to
- * prevent. Same for Breed below.
+ * Required, here and on the desktop both — the ERP form was changed to match
+ * rather than the phone relaxed to match it. A flock is housed somewhere: the
+ * shed is what occupancy, chicks placement and the growing charge all hang
+ * off. Same for Breed below, which is what the daily numbers are judged
+ * against. Batches predating the fields still exist and open for editing; the
+ * rule bites when one is saved.
  */
 const shedField = (options: Shed[], farmChosen: boolean): FormField => ({
-  name: "shed", label: "Shed / Unit", type: "select", disabled: !farmChosen,
+  name: "shed", label: "Shed / Unit", type: "select", required: true,
+  disabled: !farmChosen,
   placeholder: farmChosen
     ? (options.length ? "Select a shed / unit" : "This farm has no sheds")
     : "Select a farm first",
@@ -74,7 +77,7 @@ const LOT_NO: FormField = {
   name: "lot_no", label: "Lot No", type: "text", placeholder: "Enter lot no",
 };
 const BREED: FormField = {
-  name: "breed", label: "Breed", type: "select",
+  name: "breed", label: "Breed", type: "select", required: true,
   optionsPath: "/broiler/breeds/", optionLabelKeys: ["description", "code"],
   placeholder: "Select Breed",
 };
@@ -154,9 +157,11 @@ export function BatchFormScreen({ navigation, route }: Props) {
 
   const save = async () => {
     setError("");
-    // The farm is the ERP's one required field, and the only one a batch
-    // cannot be numbered without.
+    // Named one at a time rather than "fill in the required fields": the
+    // server refuses the same three, and this is the message that says which.
     if (!batchId && !values.broiler_farm) return setError("Choose the broiler farm.");
+    if (!values.shed) return setError("Choose the shed / unit this batch is housed in.");
+    if (!values.breed) return setError("Choose the breed.");
 
     setSaving(true);
     try {
