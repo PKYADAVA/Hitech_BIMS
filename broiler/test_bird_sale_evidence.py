@@ -140,7 +140,7 @@ class BirdSaleEvidenceTests(TestCase):
         page = self.client.get(reverse("lifting_report"),
                                {"from_date": self.today.isoformat(),
                                 "to_date": self.today.isoformat()}).content.decode()
-        self.assertIn("App Photos", page)
+        self.assertIn("Uploaded Image", page)
         self.assertIn("liftPhotosModal", page)
         self.assertIn("google.com/maps?q=26.85,80.95", page)
         # Both photos travel on the button, labelled.
@@ -153,7 +153,7 @@ class BirdSaleEvidenceTests(TestCase):
         page = self.client.get(reverse("lifting_report"),
                                {"from_date": self.today.isoformat(),
                                 "to_date": self.today.isoformat()}).content.decode()
-        self.assertIn("App Photos", page)
+        self.assertIn("Uploaded Image", page)
         # `data-urls` is only ever on the camera button; the class name also
         # appears in the page's own click handler, so it proves nothing.
         self.assertNotIn("data-urls", page)
