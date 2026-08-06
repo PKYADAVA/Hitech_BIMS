@@ -237,3 +237,70 @@ class NullScopedRowsTests(TestCase):
         Customer.objects.create(name="No Group", phone="9000000021", mobile="9100000021")
         admin = User.objects.create_superuser("boss2", "b2@x.com", "Str0ngPass!")
         self.assertEqual(len(self.visible(admin, Customer)), Customer.objects.count())
+
+
+class AppReportTests(TestCase):
+    """`--app`: which phone tabs a user is served, and what closed the rest.
+
+    Scoping decides which rows reach a screen; two gates in front of it decide
+    whether the screen appears at all — the web tab matrix, and Mobile Access
+    on top. A tab missing from the app and a tab full of nothing look identical
+    to whoever reports it, so the report has to name the gate.
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser("appboss", "ab@x.com", "Str0ngPass!")
+
+    def test_an_unrestricted_user_is_served_every_screen(self):
+        out = run(self.admin.username, "--app")
+        self.assertIn("Phone modules for", out)
+        self.assertIn("every phone screen is available", out)
+
+    def test_a_tab_the_matrix_withholds_is_named_with_its_reason(self):
+        """The commonest cause, and the one mistaken for a removed feature."""
+        from user.models import GroupTabPermission
+        from user.services.mobile_access import PHONE_SCREENS
+
+        group = Group.objects.create(name="Partial")
+        # Grant every phone tab except one, so exactly one is withheld.
+        withheld = PHONE_SCREENS[0][1]
+        for _key, tab in PHONE_SCREENS:
+            if tab == withheld:
+                continue
+            GroupTabPermission.objects.create(group=group, tab_code=tab, can_view=True)
+        member = User.objects.create_user("partial", "p@x.com", "Str0ngPass!")
+        member.groups.add(group)
+
+        out = run(member.username, "--app")
+        self.assertIn(PHONE_SCREENS[0][0], out)
+        self.assertIn("the web matrix does not grant View on this tab", out)
+
+    def test_a_module_switched_off_for_the_phone_is_reported_as_such(self):
+        """Mobile Access can only narrow what the matrix allows, so a module
+        off here is a different fix from a tab off in the matrix."""
+        from user.models import GroupMobileAccess, GroupTabPermission
+        from user.services.mobile_access import PHONE_SCREENS
+
+        group = Group.objects.create(name="PhoneLimited")
+        for _key, tab in PHONE_SCREENS:
+            GroupTabPermission.objects.create(group=group, tab_code=tab, can_view=True)
+        # Mobile Access is per-module and fails open: a module with no row is
+        # unaffected. Switching one *off* is what narrows.
+        GroupMobileAccess.objects.create(group=group, module_key="hatchery", enabled=False)
+        member = User.objects.create_user("phoned", "ph@x.com", "Str0ngPass!")
+        member.groups.add(group)
+
+        out = run(member.username, "--app")
+        self.assertIn("hidden by Mobile Access: hatchery", out)
+        self.assertIn("Mobile Access has the hatchery module switched off", out)
+
+    def test_the_app_report_runs_for_a_user_with_no_scoping(self):
+        """It answers a different question from the scopes below it, so it must
+        not be skipped by the unscoped early return."""
+        out = run(self.admin.username, "--app")
+        self.assertIn("Phone screens", out)
+        self.assertIn("Not scoped at all", out)
+
+    def test_without_the_flag_nothing_phone_related_is_printed(self):
+        out = run(self.admin.username)
+        self.assertNotIn("Phone modules", out)

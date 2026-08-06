@@ -16,6 +16,14 @@ the hidden rows were hidden only because their scope column is empty.
 
     python manage.py explain_access <username>
     python manage.py explain_access <username> --resource broiler/daily-entries
+    python manage.py explain_access <username> --app
+
+``--app`` answers the other half. Scoping decides which *rows* reach a screen;
+the phone has two gates in front of that deciding whether the screen appears at
+all — the web tab matrix, and Mobile Access on top of it. A tab missing from
+the app and a tab full of nothing look the same to whoever reports it, so this
+prints the payload the phone is actually served and names the gate that closed
+each screen.
 """
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand, CommandError
@@ -29,6 +37,9 @@ class Command(BaseCommand):
         parser.add_argument("username")
         parser.add_argument("--resource", default=None,
                             help="Only report this API prefix, e.g. broiler/daily-entries")
+        parser.add_argument("--app", action="store_true",
+                            help="Also report which phone tabs this user is served, "
+                                 "and which gate hides the rest")
 
     def handle(self, *args, **options):
         from api.viewsets import API_SCOPES
@@ -44,6 +55,11 @@ class Command(BaseCommand):
         self.stdout.write(f"  Groups        : {', '.join(groups) or '(none)'}")
         self.stdout.write(f"  Superuser     : {user.is_superuser}")
         self.stdout.write(f"  Active        : {user.is_active}")
+
+        # Before the scoping: which tabs reach the phone at all is a separate
+        # question, and it is answered even for a user nothing is scoped for.
+        if options["app"]:
+            self._app_report(user)
 
         if is_unscoped(user):
             self.stdout.write(self.style.SUCCESS(
@@ -86,6 +102,53 @@ class Command(BaseCommand):
             self._report(user, label, model, dict(scopes))
 
     # ------------------------------------------------------------------
+    def _app_report(self, user):
+        """What the phone is served, and what closed the rest.
+
+        Built from the same helpers ``api.auth.PermissionsView`` calls, so this
+        cannot drift from the payload the app actually receives.
+        """
+        from user.access import allowed_nav_groups, allowed_view_tabs
+        from user.services.mobile_access import (NAV_MODULE, PHONE_REPORTS,
+                                                 PHONE_SCREENS,
+                                                 allowed_mobile_navs,
+                                                 screen_perms)
+
+        web_navs = allowed_nav_groups(user)
+        navs = allowed_mobile_navs(user, web_navs)
+        tabs = allowed_view_tabs(user)
+        mobile = screen_perms(user)
+
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            "\nPhone modules for %s" % user.username))
+        self.stdout.write("  shown : " + (", ".join(sorted(navs)) or "(none)"))
+        off_here = sorted(n for n in web_navs if n not in navs)
+        if off_here:
+            self.stdout.write(self.style.WARNING(
+                "  hidden by Mobile Access: " + ", ".join(off_here)))
+
+        self.stdout.write(self.style.MIGRATE_HEADING("\nPhone screens"))
+        shown, hidden = [], []
+        for key, tab in list(PHONE_SCREENS) + list(PHONE_REPORTS):
+            nav = next((n for n, codes in _nav_groups().items()
+                        if tab in codes and n in NAV_MODULE), None)
+            if tab not in tabs:
+                hidden.append((key, "the web matrix does not grant View on this tab"))
+            elif nav and nav not in navs:
+                hidden.append((key, f"Mobile Access has the {nav} module switched off"))
+            elif mobile is not None and mobile.get(tab) == set():
+                hidden.append((key, "Mobile Access has this screen switched off"))
+            else:
+                shown.append(key)
+
+        self.stdout.write(f"  shown : {len(shown)}")
+        if hidden:
+            self.stdout.write(self.style.WARNING(f"  hidden: {len(hidden)}"))
+            for key, why in hidden:
+                self.stdout.write(f"    {key:34} {why}")
+        else:
+            self.stdout.write("  hidden: none — every phone screen is available")
+
     def _report(self, user, label, model, scopes):
         from api.viewsets import scope_api_queryset
 
@@ -109,6 +172,12 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(line + note))
         else:
             self.stdout.write(line + note)
+
+
+def _nav_groups():
+    from user.access import NAV_GROUPS
+
+    return NAV_GROUPS
 
 
 def _model_for(label):
