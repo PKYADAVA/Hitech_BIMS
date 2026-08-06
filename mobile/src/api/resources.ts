@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 
+import { toApiPath } from "@/config";
+
 import { http } from "./client";
 import { Envelope, Pagination, Row } from "./types";
 
@@ -20,10 +22,13 @@ export async function listResource<T = Row>(
   params?: Record<string, string | number | undefined>
 ): Promise<Page<T>> {
   const isAbsolute = /^https?:\/\//i.test(url);
-  const resp = await http.get<Envelope<T[]>>(isAbsolute ? url : url, {
-    // Absolute pagination links already carry the query string.
+  // A pagination link is followed by path, not by host. DRF builds it from
+  // whatever address Django saw, which behind the web build's proxy is the
+  // backend's own — following that verbatim left the proxy and the browser
+  // blocked it, so every list with a second page died on reaching it.
+  const resp = await http.get<Envelope<T[]>>(isAbsolute ? toApiPath(url) : url, {
+    // The link already carries its query string; params would duplicate it.
     params: isAbsolute ? undefined : params,
-    baseURL: isAbsolute ? "" : undefined,
   });
   return { items: resp.data.data, pagination: resp.data.meta?.pagination };
 }

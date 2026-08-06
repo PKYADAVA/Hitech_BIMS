@@ -39,4 +39,37 @@ function toProxyPath(url: string): string {
 export const API_BASE_URL: string =
   Platform.OS === "web" ? toProxyPath(absoluteBaseUrl) : absoluteBaseUrl;
 
+/** The API's path prefix, e.g. "/api/v1" — what `API_BASE_URL` contributes to
+ *  a request path, whichever platform resolved it. */
+export const API_PATH_PREFIX: string = toProxyPath(absoluteBaseUrl);
+
+/**
+ * A server-built link, re-pointed at the base URL this app was configured with.
+ *
+ * DRF writes pagination `next`/`previous` as absolute URLs, using whatever host
+ * Django saw the request arrive on. Behind the web build's proxy that is the
+ * backend's own address, not the origin the page is served from — so following
+ * the link verbatim leaves the proxy, becomes cross-origin, and the browser
+ * blocks it before the app sees a response. That is the CORS problem the proxy
+ * exists to avoid, re-entered through the back door on the second page of every
+ * list long enough to have one.
+ *
+ * Only the path and query survive; the host is the server's opinion about
+ * itself and no business of the client's.
+ */
+export function toApiPath(link: string): string {
+  // An empty link resolves to "/", which would ask for the API root instead of
+  // failing — worse than handing back what came in.
+  if (!link) return link;
+  try {
+    const url = new URL(link, "http://placeholder");
+    const path = url.pathname.startsWith(API_PATH_PREFIX)
+      ? url.pathname.slice(API_PATH_PREFIX.length)
+      : url.pathname;
+    return `${path}${url.search}`;
+  } catch {
+    return link;
+  }
+}
+
 export const REQUEST_TIMEOUT_MS = 20000;
