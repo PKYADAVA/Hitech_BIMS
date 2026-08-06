@@ -8,6 +8,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 from .admin_import_template import admin_import_template
+from .app_download import app_download
 
 # Define URL patterns
 urlpatterns = [
@@ -15,6 +16,8 @@ urlpatterns = [
     # Must precede the admin catch-all so it resolves under /admin/.
     path("admin/import-template/", admin_import_template, name="admin_import_template"),
     path("admin/", admin.site.urls),
+    # Public: the address staff are given to install the Android app.
+    path("app/", app_download, name="app_download"),
     path("", include("user.urls")),
     path("", include("broiler.urls")),
     path("", include("hatchery.urls")),

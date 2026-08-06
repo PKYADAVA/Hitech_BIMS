@@ -47,3 +47,7 @@ market_data/scrip_cache/
 
 # JetBrains IDE settings (machine-local; includes device/emulator caches)
 .idea/
+
+# Built Android APKs — 70MB each, and rebuilt every release.
+dist-apk/
+*.apk

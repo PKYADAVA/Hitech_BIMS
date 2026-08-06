@@ -1,0 +1,93 @@
+{% comment %}
+  The install page for the Android app. Standalone rather than extending
+  base.html: whoever opens this is on a phone, not signed in, and has no
+  business being shown a navbar full of pages they cannot reach yet.
+{% endcomment %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1e2a5a">
+  <title>Install Hi Tech BIMS</title>
+  <style>
+    :root { --navy:#1e2a5a; --green:#15803d; --ink:#0f172a; --muted:#64748b;
+            --line:#e2e8f0; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+           background:#f8fafc; color:var(--ink); display:flex; flex-direction:column;
+           min-height:100vh; }
+    header { background:var(--navy); color:#fff; padding:28px 20px; text-align:center; }
+    header h1 { margin:0; font-size:1.35rem; font-weight:800; letter-spacing:.3px; }
+    header p { margin:.35rem 0 0; opacity:.8; font-size:.85rem; }
+    main { flex:1; display:flex; justify-content:center; padding:24px 20px 40px; }
+    .card { width:100%; max-width:480px; background:#fff; border:1px solid var(--line);
+            border-radius:16px; padding:24px; box-shadow:0 8px 28px rgba(15,23,42,.06); }
+    .meta { display:flex; gap:10px; flex-wrap:wrap; justify-content:center;
+            margin-bottom:20px; }
+    .chip { background:#f1f5f9; color:var(--muted); border-radius:999px;
+            padding:4px 12px; font-size:.78rem; font-weight:600; }
+    .btn { display:block; text-align:center; background:var(--green); color:#fff;
+           text-decoration:none; padding:16px; border-radius:12px; font-weight:800;
+           font-size:1.05rem; }
+    .btn:active { opacity:.85; }
+    .unavailable { text-align:center; background:#fff7ed; border:1px solid #fed7aa;
+                   color:#9a3412; border-radius:12px; padding:16px; font-size:.9rem; }
+    h2 { font-size:.95rem; margin:26px 0 10px; }
+    ol { margin:0; padding-left:20px; color:#334155; font-size:.9rem; line-height:1.7; }
+    footer { text-align:center; color:var(--muted); font-size:.78rem; padding:0 20px 28px; }
+    code { background:#f1f5f9; padding:1px 6px; border-radius:5px; font-size:.85em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Hi Tech BIMS</h1>
+    <p>Farm management, on your phone</p>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="meta">
+        {% if version %}<span class="chip">Version {{ version }}</span>{% endif %}
+        <span class="chip">Android</span>
+        {% if size_mb %}<span class="chip">{{ size_mb }} MB</span>{% endif %}
+      </div>
+
+      {% if download_url %}
+        <a class="btn" href="{{ download_url }}">Download the app</a>
+      {% else %}
+        {% comment %}
+          Better to say the build is not published than to show a button that
+          downloads nothing — the second is reported as "the app is broken".
+        {% endcomment %}
+        <div class="unavailable">
+          <strong>No build published yet.</strong><br>
+          Set <code>APK_DOWNLOAD_URL</code>, or collect an APK into
+          <code>static/app/</code>, and this page will offer it.
+        </div>
+      {% endif %}
+
+      <h2>Installing it</h2>
+      <ol>
+        <li>Tap <strong>Download</strong> above and wait for it to finish.</li>
+        <li>Open the downloaded file.</li>
+        <li>Android will ask to allow installing from this browser — allow it.
+            You only need to do this once.</li>
+        <li>Open <strong>Hi Tech BIMS</strong> and sign in with the same username
+            and password you use on the website.</li>
+      </ol>
+
+      <h2>If it will not install</h2>
+      <ol>
+        <li>Check there is room on the phone — it needs about 150&nbsp;MB free.</li>
+        <li>If an older copy is installed and refuses to update, uninstall it first.</li>
+        <li>Ask your administrator to confirm your account is active.</li>
+      </ol>
+    </div>
+  </main>
+
+  <footer>
+    Connects to {{ host }} &middot; Ask your branch administrator for a login.
+  </footer>
+</body>
+</html>

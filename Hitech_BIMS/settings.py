@@ -283,6 +283,22 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
+# --- Android app distribution -------------------------------------------
+# The share link at /app/ is a page, not a file: it survives a new build,
+# which a link to the APK itself does not, so the address handed to staff
+# stays the same for every release.
+#
+# APK_DOWNLOAD_URL points at wherever the build actually lives — a Spaces
+# bucket, a CDN, anything reachable. Left unset, the page looks for an APK
+# collected into static/app/ and offers that instead; with neither it says the
+# build has not been published rather than showing a dead button.
+#
+# The filesystem on App Platform does not survive a deploy, so an APK written
+# at runtime is gone by the next one. Object storage or the repo's static
+# files are the two places that persist.
+APK_DOWNLOAD_URL = os.getenv("APK_DOWNLOAD_URL", "")
+APK_VERSION = os.getenv("APK_VERSION", "")
+
 # --- DigitalOcean Spaces (S3-compatible) for media uploads ---
 # Spaces speaks the S3 API, so django-storages' S3 backend drives it once
 # pointed at the regional Spaces endpoint. Only media is offloaded here; static
