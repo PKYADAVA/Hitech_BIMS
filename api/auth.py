@@ -244,10 +244,12 @@ class PermissionsView(APIView):
                 nav: {"add": True, "edit": True, "delete": True} for nav in NAV_GROUPS
             }
         else:
-            from user.models import GroupTabPermission
+            from user.access import _tab_permission_qs
 
+            # Whichever matrix answers for this user — their own when they have
+            # been switched to individual permissions, their groups' otherwise.
             add_tabs, edit_tabs, del_tabs = set(), set(), set()
-            for p in GroupTabPermission.objects.filter(group__in=u.groups.all()).values(
+            for p in _tab_permission_qs(u).values(
                 "tab_code", "can_add", "can_edit", "can_delete"
             ):
                 if p["can_add"]:

@@ -1043,6 +1043,116 @@ def _persist_web_access(request, group):
     return redirect(f"{reverse('user_groups')}?group={group.id}#webaccess")
 
 
+
+# ---------------------------------------------------------------------------
+# Per-user permissions
+# ---------------------------------------------------------------------------
+
+def _permission_matrix(saved_perms):
+    """The Web-Access grid, given whatever rows answer for the subject.
+
+    The same shape ``build_web_access_context`` builds for a group, so a user's
+    matrix and a group's are the same grid in the same order — one of them
+    quietly listing different tabs is exactly the confusion this page exists to
+    remove.
+    """
+    matrix = []
+    for ci, module in enumerate(MODULE_REGISTRY):
+        sections = []
+        for si, section in enumerate(module["sections"]):
+            tabs = []
+            for tab in section["tabs"]:
+                code, label = tab[0], tab[1]
+                perms = saved_perms.get(code, {})
+                tabs.append({
+                    "code": code, "label": label,
+                    "cells": [{"action": a, "checked": perms.get(a, False)}
+                              for a in ACTIONS],
+                })
+            sections.append({"label": section["label"], "mid": f"{ci}-{si}",
+                             "tabs": tabs})
+        matrix.append({"category": module["label"], "cid": str(ci),
+                       "modules": sections})
+    return matrix
+
+
+@login_required
+def user_permissions(request, user_id):
+    """User > Users > Permissions — one person's own tab matrix.
+
+    Groups answer "what may this role do", which is right until one person in a
+    role needs something the rest of it does not. Giving them a group of their
+    own works and leaves a group per person behind for whoever inherits the
+    system, so this is the per-person answer instead.
+
+    Switched on per user: while the switch is off nothing here applies and the
+    groups answer exactly as they do today, which is what makes the page safe to
+    open on an existing account.
+    """
+    from .models import UserProfile, UserTabPermission
+
+    subject = get_object_or_404(User, id=user_id)
+    profile, _ = UserProfile.objects.get_or_create(user=subject)
+
+    if request.method == "POST":
+        individual = request.POST.get("individual_permissions") == "on"
+        with transaction.atomic():
+            profile.individual_permissions = individual
+            profile.save(update_fields=["individual_permissions"])
+
+            # Rewritten wholesale rather than merged: the form posts the whole
+            # grid, so a cleared tick has to become a missing row.
+            UserTabPermission.objects.filter(user=subject).delete()
+            rows = []
+            for code in ALL_TAB_CODES:
+                values = {f"can_{a}": request.POST.get(f"perm_{code}_{a}") == "on"
+                          for a in ACTIONS}
+                if any(values.values()):
+                    rows.append(UserTabPermission(user=subject, tab_code=code, **values))
+            UserTabPermission.objects.bulk_create(rows)
+
+        messages.success(
+            request,
+            "Permissions saved for %s — %s."
+            % (subject.username,
+               "their own matrix now applies" if individual
+               else "their groups still apply, this matrix is switched off"))
+        return redirect(reverse('create_user_permissions', args=[subject.id]))
+
+    saved = {tp.tab_code: {a: getattr(tp, f"can_{a}") for a in ACTIONS}
+             for tp in UserTabPermission.objects.filter(user=subject)}
+    # What the groups grant today, so the page can say what turning the switch
+    # on would change rather than leaving it to be discovered afterwards.
+    #
+    # Counted the way access is actually decided — a tab is reachable when any
+    # action is ticked — rather than by counting rows. Rows outnumber granted
+    # tabs several times over, and quoting that number would overstate what the
+    # user is about to lose.
+    from .access import _any_action_q, allowed_view_tabs
+
+    # Counted the way access is decided — a tab is reachable when any action is
+    # ticked — using that rule rather than a second copy of it. While the switch
+    # is on, allowed_view_tabs answers for the individual matrix, so the group's
+    # own count has to be asked for directly.
+    group_tabs = (
+        allowed_view_tabs(subject) if not profile.individual_permissions
+        else set(GroupTabPermission.objects
+                 .filter(group__in=subject.groups.all())
+                 .filter(_any_action_q())
+                 .values_list("tab_code", flat=True)))
+
+    return render(request, "user_permissions.html", {
+        "subject": subject,
+        "individual": profile.individual_permissions,
+        "matrix": _permission_matrix(saved),
+        "actions": ACTIONS,
+        "unenforced_actions": UNENFORCED_ACTIONS,
+        "group_names": list(subject.groups.values_list("name", flat=True)),
+        "group_tab_count": len(group_tabs),
+        "own_tab_count": len(saved),
+    })
+
+
 def build_web_access_context(selected_id):
     """Build the Web-Access matrix + scoping context for a selected group id
     (or an empty/defaults context when none is selected)."""

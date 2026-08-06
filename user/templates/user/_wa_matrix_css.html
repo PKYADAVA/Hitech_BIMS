@@ -1,0 +1,91 @@
+<style>
+    :root { --wa-purple:#6f42c1; --wa-purple-soft:#f4eefc; --wa-border:#e7e0f3; }
+
+    /* ---- Editor card ---- */
+    .wa-editor { border:1px solid var(--wa-border); border-radius:14px; background:#fff;
+                 box-shadow:0 6px 22px rgba(111,66,193,.08); margin-bottom:1.5rem; }
+    .wa-editor-head { display:flex; flex-wrap:wrap; align-items:center; gap:12px;
+                      padding:16px 20px; color:#fff; border-radius:13px 13px 0 0;
+                      background:linear-gradient(120deg,#6f42c1,#8b5cf6); }
+    .wa-editor-head .wa-eh-icon { width:42px; height:42px; border-radius:10px; flex:0 0 auto;
+                      background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; font-size:1.2rem; }
+    .wa-editor-head h5 { margin:0; font-weight:700; }
+    .wa-editor-head small { opacity:.85; }
+    .wa-editor-body { padding:20px; }
+    .wa-section-title { font-weight:700; color:#3d2c66; margin:22px 0 12px; display:flex; align-items:center; gap:8px; }
+    /* Shown while Access Type is Admin, which bypasses the matrix entirely. */
+                     padding:11px 14px; border:1px solid #f0c36d; border-radius:10px;
+                     background:#fffaf0; color:#7a4f01; font-size:.83rem; line-height:1.45; }
+    /* The matrix still submits its values, so switching back to Sub-Admin keeps
+       whatever was ticked. It is only shown as inert, not disabled. */
+    .wa-section-title:first-child { margin-top:4px; }
+
+    /* ---- Matrix ---- */
+    .wa-header { background:var(--wa-purple); color:#fff; padding:12px 16px; border-radius:10px 10px 0 0;
+                 font-weight:600; font-size:1.02rem; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    .wa-scroll { max-height:540px; overflow:auto; border:1px solid var(--wa-border); border-top:0; border-radius:0 0 10px 10px; }
+    /* min-width keeps the 9 columns tappable; the container scrolls horizontally on small screens. */
+    .wa-matrix { width:100%; min-width:720px; border-collapse:collapse; table-layout:fixed; }
+    .wa-matrix th, .wa-matrix td { padding:8px 4px; border-bottom:1px solid #f1eef7; }
+    .wa-matrix thead th { background:var(--wa-purple-soft); color:var(--wa-purple); position:sticky; top:0; z-index:1; font-size:.82rem; }
+    .wa-matrix th.link-cell, .wa-matrix td.link-cell { text-align:left; width:auto; }
+    .wa-matrix th.act-col, .wa-matrix td.act-col { text-align:center; width:8%; }
+    .wa-inert { color:#b45309; font-weight:700; cursor:help; }
+    .wa-inert-note { font-size:.75rem; color:#8494ab; margin:8px 2px 0; }
+    .wa-cat-row td { background:#f7f1ff; font-weight:700; font-size:.92rem; }
+    .wa-mod-row td { background:#fcfaff; font-weight:600; }
+    .wa-tab-row td.link-cell { font-weight:400; }
+    .wa-tab-row:hover td { background:#faf7ff; }
+    /* Bigger, higher-contrast checkboxes so ticks are easy to see and hit. */
+    .wa-matrix .form-check-input { margin:0; float:none; vertical-align:middle; cursor:pointer;
+        width:19px; height:19px; border:1.6px solid #b7add1; border-radius:5px; background-color:#fff; }
+    .wa-matrix .form-check-input:hover { border-color:var(--wa-purple); box-shadow:0 0 0 2px rgba(111,66,193,.12); }
+    .wa-matrix .form-check-input:focus { border-color:var(--wa-purple); box-shadow:0 0 0 .2rem rgba(111,66,193,.25); }
+    .wa-matrix .form-check-input:checked,
+    .wa-matrix .form-check-input:indeterminate { background-color:var(--wa-purple); border-color:var(--wa-purple); }
+    /* Slightly larger folder/row "select all" boxes to stand out from cell boxes. */
+    /* The category / module / tab "is this reachable" boxes. They are all
+       .at-all now (access_tree.js drives them from data-scope-*), so size them
+       by where they sit rather than by three separate class names. */
+    .wa-matrix .at-all { width:18px; height:18px; }
+    .wa-matrix thead th input { margin-top:4px; width:18px; height:18px; }
+    /* Tree node: indentation is driven by the level, chevron + icon + label. */
+    .wa-node { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+    .wa-lvl0 { padding-left:2px; }
+    .wa-lvl1 { padding-left:22px; }
+    .wa-lvl2 { padding-left:48px; }
+    .wa-toggle { cursor:pointer; display:inline-flex; width:14px; justify-content:center; color:#8a63c9; flex:0 0 auto; }
+    .wa-caret { transition: transform .15s ease; font-size:.7rem; }
+    .wa-toggle.collapsed .wa-caret { transform: rotate(-90deg); }
+    .wa-ficon { width:15px; text-align:center; flex:0 0 auto; }
+    .wa-cat-row .wa-ficon { color:var(--wa-purple); }
+    .wa-mod-row .wa-ficon { color:#c8922a; }
+    .wa-tab-row .wa-ficon { color:#9aa4b2; }
+    .wa-spacer { display:inline-block; width:14px; flex:0 0 auto; }
+    .wa-treebar { display:flex; gap:10px; align-items:center; padding:8px 2px; }
+    .wa-treebar a { font-size:.85rem; cursor:pointer; text-decoration:none; color:var(--wa-purple); }
+
+    /* ---- Data-scope cards ---- */
+
+    /* ---- Access-flag segmented controls ---- */
+    .wa-flags { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+    .wa-flag { border:1px solid var(--wa-border); border-radius:10px; padding:12px 14px; background:#fcfbfe;
+               display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .wa-flag-label { font-weight:600; color:#3d2c66; }
+    .wa-seg { display:inline-flex; border:1px solid var(--wa-border); border-radius:8px; overflow:hidden; background:#fff; }
+    .wa-seg label { margin:0; cursor:pointer; }
+    .wa-seg input { position:absolute; opacity:0; pointer-events:none; }
+    .wa-seg span { display:inline-block; padding:6px 15px; font-size:.86rem; color:#555; transition:.15s; }
+    .wa-seg label + label span { border-left:1px solid var(--wa-border); }
+    .wa-seg input:checked + span { background:var(--wa-purple); color:#fff; }
+
+    /* ---- Sticky action bar ---- */
+    .wa-actions { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--wa-border);
+                  border-radius:0 0 13px 13px; padding:14px 20px; display:flex; justify-content:flex-end;
+                  gap:10px; flex-wrap:wrap; box-shadow:0 -3px 10px rgba(0,0,0,.03); }
+
+    @media (max-width:576px){
+        .wa-editor-body { padding:14px; }
+        .wa-actions .btn { flex:1 1 auto; }
+    }
+</style>

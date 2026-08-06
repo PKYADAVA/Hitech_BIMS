@@ -1,0 +1,56 @@
+            <thead>
+                <tr>
+                    <th class="link-cell">Link<br><input type="checkbox" class="form-check-input at-all" title="Select every permission"></th>
+                    {% for action in actions %}
+                    <th class="ds-num act-col">{{ action|capfirst }}{% if action in unenforced_actions %}<sup class="wa-inert" title="Stored, but nothing checks this yet">*</sup>{% endif %}<br><input type="checkbox" class="form-check-input at-all" data-action="{{ action }}" title="Select all {{ action }}"></th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for section in matrix %}
+                <tr class="wa-cat-row" data-cat="{{ section.cid }}">
+                    <td class="link-cell">
+                        <span class="wa-node wa-lvl0">
+                            <span class="wa-toggle at-toggle" data-at-folder="c-{{ section.cid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
+                            <i class="fas fa-folder-open wa-ficon"></i>
+                            <input type="checkbox" class="form-check-input at-all" data-at-mode="any" data-scope-cat="{{ section.cid }}">
+                            <span>{{ section.category }}</span>
+                        </span>
+                    </td>
+                    {% for action in actions %}
+                    <td class="act-col"><input type="checkbox" class="form-check-input at-all" data-scope-cat="{{ section.cid }}" data-action="{{ action }}"></td>
+                    {% endfor %}
+                </tr>
+                {% for module in section.modules %}
+                <tr class="wa-mod-row child-of-c-{{ section.cid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
+                    <td class="link-cell">
+                        <span class="wa-node wa-lvl1">
+                            <span class="wa-toggle at-toggle" data-at-folder="m-{{ module.mid }}"><i class="fas fa-chevron-down wa-caret"></i></span>
+                            <i class="fas fa-folder-open wa-ficon"></i>
+                            <input type="checkbox" class="form-check-input at-all" data-at-mode="any" data-scope-mod="{{ module.mid }}">
+                            <span>{{ module.label }}</span>
+                        </span>
+                    </td>
+                    {% for action in actions %}
+                    <td class="act-col"><input type="checkbox" class="form-check-input at-all" data-scope-mod="{{ module.mid }}" data-action="{{ action }}"></td>
+                    {% endfor %}
+                </tr>
+                {% for tab in module.tabs %}
+                <tr class="wa-tab-row child-of-c-{{ section.cid }} child-of-m-{{ module.mid }}" data-cat="{{ section.cid }}" data-mod="{{ module.mid }}">
+                    <td class="link-cell">
+                        <span class="wa-node wa-lvl2">
+                            <span class="wa-spacer"></span>
+                            <i class="fas fa-file-lines wa-ficon"></i>
+                            <input type="checkbox" class="form-check-input at-all" data-at-mode="any" data-scope-tab="{{ tab.code }}" title="Select all permissions for this tab">
+                            <span>{{ tab.label }}</span>
+                        </span>
+                    </td>
+                    {% for cell in tab.cells %}
+                    <td class="act-col"><input type="checkbox" class="form-check-input wa-cell at-cell" name="perm_{{ tab.code }}_{{ cell.action }}" data-action="{{ cell.action }}" data-scope-cat="{{ section.cid }}" data-scope-mod="{{ module.mid }}" data-scope-tab="{{ tab.code }}" {% if cell.checked %}checked{% endif %}></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>

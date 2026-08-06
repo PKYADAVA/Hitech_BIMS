@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Permissions — {{ subject.username }}{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='user' %}{% endblock %}
+
+{% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='create_user' %}
+
+{% include 'user/_wa_matrix_css.html' %}
+<style>
+  .up-switch { display:flex; align-items:flex-start; gap:12px; padding:14px 16px;
+               border:1px solid var(--wa-border); border-radius:12px; background:#faf7ff;
+               margin-bottom:18px; }
+  .up-switch .form-check-input { margin-top:.15rem; }
+  .up-switch small { display:block; color:#5b4a7d; line-height:1.5; }
+  .up-off .wa-scroll { opacity:.5; }
+</style>
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title">Permissions · {{ subject.username }}</div>
+    <div class="page-header-subtitle">
+      {% if group_names %}Groups: {{ group_names|join:", " }}
+      {% else %}No groups{% endif %}
+    </div>
+  </div>
+  <div class="page-header-right">
+    <a href="{% url 'create_user' %}" class="btn btn-outline-secondary">
+      <i class="fas fa-list"></i> Users
+    </a>
+  </div>
+</div>
+
+<form method="post" id="user-permissions-form"{% if not individual %} class="up-off"{% endif %}>
+  {% csrf_token %}
+
+  <div class="wa-editor">
+    <div class="wa-editor-head">
+      <span class="wa-eh-icon"><i class="fas fa-user-shield"></i></span>
+      <div>
+        <h5>Individual Permissions</h5>
+        <small>What this person may reach, instead of what their role may</small>
+      </div>
+    </div>
+    <div class="wa-editor-body">
+
+      {% comment %}
+        The switch, not the ticks, decides whose matrix applies. A matrix saved
+        with nothing ticked has no rows either, so falling back to the groups
+        there would hand someone every tab their role has at the moment their
+        access was meant to be taken away.
+      {% endcomment %}
+      <div class="up-switch">
+        <input class="form-check-input" type="checkbox" role="switch"
+               name="individual_permissions" id="individual_permissions"
+               {% if individual %}checked{% endif %}>
+        <label class="form-check-label" for="individual_permissions">
+          <strong>Use this matrix instead of {{ subject.username }}'s groups</strong>
+          <small>
+            While this is off, the groups decide and nothing below applies —
+            {{ subject.username }} reaches the
+            {{ group_tab_count }} tab{{ group_tab_count|pluralize }} their groups grant.
+            Switch it on and only what is ticked here applies, whatever the groups say.
+            {% if own_tab_count %}This matrix currently has
+              {{ own_tab_count }} tab{{ own_tab_count|pluralize }} ticked.{% endif %}
+          </small>
+        </label>
+      </div>
+
+      <div class="wa-scroll">
+        <table class="table wa-table mb-0">
+{% include 'user/_wa_matrix_table.html' %}
+      </div>
+
+      {% if unenforced_actions %}
+      <p class="wa-inert-note">
+        <span class="wa-inert">*</span>
+        {{ unenforced_actions|join:", "|capfirst }} are saved against the user but
+        nothing reads them yet — ticking or clearing them changes no behaviour.
+        View, Add, Edit, Delete and Print are enforced.
+      </p>
+      {% endif %}
+
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save me-1"></i>Save permissions
+        </button>
+        <a href="{% url 'create_user' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'js/access_tree.js' %}"></script>
+<script>
+  // Grey the grid out while the switch is off, so it is plain that ticking
+  // things there changes nothing yet. The values still submit, so turning the
+  // switch on later keeps whatever was prepared.
+  document.getElementById('individual_permissions').addEventListener('change', function () {
+    document.getElementById('user-permissions-form').classList.toggle('up-off', !this.checked);
+  });
+</script>
+{% endblock %}

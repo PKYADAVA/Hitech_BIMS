@@ -95,6 +95,16 @@
                             {% else %}title="{{ user.is_active|yesno:'Deactivate,Activate' }}"{% endif %}>
                             <i class="fas {% if user.is_active %}fa-toggle-on{% else %}fa-toggle-off{% endif %}"></i>
                         </button>
+                        {% comment %}
+                          Individual permissions: what this person may reach,
+                          instead of what their role may. Off until switched on
+                          there, so opening it changes nothing.
+                        {% endcomment %}
+                        <a class="btn btn-outline-primary btn-sm"
+                           href="{% url 'create_user_permissions' user.id %}"
+                           title="Permissions">
+                            <i class="fas fa-user-shield"></i>
+                        </a>
                         {% endif %}
                         {% if page_perms.delete %}
                         <button type="button" class="btn btn-outline-danger btn-sm delete-user-btn"

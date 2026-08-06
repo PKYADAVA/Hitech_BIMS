@@ -799,6 +799,11 @@ def user_has_any_matrix_config(user):
     """
     from .models import GroupAccessProfile, GroupTabPermission
 
+    # A user switched to their own matrix is configured by that switch alone.
+    # Without this the fail-open below would grant every tab at exactly the
+    # moment an administrator narrowed someone to four of them.
+    if uses_individual_permissions(user):
+        return True
     groups = user.groups.all()
     return (GroupTabPermission.objects.filter(group__in=groups).exists()
             or GroupAccessProfile.objects.filter(group__in=groups).exists())
@@ -811,6 +816,36 @@ def _any_action_q():
     for a in ACTIONS:
         q |= Q(**{f"can_{a}": True})
     return q
+
+
+def uses_individual_permissions(user):
+    """True when this user's own matrix answers instead of their groups'.
+
+    A switch on the profile rather than "are there rows": a matrix deliberately
+    saved with nothing ticked has no rows either, and falling back to the groups
+    there would hand someone every tab their role has at the moment their access
+    was meant to be taken away.
+    """
+    from .models import UserProfile
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    return UserProfile.objects.filter(
+        user=user, individual_permissions=True).exists()
+
+
+def _tab_permission_qs(user, **filters):
+    """The permission rows that answer for this user — theirs, or their groups'.
+
+    Individual replaces group rather than adding to it, so this returns one or
+    the other and never a union: an administrator who ticks four tabs on a
+    person means those four, whatever their groups say.
+    """
+    from .models import GroupTabPermission, UserTabPermission
+
+    if uses_individual_permissions(user):
+        return UserTabPermission.objects.filter(user=user, **filters)
+    return GroupTabPermission.objects.filter(group__in=user.groups.all(), **filters)
 
 
 def user_can(user, tab_code, action="view"):
@@ -828,10 +863,7 @@ def user_can(user, tab_code, action="view"):
         return True
     if action not in ACTIONS:
         action = "view"
-    from .models import GroupTabPermission
-    qs = GroupTabPermission.objects.filter(
-        group__in=user.groups.all(), tab_code=tab_code
-    )
+    qs = _tab_permission_qs(user, tab_code=tab_code)
     if action == "view":
         return qs.filter(_any_action_q()).exists()
     return qs.filter(**{f"can_{action}": True}).exists()
@@ -930,11 +962,9 @@ def allowed_view_tabs(user):
         return set(ALL_TAB_CODES)
     if not user or not user.is_authenticated:
         return set()
-    from .models import GroupTabPermission
     # Any ticked action grants page access (see user_can).
     return set(
-        GroupTabPermission.objects.filter(group__in=user.groups.all())
-        .filter(_any_action_q())
+        _tab_permission_qs(user).filter(_any_action_q())
         .values_list("tab_code", flat=True)
     )
 

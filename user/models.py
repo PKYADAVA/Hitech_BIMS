@@ -8,6 +8,12 @@ class UserProfile(models.Model):
     department = models.CharField(max_length=100, blank=True, null=True)
     role = models.CharField(max_length=100, blank=True, null=True)
 
+    #: Take this person's tabs from their own matrix instead of their groups'.
+    #: A switch rather than "are there rows", so an individual matrix saved with
+    #: nothing ticked means nothing — see :class:`UserTabPermission`. Off by
+    #: default, so no existing account changes until someone turns it on.
+    individual_permissions = models.BooleanField(default=False)
+
     def __str__(self):
         return self.user.username
 
@@ -39,6 +45,52 @@ class GroupTabPermission(models.Model):
 
     def __str__(self):
         return f"{self.group.name} · {self.tab_code}"
+
+
+class UserTabPermission(models.Model):
+    """One person's own action permissions for one screen of the ERP.
+
+    :class:`GroupTabPermission` answers "what may this *role* do", which is the
+    right question until one person in a role needs something the rest of it
+    does not. Giving them a group of their own works, and leaves a group per
+    person behind for whoever inherits the system.
+
+    So this is the per-person answer, and it **replaces** the group matrix
+    rather than adding to or subtracting from it: an administrator who ticks
+    four tabs here means those four, whatever the user's groups happen to say.
+    One place answers "what may this person reach", which is the property that
+    makes a permission auditable.
+
+    Switched on per user by ``UserProfile.individual_permissions``, not by the
+    presence of rows: a matrix deliberately saved with nothing ticked has no
+    rows either, and falling back to the groups there would hand someone every
+    tab their role has at the moment their access was meant to be removed. The
+    same trap ``user_has_any_matrix_config`` documents for groups, one level in.
+
+    Data scoping is a separate question with its own per-person answer — see
+    :class:`EmployeeAccessProfile`. This decides which screens; that decides
+    which rows.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="tab_permissions"
+    )
+    tab_code = models.CharField(max_length=100)
+    can_view = models.BooleanField(default=False)
+    can_add = models.BooleanField(default=False)
+    can_edit = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
+    can_print = models.BooleanField(default=False)
+    can_save = models.BooleanField(default=False)
+    can_update = models.BooleanField(default=False)
+    can_favorite = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("user", "tab_code")
+        verbose_name = "User tab permission"
+
+    def __str__(self):
+        return f"{self.user.username} · {self.tab_code}"
 
 
 class GroupAccessProfile(models.Model):
