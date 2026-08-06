@@ -147,6 +147,20 @@ class MatrixPermission(BasePermission):
             return self._unmapped(request, view, user)
 
         action = METHOD_ACTIONS.get(request.method, "view")
+
+        # Reading a master is part of using the transaction that asks for it.
+        # The phone's Daily Entry screen needs farms, batches and supervisors
+        # to fill its pickers; refusing those because the user was not also
+        # given the Broiler Farm master left the screen open with every
+        # dropdown empty and nothing to say why. Same rule the web middleware
+        # applies to the master JSON feeds — read is opened, writing a master
+        # still needs that master's own rights, and the rows that come back are
+        # still narrowed by the data scope.
+        from user.access import MASTER_REFERENCE_TABS
+
+        if action == "view" and tab in MASTER_REFERENCE_TABS:
+            return True
+
         if not user_can(user, tab, action):
             self._record(request, view, user, "denied", tab, action)
             return False

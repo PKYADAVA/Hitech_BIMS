@@ -594,10 +594,44 @@ for _nav, _s, _code, _l, _extra in iter_tabs():
 #: Read only. Safe methods pass; creating, editing or deleting a master still
 #: needs that master's own rights. And reading is still *scoped* — this decides
 #: whether the endpoint answers, not what it answers with.
+#: Masters any signed-in user may *read*, because a transaction cannot be
+#: filled in without them.
+#:
+#: Listed one by one on purpose. "Every tab in a Master section" is the tempting
+#: rule and it is far too wide — it would hand the SMS gateway settings, the
+#: chart of accounts, the bank and cash accounts and the price masters to
+#: anyone with a login. A permission rule has to be readable to be reviewed,
+#: so this is the reading.
+#:
+#: What is here is organizational scaffolding: where a thing happened and what
+#: it was. Farms, sheds, batches, branches, supervisors, warehouses, items and
+#: their units — the answers a transaction form makes you choose between.
+#:
+#: What is deliberately absent stays behind its own tab: bank_cash, coa,
+#: fin_year, payment_mode, tax_master, terms, company_profile, the price
+#: masters, sms_settings and sms_templates. Parties (customer, supplier) are
+#: out too — they carry contact and credit terms, and no reported case needs
+#: them yet. Add to this list when a real form is found to need one, not in
+#: advance.
+MASTER_REFERENCE_TABS = {
+    # Broiler organisation
+    "region", "branch_template", "broiler_line", "supervisor_template",
+    "branch_farm", "broiler_farm_shed", "broiler_batch", "farmer_group",
+    "broiler_disease", "feed_phase_master_list",
+    # Where stock sits, and what it is
+    "warehouse", "warehouse_mapping", "sector", "organization_centre",
+    "organization_centre_mapping", "item_category", "items",
+    "unit_of_measurement",
+    # Hatchery equipment, for the hatchery transactions
+    "hatchery_master_list", "hatcher_list", "setter_list",
+}
+
+#: The same masters' JSON endpoints, for the web middleware. Derived from the
+#: tab list so the two gates cannot drift apart.
 MASTER_REFERENCE_URLS = {
     _u
     for _nav, _section, _code, _l, _extra in iter_tabs()
-    if "master" in _section.lower()
+    if _code in MASTER_REFERENCE_TABS
     for _u in _extra
 }
 

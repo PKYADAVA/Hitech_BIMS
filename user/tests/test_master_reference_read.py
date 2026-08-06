@@ -50,12 +50,59 @@ class MasterReferenceReadTests(TestCase):
         resp = self.client.post(reverse("branch_list"), {})
         self.assertEqual(resp.status_code, 403)
 
-    def test_the_set_covers_masters_and_not_transactions(self):
+    def test_the_set_covers_the_pickers_and_nothing_sensitive(self):
+        from user.access import MASTER_REFERENCE_TABS
+
         self.assertIn("branch_list", MASTER_REFERENCE_URLS)
         self.assertIn("supervisor_list", MASTER_REFERENCE_URLS)
         # A transaction's own list is not reference data — it is the records.
         self.assertNotIn("bird_sale_api_list", MASTER_REFERENCE_URLS)
         self.assertNotIn("daily_entry_api_list", MASTER_REFERENCE_URLS)
+        # "Every tab in a Master section" is the tempting rule and far too
+        # wide. These stay behind their own tab, and this is what says so.
+        for closed in ("sms_settings", "bank_cash", "coa", "fin_year",
+                       "sales_price_master", "item_price_list", "tax_master",
+                       "company_profile", "customer", "supplier"):
+            self.assertNotIn(closed, MASTER_REFERENCE_TABS, closed)
+
+
+class MobileMasterReferenceTests(TestCase):
+    """The phone hits the same wall through a different gate.
+
+    Daily Entry's screen needs farms, batches and supervisors to fill its
+    pickers. Refusing those because the user was not also given the Broiler
+    Farm master left the screen open with every dropdown empty.
+    """
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+
+        region = Region.objects.create(description="East")
+        self.branch = Branch.objects.create(branch_name="Bahraich",
+                                            region=region, prefix="BHR")
+        group = Group.objects.create(name="Transactions Only")
+        GroupTabPermission.objects.create(group=group, tab_code="daily_entry",
+                                          can_view=True, can_add=True)
+        self.user = get_user_model().objects.create_user("driver", password="x")
+        self.user.groups.add(group)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_the_pickers_answer(self):
+        for path in ("/api/v1/broiler/farms/", "/api/v1/broiler/branches/",
+                     "/api/v1/broiler/supervisors/", "/api/v1/broiler/batches/"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+
+    def test_a_master_outside_the_list_is_still_refused(self):
+        # Suppliers carry contact details and credit terms, and nothing
+        # reported needs them — so the matrix still governs them.
+        self.assertEqual(
+            self.client.get("/api/v1/purchase/suppliers/").status_code, 403)
+
+    def test_writing_a_master_is_still_refused(self):
+        self.assertEqual(
+            self.client.post("/api/v1/broiler/branches/", {}, format="json")
+            .status_code, 403)
 
 
 class MasterReferenceScopeTests(TestCase):
