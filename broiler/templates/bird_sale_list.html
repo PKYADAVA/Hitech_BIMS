@@ -42,11 +42,25 @@
           <tr>
             <th class="ds-mid">Date</th><th>Sale No.</th><th>Doc No.</th><th>Sale To</th><th>Farm</th>
             <th>Batch</th><th>Birds</th><th>Net Wt.</th><th>Avg Wt.</th><th class="ds-num">Rate</th>
-            <th class="ds-num">Amount</th><th class="ds-mid text-center">Action</th>
+            <th class="ds-num">Amount</th><th class="text-center">Evidence</th>
+            <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Lifting evidence: the photographs the phone took on site -->
+<div class="modal fade" id="evidenceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-camera me-1"></i>Lifting Evidence</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body"><div class="row" id="evidence-body"></div></div>
     </div>
   </div>
 </div>
@@ -84,6 +98,41 @@ $(function () {
 
   // escapeHtml() provided globally by main.js
 
+  // A lifting recorded on the phone carries a GPS pin and photographs of the
+  // truck, the birds and the weighbridge slip. Nobody at the desk watched the
+  // birds leave, so this column is how the branch checks what it is billed
+  // for. A sale typed up here afterwards has neither, and says so.
+  const photosById = {};
+
+  function evidenceCell(row) {
+    const bits = [];
+    if (row.lift_latitude != null && row.lift_longitude != null) {
+      const pin = `${row.lift_latitude},${row.lift_longitude}`;
+      bits.push(`<a class="btn btn-sm btn-outline-success" target="_blank" rel="noopener"
+                    href="https://www.google.com/maps?q=${encodeURIComponent(pin)}"
+                    title="${escapeHtml(row.lift_place || pin)}"><i class="fas fa-location-dot"></i></a>`);
+    }
+    if (row.photos && row.photos.length) {
+      photosById[row.id] = row.photos;
+      bits.push(`<button type="button" class="btn btn-sm btn-outline-primary evidence-button ms-1"
+                    data-id="${row.id}" title="View photos"><i class="fas fa-camera"></i>
+                    <span class="ms-1">${row.photos.length}</span></button>`);
+    }
+    return bits.length ? bits.join("") : '<span class="text-muted">—</span>';
+  }
+
+  $(document).on("click", ".evidence-button", function () {
+    const shots = photosById[$(this).data("id")] || [];
+    $("#evidence-body").html(shots.map(p => `
+      <div class="col-6 col-md-4 mb-3 text-center">
+        <a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">
+          <img src="${escapeHtml(p.url)}" class="img-fluid rounded border" alt="${escapeHtml(p.label)}">
+        </a>
+        <div class="small text-muted mt-1">${escapeHtml(p.label)}</div>
+      </div>`).join(""));
+    $("#evidenceModal").modal("show");
+  });
+
   function renderRows(rows) {
     if (table) { table.destroy(); }
     const tbody = $("#sale-table tbody");
@@ -101,6 +150,7 @@ $(function () {
         <td>${Number(row.avg_weight).toFixed(2)}</td>
         <td>${Number(row.rate).toFixed(2)}</td>
         <td>${Number(row.amount).toFixed(2)}</td>
+        <td class="text-center text-nowrap">${evidenceCell(row)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
@@ -112,7 +162,7 @@ $(function () {
     table = $("#sale-table").DataTable({
       responsive: true, order: [[0, "desc"]],
       dom: "Bfrtip", buttons: ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      columnDefs: [{ orderable: false, targets: [-1] }],
+      columnDefs: [{ orderable: false, targets: [-1, -2] }],
       language: { emptyTable: "No data available in table" },
     });
   }

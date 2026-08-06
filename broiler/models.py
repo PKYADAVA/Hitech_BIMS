@@ -1,5 +1,5 @@
 import re
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import models
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
@@ -500,6 +500,11 @@ class Farmer(models.Model):
         null=True,
         help_text=_("Residential address of the farmer")
     )
+    status = models.CharField(
+        max_length=12, default="active", blank=True,
+        choices=[("active", "Active"), ("inactive", "Inactive")],
+        help_text=_("Whether this farmer is currently dealt with"))
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -642,6 +647,24 @@ class BroilerFarm(models.Model):
         null=True,
         help_text=_("Other supporting documents")
     )
+    # Facts the Farm Report asks for that the master did not hold. Kept
+    # optional: they are surveyed on a visit, not known when a farm is first
+    # entered, so a farm with blanks here is normal rather than incomplete.
+    own_or_lease = models.CharField(
+        max_length=10, blank=True,
+        choices=[("own", "Own"), ("lease", "Lease")],
+        help_text=_("Whether the farmer owns the land or leases it"))
+    water_ph = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        help_text=_("Water pH from the last test"))
+    water_tds = models.PositiveIntegerField(
+        null=True, blank=True, help_text=_("Water TDS in ppm from the last test"))
+    farm_status = models.CharField(
+        max_length=12, default="active", blank=True,
+        choices=[("active", "Active"), ("inactive", "Inactive"),
+                 ("closed", "Closed")],
+        help_text=_("Whether the farm is currently in use"))
+
     farm_sqft = models.CharField(
         max_length=20,
         blank=True,
@@ -1296,9 +1319,10 @@ class BirdSale(models.Model):
     avg_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, editable=False,
                                      help_text="Net weight / Birds")
     rate = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Rate per Kg")
-    round_off = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    round_off = models.DecimalField(max_digits=8, decimal_places=2, default=0, editable=False,
+                                    help_text="What rounding the total to the rupee added or took off")
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False,
-                                 help_text="Net weight x Rate + RoundOff")
+                                 help_text="Net weight x Rate, rounded to the rupee")
 
     # The person who supervised the lifting/weighment — any employee (branch
     # manager, line supervisor, accountant, weighment operator, etc.), not
@@ -1308,6 +1332,17 @@ class BirdSale(models.Model):
     vehicle = models.CharField(max_length=50, blank=True)
     driver = models.CharField(max_length=100, blank=True)
     remarks = models.CharField(max_length=255, blank=True)
+
+    # Where the lifting was weighed, stamped by the phone that recorded it.
+    # Nullable and never required by the model: the same sale is also raised at
+    # a desk from a slip brought back from the field, and that desk has no GPS.
+    # The phone form asks for it because the phone is standing there.
+    lift_latitude = models.FloatField(null=True, blank=True,
+                                      help_text="GPS latitude where the lifting was recorded")
+    lift_longitude = models.FloatField(null=True, blank=True,
+                                       help_text="GPS longitude where the lifting was recorded")
+    lift_place = models.CharField(max_length=200, blank=True,
+                                  help_text="Human-readable place for the GPS pin")
 
     entry_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='broiler_bird_sales')
@@ -1333,7 +1368,16 @@ class BirdSale(models.Model):
 
     def save(self, *args, **kwargs):
         self.avg_weight = round(self.net_weight / self.birds, 2) if self.birds else 0
-        self.amount = (self.net_weight or 0) * (self.rate or 0) + (self.round_off or 0)
+        # Round off is derived, not typed. A lifting is billed to the rupee, so
+        # the paise fall off the total and `round_off` records what that cost
+        # or gained — it used to be an editable box the user filled in, which
+        # made the same weighment come to a different figure depending on who
+        # entered it.
+        # Coerced rather than used as they arrive: `or 0` hands back a plain
+        # int for an empty weight, and a form posts these as strings.
+        raw = Decimal(str(self.net_weight or 0)) * Decimal(str(self.rate or 0))
+        self.amount = raw.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        self.round_off = self.amount - raw
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new and not self.sale_no:
@@ -1352,6 +1396,70 @@ class BirdSale(models.Model):
             if match:
                 max_num = max(max_num, int(match.group(1)))
         return f"{prefix}{max_num + 1:04d}"
+
+    @property
+    def has_location(self):
+        return self.lift_latitude is not None and self.lift_longitude is not None
+
+
+class BirdSalePhoto(models.Model):
+    """Photo evidence of a lifting — the truck, the birds, the weighbridge slip.
+
+    A lifting is the one broiler transaction nobody at the desk witnesses: the
+    birds leave the farm, and what the branch is billed for is whatever the
+    slip says. These are the pictures that make the slip checkable, so they are
+    taken on site by the phone raising the sale.
+
+    Modelled as rows rather than three fields on ``BirdSale`` for the same
+    reason as ``DailyEntryPhoto``: a lifting is often more than one truckload
+    and more than one weighment, and a fixed field can hold exactly one of
+    each. ``kind`` says what a picture shows; ``KIND_OTHER`` carries the
+    "Add More" ones that evidence nothing in particular.
+    """
+
+    KIND_TRUCK = "truck"
+    KIND_BIRDS = "birds"
+    KIND_WEIGHBRIDGE = "weighbridge"
+    KIND_OTHER = "other"
+    KIND_CHOICES = [
+        (KIND_TRUCK, _("Truck Photo")),
+        (KIND_BIRDS, _("Birds Photo")),
+        (KIND_WEIGHBRIDGE, _("Weighbridge Slip")),
+        (KIND_OTHER, _("Other")),
+    ]
+
+    #: The three a lifting is expected to carry, in the order the form asks.
+    REQUIRED_KINDS = [KIND_TRUCK, KIND_BIRDS, KIND_WEIGHBRIDGE]
+
+    #: Cap per sale per kind — field photos travel over rural mobile data, and
+    #: an uncapped set is how a save stops finishing at all.
+    MAX_PER_KIND = 5
+
+    sale = models.ForeignKey(BirdSale, on_delete=models.CASCADE, related_name="photos",
+                             help_text=_("Bird Sale this photo evidences"))
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_OTHER,
+                            help_text=_("What the photo shows"))
+    image = models.ImageField(upload_to="bird_sale/photos/%Y/%m/",
+                              help_text=_("The photograph"))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Bird Sale Photo")
+        verbose_name_plural = _("Bird Sale Photos")
+        ordering = ["kind", "id"]
+        indexes = [models.Index(fields=["sale", "kind"])]
+
+    def __str__(self):
+        return f"{self.sale.sale_no} - {self.get_kind_display()}"
+
+    def delete(self, *args, **kwargs):
+        # Drop the file with the row. A cascade from the sale skips this, which
+        # is why the register's Delete goes through the model rather than a
+        # bulk queryset delete.
+        image = self.image
+        super().delete(*args, **kwargs)
+        if image:
+            image.storage.delete(image.name)
 
 
 class BirdSaleReceipt(models.Model):

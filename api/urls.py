@@ -21,6 +21,7 @@ from broiler.api import (
     DailyEntryLookupView,
     DailyEntryStockLookupView,
     MedicineItemLookupView,
+    ReceiptLookupView,
     MedicineStockLookupView,
     ReverseGeocodeView,
 )
@@ -35,6 +36,7 @@ from hr.api import register as register_hr
 from hr.api_write import write_urls as hr_write_urls
 from purchase.api import register as register_purchase
 from purchase.api_write import write_urls as purchase_write_urls
+from sales.api import CustomerBalanceView
 from user.api import (RoleMobileModuleView, RoleModuleView, RolesAccessView,
                       RoleView, UserCreateView, UserRolesView)
 from user.api import register as register_user
@@ -137,11 +139,17 @@ urlpatterns = [
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    # What a customer owes, for a form raising a document against them.
+    path("sales/customer-balance", CustomerBalanceView.as_view(),
+         name="sales-customer-balance"),
     # Bird Sale form: farm → active batch + owning farmer (declared before router).
     path("broiler/farm-lookup", BirdSaleFarmLookupView.as_view(), name="broiler-farm-lookup"),
     # Medicine/Vaccine Consumption: the two columns the phone form was missing.
     # A pin as an address, proxied so the phone gets what the browser gets.
     path("geo/reverse", ReverseGeocodeView.as_view(), name="geo-reverse"),
+    # Bird Receipt: ledger balance + the codes each payment mode allows.
+    path("broiler/receipt-lookup", ReceiptLookupView.as_view(),
+         name="broiler-receipt-lookup"),
     path("broiler/medicine-item-lookup", MedicineItemLookupView.as_view(),
          name="broiler-medicine-item-lookup"),
     path("broiler/medicine-stock-lookup", MedicineStockLookupView.as_view(),

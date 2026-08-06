@@ -59,6 +59,7 @@ FA_TO_MCI = {
     "fa-percentage": "percent",
     "fa-receipt": "receipt",
     "fa-right-left": "swap-horizontal",
+    "fa-seedling": "sprout",
     "fa-ruler": "ruler",
     "fa-shopping-basket": "basket",
     "fa-sitemap": "sitemap",

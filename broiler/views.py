@@ -2691,6 +2691,16 @@ def _bird_sale_to_dict(row):
         "lifting_supervisor": row.lifting_supervisor_id,
         "lifting_supervisor_name": str(row.lifting_supervisor) if row.lifting_supervisor_id else "",
         "vehicle": row.vehicle, "driver": row.driver, "remarks": row.remarks,
+        # Field evidence, captured by the phone. A desk raising the same sale
+        # from a slip brought in has none of it, so every one of these is
+        # allowed to be empty — the register says which liftings were
+        # witnessed and which were typed up afterwards.
+        "lift_latitude": row.lift_latitude, "lift_longitude": row.lift_longitude,
+        "lift_place": row.lift_place,
+        "photos": [
+            {"kind": p.kind, "label": p.get_kind_display(), "url": p.image.url}
+            for p in row.photos.all() if p.image
+        ],
     }
 
 
@@ -2717,7 +2727,8 @@ def _apply_bird_sale(instance, data):
     instance.birds = int(data.get("birds") or 0)
     instance.net_weight = Decimal(str(data.get("net_weight") or 0))
     instance.rate = Decimal(str(data.get("rate") or 0))
-    instance.round_off = Decimal(str(data.get("round_off") or 0))
+    # round_off and amount are derived in BirdSale.save(); a value sent for
+    # either is ignored rather than trusted.
     instance.lifting_supervisor_id = data.get("lifting_supervisor") or None
     instance.vehicle = data.get("vehicle") or ""
     instance.driver = data.get("driver") or ""
@@ -2751,11 +2762,15 @@ class BirdSaleAPI(BaseAPIView):
         try:
             if id:
                 row = _scope_rows(request.user, BirdSale.objects.select_related(
-                    "customer", "farmer", "farm", "batch", "lifting_supervisor")).get(id=id)
+                    "customer", "farmer", "farm", "batch", "lifting_supervisor")
+                    .prefetch_related("photos")).get(id=id)
                 return JsonResponse(_bird_sale_to_dict(row))
 
+            # Evidence photos are rendered per row, so they are fetched with the
+            # page rather than one query per sale.
             qs = _scope_rows(request.user, BirdSale.objects.select_related(
-                "customer", "farmer", "farm", "batch", "lifting_supervisor"))
+                "customer", "farmer", "farm", "batch", "lifting_supervisor")
+                .prefetch_related("photos"))
             from_date = (request.GET.get("from_date") or "").strip()
             to_date = (request.GET.get("to_date") or "").strip()
             if from_date:

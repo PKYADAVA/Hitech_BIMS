@@ -139,6 +139,10 @@ API_SCOPES = {
     "broiler.DailyEntryPhoto": {"branches": "entry__farm__branch_id",
                                 "farms": "entry__farm_id"},
     "broiler.BirdSale": {"branches": "farm__branch_id", "farms": "farm_id"},
+    # Same reasoning as DailyEntryPhoto: the picture inherits the sale's farm,
+    # so it is scoped down that path one hop further along.
+    "broiler.BirdSalePhoto": {"branches": "sale__farm__branch_id",
+                              "farms": "sale__farm_id"},
     # Copied from broiler/views.py::farm_location_capture_api, which scopes the
     # register with scope_multi on exactly these two fields.
     "broiler.FarmLocationCapture": {"branches": "farm__branch_id", "farms": "farm_id"},

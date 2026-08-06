@@ -28,6 +28,7 @@ from api.viewsets import V1ViewMixin, register_model
 from .models import (
     Branch,
     BirdSale,
+    BirdSalePhoto,
     BirdSaleReceipt,
     Breed,
     BreedStandard,
@@ -60,10 +61,10 @@ def _active_batch_for_farm(farm_id):
 
 
 class BirdSaleSerializer(serializer_factory(BirdSale)):
-    """Bird Sale write logic identical to the web form: the batch and the buyer
-    are derived from the chosen farm, never trusted from the client.
+    """Bird Sale write logic identical to the web form: the buyer is derived
+    from the chosen farm, never trusted from the client.
 
-    * batch  → the farm's active batch
+    * batch  → the one chosen, checked against the farm; else its open batch
     * farmer → the farm's owner (a Farmer Sale is that farmer buying back)
     * customer required for a Customer Sale; farmer must exist for a Farmer Sale
 
@@ -71,12 +72,21 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
     """
 
     def validate(self, attrs):
+        from .views import _resolve_batch
+
         attrs = super().validate(attrs)
         farm = attrs.get("farm") or getattr(self.instance, "farm", None)
         sale_type = attrs.get("sale_type") or getattr(self.instance, "sale_type", "customer")
 
         if farm is not None:
-            attrs["batch"] = _active_batch_for_farm(farm.id)
+            # The client's choice is honoured but not trusted: _resolve_batch
+            # only accepts a batch belonging to this farm, and falls back to
+            # the farm's open one otherwise. Overriding it unconditionally —
+            # which this did — silently posted a two-flock farm's sale against
+            # whichever batch the server picked, discarding the answer the form
+            # had just asked for.
+            chosen = attrs.get("batch")
+            attrs["batch"] = _resolve_batch(farm.id, chosen.id if chosen else None)
             if sale_type == "farmer":
                 attrs["farmer"] = farm.farmer
                 attrs["customer"] = None
@@ -96,6 +106,33 @@ class BirdSaleSerializer(serializer_factory(BirdSale)):
         if request is not None and not validated_data.get("entry_by"):
             validated_data["entry_by"] = request.user
         return super().create(validated_data)
+
+
+class BirdSalePhotoSerializer(serializer_factory(BirdSalePhoto)):
+    """Photo evidence of a lifting — truck, birds, weighbridge slip.
+
+    Same cap rule and same reason as ``DailyEntryPhotoSerializer``: the phone
+    counts what is on its own screen, which is not what the server holds if the
+    lifting was photographed from two devices or a retry re-sent a set that had
+    already landed.
+    """
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        sale = attrs.get("sale") or getattr(self.instance, "sale", None)
+        kind = attrs.get("kind") or getattr(self.instance, "kind", None)
+        if sale is not None and kind:
+            existing = BirdSalePhoto.objects.filter(sale=sale, kind=kind)
+            if self.instance is not None:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.count() >= BirdSalePhoto.MAX_PER_KIND:
+                raise serializers.ValidationError({
+                    "image": (
+                        f"This sale already has {BirdSalePhoto.MAX_PER_KIND} "
+                        f"{kind} photos, which is the limit."
+                    )
+                })
+        return attrs
 
 
 class DailyEntryPhotoSerializer(serializer_factory(DailyEntryPhoto)):
@@ -386,6 +423,44 @@ class ReverseGeocodeView(V1ViewMixin, APIView):
         return Response(place)
 
 
+class ReceiptLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/receipt-lookup — what the Bird Receipt form asks for.
+
+    Two answers in one call because the form needs both the moment a party is
+    chosen: the outstanding ledger balance, and which Bank/Cash codes the
+    payment mode allows. Both delegate to the web form's own helpers so the
+    phone and the ERP agree on the figure and the shortlist.
+
+    Called with no party it still answers with the modes and their codes, which
+    is what the form needs to populate its pickers before anything is chosen.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from account.services.bank_cash import (active_payment_modes,
+                                                bank_cash_accounts, payment_mode_map)
+
+        from .views import bird_sale_receipt_balance_lookup
+
+        q = request.query_params
+        balance = "0"
+        if q.get("customer") or q.get("farmer"):
+            # Reuse the web view rather than restate the rollup: a customer
+            # receipt shows the whole customer ledger, a farmer receipt the
+            # cost-centre balance, and that distinction is easy to lose.
+            import json as _json
+            balance = _json.loads(
+                bird_sale_receipt_balance_lookup(request).content).get("balance", "0")
+
+        return Response({
+            "balance": balance,
+            "modes": list(active_payment_modes("receipt")),
+            "mode_codes": payment_mode_map("receipt"),
+            "accounts": [{"id": a.id, "label": str(a)} for a in bank_cash_accounts()],
+        })
+
+
 class MedicineItemLookupView(V1ViewMixin, APIView):
     """GET /api/v1/broiler/medicine-item-lookup?item=<id> — the item's
     consumption unit, for the auto-filled Unit column on the phone's
@@ -578,6 +653,10 @@ def register(router) -> None:
                    serializer=MedicineVaccineEntrySerializer, cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, serializer=BirdSaleSerializer,
                    search_fields=["sale_no", "doc_no", "vehicle", "driver"], cursor=True)
+    # Lifting evidence, one row per picture. Uploaded after the sale itself,
+    # since each photo needs the sale's id to hang off.
+    register_model(router, "broiler/bird-sale-photos", BirdSalePhoto,
+                   serializer=BirdSalePhotoSerializer, ordering=["kind", "id"])
     register_model(router, "broiler/bird-sale-receipts", BirdSaleReceipt, cursor=True)
 
     # --- Growing-charge settlement / batch closing (read-only) ----------

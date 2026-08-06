@@ -10,7 +10,12 @@ Registered under ``/api/v1/sales/…`` by :func:`register` (called from
 """
 from __future__ import annotations
 
-from api.viewsets import register_model
+from django.utils import timezone
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from api.viewsets import V1ViewMixin, register_model
 
 from .models import (
     Customer,
@@ -21,6 +26,44 @@ from .models import (
     SalesPriceMaster,
     SalesReceipt,
 )
+
+
+class CustomerBalanceView(V1ViewMixin, APIView):
+    """GET /api/v1/sales/customer-balance?customer=<id> — what one customer
+    owes, for a form raising a document against them.
+
+    The same payload the web Bird Sale and Delivery Challan forms fetch, from
+    the same ``_customer_balance_row`` the Customer Balance report is built
+    from — so the figure a supervisor is shown on the farm gate cannot differ
+    from the figure the branch judges that customer by.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .views import _customer_balance_row
+
+        raw = (request.query_params.get("customer") or "").strip()
+        customer = (Customer.objects.select_related("customer_group")
+                    .filter(id=raw).first()) if raw.isdigit() else None
+        if not customer:
+            return Response({"balance": "", "label": "", "credit_limit": "",
+                             "available": "", "limit_exceeded": ""})
+
+        row = _customer_balance_row(customer, None, None, timezone.localdate())
+        if row["debit"] > 0:
+            label = "%s Dr" % row["debit"]           # customer owes us
+        elif row["credit"] > 0:
+            label = "%s Cr" % row["credit"]          # customer is in advance
+        else:
+            label = "0.00"
+        return Response({
+            "balance": str(row["debit"] - row["credit"]),
+            "label": label,
+            "credit_limit": str(row["credit_limit"]),
+            "available": str(row["available"]),
+            "limit_exceeded": str(row["limit_exceeded"]),
+        })
 
 
 def register(router) -> None:
