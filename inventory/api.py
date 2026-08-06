@@ -55,6 +55,25 @@ class StockTransferItemLookupView(V1ViewMixin, APIView):
         return Response(json.loads(stock_transfer_item_lookup(request).content))
 
 
+class FarmBatchListView(V1ViewMixin, APIView):
+    """GET /api/v1/inventory/farm-batches?farm=<id> — a farm's batches, for the
+    Batch box on a transfer into or out of that farm.
+
+    Every batch, not just the open ones, with the current one flagged: chicks
+    are placed onto a fresh flock, but a correction filed a week later belongs
+    to the batch it was about. Delegates to the web form's own lookup.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import json
+
+        from inventory.views import stock_transfer_farm_batches
+
+        return Response(json.loads(stock_transfer_farm_batches(request).content))
+
+
 class StockTransferStockLookupView(V1ViewMixin, APIView):
     """GET /api/v1/inventory/stock-transfer-stock?location_type=&location_id=
     &item=<id>&date=<iso> — what is actually at that location on that date.

@@ -47,6 +47,7 @@ export const RESOURCE_TABS: Record<string, string> = {
   "broiler-farm-location-capture": "farm_location_capture_list",
   "broiler-bird-sales": "bird_sale_list",
   "broiler-sale-receipts": "bird_sale_receipt_list",
+  "broiler-chicks-placement": "chicks_placement_list",
   "broiler-farms": "branch_farm",
   "broiler-sheds": "broiler_farm_shed",
   "broiler-batches": "broiler_batch",

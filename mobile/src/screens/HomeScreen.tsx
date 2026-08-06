@@ -111,9 +111,6 @@ type NavTarget =
  * rather than a mobile-only selection: someone who works both screens should
  * not have to learn two sets of shortcuts. Each opens that resource's list,
  * which is where the web links land too.
- *
- * Chicks Placement is the exception — the phone has no placement *transaction*
- * list, only the register — so it opens the report of the same name.
  */
 interface QuickAction {
   key: string;
@@ -132,8 +129,10 @@ const QUICK_ACTIONS: QuickAction[] = [
     tab: "HrModule", resourceKey: "hr-supervisor-trips" },
   { key: "batch", label: "Batch Creation", icon: "📦", color: colors.broiler,
     tab: "Broiler", resourceKey: "broiler-batches" },
+  // Opened the report until the phone grew the transaction itself; it now
+  // lands on the register, which is where the web shortcut goes.
   { key: "placement", label: "Chicks Placement", icon: "🐥", color: colors.hatchery,
-    tab: "Broiler", report: { title: "Chicks Placement", path: "/reports/chicks-placement" } },
+    tab: "Broiler", resourceKey: "broiler-chicks-placement" },
   { key: "feed", label: "Feed Transfer", icon: "🚚", color: colors.inventory,
     tab: "InventoryModule", resourceKey: "inventory-stock-transfers" },
   { key: "daily", label: "Daily Entry", icon: "📋", color: colors.broiler,

@@ -82,6 +82,7 @@ PHONE_SCREENS = [
     ("hr-supervisor-trips", "supervisor_trip_report"),
     ("broiler-bird-sales", "bird_sale_list"),
     ("broiler-sale-receipts", "bird_sale_receipt_list"),
+    ("broiler-chicks-placement", "chicks_placement_list"),
     ("broiler-farms", "branch_farm"),
     ("broiler-sheds", "broiler_farm_shed"),
     ("broiler-batches", "broiler_batch"),

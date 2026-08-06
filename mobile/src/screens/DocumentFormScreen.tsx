@@ -1,9 +1,11 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { deleteDocument, loadDocument, saveDocument } from "@/api/documents";
 import { ApiError } from "@/api/types";
+import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button, Card, Loading } from "@/components/ui";
@@ -11,12 +13,13 @@ import { RESOURCES } from "@/config/catalog";
 import {
   BATCH_OPTIONS_PATH,
   DOCUMENTS,
+  DocConfig,
   DocField,
   DocSection,
   FARM_OPTIONS_PATH,
   WAREHOUSE_OPTIONS_PATH,
 } from "@/config/documents";
-import { FormField, stockTransferItem, stockTransferStock } from "@/config/forms";
+import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { usePickerOptions } from "@/query/usePickerOptions";
@@ -49,12 +52,20 @@ function FieldRows({
   fields,
   values,
   set,
+  dynamic,
+  rowIndex,
 }: {
   fields: DocField[];
   values: Dict;
   set: (key: string, val: string) => void;
+  /** Options for pickers whose choices depend on another field, keyed
+   *  `<rowIndex>:<field>`. Absent for the header, which has none. */
+  dynamic?: Record<string, { value: string; label: string }[]>;
+  rowIndex?: number;
 }) {
   const styles = useStyles();
+  const opts = (f: DocField) =>
+    f.dynamicOptions && dynamic ? (dynamic[`${rowIndex}:${f.name}`] ?? []) : undefined;
   const out: React.ReactNode[] = [];
   for (let i = 0; i < fields.length; i += 1) {
     const f = fields[i];
@@ -63,17 +74,17 @@ function FieldRows({
       out.push(
         <View key={f.name} style={styles.pair}>
           <View style={styles.pairHalf}>
-            <DocFieldControl field={f} values={values} set={set} />
+            <DocFieldControl field={f} values={values} set={set} dynamic={opts(f)} />
           </View>
           <View style={styles.pairHalf}>
-            <DocFieldControl field={next} values={values} set={set} />
+            <DocFieldControl field={next} values={values} set={set} dynamic={opts(next)} />
           </View>
         </View>
       );
       i += 1;
       continue;
     }
-    out.push(<DocFieldControl key={f.name} field={f} values={values} set={set} />);
+    out.push(<DocFieldControl key={f.name} field={f} values={values} set={set} dynamic={opts(f)} />);
   }
   return <>{out}</>;
 }
@@ -195,11 +206,14 @@ function DocFieldControl({
   values,
   set,
   error,
+  dynamic,
 }: {
   field: DocField;
   values: Dict;
   set: (key: string, val: string) => void;
   error?: string;
+  /** Choices for a `dynamicOptions` picker; undefined for every other field. */
+  dynamic?: { value: string; label: string }[];
 }) {
   if (field.type === "location") return <LocationControl field={field} values={values} set={set} />;
   if (field.type === "toggle")
@@ -214,9 +228,19 @@ function DocFieldControl({
         onChange={(v) => set(field.name, v)}
       />
     );
+  const asked = asFormField(field);
+  if (field.dynamicOptions) {
+    // No path to fetch from: the choices arrive already loaded, and an empty
+    // set says why it is empty rather than looking like a broken picker.
+    asked.options = dynamic ?? [];
+    asked.optionsPath = undefined;
+    if (!values[field.dynamicOptions.on] && field.dynamicOptions.emptyHint) {
+      asked.placeholder = field.dynamicOptions.emptyHint;
+    }
+  }
   return (
     <FormControl
-      field={asFormField(field)}
+      field={asked}
       value={values[field.name] ?? ""}
       error={error}
       onChange={(v) => set(field.name, v)}
@@ -282,12 +306,25 @@ const initValues = (fields: DocField[], extra: Dict = {}): Dict => {
     if (f.type === "location" && v[`${f.name}_type`] === undefined) {
       v[`${f.name}_type`] = "warehouse";
     }
+    // A row carrying its own date starts on today, as the web grid's rows do —
+    // a document whose date lives on the header has this seeded there instead.
+    if (f.type === "date" && v[f.name] === undefined) {
+      v[f.name] = new Date().toISOString().slice(0, 10);
+    }
   }
   return v;
 };
 
+/** The item fields a document actually renders — its sections when it has
+ *  them, the flat list otherwise. Seeding walked only the flat list, so a
+ *  sectioned document's dates and toggles started empty. */
+const itemFieldsOf = (d: DocConfig): DocField[] =>
+  d.itemSections ? d.itemSections.flatMap((s) => s.fields) : d.itemFields;
+
 export function DocumentFormScreen({ route, navigation }: Props) {
   const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { resourceKey, mode, row } = route.params;
   const doc = DOCUMENTS[resourceKey];
   const config = RESOURCES[resourceKey];
@@ -296,14 +333,27 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   const [header, setHeader] = useState<Dict>(() =>
     initValues(doc.header, { date: new Date().toISOString().slice(0, 10) })
   );
-  const [items, setItems] = useState<Dict[]>(() => [initValues(doc.itemFields)]);
+  const [items, setItems] = useState<Dict[]>(() => [initValues(itemFieldsOf(doc))]);
   const [loading, setLoading] = useState(editId != null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: `${editId != null ? "Edit" : "New"} ${doc.title}` });
-  }, [navigation, doc.title, editId]);
+    navigation.setOptions({
+      title: `${editId != null ? "Edit" : "Add"} ${doc.title}`,
+      headerRight: () => (
+        <Pressable
+          onPress={() => navigation.navigate("List", { resourceKey })}
+          style={styles.registerBtn}
+          accessibilityRole="button"
+          accessibilityLabel={`${doc.title} register`}
+        >
+          <AppIcon name="format-list-bulleted" size={16} color={colors.onDark} />
+          <Text style={styles.registerText}>Register</Text>
+        </Pressable>
+      ),
+    });
+  }, [navigation, doc.title, editId, resourceKey, styles, colors.onDark]);
 
   // Edit: fetch the existing document (already in form-field shape) and prefill.
   useEffect(() => {
@@ -314,7 +364,7 @@ export function DocumentFormScreen({ route, navigation }: Props) {
         const detail = await loadDocument(doc.savePath, editId);
         if (!alive) return;
         setHeader(initValues(doc.header, detail.header));
-        setItems(detail.items.length ? detail.items : [initValues(doc.itemFields)]);
+        setItems(detail.items.length ? detail.items : [initValues(itemFieldsOf(doc))]);
       } catch (e) {
         if (alive) setFormError((e as Error)?.message ?? "Could not load this record.");
       } finally {
@@ -328,14 +378,52 @@ export function DocumentFormScreen({ route, navigation }: Props) {
 
   const setHeaderKey = (key: string, val: string) => setHeader((p) => ({ ...p, [key]: val }));
   const setItemKey = (idx: number, key: string, val: string) => {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [key]: val } : it)));
-    // The derived half of the row — UOM, price, what is actually in stock —
-    // depends on the item, the source location and the date, so any of the
-    // three changing re-reads it. Only documents that declare the readonly
-    // fields ask for them.
-    if (doc.resourceKey === "inventory-stock-transfers"
-        && ["item", "from_id", "from_type"].includes(key)) {
-      void refreshDerived(idx, { [key]: val });
+    setItems((prev) => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const next = { ...it, [key]: val };
+      // Arithmetic the row owns — placement quantity, amount — recomputed in
+      // the same update that changed its inputs, so what a readonly box shows
+      // and what the payload carries can never be a keystroke apart.
+      return doc.compute ? { ...next, ...doc.compute(next, header) } : next;
+    }));
+    // A picker whose options come from another field is reloaded, and its
+    // value dropped: a batch left over from the farm before it would post
+    // these chicks onto a flock on someone else's farm.
+    for (const f of itemFieldList) {
+      if (f.dynamicOptions?.on === key) void reloadDynamic(idx, f, val);
+    }
+    // The derived half of the row — price, what is actually in stock — is
+    // declared by the document rather than switched on its key here, which is
+    // what stopped any second document from having lookups at all.
+    if (doc.derive?.on.includes(key)) void refreshDerived(idx, { [key]: val });
+  };
+
+  /** Every item field, sections or flat — the list both hooks above walk. */
+  const itemFieldList = React.useMemo(
+    () => (doc.itemSections ? doc.itemSections.flatMap((s) => s.fields) : doc.itemFields),
+    [doc]
+  );
+
+  /** Options for one row's dependent picker, keyed `<rowIndex>:<field>`. */
+  const [dynamic, setDynamic] = useState<Record<string, { value: string; label: string }[]>>({});
+
+  const reloadDynamic = async (idx: number, field: DocField, on: string) => {
+    const key = `${idx}:${field.name}`;
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field.name]: "" } : it)));
+    if (!on) {
+      setDynamic((d) => ({ ...d, [key]: [] }));
+      return;
+    }
+    try {
+      const options = await field.dynamicOptions!.load(on);
+      setDynamic((d) => ({ ...d, [key]: options }));
+      // One choice is not a question. The web form pre-selects the active
+      // batch for the same reason.
+      if (options.length === 1) {
+        setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field.name]: options[0].value } : it)));
+      }
+    } catch {
+      setDynamic((d) => ({ ...d, [key]: [] }));
     }
   };
 
@@ -346,30 +434,23 @@ export function DocumentFormScreen({ route, navigation }: Props) {
    * the sheet, and the save re-checks the stock anyway.
    */
   const refreshDerived = async (idx: number, patch: Dict) => {
+    if (!doc.derive) return;
     const row = { ...(items[idx] ?? {}), ...patch };
-    const itemId = row.item;
-    if (!itemId) return;
+    let found: Dict;
     try {
-      const info = await stockTransferItem(itemId, header.date);
-      setItems((prev) => prev.map((it, i) => (i === idx
-        ? { ...it, uom_label: info.unit || "", rate: it.rate || info.rate || "" }
-        : it)));
+      found = await doc.derive.run(row, header);
     } catch {
-      /* advisory */
+      return;                                   // advisory; the save re-checks
     }
-    const fromType = row.from_type || "warehouse";
-    const fromId = row.from_id;
-    if (!fromId || !header.date) return;
-    try {
-      const stock = await stockTransferStock(fromType, fromId, itemId, header.date);
-      setItems((prev) => prev.map((it, i) => (i === idx
-        ? { ...it, stock_label: stock }
-        : it)));
-    } catch {
-      /* advisory */
-    }
+    if (!Object.keys(found).length) return;
+    setItems((prev) => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const next = { ...it, ...found };
+      return doc.compute ? { ...next, ...doc.compute(next, header) } : next;
+    }));
   };
-  const addItem = () => setItems((prev) => [...prev, initValues(doc.itemFields)]);
+
+  const addItem = () => setItems((prev) => [...prev, initValues(itemFieldsOf(doc))]);
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
   const onSave = async () => {
@@ -433,7 +514,8 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   if (loading) return <Loading label={`Loading ${doc.title.toLowerCase()}…`} />;
 
   return (
-    <KeyboardAwareScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <View style={styles.screen}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content}>
       {formError ? <Text style={styles.formError}>{formError}</Text> : null}
 
       {/* Header */}
@@ -446,14 +528,16 @@ export function DocumentFormScreen({ route, navigation }: Props) {
 
       {/* Line items. Row-based docs edit a single record, so no add/remove there. */}
       <View style={styles.itemsHeader}>
-        <Text style={styles.itemsTitle}>
-          {doc.itemTitle.toUpperCase()}
+        {/* Count on its own line: beside a long title it was what pushed the
+            Add button off the right edge. */}
+        <View style={styles.itemsHeading}>
+          <Text style={styles.itemsTitle}>{doc.itemTitle.toUpperCase()}</Text>
           {doc.itemNoun ? (
             <Text style={styles.itemsCount}>
-              {"  "}({items.length} {doc.itemNoun}{items.length === 1 ? "" : "s"})
+              {items.length} {doc.itemNoun}{items.length === 1 ? "" : "s"}
             </Text>
           ) : null}
-        </Text>
+        </View>
         {editId != null && doc.buildEdit ? null : (
           <Pressable hitSlop={8} onPress={addItem} style={styles.addRowButton}>
             <Text style={styles.addLink}>＋ Add {doc.itemNoun ?? "line"}</Text>
@@ -467,14 +551,27 @@ export function DocumentFormScreen({ route, navigation }: Props) {
             doc.itemSections.map((section, sIdx) => (
               <View key={section.title}>
                 <View style={[styles.sectionHead, styles[`tone_${section.tone}`]]}>
+                  {section.icon ? (
+                    <View style={[styles.sectionChip, styles[`chip_${section.tone}`]]}>
+                      <AppIcon name={section.icon as IconName} size={15} color="#fff" />
+                    </View>
+                  ) : null}
                   <Text style={[styles.sectionTitle, styles[`toneText_${section.tone}`]]}>
-                    {section.title.toUpperCase()}
+                    {section.icon ? `${sIdx + 1}. ` : ""}{section.title.toUpperCase()}
                   </Text>
+                  {/* Pushes the delete to the far end without letting a
+                      section that has none right-align its own title. */}
+                  <View style={styles.sectionSpacer} />
                   {/* Only the first heading carries the delete, so a row has
                       one obvious way out rather than three. */}
                   {sIdx === 0 && items.length > 1 ? (
-                    <Pressable hitSlop={8} onPress={() => removeItem(idx)}>
-                      <Text style={styles.removeLink}>Remove</Text>
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => removeItem(idx)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${doc.itemNoun ?? "line"} ${idx + 1}`}
+                    >
+                      <AppIcon name="trash-can-outline" size={18} color={colors.danger} />
                     </Pressable>
                   ) : null}
                 </View>
@@ -482,6 +579,8 @@ export function DocumentFormScreen({ route, navigation }: Props) {
                   fields={section.fields}
                   values={it}
                   set={(key, val) => setItemKey(idx, key, val)}
+                  dynamic={dynamic}
+                  rowIndex={idx}
                 />
               </View>
             ))
@@ -516,19 +615,64 @@ export function DocumentFormScreen({ route, navigation }: Props) {
         </Pressable>
       ) : null}
 
-      <Button title={editId != null ? "Save changes" : "Create"} onPress={onSave} loading={saving} />
+      {/* Delete stays in the sheet rather than the footer: it destroys the
+          record, and a destructive button pinned beside Submit is one it will
+          eventually be hit instead of. */}
       {editId != null ? (
         <View style={{ marginTop: spacing.sm }}>
           <Button title="Delete" variant="danger" onPress={onDelete} />
         </View>
       ) : null}
       <View style={{ height: spacing.xxl }} />
-    </KeyboardAwareScrollView>
+      </KeyboardAwareScrollView>
+
+      {/* Cancel and Submit stay on screen: these sheets run to several
+          hundred points, and a footer scrolled off the end is a footer
+          nobody finds. */}
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+        <Pressable
+          style={styles.cancelBtn}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+        >
+          <AppIcon name="close" size={18} color={colors.danger} />
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.submitBtn, saving && styles.submitBusy]}
+          onPress={onSave}
+          disabled={saving}
+          accessibilityRole="button"
+        >
+          <AppIcon name="check" size={18} color="#fff" />
+          <Text style={styles.submitText}>
+            {saving ? "Saving…" : editId != null ? "Save changes" : "Submit"}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
+  footer: {
+    flexDirection: "row", gap: spacing.sm, padding: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface,
+  },
+  cancelBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: spacing.xs, borderWidth: 1, borderColor: colors.danger,
+    borderRadius: radius.md, paddingVertical: spacing.md,
+  },
+  cancelText: { ...type.label, color: colors.danger, fontWeight: "700" },
+  submitBtn: {
+    flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: spacing.xs, backgroundColor: colors.broiler, borderRadius: radius.md,
+    paddingVertical: spacing.md,
+  },
+  submitBusy: { opacity: 0.6 },
+  submitText: { ...type.label, color: "#fff", fontWeight: "800" },
   content: { padding: spacing.md },
   section: { marginBottom: spacing.md },
   formError: {
@@ -543,8 +687,21 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
+  // The title yields and the button keeps its width: a long document name
+  // ("Chicks Placement Records") was pushing Add off the right edge, which is
+  // the one control the header exists for.
+  itemsHeading: { flexShrink: 1 },
+  // White on the module-coloured header bar; in the module colour it would be
+  // there and invisible.
+  registerBtn: {
+    flexDirection: "row", alignItems: "center", gap: spacing.xs,
+    borderWidth: 1, borderColor: colors.onDark, borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm, paddingVertical: 5, marginRight: spacing.xs,
+  },
+  registerText: { ...type.label, color: colors.onDark, fontWeight: "700" },
   itemsTitle: { ...type.h3, color: colors.text },
   itemsCount: { ...type.body, color: colors.textMuted, fontWeight: "400" },
   pair: { flexDirection: "row", gap: spacing.md },
@@ -557,6 +714,7 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   addRowButton: {
+    flexShrink: 0,
     borderWidth: 1,
     borderColor: colors.tint,
     borderRadius: radius.md,
@@ -580,7 +738,6 @@ const useStyles = makeStyles((colors) => ({
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
@@ -588,6 +745,24 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   sectionTitle: { ...type.label, fontWeight: "700", letterSpacing: 0.6 },
+  sectionSpacer: { flex: 1 },
+  // Chicks Placement's three: where they came from, how many, what they cost.
+  tone_source: { backgroundColor: "rgba(234,88,12,0.10)" },
+  tone_quantity: { backgroundColor: "rgba(22,163,74,0.10)" },
+  tone_pricing: { backgroundColor: "rgba(37,99,235,0.10)" },
+  toneText_source: { color: "#c2410c" },
+  toneText_quantity: { color: "#15803d" },
+  toneText_pricing: { color: "#1d4ed8" },
+  sectionChip: {
+    width: 26, height: 26, borderRadius: 8,
+    alignItems: "center", justifyContent: "center", marginRight: spacing.xs,
+  },
+  chip_source: { backgroundColor: "#ea580c" },
+  chip_quantity: { backgroundColor: "#16a34a" },
+  chip_pricing: { backgroundColor: "#2563eb" },
+  chip_item: { backgroundColor: "#4f46e5" },
+  chip_location: { backgroundColor: "#16a34a" },
+  chip_logistics: { backgroundColor: "#ea580c" },
   tone_item: { backgroundColor: "rgba(99,102,241,0.10)" },
   tone_location: { backgroundColor: "rgba(22,163,74,0.10)" },
   tone_logistics: { backgroundColor: "rgba(234,88,12,0.10)" },

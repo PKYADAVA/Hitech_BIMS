@@ -8,6 +8,8 @@
  * `<name>_id`, and `<name>_batch` — and the per-document `build()` folds the
  * header + items into the exact payload each web API expects.
  */
+import { farmBatches, stockTransferItem, stockTransferStock } from "@/api/lookups";
+
 export type DocFieldType =
   | "text" | "date" | "decimal" | "number" | "select" | "toggle" | "location"
   /** Multi-line, with a character budget shown as you type. */
@@ -33,6 +35,20 @@ export interface DocField {
   placeholder?: string;
   /** Lay this field beside the previous one instead of under it. */
   half?: boolean;
+  /**
+   * Options that depend on another field of the same row.
+   *
+   * A farm's batches are not a list endpoint the picker can be pointed at —
+   * they only exist once a farm is chosen. `on` names the field that decides
+   * them; the screen reloads and clears the value whenever it moves, so a
+   * batch can never be left over from the farm before it.
+   */
+  dynamicOptions?: {
+    on: string;
+    load: (value: string) => Promise<{ value: string; label: string }[]>;
+    /** Prompt while `on` is still empty. */
+    emptyHint?: string;
+  };
 }
 
 /**
@@ -45,9 +61,14 @@ export interface DocField {
  */
 export interface DocSection {
   title: string;
-  tone: "item" | "location" | "logistics";
+  tone: DocTone;
   fields: DocField[];
+  /** MaterialCommunityIcons name shown in the heading's chip. Sections are
+   *  numbered wherever one is given, so a long card can be talked about. */
+  icon?: string;
 }
+
+export type DocTone = "item" | "location" | "logistics" | "source" | "quantity" | "pricing";
 
 type Dict = Record<string, string>;
 
@@ -68,6 +89,27 @@ export interface DocConfig {
    * document still uses.
    */
   itemSections?: DocSection[];
+  /**
+   * Derived values for a row, recomputed on every edit to it.
+   *
+   * The web forms carry the same arithmetic in a `recalc` handler — placement
+   * quantity from what was ordered less what did not arrive, amount from
+   * quantity by rate. Returning the fields rather than mutating keeps a
+   * readonly box and the figure that will be saved the same number.
+   */
+  compute?: (row: Dict, header: Dict) => Dict;
+  /**
+   * Server-side fill for a row: what an item costs, what is in stock.
+   *
+   * `on` names the fields that invalidate it, so a document says what its own
+   * lookups depend on instead of the screen hard-coding a resourceKey — which
+   * is what it did, and meant a second document with lookups could not have
+   * them. Advisory: a failure leaves the row usable and the save re-checks.
+   */
+  derive?: {
+    on: string[];
+    run: (row: Dict, header: Dict) => Promise<Dict>;
+  };
   build: (header: Dict, items: Dict[]) => Record<string, unknown>;
   /**
    * Payload for *edit* (PUT), when it differs from create. The row-based
@@ -123,7 +165,164 @@ const fDec = (name: string, label: string, required = false): DocField => ({ nam
 
 /* ------------------------------ documents ------------------------------- */
 
+/** Whole chicks, floored at zero — a placement cannot be negative, and the
+ *  web form clamps the same way. */
+const chicksInt = (v: string) => Math.max(Math.trunc(Number(v) || 0), 0);
+
 export const DOCUMENTS: Record<string, DocConfig> = {
+  /**
+   * Chicks Placement — day-old chicks arriving from a hatchery or supplier and
+   * going onto a farm.
+   *
+   * Saved as a Stock Transfer, which is what it is: stock leaving a warehouse
+   * and landing on a flock. The dedicated form exists because the transfer
+   * grid cannot ask the questions a placement needs — how many were ordered
+   * against how many actually walked off the lorry — and because the four
+   * shortfall columns are the whole point of recording a placement separately.
+   *
+   * Every record carries its own date and DC number, as the web grid's rows
+   * do: one run of the form files several lorries, and they did not all arrive
+   * on the same challan.
+   */
+  "broiler-chicks-placement": {
+    resourceKey: "broiler-chicks-placement",
+    title: "Chicks Placement",
+    savePath: "/inventory/stock-transfers/save",
+    itemTitle: "Chicks Placement Records",
+    itemNoun: "Entry",
+    header: [],
+    itemSections: [
+      {
+        title: "Source & Destination",
+        tone: "source",
+        icon: "bird",
+        fields: [
+          { ...fDate(), half: true },
+          { name: "dc_no", label: "DC No.", type: "text", placeholder: "Enter DC No.", half: true },
+          { name: "source", label: "Source Hatchery / Supplier", type: "select",
+            optionsPath: "/broiler/chicks-sources", optionLabelKeys: ["name"], required: true,
+            placeholder: "Select Supplier / Hatchery" },
+          { ...fWarehouse("from_id", "From Warehouse", true), placeholder: "Select Warehouse" },
+          { name: "to_id", label: "To Farm", type: "select", optionsPath: FARM_PATH,
+            optionLabelKeys: ["farm_name", "farm_code"], required: true,
+            placeholder: "Select Farm", half: true },
+          { name: "to_batch", label: "Batch", type: "select", half: true,
+            placeholder: "Select Batch",
+            dynamicOptions: {
+              on: "to_id",
+              emptyHint: "Select a farm first",
+              load: async (farmId) => (await farmBatches(farmId)).map((b) => ({
+                value: String(b.id),
+                label: b.is_active ? `${b.batch_name} (Active)` : b.batch_name,
+              })),
+            } },
+        ],
+      },
+      {
+        title: "Chicks & Quantities",
+        tone: "quantity",
+        icon: "package-variant-closed",
+        fields: [
+          { name: "item", label: "Chicks Item", type: "select",
+            optionsPath: "/broiler/chick-items", optionLabelKeys: ["description", "item_code"],
+            required: true, placeholder: "Select Item", half: true },
+          { name: "stock_label", label: "Item Stock", type: "readonly",
+            placeholder: "—", half: true },
+          { name: "chicks_ordered", label: "Chicks Ordered", type: "number",
+            required: true, half: true },
+          { name: "transit_mortality", label: "Transit Mortality", type: "number", half: true },
+          { name: "shortage", label: "Shortage", type: "number", half: true },
+          { name: "culls", label: "Culls", type: "number", half: true },
+          { name: "quantity", label: "Placement Qty (Auto)", type: "readonly", placeholder: "0" },
+        ],
+      },
+      {
+        title: "Pricing & Logistics",
+        tone: "pricing",
+        icon: "currency-inr",
+        fields: [
+          { name: "rate", label: "Rate (₹ per Chick)", type: "decimal",
+            placeholder: "Rate per Chick", half: true },
+          { name: "amount_label", label: "Amount (Auto)", type: "readonly",
+            placeholder: "0.00", half: true },
+          { name: "vehicle_no", label: "Vehicle No.", type: "text",
+            placeholder: "Vehicle No.", half: true },
+          { name: "driver_name", label: "Driver Name", type: "text",
+            placeholder: "Driver Name", half: true },
+          { name: "remarks", label: "Remarks", type: "textarea", maxLength: 200,
+            placeholder: "Add placement / chick notes…" },
+        ],
+      },
+    ],
+    itemFields: [fDate(), fItem(), fQty(), fRate(), fRemarks()],
+
+    // Placement Qty is the only figure that reaches stock: what was ordered,
+    // less what died in transit, went missing, or was culled on arrival. The
+    // other three are recorded for the claim against the hatchery, never
+    // posted. Mirrors the web form's recalcPlacementQty/recalcAmount.
+    compute: (row) => {
+      const qty = Math.max(
+        chicksInt(row.chicks_ordered) - chicksInt(row.transit_mortality)
+          - chicksInt(row.shortage) - chicksInt(row.culls),
+        0
+      );
+      return {
+        quantity: String(qty),
+        amount_label: (qty * (Number(row.rate) || 0)).toFixed(2),
+      };
+    },
+
+    derive: {
+      on: ["item", "from_id", "date"],
+      run: async (row) => {
+        const out: Dict = {};
+        if (!row.item) return out;
+        try {
+          const info = await stockTransferItem(row.item, row.date);
+          // The price master's rate for that date, as the web form fills it —
+          // left editable, because a lorry is sometimes billed differently.
+          if (!row.rate && !info.price_missing) out.rate = info.rate || "";
+        } catch {
+          /* advisory */
+        }
+        if (row.from_id && row.date) {
+          try {
+            out.stock_label = await stockTransferStock("warehouse", row.from_id, row.item, row.date);
+          } catch {
+            /* advisory */
+          }
+        }
+        return out;
+      },
+    },
+
+    build: (_h, items) => ({
+      rows: items
+        .filter((it) => has(it.item) && has(it.source) && has(it.from_id) && has(it.to_id))
+        .map((it) => ({
+          date: it.date,
+          dc_no: it.dc_no || "",
+          source: it.source,
+          item: it.item,
+          chicks_ordered: it.chicks_ordered || "0",
+          transit_mortality: it.transit_mortality || "0",
+          shortage: it.shortage || "0",
+          culls: it.culls || "0",
+          quantity: it.quantity || "0",
+          rate: it.rate || "0",
+          purchase_rate: it.rate || "0",
+          from_location_type: "warehouse",
+          from_location_id: it.from_id,
+          to_location_type: "farm",
+          to_location_id: it.to_id,
+          to_batch: it.to_batch || null,
+          vehicle_no: it.vehicle_no || "",
+          driver_name: it.driver_name || "",
+          remarks: it.remarks || "",
+        })),
+    }),
+  },
+
   // Stock Transfer — every row carries its own locations and logistics, as the
   // ERP grid does: one sheet can move different items between different pairs
   // of stores on the same day. Only the date and DC number are shared.
