@@ -133,7 +133,10 @@ const QUICK_ACTIONS: QuickAction[] = [
   // lands on the register, which is where the web shortcut goes.
   { key: "placement", label: "Chicks Placement", icon: "🐥", color: colors.hatchery,
     tab: "Broiler", resourceKey: "broiler-chicks-placement" },
-  { key: "feed", label: "Feed Transfer", icon: "🚚", color: colors.inventory,
+  // Named for the tab it opens. "Feed Transfer" described what the branches
+  // mostly move, not the tab, and a shortcut that lands somewhere other than
+  // its label reads as the wrong link.
+  { key: "feed", label: "Stock Transfer", icon: "🚚", color: colors.inventory,
     tab: "InventoryModule", resourceKey: "inventory-stock-transfers" },
   { key: "daily", label: "Daily Entry", icon: "📋", color: colors.broiler,
     tab: "Broiler", resourceKey: "broiler-daily-entries" },

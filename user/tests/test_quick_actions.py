@@ -15,7 +15,7 @@ from user.models import GroupTabPermission
 QUICK_ACTIONS = [
     ("Batch Creation", "broiler_batch"),
     ("Chicks Placement", "chicks_placement_list"),
-    ("Feed Transfer", "stock_transfer_list"),
+    ("Stock Transfer", "stock_transfer_list"),
     ("Daily Entry", "daily_entry_list"),
     ("Medicine &amp; Vaccine Consumption", "medicine_entry_list"),
     ("Bird Sale", "bird_sale_list"),
