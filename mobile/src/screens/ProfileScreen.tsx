@@ -8,6 +8,7 @@ import { AppIcon, IconName } from "@/components/AppIcon";
 import { Card, IconCircle, Screen, withAlpha } from "@/components/ui";
 import { AuthUser } from "@/api/types";
 import { makeStyles, spacing, radius, type, ThemePreference, useTheme } from "@/theme";
+import { confirm } from "@/ui/confirm";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
 
@@ -176,11 +177,16 @@ export function ProfileScreen() {
     await setAppLock(v);
   };
 
-  const confirmLogout = () =>
-    Alert.alert("Log out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Log out", style: "destructive", onPress: logout },
-    ]);
+  const confirmLogout = async () => {
+    if (await confirm({
+      title: "Log out",
+      message: "Are you sure you want to sign out?",
+      confirmLabel: "Log out",
+      destructive: true,
+    })) {
+      await logout();
+    }
+  };
 
   return (
     <Screen edges={["left", "right"]}>

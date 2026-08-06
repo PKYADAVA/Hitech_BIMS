@@ -16,6 +16,7 @@ import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, makeStyles, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
+import { confirm } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
 
@@ -206,17 +207,12 @@ export function FormScreen({ route, navigation }: Props) {
     // the breed curve) are confirmed, not blocked — the person in the shed
     // knows why a day looks unusual, and refusing the save would just lose it.
     if (advice?.issues.length) {
-      const proceed = await new Promise<boolean>((resolve) =>
-        Alert.alert(
-          "Check before saving",
-          `${advice.issues.map((i) => `• ${i}`).join("\n")}\n\nSave anyway?`,
-          [
-            { text: "Go back", style: "cancel", onPress: () => resolve(false) },
-            { text: "Save anyway", onPress: () => resolve(true) },
-          ],
-          { cancelable: false }
-        )
-      );
+      const proceed = await confirm({
+        title: "Check before saving",
+        message: `${advice.issues.map((i) => `• ${i}`).join("\n")}\n\nSave anyway?`,
+        confirmLabel: "Save anyway",
+        cancelLabel: "Go back",
+      });
       if (!proceed) return;
     }
     setSaving(true);
@@ -233,23 +229,20 @@ export function FormScreen({ route, navigation }: Props) {
     }
   };
 
-  const onDelete = () => {
-    Alert.alert("Delete", `Delete this ${config.singular.toLowerCase()}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteResource(config.path, (row as Row).id);
-            queryClient.invalidateQueries({ queryKey: ["list", config.path] });
-            navigation.navigate("List", { resourceKey });
-          } catch (e) {
-            handleApiError(e);
-          }
-        },
-      },
-    ]);
+  const onDelete = async () => {
+    if (!(await confirm({
+      title: "Delete",
+      message: `Delete this ${config.singular.toLowerCase()}?`,
+      confirmLabel: "Delete",
+      destructive: true,
+    }))) return;
+    try {
+      await deleteResource(config.path, (row as Row).id);
+      queryClient.invalidateQueries({ queryKey: ["list", config.path] });
+      navigation.navigate("List", { resourceKey });
+    } catch (e) {
+      handleApiError(e);
+    }
   };
 
   const handleApiError = (e: unknown) => {

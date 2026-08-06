@@ -21,6 +21,7 @@ import { useResourceList } from "@/query/useResourceList";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
+import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "List">;
 
@@ -111,27 +112,20 @@ export function ResourceListScreen({ route, navigation }: Props) {
   };
 
   /** Deleting is destructive and off a small button, so it always asks first. */
-  const confirmDelete = (row: Row) => {
+  const confirmDelete = async (row: Row) => {
     const label = config.card(row).title;
-    Alert.alert(
-      `Delete ${config.singular}?`,
-      `${label} will be removed. This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete", style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteResource(config.path, row.id as number);
-              queryClient.invalidateQueries({ queryKey: ["resource", config.path] });
-            } catch (e) {
-              Alert.alert("Could not delete",
-                          (e as Error)?.message ?? "Please try again.");
-            }
-          },
-        },
-      ],
-    );
+    if (!(await confirm({
+      title: `Delete ${config.singular}?`,
+      message: `${label} will be removed. This cannot be undone.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    }))) return;
+    try {
+      await deleteResource(config.path, row.id as number);
+      queryClient.invalidateQueries({ queryKey: ["resource", config.path] });
+    } catch (e) {
+      notify("Could not delete", (e as Error)?.message ?? "Please try again.");
+    }
   };
 
   // Server feeds have no search_fields, so filter the loaded rows client-side.

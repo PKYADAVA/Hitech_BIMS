@@ -24,6 +24,7 @@ import { Card, EmptyOrError, Loading } from "@/components/ui";
 import { ModuleStackParams } from "@/navigation/types";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { pick } from "@/utils/format";
+import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "ManageAccess">;
 
@@ -83,23 +84,20 @@ function RolesPanel() {
     }
   };
 
-  const doDelete = (role: RoleAccess) => {
-    Alert.alert("Delete role", `Delete "${role.name}"? Users lose the access it grants.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteRole(role.id);
-            setRoles((prev) => prev.filter((r) => r.id !== role.id));
-            setExpanded(null);
-          } catch (e) {
-            Alert.alert("Failed", (e as Error)?.message ?? "Could not delete role.");
-          }
-        },
-      },
-    ]);
+  const doDelete = async (role: RoleAccess) => {
+    if (!(await confirm({
+      title: "Delete role",
+      message: `Delete "${role.name}"? Users lose the access it grants.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    }))) return;
+    try {
+      await deleteRole(role.id);
+      setRoles((prev) => prev.filter((r) => r.id !== role.id));
+      setExpanded(null);
+    } catch (e) {
+      notify("Failed", (e as Error)?.message ?? "Could not delete role.");
+    }
   };
 
   const addRole = async () => {

@@ -25,6 +25,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { formatDate } from "@/utils/format";
+import { confirm } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "DailyEntryGrid">;
 
@@ -780,17 +781,12 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
       return a.issues.map((i) => `${farmLabel(r)}: ${i}`);
     });
     if (issues.length) {
-      const proceed = await new Promise<boolean>((resolve) =>
-        Alert.alert(
-          "Check before saving",
-          `${issues.map((i) => `• ${i}`).join("\n")}\n\nSave anyway?`,
-          [
-            { text: "Go back", style: "cancel", onPress: () => resolve(false) },
-            { text: "Save anyway", onPress: () => resolve(true) },
-          ],
-          { cancelable: false }
-        )
-      );
+      const proceed = await confirm({
+        title: "Check before saving",
+        message: `${issues.map((i) => `• ${i}`).join("\n")}\n\nSave anyway?`,
+        confirmLabel: "Save anyway",
+        cancelLabel: "Go back",
+      });
       if (!proceed) {
         setSaving(false);
         return;

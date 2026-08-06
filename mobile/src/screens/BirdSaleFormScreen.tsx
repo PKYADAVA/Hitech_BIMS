@@ -20,6 +20,7 @@ import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
 import { isEmpty } from "@/utils/format";
+import { confirm } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "BirdSaleForm">;
 
@@ -541,10 +542,12 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
     const gaps = [...new Set(blocks.flatMap(missingEvidence))];
     if (!located) gaps.unshift("GPS location");
     if (gaps.length) {
-      const proceed = await confirm(
-        "Evidence missing",
-        `${gaps.join(", ")} not captured. Save the lifting anyway?`
-      );
+      const proceed = await confirm({
+        title: "Evidence missing",
+        message: `${gaps.join(", ")} not captured. Save the lifting anyway?`,
+        confirmLabel: "Save anyway",
+        cancelLabel: "Go back",
+      });
       if (!proceed) return;
     }
     await save();
@@ -576,23 +579,20 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
     }
   };
 
-  const onDelete = () => {
-    Alert.alert("Delete", "Delete this bird sale?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteResource(PATH, (row as Row).id);
-            queryClient.invalidateQueries({ queryKey: ["list", PATH] });
-            navigation.navigate("List", { resourceKey: RESOURCE_KEY });
-          } catch (e) {
-            handleApiError(e);
-          }
-        },
-      },
-    ]);
+  const onDelete = async () => {
+    if (!(await confirm({
+      title: "Delete",
+      message: "Delete this bird sale?",
+      confirmLabel: "Delete",
+      destructive: true,
+    }))) return;
+    try {
+      await deleteResource(PATH, (row as Row).id);
+      queryClient.invalidateQueries({ queryKey: ["list", PATH] });
+      navigation.navigate("List", { resourceKey: RESOURCE_KEY });
+    } catch (e) {
+      handleApiError(e);
+    }
   };
 
   const handleApiError = (e: unknown) => {
@@ -1013,17 +1013,6 @@ function PhotoSlot({
       <Text style={styles.slotLabel} numberOfLines={1}>{label}</Text>
     </View>
   );
-}
-
-/** Alert.alert as a promise — RN has no confirm(), and the evidence warning
- *  has to know whether the user chose to go ahead. */
-function confirm(title: string, message: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    Alert.alert(title, message, [
-      { text: "Go back", style: "cancel", onPress: () => resolve(false) },
-      { text: "Save anyway", onPress: () => resolve(true) },
-    ]);
-  });
 }
 
 const useStyles = makeStyles((colors) => ({

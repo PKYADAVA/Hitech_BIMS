@@ -25,6 +25,7 @@ import { queryClient } from "@/query/queryClient";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
+import { confirm } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "DocumentForm">;
 type Dict = Record<string, string>;
@@ -491,24 +492,21 @@ export function DocumentFormScreen({ route, navigation }: Props) {
     }
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (editId == null) return;
-    Alert.alert("Delete", `Delete this ${doc.title.toLowerCase()}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteDocument(doc.savePath, editId);
-            queryClient.invalidateQueries({ queryKey: ["list", config.path] });
-            navigation.navigate("List", { resourceKey });
-          } catch (e) {
-            setFormError((e as Error)?.message ?? "Could not delete.");
-          }
-        },
-      },
-    ]);
+    if (!(await confirm({
+      title: "Delete",
+      message: `Delete this ${doc.title.toLowerCase()}?`,
+      confirmLabel: "Delete",
+      destructive: true,
+    }))) return;
+    try {
+      await deleteDocument(doc.savePath, editId);
+      queryClient.invalidateQueries({ queryKey: ["list", config.path] });
+      navigation.navigate("List", { resourceKey });
+    } catch (e) {
+      setFormError((e as Error)?.message ?? "Could not delete.");
+    }
   };
 
   if (loading) return <Loading label={`Loading ${doc.title.toLowerCase()}…`} />;
