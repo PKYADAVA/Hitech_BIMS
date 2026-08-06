@@ -141,9 +141,9 @@
               </a>
             {% endif %}
             {% if r.photos %}
-              {# Paired pipe-joined lists rather than JSON: a media URL never
-                 contains a pipe, and this needs no escaping dance in a data
-                 attribute. #}
+              {% comment %} Paired pipe-joined lists rather than JSON: a media
+                 URL never contains a pipe, and this needs no escaping dance in
+                 a data attribute. {% endcomment %}
               <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 lr-photos"
                       data-urls="{% for p in r.photos %}{{ p.url }}{% if not forloop.last %}|{% endif %}{% endfor %}"
                       data-labels="{% for p in r.photos %}{{ p.label }}{% if not forloop.last %}|{% endif %}{% endfor %}"

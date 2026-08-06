@@ -170,11 +170,11 @@
         </div>
         <div class="col-md-4">
           <label class="form-label" for="emergency_contact">Emergency Contact</label>
-          {# Starts blank, not "0". A pre-filled zero is not a phone number, and
-             the validator rejects any contact shorter than ten digits — so an
-             optional field nobody had touched refused every new employee, with
-             "Invalid emergency contact number" pointing at a value the form
-             had put there itself. #}
+          {% comment %} Starts blank, not "0". A pre-filled zero is not a phone
+             number, and the validator rejects any contact shorter than ten
+             digits — so an optional field nobody had touched refused every new
+             employee, with "Invalid emergency contact number" pointing at a
+             value the form had put there itself. {% endcomment %}
           <input type="number" class="form-control" id="emergency_contact" name="emergency_contact" placeholder="Enter emergency contact">
         </div>
         <div class="col-md-4">
