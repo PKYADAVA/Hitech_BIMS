@@ -111,6 +111,18 @@
         </div>
         <div class="card-body">
           <div class="row">
+            <div class="col-md-4 mb-3">
+              <label for="user">User Login</label>
+              <select class="form-control" id="user" name="user">
+                <option value="" {% if not employee.user_id %}selected{% endif %}>No login</option>
+                {% for u in login_detail %}
+                  <option value="{{ u.id }}" {% if employee.user_id == u.id %}selected{% endif %}>{{ u.username }}{% if u.get_full_name %} — {{ u.get_full_name }}{% endif %}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Links this employee to the login they
+                sign in with. Their organizational access and their daily trips
+                are found through it.</small>
+            </div>
             <div class="col-md-4">
               <label for="warehouse">Warehouse <span class="text-danger">*</span></label>
               <select class="form-control" id="warehouse" name="warehouse" required>

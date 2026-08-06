@@ -104,6 +104,43 @@ class EmployeeEditTests(TestCase):
                  if 'id="emergency_contact"' in line][0]
         self.assertNotIn('value="0"', field)
 
+    def test_the_login_can_be_linked_from_the_form(self):
+        # Employee.user existed on the model but on no form, so it was null for
+        # everyone — and everything that answers "whose is this" hangs off it:
+        # the trip a supervisor logs, and the organizational scope that decides
+        # what they see. A grant with no link applies to nobody.
+        login = get_user_model().objects.create_user("rahul", password="x")
+        self.assertIsNone(self.employee.user_id)
+        self.client.post(self.url(), {
+            "full_name": "Akhilesh Kumar Pal", "warehouse": self.warehouse.id,
+            "user": login.id,
+        })
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.user_id, login.id)
+
+    def test_the_link_can_be_cleared_again(self):
+        login = get_user_model().objects.create_user("rahul", password="x")
+        self.employee.user = login
+        self.employee.save()
+        self.client.post(self.url(), {
+            "full_name": "Akhilesh Kumar Pal", "warehouse": self.warehouse.id,
+            "user": "",
+        })
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.user_id)
+
+    def test_a_login_already_claimed_is_not_offered_twice(self):
+        # Employee.user is a OneToOne — offering a taken login would move the
+        # link and silently unscope whoever had it.
+        from hr.views import available_logins
+
+        login = get_user_model().objects.create_user("rahul", password="x")
+        other = Employee.objects.create(full_name="Someone Else", user=login)
+        self.assertNotIn(login, available_logins(self.employee))
+        # ...but it stays on offer for the employee who already holds it, or an
+        # edit would look like it was about to clear the link.
+        self.assertIn(login, available_logins(other))
+
     def test_the_save_button_is_inside_the_form(self):
         # A stray </div> popped the form off the parser's stack, leaving the
         # button — and the whole bank-details card — outside it. The page

@@ -108,6 +108,10 @@ def create_new_employee(request):
             branch_name = request.POST.get("branch_name")
             saving = request.POST.get("saving")
             image = request.FILES.get("image", None)
+            # The login this employee *is*. Everything that answers "whose is
+            # this" hangs off it — the trip a supervisor logs, and the
+            # organizational scope that decides what they see.
+            login_id = request.POST.get("user") or None
 
             error_message = None
 
@@ -181,6 +185,7 @@ def create_new_employee(request):
                 designation=designation,
                 bank_name=bank_name,
                 image=image,
+                user_id=login_id,
             )
             employee.save()
 
@@ -197,8 +202,25 @@ def create_new_employee(request):
         "designation_detail": designations_details,
         "group_detail": Group.objects.all(),
         "warehouse_detail": Warehouse.objects.all(),
+        "login_detail": available_logins(),
     }
     return render(request, "new_employee.html", context)
+
+
+def available_logins(employee=None):
+    """Logins that can be attached to an employee, plus this one's own.
+
+    Employee.user is a OneToOne, so a login already claimed by someone else is
+    not on offer — picking it would move the link and silently unscope whoever
+    had it. The employee's current login stays in the list so an edit does not
+    look like it is about to clear it.
+    """
+    from django.contrib.auth.models import User
+
+    taken = set(Employee.objects.exclude(user=None).values_list("user_id", flat=True))
+    if employee is not None and employee.user_id:
+        taken.discard(employee.user_id)
+    return User.objects.exclude(id__in=taken).order_by("username")
 
 
 @login_required(login_url="login")
@@ -219,6 +241,7 @@ def edit_employee(request, pk):
                 with transaction.atomic():
                     employee.full_name = request.POST.get("full_name")
                     employee.title = request.POST.get("title")
+                    employee.user_id = request.POST.get("user") or None
                     employee.father_name = request.POST.get("father_name")
 
                     employee.marital_status = request.POST.get("marital_status")
@@ -306,6 +329,7 @@ def edit_employee(request, pk):
             "designation_detail": Designation.objects.all(),
             "group_detail": Group.objects.all(),
             "warehouse_detail": Warehouse.objects.all(),
+            "login_detail": available_logins(employee),
         }
 
         return render(request, "edit_employee.html", context)

@@ -133,6 +133,18 @@
           </select>
         </div>
         <div class="col-md-4">
+          <label class="form-label" for="user">User Login</label>
+          <select class="form-select" id="user" name="user">
+            <option value="" selected>No login</option>
+            {% for u in login_detail %}
+              <option value="{{ u.id }}">{{ u.username }}{% if u.get_full_name %} — {{ u.get_full_name }}{% endif %}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Links this employee to the login they sign in
+            with. Their organizational access and their daily trips are found
+            through it.</div>
+        </div>
+        <div class="col-md-4">
           <label class="form-label" for="date_of_joining">Date of Joining</label>
           <input type="date" class="form-control" id="date_of_joining" name="date_of_joining">
         </div>
