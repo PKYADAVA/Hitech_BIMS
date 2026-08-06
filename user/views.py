@@ -1207,3 +1207,257 @@ def user_analytics_data(request):
             "users": user_data,
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Employee Organization Access Master
+# ---------------------------------------------------------------------------
+
+#: The dimensions this page edits, as (all-flag, m2m field, posted field name).
+#: One list so the view, the summary and the row loader cannot disagree about
+#: what the page holds.
+_ORG_SCOPES = [
+    ("all_companies", "companies", "companies"),
+    ("all_branches", "branches", "branches"),
+    ("all_warehouses", "warehouses", "warehouses"),
+    ("all_farms", "farms", "farms"),
+    ("all_sheds", "sheds", "sheds"),
+    ("all_cost_centres", "cost_centres", "cost_centres"),
+]
+
+
+def warehouse_branch_map():
+    """Warehouse id -> branch id, from the Office Mapping master.
+
+    Warehouse carries no branch column — that was replaced by
+    ``inventory.Mapping`` (TYPE_SECTOR_BRANCH) — so every branch-derived answer
+    about warehouses reads through here. A warehouse nobody has mapped is
+    absent, which is what puts it outside any branch's scope.
+    """
+    from inventory.models import Mapping
+
+    return dict(Mapping.objects
+                .filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__isnull=False)
+                .values_list("from_id", "to_id"))
+
+
+def _org_access_options():
+    """Everything the pickers offer, in the order the page lays them out.
+
+    Each row of a cascading dimension carries its parent, so the picker can
+    narrow to it: choose two branches and the warehouse and farm lists show
+    only what belongs to those two. Offering the rest and quietly dropping them
+    on save would be worse than not offering them at all.
+    """
+    from account.models import CompanyProfile, OrganizationCentre
+    from broiler.models import Branch, BroilerBatch, BroilerFarm, BroilerFarmShed
+
+    branch_of = warehouse_branch_map()
+    warehouses = list(Warehouse.objects.order_by("name"))
+    for w in warehouses:
+        # 0 rather than None: an unmapped warehouse belongs to no branch, and a
+        # parent id no branch can ever have is what keeps it out of every
+        # branch-narrowed list without a special case in the template.
+        w.branch_id = branch_of.get(w.id, 0)
+
+    return {
+        "companies": CompanyProfile.objects.order_by("id"),
+        "branches": Branch.objects.order_by("branch_name"),
+        "warehouses": warehouses,
+        "farms": BroilerFarm.objects.select_related("branch").order_by("farm_name"),
+        "sheds": BroilerFarmShed.objects.select_related("farm").order_by(
+            "farm__farm_name", "unit_no"),
+        "cost_centres": OrganizationCentre.objects.order_by("name"),
+        "batches": BroilerBatch.objects.select_related("broiler_farm")
+                   .order_by("-id"),
+    }
+
+
+def _drop_out_of_scope(profile):
+    """Remove selections that fall outside the dimension above them.
+
+    A warehouse belongs to a branch (through Office Mapping) and a shed to a
+    farm. Naming one whose parent is not in scope would grant a place the
+    branch selection says the employee has nothing to do with — so it is not
+    stored. The picker already hides these; this is the rule the picker is only
+    the front of, for anything that posts without it.
+
+    Only *named* selections are pruned. Under "All" there is nothing to prune,
+    because the answer is derived from the parent to begin with.
+    """
+    from broiler.models import BroilerFarm
+
+    if not profile.all_branches:
+        branch_ids = set(profile.branches.values_list("id", flat=True))
+
+        if not profile.all_warehouses:
+            branch_of = warehouse_branch_map()
+            profile.warehouses.set([
+                w for w in profile.warehouses.values_list("id", flat=True)
+                if branch_of.get(w) in branch_ids])
+
+        if not profile.all_farms:
+            profile.farms.set(profile.farms.filter(branch_id__in=branch_ids))
+
+    if not profile.all_sheds:
+        # The farms in scope: those named, or those of the branches when farms
+        # are left on "All".
+        if profile.all_farms:
+            farms = (BroilerFarm.objects.all() if profile.all_branches
+                     else BroilerFarm.objects.filter(
+                         branch_id__in=profile.branches.values_list("id", flat=True)))
+        else:
+            farms = profile.farms.all()
+        profile.sheds.set(profile.sheds.filter(farm__in=farms))
+
+
+def _org_access_row(profile, totals):
+    """One saved profile as the list renders it.
+
+    Counts rather than names: a row that says "All (12)" and one that says "3"
+    are the two things a reader is scanning for, and spelling out twelve
+    warehouses in a table cell tells them less, not more.
+
+    ``totals`` is passed in rather than counted here — it is the same for every
+    row, and counting it per row is one query per dimension per employee.
+    """
+    def count(all_flag, field, total):
+        return f"All ({total})" if getattr(profile, all_flag) \
+            else str(getattr(profile, field).count())
+
+    options = totals
+    return {
+        "profile": profile,
+        "employee": profile.employee,
+        "branches": count("all_branches", "branches", options["branches"]),
+        "warehouses": count("all_warehouses", "warehouses", options["warehouses"]),
+        "farms": count("all_farms", "farms", options["farms"]),
+        "sheds": count("all_sheds", "sheds", options["sheds"]),
+        "cost_centres": count("all_cost_centres", "cost_centres",
+                              options["cost_centres"]),
+        "batch_visibility": profile.get_batch_visibility_display(),
+    }
+
+
+@login_required
+def employee_access(request):
+    """User > Employee Organization Access — one employee's data scope.
+
+    Permissions (which tabs, which actions) stay with the groups; this decides
+    which *rows*. Where a profile exists it replaces the group's data scope
+    entirely — see user.services.scoping — so an employee with no profile is
+    scoped exactly as they were before this page existed.
+    """
+    from .models import EmployeeAccessProfile
+
+    if request.method == "POST":
+        return _save_employee_access(request)
+
+    profiles = (EmployeeAccessProfile.objects
+                .select_related("employee", "employee__designation")
+                .prefetch_related("branches", "warehouses", "farms", "sheds",
+                                  "cost_centres")
+                .order_by("employee__full_name"))
+    options = _org_access_options()
+    totals = {k: len(v) if isinstance(v, list) else v.count()
+              for k, v in options.items()}
+    return render(request, "employee_access.html", {
+        "employees": Employee.objects.select_related(
+            "designation", "department", "user").order_by("full_name"),
+        "options": options,
+        "rows": [_org_access_row(p, totals) for p in profiles],
+        "batch_choices": EmployeeAccessProfile.BATCH_VISIBILITY_CHOICES,
+    })
+
+
+def _save_employee_access(request):
+    from .models import EmployeeAccessProfile
+
+    employee_id = request.POST.get("employee")
+    if not employee_id:
+        messages.error(request, "Choose whose access this is.")
+        return redirect("employee_access")
+
+    employee = get_object_or_404(Employee, pk=employee_id)
+    with transaction.atomic():
+        # One profile per employee, so saving the same person again edits
+        # theirs rather than stacking a second scope nobody would see.
+        profile, _ = EmployeeAccessProfile.objects.get_or_create(
+            employee=employee)
+        for all_flag, field, posted in _ORG_SCOPES:
+            setattr(profile, all_flag, request.POST.get(f"all_{posted}") == "on")
+            getattr(profile, field).set(request.POST.getlist(posted))
+        # The picker narrows warehouses to the chosen branches and sheds to the
+        # farms in scope, but the picker is not the rule. A selection that
+        # falls outside its parent is dropped here too, so what is stored can
+        # never grant more than the page showed.
+        _drop_out_of_scope(profile)
+        profile.batch_visibility = (request.POST.get("batch_visibility")
+                                    or EmployeeAccessProfile.ALL_BATCHES)
+        profile.batches.set(
+            request.POST.getlist("batches")
+            if profile.batch_visibility == EmployeeAccessProfile.SELECTED_BATCHES
+            else [])
+        profile.notes = (request.POST.get("notes") or "")[:250]
+        profile.is_active = request.POST.get("is_active") == "on"
+        profile.updated_by = request.user
+        profile.save()
+
+    messages.success(request, f"Access saved for {employee.full_name}.")
+    return redirect("employee_access")
+
+
+@login_required
+def employee_access_row(request, pk):
+    """One saved profile as JSON, for loading it back into the form."""
+    from .models import EmployeeAccessProfile
+
+    profile = get_object_or_404(EmployeeAccessProfile, pk=pk)
+    data = {
+        "id": profile.id,
+        "employee": profile.employee_id,
+        "batch_visibility": profile.batch_visibility,
+        "batches": list(profile.batches.values_list("id", flat=True)),
+        "notes": profile.notes,
+        "is_active": profile.is_active,
+    }
+    for all_flag, field, posted in _ORG_SCOPES:
+        data[f"all_{posted}"] = getattr(profile, all_flag)
+        data[posted] = list(getattr(profile, field).values_list("id", flat=True))
+    return JsonResponse(data)
+
+
+@login_required
+def employee_access_delete(request, pk):
+    """Remove a profile — the employee falls back to their group's scope."""
+    from .models import EmployeeAccessProfile
+
+    profile = get_object_or_404(EmployeeAccessProfile, pk=pk)
+    name = profile.employee.full_name
+    profile.delete()
+    messages.success(
+        request, f"Access for {name} removed. They now follow their role's scope.")
+    return redirect("employee_access")
+
+
+@login_required
+def employee_access_info(request, pk):
+    """The read-only Employee Information panel for one employee."""
+    employee = get_object_or_404(
+        Employee.objects.select_related("designation", "department", "user"),
+        pk=pk)
+    user = employee.user
+    return JsonResponse({
+        # Same shape the list and the picker use — a bare 2263 beside an
+        # EMP02263 in the table below reads as two different people.
+        "employee_id": f"EMP{employee.employee_id:05d}" if employee.employee_id else "",
+        "designation": getattr(employee.designation, "title", "") or "",
+        "department": getattr(employee.department, "name", "") or "",
+        # The role is whatever User Access gives the login — this page does not
+        # set it, and says so by showing it and not offering to change it.
+        "role": ", ".join(user.groups.values_list("name", flat=True)) if user else "",
+        "login_status": ("Active" if user and user.is_active
+                         else "Inactive" if user else "No login"),
+        "date_of_joining": (employee.date_of_joining.strftime("%d-%b-%Y")
+                            if employee.date_of_joining else ""),
+    })

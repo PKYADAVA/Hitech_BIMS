@@ -100,6 +100,106 @@ class GroupAccessProfile(models.Model):
         return f"Access profile · {self.group.name}"
 
 
+class EmployeeAccessProfile(models.Model):
+    """One employee's organizational data scope.
+
+    :class:`GroupAccessProfile` answers "what may this *role* see", which is the
+    right question until two people share a role and not a territory. Two branch
+    managers are both Branch Managers; one runs Akbarpur and one runs Tulsipur,
+    and no arrangement of groups says that without inventing a group per person.
+
+    So this is the per-person answer, and where it exists it **replaces** the
+    group scope rather than narrowing or widening it: an administrator who lists
+    two branches here means those two, whatever the employee's groups happen to
+    say. Permissions — which tabs, which actions — stay with the groups; this
+    only decides which rows.
+
+    Nothing changes for anyone until a profile is created, which is what makes
+    it safe to add: an employee with no profile, or an inactive one, is scoped
+    exactly as they are today.
+
+    Each dimension has an ``all_*`` flag, defaulting True, so a half-filled
+    profile is permissive rather than a lockout. Two of them mean "all *of what
+    is already selected*" rather than "every row in the table": farms are all
+    farms of the chosen branches, sheds all sheds of the chosen farms. That
+    cascade is the whole point of the page — pick two branches and the farms and
+    sheds beneath them follow without listing any of them.
+    """
+
+    ALL_BATCHES = "all"
+    ACTIVE_BATCHES = "active"
+    SELECTED_BATCHES = "selected"
+    BATCH_VISIBILITY_CHOICES = [
+        (ALL_BATCHES, "All Batches"),
+        (ACTIVE_BATCHES, "Active Batches Only"),
+        (SELECTED_BATCHES, "Selected Batches"),
+    ]
+
+    employee = models.OneToOneField(
+        "hr.Employee", on_delete=models.CASCADE, related_name="access_profile",
+        help_text="Whose scope this is. The login is reached through the "
+                  "employee's user link.",
+    )
+
+    all_companies = models.BooleanField(default=True)
+    companies = models.ManyToManyField(
+        "account.CompanyProfile", blank=True, related_name="employee_profiles")
+
+    all_branches = models.BooleanField(default=True)
+    branches = models.ManyToManyField(
+        "broiler.Branch", blank=True, related_name="employee_profiles")
+
+    # All warehouses *of the selected branches*. Warehouse carries no branch
+    # column — that was replaced by inventory.Mapping (TYPE_SECTOR_BRANCH,
+    # from_id=warehouse, to_id=branch), the Office Mapping master — so the
+    # cascade reads through there. A warehouse nobody has mapped belongs to no
+    # branch and so falls outside a branch-derived scope.
+    all_warehouses = models.BooleanField(default=True)
+    warehouses = models.ManyToManyField(
+        "inventory.Warehouse", blank=True, related_name="employee_profiles")
+
+    # All farms *of the selected branches* — BroilerFarm.branch makes that real.
+    all_farms = models.BooleanField(default=True)
+    farms = models.ManyToManyField(
+        "broiler.BroilerFarm", blank=True, related_name="employee_profiles")
+
+    # All sheds *of the farms in scope*, likewise via BroilerFarmShed.farm.
+    all_sheds = models.BooleanField(default=True)
+    sheds = models.ManyToManyField(
+        "broiler.BroilerFarmShed", blank=True, related_name="employee_profiles")
+
+    all_cost_centres = models.BooleanField(default=True)
+    cost_centres = models.ManyToManyField(
+        "account.OrganizationCentre", blank=True, related_name="employee_profiles")
+
+    batch_visibility = models.CharField(
+        max_length=10, choices=BATCH_VISIBILITY_CHOICES, default=ALL_BATCHES,
+        help_text="Active Batches Only hides settled flocks without naming any.",
+    )
+    batches = models.ManyToManyField(
+        "broiler.BroilerBatch", blank=True, related_name="employee_profiles",
+        help_text="Only read when batch visibility is 'Selected Batches'.")
+
+    notes = models.CharField(max_length=250, blank=True)
+    # Switched off rather than deleted, so a scope can be lifted for a week
+    # without losing what it was. An inactive profile scopes nobody.
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="employee_access_profiles_updated")
+
+    class Meta:
+        verbose_name = "Employee Organization Access"
+        verbose_name_plural = "Employee Organization Access"
+        ordering = ["employee__full_name"]
+
+    def __str__(self):
+        return f"Organization access · {self.employee.full_name}"
+
+
 class WebAccessAudit(models.Model):
     """What the Web-Access guard *would* do, recorded without doing it.
 

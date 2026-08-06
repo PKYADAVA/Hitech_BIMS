@@ -33,10 +33,72 @@ SCOPES = {
     "supplier_groups": ("all_supplier_groups", "supplier_groups"),
 }
 
+#: The same dimensions on an employee profile, which names two of them
+#: differently — "sectors" is the group profile's word for warehouses.
+EMPLOYEE_SCOPES = {
+    "branches": ("all_branches", "branches"),
+    "farms": ("all_farms", "farms"),
+    "sectors": ("all_warehouses", "warehouses"),
+}
+
+
+def employee_profile_for(user):
+    """The active organizational access profile for this login, or None.
+
+    Reached through the employee's user link, which is also what decides whose
+    trip a supervisor is logging — one relationship, not a second one to keep
+    in step.
+    """
+    from user.models import EmployeeAccessProfile
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    return (EmployeeAccessProfile.objects
+            .filter(employee__user=user, is_active=True)
+            .prefetch_related("branches", "farms", "warehouses")
+            .first())
+
+
+def _employee_allowed_ids(profile, scope):
+    """What one employee profile permits for ``scope``, or None for no limit.
+
+    Two dimensions cascade rather than standing alone. "All farms" means all
+    farms *of the branches in scope*, and warehouses likewise — that is what
+    makes the page usable: pick two branches and everything beneath them
+    follows without listing any of it. Only when branches are unrestricted too
+    does "all" mean every row in the table.
+    """
+    if scope not in EMPLOYEE_SCOPES:
+        # A dimension this page does not cover — lines, customer and supplier
+        # groups. The profile replaces the group scope, and it says nothing
+        # about these, so they are unrestricted rather than empty.
+        return None
+
+    all_flag, field = EMPLOYEE_SCOPES[scope]
+    if not getattr(profile, all_flag):
+        return set(getattr(profile, field).values_list("id", flat=True))
+
+    branch_ids = (None if profile.all_branches
+                  else set(profile.branches.values_list("id", flat=True)))
+    if scope == "branches" or branch_ids is None:
+        return None
+
+    if scope == "farms":
+        from broiler.models import BroilerFarm
+        return set(BroilerFarm.objects.filter(branch_id__in=branch_ids)
+                   .values_list("id", flat=True))
+
+    # Warehouses reach their branch through the Office Mapping master rather
+    # than a column of their own — see EmployeeAccessProfile.all_warehouses.
+    from inventory.models import Mapping
+    return set(Mapping.objects
+               .filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id__in=branch_ids)
+               .values_list("from_id", flat=True))
+
 
 def is_unscoped(user):
     """True when no scoping applies at all — superuser, Admin group, or a user
-    whose groups carry no access profile."""
+    with neither an employee profile nor a group carrying one."""
     from user.access import _user_is_unrestricted
     from user.models import GroupAccessProfile
 
@@ -44,6 +106,8 @@ def is_unscoped(user):
         return True
     if _user_is_unrestricted(user):
         return True
+    if employee_profile_for(user) is not None:
+        return False
     return not GroupAccessProfile.objects.filter(group__in=user.groups.all()).exists()
 
 
@@ -60,6 +124,15 @@ def allowed_ids(user, scope):
         raise ValueError(f"unknown scope {scope!r}")
     if is_unscoped(user):
         return None
+
+    # An employee's own profile replaces the group scope rather than narrowing
+    # or widening it. Two people can share a role and not a territory, and no
+    # arrangement of groups says that without inventing a group per person —
+    # so where an administrator has answered for the person, that is the
+    # answer. Groups still decide which tabs and which actions.
+    profile = employee_profile_for(user)
+    if profile is not None:
+        return _employee_allowed_ids(profile, scope)
 
     all_flag, field = SCOPES[scope]
     profiles = GroupAccessProfile.objects.filter(group__in=user.groups.all())

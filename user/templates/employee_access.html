@@ -1,0 +1,522 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Employee Organization Access Master — BIMS{% endblock %}
+{% block css %}
+<style>
+  /* Seven scope panels across the page, each self-contained: a heading strip
+     naming the dimension, an All / Selected choice, and the list the choice
+     governs. The list stays visible under "All" rather than disappearing —
+     hiding it makes the page jump and loses the reader's place. */
+  .oa-grid { display: grid; gap: .75rem; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .oa-grid.oa-lower { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 1400px) { .oa-grid, .oa-grid.oa-lower { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+  @media (max-width: 992px)  { .oa-grid, .oa-grid.oa-lower { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  @media (max-width: 640px)  { .oa-grid, .oa-grid.oa-lower { grid-template-columns: 1fr; } }
+
+  .oa-card { border: 1px solid #dee2e6; border-radius: .5rem; background: #fff;
+             display: flex; flex-direction: column; min-width: 0; }
+  .oa-head { display: flex; align-items: center; gap: .5rem; padding: .5rem .65rem;
+             border-bottom: 1px solid #e9ecef; border-radius: .5rem .5rem 0 0;
+             font-size: .8rem; font-weight: 700; }
+  .oa-head i { font-size: .95rem; }
+  .oa-body { padding: .55rem .65rem; display: flex; flex-direction: column; gap: .4rem; }
+  .oa-choice { display: flex; align-items: center; gap: .35rem; font-size: .78rem; }
+  .oa-list { border: 1px solid #e9ecef; border-radius: .35rem; padding: .4rem;
+             max-height: 8.5rem; overflow-y: auto; display: flex;
+             flex-direction: column; gap: .2rem; }
+  .oa-list label { font-size: .75rem; display: flex; align-items: flex-start;
+                   gap: .35rem; margin: 0; cursor: pointer; }
+  /* Under "All", the list is context rather than a control. Greyed and inert,
+     so nobody ticks a box that the All flag is already overriding. */
+  .oa-list.oa-off { background: #f8f9fa; opacity: .55; pointer-events: none; }
+  .oa-note { font-size: .72rem; color: #0c5460; background: #e7f3f8;
+             border-radius: .35rem; padding: .4rem .5rem; }
+  .oa-count { font-size: .72rem; color: #6c757d; padding: 0 .65rem .5rem; }
+  .oa-empty { font-size: .72rem; color: #856404; background: #fff6da;
+              border-radius: .35rem; padding: .4rem .5rem; }
+
+  .oa-info { display: grid; gap: .75rem; grid-template-columns: repeat(6, minmax(0,1fr)); }
+  @media (max-width: 1200px) { .oa-info { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+  @media (max-width: 700px)  { .oa-info { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .oa-info label { font-size: .72rem; color: #6c757d; margin-bottom: .15rem; }
+
+  .oa-summary td { font-size: .78rem; padding: .3rem .2rem; border: 0; }
+  .oa-summary td:last-child { text-align: right; font-weight: 600; }
+  .oa-summary tr + tr td { border-top: 1px solid #f1f3f5; }
+</style>
+{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='user' %}{% endblock %}
+{% block content %}
+{% include '_user_management_subnavbar.html' with active_tab='employee_access' %}
+
+<div class="page-header">
+  <div class="page-header-title">Employee Organization Access Master</div>
+  <div class="page-header-subtitle">
+    Define organizational data scope for the employee. Permissions / actions are
+    managed through <a href="{% url 'assign_groups' %}">User Access (Role)</a>.
+  </div>
+</div>
+
+<form method="post" id="oa-form">
+  {% csrf_token %}
+  <input type="hidden" name="profile_id" id="profile_id">
+
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-id-badge me-1"></i>1. Employee Information (Read Only)</div>
+    <div class="card-body">
+      <div class="oa-info">
+        <div>
+          <label class="form-label">Employee <span class="text-danger">*</span></label>
+          <select name="employee" id="employee" class="form-select form-select-sm" required>
+            <option value="">Select an employee</option>
+            {% for e in employees %}
+              <option value="{{ e.id }}">{{ e.full_name }}{% if e.employee_id %} (EMP{{ e.employee_id|stringformat:'05d' }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div><label class="form-label">Employee ID</label>
+          <input class="form-control form-control-sm bg-light" id="info_employee_id" readonly></div>
+        <div><label class="form-label">Designation</label>
+          <input class="form-control form-control-sm bg-light" id="info_designation" readonly></div>
+        <div><label class="form-label">Department</label>
+          <input class="form-control form-control-sm bg-light" id="info_department" readonly></div>
+        <div><label class="form-label">Role (From User Access)</label>
+          <input class="form-control form-control-sm bg-light" id="info_role" readonly></div>
+        <div><label class="form-label">Date of Joining</label>
+          <input class="form-control form-control-sm bg-light" id="info_joining" readonly></div>
+      </div>
+      <div class="mt-2">
+        <span class="badge bg-secondary" id="info_login">Login status —</span>
+        <label class="ms-3 form-check-label" style="font-size:.8rem">
+          <input type="checkbox" name="is_active" id="is_active" checked> Access active
+        </label>
+      </div>
+    </div>
+  </div>
+
+  {% comment %} Panels 2-7. Each is the same shape, so the markup is one
+     include-like block repeated rather than seven bespoke ones. {% endcomment %}
+  <div class="oa-grid mb-3">
+    <div class="oa-card">
+      <div class="oa-head" style="background:#eef7ee;color:#1e7e34">
+        <i class="fas fa-building"></i>2. Company Access</div>
+      <div class="oa-body">
+        <label class="oa-choice"><input type="radio" name="mode_companies" value="all" checked> All Companies</label>
+        <label class="oa-choice"><input type="radio" name="mode_companies" value="some"> Selected Companies</label>
+        <div class="oa-list oa-off" data-list="companies">
+          {% for c in options.companies %}
+            <label><input type="checkbox" name="companies" value="{{ c.id }}"> {{ c }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No companies.</span>{% endfor %}
+        </div>
+      </div>
+      <div class="oa-count" data-count="companies"></div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#eef3fb;color:#274d84">
+        <i class="fas fa-code-branch"></i>3. Branch Access</div>
+      <div class="oa-body">
+        <label class="oa-choice"><input type="radio" name="mode_branches" value="all" checked> All Branches</label>
+        <label class="oa-choice"><input type="radio" name="mode_branches" value="some"> Selected Branches</label>
+        <div class="oa-list oa-off" data-list="branches">
+          {% for b in options.branches %}
+            <label><input type="checkbox" name="branches" value="{{ b.id }}"> {{ b.branch_name }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No branches.</span>{% endfor %}
+        </div>
+      </div>
+      <div class="oa-count" data-count="branches"></div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#fdf3e7;color:#a15c07">
+        <i class="fas fa-warehouse"></i>4. Warehouse Access</div>
+      <div class="oa-body">
+        <label class="oa-choice"><input type="radio" name="mode_warehouses" value="all" checked> All Warehouses of Selected Branches</label>
+        <label class="oa-choice"><input type="radio" name="mode_warehouses" value="some"> Selected Warehouses</label>
+        <div class="oa-empty" data-empty="warehouses" style="display:none">
+          No warehouse is mapped to the selected branches.
+        </div>
+        <div class="oa-list oa-off" data-list="warehouses">
+          {% for w in options.warehouses %}
+            <label data-parent="{{ w.branch_id }}"><input type="checkbox" name="warehouses" value="{{ w.id }}"> {{ w.name }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No warehouses.</span>{% endfor %}
+        </div>
+        {% comment %} Warehouses reach their branch through Office Mapping, not
+           a column of their own, so an unmapped one belongs to no branch and
+           falls outside a branch-derived scope. Saying so beats letting
+           someone wonder. {% endcomment %}
+        <div class="oa-note oa-when-all" data-note="warehouses">
+          Warehouses mapped to the selected branches (Inventory &gt; Master &gt;
+          Office Mapping) will be accessible. Unmapped warehouses are not.
+        </div>
+      </div>
+      <div class="oa-count" data-count="warehouses"></div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#f3eefb;color:#5a3d9a">
+        <i class="fas fa-home"></i>5. Farm Access</div>
+      <div class="oa-body">
+        <label class="oa-choice"><input type="radio" name="mode_farms" value="all" checked> All Farms of Selected Branches</label>
+        <label class="oa-choice"><input type="radio" name="mode_farms" value="some"> Selected Farms</label>
+        <div class="oa-empty" data-empty="farms" style="display:none">
+          The selected branches have no farms.
+        </div>
+        <div class="oa-list oa-off" data-list="farms">
+          {% for f in options.farms %}
+            <label data-parent="{{ f.branch_id|default:0 }}"><input type="checkbox" name="farms" value="{{ f.id }}"> {{ f.farm_name }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No farms.</span>{% endfor %}
+        </div>
+        <div class="oa-note oa-when-all" data-note="farms">
+          All farms under the selected branches will be accessible to this employee.
+        </div>
+      </div>
+      <div class="oa-count" data-count="farms"></div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#fdeeee;color:#a12727">
+        <i class="fas fa-warehouse"></i>6. Shed Access</div>
+      <div class="oa-body">
+        <label class="oa-choice"><input type="radio" name="mode_sheds" value="all" checked> All Sheds of Selected Farms</label>
+        <label class="oa-choice"><input type="radio" name="mode_sheds" value="some"> Selected Sheds</label>
+        <div class="oa-empty" data-empty="sheds" style="display:none">
+          The farms in scope have no sheds.
+        </div>
+        <div class="oa-list oa-off" data-list="sheds">
+          {% for s in options.sheds %}
+            <label data-parent="{{ s.farm_id|default:0 }}"><input type="checkbox" name="sheds" value="{{ s.id }}"> {{ s.shed_name|default:s.shed_code }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No sheds.</span>{% endfor %}
+        </div>
+        <div class="oa-note oa-when-all" data-note="sheds">
+          All sheds under the selected farms will be accessible to this employee.
+        </div>
+      </div>
+      <div class="oa-count" data-count="sheds"></div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#eef6f7;color:#20707d">
+        <i class="fas fa-sitemap"></i>7. Cost Centre Access</div>
+      <div class="oa-body">
+        <label class="oa-choice"><input type="radio" name="mode_cost_centres" value="all" checked> All Cost Centres</label>
+        <label class="oa-choice"><input type="radio" name="mode_cost_centres" value="some"> Selected Cost Centres</label>
+        <div class="oa-list oa-off" data-list="cost_centres">
+          {% for c in options.cost_centres %}
+            <label><input type="checkbox" name="cost_centres" value="{{ c.id }}"> {{ c.name }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No cost centres.</span>{% endfor %}
+        </div>
+      </div>
+      <div class="oa-count" data-count="cost_centres"></div>
+    </div>
+  </div>
+
+  <div class="oa-grid oa-lower mb-3">
+    <div class="oa-card">
+      <div class="oa-head" style="background:#eef3fb;color:#274d84">
+        <i class="fas fa-layer-group"></i>8. Batch Visibility</div>
+      <div class="oa-body">
+        {% for value, label in batch_choices %}
+          <label class="oa-choice">
+            <input type="radio" name="batch_visibility" value="{{ value }}"
+                   {% if forloop.first %}checked{% endif %}> {{ label }}
+          </label>
+        {% endfor %}
+        <div class="oa-list oa-off" data-list="batches">
+          {% for b in options.batches %}
+            <label><input type="checkbox" name="batches" value="{{ b.id }}"> {{ b.batch_name }}</label>
+          {% empty %}<span class="text-muted" style="font-size:.75rem">No batches.</span>{% endfor %}
+        </div>
+        <div class="oa-note" id="batch_note">
+          Employee can view and work with only active batches.
+        </div>
+      </div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#f8f9fa;color:#495057">
+        <i class="fas fa-list"></i>Data Scope Summary</div>
+      <div class="oa-body">
+        {% comment %} Counted from the form as it stands, not from what was
+           last saved — the point of a summary is to answer "what am I about to
+           grant". {% endcomment %}
+        <table class="oa-summary w-100"><tbody>
+          <tr><td>Company</td><td data-sum="companies">—</td></tr>
+          <tr><td>Branches</td><td data-sum="branches">—</td></tr>
+          <tr><td>Warehouses</td><td data-sum="warehouses">—</td></tr>
+          <tr><td>Farms</td><td data-sum="farms">—</td></tr>
+          <tr><td>Sheds</td><td data-sum="sheds">—</td></tr>
+          <tr><td>Cost Centres</td><td data-sum="cost_centres">—</td></tr>
+          <tr><td>Batch Visibility</td><td data-sum="batches">—</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#fdf3e7;color:#a15c07">
+        <i class="fas fa-sticky-note"></i>Notes</div>
+      <div class="oa-body">
+        <textarea name="notes" id="notes" class="form-control form-control-sm"
+                  rows="5" maxlength="250" placeholder="Enter notes here…"></textarea>
+        <div class="text-end" style="font-size:.72rem;color:#6c757d">
+          Maximum 250 characters · <span id="notes_count">0</span> / 250
+        </div>
+      </div>
+    </div>
+
+    <div class="oa-card">
+      <div class="oa-head" style="background:#f8f9fa;color:#495057">
+        <i class="fas fa-save"></i>Save</div>
+      <div class="oa-body">
+        <button class="btn btn-primary btn-sm" type="submit">
+          <i class="fas fa-save me-1"></i>Save Access</button>
+        <button class="btn btn-outline-secondary btn-sm" type="reset" id="oa-reset">
+          <i class="fas fa-undo me-1"></i>Reset</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-table me-1"></i>Employee Organization Access List</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid">
+        <thead><tr>
+          <th>Employee ID</th><th>Employee Name</th><th>Designation</th>
+          <th>Branches</th><th>Warehouses</th><th>Farms</th><th>Sheds</th>
+          <th>Cost Centres</th><th>Batch Visibility</th><th>Status</th>
+          <th>Last Updated</th><th class="ds-mid">Action</th>
+        </tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{% if row.employee.employee_id %}EMP{{ row.employee.employee_id|stringformat:'05d' }}{% else %}—{% endif %}</td>
+            <td>{{ row.employee.full_name }}</td>
+            <td>{{ row.employee.designation.title|default:"—" }}</td>
+            <td>{{ row.branches }}</td>
+            <td>{{ row.warehouses }}</td>
+            <td>{{ row.farms }}</td>
+            <td>{{ row.sheds }}</td>
+            <td>{{ row.cost_centres }}</td>
+            <td>{{ row.batch_visibility }}</td>
+            <td>
+              {% if row.profile.is_active %}
+                <span class="badge bg-success">Active</span>
+              {% else %}
+                <span class="badge bg-secondary">Inactive</span>
+              {% endif %}
+            </td>
+            <td>{{ row.profile.updated_at|date:"d M Y H:i" }}</td>
+            <td class="ds-mid">
+              <button type="button" class="btn btn-sm btn-outline-primary oa-edit"
+                      data-id="{{ row.profile.id }}" title="Edit">
+                <i class="fas fa-pen"></i></button>
+              <a class="btn btn-sm btn-outline-danger"
+                 href="{% url 'employee_access_delete' row.profile.id %}"
+                 onclick="return confirm('Remove this scope? {{ row.employee.full_name|escapejs }} will follow their role\'s scope instead.')"
+                 title="Delete"><i class="fas fa-trash"></i></a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="12" class="text-center text-muted py-4">
+            No employee has an organizational scope yet. Everyone follows their
+            role's scope until one is saved here.
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+(function () {
+  const form = document.getElementById('oa-form');
+  const DIMENSIONS = ['companies', 'branches', 'warehouses', 'farms',
+                      'sheds', 'cost_centres'];
+
+  const modeOf = (dim) =>
+    (form.querySelector(`input[name="mode_${dim}"]:checked`) || {}).value || 'all';
+  const boxes = (dim) => [...form.querySelectorAll(`input[name="${dim}"]`)];
+  const chosen = (dim) => boxes(dim).filter(b => b.checked);
+
+  /**
+   * A list under "All" is context, not a control: greyed and inert so nobody
+   * ticks a box the All flag is already overriding. The hidden all_* field is
+   * what the server reads — a radio pair is clearer on screen than a lone
+   * checkbox, but the model stores a boolean.
+   */
+  function paint(dim) {
+    const all = modeOf(dim) === 'all';
+    const list = form.querySelector(`[data-list="${dim}"]`);
+    if (list) list.classList.toggle('oa-off', all);
+    const note = form.querySelector(`[data-note="${dim}"]`);
+    if (note) note.style.display = all ? '' : 'none';
+
+    let hidden = form.querySelector(`input[type=hidden][name="all_${dim}"]`);
+    if (!hidden) {
+      hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = `all_${dim}`;
+      form.appendChild(hidden);
+    }
+    // Checkbox semantics on the server: present and "on" means true.
+    hidden.value = all ? 'on' : '';
+
+    // "All" counts what is in scope, not what is in the table: under two
+    // branches, "All warehouses" is those branches' warehouses.
+    const scoped = inScope(dim);
+    const total = scoped === null ? boxes(dim).length : scoped.size;
+    const count = form.querySelector(`[data-count="${dim}"]`);
+    if (count) {
+      count.textContent = all ? `All ${total} selected`
+                              : `${chosen(dim).length} Selected`;
+    }
+    const sum = form.querySelector(`[data-sum="${dim}"]`);
+    if (sum) sum.textContent = all ? `All (${total})` : chosen(dim).length;
+  }
+
+  /**
+   * Which dimension each cascading one hangs off. Warehouses and farms belong
+   * to branches; sheds belong to farms.
+   */
+  const PARENT_OF = { warehouses: 'branches', farms: 'branches', sheds: 'farms' };
+
+  /**
+   * The ids of `dim` that are currently in scope — what a child may hang off.
+   *
+   * Under "All" that is everything the dimension itself is narrowed to, which
+   * is why this recurses: sheds hang off farms, and farms under "All" mean the
+   * farms of the chosen branches. Returning null means no narrowing at all.
+   */
+  function inScope(dim) {
+    if (modeOf(dim) !== 'all') return new Set(chosen(dim).map(b => b.value));
+    const parent = PARENT_OF[dim];
+    if (!parent) return null;                 // branches under "All": no limit
+    const allowed = inScope(parent);
+    if (allowed === null) return null;
+    return new Set(boxes(dim)
+      .filter(b => allowed.has(b.closest('label').dataset.parent))
+      .map(b => b.value));
+  }
+
+  /**
+   * Narrow a picker to its parent's selection.
+   *
+   * Offering every warehouse while the branch list says Akbarpur invites
+   * someone to tick one that belongs elsewhere — which the save would then
+   * have to drop, silently. Better not to offer it. Anything already ticked
+   * that falls out of scope is unticked, or a branch change would leave a
+   * stale grant behind that nothing on screen accounts for.
+   */
+  function cascade(dim) {
+    const allowed = inScope(PARENT_OF[dim]);
+    let visible = 0;
+    boxes(dim).forEach(function (box) {
+      const label = box.closest('label');
+      const show = allowed === null || allowed.has(label.dataset.parent);
+      label.style.display = show ? '' : 'none';
+      if (!show && box.checked) box.checked = false;
+      if (show) visible += 1;
+    });
+    const empty = form.querySelector(`[data-empty="${dim}"]`);
+    if (empty) empty.style.display = visible ? 'none' : '';
+    return visible;
+  }
+
+  function paintBatches() {
+    const mode = (form.querySelector('input[name="batch_visibility"]:checked') || {}).value;
+    const list = form.querySelector('[data-list="batches"]');
+    if (list) list.classList.toggle('oa-off', mode !== 'selected');
+    const note = document.getElementById('batch_note');
+    note.style.display = mode === 'active' ? '' : 'none';
+    const sum = form.querySelector('[data-sum="batches"]');
+    if (sum) {
+      sum.textContent = mode === 'all' ? 'All Batches'
+        : mode === 'active' ? 'Active Batches Only'
+        : `${chosen('batches').length} Selected`;
+    }
+  }
+
+  function paintAll() {
+    // Parents first: a child's visible set depends on its parent's selection,
+    // and sheds depend on farms which depend on branches.
+    ['warehouses', 'farms', 'sheds'].forEach(cascade);
+    DIMENSIONS.forEach(paint);
+    paintBatches();
+  }
+
+  form.addEventListener('change', paintAll);
+  form.addEventListener('input', function (ev) {
+    if (ev.target.id === 'notes') {
+      document.getElementById('notes_count').textContent = ev.target.value.length;
+    }
+  });
+
+  // The read-only panel follows the chosen employee. Fetched rather than
+  // embedded: the employee list is long and most of it is never looked at.
+  const employee = document.getElementById('employee');
+  employee.addEventListener('change', function () {
+    const fields = ['employee_id', 'designation', 'department', 'role', 'joining'];
+    if (!employee.value) {
+      fields.forEach(f => { document.getElementById('info_' + f).value = ''; });
+      document.getElementById('info_login').textContent = 'Login status —';
+      return;
+    }
+    fetch(`/employee-access/employee/${employee.value}/`)
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('info_employee_id').value = d.employee_id;
+        document.getElementById('info_designation').value = d.designation;
+        document.getElementById('info_department').value = d.department;
+        document.getElementById('info_role').value = d.role;
+        document.getElementById('info_joining').value = d.date_of_joining;
+        const badge = document.getElementById('info_login');
+        badge.textContent = 'Login: ' + d.login_status;
+        badge.className = 'badge ' + (d.login_status === 'Active'
+          ? 'bg-success' : d.login_status === 'Inactive' ? 'bg-secondary' : 'bg-warning');
+      });
+  });
+
+  // Edit: load a saved profile back into the same form, so there is one editor
+  // rather than an add form and a separate edit form to keep in step.
+  document.querySelectorAll('.oa-edit').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      fetch(`/employee-access/${btn.dataset.id}/row/`)
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('profile_id').value = d.id;
+          employee.value = d.employee;
+          employee.dispatchEvent(new Event('change'));
+          DIMENSIONS.forEach(function (dim) {
+            const all = d['all_' + dim];
+            const radio = form.querySelector(
+              `input[name="mode_${dim}"][value="${all ? 'all' : 'some'}"]`);
+            if (radio) radio.checked = true;
+            boxes(dim).forEach(b => { b.checked = d[dim].includes(Number(b.value)); });
+          });
+          const vis = form.querySelector(
+            `input[name="batch_visibility"][value="${d.batch_visibility}"]`);
+          if (vis) vis.checked = true;
+          boxes('batches').forEach(b => { b.checked = d.batches.includes(Number(b.value)); });
+          document.getElementById('notes').value = d.notes || '';
+          document.getElementById('notes_count').textContent = (d.notes || '').length;
+          document.getElementById('is_active').checked = d.is_active;
+          paintAll();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+  });
+
+  document.getElementById('oa-reset').addEventListener('click', function () {
+    // Let the native reset land first, then repaint from the restored state.
+    setTimeout(paintAll, 0);
+  });
+
+  paintAll();
+})();
+</script>
+{% endblock %}
