@@ -267,7 +267,7 @@ function TodayTrip({
           <Text style={styles.tripTitle} numberOfLines={1}>{view.title}</Text>
           <Text style={styles.panelMeta} numberOfLines={1}>{view.detail}</Text>
         </View>
-        {view.badge ? <Badge label={view.badge.label} tone={view.badge.tone} /> : null}
+        <Badge label={view.badge.label} tone={view.badge.tone} />
       </View>
       {loading || !view.action ? null : (
         <View style={styles.tripActions}>

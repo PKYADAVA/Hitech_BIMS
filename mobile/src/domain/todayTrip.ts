@@ -5,11 +5,19 @@ export type TripState = "none" | "open" | "closed";
 
 export interface TodayTripView {
   state: TripState;
-  /** The trip number once there is one, else the card's own name. */
+  /** The trip number once there is one, else that there is not one. */
   title: string;
   /** The one line under it: when it started, or how it finished. */
   detail: string;
-  badge?: { label: string; tone: "neutral" | "success" };
+  /**
+   * Where the day stands, always present.
+   *
+   * Named in the driver's words — not started, started, ended — rather than
+   * the database's "In Progress"/"Completed", and never omitted: a card with
+   * no badge leaves "no trip today" and "the card failed to load" looking
+   * exactly alike.
+   */
+  badge: { label: string; tone: "neutral" | "success" | "warning" };
   /** The single action this state needs, or none once the day is settled. */
   action?: "start" | "end";
 }
@@ -33,8 +41,13 @@ export function clockOf(value: unknown): string {
  */
 export function describeTodayTrip(trip: Row | null | undefined): TodayTripView {
   if (!trip) {
-    return { state: "none", title: "Not started",
-             detail: "Nothing logged yet today.", action: "start" };
+    return {
+      state: "none",
+      title: "No trip yet",
+      detail: "Nothing logged today.",
+      badge: { label: "not started", tone: "warning" },
+      action: "start",
+    };
   }
   const title = String(trip.trip_no ?? "Today's Trip");
   if (trip.status === "Completed") {
@@ -42,9 +55,9 @@ export function describeTodayTrip(trip: Row | null | undefined): TodayTripView {
     return {
       state: "closed",
       title,
-      detail: [ended && `Closed ${ended}`, `${trip.distance_km ?? 0} km`]
+      detail: [ended && `Ended ${ended}`, `${trip.distance_km ?? 0} km`]
         .filter(Boolean).join(" · "),
-      badge: { label: "completed", tone: "success" },
+      badge: { label: "ended", tone: "success" },
     };
   }
   const started = clockOf(trip.start_photo_at);
@@ -52,8 +65,8 @@ export function describeTodayTrip(trip: Row | null | undefined): TodayTripView {
     state: "open",
     title,
     detail: [started && `Started ${started}`, trip.registration]
-      .filter(Boolean).join(" · ") || "In progress",
-    badge: { label: "in progress", tone: "neutral" },
+      .filter(Boolean).join(" · ") || "On the road",
+    badge: { label: "started", tone: "neutral" },
     action: "end",
   };
 }

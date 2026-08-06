@@ -6,15 +6,26 @@ const trip = (over: Partial<Row> = {}): Row =>
   ({ id: 1, trip_no: "TRP-2026-0007", status: "In Progress", ...over } as Row);
 
 describe("describeTodayTrip", () => {
-  it("offers Start when nothing is logged", () => {
+  it("says not started, and offers Start, when nothing is logged", () => {
     const v = describeTodayTrip(null);
     expect(v.state).toBe("none");
     expect(v.action).toBe("start");
-    expect(v.badge).toBeUndefined();
+    expect(v.badge).toEqual({ label: "not started", tone: "warning" });
     expect(v.detail).toMatch(/nothing logged/i);
     // Not "Today's Trip" — the section above the card already says that, and
     // a card echoing its own heading tells the reader nothing.
-    expect(v.title).toBe("Not started");
+    expect(v.title).toBe("No trip yet");
+  });
+
+  it("names the state in every one of them", () => {
+    // The badge is what the driver reads first, so it is never absent: a card
+    // with no status looks the same as one that failed to load.
+    const labels = [
+      describeTodayTrip(null),
+      describeTodayTrip(trip()),
+      describeTodayTrip(trip({ status: "Completed" })),
+    ].map((v) => v.badge.label);
+    expect(labels).toEqual(["not started", "started", "ended"]);
   });
 
   it("treats a missing answer the same as no trip, not as an error", () => {
@@ -28,7 +39,7 @@ describe("describeTodayTrip", () => {
     expect(v.state).toBe("open");
     expect(v.action).toBe("end");
     expect(v.title).toBe("TRP-2026-0007");
-    expect(v.badge).toEqual({ label: "in progress", tone: "neutral" });
+    expect(v.badge).toEqual({ label: "started", tone: "neutral" });
     expect(v.detail).toContain("UP53 XX 9876");
     expect(v.detail).toMatch(/^Started \d{1,2}:\d{2}/);
   });
@@ -40,7 +51,7 @@ describe("describeTodayTrip", () => {
 
   it("still says something when the trip has no start stamp", () => {
     // Recorded from the back office: no photograph, so nothing to stamp.
-    expect(describeTodayTrip(trip()).detail).toBe("In progress");
+    expect(describeTodayTrip(trip()).detail).toBe("On the road");
   });
 
   it("offers no action once the trip is settled, and shows the distance", () => {
@@ -49,13 +60,13 @@ describe("describeTodayTrip", () => {
     }));
     expect(v.state).toBe("closed");
     expect(v.action).toBeUndefined();
-    expect(v.badge).toEqual({ label: "completed", tone: "success" });
+    expect(v.badge).toEqual({ label: "ended", tone: "success" });
     expect(v.detail).toContain("68 km");
   });
 
   it("survives a timestamp it cannot parse", () => {
     const v = describeTodayTrip(trip({ start_photo_at: "not a date" }));
-    expect(v.detail).toBe("In progress");
+    expect(v.detail).toBe("On the road");
   });
 });
 
