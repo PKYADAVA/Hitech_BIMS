@@ -7,7 +7,7 @@ from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import redirect
 
-from .access import (PUBLIC_URL_NAMES, URLNAME_TO_TAB, derive_tab,
+from .access import (MASTER_REFERENCE_URLS, PUBLIC_URL_NAMES, URLNAME_TO_TAB, derive_tab,
                      resolve_action, user_can)
 
 logger = logging.getLogger(__name__)
@@ -90,8 +90,19 @@ class WebAccessMiddleware:
         if user_can(user, tab, action):
             return None
 
+        # Reading a master to fill a picker is part of using the transaction
+        # that asks for it. See MASTER_REFERENCE_URLS — writes still need the
+        # master's own rights, and what comes back is still data-scoped.
+        if action == "view" and self._is_reference_read(request, url_name):
+            return None
+
         self._record(request, view_func, url_name, user, "denied", tab, action)
         return self._deny(request, action)
+
+    @staticmethod
+    def _is_reference_read(request, url_name):
+        return (request.method in ("GET", "HEAD")
+                and url_name in MASTER_REFERENCE_URLS)
 
     @staticmethod
     def _is_export(request):

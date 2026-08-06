@@ -581,6 +581,27 @@ for _nav, _s, _code, _l, _extra in iter_tabs():
         URLNAME_TO_TAB[_u] = _code
 
 
+#: Master feeds any signed-in user may *read*.
+#:
+#: A master's JSON endpoints are registered under that master's tab, so a user
+#: granted Daily Entry but not Broiler Farm was refused ``branch_list`` — and
+#: the branch picker on the transaction they *had* been granted came back
+#: empty. Being allowed to record a day's figures has to imply being allowed to
+#: read the farms and branches the form asks you to choose between; needing the
+#: master tab as well means every transaction user is also given the master,
+#: which is the opposite of least privilege.
+#:
+#: Read only. Safe methods pass; creating, editing or deleting a master still
+#: needs that master's own rights. And reading is still *scoped* — this decides
+#: whether the endpoint answers, not what it answers with.
+MASTER_REFERENCE_URLS = {
+    _u
+    for _nav, _section, _code, _l, _extra in iter_tabs()
+    if "master" in _section.lower()
+    for _u in _extra
+}
+
+
 # ---------------------------------------------------------------------------
 # Action (create / edit / delete) url-name resolution
 # ---------------------------------------------------------------------------

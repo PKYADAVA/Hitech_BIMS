@@ -682,7 +682,12 @@ class BranchAPI(BaseAPIView):
                 branch = Branch.objects.select_related("region").get(id=id)
                 return JsonResponse(_branch_to_dict(branch))
 
-            branches = Branch.objects.select_related("region").all()
+            # Scoped, because this feeds every branch picker in the ERP. It
+            # returned every branch to everyone, so a user limited to Akbarpur
+            # was still offered the rest — the restriction was in the profile
+            # and nowhere on the screen.
+            branches = branches_for(request.user,
+                                    Branch.objects.select_related("region"))
             return JsonResponse([_branch_to_dict(b) for b in branches], safe=False)
         except Exception as e:
             return self.handle_exception(e)
