@@ -53,6 +53,19 @@
         {% if size_mb %}<span class="chip">{{ size_mb }} MB</span>{% endif %}
       </div>
 
+      {% if insecure_link %}
+        {% comment %}
+          Shown to whoever configured it, not to the person installing — but
+          they are the same person the first time, and a silent block is worse
+          than an ugly warning.
+        {% endcomment %}
+        <div class="unavailable" style="margin-bottom:14px">
+          <strong>This download will be blocked.</strong><br>
+          The build is on an <code>http://</code> address while this page is
+          served over <code>https://</code>, and browsers refuse that. Host the
+          APK over HTTPS and update <code>APK_DOWNLOAD_URL</code>.
+        </div>
+      {% endif %}
       {% if download_url %}
         <a class="btn" href="{{ download_url }}">Download the app</a>
       {% else %}

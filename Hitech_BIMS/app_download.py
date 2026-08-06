@@ -51,9 +51,16 @@ def app_download(request):
         stem = local["name"].rsplit(".", 1)[0]
         version = stem.split("-v")[-1] if "-v" in stem else ""
 
+    # Chrome refuses a download that leaves an HTTPS page for an HTTP one, and
+    # says so in a strip at the bottom of the window that people miss entirely.
+    # The report that comes back is "the download does nothing", which is a
+    # long way from the cause, so the page names it instead.
+    insecure = url.startswith("http://") and request.is_secure()
+
     return render(request, "app_download.html", {
         "download_url": url,
         "version": version,
         "size_mb": local["size_mb"] if local else None,
         "host": request.get_host(),
+        "insecure_link": insecure,
     })

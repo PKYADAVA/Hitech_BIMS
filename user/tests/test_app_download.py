@@ -57,3 +57,21 @@ class AppDownloadTests(TestCase):
         resp = self.client.get(self.url())
         self.assertNotContains(resp, "main_top_navbar")
         self.assertNotContains(resp, "Logout")
+
+    @override_settings(APK_DOWNLOAD_URL="http://insecure.example.com/bims.apk")
+    def test_an_http_build_on_an_https_page_is_called_out(self):
+        """Browsers refuse a download that leaves HTTPS for HTTP, in a strip
+        people miss — and report as "the download does nothing"."""
+        resp = self.client.get(self.url(), secure=True)
+        self.assertContains(resp, "This download will be blocked")
+
+    @override_settings(APK_DOWNLOAD_URL="https://secure.example.com/bims.apk")
+    def test_an_https_build_is_not_called_out(self):
+        resp = self.client.get(self.url(), secure=True)
+        self.assertNotContains(resp, "This download will be blocked")
+
+    @override_settings(APK_DOWNLOAD_URL="http://insecure.example.com/bims.apk")
+    def test_plain_http_serving_is_left_alone(self):
+        """On a development server there is no mixed content to warn about."""
+        resp = self.client.get(self.url())
+        self.assertNotContains(resp, "This download will be blocked")
