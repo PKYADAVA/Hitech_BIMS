@@ -127,6 +127,14 @@ class BaseReadOnlyViewSet(V1ViewMixin, AutoQuerysetMixin, viewsets.ReadOnlyModel
 #: need to see. Each entry below mirrors what the web view for the same model
 #: does; copying the web is the point, since the API is that data by another
 #: door and the two disagreeing is the bug.
+#: ``mode``    — "all" (default) requires every scope to pass; "any" keeps a row
+#:               when one does, and keeps rows where all the fields are empty.
+#: ``nulls``    — "keep" keeps rows whose scope column is NULL under "all" mode.
+#:               Only three scoped columns are nullable at all; without this the
+#:               moment any scope applies, an employee with no warehouse or a
+#:               customer with no group becomes invisible to every scoped user
+#:               at once — not restricted, unreachable. The same reasoning
+#:               `scope_or_null` was written for.
 API_SCOPES = {
     "broiler.Branch": {"branches": "id"},
     "broiler.BroilerFarm": {"branches": "branch_id", "farms": "id"},
@@ -152,13 +160,19 @@ API_SCOPES = {
     # (Warehouse on the HR side), so a branch login sees their own people's
     # travel. The visits inherit it a hop further along, or come in through the
     # farm they called at.
-    "hr.EmployeeVehicle": {"sectors": "employee__warehouse_id"},
-    "hr.SupervisorTrip": {"sectors": "employee__warehouse_id"},
+    # `nulls`: an employee with no warehouse on their HR record belongs to no
+    # branch, so a warehouse-scoped user saw none of their trips — and neither
+    # did anyone else, which made the record unreachable rather than restricted.
+    "hr.EmployeeVehicle": {"sectors": "employee__warehouse_id", "nulls": "keep"},
+    "hr.SupervisorTrip": {"sectors": "employee__warehouse_id", "nulls": "keep"},
     "hr.SupervisorTripVisit": {"mode": "any",
                                "sectors": "trip__employee__warehouse_id",
                                "farms": "farm_id"},
     "inventory.Warehouse": {"sectors": "id"},
-    "sales.Customer": {"customer_groups": "customer_group_id"},
+    # `nulls`: customer_group is optional on the master, and an ungrouped
+    # customer disappeared from every scoped user's picker — including the one
+    # on Bird Sale, which cannot be completed without choosing one.
+    "sales.Customer": {"customer_groups": "customer_group_id", "nulls": "keep"},
 
     # Hatchery transactions — hatchery/views.py scopes each of these with
     # scope_any on exactly these fields.
@@ -347,15 +361,25 @@ def scope_api_queryset(user, qs):
     limits that narrow the web app have to narrow it too — otherwise a token is
     a way round the scoping as well as the matrix.
     """
-    from user.services.scoping import scope_any, scope_multi
+    from user.services.scoping import scope_any, scope_multi, scope_or_null
 
     model = qs.model
     scopes = API_SCOPES.get(f"{model._meta.app_label}.{model.__name__}")
     if not scopes or user is None:
         return qs
     scopes = dict(scopes)
-    combine = scope_any if scopes.pop("mode", "all") == "any" else scope_multi
-    return combine(user, qs, **scopes)
+    mode = scopes.pop("mode", "all")
+    keep_null = scopes.pop("nulls", None) == "keep"
+    if mode == "any":
+        return scope_any(user, qs, **scopes)
+    if keep_null:
+        # A row whose scope column is empty is not in someone else's warehouse
+        # or someone else's group — it is unassigned, and `field__in` drops it
+        # for every scoped user at once. See the note on `nulls` in API_SCOPES.
+        for scope, field in scopes.items():
+            qs = scope_or_null(user, qs, scope, field)
+        return qs
+    return scope_multi(user, qs, **scopes)
 
 
 def _has_field(model, name: str) -> bool:

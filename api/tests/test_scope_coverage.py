@@ -9,6 +9,10 @@ from django.test import TestCase
 from api.viewsets import (API_SCOPES, UNSCOPED_API_MODELS,
                           registered_api_models)
 
+#: Keys in an API_SCOPES entry that configure the combination rather than name
+#: a column — never a path, and never a dimension.
+_SETTINGS = {"mode", "nulls"}
+
 
 class ScopeCoverageTests(TestCase):
     def test_no_api_model_is_silently_unscoped(self):
@@ -46,7 +50,7 @@ class ScopeCoverageTests(TestCase):
         for label, scopes in API_SCOPES.items():
             model = apps.get_model(label)
             for scope, fields in scopes.items():
-                if scope == "mode":
+                if scope in _SETTINGS:
                     continue
                 # A dimension may name several columns — a transfer has two
                 # ends, and either one puts the row in scope.
@@ -62,12 +66,26 @@ class ScopeCoverageTests(TestCase):
         tuple. Only scope_any expands them, so the two must travel together."""
         for label, scopes in API_SCOPES.items():
             multi = [s for s, f in scopes.items()
-                     if s != "mode" and not isinstance(f, str)]
+                     if s not in _SETTINGS and not isinstance(f, str)]
             if multi:
                 with self.subTest(model=label):
                     self.assertEqual(scopes.get("mode"), "any",
                                      f"{label} names several columns for "
                                      f"{multi} but does not use mode=any")
+
+    def test_settings_keys_are_spelled_correctly(self):
+        """`nulls` decides whether a row with an empty scope column survives.
+        A typo would silently fall back to dropping it, which is the bug the
+        flag was added to fix and would look identical to not having it."""
+        for label, scopes in API_SCOPES.items():
+            with self.subTest(model=label):
+                self.assertIn(scopes.get("nulls", "drop"), {"drop", "keep"})
+                # And `nulls` only means anything under the default mode.
+                if scopes.get("nulls") == "keep":
+                    self.assertNotEqual(
+                        scopes.get("mode"), "any",
+                        f"{label}: mode=any already keeps empty rows, so "
+                        f"nulls=keep says nothing")
 
     def test_modes_are_spelled_correctly(self):
         """`mode` decides AND vs OR. A typo would silently fall back to AND
