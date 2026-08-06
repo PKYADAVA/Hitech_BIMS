@@ -5,17 +5,25 @@ import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
-import { Badge, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
+import { Badge, Button, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
 import { colors, makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { TabParams } from "@/navigation/types";
-import { AuthUser } from "@/api/types";
+import { AuthUser, Row } from "@/api/types";
 import { Overview, useOverview } from "@/api/stats";
+import { useTodayTrip } from "@/api/trips";
 import { IndicatorCarousel, Indicator } from "@/components/IndicatorCarousel";
+import { describeTodayTrip } from "@/domain/todayTrip";
 import { useAuthStore } from "@/store/authStore";
+import { RESOURCE_TABS } from "@/api/permissions";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { useSideNav } from "@/store/sideNavStore";
 
 const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
+
+/** The Mobile Access tab behind the trip register, taken from the one map that
+ *  already pairs screens with tabs rather than spelled out a second time. */
+const TRIP_RESOURCE = "hr-supervisor-trips";
+const TRIP_TAB = RESOURCE_TABS[TRIP_RESOURCE];
 
 /** Cross-module headline indicators for the Home carousel. */
 function buildIndicators(ov?: Overview): Indicator[] {
@@ -118,6 +126,10 @@ interface QuickAction {
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
+  // First, because for the people who drive all day it is the only one they
+  // open — see TodayTrip, which puts the same thing above the fold for them.
+  { key: "trip", label: "Daily Trip", icon: "🚗", color: colors.hr,
+    tab: "HrModule", resourceKey: "hr-supervisor-trips" },
   { key: "batch", label: "Batch Creation", icon: "📦", color: colors.broiler,
     tab: "Broiler", resourceKey: "broiler-batches" },
   { key: "placement", label: "Chicks Placement", icon: "🐥", color: colors.hatchery,
@@ -134,9 +146,10 @@ const QUICK_ACTIONS: QuickAction[] = [
     tab: "Broiler", resourceKey: "broiler-sale-receipts" },
 ];
 
-/** Which module governs an action, so permissions hide it with its module. */
+/** Which module governs an action, so permissions hide it with its module.
+ *  Root-presented modules are named "<Module>Module"; the tab ones are not. */
 const moduleOf = (a: QuickAction): string =>
-  a.tab === "InventoryModule" ? "inventory" : String(a.tab).toLowerCase();
+  String(a.tab).replace(/Module$/, "").toLowerCase();
 
 const num = (v?: number, dp = 0) =>
   v === undefined || v === null ? "–" : v.toLocaleString(undefined, {
@@ -214,6 +227,56 @@ function SystemSummary({ ov }: { ov?: Overview }) {
           </View>
         ))}
       </View>
+    </Card>
+  );
+}
+
+/**
+ * Today's Trip — the first thing a driver sees, before the dashboard proper.
+ *
+ * Whoever spends the day on the road opens this app to do one thing, and
+ * hunting for it through HR > Supervisor Daily Trip every morning is three
+ * taps too many. So the day's own trip is pinned above everything else, in
+ * whichever of its three states it is in, with the single action that state
+ * needs: start it, close it, or nothing at all once it is closed.
+ *
+ * Shown only to a login that maps to an employee record — a back-office login
+ * has no "my trip" to show — and only when Mobile Access grants the tab.
+ */
+function TodayTrip({
+  trip,
+  loading,
+  onStart,
+  onEnd,
+}: {
+  trip: Row | null | undefined;
+  loading: boolean;
+  onStart: () => void;
+  onEnd: () => void;
+}) {
+  const styles = useStyles();
+  const view = describeTodayTrip(trip);
+
+  return (
+    <Card style={styles.tripCard}>
+      <View style={styles.tripTop}>
+        <View style={[styles.tripIcon, { backgroundColor: withAlpha(colors.hr, 0.14) }]}>
+          <AppIcon name="car-side" size={22} color={colors.hr} />
+        </View>
+        <View style={styles.panelMain}>
+          <Text style={styles.tripTitle} numberOfLines={1}>{view.title}</Text>
+          <Text style={styles.panelMeta} numberOfLines={1}>{view.detail}</Text>
+        </View>
+        {view.badge ? <Badge label={view.badge.label} tone={view.badge.tone} /> : null}
+      </View>
+      {loading || !view.action ? null : (
+        <View style={styles.tripActions}>
+          <Button
+            title={view.action === "start" ? "Start Trip" : "End Trip"}
+            onPress={view.action === "start" ? onStart : onEnd}
+          />
+        </View>
+      )}
     </Card>
   );
 }
@@ -335,6 +398,7 @@ export function HomeScreen({ navigation }: Props) {
   const { colors: theme } = useTheme();
   const user = useAuthStore((s) => s.user);
   const canModule = usePermissionsStore((s) => s.canModule);
+  const canTab = usePermissionsStore((s) => s.canTab);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
   const navOrder = usePermissionsStore((s) => s.navOrder);
   const refreshPerms = usePermissionsStore((s) => s.refresh);
@@ -342,6 +406,13 @@ export function HomeScreen({ navigation }: Props) {
   const [period, setPeriod] = React.useState<"today" | "week" | "month">("today");
   const [pickFarm, setPickFarm] = React.useState(false);
   const { data: ov, refetch, isFetching } = useOverview({ farm, period });
+
+  // The trip card is for the person who drives, so it needs both halves of
+  // that: a login the server can resolve to an employee, and the tab granted.
+  const drives = !!user?.employee && canTab(TRIP_TAB);
+  const { data: trip, isLoading: tripLoading, refetch: refetchTrip } = useTodayTrip(drives);
+  const openTrip = (params: { row?: Row; ending?: boolean }) =>
+    navigation.navigate("HrModule" as any, { screen: "SupervisorTripForm", params });
 
   const farmName = farm
     ? ov?.farm_options?.find((f) => String(f.id) === farm)?.name ?? "Farm"
@@ -359,7 +430,10 @@ export function HomeScreen({ navigation }: Props) {
     useCallback(() => {
       refetch();
       refreshPerms();
-    }, [refetch, refreshPerms])
+      // Coming back from starting or ending a trip lands here, so the card has
+      // to re-read rather than show the state the driver just left behind.
+      if (drives) refetchTrip();
+    }, [refetch, refreshPerms, refetchTrip, drives])
   );
 
   return (
@@ -382,6 +456,18 @@ export function HomeScreen({ navigation }: Props) {
           }
         />
 
+        {drives ? (
+          <View style={styles.body}>
+            <SectionHeader title="Today's Trip" subtitle="Your day on the road" />
+            <TodayTrip
+              trip={trip}
+              loading={tripLoading}
+              onStart={() => openTrip({})}
+              onEnd={() => openTrip({ row: trip ?? undefined, ending: true })}
+            />
+          </View>
+        ) : null}
+
         <View style={styles.body}>
           <SectionHeader title="At a glance" subtitle="Today's key numbers across your farm" />
         </View>
@@ -393,7 +479,13 @@ export function HomeScreen({ navigation }: Props) {
 
           <SectionHeader title="Quick Access" subtitle="The dashboard's shortcuts" />
           <View style={styles.quickGrid}>
-            {QUICK_ACTIONS.filter((a) => !permsLoaded || canModule(moduleOf(a))).map((a) => (
+            {QUICK_ACTIONS.filter((a) => !permsLoaded
+              // Daily Trip is one screen inside HR, so the module flag is too
+              // coarse: it would show the shortcut to anyone with any HR
+              // access at all, including those Mobile Access denies the tab.
+              || (a.resourceKey === TRIP_RESOURCE
+                ? canTab(TRIP_TAB)
+                : canModule(moduleOf(a)))).map((a) => (
               <Pressable
                 key={a.key}
                 style={styles.quickCard}
@@ -580,6 +672,18 @@ const useStyles = makeStyles((colors) => ({
   summaryCell: { alignItems: "center", flex: 1 },
   summaryValue: { ...type.h3, color: colors.text },
   summaryLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+  tripCard: { marginBottom: spacing.sm, gap: spacing.sm },
+  tripTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  tripIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripTitle: { ...type.title, color: colors.text },
+  // Full-width, because it is the one thing this card is for.
+  tripActions: { marginTop: spacing.xs },
   quickGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

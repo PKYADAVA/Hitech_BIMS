@@ -443,6 +443,9 @@ export function SupervisorTripFormScreen({ navigation, route }: Props) {
       setTripNo(data.data.trip_no);
       setStatus(data.data.status);
       queryClient.invalidateQueries({ queryKey: ["resource", "/hr/trips/"] });
+      // Home pins today's trip above the dashboard, and it is the screen a
+      // driver lands back on — it must not still be offering "Start Trip".
+      queryClient.invalidateQueries({ queryKey: ["today-trip"] });
       if (thenLeave) navigation.goBack();
     } catch (e: unknown) {
       // The envelope carries the useful part in `fields`; `message` alone is
