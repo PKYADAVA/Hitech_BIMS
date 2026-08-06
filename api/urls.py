@@ -14,10 +14,13 @@ from rest_framework.routers import DefaultRouter
 
 from account.api import register as register_account
 from account.models import ChartOfAccount
-from inventory.api import (StockTransferItemLookupView,
+from inventory.api import (FarmBatchListView, StockTransferItemLookupView,
                            StockTransferStockLookupView)
 from broiler.api import (
+    BatchShedLookupView,
     BirdSaleFarmLookupView,
+    ChickItemListView,
+    ChicksSourceListView,
     DailyEntryLookupView,
     DailyEntryStockLookupView,
     MedicineItemLookupView,
@@ -152,6 +155,9 @@ urlpatterns = [
          name="broiler-receipt-lookup"),
     path("broiler/medicine-item-lookup", MedicineItemLookupView.as_view(),
          name="broiler-medicine-item-lookup"),
+    # Batch Creation: the chosen farm's sheds, with the occupied ones flagged.
+    path("broiler/batch-sheds", BatchShedLookupView.as_view(),
+         name="broiler-batch-sheds"),
     path("broiler/medicine-stock-lookup", MedicineStockLookupView.as_view(),
          name="broiler-medicine-stock-lookup"),
     # Daily Entry form: the above plus feed phase, breed standards and live birds.
@@ -165,6 +171,10 @@ urlpatterns = [
          name="inventory-stock-transfer-item"),
     path("inventory/stock-transfer-stock", StockTransferStockLookupView.as_view(),
          name="inventory-stock-transfer-stock"),
+    path("inventory/farm-batches", FarmBatchListView.as_view(), name="inventory-farm-batches"),
+    # Chicks Placement form: the two pickers the phone has no list endpoint for.
+    path("broiler/chicks-sources", ChicksSourceListView.as_view(), name="broiler-chicks-sources"),
+    path("broiler/chick-items", ChickItemListView.as_view(), name="broiler-chick-items"),
     # Hatch Entry form: tray setting → dates + source purchase figures.
     path("hatchery/tray-setting-lookup", TraySettingLookupView.as_view(), name="hatchery-tray-setting-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),

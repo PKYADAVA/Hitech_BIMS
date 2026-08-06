@@ -119,7 +119,12 @@ def _delegate(bound_method, request, *args) -> Response:
     # The web views read ``json.loads(request.body)`` and ``request.user``; hand
     # them the raw Django request with the authenticated user attached. We never
     # touch ``request.data`` here, so the body stream stays readable downstream.
-    django_request = request._request
+    #
+    # A caller may pass a stand-in instead — a web view that reads
+    # ``request.POST`` cannot be handed a JSON request, because ``POST`` is
+    # empty for a JSON body and reading it after DRF has parsed one raises.
+    # Such a shim is already the Django request, so there is nothing to unwrap.
+    django_request = getattr(request, "_request", request)
     django_request.user = request.user
     try:
         resp = bound_method(django_request, *args)

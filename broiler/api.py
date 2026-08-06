@@ -461,6 +461,31 @@ class ReceiptLookupView(V1ViewMixin, APIView):
         })
 
 
+class BatchShedLookupView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/batch-sheds?farm=<id> — the Shed / Unit picker.
+
+    A batch is housed in one shed and a shed holds one open batch, so the
+    picker has to know which units of the chosen farm are already taken. That
+    rule is the create endpoint's, not the picker's, so both read it from the
+    same helper: a phone offering a unit the save would refuse is worse than
+    offering none.
+
+    Farm-scoped rather than "every shed, filter on the client": a farm's sheds
+    are what the form asks for, and shipping the whole estate to filter it on
+    the phone is a list that grows without bound.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .views import batch_shed_options
+
+        farm = request.query_params.get("farm")
+        # No farm chosen yet is not an error — it is the form's opening state,
+        # and it answers with nothing to pick, which is exactly right.
+        return Response(batch_shed_options(farm) if farm else [])
+
+
 class MedicineItemLookupView(V1ViewMixin, APIView):
     """GET /api/v1/broiler/medicine-item-lookup?item=<id> — the item's
     consumption unit, for the auto-filled Unit column on the phone's
@@ -548,6 +573,55 @@ class BirdSaleFarmLookupView(V1ViewMixin, APIView):
             "start_date": ctx["placed_on"].isoformat() if ctx["placed_on"] else None,
             "next_date": ctx["next_date"].isoformat(),
         })
+
+
+class ChicksSourceListView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/chicks-sources — the Chicks Placement form's
+    "Source Hatchery / Supplier" picker.
+
+    Two masters behind one control, exactly as on the web: hatcheries first,
+    then suppliers, with ``id`` carrying the ``h:``/``s:`` prefix the Stock
+    Transfer API splits back into the right column. Delegates to the web form's
+    own ``_chicks_sources`` so the two lists, and the scoping on the supplier
+    half, cannot drift apart.
+
+    The prefixed id is a string rather than a number on purpose — the generic
+    picker sends back whatever ``id`` it was given, which is what lets one
+    control round-trip either kind of source.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .views import _chicks_sources
+
+        return Response([
+            {"id": s["value"], "name": s["label"], "group": s["group"],
+             # Only hatcheries are mapped to a warehouse (Inventory > Office
+             # Mapping); a supplier leaves From Warehouse to be picked by hand.
+             "warehouse": s["warehouse_id"] or None}
+            for s in _chicks_sources(request.user)
+        ])
+
+
+class ChickItemListView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/chick-items — the items a placement may move.
+
+    The same narrowing the web form applies: items in a category named for
+    chicks. A placement is a stock transfer, and the full item list would offer
+    feed and medicine as things to place on a farm.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from inventory.models import Item
+
+        return Response([
+            {"id": i.id, "item_code": i.item_code, "description": i.description}
+            for i in (Item.objects.filter(category__name__icontains="chick")
+                      .order_by("item_code"))
+        ])
 
 
 class DailyEntryLookupView(V1ViewMixin, APIView):

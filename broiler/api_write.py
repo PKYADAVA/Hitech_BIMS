@@ -27,10 +27,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.viewsets import V1ViewMixin
-from inventory.api_write import _make_write_view, _s
+from inventory.api_write import _delegate, _make_write_view, _s
 
 from . import views as web
-from .models import BirdSaleReceipt, FarmLocationCapture, MedicineVaccineEntry
+from .models import (BirdSaleReceipt, BroilerBatch, FarmLocationCapture,
+                     MedicineVaccineEntry)
 
 
 def _load_medicine_entry(o) -> dict:
@@ -74,6 +75,65 @@ MedicineEntryWriteView = _make_write_view(
     web.MedicineEntryAPI, MedicineVaccineEntry, _load_medicine_entry)
 BirdSaleReceiptWriteView = _make_write_view(
     web.BirdSaleReceiptAPI, BirdSaleReceipt, _load_bird_sale_receipt)
+
+
+def _load_batch(o) -> dict:
+    """A saved batch in the shape the phone's form fields use."""
+    return {
+        "id": o.id,
+        "broiler_farm": _s(o.broiler_farm_id),
+        "broiler_farm_name": o.broiler_farm.farm_name if o.broiler_farm_id else "",
+        "shed": _s(o.shed_id),
+        "batch_name": o.batch_name or "",
+        "book_number": o.book_number or "",
+        "lot_no": o.lot_no or "",
+        "breed": _s(o.breed_id),
+    }
+
+
+class _FormRequest:
+    """A JSON request presented as the form post a web view expects.
+
+    ``BroilerBatchAPI.post`` reads ``request.POST``, which is empty for a JSON
+    body — and reading it once DRF has parsed that body raises rather than
+    re-reading a consumed stream. Same reasoning as :class:`_CaptureRequest`,
+    without the files: the point is to reuse the web view exactly as it stands
+    rather than keep a second copy of the auto-numbering and the shed
+    occupancy check on this side.
+    """
+
+    def __init__(self, request):
+        self.POST = request.data
+        self.user = request.user
+
+
+class BroilerBatchWriteView(V1ViewMixin, APIView):
+    """POST/PUT/DELETE /api/v1/broiler/batches/save[/<id>].
+
+    Delegates to the web ``BroilerBatchAPI`` so the phone gets the same rules
+    the browser does, and cannot drift from them: the batch number is generated
+    on save and never accepted from a form, a shed already holding an open
+    batch is refused, and an edit may change only the book number, lot number,
+    breed and shed — the farm is fixed at creation.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        obj = (BroilerBatch.objects.select_related("broiler_farm")
+               .filter(pk=pk).first())
+        if obj is None:
+            raise NotFound("Batch not found.")
+        return Response(_load_batch(obj))
+
+    def post(self, request):
+        return _delegate(web.BroilerBatchAPI().post, _FormRequest(request))
+
+    def put(self, request, pk):
+        return _delegate(web.BroilerBatchAPI().put, request, pk)
+
+    def delete(self, request, pk):
+        return _delegate(web.BroilerBatchAPI().delete, request, pk)
 
 
 class _CaptureRequest:
@@ -147,6 +207,10 @@ def write_urls() -> list:
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save-new"),
         path("broiler/location-captures/save/<int:pk>",
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save"),
+        path("broiler/batches/save", BroilerBatchWriteView.as_view(),
+             name="broiler-batches-save-new"),
+        path("broiler/batches/save/<int:pk>", BroilerBatchWriteView.as_view(),
+             name="broiler-batches-save"),
         path("broiler/medicine-entries/save", MedicineEntryWriteView.as_view(),
              name="broiler-medicine-entries-save-new"),
         path("broiler/medicine-entries/save/<int:pk>", MedicineEntryWriteView.as_view(),

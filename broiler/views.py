@@ -832,43 +832,58 @@ class BroilerFarmTemplateView(View):
         }
         return render(request, "broiler_farm.html", context)
 
+def batch_shed_options(farm_id=None) -> list[dict]:
+    """The Shed / Unit picker for a new batch, as both front ends need it.
+
+    Every shed, deliberately NOT filtered on ``is_active``.
+    ``BroilerFarmShed.is_active`` is occupancy-driven ("has birds in it"), and
+    birds only arrive through chicks placement on a batch, so filtering on it
+    would hide exactly the vacant sheds a new batch needs. Sheds already
+    holding an open batch are flagged ``occupied`` instead, and the caller
+    renders them disabled — the same rule the create endpoint enforces, so a
+    picker cannot offer what the save will refuse.
+
+    Lives here rather than in each front end because the browser and the phone
+    have to agree about which units are free; two copies of that would not
+    stay in step.
+    """
+    occupied = dict(
+        BroilerBatch.objects.filter(
+            shed__isnull=False, end_date__isnull=True, is_closed=False
+        ).values_list("shed_id", "batch_name")
+    )
+    sheds = BroilerFarmShed.objects.order_by("farm__farm_code", "unit_no")
+    if farm_id:
+        sheds = sheds.filter(farm_id=farm_id)
+    return [
+        {
+            "id": s.id,
+            "farm_id": s.farm_id,
+            "label": (s.shed_name or s.shed_code or f"Unit {s.unit_no}")
+            + (f" · Unit {s.unit_no}" if s.unit_no else ""),
+            "occupied": s.id in occupied,
+            # Which batch is in the way, so the phone can say so rather than
+            # leaving someone to guess why a unit is greyed out.
+            "occupied_by": occupied.get(s.id, ""),
+        }
+        for s in sheds
+    ]
+
+
 @method_decorator(login_required, name="dispatch")
 class BroilerBatchTemplateView(View):
     """View for rendering the broiler batch template."""
-    
+
     def get(self, request):
         cache_key = "broiler_farm_list"
         broiler_farms = cache.get(cache_key)
         if not broiler_farms:
             broiler_farms = list(BroilerFarm.objects.values())
             cache.set(cache_key, broiler_farms)
-        # Sheds already holding an active/open batch — shown as occupied so a
-        # second batch can't be started on the same unit.
-        occupied_shed_ids = set(
-            BroilerBatch.objects.filter(
-                shed__isnull=False, end_date__isnull=True, is_closed=False
-            ).values_list("shed_id", flat=True)
-        )
-        sheds = [
-            {
-                "id": s.id,
-                "farm_id": s.farm_id,
-                "label": (s.shed_name or s.shed_code or f"Unit {s.unit_no}")
-                + (f" · Unit {s.unit_no}" if s.unit_no else ""),
-                "occupied": s.id in occupied_shed_ids,
-            }
-            # Every shed of every farm — deliberately NOT filtered on is_active.
-            # BroilerFarmShed.is_active is occupancy-driven ("has birds in it"),
-            # and birds only arrive through chicks placement on a batch, so
-            # filtering on it would hide exactly the vacant sheds a new batch
-            # needs. Sheds that already carry an open batch are flagged
-            # occupied above and rendered disabled instead.
-            for s in BroilerFarmShed.objects.order_by("farm__farm_code", "unit_no")
-        ]
         context = {
             "broiler_farms": broiler_farms,
             "breeds": Breed.objects.filter(is_active=True).order_by("description"),
-            "sheds": sheds,
+            "sheds": batch_shed_options(),
         }
         return render(request, "broiler_batch.html", context)
 
