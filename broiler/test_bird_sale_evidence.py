@@ -127,6 +127,38 @@ class BirdSaleEvidenceTests(TestCase):
         page = self.client.get(reverse("bird_sale_edit", args=[sale.id])).content.decode()
         self.assertNotIn("Lifting Evidence", page)
 
+    def test_the_lifting_report_carries_the_evidence_column(self):
+        """The register shows it per sale; the Lifting Report is where the desk
+        reconciles a day's billing, so it has to be checkable there too."""
+        from django.urls import reverse
+
+        sale = self.a_sale(lift_latitude=26.85, lift_longitude=80.95,
+                           lift_place="Green Valley Farm, Sitapur, UP")
+        BirdSalePhoto.objects.create(sale=sale, kind="truck", image=a_photo("t.gif"))
+        BirdSalePhoto.objects.create(sale=sale, kind="weighbridge", image=a_photo("w.gif"))
+
+        page = self.client.get(reverse("lifting_report"),
+                               {"from_date": self.today.isoformat(),
+                                "to_date": self.today.isoformat()}).content.decode()
+        self.assertIn("App Photos", page)
+        self.assertIn("liftPhotosModal", page)
+        self.assertIn("google.com/maps?q=26.85,80.95", page)
+        # Both photos travel on the button, labelled.
+        self.assertIn("Truck Photo|Weighbridge Slip", page)
+
+    def test_a_desk_lifting_shows_a_dash_rather_than_empty_controls(self):
+        from django.urls import reverse
+
+        self.a_sale()
+        page = self.client.get(reverse("lifting_report"),
+                               {"from_date": self.today.isoformat(),
+                                "to_date": self.today.isoformat()}).content.decode()
+        self.assertIn("App Photos", page)
+        # `data-urls` is only ever on the camera button; the class name also
+        # appears in the page's own click handler, so it proves nothing.
+        self.assertNotIn("data-urls", page)
+        self.assertIn("lr-evidence", page)
+
     def test_deleting_a_photo_takes_its_file_with_it(self):
         sale = self.a_sale()
         photo = BirdSalePhoto.objects.create(sale=sale, kind="truck", image=a_photo())

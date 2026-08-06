@@ -4343,6 +4343,9 @@ def lifting_report(request):
     sales = (BirdSale.objects
              .select_related("customer", "farmer", "farm__branch", "farm__supervisor",
                              "lifting_supervisor", "batch")
+             # The evidence the phone took on site is a column here, so it is
+             # fetched with the page rather than one query per lifting.
+             .prefetch_related("photos")
              .order_by("date", "id"))
     sales = scope_multi(request.user, sales,
                         farms="farm_id", branches="farm__branch_id")
@@ -4459,6 +4462,13 @@ def lifting_report(request):
             "batch": batch.batch_name if batch else "",
             "mean_age": mean_age,
             "vehicle": s.vehicle or "", "driver": s.driver or "", "remarks": s.remarks or "",
+            # What the supervisor photographed at the weighbridge, and where
+            # they were standing. Empty for a lifting typed up at a desk from a
+            # slip brought back — which is itself worth being able to see.
+            "photos": [{"label": p.get_kind_display(), "url": p.image.url}
+                       for p in s.photos.all() if p.image],
+            "lift_latitude": s.lift_latitude, "lift_longitude": s.lift_longitude,
+            "lift_place": s.lift_place or "",
         })
 
     tkeys = ["birds", "weight", "amount", "tcs", "total", "receipt"]

@@ -16,6 +16,7 @@
   .lr-filter .form-label { font-size:.68rem; font-weight:600; margin-bottom:.1rem; }
   .lr-filter .form-control-sm, .lr-filter .form-select-sm { font-size:.78rem; }
   .lr-table { font-size:.72rem; }
+  @media print { .lr-evidence, .lr-table thead th:last-child { display:none; } }
   .lr-table th, .lr-table td { white-space:nowrap; vertical-align:middle; padding:.34rem .5rem; }
   .lr-table thead th { background-color:#1b3a6b !important; color:#fff !important; text-align:center; font-weight:600; border-color:#274d84; position:sticky; top:0; z-index:2; }
   .lr-table td.num, .lr-table th.num { text-align:right; }
@@ -95,6 +96,7 @@
         <th class="ds-num num">Receipt Amount</th><th class="ds-num num">Day Ledger Balance</th>
         <th>Lifting Supervisor</th><th>Vehicle</th>
         <th>Driver</th><th>Remarks</th>
+        <th class="ds-mid text-center">App Photos</th>
       </tr></thead>
       <tbody>
         {% for r in rows %}
@@ -122,9 +124,41 @@
           <td title="{{ r.vehicle }}">{{ r.vehicle }}</td>
           <td title="{{ r.driver }}">{{ r.driver }}</td>
           <td title="{{ r.remarks }}">{{ r.remarks }}</td>
+          {% comment %}
+            What the phone photographed at the weighbridge, and where it was
+            standing. A lifting is the one broiler transaction nobody at the
+            branch witnesses, so this column is how the desk checks the slip it
+            is billed against. Blank means the sale was typed up here from a
+            slip brought back, which is itself worth being able to see.
+          {% endcomment %}
+          <td class="text-center text-nowrap lr-evidence">
+            {% if r.lift_latitude != None and r.lift_longitude != None %}
+              <a class="btn btn-sm btn-outline-success py-0 px-1"
+                 href="https://www.google.com/maps?q={{ r.lift_latitude }},{{ r.lift_longitude }}"
+                 target="_blank" rel="noopener"
+                 title="{% if r.lift_place %}{{ r.lift_place }}{% else %}{{ r.lift_latitude }}, {{ r.lift_longitude }}{% endif %}">
+                <i class="fas fa-location-dot"></i>
+              </a>
+            {% endif %}
+            {% if r.photos %}
+              {# Paired pipe-joined lists rather than JSON: a media URL never
+                 contains a pipe, and this needs no escaping dance in a data
+                 attribute. #}
+              <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1 lr-photos"
+                      data-urls="{% for p in r.photos %}{{ p.url }}{% if not forloop.last %}|{% endif %}{% endfor %}"
+                      data-labels="{% for p in r.photos %}{{ p.label }}{% if not forloop.last %}|{% endif %}{% endfor %}"
+                      data-title="{{ r.farm }} - {{ r.date|date:'d.m.Y' }}"
+                      title="View {{ r.photos|length }} photo{{ r.photos|length|pluralize }}">
+                <i class="fas fa-camera"></i> {{ r.photos|length }}
+              </button>
+            {% endif %}
+            {% if not r.photos and r.lift_latitude == None %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="23" class="text-center text-muted py-4">No liftings found for the selected filters.</td></tr>
+        <tr><td colspan="24" class="text-center text-muted py-4">No liftings found for the selected filters.</td></tr>
         {% endfor %}
       </tbody>
       {% if rows %}
@@ -138,10 +172,44 @@
         <td class="num">{{ totals.tcs|indian_currency }}</td>
         <td class="num">{{ totals.total|indian_currency }}</td>
         <td class="num">{{ totals.receipt|indian_currency }}</td>
-        <td colspan="5"></td>
+        <td colspan="6"></td>
       </tr></tfoot>
       {% endif %}
     </table>
   </div>
 </div></div>
+
+<!-- The photographs a supervisor took at the weighbridge -->
+<div class="modal fade" id="liftPhotosModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-camera me-1"></i><span id="lift-photos-title">Lifting Evidence</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body"><div class="row" id="lift-photos-body"></div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('.lr-photos');
+  if (!btn) return;
+  const urls = (btn.dataset.urls || '').split('|').filter(Boolean);
+  const labels = (btn.dataset.labels || '').split('|');
+  document.getElementById('lift-photos-title').textContent =
+    btn.dataset.title || 'Lifting Evidence';
+  document.getElementById('lift-photos-body').innerHTML = urls.map((url, i) => `
+    <div class="col-6 col-md-4 mb-3 text-center">
+      <a href="${escapeHtml(url)}" target="_blank" rel="noopener">
+        <img src="${escapeHtml(url)}" class="img-fluid rounded border" alt="${escapeHtml(labels[i] || '')}">
+      </a>
+      <div class="small text-muted mt-1">${escapeHtml(labels[i] || '')}</div>
+    </div>`).join('');
+  new bootstrap.Modal(document.getElementById('liftPhotosModal')).show();
+});
+</script>
 {% endblock %}
