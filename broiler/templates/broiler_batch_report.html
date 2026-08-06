@@ -44,6 +44,13 @@
   /* Mortality table: compact so more columns fit, in a capped scroll box with a
      sticky 2-row header that stays locked at the top while the rows scroll. */
   .report-scroll { max-height: 72vh; overflow: auto; }
+  /* Keep every figure on one line, the way .rpt-scroll does for the other wide
+     reports. Without it a long label like "Pre-Starter Feed" wraps in its
+     narrow column and drags the whole row to three lines — 88px against the
+     36px of the totals row underneath it. The table scrolls sideways instead,
+     which is what the scroll box is for. */
+  .report-scroll .report-dense th,
+  .report-scroll .report-dense td { white-space: nowrap; }
   .report-dense th, .report-dense td { font-size: .72rem; padding: .18rem .3rem; line-height: 1.15; }
   .report-dense thead th { position: sticky; z-index: 3; }
   .report-dense thead tr:first-child th { top: 0; }
@@ -53,7 +60,18 @@
     font-weight: 700; background: #dbe9f0 !important;
   }
   .report-costing td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; }
+  /* The `.ds` prefix is not decoration: design-system.css paints
+     `.ds .rpt-table td:first-child` white for its frozen-column effect, which
+     out-ranks a plain `.report-costing td.lbl` and left the first label column
+     — Placement Date down to Grade — the only untinted one on the panel. */
+  .ds .report-costing td.lbl,
   .report-costing td.lbl { background: #eaf3f8; font-weight: 700; white-space: nowrap; }
+  /* The column groups are not the same length, so the shorter ones are padded
+     with empty label/value cells. Those were still painting the label tint,
+     which read as a stray block of colour hanging below the last real figure
+     and made the columns look out of line. */
+  .ds .report-costing td.lbl:empty,
+  .report-costing td.lbl:empty { background: transparent; }
   .report-costing td.val { text-align: right; }
   .report-costing td.hl { color: #b02a2a; font-weight: 700; text-align: right; }
 
@@ -917,6 +935,19 @@ $(function () {
     });
   }
 
+  // Axis ticks and tooltips both print raw numbers, and Chart.js builds its
+  // ticks by repeated addition — so a 0.005 step lands on 0.22000000000000003
+  // and prints every digit of it. Round to the precision the value deserves,
+  // then drop the trailing zeros so 0.220% reads as 0.22%.
+  function tidyNumber(value, unit) {
+    if (typeof value !== 'number' || !isFinite(value)) return value;
+    // Percentages and ratios are read to two or three decimals; kilos and
+    // counts to one. Small magnitudes keep a digit more so a 0.005 step does
+    // not collapse two ticks onto the same label.
+    const places = unit === '%' ? 3 : (Math.abs(value) < 10 ? 2 : 1);
+    return parseFloat(value.toFixed(places)).toString();
+  }
+
   function miniChart(canvasId, type, values, color, unit) {
     const el = document.getElementById(canvasId);
     if (!el) return;
@@ -934,12 +965,12 @@ $(function () {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: (ctx) => ' ' + ctx.parsed.y + (unit ? ' ' + unit : '') } },
+          tooltip: { callbacks: { label: (ctx) => ' ' + tidyNumber(ctx.parsed.y, unit) + (unit ? ' ' + unit : '') } },
         },
         scales: {
           x: { ticks: { maxTicksLimit: 6, font: { size: 9 } }, grid: { display: false } },
           y: {
-            ticks: { font: { size: 9 }, callback: (v) => unit === '%' ? v + '%' : v },
+            ticks: { font: { size: 9 }, callback: (v) => tidyNumber(v, unit) + (unit === '%' ? '%' : '') },
             grid: { color: '#e1e0d9' },
           },
         },
