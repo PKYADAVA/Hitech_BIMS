@@ -7341,3 +7341,104 @@ def farm_location_capture_complete(request, id):
     if not filled:
         return JsonResponse({"error": "Nothing pending was filled in."}, status=400)
     return JsonResponse({"message": "Capture updated (%d item(s) filled in)." % len(filled)})
+
+
+# --- Farmer & Farm combined report ------------------------------------------
+
+# The report's columns are the master's inputs, in the master's own order, so
+# what a clerk typed on Broiler > Master > Farm is what the register shows
+# back. Anything not collected there has been dropped: a column that nothing
+# can ever fill is a column that teaches people to ignore blanks.
+FFR_COLUMNS = [
+    "Sr No",
+    # --- farmer, as the master collects it ---
+    "Farmer Name", "Phone No", "Mobile-1", "Mobile-2", "Address",
+    "PAN No", "PAN Upload", "Aadhar No", "Aadhar Front", "Aadhar Back",
+    "National ID", "USC", "Service No", "Farmer Photo", "Farmer Group",
+    "TDS %", "Account Holder", "Acc No", "IFSC Code", "Bank Name", "Bank Branch",
+    # --- farm ---
+    "Region", "Branch", "Line", "Supervisor", "Farm Code", "Farm Name",
+    "Farm Type", "Farm Capacity", "Farm Sqft", "Pincode", "State", "District",
+    "Area Name", "Farm Address", "Farm Location", "Farm Image",
+    "Agreement Start", "Agreement End", "Agreement Months", "Agreement Copy",
+    "Security Cheque-1", "Security Cheque-2", "Security Cheque-3",
+    "Security Cheque-4", "Other Docs", "Remarks",
+]
+
+
+@login_required(login_url="login")
+def farmer_farm_report(request):
+    """Broiler > Reports > Farmer & Farm.
+
+    One row per farm, carrying its farmer's details alongside — the two
+    registers merged, because the question is always about the pair: whose
+    farm is this, is their paperwork in order, is the agreement live.
+
+    A farmer with no farm still gets a row, with the farm half blank. "Signed
+    up and nothing placed" is exactly the gap a register like this is read to
+    find, and dropping those rows would hide it.
+    """
+    def g(key):
+        return (request.GET.get(key) or "").strip()
+
+    group_id = g("farmer_group")
+    branch_id, line, supervisor_id, farm_id = (
+        g("branch"), g("line"), g("supervisor"), g("farm"))
+    farm_filtered = any([branch_id, line, supervisor_id, farm_id])
+
+    farms = (BroilerFarm.objects
+             .select_related("branch", "supervisor", "farmer", "farmer__farmer_group")
+             .prefetch_related("images")
+             .order_by("farmer__farmer_name", "farm_name"))
+    farms = scope_multi(request.user, farms, branches="branch_id", farms="id")
+    if branch_id.isdigit():
+        farms = farms.filter(branch_id=branch_id)
+    if line:
+        farms = farms.filter(line=line)
+    if supervisor_id.isdigit():
+        farms = farms.filter(supervisor_id=supervisor_id)
+    if farm_id.isdigit():
+        farms = farms.filter(id=farm_id)
+    if group_id.isdigit():
+        farms = farms.filter(farmer__farmer_group_id=group_id)
+
+    farms = list(farms)
+    rows = [{"farmer": f.farmer, "farm": f} for f in farms]
+
+    # Farmers with nothing on the ground, appended only while no farm filter is
+    # in play — under one they are not "missing", they simply do not match, and
+    # listing them there would read as a gap that is not there.
+    if not farm_filtered:
+        loose = Farmer.objects.select_related("farmer_group").exclude(
+            id__in={f.farmer_id for f in farms if f.farmer_id})
+        if group_id.isdigit():
+            loose = loose.filter(farmer_group_id=group_id)
+        rows += [{"farmer": f, "farm": None} for f in loose.order_by("farmer_name")]
+
+    criteria = [c for c in (
+        f"Farmer Group: {FarmerGroup.objects.filter(id=group_id).first()}" if group_id.isdigit() else "",
+        f"Branch: {Branch.objects.filter(id=branch_id).first()}" if branch_id.isdigit() else "",
+
+    ) if c]
+
+    return render(request, "farmer_farm_report.html", {
+        "rows": rows,
+        "columns": FFR_COLUMNS,
+        "summary": {
+            "rows": len(rows),
+            "farmers": len({r["farmer"].id for r in rows if r["farmer"]}),
+            "farms": len(farms),
+            "capacity": sum(f.farm_capacity or 0 for f in farms),
+            "unplaced": sum(1 for r in rows if r["farm"] is None),
+        },
+        "criteria": " | ".join(criteria),
+        "group_id": group_id,
+        "branch_id": branch_id, "line": line, "supervisor_id": supervisor_id,
+        "farm_id": farm_id,
+        "farmer_groups": FarmerGroup.objects.order_by("description"),
+        "branches": branches_for(request.user),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "all_farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        "lines": (BroilerFarm.objects.exclude(line="")
+                  .values_list("line", flat=True).distinct().order_by("line")),
+    })

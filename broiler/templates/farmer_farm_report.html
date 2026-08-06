@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Farmer &amp; Farm Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">
+<style>
+  /* Two registers of different grain on one page, so each carries its own
+     heading, filters and column switches. */
+  .ffr-section + .ffr-section { margin-top: 1.75rem; }
+  .ffr-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+  .ffr-head h2 { font-size: 1rem; font-weight: 700; margin: 0; }
+  .ffr-count { font-size: .75rem; color: #6c757d; }
+  .ffr-cols { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin: .5rem 0 .75rem; }
+  .ffr-cols label { font-size: .75rem; display: flex; align-items: center; gap: .25rem;
+                    margin: 0; cursor: pointer; }
+  .ffr-thumb { height: 34px; width: 44px; object-fit: cover; border-radius: 3px; }
+  .ffr-doc { font-size: .72rem; }
+  td.ffr-none { color: #8a939b; }
+  /* Sr No is frozen at the left so a row keeps its number 40 columns along.
+     z-index matters more than it looks: sticky cells paint in document order,
+     so without a higher stacking value the ones that come after simply cover
+     this one as the table scrolls under them. The heading has to out-rank both
+     its own row (which is sticky to the top) and the frozen body cells. */
+  .rpt-scroll .rpt-table td.ffr-sr,
+  .rpt-scroll .rpt-table thead th:first-child {
+    position: sticky; left: 0; text-align: center; min-width: 3rem; }
+  .rpt-scroll .rpt-table td.ffr-sr {
+    background: #fff; color: #6c757d; z-index: 2;
+    box-shadow: 1px 0 0 #dee2e6; }
+  .rpt-scroll .rpt-table tbody tr:hover td.ffr-sr { background: #f4f8fc; }
+  .rpt-scroll .rpt-table thead th:first-child {
+    z-index: 5; box-shadow: 1px 0 0 #274d84; }
+</style>{% endblock %}
+{% block nav %}
+  {% include 'main_top_navbar.html' with active_tab='broiler' %}
+{% endblock %}
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='farmer_farm_report' %}
+
+{% include '_report_letterhead.html' with title='Farmer &amp; Farm Report' criteria=criteria %}
+
+<form method="get">
+<div class="rpt-filter no-print">
+  <div class="rpt-grid">
+    <div><label class="form-label">Farmer Group</label>
+      <select name="farmer_group" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for g in farmer_groups %}<option value="{{ g.id }}" {% if group_id == g.id|stringformat:'s' %}selected{% endif %}>{{ g.description|default:g.code }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Branch</label>
+      <select name="branch" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Line</label>
+      <select name="line" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for l in lines %}<option value="{{ l }}" {% if line == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Supervisor</label>
+      <select name="supervisor" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Farm/Location</label>
+      <select name="farm" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for f in all_farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}{% if f.area %} — {{ f.area }}{% endif %}</option>{% endfor %}
+      </select></div>
+    <div class="rpt-actions">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-filter"></i> Submit</button>
+      <a href="{% url 'farmer_farm_report' %}" class="btn btn-outline-secondary btn-sm">Reset</a>
+      <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+    </div>
+  </div>
+</div>
+</form>
+
+<div class="ffr-section" data-table="ffr">
+  <div class="ffr-cols no-print">
+    {% for label in columns %}
+      <label><input type="checkbox" data-col="{{ forloop.counter0 }}" checked> {{ label }}</label>
+    {% endfor %}
+  </div>
+  <div class="rpt-scroll">
+    <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0"
+           style="width:auto; min-width:100%; table-layout:auto;">
+      <thead><tr>{% for label in columns %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="ffr-sr">{{ forloop.counter }}</td>
+          {% with f=row.farmer %}
+          <td>{{ f.farmer_name }}</td>
+          <td>{{ f.phone_no|default:"—" }}</td>
+          <td>{{ f.mobile_no|default:"—" }}</td>
+          <td>{{ f.mobile_2|default:"—" }}</td>
+          <td>{{ f.address|default:"—" }}</td>
+          <td>{{ f.pan_no|default:"—" }}</td>
+          <td>{% if f.pan_upload %}<a class="ffr-doc" href="{{ f.pan_upload.url }}" target="_blank" rel="noopener">view</a>{% else %}—{% endif %}</td>
+          <td>{{ f.aadhar_no|default:"—" }}</td>
+          <td>{% if f.aadhar_upload_front %}<a class="ffr-doc" href="{{ f.aadhar_upload_front.url }}" target="_blank" rel="noopener">view</a>{% else %}—{% endif %}</td>
+          <td>{% if f.aadhar_upload_back %}<a class="ffr-doc" href="{{ f.aadhar_upload_back.url }}" target="_blank" rel="noopener">view</a>{% else %}—{% endif %}</td>
+          <td>{{ f.national_id|default:"—" }}</td>
+          <td>{{ f.usc|default:"—" }}</td>
+          <td>{{ f.service_no|default:"—" }}</td>
+          <td>{% if f.farmer_photo %}<a href="{{ f.farmer_photo.url }}" target="_blank" rel="noopener"><img src="{{ f.farmer_photo.url }}" alt="Farmer" class="ffr-thumb"></a>{% else %}—{% endif %}</td>
+          <td>{% if f.farmer_group %}{{ f.farmer_group.description|default:f.farmer_group.code }}{% else %}—{% endif %}</td>
+          <td class="text-end">{{ f.tds_percent|default_if_none:"—" }}</td>
+          <td>{{ f.account_holder_name|default:"—" }}</td>
+          <td>{{ f.acc_no|default:"—" }}</td>
+          <td>{{ f.ifsc_code|default:"—" }}</td>
+          <td>{{ f.bank_name|default:"—" }}</td>
+          <td>{{ f.bank_branch|default:"—" }}</td>
+          {% endwith %}
+          {% with m=row.farm %}
+          {% if m %}
+          <td>{{ m.region|default:"—" }}</td>
+          <td>{{ m.branch.branch_name|default:"—" }}</td>
+          <td>{{ m.line|default:"—" }}</td>
+          <td>{{ m.supervisor.name|default:"—" }}</td>
+          <td>{{ m.farm_code|default:"—" }}</td>
+          <td>{{ m.farm_name }}</td>
+          <td>{{ m.get_farm_type_display|default:"—" }}</td>
+          <td class="text-end">{{ m.farm_capacity|default_if_none:"—" }}</td>
+          <td class="text-end">{{ m.farm_sqft|default:"—" }}</td>
+          <td>{{ m.farm_pincode|default:"—" }}</td>
+          <td>{{ m.state|default:"—" }}</td>
+          <td>{{ m.district|default:"—" }}</td>
+          <td>{{ m.area|default:"—" }}</td>
+          <td>{{ m.farm_address|default:"—" }}</td>
+          <td>
+            {% if m.farm_latitude and m.farm_longitude %}
+              <a href="https://www.google.com/maps?q={{ m.farm_latitude }},{{ m.farm_longitude }}"
+                 target="_blank" rel="noopener">{{ m.farm_latitude|floatformat:4 }}, {{ m.farm_longitude|floatformat:4 }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% for shot in m.images.all|slice:":2" %}
+              <a href="{{ shot.image.url }}" target="_blank" rel="noopener">
+                <img src="{{ shot.image.url }}" alt="Farm" class="ffr-thumb"></a>
+            {% empty %}—{% endfor %}
+          </td>
+          <td>{{ m.agreement_start_date|date:"d M Y"|default:"—" }}</td>
+          <td>{{ m.agreement_end_date|date:"d M Y"|default:"—" }}</td>
+          <td class="text-end">{{ m.agreement_months|default_if_none:"—" }}</td>
+          <td>{% if m.agreement_copy %}<a class="ffr-doc" href="{{ m.agreement_copy.url }}" target="_blank" rel="noopener">view</a>{% else %}—{% endif %}</td>
+          <td>{% if m.cheque_1_file %}<a class="ffr-doc" href="{{ m.cheque_1_file.url }}" target="_blank" rel="noopener">{{ m.cheque_1_no|default:"view" }}</a>{% else %}{{ m.cheque_1_no|default:"—" }}{% endif %}</td>
+          <td>{% if m.cheque_2_file %}<a class="ffr-doc" href="{{ m.cheque_2_file.url }}" target="_blank" rel="noopener">{{ m.cheque_2_no|default:"view" }}</a>{% else %}{{ m.cheque_2_no|default:"—" }}{% endif %}</td>
+          <td>{% if m.cheque_3_file %}<a class="ffr-doc" href="{{ m.cheque_3_file.url }}" target="_blank" rel="noopener">{{ m.cheque_3_no|default:"view" }}</a>{% else %}{{ m.cheque_3_no|default:"—" }}{% endif %}</td>
+          <td>{% if m.cheque_4_file %}<a class="ffr-doc" href="{{ m.cheque_4_file.url }}" target="_blank" rel="noopener">{{ m.cheque_4_no|default:"view" }}</a>{% else %}{{ m.cheque_4_no|default:"—" }}{% endif %}</td>
+          <td>{% if m.other_documents %}<a class="ffr-doc" href="{{ m.other_documents.url }}" target="_blank" rel="noopener">view</a>{% else %}—{% endif %}</td>
+          <td>{{ m.remarks|default:"—" }}</td>
+          {% else %}
+          {% comment %} A farmer with nothing placed: the farm half stays blank
+             on purpose, so the gap is visible rather than hidden. {% endcomment %}
+          {% for i in "12345678901234567890123456" %}<td class="ffr-none">—</td>{% endfor %}
+          {% endif %}
+          {% endwith %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="48" class="text-center text-muted py-4">Nothing for these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+// Column switches, per section. Header and body cells share an index, so one
+// checkbox hides a whole column without the two ever disagreeing.
+document.querySelectorAll('.ffr-section').forEach(function (section) {
+  section.querySelectorAll('.ffr-cols input[type=checkbox]').forEach(function (box) {
+    box.addEventListener('change', function () {
+      var index = Number(box.dataset.col);
+      section.querySelectorAll('table tr').forEach(function (row) {
+        var cell = row.children[index];
+        // The "no rows" message spans every column and has no cell to hide.
+        if (cell && !cell.hasAttribute('colspan')) {
+          cell.style.display = box.checked ? '' : 'none';
+        }
+      });
+    });
+  });
+});
+</script>
+{% endblock %}
