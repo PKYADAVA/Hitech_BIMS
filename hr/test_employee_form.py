@@ -84,6 +84,26 @@ class EmployeeEditTests(TestCase):
         self.employee.refresh_from_db()
         self.assertEqual(self.employee.designation_id, self.designation.id)
 
+    def test_a_new_employee_needs_only_a_name_and_a_warehouse(self):
+        # The create path keeps its own copy of the checks, and it had drifted:
+        # it still demanded a designation after the shared validator stopped.
+        resp = self.client.post(reverse("create_new_employee"), {
+            "full_name": "New Person", "warehouse": self.warehouse.id,
+            "designation": "", "emergency_contact": "", "salary": "",
+        })
+        self.assertEqual(resp.status_code, 302, "the create was refused")
+        made = Employee.objects.get(full_name="New Person")
+        self.assertIsNone(made.designation_id)
+
+    def test_the_add_form_does_not_prefill_a_contact_that_is_not_one(self):
+        # It shipped value="0", which the validator rejects as too short — an
+        # optional field nobody had touched refused every new employee, naming
+        # a value the form itself had put there.
+        html = self.client.get(reverse("create_new_employee")).content.decode()
+        field = [line for line in html.splitlines()
+                 if 'id="emergency_contact"' in line][0]
+        self.assertNotIn('value="0"', field)
+
     def test_the_save_button_is_inside_the_form(self):
         # A stray </div> popped the form off the parser's stack, leaving the
         # button — and the whole bank-details card — outside it. The page

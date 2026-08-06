@@ -111,10 +111,12 @@ def create_new_employee(request):
 
             error_message = None
 
+            # The two the form marks. Designation is nullable and no longer
+            # demanded — see hr.validation.validate_employee_data, which the
+            # edit view uses; this create path keeps its own copy of the check
+            # and the two had drifted apart.
             if not full_name:
                 error_message = "Full Name is required."
-            if not designation_id:
-                error_message = "Designation is required."
             if not warehouse_id:
                 error_message = "Warehouse is required."
 
@@ -129,10 +131,12 @@ def create_new_employee(request):
                 else:
                     date_of_birth = None
 
-            if error_message is None:
-                try:
-                    designation = Designation.objects.get(id=designation_id)
-                except Designation.DoesNotExist:
+            designation = None
+            if error_message is None and designation_id:
+                # Blank is a blank now, not a lookup for id "" — which raised
+                # rather than leaving the field empty.
+                designation = Designation.objects.filter(id=designation_id).first()
+                if designation is None:
                     error_message = "Designation not found."
 
             if error_message:
@@ -166,7 +170,10 @@ def create_new_employee(request):
                 salary_type=salary_type,
                 advance=int(advance) if advance else 0,
                 savings=int(saving) if saving else 0,
-                date_of_joining=parse_date(date_of_joining),
+                # parse_date(None) raises, and the catch-all below turns that
+                # into "An error occurred while creating the employee" — a
+                # generic failure for a field nobody filled in.
+                date_of_joining=parse_date(date_of_joining) if date_of_joining else None,
                 report_to=report_to,
                 salary_account=salary_account,
                 ifsc_code=ifsc_code,
