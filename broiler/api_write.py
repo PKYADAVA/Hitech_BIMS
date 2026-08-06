@@ -30,7 +30,7 @@ from api.viewsets import V1ViewMixin
 from inventory.api_write import _make_write_view, _s
 
 from . import views as web
-from .models import FarmLocationCapture, MedicineVaccineEntry
+from .models import BirdSaleReceipt, FarmLocationCapture, MedicineVaccineEntry
 
 
 def _load_medicine_entry(o) -> dict:
@@ -51,8 +51,29 @@ def _load_medicine_entry(o) -> dict:
     }
 
 
+def _load_bird_sale_receipt(o) -> dict:
+    """A saved receipt in the shape the phone's form fields use."""
+    return {
+        "date": _s(o.date),
+        "location": _s(o.location_id),
+        "sale_type": o.sale_type or "customer",
+        "rows": [{
+            "id": o.id,
+            "customer": _s(o.customer_id),
+            "farmer": _s(o.farmer_id),
+            "mode": o.mode or "",
+            "receipt_account": _s(o.receipt_account_id),
+            "amount": _s(o.amount),
+            "reference_no": o.reference_no or "",
+            "remarks": o.remarks or "",
+        }],
+    }
+
+
 MedicineEntryWriteView = _make_write_view(
     web.MedicineEntryAPI, MedicineVaccineEntry, _load_medicine_entry)
+BirdSaleReceiptWriteView = _make_write_view(
+    web.BirdSaleReceiptAPI, BirdSaleReceipt, _load_bird_sale_receipt)
 
 
 class _CaptureRequest:
@@ -118,6 +139,10 @@ class FarmLocationCaptureWriteView(V1ViewMixin, APIView):
 def write_urls() -> list:
     """URL patterns for the broiler document write endpoints."""
     return [
+        path("broiler/bird-sale-receipts/save", BirdSaleReceiptWriteView.as_view(),
+             name="broiler-receipts-save-new"),
+        path("broiler/bird-sale-receipts/save/<int:pk>", BirdSaleReceiptWriteView.as_view(),
+             name="broiler-receipts-save"),
         path("broiler/location-captures/save",
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save-new"),
         path("broiler/location-captures/save/<int:pk>",

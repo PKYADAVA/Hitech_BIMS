@@ -219,11 +219,12 @@ const broilerResources: ResourceConfig[] = [
     key: "broiler-sale-receipts",
     module: "broiler",
     path: "/broiler/bird-sale-receipts/",
-    title: "Sale Receipts",
-    singular: "Bird Sale Receipt",
+    title: "Bird Receipt",
+    singular: "Bird Receipt",
+    createLabel: "Add Receipt",
     icon: "receipt",
     accent: B,
-    emptyMessage: "No sale receipts yet.",
+    emptyMessage: "No bird receipts yet.",
     searchKeys: ["receipt_no", "reference_no"],
     card: (r) => ({
       title: pick(r, ["receipt_no"], `Receipt #${r.id}`),
@@ -1835,6 +1836,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       {
         title: "Master",
         resourceKeys: [
+          "broiler-farmers",
           "broiler-farms",
           "broiler-sheds",
           "broiler-batches",
@@ -1870,19 +1872,13 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "broiler-gc-settlements",
         ],
       },
-      {
-        title: "Other",
-        resourceKeys: [
-          "broiler-farmers",
-        ],
-      },
     ],
     reports: [
       { key: "live-flock", title: "Live Flock Summary", icon: "bird", path: "/reports/live-flock" },
       { key: "batch-summary", title: "Batch History", icon: "file-document-outline", path: "/reports/batch-summary" },
       { key: "chicks-placement", title: "Chicks Placement", icon: "bird", path: "/reports/chicks-placement" },
       { key: "day-record", title: "Day Record", icon: "calendar-today", path: "/reports/day-record" },
-      { key: "feed-dispatch", title: "Feed Dispatch & Stock", icon: "grain", path: "/reports/feed-dispatch" },
+      { key: "feed-dispatch", title: "Feed Dispatch & Stock", icon: "sprout", path: "/reports/feed-dispatch" },
       { key: "lifting", title: "Lifting", icon: "truck-delivery", path: "/reports/lifting" },
       { key: "mortality-trend", title: "Mortality Trend", icon: "📉", path: "/reports/mortality-trend" },
     ],

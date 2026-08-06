@@ -22,7 +22,7 @@ export type ModuleStackParams = {
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
-  /** Bespoke Bird Sale Receipt form (customer/farmer toggle). */
+  /** Bespoke Bird Receipt form (customer/farmer toggle). */
   BirdSaleReceiptForm: { mode: "create" | "edit"; row?: Row };
   /**
    * Daily Entry. Without params it is the multi-farm round — several farms,
