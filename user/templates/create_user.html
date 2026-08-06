@@ -37,6 +37,7 @@
                     <th>Username</th>
                     <th>Group</th>
                     <th>Superuser</th>
+                    <th>Status</th>
                     <th class="ds-mid">Actions</th>
                 </tr>
             </thead>
@@ -60,14 +61,52 @@
                         </span>
                     </td>
                     <td>
+                        <span class="badge {% if user.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ user.is_active|yesno:"Active,Inactive" }}
+                        </span>
+                    </td>
+                    <td>
+                      <div class="d-flex gap-1 justify-content-center">
+                        {% if page_perms.edit %}
                         <button type="button" class="btn btn-outline-warning btn-sm edit-user-btn"
                             data-id="{{ user.id }}"
                             data-username="{{ user.username }}"
                             data-group-id="{% if user_group %}{{ user_group.id }}{% endif %}"
                             data-employee-id="{% if user.employee %}{{ user.employee.id }}{% endif %}"
-                            data-superuser="{{ user.is_superuser|yesno:'1,0' }}">
+                            data-superuser="{{ user.is_superuser|yesno:'1,0' }}"
+                            title="Edit">
                             <i class="fas fa-pen"></i>
                         </button>
+                        {% comment %}
+                          Deactivating is the everyday answer to someone
+                          leaving: Django refuses an inactive user's login, so
+                          access stops at once while everything they entered
+                          keeps its author. Delete is for an account raised in
+                          error, and the server refuses it where the record
+                          would take an approval trail with it.
+                        {% endcomment %}
+                        <button type="button"
+                            class="btn btn-sm toggle-active-btn {% if user.is_active %}btn-outline-secondary{% else %}btn-outline-success{% endif %}"
+                            data-id="{{ user.id }}"
+                            data-username="{{ user.username }}"
+                            data-active="{{ user.is_active|yesno:'1,0' }}"
+                            {% if user.id == request.user.id %}disabled
+                              title="You cannot deactivate the account you are signed in with"
+                            {% else %}title="{{ user.is_active|yesno:'Deactivate,Activate' }}"{% endif %}>
+                            <i class="fas {% if user.is_active %}fa-toggle-on{% else %}fa-toggle-off{% endif %}"></i>
+                        </button>
+                        {% endif %}
+                        {% if page_perms.delete %}
+                        <button type="button" class="btn btn-outline-danger btn-sm delete-user-btn"
+                            data-id="{{ user.id }}"
+                            data-username="{{ user.username }}"
+                            {% if user.id == request.user.id %}disabled
+                              title="You cannot delete the account you are signed in with"
+                            {% else %}title="Delete"{% endif %}>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                      </div>
                     </td>
                 </tr>
                 {% endwith %}
@@ -78,6 +117,32 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Delete User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Delete <strong id="delete-user-name"></strong>?</p>
+        <p class="text-muted small mb-0">
+          The account and its sign-in are gone for good. Any employee linked to
+          it stays on the HR master. If you only want to stop them signing in,
+          deactivate instead — that keeps their name on everything they entered.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-user-btn">
+          <i class="fas fa-trash me-1"></i>Delete
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Create User Modal -->
@@ -205,6 +270,56 @@
                 },
                 error: function (xhr, status, error) {
                     window.showToast('danger', 'An error occurred: ' + error);
+                }
+            });
+        });
+
+        // Switching an account off is reversible and takes effect on the next
+        // login attempt, so it asks once and gets on with it.
+        $(document).on('click', '.toggle-active-btn', function () {
+            var btn = $(this);
+            var wasActive = btn.data('active') == 1;
+            var verb = wasActive ? 'Deactivate' : 'Activate';
+            if (!confirm(verb + ' ' + btn.data('username') + '?'
+                         + (wasActive ? ' They will not be able to sign in.' : ''))) {
+                return;
+            }
+            $.ajax({
+                url: '/user/' + btn.data('id') + '/toggle-active/',
+                method: 'POST',
+                data: { csrfmiddlewaretoken: '{{ csrf_token }}' },
+                success: function (response) {
+                    window.showToast('success', response.message);
+                    location.reload();
+                },
+                error: function (xhr) {
+                    window.showToast('danger', (xhr.responseJSON && xhr.responseJSON.error)
+                        || 'Could not change that account.');
+                }
+            });
+        });
+
+        $(document).on('click', '.delete-user-btn', function () {
+            var btn = $(this);
+            $('#delete-user-name').text(btn.data('username'));
+            $('#confirm-delete-user-btn').data('id', btn.data('id'));
+            $('#deleteUserModal').modal('show');
+        });
+
+        $('#confirm-delete-user-btn').on('click', function () {
+            $.ajax({
+                url: '/user/' + $(this).data('id') + '/delete/',
+                method: 'POST',
+                data: { csrfmiddlewaretoken: '{{ csrf_token }}' },
+                success: function (response) {
+                    $('#deleteUserModal').modal('hide');
+                    window.showToast('success', response.message);
+                    location.reload();
+                },
+                error: function (xhr) {
+                    $('#deleteUserModal').modal('hide');
+                    window.showToast('danger', (xhr.responseJSON && xhr.responseJSON.error)
+                        || 'Could not delete that account.');
                 }
             });
         });

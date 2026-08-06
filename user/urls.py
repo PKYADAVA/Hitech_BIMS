@@ -13,6 +13,11 @@ urlpatterns = [
     path('user_profile/', views.user_profile, name='user_profile'),
     path('create_user_temp/', views.create_user, name='create_user'),
     path('update_user/<int:user_id>/', views.update_user, name='update_user'),
+    # Named for the tab they serve, so user/access.py derives their rights:
+    # create_user + toggle_active -> edit, create_user + delete -> delete.
+    path('user/<int:user_id>/toggle-active/', views.toggle_user_active,
+         name='create_user_toggle_active'),
+    path('user/<int:user_id>/delete/', views.delete_user, name='create_user_delete'),
     path('assign_permission_temp/', views.assign_groups, name='assign_groups'),
     path('manage_groups/', views.manage_groups, name='user_groups'),
     path('delete_group/', views.delete_group, name='delete_group'),

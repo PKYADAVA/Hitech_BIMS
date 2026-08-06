@@ -3,7 +3,8 @@ from collections import defaultdict
 from datetime import datetime
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
-from django.db.models import Count
+from django.db import transaction
+from django.db.models import Count, ProtectedError
 from django.contrib.auth.models import User
 from django.utils.timezone import localtime
 import datetime
@@ -828,6 +829,85 @@ def update_user(request, user_id):
         return JsonResponse({"message": "User updated successfully."})
 
     return JsonResponse({"error": "Invalid request method."}, status=405)
+
+
+def _last_active_superuser(user):
+    """True when switching this account off would leave nobody who can switch
+    it back on. The one state the Users page must not be able to reach."""
+    if not (user.is_superuser and user.is_active):
+        return False
+    return not (User.objects.filter(is_superuser=True, is_active=True)
+                .exclude(id=user.id).exists())
+
+
+@login_required
+def toggle_user_active(request, user_id):
+    """Switch an account on or off.
+
+    The everyday answer to "this person has left": Django refuses a login for
+    an inactive user, so access stops at once, while everything they entered
+    keeps its author. Deleting is for an account raised in error.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=405)
+
+    user = get_object_or_404(User, id=user_id)
+    if user.id == request.user.id:
+        return JsonResponse(
+            {"error": "You cannot deactivate the account you are signed in with."},
+            status=400)
+    if user.is_active and _last_active_superuser(user):
+        return JsonResponse(
+            {"error": "%s is the only active superuser. Promote someone else "
+                      "first, or nobody can undo this." % user.username},
+            status=400)
+
+    user.is_active = not user.is_active
+    user.save(update_fields=["is_active"])
+    return JsonResponse({
+        "is_active": user.is_active,
+        "message": "%s is now %s." % (user.username,
+                                      "active" if user.is_active else "inactive"),
+    })
+
+
+@login_required
+def delete_user(request, user_id):
+    """Remove an account outright.
+
+    Refused where the record would take something with it that is not the
+    user's own: a change request names who raised and who reviewed it, and
+    those columns are PROTECTed precisely so an approval trail cannot lose its
+    author. Deactivating is offered instead, which is what is wanted in almost
+    every case anyway.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method."}, status=405)
+
+    user = get_object_or_404(User, id=user_id)
+    if user.id == request.user.id:
+        return JsonResponse(
+            {"error": "You cannot delete the account you are signed in with."},
+            status=400)
+    if _last_active_superuser(user):
+        return JsonResponse(
+            {"error": "%s is the only active superuser. Promote someone else "
+                      "first." % user.username},
+            status=400)
+
+    username = user.username
+    try:
+        with transaction.atomic():
+            user.delete()
+    except ProtectedError:
+        return JsonResponse(
+            {"error": "%s has approval history against their name and cannot be "
+                      "deleted without it. Deactivate the account instead — they "
+                      "lose access and the trail keeps its author." % username},
+            status=400)
+    # The linked employee survives: Employee.user is SET_NULL, so the person
+    # stays on the HR master and can be given a new account.
+    return JsonResponse({"message": "%s deleted." % username})
 
 
 @login_required
