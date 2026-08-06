@@ -73,6 +73,8 @@ const EMOJI_TO_ICON: Record<string, IconName> = {
   "🕒": "clock-outline",
   "🗂️": "folder-multiple-outline",
   "🗺️": "map-outline",
+  "🏍": "motorbike",
+  "🚗": "car-side",
   "🚚": "truck-outline",
   "🛒": "cart-outline",
   "🛡️": "shield-outline",
