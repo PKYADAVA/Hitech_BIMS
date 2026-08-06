@@ -260,6 +260,10 @@ const FARM = (r = false) => sel("farm", "Farm", "/broiler/farms/", ["farm_name",
 const BATCH = (r = false) => sel("batch", "Batch", "/broiler/batches/", ["batch_name", "lot_no"], r);
 const FARMER = () => sel("farmer", "Farmer", "/broiler/farmers/", ["farmer_name"]);
 const ITEM = (name: string, label: string, r = false) => sel(name, label, "/items/", ["description", "item_code"], r);
+/** A Daily Entry's Feed columns take feed, not the whole Item master — which
+ *  offered Day Old Chicks as something to feed a flock. */
+const FEED_ITEM = (name: string, label: string) =>
+  sel(name, label, "/broiler/feed-items", ["description", "item_code"]);
 const CUSTOMER = () => sel("customer", "Customer", "/customers/", ["name", "code"]);
 const SUPPLIER = () => sel("supplier", "Supplier", "/suppliers/", ["name", "code"]);
 const WAREHOUSE = (name: string, label: string) => sel(name, label, "/warehouses/", ["name", "code"]);
@@ -285,9 +289,9 @@ export const FORMS: Record<string, FormSchema> = {
       num("age_days", "Age (days)"),
       num("mortality", "Mortality"),
       num("culls", "Culls"),
-      ITEM("feed_1", "Feed 1"),
+      FEED_ITEM("feed_1", "Feed 1"),
       dec("feed_1_qty", "Feed 1 Qty"),
-      ITEM("feed_2", "Feed 2"),
+      FEED_ITEM("feed_2", "Feed 2"),
       dec("feed_2_qty", "Feed 2 Qty"),
       dec("avg_weight_gms", "Avg Weight (g)"),
       text("remarks", "Remarks"),

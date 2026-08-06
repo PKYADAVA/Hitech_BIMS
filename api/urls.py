@@ -20,6 +20,7 @@ from broiler.api import (
     BatchShedLookupView,
     BirdSaleFarmLookupView,
     ChickItemListView,
+    FeedItemListView,
     ChicksSourceListView,
     DailyEntryLookupView,
     DailyEntryStockLookupView,
@@ -175,6 +176,7 @@ urlpatterns = [
     # Chicks Placement form: the two pickers the phone has no list endpoint for.
     path("broiler/chicks-sources", ChicksSourceListView.as_view(), name="broiler-chicks-sources"),
     path("broiler/chick-items", ChickItemListView.as_view(), name="broiler-chick-items"),
+    path("broiler/feed-items", FeedItemListView.as_view(), name="broiler-feed-items"),
     # Hatch Entry form: tray setting → dates + source purchase figures.
     path("hatchery/tray-setting-lookup", TraySettingLookupView.as_view(), name="hatchery-tray-setting-lookup"),
     path("reports/live-flock", LiveFlockReportView.as_view(), name="report-live-flock"),

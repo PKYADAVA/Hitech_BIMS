@@ -604,24 +604,41 @@ class ChicksSourceListView(V1ViewMixin, APIView):
         ])
 
 
+def _item_options(queryset):
+    return [{"id": i.id, "item_code": i.item_code, "description": i.description}
+            for i in queryset]
+
+
 class ChickItemListView(V1ViewMixin, APIView):
     """GET /api/v1/broiler/chick-items — the items a placement may move.
 
-    The same narrowing the web form applies: items in a category named for
-    chicks. A placement is a stock transfer, and the full item list would offer
-    feed and medicine as things to place on a farm.
+    The same narrowing the web form applies, from the same helper: a placement
+    is a stock transfer, and the full item list would offer feed and medicine
+    as things to place on a farm.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from inventory.models import Item
+        from .views import chick_items
 
-        return Response([
-            {"id": i.id, "item_code": i.item_code, "description": i.description}
-            for i in (Item.objects.filter(category__name__icontains="chick")
-                      .order_by("item_code"))
-        ])
+        return Response(_item_options(chick_items()))
+
+
+class FeedItemListView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/feed-items — the items a Daily Entry may record as feed.
+
+    Both Feed columns pointed at the whole Item master, which offered Day Old
+    Chicks as something to feed a flock. Same helper as the web form, so the
+    two lists cannot drift.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .views import feed_items
+
+        return Response(_item_options(feed_items()))
 
 
 class DailyEntryLookupView(V1ViewMixin, APIView):

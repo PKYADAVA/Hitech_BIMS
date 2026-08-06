@@ -1987,7 +1987,9 @@ class DailyEntryListTemplateView(View):
 class SingleBatchDailyEntryListTemplateView(View):
     def get(self, request):
         return render(request, "daily_entry_single_list.html", {
-            "items": Item.objects.order_by("item_code"),
+            # Same rule as the form: the register's edit dialog offers the same
+            # Feed pickers, so it must offer the same list.
+            "items": feed_items(),
         })
 
 
@@ -1997,7 +1999,9 @@ class SingleBatchDailyEntryFormTemplateView(View):
         return render(request, "daily_entry_single_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
-            "items": Item.objects.order_by("item_code"),
+            # Feed only: the Feed-1/Feed-2 columns are the only pickers on this
+            # page, and the whole master offered Day Old Chicks among them.
+            "items": feed_items(),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -2008,7 +2012,9 @@ class DailyEntryFormTemplateView(View):
         return render(request, "daily_entry_form.html", {
             "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
-            "items": Item.objects.order_by("item_code"),
+            # Feed only: the Feed-1/Feed-2 columns are the only pickers on this
+            # page, and the whole master offered Day Old Chicks among them.
+            "items": feed_items(),
             "today": timezone.localdate().isoformat(),
         })
 
@@ -2213,7 +2219,7 @@ def _flock_counts(batch, as_of=None):
     empty = {"placed": 0, "mortality": 0, "culls": 0, "sold": 0, "live": 0}
     if not batch:
         return empty
-    chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+    chick_ids = list(chick_items().values_list("id", flat=True))
     placed_q = StockTransfer.objects.filter(to_batch_id=batch.id, item_id__in=chick_ids)
     de_q = DailyEntry.objects.filter(batch_id=batch.id)
     sold_q = BirdSale.objects.filter(batch_id=batch.id)
@@ -2234,6 +2240,30 @@ def _flock_counts(batch, as_of=None):
     }
 
 
+def feed_items():
+    """The items a Daily Entry may record as feed.
+
+    One definition of what counts as feed, because the answer was written out
+    thirteen times and the Daily Entry form did not use any of them — its Feed
+    columns listed the whole Item master, so Day Old Chicks was offered as
+    something to feed a flock.
+
+    Matched on the category's name rather than an id: the category is created
+    by whoever sets up Inventory, so there is no fixed id to hold on to, and
+    a site running "Broiler Feed" and "Pre-Starter Feed" wants both.
+    """
+    from inventory.models import Item
+
+    return Item.objects.filter(category__name__icontains="feed").order_by("item_code")
+
+
+def chick_items():
+    """The items a placement may move onto a farm — the same rule, for chicks."""
+    from inventory.models import Item
+
+    return Item.objects.filter(category__name__icontains="chick").order_by("item_code")
+
+
 def _placement_date(batch):
     """The day the chicks went in, or None.
 
@@ -2251,10 +2281,9 @@ def _placement_date(batch):
         return None
     if batch.start_date:
         return batch.start_date
-    from inventory.models import Item, StockTransfer
+    from inventory.models import StockTransfer
 
-    chick_ids = Item.objects.filter(
-        category__name__icontains="chick").values_list("id", flat=True)
+    chick_ids = chick_items().values_list("id", flat=True)
     return (StockTransfer.objects
             .filter(to_batch=batch, item_id__in=chick_ids)
             .order_by("date").values_list("date", flat=True).first())
@@ -2352,7 +2381,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     consumed_per_bird_actual_g = None
     if batch:
         from inventory.models import Item as _Item, StockTransfer as _ST
-        chick_ids = list(_Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+        chick_ids = list(chick_items().values_list("id", flat=True))
         placed = _ST.objects.filter(to_batch_id=batch.id, item_id__in=chick_ids, date__lt=entry_date)\
                             .aggregate(t=Sum("quantity"))["t"] or 0
         sold_by_date = {}
@@ -3834,7 +3863,7 @@ def _live_flock_row(batch, today):
         feed_consumed / actual_age if actual_age else Decimal("0"))
 
     # farm<->farm feed movements (subset of the engine's in/out)
-    feed_item_ids = list(Item.objects.filter(category__name__icontains="feed").values_list("id", flat=True))
+    feed_item_ids = list(feed_items().values_list("id", flat=True))
     transfer_in_farms = StockTransfer.objects.filter(
         to_batch=batch, from_location_type="farm", item_id__in=feed_item_ids
     ).aggregate(t=Sum("quantity"))["t"] or Decimal("0")
@@ -4198,8 +4227,8 @@ def day_record_report(request):
     if farm_id:
         entries = entries.filter(farm_id=farm_id)
 
-    feed_ids = list(Item.objects.filter(category__name__icontains="feed").values_list("id", flat=True))
-    chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+    feed_ids = list(feed_items().values_list("id", flat=True))
+    chick_ids = list(chick_items().values_list("id", flat=True))
     placed_cache = {}
 
     rows = [_day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale)
@@ -4263,8 +4292,8 @@ def farm_detailed_daily_entry_report(request):
     if farm_id:
         entries = entries.filter(farm_id=farm_id)
 
-    feed_ids = list(Item.objects.filter(category__name__icontains="feed").values_list("id", flat=True))
-    chick_ids = list(Item.objects.filter(category__name__icontains="chick").values_list("id", flat=True))
+    feed_ids = list(feed_items().values_list("id", flat=True))
+    chick_ids = list(chick_items().values_list("id", flat=True))
     placed_cache = {}
 
     rows = [_day_record_row(e, e.date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale)
@@ -4526,7 +4555,7 @@ def chicks_placement_report(request):
     rows, totals = [], None
     if submitted:
         qs = (StockTransfer.objects
-              .filter(to_location_type="farm", item__category__name__icontains="chick")
+              .filter(to_location_type="farm", item__in=chick_items())
               .select_related("to_farm__branch", "to_farm__supervisor", "to_batch",
                               "from_warehouse", "source_hatchery", "source_supplier", "item")
               .order_by("date", "id"))
@@ -4965,7 +4994,7 @@ def batch_wise_feed_scheduling_report(request):
 
         # Everything the rows need, in one aggregate per movement type rather
         # than per batch — this report spans every live flock in a branch.
-        is_chick = Q(item__category__name__icontains="chick")
+        is_chick = Q(item__in=chick_items())
         # Placement also dates the flock: a batch with no start_date still has
         # a real placement — the chick transfer — to take its age from.
         placement = {
@@ -5484,7 +5513,7 @@ def feed_dispatch_stock_report(request):
     # Feed columns are fully dynamic — every Item under a "Feed" category is
     # its own ledger column, keyed by item id and ordered by item_code. Add a
     # new feed Item and it shows up here automatically, no code change needed.
-    feed_items_all = list(Item.objects.filter(category__name__icontains="feed").order_by("item_code"))
+    feed_items_all = list(feed_items())
     # Every figure here is in bags, converted from kg by the item's bag weight.
     # An item without one divides by nothing, so its columns read 0 however much
     # was actually bought or dispatched — which looks like "no activity" rather
@@ -5999,7 +6028,7 @@ class ChicksPlacementListTemplateView(View):
         return render(request, "chicks_placement_list.html", {
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
-            "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
+            "chick_items": chick_items(),
             "sources": _chicks_sources(request.user),
         })
 
@@ -6010,7 +6039,7 @@ class ChicksPlacementFormTemplateView(View):
         return render(request, "chicks_placement_form.html", {
             "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
             "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
-            "chick_items": Item.objects.filter(category__name__icontains="chick").order_by("item_code"),
+            "chick_items": chick_items(),
             "sources": _chicks_sources(request.user),
             "today": timezone.localdate().isoformat(),
         })

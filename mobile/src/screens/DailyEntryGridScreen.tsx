@@ -97,14 +97,17 @@ const F_SUPERVISOR: FormField = {
 const F_FARM: FormField = { name: "farm", label: "Farm", type: "select", required: true };
 const F_MORTALITY: FormField = { name: "mortality", label: "Mortality (Nos)", type: "number" };
 const F_CULLS: FormField = { name: "culls", label: "Culls (Nos)", type: "number" };
+// Feed only. Both columns listed the whole Item master, which offered Day Old
+// Chicks as something to feed a flock; the endpoint applies the web form's own
+// rule so the two lists cannot drift.
 const F_FEED_1: FormField = {
   name: "feed_1", label: "Item", type: "select",
-  optionsPath: "/items/", optionLabelKeys: ["description", "item_code"],
+  optionsPath: "/broiler/feed-items", optionLabelKeys: ["description", "item_code"],
 };
 const F_FEED_1_QTY: FormField = { name: "feed_1_qty", label: "Qty (kg)", type: "decimal" };
 const F_FEED_2: FormField = {
   name: "feed_2", label: "Item", type: "select",
-  optionsPath: "/items/", optionLabelKeys: ["description", "item_code"],
+  optionsPath: "/broiler/feed-items", optionLabelKeys: ["description", "item_code"],
 };
 const F_FEED_2_QTY: FormField = { name: "feed_2_qty", label: "Qty (kg)", type: "decimal" };
 const F_AVG_WT: FormField = { name: "avg_weight_gms", label: "Avg. Weight (g)", type: "decimal" };
