@@ -21,7 +21,10 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
  */
 const ROW_FORM_SCREEN: Record<string,
   "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"
-  | "SupervisorTripForm"> = {
+  | "SupervisorTripForm" | "BatchForm"> = {
+  // The shed picker has to know which units are free, and the batch number is
+  // minted server-side — neither fits the generic form.
+  "broiler-batches": "BatchForm",
   "broiler-daily-entries": "DailyEntryGrid",
   // One supervisor, farm, batch and date over several consumption lines.
   "broiler-medicine-vaccine": "MedicineEntryForm",

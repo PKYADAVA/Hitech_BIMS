@@ -32,6 +32,8 @@ export type ModuleStackParams = {
    */
   DailyEntryGrid: { row?: Row } | undefined;
   MedicineEntryForm: undefined;
+  /** Batch Creation. `row` corrects a saved batch; the farm is fixed then. */
+  BatchForm: { row?: Row } | undefined;
   FarmCaptureForm: { row?: Row } | undefined;
   /** `ending` opens the trip at the closing evidence it still needs. */
   SupervisorTripForm: { row?: Row; ending?: boolean } | undefined;

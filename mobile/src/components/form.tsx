@@ -150,7 +150,11 @@ export function FormControl({
       <TextInput
         value={value}
         onChangeText={onChange}
-        placeholder={field.label}
+        // A declared placeholder says something the label does not — "Enter
+        // book number" against the label "Book Number". This hardcoded the
+        // label, so every placeholder written was silently discarded and the
+        // box only ever echoed its own heading.
+        placeholder={field.placeholder ?? field.label}
         placeholderTextColor={colors.textFaint}
         keyboardType={numeric ? "numeric" : "default"}
         multiline={field.type === "textarea"}
@@ -221,7 +225,14 @@ function SelectControl({
 
   return (
     <>
-      <Pressable style={styles.input} onPress={() => setOpen(true)}>
+      {/* Greyed rather than hidden while it waits on an earlier field: the
+          form should show what it is going to ask for, and the placeholder
+          says what has to happen first. */}
+      <Pressable
+        style={[styles.input, field.disabled && styles.inputDisabled]}
+        disabled={field.disabled}
+        onPress={() => setOpen(true)}
+      >
         <Text style={selectedLabel ? styles.inputText : styles.placeholder} numberOfLines={1}>
           {selectedLabel || field.placeholder || `Select ${field.label.toLowerCase()}`}
         </Text>
@@ -261,14 +272,20 @@ function SelectControl({
               <Text style={styles.empty}>{loading ? "Loading…" : "No options."}</Text>
             }
             renderItem={({ item }) => (
+              // A disabled option is shown, not hidden: "this shed already has
+              // an open batch" is the answer someone is looking for, and a
+              // silently absent row only reads as missing data.
               <Pressable
-                style={styles.option}
+                style={[styles.option, item.disabled && styles.optionDisabled]}
+                disabled={item.disabled}
                 onPress={() => {
                   onChange(item.value);
                   setOpen(false);
                 }}
               >
-                <Text style={styles.optionText}>{item.label}</Text>
+                <Text style={[styles.optionText, item.disabled && styles.optionDisabledText]}>
+                  {item.label}
+                </Text>
                 {item.value === value ? <AppIcon name="check" size={18} color={colors.tint} /> : null}
               </Pressable>
             )}
@@ -542,6 +559,9 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.surface,
   },
   optionText: { ...type.body, color: colors.text, flex: 1 },
+  inputDisabled: { backgroundColor: colors.surfaceAlt },
+  optionDisabled: { backgroundColor: colors.surfaceAlt },
+  optionDisabledText: { color: colors.textFaint },
   optionClear: { ...type.body, color: colors.textMuted },
   check: { color: colors.tint, ...type.title },
   empty: { ...type.body, color: colors.textMuted, textAlign: "center", padding: spacing.xl },

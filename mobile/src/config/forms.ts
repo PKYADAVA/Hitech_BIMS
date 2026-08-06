@@ -9,6 +9,9 @@
  * items/warehouses/customers/suppliers/accounts endpoints).
  */
 import { http } from "@/api/client";
+// Re-exported so the screens that already import them from here keep working;
+// they live in api/lookups so config/documents can use them without a cycle.
+export { farmBatches, stockTransferItem, stockTransferStock } from "@/api/lookups";
 import { Envelope } from "@/api/types";
 import { isDocumentForm } from "@/config/documents";
 import { Advice, adviseDailyEntry, DailyEntryLookup } from "@/domain/dailyEntry";
@@ -46,7 +49,7 @@ export interface FormField {
    * batches, or farms narrowed to one supervisor, which the list API has no
    * field filter for.
    */
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string; disabled?: boolean }[];
   /**
    * Replaces the default "Select <label>" prompt on an empty `select`.
    *
@@ -57,6 +60,13 @@ export interface FormField {
   placeholder?: string;
   /** Computed/derived — rendered but not editable (value comes from `compute`). */
   readOnly?: boolean;
+  /**
+   * Shown, greyed, and not yet openable — a `select` waiting on an earlier
+   * answer. Distinct from `readOnly`, which means "this is never yours to
+   * set": Shed / Unit becomes pickable the moment a farm is chosen, and its
+   * placeholder says so.
+   */
+  disabled?: boolean;
   /** Display-only helper (e.g. a running total) — shown but never sent to the API. */
   transient?: boolean;
   /** For `geo`: the [latitude, longitude] field names this control fills. */
@@ -190,26 +200,6 @@ export const dailyEntryStock = async (
   })).data.data.stock;
 
 /** A transfer row's item: its UOM and the price effective on the row's date. */
-export const stockTransferItem = async (
-  itemId: string,
-  date?: string
-): Promise<{ unit: string; rate: string; price_missing: boolean; message: string }> =>
-  (await http.get<Envelope<{ unit: string; rate: string; price_missing: boolean; message: string }>>(
-    "/inventory/stock-transfer-item",
-    { params: { item: itemId, ...(date ? { date } : {}) } }
-  )).data.data;
-
-/** What is actually at a location on a date — the figure the save enforces. */
-export const stockTransferStock = async (
-  locationType: string,
-  locationId: string,
-  itemId: string,
-  date: string
-): Promise<string> =>
-  (await http.get<Envelope<{ stock: string }>>("/inventory/stock-transfer-stock", {
-    params: { location_type: locationType, location_id: locationId, item: itemId, date },
-  })).data.data.stock;
-
 interface TraySettingLookup {
   setting_date: string | null;
   hatch_date: string | null;
@@ -698,18 +688,15 @@ export const FORMS: Record<string, FormSchema> = {
       return { sq_feet: area ? (Number.isInteger(area) ? String(area) : area.toFixed(2)) : "" };
     },
   },
-  "broiler-batches": {
-    fields: [
-      sel("broiler_farm", "Farm", "/broiler/farms/", ["farm_name", "farm_code"], true),
-      text("batch_name", "Batch Name", true),
-      text("book_number", "Book Number"),
-      text("lot_no", "Lot No."),
-      BREED(),
-      date("start_date", "Start Date"),
-      date("end_date", "End Date"),
-      bool("is_closed", "Closed"),
-    ],
-  },
+  // Batch Creation is a bespoke screen (BatchFormScreen) — it needs the farm's
+  // sheds with the occupied ones greyed out, which no generic field can do.
+  //
+  // The generic form that used to be here had drifted a long way from the ERP:
+  // no Shed at all, though the model and the desktop form both carry one; a
+  // *typed* Batch No., which the ERP mints on save and never accepts from a
+  // form; and Start Date, End Date and Closed, none of which the ERP's form
+  // has — `is_closed` is set by a growing-charge settlement, so a phone ticking
+  // it would close a flock without settling it.
   "broiler-breeds": { fields: [text("code", "Code", true), text("description", "Description"), active()] },
   "broiler-breed-standards": {
     fields: [

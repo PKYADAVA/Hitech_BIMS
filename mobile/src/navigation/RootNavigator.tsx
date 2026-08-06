@@ -13,6 +13,7 @@ import { isEditable } from "@/config/forms";
 import { ModuleTabBar } from "@/components/ModuleTabBar";
 import { MODULE_ICON, MODULE_PRIMARY } from "@/config/modulePrimary";
 import { openRecordForm } from "@/navigation/openForm";
+import { BatchFormScreen } from "@/screens/BatchFormScreen";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
 import { BirdSaleReceiptFormScreen } from "@/screens/BirdSaleReceiptFormScreen";
 import { DailyEntryGridScreen } from "@/screens/DailyEntryGridScreen";
@@ -179,6 +180,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       />
       <ModuleStack.Screen name="Detail" component={RecordDetailScreen} options={{ title: "" }} />
       <ModuleStack.Screen name="Form" component={FormScreen} />
+      <ModuleStack.Screen name="BatchForm" component={BatchFormScreen} />
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
       <ModuleStack.Screen name="BirdSaleReceiptForm" component={BirdSaleReceiptFormScreen} />
       <ModuleStack.Screen name="DailyEntryGrid" component={DailyEntryGridScreen} />

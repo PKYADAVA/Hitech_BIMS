@@ -216,6 +216,29 @@ const broilerResources: ResourceConfig[] = [
     }),
   },
   {
+    // Chicks Placement is a Stock Transfer landing on a farm — the register is
+    // that same list narrowed the way the web page narrows it, rather than a
+    // second table saying the same thing.
+    key: "broiler-chicks-placement",
+    module: "broiler",
+    path: "/inventory/stock-transfers/?to_location_type=farm",
+    title: "Chicks Placement",
+    singular: "Chicks Placement",
+    icon: "bird",
+    accent: B,
+    emptyMessage: "No chicks placed yet.",
+    searchKeys: ["trnum", "dc_no", "vehicle_no", "driver_name"],
+    card: (r) => ({
+      // The farm leads: a placement is read as "which flock got chicks", not
+      // as a transfer number.
+      title: pick(r, ["to_farm_label"], "Placement"),
+      subtitle: joinParts([pick(r, ["trnum"]), formatDate(r.date), pick(r, ["item_label"])]),
+      trailing: !isBlank(r.quantity)
+        ? { value: formatNumber(r.quantity), caption: "chicks" }
+        : undefined,
+    }),
+  },
+  {
     key: "broiler-sale-receipts",
     module: "broiler",
     path: "/broiler/bird-sale-receipts/",
@@ -254,8 +277,12 @@ const broilerResources: ResourceConfig[] = [
     key: "broiler-batches",
     module: "broiler",
     path: "/broiler/batches/",
-    title: "Batches",
+    // Named as the ERP names it, under Master where the ERP keeps it. The
+    // dashboard shortcut still reads "Batch Creation" because that is what the
+    // ERP dashboard's own quick action says.
+    title: "Broiler Batch",
     singular: "Batch",
+    createLabel: "Add New Batch",
     icon: "layers",
     accent: B,
     emptyMessage: "No batches found.",
@@ -1864,6 +1891,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "broiler-farm-location-capture",
           "broiler-bird-sales",
           "broiler-sale-receipts",
+          "broiler-chicks-placement",
         ],
       },
       {
@@ -1876,7 +1904,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
     reports: [
       { key: "live-flock", title: "Live Flock Summary", icon: "bird", path: "/reports/live-flock" },
       { key: "batch-summary", title: "Batch History", icon: "file-document-outline", path: "/reports/batch-summary" },
-      { key: "chicks-placement", title: "Chicks Placement", icon: "bird", path: "/reports/chicks-placement" },
+      { key: "chicks-placement", title: "Chicks Placement Report", icon: "bird", path: "/reports/chicks-placement" },
       { key: "day-record", title: "Day Record", icon: "calendar-today", path: "/reports/day-record" },
       { key: "feed-dispatch", title: "Feed Dispatch & Stock", icon: "sprout", path: "/reports/feed-dispatch" },
       { key: "lifting", title: "Lifting", icon: "truck-delivery", path: "/reports/lifting" },
