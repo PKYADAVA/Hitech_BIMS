@@ -245,17 +245,19 @@ function SystemSummary({ ov }: { ov?: Overview }) {
  */
 function TodayTrip({
   trip,
+  linked,
   loading,
   onStart,
   onEnd,
 }: {
   trip: Row | null | undefined;
+  linked: boolean;
   loading: boolean;
   onStart: () => void;
   onEnd: () => void;
 }) {
   const styles = useStyles();
-  const view = describeTodayTrip(trip);
+  const view = describeTodayTrip(trip, linked);
 
   return (
     <Card style={styles.tripCard}>
@@ -265,7 +267,9 @@ function TodayTrip({
         </View>
         <View style={styles.panelMain}>
           <Text style={styles.tripTitle} numberOfLines={1}>{view.title}</Text>
-          <Text style={styles.panelMeta} numberOfLines={1}>{view.detail}</Text>
+          {/* Two lines, because the not-linked explanation needs them and the
+              other states never reach a second. */}
+          <Text style={styles.panelMeta} numberOfLines={2}>{view.detail}</Text>
         </View>
         <Badge label={view.badge.label} tone={view.badge.tone} />
       </View>
@@ -407,10 +411,14 @@ export function HomeScreen({ navigation }: Props) {
   const [pickFarm, setPickFarm] = React.useState(false);
   const { data: ov, refetch, isFetching } = useOverview({ farm, period });
 
-  // The trip card is for the person who drives, so it needs both halves of
-  // that: a login the server can resolve to an employee, and the tab granted.
-  const drives = !!user?.employee && canTab(TRIP_TAB);
-  const { data: trip, isLoading: tripLoading, refetch: refetchTrip } = useTodayTrip(drives);
+  // Whoever is granted the trip tab gets the card. Whether their login maps to
+  // an employee decides what it *says* — not whether it appears at all: an
+  // unlinked login used to see nothing, which looked like a broken dashboard
+  // rather than a setup step nobody had done yet.
+  const drives = canTab(TRIP_TAB);
+  const linked = !!user?.employee;
+  const { data: trip, isLoading: tripLoading, refetch: refetchTrip } =
+    useTodayTrip(drives && linked);
   const openTrip = (params: { row?: Row; ending?: boolean }) =>
     navigation.navigate("HrModule" as any, { screen: "SupervisorTripForm", params });
 
@@ -461,6 +469,7 @@ export function HomeScreen({ navigation }: Props) {
             <SectionHeader title="Today's Trip" subtitle="Your day on the road" />
             <TodayTrip
               trip={trip}
+              linked={linked}
               loading={tripLoading}
               onStart={() => openTrip({})}
               onEnd={() => openTrip({ row: trip ?? undefined, ending: true })}

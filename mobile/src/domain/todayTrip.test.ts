@@ -17,6 +17,21 @@ describe("describeTodayTrip", () => {
     expect(v.title).toBe("No trip yet");
   });
 
+  it("explains itself when the login maps to no employee", () => {
+    // The condition that made the card invisible to everyone. It is a setup
+    // step, not a fault, and it has to read as one.
+    const v = describeTodayTrip(null, false);
+    expect(v.state).toBe("unlinked");
+    expect(v.badge).toEqual({ label: "not linked", tone: "warning" });
+    expect(v.detail).toMatch(/not linked to an employee/i);
+    // No Start button: the server refuses it for the same reason.
+    expect(v.action).toBeUndefined();
+  });
+
+  it("treats a login as linked unless told otherwise", () => {
+    expect(describeTodayTrip(null).state).toBe("none");
+  });
+
   it("names the state in every one of them", () => {
     // The badge is what the driver reads first, so it is never absent: a card
     // with no status looks the same as one that failed to load.

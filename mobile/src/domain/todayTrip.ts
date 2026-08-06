@@ -1,7 +1,16 @@
 import { Row } from "@/api/types";
 
-/** What state today's trip is in, and so what the card offers. */
-export type TripState = "none" | "open" | "closed";
+/**
+ * What state today's trip is in, and so what the card offers.
+ *
+ * `unlinked` is not a state of the trip but of the login: a trip is filed
+ * against an employee, so a login with no employee record has no day of its
+ * own to show. It gets a state rather than a hidden card because a card that
+ * simply is not there is indistinguishable from one that failed — which is
+ * exactly what happened: no employee in the database had a login attached, so
+ * the card was invisible to every user and looked broken.
+ */
+export type TripState = "unlinked" | "none" | "open" | "closed";
 
 export interface TodayTripView {
   state: TripState;
@@ -39,7 +48,23 @@ export function clockOf(value: unknown): string {
  * no photograph to stamp — still gets a line, because a card that says nothing
  * is indistinguishable from one that failed to load.
  */
-export function describeTodayTrip(trip: Row | null | undefined): TodayTripView {
+export function describeTodayTrip(
+  trip: Row | null | undefined,
+  /** Whether the login maps to an employee. Trips are filed against one. */
+  linked = true,
+): TodayTripView {
+  if (!linked) {
+    // No Start button: the server refuses the same request with the same
+    // reason, and a button that cannot work is worse than no button.
+    return {
+      state: "unlinked",
+      title: "Not set up yet",
+      // Short enough to fit the card's two lines beside the badge — the longer
+      // version truncated mid-sentence, which is worse than not explaining.
+      detail: "Your login is not linked to an employee record. Ask HR.",
+      badge: { label: "not linked", tone: "warning" },
+    };
+  }
   if (!trip) {
     return {
       state: "none",
