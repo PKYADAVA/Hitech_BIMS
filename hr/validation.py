@@ -5,7 +5,16 @@ def validate_employee_data(data):
     """
     Validates employee form data before processing.
     """
-    required_fields = ["full_name", "designation", "warehouse"]
+    # A name to know them by and a warehouse to scope them to. Everything else
+    # on the employee form is nullable in the database, and demanding it here
+    # only stopped old records — saved before those fields existed — from being
+    # reopened and corrected at all.
+    #
+    # Designation was on this list and is nullable too. Its picker had no empty
+    # option, so the check could never fail from the form: the browser posted
+    # whichever designation happened to be first, and an employee with none
+    # quietly acquired one on any save.
+    required_fields = ["full_name", "warehouse"]
     for field in required_fields:
         if not data.get(field):
             return False, f"{field.replace('_', ' ').title()} is required"

@@ -71,8 +71,9 @@
           <input type="date" class="form-control" id="date_of_birth" name="date_of_birth">
         </div>
         <div class="col-md-4">
-          <label class="form-label" for="designation">Designation <span class="text-danger">*</span></label>
+          <label class="form-label" for="designation">Designation</label>
           <select class="form-select" id="designation" name="designation">
+            <option value="" selected>Select Designation</option>
             {% for designation in designation_detail %}
               <option value="{{ designation.id }}">{{ designation.title }}</option>
             {% endfor %}
