@@ -74,6 +74,32 @@
   .dr-table tr.feed-note-warn > td { background:#fff6f6; border-left-color:#ef4444; }
   /* Readable text inside the Feed Check strip (grey was too faint) */
   .dr-table tr.feed-note-row > td { color:#334155; font-size:.8rem; line-height:1.5; }
+
+  /* The advisory prose and the feed table sit side by side: the panel was
+     already the full width of the grid with most of the right half empty,
+     and stacking the feed figures as sentences ran it to four extra lines. */
+  /* The advisory prose and the feed table sit side by side. Neither side is
+     allowed to grow: this cell spans a grid far wider than the screen, and a
+     block that stretches to fill it either pushes the table off the right or
+     widens the grid's own columns to match. Both flow from the left instead,
+     so the pair sits inside the first screenful whatever the grid is doing. */
+  .fp-split { display:flex; gap:1rem; align-items:flex-start; flex-wrap:wrap; }
+  .fp-left { flex:0 1 auto; max-width:52rem; }
+  .fp-right { flex:0 1 auto; }
+  .fp-grid { display:grid; grid-template-columns:auto repeat(5, auto) auto;
+             gap:0 .55rem; font-size:.68rem; line-height:1.4; background:#fff;
+             border:1px solid #e2e8f0; border-radius:6px; padding:.3rem .5rem; }
+  .fp-grid > div { white-space:nowrap; }
+  .fp-head { color:#64748b; font-weight:600; font-size:.62rem;
+             text-transform:uppercase; letter-spacing:.02em;
+             border-bottom:1px solid #f1f5f9; padding-bottom:.15rem; }
+  .fp-num { text-align:right; }
+  .fp-flag { padding-left:.25rem; }
+  .fp-total { border-top:1px solid #e2e8f0; margin-top:.15rem;
+              padding-top:.15rem; font-weight:700; color:#0f172a; }
+  .fp-stock { font-size:.64rem; color:#475569; background:#f8fafc;
+              border:1px solid #e2e8f0; border-top:none;
+              border-radius:0 0 6px 6px; padding:.2rem .5rem; margin-top:-1px; }
   .dr-table tr.feed-note-row .text-muted { color:#475569 !important; }
   .dr-table tr.feed-note-row .text-muted strong { color:#1e293b; }
   .dr-status-pill { float:right; font-weight:700; font-size:.7rem; letter-spacing:.02em;
@@ -254,8 +280,9 @@ function row() {
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
-  const prev = [...get('row-table').tBodies[0]
-                .querySelectorAll('tr:not(.feed-note-row)')].pop();
+  // The last *entry* row, not the last <tr> — a feed-plan row nested inside
+  // one would carry no farm to carry forward.
+  const prev = entryRows().pop();
   get('row-table').tBodies[0].append(tr);
   // fillRowForFarm counts the rows already on this farm, so the carried row
   // lands on the next day rather than repeating the last one's date.
@@ -268,12 +295,30 @@ function row() {
 // Only the last row offers "+" (add another row); earlier rows just delete.
 // The sole remaining row can't be deleted — no "+" would be left to add one back.
 function refreshRowAddButtons() {
-  const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
+  const rows = entryRows();
   rows.forEach((tr, i) => {
     tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
     tr.querySelector('.remove').disabled = rows.length === 1;
   });
   updateSummary();
+}
+
+/**
+ * The genuine entry rows.
+ *
+ * `#row-table tbody tr` is a *descendant* selector, and the feed-plan panel
+ * renders its own <tr>s inside an entry row's cell — so it matched those too.
+ * `tr.querySelector('.farm')` was then null and the whole live-stock preview
+ * threw before it ever fetched a balance, which is why the Stock column sat on
+ * its "auto" placeholder with no error on screen.
+ *
+ * Excluding the note row by class is not enough: what has to be excluded is
+ * anything nested *within* one. A row that carries no Farm control is not an
+ * entry row, whatever it is called.
+ */
+function entryRows() {
+  return [...document.querySelectorAll('#row-table tbody tr')]
+    .filter(tr => tr.querySelector('.farm'));
 }
 
 // Live running-stock preview. Each row here has its own Farm, so the
@@ -284,7 +329,7 @@ function refreshRowAddButtons() {
 let stockPreviewToken = 0;
 async function recomputeStockPreview() {
   const myToken = ++stockPreviewToken;
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   const openingCache = {};
   const running = {};
   for (const tr of rows) {
@@ -324,7 +369,7 @@ function fillRowForFarm(tr, farmId, isNew) {
   // Count other rows already using this farm NOW (synchronously) — each repeat
   // advances the date one day. Order- and timing-independent.
   let others = 0;
-  document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)').forEach(r => {
+  entryRows().forEach(r => {
     const s = r.querySelector('.farm');
     if (r !== tr && s && s.value === farmId) others++;
   });
@@ -396,6 +441,8 @@ function applyFeedPhase(tr, data) {
   tr.dataset.consumedByItem = JSON.stringify(data.consumed_by_item || []);
   tr.dataset.consumedTotal = (data.consumed_total_kg ?? '');
   tr.dataset.perBirdActual = (data.consumed_per_bird_actual_g ?? '');
+  tr.dataset.feedPlan = JSON.stringify(data.feed_plan || []);
+  tr.dataset.farmFeedStock = JSON.stringify(data.farm_feed_stock || []);
   tr.dataset.liveBirds = data.live_birds || 0;
   tr.dataset.expectName = (cur && cur.phase_name) || '';   // current phase feed
   tr.dataset.nextFeed   = (cur && cur.next_feed_item) || '';
@@ -434,7 +481,7 @@ function feedName(tr, cls) {
 // directly under each data row (its own row) with the full detail.
 function updateFeedFeedback() {
   document.querySelectorAll('#row-table tbody tr.feed-note-row').forEach(r => r.remove());
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   rows.forEach(tr => {
     renderInlineHints(tr);              // the tiny per-cell hints (kept)
     const n = rowNotification(tr);      // this row's own feed-check detail
@@ -444,15 +491,20 @@ function updateFeedFeedback() {
     const statusLabel = n.status === 'warn' ? 'Needs Review' : n.status === 'near' ? 'Near Limit' : 'Within Standard';
     note.className = 'feed-note-row ' + statusClass;
     note.innerHTML = `<td colspan="15" class="small">
-        <span class="dr-status-pill">${statusLabel}</span>
-        <i class="fas fa-seedling me-1 text-muted"></i>${n.head}
-        <span class="ms-2">${n.parts.join(' &nbsp;|&nbsp; ')}</span>
-        <span class="ms-2">${n.totalLine}</span>
-        ${n.weightLine ? `<span class="ms-2">${n.weightLine}</span>` : ''}
-        ${n.crossLine ? `<div class="mt-1">${n.crossLine}</div>` : ''}
-        ${n.consumedLine ? `<div>${n.consumedLine}</div>` : ''}
-        ${n.actualLine ? `<div>${n.actualLine}</div>` : ''}
-        ${n.capLine || ''}
+      <div class="fp-split">
+        <div class="fp-left">
+          <span class="dr-status-pill">${statusLabel}</span>
+          <i class="fas fa-seedling me-1 text-muted"></i>${n.head}
+          <span class="ms-2">${n.parts.join(' &nbsp;|&nbsp; ')}</span>
+          <span class="ms-2">${n.totalLine}</span>
+          ${n.weightLine ? `<span class="ms-2">${n.weightLine}</span>` : ''}
+          ${n.crossLine ? `<div class="mt-1">${n.crossLine}</div>` : ''}
+          ${n.consumedLine ? `<div>${n.consumedLine}</div>` : ''}
+          ${n.actualLine ? `<div>${n.actualLine}</div>` : ''}
+          ${n.capLine || ''}
+        </div>
+        ${n.planTable ? `<div class="fp-right">${n.planTable}</div>` : ''}
+      </div>
       </td>`;
     tr.after(note);
   });
@@ -461,7 +513,7 @@ function updateFeedFeedback() {
 
 // Totals bar under the table (rows / feed kg / mortality / culls).
 function updateSummary() {
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   let feed = 0, mort = 0, culls = 0, wsum = 0, wcount = 0;
   rows.forEach(tr => {
     feed += (parseFloat(tr.querySelector('.kgs-1').value || '0')) + (parseFloat(tr.querySelector('.kgs-2').value || '0'));
@@ -493,6 +545,101 @@ function interpCurve(curve, key, target, out) {
     }
   }
   return curve[curve.length - 1][out];
+}
+
+
+// Per feed type: what the phase needs for this flock, what has reached the
+// farm, what has been fed, and what is left — recomputed as the kilos are
+// typed, so the balance on screen is the balance after this entry rather than
+// before it.
+//
+// A table rather than a run of sentences: it is five numbers about four feeds,
+// which as prose ran to four lines and pushed everything else down the page.
+// Set beside the advisory text, in the width the panel was already wasting.
+//
+// "Sent" is farm-level: a delivery is booked to the farm, not to a flock, and
+// the header says so rather than implying the figure is the batch's own.
+function feedPlanTable(tr) {
+  const plan = JSON.parse(tr.dataset.feedPlan || '[]');
+  const stock = JSON.parse(tr.dataset.farmFeedStock || '[]');
+  if (!plan.length && !stock.length) return '';
+
+  // What this row is about to feed, per item, so the numbers move as you type.
+  // Guarded: a row mid-construction has no selects yet, and throwing here
+  // aborts the whole notification — the row then shows no panel at all rather
+  // than a panel missing one line.
+  const typing = {};
+  [['.feed-1', '.kgs-1'], ['.feed-2', '.kgs-2']].forEach(([fc, kc]) => {
+    const sel = tr.querySelector(fc), box = tr.querySelector(kc);
+    if (!sel || !box) return;
+    const id = sel.value;
+    const kg = Number(box.value) || 0;
+    if (id && kg) typing[id] = (typing[id] || 0) + kg;
+  });
+
+  // Birds booked as lost on this row are not going to eat, so the requirement
+  // is measured against the flock this entry leaves behind rather than the one
+  // the server last saw.
+  const lostNow = (Number(tr.querySelector('.mortality')?.value) || 0)
+                + (Number(tr.querySelector('.culls')?.value) || 0);
+  const birdsNow = Math.max((parseInt(tr.dataset.liveBirds || '0', 10) || 0) - lostNow, 0);
+
+  const cell = (v, cls) => `<div class="fp-num ${cls || ''}">${v.toFixed(1)}</div>`;
+  // Summed as the rows are built: the whole flock's feed, which is the figure
+  // an order is actually placed against.
+  const sum = { required: 0, sent: 0, fed: 0, balance: 0, remaining: 0 };
+  const body = plan.map(p => {
+    const now = typing[String(p.item)] || 0;
+    const fed = Number(p.fed_kg) + now;
+    // Recomputed from the cap rather than taken as sent, so it tracks the
+    // flock as the row is filled in.
+    const required = Number(p.cap_per_bird_kg) * birdsNow;
+    const balance = Number(p.sent_kg) - fed;
+    const remaining = required - fed;
+    const over = Number(p.sent_kg) - required;
+
+    // One flag per row, worst first: fed feed that never arrived, fed past the
+    // phase cap, or more delivered than the phase can use.
+    let flag = '';
+    if (balance < 0) flag = `<span class="text-danger" title="Fed but never received">${Math.abs(balance).toFixed(0)} unreceived</span>`;
+    else if (remaining < 0) flag = `<span class="text-danger" title="Past the phase cap">${Math.abs(remaining).toFixed(0)} over cap</span>`;
+    else if (over > 0) flag = `<span class="text-warning-emphasis" title="Sent beyond this phase's requirement">${over.toFixed(0)} extra sent</span>`;
+
+    sum.required += required; sum.sent += Number(p.sent_kg); sum.fed += fed;
+    sum.balance += balance; sum.remaining += remaining;
+
+    return `<div class="fp-name">${escapeHtml(p.name)}</div>`
+      + cell(required)
+      + cell(Number(p.sent_kg))
+      + cell(fed)
+      + cell(balance, balance < 0 ? 'text-danger fw-bold' : '')
+      + cell(remaining, remaining < 0 ? 'text-danger fw-bold' : '')
+      + `<div class="fp-flag">${flag}</div>`;
+  }).join('');
+
+  const stockLine = stock.length ? `<div class="fp-stock">
+      <i class="fas fa-warehouse me-1"></i>On the farm now:
+      ${stock.map(x => `${escapeHtml(x.name)} <strong class="${Number(x.kg) < 0 ? 'text-danger' : ''}">${Number(x.kg).toFixed(1)}</strong>`).join(' &middot; ')} kg
+    </div>` : '';
+
+  // Divs, not a table: this sits inside the grid's own <tbody>, and every
+  // selector on the page is `#row-table tbody tr`, which matches descendants
+  // at any depth. A nested <table> made each of its rows look like a data row
+  // — the submit payload, the totals and the per-row hints all counted them.
+  return `<div class="fp-grid">
+      <div class="fp-head">Feed</div><div class="fp-head fp-num">Required</div>
+      <div class="fp-head fp-num">Sent</div><div class="fp-head fp-num">Fed</div>
+      <div class="fp-head fp-num">Balance</div><div class="fp-head fp-num">To feed</div>
+      <div class="fp-head"></div>
+      ${body}
+      <div class="fp-total fp-name">All feed</div>
+      <div class="fp-total fp-num">${sum.required.toFixed(1)}</div>
+      <div class="fp-total fp-num">${sum.sent.toFixed(1)}</div>
+      <div class="fp-total fp-num">${sum.fed.toFixed(1)}</div>
+      <div class="fp-total fp-num ${sum.balance < 0 ? 'text-danger' : ''}">${sum.balance.toFixed(1)}</div>
+      <div class="fp-total fp-num">${sum.remaining.toFixed(1)}</div>
+      <div class="fp-total"></div>
+    </div>${stockLine}`;
 }
 
 function totalFeed(tr) {
@@ -565,7 +712,7 @@ function priorListFeed(tr) {
   const farmId = tr.querySelector('.farm').value;
   const batchKey = tr.querySelector('.batch').value;
   let total = 0; const byItem = {};
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   for (const r of rows) {
     if (r === tr) break;                                   // only rows BEFORE this one
     if (!farmId || r.querySelector('.farm').value !== farmId) continue;
@@ -670,7 +817,14 @@ function slotHint(tr, feedCls, hintCls, age, expectName, isF2, nextFeed, nextNam
 
 // One <li> summarising a row's feed vs the plan, or null if nothing to check.
 function rowNotification(tr) {
-  if (!tr.dataset.stdFeed && !tr.dataset.expectName && !tr.dataset.stdWeight && !tr.dataset.stdNote) return null;
+  // The panel used to be worth showing only when the breed standard had
+  // something to say. It now also carries the feed plan and the farm's stock,
+  // which stand on their own — so a farm past the end of its breed curve, or
+  // with no curve at all, still gets its feed figures instead of nothing.
+  const hasPlan = (tr.dataset.feedPlan || '[]') !== '[]'
+               || (tr.dataset.farmFeedStock || '[]') !== '[]';
+  if (!hasPlan && !tr.dataset.stdFeed && !tr.dataset.expectName
+      && !tr.dataset.stdWeight && !tr.dataset.stdNote) return null;
   const farm = (() => { const s = tr.querySelector('.farm'); return s.value ? s.options[s.selectedIndex].text : ''; })();
   if (!farm) return null;
   const age = parseInt(tr.dataset.ageDays || '-1', 10);
@@ -807,9 +961,11 @@ function rowNotification(tr) {
   }
 
   const capLine = capProgressLine(tr);
+  const planTable = feedPlanTable(tr);
 
   const head = `<strong>${escapeHtml(farm)}</strong> <span class="text-muted">· Age ${age} · Phase: ${escapeHtml(expectName || '—')}</span>`;
-  return { head, parts, totalLine, weightLine, crossLine, consumedLine, actualLine, capLine, issues, status };
+  return { head, parts, totalLine, weightLine, crossLine, consumedLine, actualLine,
+           planTable, capLine, issues, status };
 }
 
 get('row-table').addEventListener('input', e => {
@@ -819,6 +975,11 @@ get('row-table').addEventListener('input', e => {
   } else if (e.target.classList.contains('avg-wt')) {
     updateFeedFeedback();
   } else if (e.target.classList.contains('mortality') || e.target.classList.contains('culls')) {
+    // The feed requirement is the phase cap times the live flock, so birds
+    // booked as dead on this row change what the flock still needs. Without
+    // this the table answered for a flock the entry was in the middle of
+    // correcting.
+    updateFeedFeedback();
     updateSummary();
   }
 });
@@ -834,7 +995,7 @@ get('daily-entry-form').addEventListener('submit', function (e) {
   e.preventDefault();
   const supervisor = value('supervisor');
   if (!supervisor) { alert('Select a Supervisor.'); return; }
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].map(tr => ({
+  const rows = entryRows().map(tr => ({
     farm: tr.querySelector('.farm').value,
     batch: tr.querySelector('.batch').value,
     date: tr.querySelector('.date').value || TODAY,
@@ -871,7 +1032,7 @@ get('daily-entry-form').addEventListener('submit', function (e) {
 // supervisor's assigned farms (does NOT auto-create rows).
 get('supervisor').addEventListener('change', function () {
   currentFarmOptions = this.value ? farmOptionsFor(this.value) : farmOptions;
-  document.querySelectorAll('#row-table tbody tr:not(.feed-note-row) .farm').forEach(sel => {
+  entryRows().map(tr => tr.querySelector('.farm')).forEach(sel => {
     sel.innerHTML = currentFarmOptions;
     sel.value = '';
     if (window.jQuery) jQuery(sel).trigger('change.select2');   // sync Select2 display

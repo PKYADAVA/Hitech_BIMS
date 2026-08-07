@@ -289,7 +289,7 @@ function recomputeAge(tr) {
 // Only the last row offers "+"; earlier rows just delete. The sole row can't
 // be deleted (no "+" would remain to add one back).
 function refreshRowAddButtons() {
-  const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
+  const rows = entryRows();
   rows.forEach((tr, i) => {
     tr.querySelector('.add-row-inline').classList.toggle('d-none', i !== rows.length - 1);
     tr.querySelector('.remove').disabled = rows.length === 1;
@@ -307,6 +307,26 @@ function refreshRowData(tr) {
     .then(r => r.json()).then(data => applyFeedPhase(tr, data));
 }
 
+/**
+ * The genuine entry rows.
+ *
+ * `#row-table tbody tr` is a *descendant* selector, and the feed-plan panel
+ * renders its own <tr>s inside an entry row's cell — so it matched those too.
+ * `tr.querySelector('.farm')` was then null and the whole live-stock preview
+ * threw before it ever fetched a balance, which is why the Stock column sat on
+ * its "auto" placeholder with no error on screen.
+ *
+ * Excluding the note row by class is not enough: what has to be excluded is
+ * anything nested *within* one. A row that carries none of the day's own
+ * controls is not an entry row, whatever it is called.
+ */
+function entryRows() {
+  return [...document.querySelectorAll('#row-table tbody tr')]
+    // This page carries one Farm for the whole document, so an entry row is
+    // recognised by the Date control every one of them has.
+    .filter(tr => tr.querySelector('.date'));
+}
+
 // Live running-stock preview: fetch each feed item's real opening balance once
 // (as of the earliest row that uses it), then walk the grid subtracting each
 // row's Kgs so later rows show the balance after earlier consumption.
@@ -314,7 +334,7 @@ let stockPreviewToken = 0;
 async function recomputeStockPreview() {
   const farmId = value('farm');
   const myToken = ++stockPreviewToken;
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   if (!farmId) {
     rows.forEach(tr => { tr.querySelector('.stock-1').value = ''; tr.querySelector('.stock-2').value = ''; });
     return;
@@ -387,7 +407,7 @@ function feedName(tr, cls) {
 
 function updateFeedFeedback() {
   document.querySelectorAll('#row-table tbody tr.feed-note-row').forEach(r => r.remove());
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   rows.forEach(tr => {
     renderInlineHints(tr);
     const n = rowNotification(tr);
@@ -413,7 +433,7 @@ function updateFeedFeedback() {
 }
 
 function updateSummary() {
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   let feed = 0, mort = 0, culls = 0, latestWt = 0, latestDate = '';
   rows.forEach(tr => {
     feed += (parseFloat(tr.querySelector('.kgs-1').value || '0')) + (parseFloat(tr.querySelector('.kgs-2').value || '0'));
@@ -511,7 +531,7 @@ function capProgressLine(tr) {
 // day count the feed just typed for an earlier day on top of saved history.
 function priorListFeed(tr) {
   let total = 0; const byItem = {};
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')];
+  const rows = entryRows();
   for (const r of rows) {
     if (r === tr) break;
     [['.feed-1', '.kgs-1'], ['.feed-2', '.kgs-2']].forEach(([fc, kc]) => {
@@ -739,7 +759,7 @@ get('supervisor').addEventListener('change', function () {
   get('farm').value = '';
   if (window.jQuery) jQuery(get('farm')).trigger('change.select2');
   fillBatchSelect(get('batch'), []); batchStartDate = null;
-  document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)').forEach(recomputeAge);
+  entryRows().forEach(recomputeAge);
   recomputeStockPreview();
   updateFeedFeedback();
 });
@@ -750,7 +770,7 @@ get('farm').addEventListener('change', function () {
   fetch(`{% url 'daily_entry_farm_lookup' %}?farm=${farmId}`).then(r => r.json()).then(data => {
     fillBatchSelect(get('batch'), data.batches);
     batchStartDate = data.start_date;
-    const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
+    const rows = entryRows();
     // Every row is dated from the farm's next entry date, one day apart —
     // not just the first. Guarding on rows.length === 1 left every other row
     // sitting on today, so a sheet started before the farm was picked, or a
@@ -775,7 +795,7 @@ get('batch').addEventListener('change', function () {
     .then(r => r.json()).then(data => {
       batchStartDate = data.start_date;
       nextEntryDate = data.next_date || null;
-      const rows = document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)');
+      const rows = entryRows();
       if (nextEntryDate) {
         rows.forEach((tr, i) => {
           const target = i ? addDaysISO(nextEntryDate, i) : nextEntryDate;
@@ -811,7 +831,7 @@ get('row-table').addEventListener('click', e => {
     e.target.closest('tr').remove(); refreshRowAddButtons(); updateFeedFeedback(); recomputeStockPreview();
   }
   if (e.target.closest('.add-row-inline')) {
-    const lastRow = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].pop();
+    const lastRow = entryRows().pop();
     const lastDate = lastRow ? lastRow.querySelector('.date').value : null;
     // Continue from the last row, or from the farm's next entry date when
     // there is no row yet — today is only right if neither is known.
@@ -835,7 +855,7 @@ get('single-batch-form').addEventListener('submit', function (e) {
   if (!farm) { alert('Select a Farm.'); return; }
   const batch = get('batch').value;
   if (!batch) { alert('Select a Batch.'); return; }
-  const rows = [...document.querySelectorAll('#row-table tbody tr:not(.feed-note-row)')].map(tr => ({
+  const rows = entryRows().map(tr => ({
     batch: batch,
     date: tr.querySelector('.date').value,
     mortality: tr.querySelector('.mortality').value,
