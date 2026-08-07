@@ -41,6 +41,8 @@ class FeedPlanTests(TestCase):
                                        category=feed_cat, standard_cost_per_unit=0)
         self.starter = Item.objects.create(item_code="ITM-0002", description="Starter Feed",
                                            category=feed_cat, standard_cost_per_unit=0)
+        self.finisher = Item.objects.create(item_code="ITM-0003", description="Finisher Feed",
+                                            category=feed_cat, standard_cost_per_unit=0)
         self.chick = Item.objects.create(item_code="CHK-001", description="Day Old Chick",
                                          category=chick_cat, standard_cost_per_unit=0)
 
@@ -59,6 +61,9 @@ class FeedPlanTests(TestCase):
         FeedPhaseLine.objects.create(master=master, seq_no=2, from_age=13, to_age=26,
                                      feed_item=self.starter, phase_code="ST",
                                      max_feed_qty=Decimal("1.200"), status="active")
+        FeedPhaseLine.objects.create(master=master, seq_no=3, from_age=27, to_age=None,
+                                     feed_item=self.finisher, phase_code="FN",
+                                     max_feed_qty=Decimal("1.500"), status="active")
 
         # 1,000 chicks placed.
         StockTransfer.objects.create(
@@ -94,11 +99,26 @@ class FeedPlanTests(TestCase):
         self.assertEqual(row["required_kg"], "400.00")
 
     def test_every_feed_in_the_program_is_reported_not_only_the_current_one(self):
-        """A supervisor ordering next week's feed needs the phase after this
+        """A supervisor ordering next week's feed needs the phases after this
         one, not just the one being fed today."""
         _row, payload = self.plan()
         self.assertEqual(sorted(r["name"] for r in payload["feed_plan"]),
-                         ["Pre-Starter Feed", "Starter Feed"])
+                         ["Finisher Feed", "Pre-Starter Feed", "Starter Feed"])
+
+    def test_the_feeds_are_listed_in_programme_order(self):
+        """A flock eats Pre-Starter, then Starter, then Finisher. Alphabetical
+        put Finisher first and made a sequence read as a jumble."""
+        _row, payload = self.plan()
+        self.assertEqual([r["name"] for r in payload["feed_plan"]],
+                         ["Pre-Starter Feed", "Starter Feed", "Finisher Feed"])
+
+    def test_the_starting_age_settles_a_tied_sequence(self):
+        """Lines sharing a sequence number still read in the order the flock
+        will eat them, rather than falling back to alphabetical."""
+        FeedPhaseLine.objects.filter(master__breed=self.breed).update(seq_no=1)
+        _row, payload = self.plan()
+        self.assertEqual([r["name"] for r in payload["feed_plan"]],
+                         ["Pre-Starter Feed", "Starter Feed", "Finisher Feed"])
 
     def test_the_requirement_follows_the_flock_down(self):
         """Birds that have died do not eat. The requirement is against what is

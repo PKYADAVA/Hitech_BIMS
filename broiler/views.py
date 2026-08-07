@@ -2196,8 +2196,16 @@ def resolve_feed_phase(batch, on_date, age_days):
         if not l.feed_item_id:
             continue
         e = phase_by_item.setdefault(str(l.feed_item_id),
-                                     {"name": l.feed_item.description, "ranges": [], "max": 0})
+                                     {"name": l.feed_item.description, "ranges": [], "max": 0,
+                                      "seq": l.seq_no, "from_age": l.from_age,
+                                      "priority": l.priority})
         e["ranges"].append([l.from_age, l.to_age])
+        # An item used by several lines keeps the earliest position: that is
+        # where it first enters the programme, and where a reader expects it.
+        if l.seq_no is not None and (e["seq"] is None or l.seq_no < e["seq"]):
+            e["seq"] = l.seq_no
+        if l.from_age is not None and (e["from_age"] is None or l.from_age < e["from_age"]):
+            e["from_age"] = l.from_age
         # Max Feed Qty (kg/bird) — the feed-quantity changeover trigger; keep the
         # largest cap if the item spans several phase lines.
         try:
@@ -2457,6 +2465,9 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
             feed_plan.append({
                 "item": item_id,
                 "name": info.get("name") or "",
+                "seq": info.get("seq"),
+                "from_age": info.get("from_age"),
+                "priority": info.get("priority"),
                 "cap_per_bird_kg": str(cap_per_bird),
                 "required_kg": str(required),
                 "sent_kg": str(sent),
@@ -2469,7 +2480,13 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
                 # Delivered beyond what the phase can use. Sitting on the farm.
                 "excess_kg": str((sent - required).quantize(Decimal("0.01"))) if sent > required else None,
             })
-        feed_plan.sort(key=lambda r: r["name"])
+        # Programme order, not alphabetical: a flock eats Pre-Starter, then
+        # Starter, then Finisher, and listing them F-P-S made a sequence read
+        # as a jumble. Sequence number first, then the age it starts at, with
+        # the name only to settle a tie.
+        feed_plan.sort(key=lambda r: (r["seq"] if r["seq"] is not None else 10**6,
+                                      r["from_age"] if r["from_age"] is not None else 10**6,
+                                      r["name"]))
 
         # Everything else with feed on hand at this farm, so the panel can say
         # what is actually in the store rather than only the phase's own items.
