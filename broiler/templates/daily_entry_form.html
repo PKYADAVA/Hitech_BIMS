@@ -78,31 +78,7 @@
   /* The advisory prose and the feed table sit side by side: the panel was
      already the full width of the grid with most of the right half empty,
      and stacking the feed figures as sentences ran it to four extra lines. */
-  /* The advisory prose and the feed table sit side by side. Neither side is
-     allowed to grow: this cell spans a grid far wider than the screen, and a
-     block that stretches to fill it either pushes the table off the right or
-     widens the grid's own columns to match. Both flow from the left instead,
-     so the pair sits inside the first screenful whatever the grid is doing. */
-  .fp-split { display:flex; gap:1rem; align-items:flex-start; flex-wrap:wrap; }
-  .fp-left { flex:0 1 auto; max-width:52rem; }
-  .fp-right { flex:0 1 auto; }
-  .fp-grid { display:grid; grid-template-columns:auto repeat(5, auto) auto;
-             gap:0 .55rem; font-size:.68rem; line-height:1.4; background:#fff;
-             border:1px solid #e2e8f0; border-radius:6px; padding:.3rem .5rem; }
-  .fp-grid > div { white-space:nowrap; }
-  .fp-head { color:#64748b; font-weight:600; font-size:.62rem;
-             text-transform:uppercase; letter-spacing:.02em;
-             border-bottom:1px solid #f1f5f9; padding-bottom:.15rem; }
-  .fp-num { text-align:right; }
-  /* Every figure in the grid is kilograms; saying so once per column beats
-     repeating "kg" on 20 numbers. */
-  .fp-unit { color:#94a3b8; font-weight:500; text-transform:none; }
-  .fp-flag { padding-left:.25rem; }
-  .fp-total { border-top:1px solid #e2e8f0; margin-top:.15rem;
-              padding-top:.15rem; font-weight:700; color:#0f172a; }
-  .fp-stock { font-size:.64rem; color:#475569; background:#f8fafc;
-              border:1px solid #e2e8f0; border-top:none;
-              border-radius:0 0 6px 6px; padding:.2rem .5rem; margin-top:-1px; }
+
   .dr-table tr.feed-note-row .text-muted { color:#475569 !important; }
   .dr-table tr.feed-note-row .text-muted strong { color:#1e293b; }
   .dr-status-pill { float:right; font-weight:700; font-size:.7rem; letter-spacing:.02em;
@@ -204,6 +180,7 @@
 {% endblock %}
 
 {% block js %}
+{% include 'broiler/_feed_plan_panel.html' %}
 <script>
 const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 const feedOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
@@ -557,127 +534,6 @@ function interpCurve(curve, key, target, out) {
   return curve[curve.length - 1][out];
 }
 
-
-// Per feed type: what the phase needs for this flock, what has reached the
-// farm, what has been fed, and what is left — recomputed as the kilos are
-// typed, so the balance on screen is the balance after this entry rather than
-// before it.
-//
-// A table rather than a run of sentences: it is five numbers about four feeds,
-// which as prose ran to four lines and pushed everything else down the page.
-// Set beside the advisory text, in the width the panel was already wasting.
-//
-// "Sent" is farm-level: a delivery is booked to the farm, not to a flock, and
-// the header says so rather than implying the figure is the batch's own.
-function feedPlanTable(tr) {
-  const plan = JSON.parse(tr.dataset.feedPlan || '[]');
-  const stock = JSON.parse(tr.dataset.farmFeedStock || '[]');
-  if (!plan.length && !stock.length) return '';
-
-  // What this row is about to feed, per item, so the numbers move as you type.
-  // Guarded: a row mid-construction has no selects yet, and throwing here
-  // aborts the whole notification — the row then shows no panel at all rather
-  // than a panel missing one line.
-  const typing = {};
-  [['.feed-1', '.kgs-1'], ['.feed-2', '.kgs-2']].forEach(([fc, kc]) => {
-    const sel = tr.querySelector(fc), box = tr.querySelector(kc);
-    if (!sel || !box) return;
-    const id = sel.value;
-    const kg = Number(box.value) || 0;
-    if (id && kg) typing[id] = (typing[id] || 0) + kg;
-  });
-
-  // Birds booked as lost on this row are not going to eat, so the requirement
-  // is measured against the flock this entry leaves behind rather than the one
-  // the server last saw.
-  const lostNow = (Number(tr.querySelector('.mortality')?.value) || 0)
-                + (Number(tr.querySelector('.culls')?.value) || 0);
-  const birdsNow = Math.max((parseInt(tr.dataset.liveBirds || '0', 10) || 0) - lostNow, 0);
-
-  const cell = (v, cls) => `<div class="fp-num ${cls || ''}">${v.toFixed(1)}</div>`;
-  // Summed as the rows are built: the whole flock's feed, which is the figure
-  // an order is actually placed against.
-  const sum = { required: 0, sent: 0, fed: 0, balance: 0, remaining: 0 };
-  const body = plan.map(p => {
-    const now = typing[String(p.item)] || 0;
-    const fed = Number(p.fed_kg) + now;
-    // Recomputed from the cap rather than taken as sent, so it tracks the
-    // flock as the row is filled in.
-    const required = Number(p.cap_per_bird_kg) * birdsNow;
-    const balance = Number(p.sent_kg) - fed;
-    const remaining = required - fed;
-    const over = Number(p.sent_kg) - required;
-
-    // One flag per row, worst first: fed feed that never arrived, fed past the
-    // phase cap, or more delivered than the phase can use.
-    let flag = '';
-    if (balance < 0) flag = `<span class="text-danger" title="Fed but never received">${Math.abs(balance).toFixed(0)} unreceived</span>`;
-    else if (remaining < 0) flag = `<span class="text-danger" title="Past the phase cap">${Math.abs(remaining).toFixed(0)} over cap</span>`;
-    else if (over > 0) flag = `<span class="text-warning-emphasis" title="Sent beyond this phase's requirement">${over.toFixed(0)} extra sent</span>`;
-
-    sum.required += required; sum.sent += Number(p.sent_kg); sum.fed += fed;
-    sum.balance += balance; sum.remaining += remaining;
-
-    return `<div class="fp-name">${escapeHtml(p.name)}</div>`
-      + cell(required)
-      + cell(Number(p.sent_kg))
-      + cell(fed)
-      + cell(balance, balance < 0 ? 'text-danger fw-bold' : '')
-      + cell(remaining, remaining < 0 ? 'text-danger fw-bold' : '')
-      + `<div class="fp-flag">${flag}</div>`;
-  }).join('');
-
-  const stockLine = stock.length ? `<div class="fp-stock">
-      <i class="fas fa-warehouse me-1"></i>On the farm now:
-      ${stock.map(x => `${escapeHtml(x.name)} <strong class="${Number(x.kg) < 0 ? 'text-danger' : ''}">${Number(x.kg).toFixed(1)}</strong>`).join(' &middot; ')} kg
-    </div>` : '';
-
-  // Divs, not a table: this sits inside the grid's own <tbody>, and every
-  // selector on the page is `#row-table tbody tr`, which matches descendants
-  // at any depth. A nested <table> made each of its rows look like a data row
-  // — the submit payload, the totals and the per-row hints all counted them.
-  return `<div class="fp-grid">
-      <div class="fp-head">Feed</div>
-      <div class="fp-head fp-num">Required <span class="fp-unit">kg</span></div>
-      <div class="fp-head fp-num">Sent <span class="fp-unit">kg</span></div>
-      <div class="fp-head fp-num">Fed <span class="fp-unit">kg</span></div>
-      <div class="fp-head fp-num">Balance <span class="fp-unit">kg</span></div>
-      <div class="fp-head fp-num">To feed <span class="fp-unit">kg</span></div>
-      <div class="fp-head"></div>
-      ${body}
-      <div class="fp-total fp-name">All feed</div>
-      <div class="fp-total fp-num">${sum.required.toFixed(1)}</div>
-      <div class="fp-total fp-num">${sum.sent.toFixed(1)}</div>
-      <div class="fp-total fp-num">${sum.fed.toFixed(1)}</div>
-      <div class="fp-total fp-num ${sum.balance < 0 ? 'text-danger' : ''}">${sum.balance.toFixed(1)}</div>
-      <div class="fp-total fp-num">${sum.remaining.toFixed(1)}</div>
-      <div class="fp-total"></div>
-    </div>${stockLine}`;
-}
-
-
-// The two derived bird columns. Opening is the flock the server counted as of
-// this entry's date; closing is that less the losses this row books, so the
-// pair reads as the day's movement rather than leaving it to be worked out.
-//
-// Both are display-only — the server derives the flock from the placements and
-// the entries themselves, and nothing here is submitted.
-function updateBirdStock(tr) {
-  const opening = parseInt(tr.dataset.liveBirds || '', 10);
-  const openBox = tr.querySelector('.opening-birds');
-  const closeBox = tr.querySelector('.closing-birds');
-  if (!openBox || !closeBox) return;
-  if (isNaN(opening)) { openBox.value = ''; closeBox.value = ''; return; }
-  const lost = (Number(tr.querySelector('.mortality')?.value) || 0)
-             + (Number(tr.querySelector('.culls')?.value) || 0);
-  openBox.value = opening;
-  const closing = opening - lost;
-  closeBox.value = closing;
-  // More birds booked lost than are alive: the count cannot go below zero, and
-  // the entry is wrong rather than the flock being negative.
-  closeBox.classList.toggle('text-danger', closing < 0);
-  closeBox.classList.toggle('fw-bold', closing < 0);
-}
 
 function totalFeed(tr) {
   return (parseFloat(tr.querySelector('.kgs-1').value || '0')) + (parseFloat(tr.querySelector('.kgs-2').value || '0'));

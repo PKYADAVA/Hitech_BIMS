@@ -142,8 +142,10 @@
             <tr>
               <th class="c-fit m-short">Age</th>
               <th class="c-fit m-date ds-mid">Date</th>
+              <th class="c-num m-num ds-num">Opening Birds</th>
               <th class="c-fit m-short">Mortality</th>
               <th class="c-fit m-short">Culls</th>
+              <th class="c-num m-num ds-num">Closing Birds</th>
               <th class="c-fit m-short fg1">Feed 1</th>
               <th class="c-num m-num ds-num fg1">Stock-1</th>
               <th class="c-fit m-short fg1">Kgs</th>
@@ -176,6 +178,7 @@
 {% endblock %}
 
 {% block js %}
+{% include 'broiler/_feed_plan_panel.html' %}
 <script>
 const feedOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const allFarmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
@@ -257,8 +260,12 @@ function row(dateVal) {
   tr.innerHTML = `
     <td><input class="form-control bg-light age" readonly></td>
     <td><input class="form-control date" type="date" value="${dateVal || TODAY}" max="${TODAY}"></td>
+    <td><input class="form-control bg-light opening-birds" readonly placeholder="auto"
+               title="Live birds at the start of this day"></td>
     <td><input class="form-control mortality" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control culls" type="number" min="0" step="1" value="0"></td>
+    <td><input class="form-control bg-light closing-birds" readonly placeholder="auto"
+               title="Opening less this row's mortality and culls"></td>
     <td class="fg1"><select class="form-select feed-1">${feedOptions}</select><div class="phase-hint small mt-1"></div></td>
     <td class="fg1"><input class="form-control bg-light stock-1" readonly placeholder="auto"></td>
     <td class="fg1"><input class="form-control kgs-1" type="number" min="0" step=".01" value="0"><div class="feed-warn small mt-1"></div></td>
@@ -375,6 +382,9 @@ function applyFeedPhase(tr, data) {
   tr.dataset.consumedTotal = (data.consumed_total_kg ?? '');
   tr.dataset.perBirdActual = (data.consumed_per_bird_actual_g ?? '');
   tr.dataset.liveBirds = data.live_birds || 0;
+  tr.dataset.feedPlan = JSON.stringify(data.feed_plan || []);
+  tr.dataset.farmFeedStock = JSON.stringify(data.farm_feed_stock || []);
+  updateBirdStock(tr);   // needs liveBirds, so it follows it
   tr.dataset.expectName = (cur && cur.phase_name) || '';
   tr.dataset.nextFeed   = (cur && cur.next_feed_item) || '';
   tr.dataset.nextName   = (cur && cur.next_name) || '';
@@ -416,16 +426,21 @@ function updateFeedFeedback() {
     const statusClass = n.status === 'warn' ? 'feed-note-warn' : n.status === 'near' ? 'feed-note-near' : 'feed-note-ok';
     const statusLabel = n.status === 'warn' ? 'Needs Review' : n.status === 'near' ? 'Near Limit' : 'Within Standard';
     note.className = 'feed-note-row ' + statusClass;
-    note.innerHTML = `<td colspan="13" class="small">
-        <span class="dr-status-pill">${statusLabel}</span>
-        <i class="fas fa-seedling me-1 text-muted"></i>${n.head}
-        <span class="ms-2">${n.parts.join(' &nbsp;|&nbsp; ')}</span>
-        <span class="ms-2">${n.totalLine}</span>
-        ${n.weightLine ? `<span class="ms-2">${n.weightLine}</span>` : ''}
-        ${n.crossLine ? `<div class="mt-1">${n.crossLine}</div>` : ''}
-        ${n.consumedLine ? `<div>${n.consumedLine}</div>` : ''}
-        ${n.actualLine ? `<div>${n.actualLine}</div>` : ''}
-        ${n.capLine || ''}
+    note.innerHTML = `<td colspan="15" class="small">
+      <div class="fp-split">
+        <div class="fp-left">
+          <span class="dr-status-pill">${statusLabel}</span>
+          <i class="fas fa-seedling me-1 text-muted"></i>${n.head}
+          <span class="ms-2">${n.parts.join(' &nbsp;|&nbsp; ')}</span>
+          <span class="ms-2">${n.totalLine}</span>
+          ${n.weightLine ? `<span class="ms-2">${n.weightLine}</span>` : ''}
+          ${n.crossLine ? `<div class="mt-1">${n.crossLine}</div>` : ''}
+          ${n.consumedLine ? `<div>${n.consumedLine}</div>` : ''}
+          ${n.actualLine ? `<div>${n.actualLine}</div>` : ''}
+          ${n.capLine || ''}
+        </div>
+        ${n.planTable ? `<div class="fp-right">${n.planTable}</div>` : ''}
+      </div>
       </td>`;
     tr.after(note);
   });
@@ -626,7 +641,12 @@ function slotHint(tr, feedCls, hintCls, age) {
 }
 
 function rowNotification(tr) {
-  if (!tr.dataset.stdFeed && !tr.dataset.expectName && !tr.dataset.stdWeight && !tr.dataset.stdNote) return null;
+  // Worth showing on the feed plan alone: a flock past the end of its breed
+  // curve still has feed figures, and used to get nothing at all.
+  const hasPlan = (tr.dataset.feedPlan || '[]') !== '[]'
+               || (tr.dataset.farmFeedStock || '[]') !== '[]';
+  if (!hasPlan && !tr.dataset.stdFeed && !tr.dataset.expectName
+      && !tr.dataset.stdWeight && !tr.dataset.stdNote) return null;
   if (!value('farm')) return null;
   const age = parseInt(tr.dataset.ageDays || '-1', 10);
   const std = parseFloat(tr.dataset.stdFeed || '');
@@ -747,10 +767,12 @@ function rowNotification(tr) {
   }
 
   const capLine = capProgressLine(tr);
+  const planTable = feedPlanTable(tr);
 
   const dateVal = tr.querySelector('.date').value || '';
   const head = `<strong>Age ${age}</strong> <span class="text-muted">· ${escapeHtml(dateVal)} · Phase: ${escapeHtml(expectName || '—')}</span>`;
-  return { head, parts, totalLine, weightLine, crossLine, consumedLine, actualLine, capLine, issues, status };
+  return { head, parts, totalLine, weightLine, crossLine, consumedLine, actualLine,
+           planTable, capLine, issues, status };
 }
 
 // ===== Wiring =====
@@ -816,7 +838,13 @@ get('row-table').addEventListener('input', e => {
   }
   else if (e.target.classList.contains('kgs-1') || e.target.classList.contains('kgs-2')) { updateFeedFeedback(); recomputeStockPreview(); }
   else if (e.target.classList.contains('avg-wt')) { updateFeedFeedback(); }
-  else if (e.target.classList.contains('mortality') || e.target.classList.contains('culls')) { updateSummary(); }
+  else if (e.target.classList.contains('mortality') || e.target.classList.contains('culls')) {
+    // Losses booked here change the flock the feed requirement is measured
+    // against, and the closing count beside them.
+    updateBirdStock(e.target.closest('tr'));
+    updateFeedFeedback();
+    updateSummary();
+  }
 });
 
 get('row-table').addEventListener('change', e => {
@@ -842,7 +870,23 @@ get('row-table').addEventListener('click', e => {
       alert('This flock is already recorded up to today. There is no further day to add.');
       return;
     }
-    row(nextDate);
+    const fresh = row(nextDate);
+    // A new day on the same flock is nearly always the same feed as the day
+    // before. Carrying the selections over means adding a week of entries is
+    // typing seven quantities rather than re-picking the feed seven times; the
+    // quantities themselves start empty, because those are what differ.
+    //
+    // Losses are deliberately not carried: repeating yesterday's mortality is
+    // a wrong entry that looks like a filled-in one.
+    if (lastRow && fresh) {
+      ['.feed-1', '.feed-2'].forEach(cls => {
+        const from = lastRow.querySelector(cls), to = fresh.querySelector(cls);
+        if (from && to && from.value) {
+          to.value = from.value;
+          to.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    }
     recomputeStockPreview();
   }
 });
