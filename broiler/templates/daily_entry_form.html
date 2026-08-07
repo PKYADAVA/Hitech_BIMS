@@ -94,6 +94,9 @@
              text-transform:uppercase; letter-spacing:.02em;
              border-bottom:1px solid #f1f5f9; padding-bottom:.15rem; }
   .fp-num { text-align:right; }
+  /* Every figure in the grid is kilograms; saying so once per column beats
+     repeating "kg" on 20 numbers. */
+  .fp-unit { color:#94a3b8; font-weight:500; text-transform:none; }
   .fp-flag { padding-left:.25rem; }
   .fp-total { border-top:1px solid #e2e8f0; margin-top:.15rem;
               padding-top:.15rem; font-weight:700; color:#0f172a; }
@@ -627,9 +630,12 @@ function feedPlanTable(tr) {
   // at any depth. A nested <table> made each of its rows look like a data row
   // — the submit payload, the totals and the per-row hints all counted them.
   return `<div class="fp-grid">
-      <div class="fp-head">Feed</div><div class="fp-head fp-num">Required</div>
-      <div class="fp-head fp-num">Sent</div><div class="fp-head fp-num">Fed</div>
-      <div class="fp-head fp-num">Balance</div><div class="fp-head fp-num">To feed</div>
+      <div class="fp-head">Feed</div>
+      <div class="fp-head fp-num">Required <span class="fp-unit">kg</span></div>
+      <div class="fp-head fp-num">Sent <span class="fp-unit">kg</span></div>
+      <div class="fp-head fp-num">Fed <span class="fp-unit">kg</span></div>
+      <div class="fp-head fp-num">Balance <span class="fp-unit">kg</span></div>
+      <div class="fp-head fp-num">To feed <span class="fp-unit">kg</span></div>
       <div class="fp-head"></div>
       ${body}
       <div class="fp-total fp-name">All feed</div>

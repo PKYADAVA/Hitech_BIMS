@@ -88,6 +88,26 @@ export interface DailyEntryLookup {
   consumed_total_kg: string | null;
   consumed_per_bird_actual_g: string | null;
   live_birds: number;
+  /** Per feed type: what this phase needs for the flock, what has reached the
+   *  farm, and what is left. Optional — an older server does not send it, and
+   *  the panel simply omits the lines. */
+  feed_plan?: FeedPlanRow[];
+  /** What feed is actually on hand at the farm, whatever phase it belongs to. */
+  farm_feed_stock?: { item: number; name: string; kg: string }[];
+}
+
+/** One feed type's position for this flock. `sent` is farm-level — a delivery
+ *  is booked to the farm, not to a flock — which the wording reflects. */
+export interface FeedPlanRow {
+  item: number;
+  name: string;
+  cap_per_bird_kg: string;
+  required_kg: string;
+  sent_kg: string;
+  fed_kg: string;
+  balance_kg: string;
+  remaining_kg: string;
+  excess_kg: string | null;
 }
 
 export type Tone = "ok" | "warn" | "bad" | "info";
@@ -474,6 +494,51 @@ export function adviseDailyEntry(
         issues.push(`${name} stock goes negative (${closing.toFixed(2)} kg) — check the quantity`);
       }
     }
+  }
+
+  // What each feed type still needs, and whether enough has been sent. The
+  // three questions asked standing at the shed — how much more does this flock
+  // need, has it arrived, and is any of it sitting unused — recomputed against
+  // what is being typed so the balance is the one after this entry.
+  // Birds booked as lost on this entry are not going to eat, so the
+  // requirement is measured against the flock this entry leaves behind rather
+  // than the one the server last saw.
+  const lostNow = (Number(values.mortality) || 0) + (Number(values.culls) || 0);
+  const birdsNow = Math.max(lookup.live_birds - lostNow, 0);
+
+  for (const row of lookup.feed_plan ?? []) {
+    const typed =
+      (values.feed_1 === String(row.item) ? qty1 : 0) +
+      (values.feed_2 === String(row.item) ? qty2 : 0);
+    const fed = num(row.fed_kg) + typed;
+    const required = num(row.cap_per_bird_kg) * birdsNow;
+    const balance = num(row.sent_kg) - fed;
+    const remaining = required - fed;
+    const over = num(row.sent_kg) - required;
+
+    let text =
+      `${row.name}: needs ${required.toFixed(1)} kg · ` +
+      `sent ${num(row.sent_kg).toFixed(1)} · fed ${fed.toFixed(1)} · ` +
+      `balance ${balance.toFixed(1)} kg`;
+    if (remaining >= 0) {
+      text += ` · ${remaining.toFixed(1)} kg still to feed`;
+    } else {
+      text += ` · over the phase cap by ${Math.abs(remaining).toFixed(1)} kg`;
+    }
+    if (over > 0) text += ` · ${over.toFixed(1)} kg sent beyond requirement`;
+    if (balance < 0) text += ` · ${Math.abs(balance).toFixed(1)} kg fed but never received`;
+
+    notes.push({ tone: balance < 0 || remaining < 0 ? "bad" : "info", text });
+  }
+
+  const stock = lookup.farm_feed_stock ?? [];
+  if (stock.length) {
+    notes.push({
+      tone: stock.some((x) => num(x.kg) < 0) ? "bad" : "info",
+      text:
+        "Farm feed stock: " +
+        stock.map((x) => `${x.name} ${num(x.kg).toFixed(1)} kg`).join(" · "),
+    });
   }
 
   // The changeover gauge: the first selected item that carries a kg/bird cap,
