@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -390,20 +391,27 @@ class StockTransfer(models.Model):
 
     @staticmethod
     def previous_stock(location_type, location_id, item_id, before_date, before_id):
-        """Closing stock of the most recent prior transfer out of this
-        source location (Warehouse or Farm) for this item, ordered by date
-        then id (0 if none)."""
+        """What the source location holds, before this transfer is counted.
+
+        Everything that reached it, less what earlier transfers have already
+        taken out. It used to chain from zero over prior transfers alone, so a
+        warehouse that had received 5,070 chicks showed its outflows as a
+        growing negative instead of a falling balance.
+        """
         if not location_type or not location_id or not item_id:
             return 0
+        from inventory.services.item_summary import balance_excluding
+
         filters = {"from_location_type": location_type, "item_id": item_id}
         filters["from_farm_id" if location_type == "farm" else "from_warehouse_id"] = location_id
         if before_id:
             date_filter = models.Q(date__lt=before_date) | (models.Q(date=before_date) & models.Q(id__lt=before_id))
         else:
             date_filter = models.Q(date__lte=before_date)
-        row = (StockTransfer.objects.filter(**filters)
-               .filter(date_filter).order_by('-date', '-id').first())
-        return row.stock if row else 0
+        taken = (StockTransfer.objects.filter(**filters).filter(date_filter)
+                 .aggregate(total=models.Sum("quantity"))["total"] or Decimal("0"))
+        return balance_excluding(location_type, location_id, item_id,
+                                 before_date, {"stock_transfer_out"}) - taken
 
 
 class MedicineTransfer(models.Model):
@@ -525,11 +533,14 @@ class MedicineTransferItem(models.Model):
 
     @staticmethod
     def previous_stock(location_type, location_id, item_id, before_date, before_id):
-        """Closing stock of the most recent prior line moved out of this
-        source location (Warehouse or Farm) for this item, ordered by the
-        header's date then this line's id (0 if none)."""
+        """What the source location holds, before this line is counted.
+
+        Same correction as StockTransfer.previous_stock, for the same reason.
+        """
         if not location_type or not location_id or not item_id:
             return 0
+        from inventory.services.item_summary import balance_excluding
+
         filters = {"transfer__from_location_type": location_type, "item_id": item_id}
         filters["transfer__from_farm_id" if location_type == "farm" else "transfer__from_warehouse_id"] = location_id
         if before_id:
@@ -537,9 +548,10 @@ class MedicineTransferItem(models.Model):
                            | (models.Q(transfer__date=before_date) & models.Q(id__lt=before_id)))
         else:
             date_filter = models.Q(transfer__date__lte=before_date)
-        row = (MedicineTransferItem.objects.filter(**filters)
-               .filter(date_filter).order_by('-transfer__date', '-id').first())
-        return row.stock if row else 0
+        taken = (MedicineTransferItem.objects.filter(**filters).filter(date_filter)
+                 .aggregate(total=models.Sum("quantity"))["total"] or Decimal("0"))
+        return balance_excluding(location_type, location_id, item_id,
+                                 before_date, {"medicine_transfer_out"}) - taken
 
 
 class InventoryAdjustment(models.Model):
@@ -647,11 +659,15 @@ class InventoryAdjustmentItem(models.Model):
 
     @staticmethod
     def previous_stock(location_type, location_id, item_id, before_date, before_id):
-        """Closing stock of the most recent prior line at this location
-        (Warehouse or Farm) for this item, ordered by the header's date
-        then this line's id (0 if none)."""
+        """What the location holds, before this adjustment line is counted.
+
+        Same correction as StockTransfer.previous_stock. Adjustments move both
+        ways, so what earlier lines did is netted rather than summed.
+        """
         if not location_type or not location_id or not item_id:
             return 0
+        from inventory.services.item_summary import balance_excluding
+
         filters = {"adjustment__location_type": location_type, "item_id": item_id}
         filters["adjustment__farm_id" if location_type == "farm" else "adjustment__warehouse_id"] = location_id
         if before_id:
@@ -659,9 +675,11 @@ class InventoryAdjustmentItem(models.Model):
                            | (models.Q(adjustment__date=before_date) & models.Q(id__lt=before_id)))
         else:
             date_filter = models.Q(adjustment__date__lte=before_date)
-        row = (InventoryAdjustmentItem.objects.filter(**filters)
-               .filter(date_filter).order_by('-adjustment__date', '-id').first())
-        return row.stock if row else 0
+        applied = Decimal("0")
+        for row in InventoryAdjustmentItem.objects.filter(**filters).filter(date_filter):
+            applied += row.signed_quantity
+        return balance_excluding(location_type, location_id, item_id,
+                                 before_date, {"adjustment"}) + applied
 
 
 class StockIssue(models.Model):

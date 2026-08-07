@@ -2423,6 +2423,69 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     breed = batch.breed if batch and batch.breed_id else None
     counts = _flock_counts(batch, as_of=entry_date) if batch else _flock_counts(None)
 
+    # --- Feed plan: what this phase needs, what has reached the farm, what is
+    # left. The three questions a supervisor asks standing at the shed, and the
+    # three the form could not answer: how much of this feed does the batch
+    # still need, has enough been sent, and is any of it sitting unused.
+    #
+    # "Sent" is farm-level, because a delivery is booked to the farm and not to
+    # a flock; the label on the form says so rather than implying otherwise.
+    feed_plan, farm_feed_stock = [], []
+    if batch:
+        from inventory.services.item_summary import farm_receipts_balance
+
+        live = counts["live"] or 0
+        # Every feed item this phase master names for the flock's current age,
+        # plus the changeover it is heading into — the two a supervisor is
+        # deciding between when a phase is about to end.
+        wanted = {}
+        if phase:
+            for item_id, info in (phase.get("phase_by_item") or {}).items():
+                wanted[int(item_id)] = info
+        fed_by_item = {}
+        for de in DailyEntry.objects.filter(batch=batch, date__lt=entry_date):
+            if de.feed_1_id:
+                fed_by_item[de.feed_1_id] = fed_by_item.get(de.feed_1_id, Decimal("0")) + _num(de.feed_1_qty)
+            if de.feed_2_id:
+                fed_by_item[de.feed_2_id] = fed_by_item.get(de.feed_2_id, Decimal("0")) + _num(de.feed_2_qty)
+
+        for item_id, info in wanted.items():
+            cap_per_bird = Decimal(str(info.get("max") or 0))
+            required = (cap_per_bird * Decimal(live)).quantize(Decimal("0.01"))
+            sent = _num(farm_receipts_balance(farm_id, item_id, entry_date)).quantize(Decimal("0.01"))
+            fed = fed_by_item.get(item_id, Decimal("0")).quantize(Decimal("0.01"))
+            feed_plan.append({
+                "item": item_id,
+                "name": info.get("name") or "",
+                "cap_per_bird_kg": str(cap_per_bird),
+                "required_kg": str(required),
+                "sent_kg": str(sent),
+                "fed_kg": str(fed),
+                # What is left at the farm of this feed: delivered less eaten.
+                "balance_kg": str((sent - fed).quantize(Decimal("0.01"))),
+                # Still to feed against the phase's cap. Negative means the cap
+                # has already been passed, which the panel says outright.
+                "remaining_kg": str((required - fed).quantize(Decimal("0.01"))),
+                # Delivered beyond what the phase can use. Sitting on the farm.
+                "excess_kg": str((sent - required).quantize(Decimal("0.01"))) if sent > required else None,
+            })
+        feed_plan.sort(key=lambda r: r["name"])
+
+        # Everything else with feed on hand at this farm, so the panel can say
+        # what is actually in the store rather than only the phase's own items.
+        for item in feed_items():
+            bal = _num(farm_receipts_balance(farm_id, item.id, entry_date))
+            used = Decimal("0")
+            for de in DailyEntry.objects.filter(farm_id=farm_id, date__lte=entry_date):
+                if de.feed_1_id == item.id:
+                    used += _num(de.feed_1_qty)
+                if de.feed_2_id == item.id:
+                    used += _num(de.feed_2_qty)
+            on_hand = (bal - used).quantize(Decimal("0.01"))
+            if on_hand:
+                farm_feed_stock.append({"item": item.id, "name": item.description,
+                                        "kg": str(on_hand)})
+
     return {
         "batch": batch.id if batch else None,
         "batch_name": batch.batch_name if batch else "",
@@ -2454,6 +2517,8 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         "consumed_total_kg": consumed_total_kg,
         "consumed_per_bird_actual_g": consumed_per_bird_actual_g,
         "live_birds": counts["live"],
+        "feed_plan": feed_plan,
+        "farm_feed_stock": farm_feed_stock,
     }
 
 
@@ -2537,7 +2602,7 @@ def _recompute_medicine_stock_chain(farm_id, item_id):
     See _recompute_stock_chain (Daily Entry) for the full rationale."""
     if not farm_id or not item_id:
         return
-    from inventory.services.item_summary import farm_receipts_balance
+    from inventory.services.item_summary import farm_medicine_balance
 
     qs = (MedicineVaccineEntry.objects.filter(farm_id=farm_id, item_id=item_id)
           .order_by('date', 'id'))
@@ -2545,7 +2610,7 @@ def _recompute_medicine_stock_chain(farm_id, item_id):
     receipts_on = {}
     for r in qs:
         if r.date not in receipts_on:
-            receipts_on[r.date] = farm_receipts_balance(farm_id, item_id, r.date)
+            receipts_on[r.date] = farm_medicine_balance(farm_id, item_id, r.date)
         used += r.qty or 0
         closing = receipts_on[r.date] - used
         if r.stock != closing:

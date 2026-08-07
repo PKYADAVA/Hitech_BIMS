@@ -28,15 +28,15 @@ def _d(v):
 
 
 def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
-             location_type=None, location_id=None, farm_consumption=True):
+             location_type=None, location_id=None, exclude_sources=()):
     """All stock movements as dicts, newest-last. ``to_date`` caps the replay;
     ``from_date`` is *not* applied here because everything before it forms the
     opening balance.
 
-    ``farm_consumption=False`` leaves out the farm's own daily-entry feed and
-    medicine issues. The daily-entry grid chains those itself, row by row, and
-    needs the balance they are drawn *from* — counting them here as well would
-    subtract every one of them twice.
+    ``exclude_sources`` leaves named movement kinds out (see SOURCES). Every
+    document that keeps a running stock column chains its *own* movements
+    itself, row by row, and needs the balance those are drawn *from* —
+    counting them here as well would subtract each of them twice.
     """
     from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
     from inventory.models import (StockTransfer, StockReceiveItem, StockIssueItem,
@@ -46,7 +46,8 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
 
     moves = []
 
-    def add(date, loc_type, loc_id, item_pk, direction, qty, cost=None, order=0):
+    def add(date, loc_type, loc_id, item_pk, direction, qty, cost=None, order=0,
+            src=""):
         qty = _d(qty)
         if not date or not loc_id or not item_pk or qty <= 0:
             return
@@ -54,8 +55,11 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
             return
         if location_type and (loc_type != location_type or str(loc_id) != str(location_id)):
             return
+        if src in exclude_sources:
+            return
         moves.append({"date": date, "loc": (loc_type, loc_id), "item": item_pk,
-                      "dir": direction, "qty": qty, "cost": _d(cost), "order": order})
+                      "dir": direction, "qty": qty, "cost": _d(cost),
+                      "order": order, "src": src})
 
     def scope(qs, field="item_id"):
         if item_id:
@@ -70,31 +74,32 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
         # rcv_qty alone loses every purchase entered on the Sent basis.
         qty = _d(r.effective_qty()) + _d(r.free_qty)
         cost = (_d(r.amount) / qty) if (qty > 0 and r.amount) else _d(r.rate)
-        add(r.purchase.date, "warehouse", r.farm_warehouse_id, r.item_id, "in", qty, cost, 0)
+        add(r.purchase.date, "warehouse", r.farm_warehouse_id, r.item_id, "in", qty, cost, 0, src="purchase")
 
     for r in scope(StockTransfer.objects.all()):
         to_id = r.to_farm_id if r.to_location_type == "farm" else r.to_warehouse_id
-        add(r.date, r.to_location_type, to_id, r.item_id, "in", r.quantity, r.rate, 1)
+        add(r.date, r.to_location_type, to_id, r.item_id, "in", r.quantity, r.rate, 1, src="stock_transfer_in")
         from_id = r.from_farm_id if r.from_location_type == "farm" else r.from_warehouse_id
-        add(r.date, r.from_location_type, from_id, r.item_id, "out", r.quantity, None, 5)
+        add(r.date, r.from_location_type, from_id, r.item_id, "out", r.quantity, None, 5, src="stock_transfer_out")
 
     for r in scope(StockReceiveItem.objects.all()).select_related("receive"):
         loc_id = r.farm_id if r.location_type == "farm" else r.warehouse_id
-        add(r.receive.date, r.location_type, loc_id, r.item_id, "in", r.quantity, r.rate, 2)
+        add(r.receive.date, r.location_type, loc_id, r.item_id, "in", r.quantity, r.rate, 2, src="stock_receive")
 
     for r in scope(InventoryAdjustmentItem.objects.all()).select_related("adjustment"):
         adj = r.adjustment
         loc_id = adj.farm_id if adj.location_type == "farm" else adj.warehouse_id
         direction = "in" if r.adjustment_type == "Add" else "out"
         add(adj.date, adj.location_type, loc_id, r.item_id, direction, r.quantity,
-            r.rate if direction == "in" else None, 3 if direction == "in" else 6)
+            r.rate if direction == "in" else None,
+            3 if direction == "in" else 6, src="adjustment")
 
     for r in scope(MedicineTransferItem.objects.all()).select_related("transfer"):
         t = r.transfer
         to_id = t.to_farm_id if t.to_location_type == "farm" else t.to_warehouse_id
-        add(t.date, t.to_location_type, to_id, r.item_id, "in", r.quantity, r.rate, 4)
+        add(t.date, t.to_location_type, to_id, r.item_id, "in", r.quantity, r.rate, 4, src="medicine_transfer_in")
         from_id = t.from_farm_id if t.from_location_type == "farm" else t.from_warehouse_id
-        add(t.date, t.from_location_type, from_id, r.item_id, "out", r.quantity, None, 7)
+        add(t.date, t.from_location_type, from_id, r.item_id, "out", r.quantity, None, 7, src="medicine_transfer_out")
 
     # Chicks Purchase: item lives on the header. total_qty is what physically
     # arrived (Received + Free); received_qty alone would drop the free chicks.
@@ -117,13 +122,9 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
     # ---------------- outflows ----------------
     for r in scope(StockIssueItem.objects.all()).select_related("issue"):
         loc_id = r.farm_id if r.location_type == "farm" else r.warehouse_id
-        add(r.issue.date, r.location_type, loc_id, r.item_id, "out", r.quantity, None, 8)
+        add(r.issue.date, r.location_type, loc_id, r.item_id, "out", r.quantity, None, 8, src="stock_issue")
 
     # Farm consumption: feed fed on a daily entry, and medicine/vaccine issued.
-    if not farm_consumption:
-        moves.sort(key=lambda m: (m["date"], m["order"]))
-        return moves
-
     daily = DailyEntry.objects.all()
     for r in daily:
         for item_pk, qty in ((r.feed_1_id, r.feed_1_qty), (r.feed_2_id, r.feed_2_qty)):
@@ -131,10 +132,10 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
                 continue
             if item_id and str(item_pk) != str(item_id):
                 continue
-            add(r.date, "farm", r.farm_id, item_pk, "out", qty, None, 9)
+            add(r.date, "farm", r.farm_id, item_pk, "out", qty, None, 9, src="daily_entry")
 
     for r in scope(MedicineVaccineEntry.objects.all()):
-        add(r.date, "farm", r.farm_id, r.item_id, "out", r.qty, None, 10)
+        add(r.date, "farm", r.farm_id, r.item_id, "out", r.qty, None, 10, src="medicine_entry")
 
     # Chick Sale (hatchery): total_qty left the stock point - sale_qty omits
     # mortality and culls, which physically left as well.
@@ -326,20 +327,48 @@ def location_item_stock(location_type, location_id, item_id, as_of_date=None):
     return balance
 
 
-def farm_receipts_balance(farm_id, item_id, as_of_date=None):
-    """What has been delivered to a farm, net of everything except its own
-    consumption entries.
+#: Every movement kind a running-stock column might need to leave out of its
+#: own opening balance. Named so a chain excludes itself by meaning rather than
+#: by guessing at a sort rank.
+SOURCES = {
+    "purchase", "stock_transfer_in", "stock_transfer_out", "stock_receive",
+    "adjustment", "medicine_transfer_in", "medicine_transfer_out",
+    "stock_issue", "daily_entry", "medicine_entry",
+}
 
-    The opening balance a daily entry's stock column should start from. It used
-    to start from zero, so a farm with 2,337 kg of Starter Feed delivered
-    showed 0, and the column drifted further negative with every day fed —
-    reporting consumption against receipts it could not see.
 
-    Consumption is left out because the caller subtracts it row by row: the
-    grid is a chain, and each row's opening is the one before it closing.
+def balance_excluding(location_type, location_id, item_id, as_of_date,
+                      exclude_sources):
+    """What a location holds of an item, ignoring one kind of movement.
+
+    Every document that keeps a running stock column — daily entries, stock
+    transfers, medicine transfers, adjustments — chains its own rows itself and
+    needs the balance those rows are drawn *from*. Each of them used to start
+    that chain at zero, which is not an opening balance but an assumption that
+    nothing had ever arrived: a farm sent 2,337 kg of feed showed 0, and a
+    warehouse that had received 5,070 chicks showed its outflows as a growing
+    negative.
+
+    The excluded kind is the caller's own, and it must be excluded or every one
+    of its rows is subtracted twice — once here and once by the chain.
     """
     balance = Z
-    for m in _collect(None, as_of_date, None, item_id, "farm", farm_id,
-                      farm_consumption=False):
+    for m in _collect(None, as_of_date, None, item_id, location_type,
+                      location_id, exclude_sources=set(exclude_sources)):
         balance = balance + m["qty"] if m["dir"] == "in" else balance - m["qty"]
     return balance
+
+
+def farm_receipts_balance(farm_id, item_id, as_of_date=None):
+    """A farm's balance of an item, ignoring what daily entries have fed.
+
+    The opening balance the Daily Entry stock column starts from.
+    """
+    return balance_excluding("farm", farm_id, item_id, as_of_date,
+                             {"daily_entry"})
+
+
+def farm_medicine_balance(farm_id, item_id, as_of_date=None):
+    """A farm's balance of an item, ignoring what medicine entries have used."""
+    return balance_excluding("farm", farm_id, item_id, as_of_date,
+                             {"medicine_entry"})

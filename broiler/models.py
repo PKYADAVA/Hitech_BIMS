@@ -1288,7 +1288,7 @@ class MedicineVaccineEntry(models.Model):
         """
         if not item_id:
             return 0
-        from inventory.services.item_summary import farm_receipts_balance
+        from inventory.services.item_summary import farm_medicine_balance
 
         if before_id:
             date_filter = models.Q(date__lt=before_date) | (models.Q(date=before_date) & models.Q(id__lt=before_id))
@@ -1297,7 +1297,7 @@ class MedicineVaccineEntry(models.Model):
         used = (MedicineVaccineEntry.objects
                 .filter(farm_id=farm_id, item_id=item_id).filter(date_filter)
                 .aggregate(total=models.Sum("qty"))["total"] or Decimal("0"))
-        return farm_receipts_balance(farm_id, item_id, before_date) - used
+        return farm_medicine_balance(farm_id, item_id, before_date) - used
 
 
 class BirdSale(models.Model):

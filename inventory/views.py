@@ -1032,19 +1032,27 @@ def _apply_stock_transfer_row(instance, row, user):
 
 def _recompute_stock_transfer_chain(location_type, location_id, item_id):
     """Recomputes running stock for every transfer out of this source
-    location (Warehouse or Farm) that touches item_id, walking
-    chronologically from an opening balance of 0 (see
-    StockTransfer.previous_stock)."""
+    location (Warehouse or Farm) that touches item_id, walking chronologically
+    from what the location actually holds (see StockTransfer.previous_stock).
+
+    Receipts are read per row, so stock arriving between two transfers shows on
+    the day it arrived rather than never."""
     if not location_type or not location_id or not item_id:
         return
+    from inventory.services.item_summary import balance_excluding
+
     filters = {"from_location_type": location_type, "item_id": item_id}
     filters["from_farm_id" if location_type == "farm" else "from_warehouse_id"] = location_id
     qs = StockTransfer.objects.filter(**filters).order_by('date', 'id')
-    running = Decimal('0')
+    taken, received_on = Decimal('0'), {}
     for r in qs:
-        running -= r.quantity
-        if r.stock != running:
-            r.stock = running
+        if r.date not in received_on:
+            received_on[r.date] = balance_excluding(
+                location_type, location_id, item_id, r.date, {"stock_transfer_out"})
+        taken += r.quantity or 0
+        closing = received_on[r.date] - taken
+        if r.stock != closing:
+            r.stock = closing
             r.save(update_fields=["stock"])
 
 
@@ -1356,18 +1364,25 @@ def _save_medicine_transfer_items(transfer, items_data):
 
 def _recompute_medicine_stock_chain(location_type, location_id, item_id):
     """Recomputes running stock for every line moved out of this source
-    location (Warehouse or Farm) that touches item_id, walking
-    chronologically from an opening balance of 0."""
+    location (Warehouse or Farm) that touches item_id, walking chronologically
+    from what the location actually holds. See _recompute_stock_transfer_chain."""
     if not location_type or not location_id or not item_id:
         return
+    from inventory.services.item_summary import balance_excluding
+
     filters = {"transfer__from_location_type": location_type, "item_id": item_id}
     filters["transfer__from_farm_id" if location_type == "farm" else "transfer__from_warehouse_id"] = location_id
     qs = MedicineTransferItem.objects.filter(**filters).order_by('transfer__date', 'id')
-    running = Decimal('0')
+    taken, received_on = Decimal('0'), {}
     for r in qs:
-        running -= r.quantity
-        if r.stock != running:
-            r.stock = running
+        on = r.transfer.date
+        if on not in received_on:
+            received_on[on] = balance_excluding(
+                location_type, location_id, item_id, on, {"medicine_transfer_out"})
+        taken += r.quantity or 0
+        closing = received_on[on] - taken
+        if r.stock != closing:
+            r.stock = closing
             r.save(update_fields=["stock"])
 
 
@@ -1745,19 +1760,28 @@ def _save_inventory_adjustment_items(adjustment, items_data):
 
 
 def _recompute_inventory_adjustment_chain(location_type, location_id, item_id):
-    """Recomputes running stock for every line at this location (Warehouse
-    or Farm) that touches item_id, walking chronologically from an opening
-    balance of 0."""
+    """Recomputes running stock for every line at this location (Warehouse or
+    Farm) that touches item_id, walking chronologically from what the location
+    actually holds. See _recompute_stock_transfer_chain.
+
+    Adjustments move both ways, so the chain nets rather than subtracts."""
     if not location_type or not location_id or not item_id:
         return
+    from inventory.services.item_summary import balance_excluding
+
     filters = {"adjustment__location_type": location_type, "item_id": item_id}
     filters["adjustment__farm_id" if location_type == "farm" else "adjustment__warehouse_id"] = location_id
     qs = InventoryAdjustmentItem.objects.filter(**filters).order_by('adjustment__date', 'id')
-    running = Decimal('0')
+    applied, held_on = Decimal('0'), {}
     for r in qs:
-        running += r.quantity if r.adjustment_type == 'Add' else -r.quantity
-        if r.stock != running:
-            r.stock = running
+        on = r.adjustment.date
+        if on not in held_on:
+            held_on[on] = balance_excluding(
+                location_type, location_id, item_id, on, {"adjustment"})
+        applied += r.signed_quantity
+        closing = held_on[on] + applied
+        if r.stock != closing:
+            r.stock = closing
             r.save(update_fields=["stock"])
 
 
