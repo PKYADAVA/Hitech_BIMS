@@ -20,9 +20,17 @@ const doc = DOCUMENTS["inventory-stock-transfers"];
 const item = stockTransferItem as jest.Mock;
 const stock = stockTransferStock as jest.Mock;
 
-const ROW = {
-  item: "14", date: "2026-08-01", from_type: "warehouse", from_id: "1",
-};
+/**
+ * A row as the screen actually holds one.
+ *
+ * Deliberately carries no date: this form keeps one Date in its header, and an
+ * earlier version of this test put it on the row instead. That fixture passed
+ * against a `derive` that read `row.date`, which on the real screen is always
+ * undefined — so the stock was never fetched and the box kept its placeholder,
+ * with a green test beside it.
+ */
+const ROW = { item: "14", from_type: "warehouse", from_id: "1" };
+const HEADER = { date: "2026-08-01" };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -32,7 +40,7 @@ beforeEach(() => {
 
 describe("stock transfer row", () => {
   it("fills the unit and the stock at the source", async () => {
-    const out = await doc.derive!.run(ROW, {});
+    const out = await doc.derive!.run(ROW, HEADER);
     expect(out.uom_label).toBe("Bag");
     expect(out.stock_label).toBe("1122.39");
   });
@@ -40,18 +48,31 @@ describe("stock transfer row", () => {
   it("asks the source for its own kind of location", async () => {
     // A transfer can start at a farm as well as a warehouse. Assuming a
     // warehouse would read the balance of whichever warehouse shares that id.
-    await doc.derive!.run({ ...ROW, from_type: "farm", from_id: "1" }, {});
+    await doc.derive!.run({ ...ROW, from_type: "farm", from_id: "1" }, HEADER);
     expect(stock).toHaveBeenCalledWith("farm", "1", "14", "2026-08-01");
   });
 
-  it("re-runs when the item, the source or the date moves", () => {
+  it("re-runs when the item or the source moves", () => {
     expect(doc.derive!.on).toEqual(
-      expect.arrayContaining(["item", "from_type", "from_id", "date"]));
+      expect.arrayContaining(["item", "from_type", "from_id"]));
+  });
+
+  it("takes the date from the header, where this form keeps it", async () => {
+    // The row has none. Reading row.date meant the balance was never asked
+    // for at all, and the box sat on "auto" however the row was filled in.
+    await doc.derive!.run(ROW, HEADER);
+    expect(stock).toHaveBeenCalledWith("warehouse", "1", "14", "2026-08-01");
+  });
+
+  it("waits for a date rather than asking for a balance without one", async () => {
+    const out = await doc.derive!.run(ROW, {});
+    expect(out.stock_label).toBeUndefined();
+    expect(stock).not.toHaveBeenCalled();
   });
 
   it("suggests the price master rate, and leaves a typed one alone", async () => {
-    expect((await doc.derive!.run(ROW, {})).rate).toBe("42.00");
-    const typed = await doc.derive!.run({ ...ROW, rate: "50" }, {});
+    expect((await doc.derive!.run(ROW, HEADER)).rate).toBe("42.00");
+    const typed = await doc.derive!.run({ ...ROW, rate: "50" }, HEADER);
     expect(typed.rate).toBeUndefined();
   });
 
@@ -60,16 +81,16 @@ describe("stock transfer row", () => {
     // someone recording a movement that has already happened.
     item.mockRejectedValue(new Error("offline"));
     stock.mockRejectedValue(new Error("offline"));
-    await expect(doc.derive!.run(ROW, {})).resolves.toEqual({});
+    await expect(doc.derive!.run(ROW, HEADER)).resolves.toEqual({});
   });
 
   it("does nothing at all until an item is chosen", async () => {
-    expect(await doc.derive!.run({ ...ROW, item: "" }, {})).toEqual({});
+    expect(await doc.derive!.run({ ...ROW, item: "" }, HEADER)).toEqual({});
     expect(stock).not.toHaveBeenCalled();
   });
 
   it("holds off on the stock until the source is known", async () => {
-    const out = await doc.derive!.run({ item: "14", date: "2026-08-01" }, {});
+    const out = await doc.derive!.run({ item: "14" }, HEADER);
     expect(out.uom_label).toBe("Bag");
     expect(out.stock_label).toBeUndefined();
     expect(stock).not.toHaveBeenCalled();

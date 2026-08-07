@@ -381,21 +381,25 @@ export const DOCUMENTS: Record<string, DocConfig> = {
      * for by the location's own type rather than assuming a warehouse.
      */
     derive: {
-      on: ["item", "from_type", "from_id", "date"],
-      run: async (row) => {
+      on: ["item", "from_type", "from_id"],
+      run: async (row, header) => {
         const out: Dict = {};
         if (!row.item) return out;
+        // The date is the document's, not the row's — this form carries one
+        // Date in its header. Reading row.date left it undefined, so the
+        // balance was never asked for and the box kept its placeholder.
+        const on = row.date || header?.date || "";
         try {
-          const info = await stockTransferItem(row.item, row.date);
+          const info = await stockTransferItem(row.item, on);
           out.uom_label = info.unit || "";
           if (!row.rate && !info.price_missing) out.rate = info.rate || "";
         } catch {
           /* advisory — a missing price must not block the row */
         }
-        if (row.from_id && row.date) {
+        if (row.from_id && on) {
           try {
             out.stock_label = await stockTransferStock(
-              row.from_type || "warehouse", row.from_id, row.item, row.date);
+              row.from_type || "warehouse", row.from_id, row.item, on);
           } catch {
             /* advisory */
           }

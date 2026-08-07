@@ -53,12 +53,14 @@ function FieldRows({
   fields,
   values,
   set,
+  setMany,
   dynamic,
   rowIndex,
 }: {
   fields: DocField[];
   values: Dict;
   set: (key: string, val: string) => void;
+  setMany?: (patch: Dict) => void;
   /** Options for pickers whose choices depend on another field, keyed
    *  `<rowIndex>:<field>`. Absent for the header, which has none. */
   dynamic?: Record<string, { value: string; label: string }[]>;
@@ -75,17 +77,17 @@ function FieldRows({
       out.push(
         <View key={f.name} style={styles.pair}>
           <View style={styles.pairHalf}>
-            <DocFieldControl field={f} values={values} set={set} dynamic={opts(f)} />
+            <DocFieldControl field={f} values={values} set={set} setMany={setMany} dynamic={opts(f)} />
           </View>
           <View style={styles.pairHalf}>
-            <DocFieldControl field={next} values={values} set={set} dynamic={opts(next)} />
+            <DocFieldControl field={next} values={values} set={set} setMany={setMany} dynamic={opts(next)} />
           </View>
         </View>
       );
       i += 1;
       continue;
     }
-    out.push(<DocFieldControl key={f.name} field={f} values={values} set={set} dynamic={opts(f)} />);
+    out.push(<DocFieldControl key={f.name} field={f} values={values} set={set} setMany={setMany} dynamic={opts(f)} />);
   }
   return <>{out}</>;
 }
@@ -95,10 +97,13 @@ function LocationControl({
   field,
   values,
   set,
+  setMany,
 }: {
   field: DocField;
   values: Dict;
   set: (key: string, val: string) => void;
+  /** All three of a location's values as one edit — see setItemKeys. */
+  setMany?: (patch: Dict) => void;
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -161,11 +166,18 @@ function LocationControl({
         value={selected}
         onChange={(v) => {
           const [kind, id] = v.split(":");
-          set(typeKey, kind || "warehouse");
-          set(idKey, id || "");
-          // A batch belongs to the farm that was chosen; keeping the old one
-          // would attach this movement to a flock on a different farm.
-          set(batchKey, "");
+          // One edit, not three. Set separately, the stock lookup fired on the
+          // id while the kind was still the previous one — so choosing a farm
+          // asked for a warehouse's balance.
+          const patch = {
+            [typeKey]: kind || "warehouse",
+            [idKey]: id || "",
+            // A batch belongs to the farm that was chosen; keeping the old one
+            // would attach this movement to a flock on a different farm.
+            [batchKey]: "",
+          };
+          if (setMany) setMany(patch);
+          else Object.entries(patch).forEach(([k, val]) => set(k, val));
         }}
       />
       {field.withBatch && onFarm ? (
@@ -229,17 +241,21 @@ function DocFieldControl({
   field,
   values,
   set,
+  setMany,
   error,
   dynamic,
 }: {
   field: DocField;
   values: Dict;
   set: (key: string, val: string) => void;
+  /** Several keys as one edit — only a location needs it. */
+  setMany?: (patch: Dict) => void;
   error?: string;
   /** Choices for a `dynamicOptions` picker; undefined for every other field. */
   dynamic?: { value: string; label: string }[];
 }) {
-  if (field.type === "location") return <LocationControl field={field} values={values} set={set} />;
+  if (field.type === "location")
+    return <LocationControl field={field} values={values} set={set} setMany={setMany} />;
   if (field.type === "toggle")
     return <ToggleControl field={field} value={values[field.name] ?? ""} onChange={(v) => set(field.name, v)} />;
   if (field.type === "readonly")
@@ -401,10 +417,18 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   }, [editId, doc]);
 
   const setHeaderKey = (key: string, val: string) => setHeader((p) => ({ ...p, [key]: val }));
-  const setItemKey = (idx: number, key: string, val: string) => {
+  /**
+   * Change several of a row's fields as one edit.
+   *
+   * A location is three values — its kind, which one, and the batch under it —
+   * and setting them one at a time meant the lookups fired against a row that
+   * still held the last one. Choosing a *farm* asked the server for a
+   * *warehouse* balance, because the id had changed and the kind had not yet.
+   */
+  const setItemKeys = (idx: number, patch: Dict) => {
     setItems((prev) => prev.map((it, i) => {
       if (i !== idx) return it;
-      const next = { ...it, [key]: val };
+      const next = { ...it, ...patch };
       // Arithmetic the row owns — placement quantity, amount — recomputed in
       // the same update that changed its inputs, so what a readonly box shows
       // and what the payload carries can never be a keystroke apart.
@@ -414,12 +438,18 @@ export function DocumentFormScreen({ route, navigation }: Props) {
     // value dropped: a batch left over from the farm before it would post
     // these chicks onto a flock on someone else's farm.
     for (const f of itemFieldList) {
-      if (f.dynamicOptions?.on === key) void reloadDynamic(idx, f, val);
+      const on = f.dynamicOptions?.on;
+      if (on && on in patch) void reloadDynamic(idx, f, patch[on]);
     }
     // The derived half of the row — price, what is actually in stock — is
     // declared by the document rather than switched on its key here, which is
-    // what stopped any second document from having lookups at all.
-    if (doc.derive?.on.includes(key)) void refreshDerived(idx, { [key]: val });
+    // what stopped any second document from having lookups at all. It is given
+    // the whole patch, so it sees every value this edit changed.
+    if (doc.derive?.on.some((k) => k in patch)) void refreshDerived(idx, patch);
+  };
+
+  const setItemKey = (idx: number, key: string, val: string) => {
+    setItemKeys(idx, { [key]: val });
   };
 
   /** Every item field, sections or flat — the list both hooks above walk. */
@@ -600,6 +630,7 @@ export function DocumentFormScreen({ route, navigation }: Props) {
                   fields={section.fields}
                   values={it}
                   set={(key, val) => setItemKey(idx, key, val)}
+                  setMany={(patch) => setItemKeys(idx, patch)}
                   dynamic={dynamic}
                   rowIndex={idx}
                 />
@@ -621,6 +652,7 @@ export function DocumentFormScreen({ route, navigation }: Props) {
                   field={f}
                   values={it}
                   set={(key, val) => setItemKey(idx, key, val)}
+                  setMany={(patch) => setItemKeys(idx, patch)}
                 />
               ))}
             </>
