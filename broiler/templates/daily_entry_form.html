@@ -238,6 +238,18 @@ function carryFarmAndBatch(prev, tr) {
     batch.value = fromBatch.value;
     if (window.jQuery) jQuery(batch).trigger('change.select2');
   }
+  // The feed too: the same flock on the next day eats the same feed, so the
+  // row that carried its farm and batch may as well carry what it is fed.
+  // Quantities are not carried — those are what the entry is for — and nor are
+  // mortality and culls, where repeating yesterday's figure is a wrong entry
+  // that looks like a filled-in one.
+  ['.feed-1', '.feed-2'].forEach(cls => {
+    const from = prev.querySelector(cls), to = tr.querySelector(cls);
+    if (from && to && from.value) {
+      to.value = from.value;
+      if (window.jQuery) jQuery(to).trigger('change.select2');
+    }
+  });
   return fromFarm.value;
 }
 
