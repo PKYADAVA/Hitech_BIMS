@@ -168,8 +168,10 @@
               <th class="c-fit m-mid">Batch</th>
               <th class="c-fit m-short">Age</th>
               <th class="c-fit m-date ds-mid">Date</th>
+              <th class="c-num m-num ds-num">Opening Birds</th>
               <th class="c-fit m-short">Mortality</th>
               <th class="c-fit m-short">Culls</th>
+              <th class="c-num m-num ds-num">Closing Birds</th>
               <th class="c-fit m-short fg1">Feed 1</th>
               <th class="c-num m-num ds-num fg1">Stock-1</th>
               <th class="c-fit m-short fg1">Kgs</th>
@@ -269,8 +271,12 @@ function row() {
     <td><select class="form-select batch" required><option value="">select a farm first</option></select></td>
     <td><input class="form-control bg-light age" readonly></td>
     <td><input class="form-control bg-light date" readonly value="${TODAY}"></td>
+    <td><input class="form-control bg-light opening-birds" readonly placeholder="auto"
+               title="Live birds at the start of this day"></td>
     <td><input class="form-control mortality" type="number" min="0" step="1" value="0"></td>
     <td><input class="form-control culls" type="number" min="0" step="1" value="0"></td>
+    <td><input class="form-control bg-light closing-birds" readonly placeholder="auto"
+               title="Opening less this row's mortality and culls"></td>
     <td class="fg1"><select class="form-select feed-1">${feedOptions}</select><div class="phase-hint small mt-1"></div></td>
     <td class="fg1"><input class="form-control bg-light stock-1" readonly placeholder="auto"></td>
     <td class="fg1"><input class="form-control kgs-1" type="number" min="0" step=".01" value="0"><div class="feed-warn small mt-1"></div></td>
@@ -447,6 +453,7 @@ function applyFeedPhase(tr, data) {
   tr.dataset.feedPlan = JSON.stringify(data.feed_plan || []);
   tr.dataset.farmFeedStock = JSON.stringify(data.farm_feed_stock || []);
   tr.dataset.liveBirds = data.live_birds || 0;
+  updateBirdStock(tr);   // needs liveBirds, so it follows it
   tr.dataset.expectName = (cur && cur.phase_name) || '';   // current phase feed
   tr.dataset.nextFeed   = (cur && cur.next_feed_item) || '';
   tr.dataset.nextName   = (cur && cur.next_name) || '';    // changeover feed (Feed 2)
@@ -493,7 +500,7 @@ function updateFeedFeedback() {
     const statusClass = n.status === 'warn' ? 'feed-note-warn' : n.status === 'near' ? 'feed-note-near' : 'feed-note-ok';
     const statusLabel = n.status === 'warn' ? 'Needs Review' : n.status === 'near' ? 'Near Limit' : 'Within Standard';
     note.className = 'feed-note-row ' + statusClass;
-    note.innerHTML = `<td colspan="15" class="small">
+    note.innerHTML = `<td colspan="17" class="small">
       <div class="fp-split">
         <div class="fp-left">
           <span class="dr-status-pill">${statusLabel}</span>
@@ -646,6 +653,30 @@ function feedPlanTable(tr) {
       <div class="fp-total fp-num">${sum.remaining.toFixed(1)}</div>
       <div class="fp-total"></div>
     </div>${stockLine}`;
+}
+
+
+// The two derived bird columns. Opening is the flock the server counted as of
+// this entry's date; closing is that less the losses this row books, so the
+// pair reads as the day's movement rather than leaving it to be worked out.
+//
+// Both are display-only — the server derives the flock from the placements and
+// the entries themselves, and nothing here is submitted.
+function updateBirdStock(tr) {
+  const opening = parseInt(tr.dataset.liveBirds || '', 10);
+  const openBox = tr.querySelector('.opening-birds');
+  const closeBox = tr.querySelector('.closing-birds');
+  if (!openBox || !closeBox) return;
+  if (isNaN(opening)) { openBox.value = ''; closeBox.value = ''; return; }
+  const lost = (Number(tr.querySelector('.mortality')?.value) || 0)
+             + (Number(tr.querySelector('.culls')?.value) || 0);
+  openBox.value = opening;
+  const closing = opening - lost;
+  closeBox.value = closing;
+  // More birds booked lost than are alive: the count cannot go below zero, and
+  // the entry is wrong rather than the flock being negative.
+  closeBox.classList.toggle('text-danger', closing < 0);
+  closeBox.classList.toggle('fw-bold', closing < 0);
 }
 
 function totalFeed(tr) {
@@ -985,6 +1016,7 @@ get('row-table').addEventListener('input', e => {
     // booked as dead on this row change what the flock still needs. Without
     // this the table answered for a flock the entry was in the middle of
     // correcting.
+    updateBirdStock(e.target.closest('tr'));
     updateFeedFeedback();
     updateSummary();
   }
