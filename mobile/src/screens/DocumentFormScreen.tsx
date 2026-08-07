@@ -4,6 +4,7 @@ import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { deleteDocument, loadDocument, saveDocument } from "@/api/documents";
+import { farmBatches } from "@/api/lookups";
 import { ApiError } from "@/api/types";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
@@ -11,7 +12,6 @@ import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button, Card, Loading } from "@/components/ui";
 import { RESOURCES } from "@/config/catalog";
 import {
-  BATCH_OPTIONS_PATH,
   DOCUMENTS,
   DocConfig,
   DocField,
@@ -114,6 +114,27 @@ function LocationControl({
   const warehouses = usePickerOptions(WAREHOUSE_OPTIONS_PATH, ["name", "code"]);
   const farms = usePickerOptions(field.allowFarm ? FARM_OPTIONS_PATH : undefined,
                                  ["farm_name", "farm_code"]);
+  // The chosen farm's own flocks. The whole batch master was offered here, so
+  // a transfer to one farm listed every other farm's batches beside its own —
+  // and picking one attached the movement to a flock somewhere else entirely.
+  const [batches, setBatches] = useState<{ value: string; label: string }[]>([]);
+  const farmId = onFarm ? values[idKey] : "";
+  useEffect(() => {
+    if (!farmId) { setBatches([]); return; }
+    let live = true;
+    farmBatches(farmId)
+      .then((rows) => {
+        if (!live) return;
+        setBatches(rows.map((b) => ({
+          value: String(b.id),
+          // Which flock is running now is the one thing that tells them apart.
+          label: b.is_active ? `${b.batch_name} (Active)` : b.batch_name,
+        })));
+      })
+      .catch(() => { if (live) setBatches([]); });
+    return () => { live = false; };
+  }, [farmId]);
+
   const options = useMemo(() => {
     const w = warehouses.options.map((o) => ({
       value: `warehouse:${o.value}`, label: `Warehouse · ${o.label}`,
@@ -153,8 +174,10 @@ function LocationControl({
             name: batchKey,
             label: "Batch",
             type: "select",
-            optionsPath: BATCH_OPTIONS_PATH,
-            optionLabelKeys: ["batch_name", "lot_no"],
+            options: batches,
+            placeholder: batches.length
+              ? "Select batch"
+              : farmId ? "This farm has no batches" : "Choose a farm first",
           }}
           value={values[batchKey] ?? ""}
           onChange={(v) => set(batchKey, v)}

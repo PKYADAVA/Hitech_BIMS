@@ -368,6 +368,42 @@ export const DOCUMENTS: Record<string, DocConfig> = {
       },
     ],
     itemFields: [fItem(), fQty(), fRate(), fRemarks()],
+
+    /**
+     * UOM and Available Stock, which this form declared and never filled.
+     *
+     * Both boxes sat on their "auto" placeholder however the row was completed,
+     * so the one figure that decides whether a transfer can be made — what is
+     * actually at the source — was never on screen. Medicine Transfer has had
+     * this since it was written; Stock Transfer simply never got it.
+     *
+     * The source may be a farm as well as a warehouse, so the stock is asked
+     * for by the location's own type rather than assuming a warehouse.
+     */
+    derive: {
+      on: ["item", "from_type", "from_id", "date"],
+      run: async (row) => {
+        const out: Dict = {};
+        if (!row.item) return out;
+        try {
+          const info = await stockTransferItem(row.item, row.date);
+          out.uom_label = info.unit || "";
+          if (!row.rate && !info.price_missing) out.rate = info.rate || "";
+        } catch {
+          /* advisory — a missing price must not block the row */
+        }
+        if (row.from_id && row.date) {
+          try {
+            out.stock_label = await stockTransferStock(
+              row.from_type || "warehouse", row.from_id, row.item, row.date);
+          } catch {
+            /* advisory */
+          }
+        }
+        return out;
+      },
+    },
+
     build: (h, items) => ({
       rows: items
         .filter((it) => has(it.item))
