@@ -28,10 +28,16 @@ def _d(v):
 
 
 def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
-             location_type=None, location_id=None):
+             location_type=None, location_id=None, farm_consumption=True):
     """All stock movements as dicts, newest-last. ``to_date`` caps the replay;
     ``from_date`` is *not* applied here because everything before it forms the
-    opening balance."""
+    opening balance.
+
+    ``farm_consumption=False`` leaves out the farm's own daily-entry feed and
+    medicine issues. The daily-entry grid chains those itself, row by row, and
+    needs the balance they are drawn *from* — counting them here as well would
+    subtract every one of them twice.
+    """
     from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
     from inventory.models import (StockTransfer, StockReceiveItem, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
@@ -114,6 +120,10 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
         add(r.issue.date, r.location_type, loc_id, r.item_id, "out", r.quantity, None, 8)
 
     # Farm consumption: feed fed on a daily entry, and medicine/vaccine issued.
+    if not farm_consumption:
+        moves.sort(key=lambda m: (m["date"], m["order"]))
+        return moves
+
     daily = DailyEntry.objects.all()
     for r in daily:
         for item_pk, qty in ((r.feed_1_id, r.feed_1_qty), (r.feed_2_id, r.feed_2_qty)):
@@ -312,5 +322,24 @@ def location_item_stock(location_type, location_id, item_id, as_of_date=None):
     """
     balance = Z
     for m in _collect(None, as_of_date, None, item_id, location_type, location_id):
+        balance = balance + m["qty"] if m["dir"] == "in" else balance - m["qty"]
+    return balance
+
+
+def farm_receipts_balance(farm_id, item_id, as_of_date=None):
+    """What has been delivered to a farm, net of everything except its own
+    consumption entries.
+
+    The opening balance a daily entry's stock column should start from. It used
+    to start from zero, so a farm with 2,337 kg of Starter Feed delivered
+    showed 0, and the column drifted further negative with every day fed —
+    reporting consumption against receipts it could not see.
+
+    Consumption is left out because the caller subtracts it row by row: the
+    grid is a chain, and each row's opening is the one before it closing.
+    """
+    balance = Z
+    for m in _collect(None, as_of_date, None, item_id, "farm", farm_id,
+                      farm_consumption=False):
         balance = balance + m["qty"] if m["dir"] == "in" else balance - m["qty"]
     return balance

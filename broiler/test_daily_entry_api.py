@@ -309,7 +309,18 @@ class DailyEntryLookupTests(APITestCase):
         self.assertIsNone(data["std_feed_kg"])
         self.assertEqual(data["bs_curve"], [])
 
-    def test_stock_lookup_returns_the_prior_closing_balance(self):
+    def test_stock_lookup_returns_what_is_left_of_what_was_sent(self):
+        """200 kg delivered, 40 kg fed, so 160 kg is on the farm.
+
+        This used to assert the same 160 off a stored ``feed_1_stock`` with no
+        delivery behind it at all — which is the bug it now guards: the column
+        chained from zero over the entries and never saw the receipt.
+        """
+        from inventory.models import StockTransfer
+
+        StockTransfer.objects.create(
+            item=self.feed, to_location_type="farm", to_farm=self.farm,
+            date=date(2026, 7, 1), quantity=Decimal("200"))
         DailyEntry.objects.create(
             date=date(2026, 7, 10), supervisor=self.farm.supervisor,
             farm=self.farm, batch=self.batch,

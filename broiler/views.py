@@ -1938,29 +1938,44 @@ def _apply_daily_entry_row(instance, row, entry_date, user, default_farm_id=None
 
 
 def _recompute_stock_chain(farm_id, item_id):
-    """Recomputes feed_1_stock/feed_2_stock for every entry of this farm
-    that touches item_id, walking chronologically from an opening balance of
-    0. Needed after an edit changes a row's date, Kgs, or feed item, since
-    every later row's opening balance is the previous row's closing balance
-    — without this, only the edited row itself would reflect the change and
-    every row after it would silently keep its stale, pre-edit stock."""
+    """Recomputes feed_1_stock/feed_2_stock for every entry of this farm that
+    touches item_id, walking chronologically.
+
+    Each row closes at *what the farm has been sent by that date, less what
+    every entry up to and including this one has fed*. Reading the receipts
+    per row rather than once at the start is what makes a delivery arriving
+    mid-chain show up on the day it arrived.
+
+    This used to walk from an opening balance of zero over the entries alone,
+    which is why the column showed cumulative consumption with a minus sign
+    instead of a balance.
+
+    Needed after an edit changes a row's date, Kgs, or feed item, since every
+    later row's opening balance is the previous row's closing balance."""
     if not farm_id or not item_id:
         return
+    from inventory.services.item_summary import farm_receipts_balance
+
     qs = (DailyEntry.objects.filter(farm_id=farm_id)
           .filter(Q(feed_1_id=item_id) | Q(feed_2_id=item_id))
           .order_by('date', 'id'))
-    running = Decimal('0')
+    used = Decimal('0')
+    receipts_on = {}
     for r in qs:
+        if r.date not in receipts_on:
+            receipts_on[r.date] = farm_receipts_balance(farm_id, item_id, r.date)
         changed = False
         if r.feed_1_id == item_id:
-            running -= r.feed_1_qty
-            if r.feed_1_stock != running:
-                r.feed_1_stock = running
+            used += r.feed_1_qty or 0
+            closing = receipts_on[r.date] - used
+            if r.feed_1_stock != closing:
+                r.feed_1_stock = closing
                 changed = True
         if r.feed_2_id == item_id:
-            running -= r.feed_2_qty
-            if r.feed_2_stock != running:
-                r.feed_2_stock = running
+            used += r.feed_2_qty or 0
+            closing = receipts_on[r.date] - used
+            if r.feed_2_stock != closing:
+                r.feed_2_stock = closing
                 changed = True
         if changed:
             r.save(update_fields=["feed_1_stock", "feed_2_stock"])
@@ -2518,17 +2533,23 @@ def _apply_medicine_entry_row(instance, row, entry_date, user):
 
 def _recompute_medicine_stock_chain(farm_id, item_id):
     """Recomputes stock for every medicine/vaccine entry of this farm that
-    touches item_id, walking chronologically from an opening balance of 0.
+    touches item_id, walking chronologically from what the farm was sent.
     See _recompute_stock_chain (Daily Entry) for the full rationale."""
     if not farm_id or not item_id:
         return
+    from inventory.services.item_summary import farm_receipts_balance
+
     qs = (MedicineVaccineEntry.objects.filter(farm_id=farm_id, item_id=item_id)
           .order_by('date', 'id'))
-    running = Decimal('0')
+    used = Decimal('0')
+    receipts_on = {}
     for r in qs:
-        running -= r.qty
-        if r.stock != running:
-            r.stock = running
+        if r.date not in receipts_on:
+            receipts_on[r.date] = farm_receipts_balance(farm_id, item_id, r.date)
+        used += r.qty or 0
+        closing = receipts_on[r.date] - used
+        if r.stock != closing:
+            r.stock = closing
             r.save(update_fields=["stock"])
 
 

@@ -1116,8 +1116,13 @@ class DailyEntry(models.Model):
 
     @staticmethod
     def previous_stock(farm_id, item_id, before_date, before_id):
-        """Closing stock of the most recent prior entry for this farm+feed
-        item, ordered by date then id (0 if there's no earlier entry).
+        """Feed of this item at this farm, before this row is counted.
+
+        What has been delivered, less what earlier entries have already fed.
+        It used to chain from an opening balance of zero, reading only prior
+        daily entries — so a farm with 2,337 kg of Starter delivered showed 0,
+        and the column drifted further negative every day it was fed. What it
+        displayed was cumulative consumption with a minus sign, not a balance.
 
         ``before_id`` is the row's own pk when editing an existing entry (so
         same-date rows saved after it are correctly excluded); it's None for
@@ -1127,17 +1132,19 @@ class DailyEntry(models.Model):
         """
         if not item_id:
             return 0
+        from inventory.services.item_summary import farm_receipts_balance
+
         if before_id:
             date_filter = models.Q(date__lt=before_date) | (models.Q(date=before_date) & models.Q(id__lt=before_id))
         else:
             date_filter = models.Q(date__lte=before_date)
-        qs = DailyEntry.objects.filter(farm_id=farm_id).filter(date_filter).order_by('-date', '-id')
-        for row in qs:
+        used = Decimal("0")
+        for row in DailyEntry.objects.filter(farm_id=farm_id).filter(date_filter):
             if row.feed_1_id == item_id:
-                return row.feed_1_stock
+                used += row.feed_1_qty or 0
             if row.feed_2_id == item_id:
-                return row.feed_2_stock
-        return 0
+                used += row.feed_2_qty or 0
+        return farm_receipts_balance(farm_id, item_id, before_date) - used
 
 
 class DailyEntryPhoto(models.Model):
@@ -1273,18 +1280,24 @@ class MedicineVaccineEntry(models.Model):
 
     @staticmethod
     def previous_stock(farm_id, item_id, before_date, before_id):
-        """Closing stock of the most recent prior entry for this farm+item,
-        ordered by date then id (0 if there's no earlier entry). See
-        DailyEntry.previous_stock for the before_id/date-filter rationale."""
+        """Medicine of this item at this farm, before this row is counted.
+
+        Same correction as DailyEntry.previous_stock, and for the same reason:
+        it chained from zero over prior entries, so what a farm had actually
+        been sent never entered the figure. See the note there.
+        """
         if not item_id:
             return 0
+        from inventory.services.item_summary import farm_receipts_balance
+
         if before_id:
             date_filter = models.Q(date__lt=before_date) | (models.Q(date=before_date) & models.Q(id__lt=before_id))
         else:
             date_filter = models.Q(date__lte=before_date)
-        row = (MedicineVaccineEntry.objects.filter(farm_id=farm_id, item_id=item_id)
-               .filter(date_filter).order_by('-date', '-id').first())
-        return row.stock if row else 0
+        used = (MedicineVaccineEntry.objects
+                .filter(farm_id=farm_id, item_id=item_id).filter(date_filter)
+                .aggregate(total=models.Sum("qty"))["total"] or Decimal("0"))
+        return farm_receipts_balance(farm_id, item_id, before_date) - used
 
 
 class BirdSale(models.Model):
