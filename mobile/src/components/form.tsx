@@ -49,6 +49,19 @@ function FieldShell({
   );
 }
 
+/** The soft fill and edge a toned field wears. Same three colours the Day
+ *  Record's summary panels use, so a box and the figure it feeds match. */
+function toneStyle(colors: Record<string, string>, tone: string) {
+  const map: Record<string, [string, string]> = {
+    danger: [colors.dangerLight, colors.danger],
+    info: [colors.infoLight, colors.info],
+    success: [colors.successLight, colors.success],
+    warning: [colors.warningLight, colors.warning],
+  };
+  const pair = map[tone];
+  return pair ? { backgroundColor: pair[0], borderColor: pair[1] } : null;
+}
+
 /** Fields whose empty value is honestly a zero rather than nothing yet. */
 const numericType = (field: FormField) =>
   field.type === "number" || field.type === "decimal";
@@ -158,7 +171,13 @@ export function FormControl({
         placeholderTextColor={colors.textFaint}
         keyboardType={numeric ? "numeric" : "default"}
         multiline={field.type === "textarea"}
-        style={[styles.input, field.type === "textarea" && styles.textarea]}
+        style={[
+          styles.input,
+          field.type === "textarea" && styles.textarea,
+          // A tint and a matching edge, not coloured text: the value has to
+          // stay as readable as any other while it is being typed.
+          field.tone ? toneStyle(colors, field.tone) : null,
+        ]}
       />
     </FieldShell>
   );

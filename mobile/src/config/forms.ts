@@ -61,6 +61,13 @@ export interface FormField {
   /** Computed/derived — rendered but not editable (value comes from `compute`). */
   readOnly?: boolean;
   /**
+   * What this figure means, borrowed from the summary panels above the row so
+   * a field and the number it feeds are the same colour: mortality reads
+   * danger, culls read info, a balance reads success until it goes short.
+   * Purely presentational — nothing validates on it.
+   */
+  tone?: "danger" | "info" | "success" | "warning";
+  /**
    * Shown, greyed, and not yet openable — a `select` waiting on an earlier
    * answer. Distinct from `readOnly`, which means "this is never yours to
    * set": Shed / Unit becomes pickable the moment a farm is chosen, and its

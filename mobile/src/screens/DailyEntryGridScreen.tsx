@@ -103,8 +103,14 @@ const F_SUPERVISOR: FormField = {
   name: "supervisor", label: "Supervisor", type: "select", required: true,
 };
 const F_FARM: FormField = { name: "farm", label: "Farm", type: "select", required: true };
-const F_MORTALITY: FormField = { name: "mortality", label: "Mortality (Nos)", type: "number" };
-const F_CULLS: FormField = { name: "culls", label: "Culls (Nos)", type: "number" };
+// Each box wears the colour its figure wears in the Mortality Summary above,
+// so a number and the total it feeds are never two different colours.
+const F_MORTALITY: FormField = {
+  name: "mortality", label: "Mortality (Nos)", type: "number", tone: "danger",
+};
+const F_CULLS: FormField = {
+  name: "culls", label: "Culls (Nos)", type: "number", tone: "info",
+};
 // Feed only. Both columns listed the whole Item master, which offered Day Old
 // Chicks as something to feed a flock; the endpoint applies the web form's own
 // rule so the two lists cannot drift.
@@ -1433,8 +1439,17 @@ function FeedPlanTable({
 
   const { lines: rows, total: sum } = feedPlanLines(plan, typed, birds);
 
-  const Cell = ({ v, bad, mark }: { v: number; bad?: boolean; mark?: boolean }) => (
-    <Text style={[styles.fpNum, bad && styles.fpBad]} numberOfLines={1}>
+  // `signed` colours a figure by which side of zero it falls, the same way the
+  // Stock box does — the balance columns are the ones read for that.
+  const Cell = ({ v, bad, mark, signed }: {
+    v: number; bad?: boolean; mark?: boolean; signed?: boolean;
+  }) => (
+    <Text
+      style={[styles.fpNum,
+              bad && styles.fpBad,
+              signed && !bad && v > 0 && styles.fpOk]}
+      numberOfLines={1}
+    >
       {v.toFixed(1)}
       {mark ? <Text style={styles.fpMark}>*</Text> : null}
     </Text>
@@ -1457,8 +1472,9 @@ function FeedPlanTable({
           <Cell v={r.required} />
           <Cell v={r.sent} mark={r.flagOn === "sent"} />
           <Cell v={r.fed} />
-          <Cell v={r.balance} bad={r.balance < 0} mark={r.flagOn === "balance"} />
-          <Cell v={r.remaining} bad={r.remaining < 0} mark={r.flagOn === "remaining"} />
+          <Cell v={r.balance} bad={r.balance < 0} signed mark={r.flagOn === "balance"} />
+          <Cell v={r.remaining} bad={r.remaining < 0} signed
+                mark={r.flagOn === "remaining"} />
         </View>
       ))}
       {rows.length > 1 ? (
@@ -1475,7 +1491,9 @@ function FeedPlanTable({
           <Text style={[styles.fpNum, styles.fpTotal]} numberOfLines={1}>
             {sum.fed.toFixed(1)}
           </Text>
-          <Text style={[styles.fpNum, styles.fpTotal, sum.balance < 0 && styles.fpBad]}
+          <Text style={[styles.fpNum, styles.fpTotal,
+                        sum.balance < 0 && styles.fpBad,
+                        sum.balance > 0 && styles.fpOk]}
                 numberOfLines={1}>
             {sum.balance.toFixed(1)}
           </Text>
@@ -1501,12 +1519,20 @@ function FeedPlanTable({
 
 function StockCell({ label, value }: { label: string; value: number | null }) {
   const styles = useStyles();
+  // Three states, not two: short is a warning, in-hand is a reassurance, and
+  // not yet known is neither. Colouring only the bad one left "you have feed"
+  // looking the same as "nobody has told me yet".
   const short = value != null && value < 0;
+  const inHand = value != null && value > 0;
   return (
     <View style={styles.stockCell}>
       <Text style={styles.stockLabel}>{label}</Text>
-      <View style={[styles.stockBox, short ? styles.stockBoxShort : null]}>
-        <Text style={[styles.stockValue, short ? styles.stockValueShort : null]}>
+      <View style={[styles.stockBox,
+                    short ? styles.stockBoxShort : null,
+                    inHand ? styles.stockBoxOk : null]}>
+        <Text style={[styles.stockValue,
+                      short ? styles.stockValueShort : null,
+                      inHand ? styles.stockValueOk : null]}>
           {value == null ? "Auto" : value.toFixed(1)}
         </Text>
       </View>
@@ -1798,6 +1824,7 @@ const useStyles = makeStyles((colors) => ({
   fpNum: { flex: 1, minWidth: 40, textAlign: "right", ...type.caption,
            fontSize: 10, color: colors.text, paddingLeft: 2 },
   fpBad: { color: colors.danger, fontWeight: "700" },
+  fpOk: { color: colors.success, fontWeight: "700" },
   fpUnit: { fontSize: 8, fontWeight: "400", color: colors.textFaint },
   fpMark: { color: colors.danger, fontWeight: "700" },
   fpLegend: {
@@ -1890,8 +1917,10 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: "center",
   },
   stockBoxShort: { borderColor: colors.danger, backgroundColor: colors.dangerLight },
+  stockBoxOk: { borderColor: colors.success, backgroundColor: colors.successLight },
   stockValue: { ...type.body, color: colors.textMuted },
   stockValueShort: { color: colors.danger, fontWeight: "700" },
+  stockValueOk: { color: colors.success, fontWeight: "700" },
   perBird: { ...type.caption, color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.md },
 
   bar: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
