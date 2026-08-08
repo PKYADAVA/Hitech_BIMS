@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useState } from "react";
 import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
 
+import { MEDIA_BASE_URL } from "@/config";
 import { reviewChangeRequest } from "@/api/changeRequests";
 import { retryMessage } from "@/api/sms";
 import { Row } from "@/api/types";
@@ -86,9 +87,31 @@ type Props = NativeStackScreenProps<ModuleStackParams, "Detail">;
 const HIDDEN = /(^id$|_image$|_photo$|photo$|_upload|_file$|_copy$|documents?$|latitude$|longitude$)/;
 /** Image fields — rendered as photo thumbnails instead of hidden. */
 const IMAGE_KEY = /(_image$|image$|_photo$|photo$)/;
+/**
+ * A stored file's absolute address.
+ *
+ * The API returns media as a server-relative path ("/media/..."), which a
+ * browser resolves against the page it is on and a phone cannot resolve at
+ * all. The base the client already talks to is the one to hang it off.
+ */
+function mediaUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${MEDIA_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 /** True when a value looks like a usable image URL. */
 const isImageUrl = (v: unknown): v is string =>
   typeof v === "string" && /^https?:\/\//i.test(v);
+
+/**
+ * True when an attachment is something that can be shown rather than opened.
+ *
+ * Judged on the extension, not the protocol: an attachment's url arrives as a
+ * server-relative path, so the http(s) test above calls every one of them a
+ * document and a farm's photographs rendered as filenames in grey boxes.
+ */
+const looksLikeImage = (url?: string): boolean =>
+  !!url && /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(url);
 /** Fields grouped under "Record" instead of the main details. */
 const AUDIT = new Set([
   "created_at",
@@ -201,6 +224,19 @@ export function RecordDetailScreen({ route, navigation }: Props) {
     ([k, v]) => IMAGE_KEY.test(k) && isImageUrl(v)
   ) as [string, string][];
 
+  /**
+   * Attachments carried in a `files` list rather than as fields of their own.
+   *
+   * A farm capture keeps its photographs and scans in a child table, so none
+   * of them matched the field-name rule above and View showed a visit with no
+   * evidence at all — the one thing the visit exists to record. The web
+   * register renders them; this is the same list, read the same way.
+   */
+  const files = (Array.isArray(row.files) ? row.files : []) as {
+    id?: number; kind?: string; label?: string; name?: string; url?: string;
+  }[];
+  const attachments = files.filter((f) => f && f.url);
+
   const entries = Object.entries(row).filter(([k, v]) => {
     if (HIDDEN.test(k) || k.endsWith("_label") || isEmpty(v)) return false;
     // Many-to-many / list-of-ids fields: only show when we have a readable
@@ -265,6 +301,39 @@ export function RecordDetailScreen({ route, navigation }: Props) {
                   {humanizeKey(k)}
                 </Text>
                 <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+      ) : null}
+
+      {attachments.length > 0 ? (
+        <Card>
+          <Text style={styles.groupTitle}>
+            Attachments <Text style={styles.photoLabel}>{attachments.length}</Text>
+          </Text>
+          <View style={styles.photoGrid}>
+            {attachments.map((f, i) => (
+              <Pressable
+                key={f.id ?? `${f.kind}-${i}`}
+                style={styles.photoItem}
+                onPress={() => f.url && Linking.openURL(mediaUrl(f.url))}
+              >
+                <Text style={styles.photoLabel} numberOfLines={1}>
+                  {f.label || humanizeKey(f.kind ?? "File")}
+                </Text>
+                {/* A scan is as often a PDF as a photograph. Both are worth
+                    listing and both open; only one of them can be shown. */}
+                {looksLikeImage(f.url) ? (
+                  <Image source={{ uri: mediaUrl(f.url!) }} style={styles.photo}
+                         resizeMode="cover" />
+                ) : (
+                  <View style={[styles.photo, styles.fileTile]}>
+                    <Text style={styles.fileName} numberOfLines={2}>
+                      {f.name || "Open"}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
             ))}
           </View>
@@ -366,5 +435,10 @@ const useStyles = makeStyles((colors) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  fileTile: {
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: colors.surfaceAlt, padding: spacing.xs,
+  },
+  fileName: { ...type.caption, color: colors.textMuted, textAlign: "center" },
   photoLabel: { ...type.label, color: colors.textMuted },
 }));

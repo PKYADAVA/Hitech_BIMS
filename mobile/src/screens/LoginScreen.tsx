@@ -1,36 +1,61 @@
 import { StatusBar } from "expo-status-bar";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
+  Linking,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
-import { Button, Field } from "@/components/ui";
+import { API_BASE_URL } from "@/config";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 
-// Bundled poultry photo — offline, reliable login backdrop.
-const BG = require("../../assets/poultry.jpg");
+/**
+ * Sign-in, deliberately built to the same design as the web ERP's login page
+ * (`user/templates/login.html` + `static/css/login.css`).
+ *
+ * The two are the product's only front doors, and a supervisor who uses the
+ * phone in the shed and the browser in the office should not have to work out
+ * that they are the same system. Same photograph, same green, same lockup, same
+ * "Welcome Back!" card and the same reassurance under it — the layout differs
+ * only where a phone forces it to.
+ */
+
+// The same two files the web login uses, bundled so the screen renders with no
+// network at all — a supervisor at a farm gate may have nothing to fetch with.
+const HERO = require("../../assets/login-hero.jpg");
+const MARK = require("../../assets/hitech-mark.png");
 
 export function LoginScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
+  const { height } = useWindowDimensions();
+  // The photo takes the top ~44% so the card sits low, within thumb reach —
+  // the fields are what the user came for, not the scenery above them.
+  const heroHeight = Math.max(320, Math.round(height * 0.44));
   const login = useAuthStore((s) => s.login);
   const error = useAuthStore((s) => s.error);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [reveal, setReveal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const disabled = !username.trim() || !password;
 
   const onSubmit = async () => {
+    if (disabled) return;
     setSubmitting(true);
     try {
       await login(username.trim(), password);
@@ -41,14 +66,23 @@ export function LoginScreen() {
     }
   };
 
+  /**
+   * Password reset lives on the web ERP, so send them there rather than show a
+   * link that goes nowhere. Derived from the API base URL, so a build pointed
+   * at the LAN server opens the LAN server's page and not production's.
+   */
+  const forgotPassword = () => {
+    const origin = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+    Linking.openURL(`${origin}/forgot-password/`).catch(() => {});
+  };
+
   return (
-    <ImageBackground source={BG} style={styles.bg} resizeMode="cover">
+    <View style={styles.root}>
       <StatusBar style="light" />
-      <View style={styles.scrim} />
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === "ios" ? undefined : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
             contentContainerStyle={styles.scroll}
@@ -57,83 +91,258 @@ export function LoginScreen() {
             automaticallyAdjustKeyboardInsets
             showsVerticalScrollIndicator={false}
           >
-            {/* Brand over the photo */}
-            <View style={styles.brandWrap}>
-              <View style={styles.logo}>
-                <AppIcon emoji="🐔" size={40} color={colors.onDark} />
+            {/* The web page's hero panel, here as the screen's header. Fixed
+                height on purpose: inside a ScrollView an unbounded
+                ImageBackground grows to the content, which turned the photo
+                into a full-screen backdrop behind the card. */}
+            <ImageBackground source={HERO} style={[styles.hero, { height: heroHeight }]} resizeMode="cover">
+              <View style={styles.heroVeil} />
+              <SafeAreaView edges={["top"]}>
+                <View style={styles.brandRow}>
+                  <Image source={MARK} style={styles.mark} resizeMode="contain" />
+                  <View>
+                    <Text style={styles.brandName}>Hi Tech Farms</Text>
+                    <Text style={styles.brandSub}>POULTRY ERP</Text>
+                  </View>
+                </View>
+              </SafeAreaView>
+              <View style={styles.heroCopy}>
+                <Text style={styles.heroPitch}>
+                  Smart Poultry Management{"\n"}
+                  <Text style={styles.heroPitchAccent}>All in One ERP</Text>
+                </Text>
               </View>
-              <Text style={styles.brand}>Hitech BIMS</Text>
-              <Text style={styles.tagline}>Poultry &amp; Hatchery Management</Text>
+            </ImageBackground>
+
+            <View style={[styles.card, shadow(2)]}>
+              <View style={styles.lock}>
+                <AppIcon name="lock-outline" size={26} color={colors.success} />
+              </View>
+              <Text style={styles.title}>Welcome Back!</Text>
+              <Text style={styles.lead}>Login to access your ERP account</Text>
+
+              {error ? (
+                <View style={styles.errorBox}>
+                  <AppIcon name="alert-circle-outline" size={16} color={colors.danger} />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              <Text style={styles.label}>Username / Employee ID</Text>
+              <View style={styles.control}>
+                <AppIcon name="account-outline" size={18} color={colors.success} />
+                <TextInput
+                  style={styles.input}
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="Enter Employee ID or Username"
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                />
+              </View>
+
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.control}>
+                <AppIcon name="lock-outline" size={18} color={colors.success} />
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter Password"
+                  placeholderTextColor={colors.textFaint}
+                  secureTextEntry={!reveal}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="go"
+                  onSubmitEditing={onSubmit}
+                />
+                <Pressable
+                  onPress={() => setReveal((v) => !v)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={reveal ? "Hide password" : "Show password"}
+                >
+                  <AppIcon
+                    name={reveal ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color={colors.textFaint}
+                  />
+                </Pressable>
+              </View>
+
+              <Pressable onPress={forgotPassword} hitSlop={8} style={styles.forgotWrap}>
+                <Text style={styles.forgot}>Forgot Password?</Text>
+              </Pressable>
+
+              {/* Brand green, not the app's slate `primary`. This is the one
+                  screen whose job is to look like Hi Tech Farms, and the web
+                  login's button is green — a slate one here breaks the match. */}
+              <Pressable
+                onPress={onSubmit}
+                disabled={disabled || submitting}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.submit,
+                  disabled && styles.submitOff,
+                  pressed && styles.submitPressed,
+                ]}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={colors.onDark} />
+                ) : (
+                  <>
+                    <AppIcon name="login" size={18} color={colors.onDark} />
+                    <Text style={styles.submitText}>LOGIN</Text>
+                  </>
+                )}
+              </Pressable>
+
+              <View style={styles.assure}>
+                <AppIcon name="shield-check-outline" size={18} color={colors.success} />
+                <View style={styles.flex}>
+                  <Text style={styles.assureTitle}>Secure Login</Text>
+                  <Text style={styles.assureText}>
+                    Your data is protected with enterprise grade security
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            {/* Sign-in card */}
-            <View style={[styles.card, shadow(3)]}>
-              <Text style={styles.cardTitle}>Welcome back</Text>
-              <Text style={styles.cardSub}>Sign in to continue</Text>
-
-              <Field
-                label="Username"
-                value={username}
-                onChangeText={setUsername}
-                placeholder="your.username"
-                autoCorrect={false}
-                returnKeyType="next"
-              />
-              <Field
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                secureTextEntry
-                returnKeyType="go"
-                onSubmitEditing={disabled ? undefined : onSubmit}
-              />
-
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-
-              <Button title="Sign In" onPress={onSubmit} loading={submitting} disabled={disabled} />
-            </View>
+            <Text style={styles.foot}>Powered by Hi Tech Farms</Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
-  bg: { flex: 1, backgroundColor: colors.primaryDark },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(6,20,12,0.55)" },
+  root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: "flex-end", padding: spacing.lg },
+  scroll: { flexGrow: 1, paddingBottom: spacing.xl },
 
-  brandWrap: { alignItems: "center", marginBottom: spacing.xl, gap: spacing.xs },
-  logo: {
-    width: 76,
-    height: 76,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.sm,
+  hero: { justifyContent: "space-between" },   // height set per screen size
+  // Same job as the web's .hero-veil: enough scrim for white text, not so much
+  // that the sunset the photo is carrying goes flat.
+  heroVeil: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(12,45,25,0.42)",
   },
-  logoGlyph: { fontSize: 40 },
-  brand: { ...type.h1, fontSize: 30, color: colors.onDark, textShadowColor: "rgba(0,0,0,0.35)", textShadowRadius: 8 },
-  tagline: { ...type.body, color: "rgba(255,255,255,0.9)" },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  mark: { width: 44, height: 44 },
+  brandName: { ...type.h3, color: colors.onDark },
+  brandSub: {
+    ...type.caption,
+    fontSize: 10,
+    color: "rgba(255,255,255,0.85)",
+    letterSpacing: 2,
+    marginTop: 1,
+  },
+  // Clear of the card, which laps over the photo's bottom edge.
+  heroCopy: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl + spacing.lg },
+  heroPitch: {
+    ...type.h2,
+    color: colors.onDark,
+    lineHeight: 28,
+    textShadowColor: "rgba(0,0,0,0.4)",
+    textShadowRadius: 8,
+  },
+  heroPitchAccent: { color: "#86efac" },
 
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     padding: spacing.xl,
+    marginHorizontal: spacing.lg,
+    // Pulled up over the photo, so the card and the hero read as one panel
+    // rather than two stacked blocks.
+    marginTop: -spacing.xl,
   },
-  cardTitle: { ...type.h2, color: colors.text },
-  cardSub: { ...type.body, color: colors.textMuted, marginTop: 2, marginBottom: spacing.lg },
-  error: {
-    ...type.label,
-    color: colors.danger,
+  lock: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.successLight,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
     marginBottom: spacing.md,
+  },
+  title: { ...type.h2, color: colors.text, textAlign: "center" },
+  lead: {
+    ...type.body,
+    color: colors.textMuted,
     textAlign: "center",
+    marginTop: 4,
+    marginBottom: spacing.lg,
+  },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.dangerLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: { ...type.label, color: colors.danger, flex: 1 },
+
+  label: { ...type.label, color: colors.text, marginBottom: spacing.xs },
+  control: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 52,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+  },
+  input: { flex: 1, ...type.body, color: colors.text, paddingVertical: spacing.sm },
+
+  forgotWrap: { alignSelf: "flex-end", marginBottom: spacing.lg },
+  forgot: { ...type.label, color: colors.success },
+
+  assure: {
+    flexDirection: "row",
+    gap: spacing.md,
+    backgroundColor: colors.successLight,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+  },
+  assureTitle: { ...type.label, color: colors.success },
+  assureText: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+
+  submit: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    minHeight: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.success,
+  },
+  submitOff: { opacity: 0.45 },
+  submitPressed: { opacity: 0.85 },
+  submitText: { ...type.title, color: colors.onDark, letterSpacing: 1 },
+
+  foot: {
+    ...type.caption,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.lg,
   },
 }));

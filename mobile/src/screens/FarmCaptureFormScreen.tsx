@@ -13,7 +13,7 @@ import { FormField } from "@/config/forms";
 import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
-import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
+import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "FarmCaptureForm">;
 
@@ -406,11 +406,23 @@ export function FarmCaptureFormScreen({ navigation, route }: Props) {
         </View>
 
         <View style={styles.card}>
-          <SectionHead n={2} title="LOCATION & GPS" tone={colors.success} />
-          <Pressable style={[styles.gpsButton, locating && { opacity: 0.6 }]}
-                     onPress={useMyLocation} disabled={locating}>
-            <AppIcon name="map-marker" size={18} color={colors.success} />
-            <Text style={[styles.gpsText, { color: colors.success }]}>
+          <SectionHead n={2} title="FARM LOCATION & ADDRESS" tone={colors.success} />
+          {/* The one action of this section, so it is drawn as one: filled,
+              raised and it moves under the thumb. As a pale tint with green
+              text it read as a banner, and a banner is not something anyone
+              thinks to press. */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.gpsButton,
+              pressed && styles.gpsButtonPressed,
+              locating && { opacity: 0.6 },
+            ]}
+            onPress={useMyLocation}
+            disabled={locating}
+            accessibilityRole="button"
+          >
+            <AppIcon name="crosshairs-gps" size={18} color={colors.onDark} />
+            <Text style={styles.gpsText}>
               {locating ? "Reading location…" : "Use My Current Location"}
             </Text>
           </Pressable>
@@ -524,10 +536,12 @@ const useStyles = makeStyles((colors) => ({
 
   gpsButton: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm,
-    backgroundColor: colors.successLight,
+    backgroundColor: colors.success,
     borderRadius: radius.md, paddingVertical: spacing.md,
+    ...shadow(2),
   },
-  gpsText: { ...type.title },
+  gpsButtonPressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  gpsText: { ...type.title, color: colors.onDark },
   note: { ...type.caption, color: colors.textMuted, marginTop: spacing.xs },
 
   labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

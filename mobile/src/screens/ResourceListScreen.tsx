@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from "react-native";
 
+import { http } from "@/api/client";
 import { deleteResource } from "@/api/resources";
 import { Row } from "@/api/types";
 import { useOverview } from "@/api/stats";
@@ -102,13 +103,39 @@ export function ResourceListScreen({ route, navigation }: Props) {
         onPress: () => confirmDelete(row),
       });
     }
-    // Resource-specific actions (ending a trip, say) sit after the standard
-    // three, and only where that resource offers them.
-    if (canEdit) {
-      actions.push(...extraRowActions(config.key, row,
-        (screen, params) => navigation.navigate(screen, params)));
-    }
+    // Resource-specific actions (ending a trip, filling a capture) sit after
+    // the standard three. Each gates itself: the ERP offers "+" to whoever may
+    // add and the eraser to whoever may edit, and one shared check here made
+    // both of them follow whichever right happened to be tested.
+    actions.push(...extraRowActions(
+      config.key, row,
+      (screen, params) => (navigation.navigate as (s: string, p: unknown) => void)(
+        screen, params),
+      { add: canAdd, edit: canEdit, delete: canDelete },
+      { clearLocation: confirmClearLocation }));
     return actions;
+  };
+
+  /**
+   * Dropping a pin is destructive and off a small button, so it asks first.
+   * The visit and its photographs stay — only the reading goes, which is what
+   * the wording has to say or it reads like Delete.
+   */
+  const confirmClearLocation = async (row: Row) => {
+    const label = config.card(row).title;
+    if (!(await confirm({
+      title: "Clear the location?",
+      message: `${label} keeps its photos and documents. Only the GPS reading `
+             + "is removed, so the farm can be pinned again on the next visit.",
+      confirmLabel: "Clear Pin",
+      destructive: true,
+    }))) return;
+    try {
+      await http.post(`/broiler/location-captures/${row.id}/clear`);
+      queryClient.invalidateQueries({ queryKey: ["resource", config.path] });
+    } catch (e) {
+      notify("Could not clear", (e as Error)?.message ?? "Please try again.");
+    }
   };
 
   /** Deleting is destructive and off a small button, so it always asks first. */

@@ -15,9 +15,17 @@ import { RecordAction } from "@/components/RecordCard";
  * here would need a cast at every call site and would let a typo through.
  */
 export type RowActionNavigate = (
-  screen: "SupervisorTripForm",
-  params: { row: Row; ending: boolean },
+  screen: "SupervisorTripForm" | "FarmCaptureFill",
+  params: { row: Row; ending?: boolean },
 ) => void;
+
+/** What the asker may do here, so each action gates itself the way the ERP
+ *  register gates its own button rather than all of them sharing one check. */
+export interface RowActionPerms {
+  add: boolean;
+  edit: boolean;
+  delete: boolean;
+}
 
 /**
  * Ending a trip opens the trip, rather than closing it where you stand.
@@ -44,13 +52,59 @@ function endTripAction(row: Row, navigate: RowActionNavigate): RecordAction {
   };
 }
 
+/**
+ * Fill in what a capture is still missing — the register's "+".
+ *
+ * A visit is often recorded in pieces: the pin and the photographs on the
+ * farm, the cheque scan when it turns up a week later. Editing the whole
+ * capture to add one missing file invites overwriting what is already there,
+ * so this only offers the blanks. Gated on *add* rather than edit, as the ERP
+ * gates it: filling a blank is adding, not amending.
+ */
+function fillCaptureAction(row: Row, navigate: RowActionNavigate): RecordAction {
+  return {
+    key: "fill",
+    label: "Fill",
+    icon: "plus",
+    onPress: () => navigate("FarmCaptureFill", { row }),
+  };
+}
+
+/**
+ * Drop the pin, keeping the visit.
+ *
+ * A wrong GPS reading is the thing that needs undoing; the pictures taken on
+ * that visit are still good. Greyed when there is no location to clear, so the
+ * row keeps its shape and the button says why it is idle.
+ */
+function clearLocationAction(row: Row, onClear: () => void): RecordAction {
+  const pinned = row.latitude != null && row.longitude != null;
+  return {
+    key: "clear-location",
+    label: pinned ? "Clear Pin" : "No Pin",
+    icon: "eraser-variant",
+    disabled: !pinned,
+    onPress: onClear,
+  };
+}
+
 export function extraRowActions(
   resourceKey: string,
   row: Row,
   navigate: RowActionNavigate,
+  perms: RowActionPerms,
+  handlers?: { clearLocation?: (row: Row) => void },
 ): RecordAction[] {
   if (resourceKey === "hr-supervisor-trips") {
-    return [endTripAction(row, navigate)];
+    return perms.edit ? [endTripAction(row, navigate)] : [];
+  }
+  if (resourceKey === "broiler-farm-location-capture") {
+    const out: RecordAction[] = [];
+    if (perms.add) out.push(fillCaptureAction(row, navigate));
+    if (perms.edit && handlers?.clearLocation) {
+      out.push(clearLocationAction(row, () => handlers.clearLocation!(row)));
+    }
+    return out;
   }
   return [];
 }

@@ -35,6 +35,8 @@ export type ModuleStackParams = {
   /** Batch Creation. `row` corrects a saved batch; the farm is fixed then. */
   BatchForm: { row?: Row } | undefined;
   FarmCaptureForm: { row?: Row } | undefined;
+  /** Fill only what a capture is still missing — the register's "+". */
+  FarmCaptureFill: { row: Row };
   /** `ending` opens the trip at the closing evidence it still needs. */
   SupervisorTripForm: { row?: Row; ending?: boolean } | undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */

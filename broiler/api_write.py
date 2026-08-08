@@ -196,6 +196,88 @@ class FarmLocationCaptureWriteView(V1ViewMixin, APIView):
             status=201 if pk is None else 200)
 
 
+class _MessageSink:
+    """Where a flash message goes when there is no next page to show it on."""
+
+    def add(self, level, message, extra_tags=""):
+        return True
+
+
+class _PostRequest(_CaptureRequest):
+    """A DRF request presented as the plain Django POST a web view expects.
+
+    Both capture views are wrapped in ``@login_required`` and ``@require_POST``,
+    which read attributes a bare shim does not carry — ``method`` above all, and
+    the path a login redirect would bounce back to. Without them the decorators
+    raise before the view is reached at all.
+    """
+
+    method = "POST"
+
+    def __init__(self, request):
+        super().__init__(request)
+        self.META = request.META
+        self.path = request.path
+        # A web view flashes a message on its way to a redirect. There is no
+        # next page here to read it, but django.contrib.messages raises without
+        # somewhere to put one, so it gets a sink that is never emptied.
+        self._messages = _MessageSink()
+
+    def get_full_path(self):
+        return self.path
+
+
+def _web_result(response, done):
+    """A web view's answer as the phone's.
+
+    These two answer a browser: one returns JSON, the other redirects back to
+    the register. A redirect is a success with nowhere to go on a phone, so it
+    becomes the message it would have flashed.
+    """
+    import json
+
+    if response.status_code in (301, 302, 303, 307, 308):
+        return Response({"message": done})
+    payload = json.loads(response.content or b"{}")
+    if response.status_code >= 400:
+        raise ValidationError(payload.get("error") or payload or "Could not save.")
+    return Response(payload)
+
+
+class FarmCaptureFillView(V1ViewMixin, APIView):
+    """POST /api/v1/broiler/location-captures/<id>/fill — the register's "+".
+
+    Fills only what a capture is still missing. Delegates to the web view so
+    the rule that decides what may be written lives in one place: the phone
+    locking what is already held is a courtesy, not the guard, and a hand-made
+    request must not be able to replace a document or a GPS reading either.
+    """
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk):
+        return _web_result(
+            web.farm_location_capture_complete(_PostRequest(request), pk),
+            "Capture updated.")
+
+
+class FarmCaptureClearView(V1ViewMixin, APIView):
+    """POST /api/v1/broiler/location-captures/<id>/clear — drop the pin.
+
+    For a reading taken at the wrong place. The capture and its photographs
+    stay; only the location goes, so the farm can be re-pinned on the next
+    visit without losing the visit itself.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        return _web_result(
+            web.farm_location_capture_clear(_PostRequest(request), pk),
+            "Location cleared.")
+
+
 def write_urls() -> list:
     """URL patterns for the broiler document write endpoints."""
     return [
@@ -205,6 +287,10 @@ def write_urls() -> list:
              name="broiler-receipts-save"),
         path("broiler/location-captures/save",
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save-new"),
+        path("broiler/location-captures/<int:pk>/fill",
+             FarmCaptureFillView.as_view(), name="broiler-captures-fill"),
+        path("broiler/location-captures/<int:pk>/clear",
+             FarmCaptureClearView.as_view(), name="broiler-captures-clear"),
         path("broiler/location-captures/save/<int:pk>",
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save"),
         path("broiler/batches/save", BroilerBatchWriteView.as_view(),

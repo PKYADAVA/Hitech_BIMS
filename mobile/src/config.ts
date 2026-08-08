@@ -44,6 +44,19 @@ export const API_BASE_URL: string =
 export const API_PATH_PREFIX: string = toProxyPath(absoluteBaseUrl);
 
 /**
+ * Where uploaded files live, e.g. "http://localhost:8000".
+ *
+ * Always absolute, unlike API_BASE_URL. A stored file's url comes back
+ * server-relative ("/media/..."), and on web the API is reached through a
+ * same-origin proxy path — so resolving media against *that* points the
+ * browser at the Metro dev server, which serves no media and renders every
+ * photograph as a blank tile. CORS does not apply here: an <img> loads
+ * cross-origin freely, it is only XHR the browser guards.
+ */
+export const MEDIA_BASE_URL: string =
+  absoluteBaseUrl.replace(/\/api\/v1\/?$/, "");
+
+/**
  * A server-built link, re-pointed at the base URL this app was configured with.
  *
  * DRF writes pagination `next`/`previous` as absolute URLs, using whatever host
