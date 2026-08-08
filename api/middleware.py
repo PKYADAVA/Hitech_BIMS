@@ -2,14 +2,38 @@ import logging
 
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .models import IdempotencyRecord
 
 logger = logging.getLogger(__name__)
 
 HEADER = "HTTP_IDEMPOTENCY_KEY"
+# What the phone tells us about an entry that waited on the device.
+OFFLINE_NO_HEADER = "HTTP_X_OFFLINE_NO"
+OFFLINE_AT_HEADER = "HTTP_X_OFFLINE_CREATED_AT"
+DEVICE_HEADER = "HTTP_X_DEVICE_ID"
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 API_PREFIX = "/api/"
+
+
+def _parse_when(value):
+    """The device's own timestamp, or None if it sent nothing usable.
+
+    Never fatal: an entry that reaches the ERP with an unreadable timestamp is
+    still an entry the ERP wants. The column is left empty and the record still
+    carries when it was received.
+    """
+    if not value:
+        return None
+    try:
+        parsed = parse_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed and timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.utc)
+    return parsed
 
 
 def _requesting_user(request):
@@ -73,7 +97,11 @@ class IdempotencyMiddleware:
             with transaction.atomic():
                 record = IdempotencyRecord.objects.create(
                     key=key, user=user, method=request.method,
-                    path=request.path[:500])
+                    path=request.path[:500],
+                    offline_no=request.META.get(OFFLINE_NO_HEADER, "")[:32],
+                    device_id=request.META.get(DEVICE_HEADER, "")[:120],
+                    device_created_at=_parse_when(request.META.get(OFFLINE_AT_HEADER)),
+                    server_received_at=timezone.now())
         except IntegrityError:
             return self._already_seen(key, user)
 

@@ -29,7 +29,8 @@ import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
-import { OfflineEntriesScreen } from "@/screens/OfflineEntriesScreen";
+import { SyncStatusChip } from "@/components/SyncStatusChip";
+import { SyncCenterScreen } from "@/screens/SyncCenterScreen";
 import { ReportsHubScreen, ReportsStackParams } from "@/screens/ReportsHubScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
@@ -133,6 +134,10 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
         headerShadowVisible: false,
         headerBackVisible: false,
         contentStyle: { backgroundColor: colors.bg },
+        // Sits on every screen so the state of the queue is never more than a
+        // glance away — the moment it matters is mid-round, not on the way to
+        // a settings page.
+        headerRight: () => <SyncStatusChip tint={colors.onDark} />,
       }}
     >
       <ModuleStack.Screen
@@ -232,6 +237,7 @@ function ReportsStack() {
         options={{
           title: "Reports & Analytics",
           headerLeft: () => <SideNavButton tint={colors.onDark} />,
+          headerRight: () => <SyncStatusChip tint={colors.onDark} />,
         }}
       />
       <ReportsStackNav.Screen
@@ -310,11 +316,11 @@ export function RootNavigator() {
                 because the moment it is wanted is when a round has just been
                 filled out of range. */}
             <Root.Screen
-              name="OfflineEntries"
-              component={OfflineEntriesScreen}
+              name="SyncCenter"
+              component={SyncCenterScreen}
               options={{
                 headerShown: true,
-                title: "Offline Entries",
+                title: "Sync Center",
                 headerStyle: { backgroundColor: colors.tint },
                 headerTintColor: colors.onDark,
                 headerTitleStyle: { fontWeight: "800" },

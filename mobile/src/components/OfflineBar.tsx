@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Text, View } from "react-native";
 
 import { queryClient } from "@/query/queryClient";
 import { useAutoSync } from "@/net/autoSync";
-import { outboxState, subscribeToOutbox } from "@/net/outbox";
-import { OutboxState } from "@/net/outboxTypes";
+import { useSyncSummary } from "@/offline/useSync";
 import { makeStyles, spacing, type } from "@/theme";
 
 /**
@@ -48,12 +47,12 @@ const saves = (n: number) => `${n} save${n === 1 ? "" : "s"}`;
  */
 export function OfflineBar() {
   const state = useAutoSync();
-  const outbox = useOutbox();
+  const outbox = useSyncSummary();
   const styles = useStyles();
 
-  if (state === "online" && !outbox.pending && !outbox.rejected) return null;
+  if (state === "online" && !outbox.pending && !outbox.failed) return null;
 
-  if (state === "syncing" || (outbox.sending && state === "online")) {
+  if (state === "syncing" || (outbox.syncing && state === "online")) {
     return (
       <View style={[styles.bar, styles.syncing]}>
         <Text style={[styles.text, styles.syncingText]} numberOfLines={1}>
@@ -68,11 +67,11 @@ export function OfflineBar() {
   // Everything reached the ERP except what it refused. Nothing is waiting on
   // the network, so an offline bar would be telling the user the wrong thing.
   if (state === "online") {
-    if (!outbox.rejected) return null;
+    if (!outbox.failed) return null;
     return (
       <View style={[styles.bar, styles.rejected]}>
         <Text style={[styles.text, styles.rejectedText]} numberOfLines={1}>
-          {saves(outbox.rejected)} the ERP would not accept — open Menu to review
+          {saves(outbox.failed)} the ERP would not accept — open Menu to review
         </Text>
       </View>
     );
@@ -88,13 +87,6 @@ export function OfflineBar() {
       </Text>
     </View>
   );
-}
-
-/** The queue's count, kept current without the bar reading the queue itself. */
-function useOutbox(): OutboxState {
-  const [state, setState] = useState<OutboxState>(outboxState);
-  useEffect(() => subscribeToOutbox(setState), []);
-  return state;
 }
 
 const useStyles = makeStyles((colors) => ({

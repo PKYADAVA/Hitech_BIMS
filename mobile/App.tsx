@@ -8,7 +8,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LockGate } from "@/components/LockGate";
 import { OfflineBar } from "@/components/OfflineBar";
 import { startOnlineWatch } from "@/net/online";
-import { enqueue, flushOutbox, outboxState, pendingWrites } from "@/net/outbox";
+import { runSync } from "@/offline/engine";
+import { saveOffline } from "@/offline/save";
+import { insertEntry, listEntries, summarise } from "@/offline/queue";
 import { writeThrough } from "@/net/writeThrough";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { registerForPush } from "@/push";
@@ -50,7 +52,7 @@ export default function App() {
   useEffect(() => {
     if (!__DEV__) return;
     (globalThis as Record<string, unknown>).__bimsOffline = {
-      writeThrough, flushOutbox, pendingWrites, outboxState, enqueue,
+      writeThrough, runSync, listEntries, summarise, insertEntry, saveOffline,
     };
   }, []);
 

@@ -29,6 +29,22 @@ class IdempotencyRecord(models.Model):
                              related_name="idempotency_records")
     method = models.CharField(max_length=10)
     path = models.CharField(max_length=500)
+
+    # --- what the phone was doing when it filed this ---------------------
+    # Kept so the office can answer "when was this actually taken?" without
+    # the sync time standing in for it. A round walked out of range at 09:12
+    # and sent at 11:47 is two different facts, and only one of them is about
+    # where somebody was.
+    offline_no = models.CharField(
+        max_length=32, blank=True,
+        help_text=_("The phone's own number, e.g. OFF-20260808-000124"))
+    device_id = models.CharField(max_length=120, blank=True)
+    device_created_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=_("When the user filed it on the device"))
+    server_received_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=_("When it reached the ERP"))
     status_code = models.PositiveSmallIntegerField(null=True, blank=True)
     response = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -39,7 +55,11 @@ class IdempotencyRecord(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["user", "key"], name="uniq_idempotency_user_key"),
         ]
-        indexes = [models.Index(fields=["created_at"])]
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["device_id"]),
+            models.Index(fields=["offline_no"]),
+        ]
 
     def __str__(self):
         return f"{self.method} {self.path} [{self.key}]"

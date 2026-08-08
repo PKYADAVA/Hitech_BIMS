@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 
 import { mimeFromName } from "@/capture";
-import { OutboxFile } from "./outboxTypes";
+import { OfflineFile } from "@/offline/types";
 
 /**
  * Keeping a captured photo alive until it can be sent.
@@ -12,7 +12,7 @@ import { OutboxFile } from "./outboxTypes";
  * signal an hour on: Android empties that directory whenever it wants storage
  * back, and the queued write would then have a path pointing at nothing.
  *
- * So a photo bound for the outbox is copied into the document directory, which
+ * So a photo bound for the queue is copied into the document directory, which
  * is backed up and not reclaimed, and deleted once the write lands.
  *
  * On web there is no document directory. A blob: uri dies with the page, so
@@ -39,10 +39,10 @@ async function outboxDirectory() {
  * never succeed, and the caller should hear about it while the user is still
  * looking at the photo.
  */
-export async function persistForOutbox(
+export async function persistForOffline(
   field: string,
   uri: string
-): Promise<OutboxFile> {
+): Promise<OfflineFile> {
   const name = uri.split("/").pop()?.split("?")[0] || `${field}.jpg`;
   const type = mimeFromName(name);
 
@@ -76,7 +76,7 @@ function toDataUrl(blob: Blob): Promise<string> {
  * Never throws: the write is already filed by the time this runs, and failing
  * the flush over a file that could not be tidied would send it a second time.
  */
-export async function discardOutboxFile(file: OutboxFile): Promise<void> {
+export async function discardOfflineFile(file: OfflineFile): Promise<void> {
   if (Platform.OS === "web" || !file.uri.startsWith("file:")) return;
   try {
     const { File } = await import("expo-file-system");

@@ -4,7 +4,7 @@ import { logout as apiLogout, fetchMe } from "@/api/auth";
 import { requestLogin, setSessionExpiredHandler } from "@/api/client";
 import { tokenStore } from "@/api/tokenStore";
 import { ApiError, AuthUser } from "@/api/types";
-import { setOutboxUser } from "@/net/outbox";
+import { setQueueUser } from "@/offline/queue";
 import { clearCachedData } from "@/query/cache";
 
 interface AuthState {
@@ -33,7 +33,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const user = await fetchMe();
-      setOutboxUser(String(user.id));
+      setQueueUser(String(user.id));
       set({ status: "signedIn", user });
     } catch {
       await tokenStore.clear();
@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await tokenStore.set(result.access, result.refresh);
       // Anything this user queued on a previous session becomes sendable
       // again; anyone else's stays where it is.
-      setOutboxUser(String(result.user.id));
+      setQueueUser(String(result.user.id));
       set({ status: "signedIn", user: result.user });
     } catch (e) {
       const message =
@@ -74,7 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // reaching signal would lose the round. Detaching the user is enough:
     // the writes stay on disk and go when that user signs in again, never
     // under the next person's token.
-    setOutboxUser(null);
+    setQueueUser(null);
     set({ status: "signedOut", user: null, error: null });
   },
 }));

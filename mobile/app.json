@@ -63,7 +63,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#15803d"
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "owner": "prabhatexpo"
   }

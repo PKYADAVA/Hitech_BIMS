@@ -16,8 +16,7 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon, IconName } from "@/components/AppIcon";
-import { outboxState, subscribeToOutbox } from "@/net/outbox";
-import { OutboxState } from "@/net/outboxTypes";
+import { useSyncSummary } from "@/offline/useSync";
 import { colors, makeStyles, radius, spacing, type, withAlpha } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -62,8 +61,8 @@ export const NAV_ITEMS: NavItem[] = [
   // It belongs in the sidebar rather than under a module because the records
   // waiting there can come from any of them, and because the moment it is
   // wanted is after a round filled out of range.
-  { key: "offline", title: "Offline Entries", icon: "cloud-upload-outline",
-    color: colors.warning, target: "OfflineEntries" },
+  { key: "offline", title: "Sync Center", icon: "cloud-sync-outline",
+    color: colors.warning, target: "SyncCenter" },
 ];
 
 export function SideNav() {
@@ -77,7 +76,7 @@ export function SideNav() {
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
   const navOrder = usePermissionsStore((s) => s.navOrder);
-  const outbox = useOutboxBadge();
+  const outbox = useSyncSummary();
 
   // Dashboard always leads; the modules follow the server's order, which is
   // the administrator's if one is configured and the registry's otherwise.
@@ -137,10 +136,10 @@ export function SideNav() {
                     </Text>
                     {/* The count is the whole reason this row is here: a queue
                         nobody notices is a round nobody knows is unsent. */}
-                    {item.key === "offline" && outbox.pending + outbox.rejected > 0 ? (
-                      <View style={[styles.badge, outbox.rejected > 0 && styles.badgeBad]}>
+                    {item.key === "offline" && outbox.pending + outbox.failed + outbox.conflicts > 0 ? (
+                      <View style={[styles.badge, (outbox.failed + outbox.conflicts) > 0 && styles.badgeBad]}>
                         <Text style={styles.badgeText}>
-                          {outbox.pending + outbox.rejected}
+                          {outbox.pending + outbox.failed + outbox.conflicts}
                         </Text>
                       </View>
                     ) : null}
@@ -152,13 +151,6 @@ export function SideNav() {
       </Pressable>
     </Modal>
   );
-}
-
-/** The queue's count, so the sidebar can show it without reading the queue. */
-function useOutboxBadge(): OutboxState {
-  const [state, setState] = React.useState<OutboxState>(outboxState);
-  React.useEffect(() => subscribeToOutbox(setState), []);
-  return state;
 }
 
 /** The hamburger that opens it. */
