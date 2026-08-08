@@ -16,6 +16,8 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon, IconName } from "@/components/AppIcon";
+import { outboxState, subscribeToOutbox } from "@/net/outbox";
+import { OutboxState } from "@/net/outboxTypes";
 import { colors, makeStyles, radius, spacing, type, withAlpha } from "@/theme";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -56,6 +58,12 @@ export const NAV_ITEMS: NavItem[] = [
   // for "the mortality report" without first deciding which module owns it.
   { key: "reports", title: "Reports & Analytics", icon: "chart-bar",
     color: colors.tint, target: "ReportsModule" },
+  // Not a module at all: what this phone has saved that the ERP has not seen.
+  // It belongs in the sidebar rather than under a module because the records
+  // waiting there can come from any of them, and because the moment it is
+  // wanted is after a round filled out of range.
+  { key: "offline", title: "Offline Entries", icon: "cloud-upload-outline",
+    color: colors.warning, target: "OfflineEntries" },
 ];
 
 export function SideNav() {
@@ -69,6 +77,7 @@ export function SideNav() {
   const canModule = usePermissionsStore((s) => s.canModule);
   const permsLoaded = usePermissionsStore((s) => s.loaded);
   const navOrder = usePermissionsStore((s) => s.navOrder);
+  const outbox = useOutboxBadge();
 
   // Dashboard always leads; the modules follow the server's order, which is
   // the administrator's if one is configured and the registry's otherwise.
@@ -78,7 +87,7 @@ export function SideNav() {
     if (!navOrder.length) return NAV_ITEMS;
     const ordered = navOrder.map((k) => byKey.get(k)).filter(Boolean) as NavItem[];
     const reports = byKey.get("reports")!;
-    return [dashboard, ...ordered, reports];
+    return [dashboard, ...ordered, reports, byKey.get("offline")!];
   }, [navOrder]);
 
   const go = (item: NavItem) => {
@@ -108,7 +117,7 @@ export function SideNav() {
 
           <ScrollView showsVerticalScrollIndicator={false}>
             {items
-              .filter((i) => ["dashboard", "reports"].includes(i.key)
+              .filter((i) => ["dashboard", "reports", "offline"].includes(i.key)
                              || !permsLoaded || canModule(i.key))
               .map((item) => {
                 const on = active === item.key;
@@ -126,6 +135,15 @@ export function SideNav() {
                     <Text style={[styles.rowText, on && styles.rowTextOn]} numberOfLines={1}>
                       {item.title}
                     </Text>
+                    {/* The count is the whole reason this row is here: a queue
+                        nobody notices is a round nobody knows is unsent. */}
+                    {item.key === "offline" && outbox.pending + outbox.rejected > 0 ? (
+                      <View style={[styles.badge, outbox.rejected > 0 && styles.badgeBad]}>
+                        <Text style={styles.badgeText}>
+                          {outbox.pending + outbox.rejected}
+                        </Text>
+                      </View>
+                    ) : null}
                   </Pressable>
                 );
               })}
@@ -134,6 +152,13 @@ export function SideNav() {
       </Pressable>
     </Modal>
   );
+}
+
+/** The queue's count, so the sidebar can show it without reading the queue. */
+function useOutboxBadge(): OutboxState {
+  const [state, setState] = React.useState<OutboxState>(outboxState);
+  React.useEffect(() => subscribeToOutbox(setState), []);
+  return state;
 }
 
 /** The hamburger that opens it. */
@@ -187,4 +212,10 @@ const useStyles = makeStyles((c) => ({
   },
   rowText: { ...type.body, color: "rgba(255,255,255,0.86)", flex: 1 },
   rowTextOn: { color: "#fff", fontWeight: "700" },
+  badge: {
+    minWidth: 22, paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: 11, backgroundColor: c.warning, alignItems: "center",
+  },
+  badgeBad: { backgroundColor: c.danger },
+  badgeText: { ...type.caption, color: "#fff", fontWeight: "800" },
 }));

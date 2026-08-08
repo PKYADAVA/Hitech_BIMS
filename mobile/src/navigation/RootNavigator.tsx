@@ -29,6 +29,7 @@ import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
+import { OfflineEntriesScreen } from "@/screens/OfflineEntriesScreen";
 import { ReportsHubScreen, ReportsStackParams } from "@/screens/ReportsHubScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
@@ -304,6 +305,22 @@ export function RootNavigator() {
             <Root.Screen name="UserModule" component={UserStack} />
             <Root.Screen name="ChangeRequestModule" component={ChangeRequestStack} />
             <Root.Screen name="ReportsModule" component={ReportsStack} />
+            {/* Not a module: what this phone has saved that the ERP has not
+                seen yet. Reachable from the sidebar whatever screen is open,
+                because the moment it is wanted is when a round has just been
+                filled out of range. */}
+            <Root.Screen
+              name="OfflineEntries"
+              component={OfflineEntriesScreen}
+              options={{
+                headerShown: true,
+                title: "Offline Entries",
+                headerStyle: { backgroundColor: colors.tint },
+                headerTintColor: colors.onDark,
+                headerTitleStyle: { fontWeight: "800" },
+                headerShadowVisible: false,
+              }}
+            />
           </>
         ) : (
           <Root.Screen name="Login" component={LoginScreen} />
