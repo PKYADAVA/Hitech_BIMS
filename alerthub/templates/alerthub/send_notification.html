@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% comment %}
+Send a notification by hand.
+
+Everything else in this module is raised by a rule watching a number. This is
+the one place a person composes a message themselves — a feed delivery running
+late, a shed closing for maintenance — and sends it to named people.
+
+It writes a real notification rather than a bare push, so the message lands in
+the recipients' bell and stays in the history. A push alone would vanish the
+moment it was swiped away, with no record it had ever been sent.
+{% endcomment %}
+
+{% block title %}Send Notification — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<style>
+  /* Composing and addressing are two halves of one job, so they sit side by
+     side on a desktop rather than stacked down a narrow column — the earlier
+     layout left two thirds of the screen empty and squeezed the recipient
+     lists into two visible rows. */
+  .sn-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; align-items: start; }
+  .sn-card-title i { font-size: .95rem; }
+
+  /* `size="8"` alone does nothing here: the design system sets
+     `.ds .form-select { height: var(--ds-button-h) }`, which outspecifies a
+     plain `.sn-picker select` and squashes both lists to one row. Matching its
+     specificity is what actually makes them tall enough to pick from. */
+  .ds .sn-picker select.form-select { height: 280px; padding: 6px; }
+  .sn-picker option { padding: 5px 8px; border-radius: 6px; }
+  .sn-count { font-size: .78rem; color: #64748b; }
+
+  @media (max-width: 991.98px) { .sn-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="ah-wrap wide">
+
+  <div class="ah-head">
+    <div>
+      <a href="{% url 'alerthub:notification_center' %}" class="text-muted small text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back to notifications
+      </a>
+      <h1 class="ah-title mt-2">
+        <i class="fa-solid fa-paper-plane text-primary"></i> Send Notification
+      </h1>
+      <p class="ah-sub">Write a message and send it to chosen users or groups.</p>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="sn-grid">
+
+      <div class="ah-card">
+        <h2 class="ah-card-title sn-card-title"><i class="fa-solid fa-pen-to-square me-2"></i>Message</h2>
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.title.id_for_label }}">Title</label>
+          {{ form.title }}
+          {% if form.title.errors %}<div class="text-danger small mt-1">{{ form.title.errors.0 }}</div>{% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.message.id_for_label }}">Message</label>
+          {{ form.message }}
+          <div class="form-text">
+            A phone's lock screen shows the first line or two — put what matters first.
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label" for="{{ form.priority.id_for_label }}">Priority</label>
+            {{ form.priority }}
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="{{ form.module.id_for_label }}">Category</label>
+            {{ form.module }}
+            <div class="form-text">{{ form.module.help_text }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ah-card sn-picker">
+        <h2 class="ah-card-title sn-card-title"><i class="fa-solid fa-users me-2"></i>Recipients</h2>
+        <p class="ah-hint">
+          Pick groups, users, or both — anyone named twice is only sent to once.
+          Inactive accounts are not offered. Ctrl-click (⌘ on Mac) to choose several.
+        </p>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label d-flex justify-content-between align-items-end"
+                   for="{{ form.groups.id_for_label }}">
+              <span>Groups</span>
+              <span class="sn-count">{{ form.groups.field.queryset.count }} available</span>
+            </label>
+            {{ form.groups }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label d-flex justify-content-between align-items-end"
+                   for="{{ form.users.id_for_label }}">
+              <span>Users</span>
+              <span class="sn-count">{{ form.users.field.queryset.count }} active</span>
+            </label>
+            {{ form.users }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ah-note info mt-3">
+      <i class="fa-solid fa-circle-info mt-1"></i>
+      <span>
+        This reaches everyone chosen in their notification bell. It also goes to
+        the phones of those who have the app installed and have not turned
+        Mobile Push off — the opt-out silences the phone, never the message.
+      </span>
+    </div>
+
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-primary">
+        <i class="fa-solid fa-paper-plane me-1"></i>Send
+      </button>
+      <a href="{% url 'alerthub:notification_center' %}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

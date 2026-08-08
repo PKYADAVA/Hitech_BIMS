@@ -486,6 +486,10 @@ MODULE_REGISTRY = [
                     ("alert_rule_list", "Alert Configuration",
                      ("alert_rule_create", "alert_rule_edit",
                       "alert_rule_delete")),
+                    # Its own tab, not an extra URL of the one above: an extra
+                    # URL grants the right but renders no nav entry, so the
+                    # page existed with no way to reach it.
+                    ("send_notification", "Send Notification"),
                     ("alert_catalog", "Alert Catalogue"),
                 ],
             },

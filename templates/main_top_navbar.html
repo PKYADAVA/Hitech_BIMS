@@ -870,6 +870,10 @@
             <a class="dropdown-item" href="{% url 'alerthub:alert_rule_list' %}">
               <i class="fas fa-sliders"></i>Alert Configuration
             </a></li>{% endif %}
+          {% if 'send_notification' in allowed_tabs %}<li>
+            <a class="dropdown-item" href="{% url 'alerthub:send_notification' %}">
+              <i class="fas fa-paper-plane"></i>Send Notification
+            </a></li>{% endif %}
           {% if 'alert_catalog' in allowed_tabs %}<li>
             <a class="dropdown-item" href="{% url 'alerthub:alert_catalog' %}">
               <i class="fas fa-book"></i>Alert Catalogue

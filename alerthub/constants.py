@@ -101,6 +101,7 @@ class Channel(models.TextChoices):
     """
 
     IN_APP = "in_app", "In-App"
+    PUSH = "push", "Mobile Push"
     EMAIL = "email", "Email"
     SMS = "sms", "SMS"
     WHATSAPP = "whatsapp", "WhatsApp"
@@ -108,7 +109,11 @@ class Channel(models.TextChoices):
 
 #: Channels with a working transport today. The dispatcher refuses anything not
 #: in here and records the intent instead, so the history stays honest.
-LIVE_CHANNELS = frozenset({Channel.IN_APP})
+#:
+#: Push joined in-app once ``alerthub.push`` was wired to the Expo sender the
+#: mobile app already registers its device tokens with — both halves existed
+#: and had simply never been joined.
+LIVE_CHANNELS = frozenset({Channel.IN_APP, Channel.PUSH})
 
 
 class Operator(models.TextChoices):

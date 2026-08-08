@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { AlertBell } from "@/components/AlertBell";
 import { AppIcon } from "@/components/AppIcon";
 import { SideNav, SideNavButton } from "@/components/SideNav";
 import { useSideNav } from "@/store/sideNavStore";
@@ -28,6 +29,7 @@ import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
+import { NotificationsScreen } from "@/screens/NotificationsScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
 import { SyncStatusChip } from "@/components/SyncStatusChip";
 import { SyncCenterScreen } from "@/screens/SyncCenterScreen";
@@ -157,7 +159,12 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           // The module's one create action, beside its title as the reference
           // has it — hidden when the user may not add, and absent for modules
           // with nothing obvious to create.
-          headerRight: () => <ModulePrimaryButton moduleKey={moduleKey} />,
+          headerRight: () => (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <ModulePrimaryButton moduleKey={moduleKey} />
+              <AlertBell />
+            </View>
+          ),
         }}
       >
         {(props) => <ModuleHubScreen {...props} moduleKey={moduleKey} />}
@@ -315,6 +322,20 @@ export function RootNavigator() {
                 seen yet. Reachable from the sidebar whatever screen is open,
                 because the moment it is wanted is when a round has just been
                 filled out of range. */}
+            {/* Alerts, reachable from wherever the bell is tapped — Home is a
+                tab and the module hubs are their own stacks. */}
+            <Root.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{
+                headerShown: true,
+                title: "Alerts & Notifications",
+                headerStyle: { backgroundColor: colors.tint },
+                headerTintColor: colors.onDark,
+                headerTitleStyle: { fontWeight: "800" },
+                headerShadowVisible: false,
+              }}
+            />
             <Root.Screen
               name="SyncCenter"
               component={SyncCenterScreen}

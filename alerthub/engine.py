@@ -24,7 +24,8 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from .constants import Channel, LIVE_CHANNELS
+from .constants import Channel, LIVE_CHANNELS, Module, Priority
+from .push import push_recipients, send_alert_push
 from .models import Notification, NotificationRecipient
 from .scoping import audience_for
 
@@ -98,7 +99,7 @@ def raise_alert(
 
         with transaction.atomic():
             notification.save()
-            delivered = _deliver(rule)
+            delivered = _deliver(rule, notification, recipients)
             NotificationRecipient.objects.bulk_create(
                 [
                     NotificationRecipient(
@@ -133,23 +134,39 @@ def _recently_raised(rule, dedupe_key) -> bool:
     ).exists()
 
 
-def _deliver(rule) -> list[str]:
+def _deliver(rule, notification, recipients) -> list[str]:
     """Send on every channel the rule asked for that has a transport.
 
     Returns the channels actually delivered. In-app is the database row itself,
     so it is delivered by definition. The rest are recorded as requested and
     logged, because claiming an SMS went out when no gateway was called is the
     one thing a notification history must never do.
+
+    Push is the one channel that reaches outside the database, so it is handed
+    to ``transaction.on_commit``: a push cannot be recalled, and firing one for
+    a notification whose transaction then rolls back would tell a supervisor
+    about an alert that does not exist.
     """
     delivered = []
     for channel in rule.channels:
-        if channel in LIVE_CHANNELS:
-            delivered.append(channel)
-        else:
+        if channel not in LIVE_CHANNELS:
             logger.info(
                 "alerthub: %s delivery requested by rule %s but no transport is "
                 "wired; recorded as in-app only.", channel, rule.pk,
             )
+            continue
+
+        if channel == Channel.PUSH:
+            wanted = push_recipients(rule, recipients)
+            if not wanted:
+                # Everyone asked for it turned push off; recording it as
+                # delivered would be a claim about phones nothing was sent to.
+                continue
+            transaction.on_commit(
+                lambda n=notification, w=wanted: send_alert_push(n, w)
+            )
+        delivered.append(channel)
+
     return delivered or [Channel.IN_APP]
 
 
@@ -174,6 +191,83 @@ def unread_count(user) -> int:
     """
     return (
         Notification.objects.for_user(user)
-        .filter(recipients__user=user, recipients__is_read=False)
+        # Cleared ones are off this user's list, so they must not keep the
+        # badge lit — a count you cannot reach by opening the list is a badge
+        # nobody can ever clear.
+        .filter(recipients__user=user, recipients__is_read=False,
+                recipients__is_dismissed=False)
         .count()
     )
+
+
+#: Rule key stamped on notifications a person sent by hand. It is not a rule —
+#: nothing raises it on a schedule — but the column is indexed and every read
+#: path groups by it, so a manual send needs one of its own to be filterable.
+MANUAL_RULE_KEY = "manual"
+
+
+def send_manual_notification(
+    *,
+    sender,
+    recipients,
+    title,
+    message="",
+    priority=Priority.MEDIUM,
+    module=Module.SYSTEM,
+):
+    """Send one notification, composed by a person, to named users.
+
+    Unlike :func:`raise_alert` there is no rule: nobody configured this and
+    nothing will raise it again, so there is no cooldown to respect and no
+    audience to resolve — the sender chose the recipients themselves.
+
+    What it deliberately keeps from the alert path:
+
+    * It writes a real ``Notification`` with real recipient rows, so it lands in
+      the bell, the notification centre and the history like anything else. A
+      message that only existed as a push would be gone the moment it was
+      swiped away, with no record it was ever sent.
+    * It respects each user's push preference. Someone who turned Mobile Push
+      off still gets it in their bell — the opt-out narrows the channel, never
+      the message.
+    * The push goes out on commit, for the same reason alerts do.
+
+    Returns the ``Notification``, or ``None`` if there was nobody to send to.
+    """
+    from .push import push_recipients, send_alert_push
+
+    people = [u for u in recipients if getattr(u, "is_active", True)]
+    if not people or not title:
+        return None
+
+    with transaction.atomic():
+        notification = Notification.objects.create(
+            rule=None,
+            rule_key=MANUAL_RULE_KEY,
+            module=module,
+            priority=priority,
+            title=title[:200],
+            message=message,
+            created_by=sender if getattr(sender, "pk", None) else None,
+        )
+        wanted = push_recipients(None, people)
+        channels = [Channel.IN_APP] + ([Channel.PUSH] if wanted else [])
+        NotificationRecipient.objects.bulk_create(
+            [
+                NotificationRecipient(
+                    notification=notification, user=user, delivered_channels=channels,
+                )
+                for user in people
+            ],
+            ignore_conflicts=True,
+        )
+        if wanted:
+            transaction.on_commit(
+                lambda n=notification, w=wanted: send_alert_push(n, w)
+            )
+
+    logger.info(
+        "alerthub: manual notification %s sent to %s user(s) by %s",
+        notification.pk, len(people), getattr(sender, "username", "?"),
+    )
+    return notification

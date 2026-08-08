@@ -36,8 +36,9 @@ not enable on the rule.
     <div class="ah-form-card">
       <h2><i class="fa-solid fa-paper-plane text-primary"></i> Delivery channels</h2>
       <p class="ah-hint">
-        In-App is delivered today. The other three record your choice now so
-        nobody has to ask everyone again on the day they are switched on.
+        In-App and Mobile Push are delivered today. The other three record your
+        choice now so nobody has to ask everyone again on the day they are
+        switched on.
       </p>
 
       <div class="row g-2">
@@ -45,6 +46,13 @@ not enable on the rule.
           <label class="ah-check">
             {{ form.receive_in_app }}
             <span><i class="fa-solid fa-bell me-1 text-primary"></i>Receive In-App</span>
+          </label>
+        </div>
+        <div class="col-sm-6">
+          <label class="ah-check">
+            {{ form.receive_push }}
+            <span><i class="fa-solid fa-mobile-screen me-1 text-primary"></i>Receive Mobile Push
+              <small class="text-muted">(Hitech BIMS app)</small></span>
           </label>
         </div>
         <div class="col-sm-6">

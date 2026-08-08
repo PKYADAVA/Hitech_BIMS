@@ -4,6 +4,7 @@ import React, { useCallback } from "react";
 import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AlertBell } from "@/components/AlertBell";
 import { AppIcon } from "@/components/AppIcon";
 import { Badge, Button, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
 import { colors, makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
@@ -370,15 +371,18 @@ function HomeHeader({
           </View>
         </View>
 
-        <Pressable
-          onPress={onProfile}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Open profile"
-          style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-        >
-          <Text style={styles.avatarText}>{initialsOf(user)}</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <AlertBell />
+          <Pressable
+            onPress={onProfile}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+          >
+            <Text style={styles.avatarText}>{initialsOf(user)}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Greeting */}
@@ -582,6 +586,7 @@ const ON_DARK_SOFT = withAlpha(colors.onDark, 0.75);
 const useStyles = makeStyles((colors) => ({
   scroll: { paddingBottom: spacing.xxl },
 
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.lg },
   header: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,

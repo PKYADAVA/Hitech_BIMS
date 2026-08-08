@@ -16,8 +16,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .catalog import CATALOG, BY_KEY
 from .constants import Module, Priority
-from .forms import AlertRuleForm, PreferenceForm
+from .forms import AlertRuleForm, ManualNotificationForm, PreferenceForm
 from .models import AlertRule, Notification, NotificationPreference
+from .engine import send_manual_notification
 from .scoping import can_see
 
 
@@ -239,5 +240,50 @@ def preferences(request):
 
     return render(request, "alerthub/preferences.html", {
         "active_tab": "alerts",
+        "form": form,
+    })
+
+
+@login_required(login_url="login")
+def send_notification(request):
+    """Compose one notification and send it to chosen users or groups.
+
+    Gated on the same right as Alert Configuration: deciding who the system
+    notifies and notifying them by hand are the same kind of authority, and a
+    separate permission would be one more thing to forget to grant.
+
+    The message is a real notification, not a bare push — it lands in the
+    recipients' bell and stays in the history, so there is a record of what was
+    sent, to whom, and by whom.
+    """
+    from user.access import user_can
+
+    if not user_can(request.user, "send_notification", "add"):
+        raise Http404
+
+    form = ManualNotificationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        people = form.recipients()
+        notification = send_manual_notification(
+            sender=request.user,
+            recipients=people,
+            title=form.cleaned_data["title"],
+            message=form.cleaned_data["message"],
+            priority=form.cleaned_data["priority"],
+            module=form.cleaned_data["module"],
+        )
+        if notification is None:
+            messages.error(request, "Nobody active matched that selection — nothing was sent.")
+        else:
+            pushed = sum(1 for u in people if getattr(u, "pk", None))
+            messages.success(
+                request,
+                f"Sent to {len(people)} user(s). It is in their notifications now, "
+                f"and on the phones of those with the app installed."
+            )
+            return redirect("alerthub:send_notification")
+
+    return render(request, "alerthub/send_notification.html", {
+        "active_tab": "send_notification",
         "form": form,
     })

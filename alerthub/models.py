@@ -99,6 +99,10 @@ class AlertRule(models.Model):
     # Stored per channel rather than as a set so the config form is a row of
     # checkboxes and a query can ask "which rules want email" directly.
     via_in_app = models.BooleanField(default=True, verbose_name="In-App")
+    via_push = models.BooleanField(
+        default=False, verbose_name="Mobile Push",
+        help_text="Send to the recipients' phones through the Hitech BIMS app.",
+    )
     via_email = models.BooleanField(default=False, verbose_name="Email")
     via_sms = models.BooleanField(default=False, verbose_name="SMS")
     via_whatsapp = models.BooleanField(default=False, verbose_name="WhatsApp")
@@ -145,6 +149,7 @@ class AlertRule(models.Model):
     def channels(self) -> list[str]:
         chosen = [
             (Channel.IN_APP, self.via_in_app),
+            (Channel.PUSH, self.via_push),
             (Channel.EMAIL, self.via_email),
             (Channel.SMS, self.via_sms),
             (Channel.WHATSAPP, self.via_whatsapp),
@@ -160,7 +165,14 @@ class AlertRule(models.Model):
 
 class NotificationQuerySet(models.QuerySet):
     def unread_for(self, user):
-        return self.filter(recipients__user=user, recipients__is_read=False)
+        return self.filter(
+            recipients__user=user, recipients__is_read=False,
+            recipients__is_dismissed=False,
+        )
+
+    def not_dismissed_by(self, user):
+        """Everything this user has not cleared off their own list."""
+        return self.exclude(recipients__user=user, recipients__is_dismissed=True)
 
     def for_user(self, user):
         from .scoping import visible_notifications
@@ -320,6 +332,13 @@ class NotificationRecipient(models.Model):
     )
     is_read = models.BooleanField(default=False, db_index=True)
     read_at = models.DateTimeField(null=True, blank=True)
+    # "Clear" — this person has finished with it and does not want it in their
+    # list any more. Per recipient, never a delete: the notification and the
+    # fact that they were sent it both survive, so the history still answers
+    # who was told what. One person clearing theirs does not touch anyone
+    # else's copy.
+    is_dismissed = models.BooleanField(default=False, db_index=True)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
     delivered_channels = models.JSONField(
         default=list, blank=True,
         help_text="Channels this actually went out on.",
@@ -363,6 +382,10 @@ class NotificationPreference(models.Model):
     receive_in_app = models.BooleanField(
         default=True, verbose_name="Receive In-App",
         help_text="Show alerts in the bell and notification centre.",
+    )
+    receive_push = models.BooleanField(
+        default=True, verbose_name="Receive Mobile Push",
+        help_text="Send alerts to this user's phone when the app is closed.",
     )
     receive_email = models.BooleanField(default=False, verbose_name="Receive Email")
     receive_sms = models.BooleanField(default=False, verbose_name="Receive SMS")

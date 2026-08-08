@@ -26,6 +26,8 @@ urlpatterns = [
     path("notifications/history/", views.notification_history,
          name="notification_history"),
     path("notifications/preferences/", views.preferences, name="preferences"),
+    path("notifications/send/", views.send_notification,
+         name="send_notification"),
     path("notifications/<int:pk>/", views.notification_detail,
          name="notification_detail"),
 

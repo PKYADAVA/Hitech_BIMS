@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { logout as apiLogout, fetchMe } from "@/api/auth";
 import { requestLogin, setSessionExpiredHandler } from "@/api/client";
 import { tokenStore } from "@/api/tokenStore";
+import { registerForPush } from "@/push";
 import { ApiError, AuthUser } from "@/api/types";
 import { setQueueUser } from "@/offline/queue";
 import { clearCachedData } from "@/query/cache";
@@ -35,6 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = await fetchMe();
       setQueueUser(String(user.id));
       set({ status: "signedIn", user });
+      void registerForPush();
     } catch {
       await tokenStore.clear();
       set({ status: "signedOut" });
@@ -50,6 +52,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // again; anyone else's stays where it is.
       setQueueUser(String(result.user.id));
       set({ status: "signedIn", user: result.user });
+      // Registered after sign-in, not at launch: the token is stored against
+      // the user, and posting it before there is a session would 401.
+      void registerForPush();
     } catch (e) {
       const message =
         e instanceof ApiError && e.code === "not_authenticated"

@@ -7,7 +7,9 @@ adding an endpoint here.
 """
 from __future__ import annotations
 
+from django.db import models
 from django.db.models import Count, Prefetch, Q
+from django.utils import timezone
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -54,6 +56,7 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         )
         qs = (
             Notification.objects.for_user(user)
+            .not_dismissed_by(user)
             .select_related("branch", "farm", "warehouse", "org_centre")
             .prefetch_related(mine)
         )
@@ -120,6 +123,34 @@ class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
         notification = self.get_object()
         mark_read(request.user, [notification.pk])
         return Response({"ok": True, "unread": unread_count(request.user)})
+
+    @action(detail=True, methods=["post"])
+    def dismiss(self, request, pk=None):
+        """Clear one notification off *this* user's list.
+
+        Read state and dismissal are different questions — "I have seen it" and
+        "I am done with it" — so clearing marks read as well: something removed
+        from the list must not keep the badge lit.
+
+        Never a delete. The notification, and the record that this user was
+        sent it, both survive; only their view of it changes.
+        """
+        notification = self.get_object()
+        now = timezone.now()
+        updated = NotificationRecipient.objects.filter(
+            notification=notification, user=request.user, is_dismissed=False,
+        ).update(
+            is_dismissed=True, dismissed_at=now,
+            is_read=True, read_at=models.F("read_at"),
+        )
+        # read_at only when it was genuinely unread, so clearing an old alert
+        # does not rewrite when it was first seen.
+        NotificationRecipient.objects.filter(
+            notification=notification, user=request.user, read_at__isnull=True,
+        ).update(read_at=now)
+        return Response({
+            "ok": bool(updated), "unread": unread_count(request.user),
+        })
 
     @action(detail=False, methods=["post"])
     def mark_all_read(self, request):

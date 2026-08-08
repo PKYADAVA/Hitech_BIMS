@@ -89,6 +89,7 @@ source is missing is the only honest way to explain a rule that never fires.
               </td>
               <td class="ah-nowrap small">
                 {% if row.rule.via_in_app %}<i class="fa-solid fa-bell text-primary" title="In-App"></i>{% endif %}
+                {% if row.rule.via_push %}<i class="fa-solid fa-mobile-screen text-primary" title="Mobile Push"></i>{% endif %}
                 {% if row.rule.via_email %}<i class="fa-solid fa-envelope text-muted ms-1" title="Email (not yet delivered)"></i>{% endif %}
                 {% if row.rule.via_sms %}<i class="fa-solid fa-comment-sms text-muted ms-1" title="SMS (not yet delivered)"></i>{% endif %}
                 {% if row.rule.via_whatsapp %}<i class="fa-brands fa-whatsapp text-muted ms-1" title="WhatsApp (not yet delivered)"></i>{% endif %}
