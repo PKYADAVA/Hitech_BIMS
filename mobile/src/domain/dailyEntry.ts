@@ -94,6 +94,9 @@ export interface DailyEntryLookup {
   feed_plan?: FeedPlanRow[];
   /** What feed is actually on hand at the farm, whatever phase it belongs to. */
   farm_feed_stock?: { item: number; name: string; kg: string }[];
+  /** The last weighing taken on this flock, and the day it was taken. */
+  last_weight_g?: string | null;
+  last_weight_date?: string | null;
 }
 
 /** One feed type's position for this flock. `sent` is farm-level — a delivery
@@ -724,6 +727,33 @@ export function feedStandard(
 
 /** Grams of feed per live bird for one slot — the per-slot figure beside each
  *  quantity. Null while the bird count is unknown. */
+/** The previous weighing on this flock, for the line under the weight box.
+ *  A bird is weighed every few days rather than daily, so today's figure is
+ *  only read against the last one — "40 g" says nothing on its own, and a
+ *  supervisor standing at the shed has no other way to recall it. Returns
+ *  null when the flock has never been weighed, so the line stays off. */
+export function lastWeightNote(
+  lookup?: { last_weight_g?: string | null; last_weight_date?: string | null } | null,
+): string | null {
+  const grams = num(lookup?.last_weight_g);
+  const on = lookup?.last_weight_date;
+  if (!grams || !on) return null;
+  return `Last ${trimZeros(grams)} g · ${shortDate(on)}`;
+}
+
+/** 40.00 reads as 40, 38.50 as 38.5 — the trailing zeros are noise in a
+ *  line this narrow. */
+export function trimZeros(n: number): string {
+  return String(Number(n.toFixed(2)));
+}
+
+/** "22 Jul" — the year is dropped because the weighing is always recent. */
+function shortDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 export function feedPerBirdG(qtyKg: number, birds: number): number | null {
   if (!birds) return null;
   return (qtyKg / birds) * 1000;

@@ -16,7 +16,8 @@ import { Button } from "@/components/ui";
 import { dailyEntryLookup, dailyEntryStock, FormField } from "@/config/forms";
 import {
   addDays, Advice, adviseDailyEntry, ageOnDate, CapProgress, DailyEntryLookup, farmFeedBalance,
-  feedPerBirdG, feedPlanLines, FeedPlanRow, feedStandard, feedTone, FeedRow, typedFeed,
+  feedPerBirdG, feedPlanLines, FeedPlanRow, feedStandard, feedTone, FeedRow, lastWeightNote,
+  typedFeed,
   flockSummary, Hint,
   priorListFeed, PriorFeed,
   todayISO, Tone,
@@ -1032,11 +1033,16 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
                     value={r.values.avg_weight_gms ?? ""}
                     onChange={setRowValue(r.key, "avg_weight_gms")}
                   />
+                  {/* Both notes belong to the weight, so they sit in its cell.
+                      Rendered under the row they read as the mortality box's. */}
+                  {a?.fieldHints.avg_weight_gms ? (
+                    <HintLine hint={a.fieldHints.avg_weight_gms} />
+                  ) : null}
+                  {lastWeightNote(r.lookup) ? (
+                    <Text style={styles.lastWeight}>{lastWeightNote(r.lookup)}</Text>
+                  ) : null}
                 </View>
               </View>
-              {a?.fieldHints.avg_weight_gms ? (
-                <HintLine hint={a.fieldHints.avg_weight_gms} />
-              ) : null}
               <PhotoStrip
                 label="Photos (Mortality)"
                 uris={r.photos.mortality}
@@ -1993,6 +1999,14 @@ const useStyles = makeStyles((colors) => ({
   geoWarn: { ...type.caption, color: colors.danger, marginTop: spacing.xs, marginBottom: spacing.md },
 
   hint: { ...type.label, marginTop: -spacing.md, marginBottom: spacing.md },
+  // Sits under the weight box in a third-width cell, so it is a size down
+  // from the hint above it and wraps rather than clipping.
+  lastWeight: {
+    ...type.caption,
+    color: colors.textMuted,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
   hint_ok: { color: colors.success },
   hint_warn: { color: colors.warning },
   hint_bad: { color: colors.danger },

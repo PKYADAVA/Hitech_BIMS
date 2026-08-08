@@ -10,7 +10,7 @@
  */
 import {
   addDays, adviseDailyEntry, ageOnDate, farmFeedBalance, feedPerBirdG, feedPlanLines,
-  feedStandard, feedTone, typedFeed,
+  feedStandard, feedTone, lastWeightNote, typedFeed,
   flockSummary, interpCurve, priorListFeed, todayISO, type DailyEntryLookup, type FeedRow,
 } from "./dailyEntry";
 
@@ -598,5 +598,31 @@ describe("negative stock is a blocker, not a warning", () => {
 
   it("has no blockers before a flock is known", () => {
     expect(adviseDailyEntry(null as any, {} as any).blockers).toEqual([]);
+  });
+});
+
+describe("lastWeightNote — the line under the weight box", () => {
+  it("names the weight and the day it was taken", () => {
+    const note = lastWeightNote({ last_weight_g: "38.50", last_weight_date: "2026-07-19" });
+    expect(note).toContain("38.5");
+    expect(note).toContain("Jul");
+  });
+
+  it("drops the trailing zeros a decimal field stores", () => {
+    expect(lastWeightNote({ last_weight_g: "40.00", last_weight_date: "2026-07-22" }))
+      .toContain("40 g");
+  });
+
+  it("stays off when the flock has never been weighed", () => {
+    expect(lastWeightNote({ last_weight_g: null, last_weight_date: null })).toBeNull();
+    expect(lastWeightNote(undefined)).toBeNull();
+  });
+
+  it("stays off when a server too old to send it answers", () => {
+    expect(lastWeightNote({})).toBeNull();
+  });
+
+  it("treats a zero weight as never weighed rather than showing 0 g", () => {
+    expect(lastWeightNote({ last_weight_g: "0", last_weight_date: "2026-07-19" })).toBeNull();
   });
 });

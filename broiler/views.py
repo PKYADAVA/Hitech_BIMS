@@ -2431,6 +2431,19 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     breed = batch.breed if batch and batch.breed_id else None
     counts = _flock_counts(batch, as_of=entry_date) if batch else _flock_counts(None)
 
+    # The last weighing on this flock, so the box asks for today's figure
+    # against something. A weight is taken every few days rather than daily,
+    # and "40 g" means nothing without knowing the flock was 38 g four days
+    # ago — that is the growth the entry is really recording.
+    last_weight_g, last_weight_date = None, None
+    if batch:
+        prev = (DailyEntry.objects
+                .filter(batch=batch, date__lt=entry_date, avg_weight_gms__gt=0)
+                .order_by("-date", "-id").values("avg_weight_gms", "date").first())
+        if prev:
+            last_weight_g = str(_num(prev["avg_weight_gms"]).quantize(Decimal("0.01")))
+            last_weight_date = prev["date"].isoformat()
+
     # --- Feed plan: what this phase needs, what has reached the farm, what is
     # left. The three questions a supervisor asks standing at the shed, and the
     # three the form could not answer: how much of this feed does the batch
@@ -2536,6 +2549,8 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         "live_birds": counts["live"],
         "feed_plan": feed_plan,
         "farm_feed_stock": farm_feed_stock,
+        "last_weight_g": last_weight_g,
+        "last_weight_date": last_weight_date,
     }
 
 
