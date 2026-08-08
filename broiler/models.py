@@ -1165,17 +1165,24 @@ class DailyEntryPhoto(models.Model):
     KIND_MORTALITY = "mortality"
     KIND_CULLS = "culls"
     KIND_FEED = "feed"
+    #: The second feed slot photographs separately. A day can be fed two
+    #: different feeds and one picture cannot evidence both.
+    KIND_FEED_2 = "feed_2"
     KIND_CHOICES = [
         (KIND_MORTALITY, _("Mortality")),
         (KIND_CULLS, _("Culls")),
         (KIND_FEED, _("Feed")),
+        (KIND_FEED_2, _("Feed 2")),
     ]
 
     #: Cap per entry per category. Field photos travel over rural mobile data,
     #: and an uncapped set is how a save stops finishing at all.
     MAX_PER_KIND = 5
 
-    #: Which single field on the parent each category's first photo mirrors into.
+    #: Which single field on the parent each category's first photo mirrors
+    #: into. KIND_FEED_2 is absent on purpose: the parent carries one
+    #: ``feed_image`` and mirroring the second slot into it would overwrite the
+    #: evidence for the first. ``save`` already returns for an unmapped kind.
     LEGACY_FIELD = {
         KIND_MORTALITY: "mort_image",
         KIND_CULLS: "cull_image",

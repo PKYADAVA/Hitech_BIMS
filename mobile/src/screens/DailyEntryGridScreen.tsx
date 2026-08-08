@@ -79,6 +79,10 @@ const PHOTO_KINDS = [
   { kind: "mortality", legacy: "mort_image", label: "Photos (Mortality)" },
   { kind: "culls", legacy: "cull_image", label: "Photos (Culls)" },
   { kind: "feed", legacy: "feed_image", label: "Photos (Feed)" },
+  // The second slot photographs separately: a day fed two different feeds
+  // cannot be evidenced by one picture. It mirrors into no legacy field —
+  // the parent carries a single feed_image, and that one belongs to Feed 1.
+  { kind: "feed_2", legacy: "", label: "Photos (Feed 2)" },
 ] as const;
 
 type PhotoKind = (typeof PHOTO_KINDS)[number]["kind"];
@@ -87,7 +91,8 @@ type PhotoKind = (typeof PHOTO_KINDS)[number]["kind"];
  *  rather than letting a save fail on the sixth picture. */
 const MAX_PHOTOS_PER_KIND = 5;
 
-const noPhotos = (): Record<PhotoKind, string[]> => ({ mortality: [], culls: [], feed: [] });
+const noPhotos = (): Record<PhotoKind, string[]> =>
+  ({ mortality: [], culls: [], feed: [], feed_2: [] });
 
 const F_BRANCH: FormField = {
   name: "branch", label: "Branch", type: "select", required: true,
@@ -111,7 +116,12 @@ const F_FEED_2: FormField = {
   optionsPath: "/broiler/feed-items", optionLabelKeys: ["description", "item_code"],
 };
 const F_FEED_2_QTY: FormField = { name: "feed_2_qty", label: "Qty (kg)", type: "decimal" };
-const F_AVG_WT: FormField = { name: "avg_weight_gms", label: "Avg. Weight (g)", type: "decimal" };
+// A third of a phone's width is too narrow for the label to double as the
+// placeholder, which is what it does by default — it rendered clipped mid-word.
+const F_AVG_WT: FormField = {
+  name: "avg_weight_gms", label: "Avg. Weight (g)", type: "decimal",
+  placeholder: "grams",
+};
 const F_REMARKS: FormField = { name: "remarks", label: "Remarks", type: "textarea" };
 
 /** One farm's row: its own values, its own server context, its own advice. */
@@ -182,6 +192,9 @@ const rowFromRecord = (rec: Row): GridRow => ({
     mortality: str(rec.mort_image) ? [str(rec.mort_image)] : [],
     culls: str(rec.cull_image) ? [str(rec.cull_image)] : [],
     feed: str(rec.feed_image) ? [str(rec.feed_image)] : [],
+    // No legacy field to seed from: the second slot has only ever lived in
+    // the photo table, so everything it has comes from there.
+    feed_2: [],
   },
 });
 
@@ -973,27 +986,31 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
               {flock ? <MortalityPanel flock={flock} /> : null}
 
               <SectionHead n={1} title="Mortality, Culls & Weight" icon="scale-balance" />
-              <View style={styles.pairRow}>
-                <View style={styles.pairCell}>
+              {/* The day's three figures on one line: they are counted in the
+                  same walk of the shed and are read together afterwards. */}
+              <View style={styles.tripleRow}>
+                <View style={styles.tripleCell}>
                   <FormControl
                     field={F_MORTALITY}
                     value={r.values.mortality ?? ""}
                     onChange={setRowValue(r.key, "mortality")}
                   />
                 </View>
-                <View style={styles.pairCell}>
+                <View style={styles.tripleCell}>
                   <FormControl
                     field={F_CULLS}
                     value={r.values.culls ?? ""}
                     onChange={setRowValue(r.key, "culls")}
                   />
                 </View>
+                <View style={styles.tripleCell}>
+                  <FormControl
+                    field={F_AVG_WT}
+                    value={r.values.avg_weight_gms ?? ""}
+                    onChange={setRowValue(r.key, "avg_weight_gms")}
+                  />
+                </View>
               </View>
-              <FormControl
-                field={F_AVG_WT}
-                value={r.values.avg_weight_gms ?? ""}
-                onChange={setRowValue(r.key, "avg_weight_gms")}
-              />
               {a?.fieldHints.avg_weight_gms ? (
                 <HintLine hint={a.fieldHints.avg_weight_gms} />
               ) : null}
@@ -1012,17 +1029,24 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
 
               <SectionHead n={2} title="Feed Consumption" icon="sack" />
               <Text style={styles.slotHead}>Primary Feed</Text>
-              <FormControl
-                field={F_FEED_1}
-                value={r.values.feed_1 ?? ""}
-                values={r.values}
-                onChange={setRowValue(r.key, "feed_1")}
-              />
-              {a?.fieldHints.feed_1 ? <HintLine hint={a.fieldHints.feed_1} /> : null}
+              {/* Which feed beside what is left of it — the pair a decision is
+                  made from — then how much was fed beside the photograph of it
+                  being fed. */}
               <View style={styles.pairRow}>
+                <View style={styles.pairCell}>
+                  <FormControl
+                    field={F_FEED_1}
+                    value={r.values.feed_1 ?? ""}
+                    values={r.values}
+                    onChange={setRowValue(r.key, "feed_1")}
+                  />
+                </View>
                 <View style={styles.pairCell}>
                   <StockCell label="Stock-1 (kg)" value={balanceFor(r, "feed_1")} />
                 </View>
+              </View>
+              {a?.fieldHints.feed_1 ? <HintLine hint={a.fieldHints.feed_1} /> : null}
+              <View style={styles.pairRow}>
                 <View style={styles.pairCell}>
                   <FormControl
                     field={F_FEED_1_QTY}
@@ -1030,33 +1054,50 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
                     onChange={setRowValue(r.key, "feed_1_qty")}
                   />
                 </View>
+                <View style={styles.pairCell}>
+                  <PhotoStrip
+                    label="Photos (Feed)"
+                    uris={r.photos.feed}
+                    onAdd={() => addPhoto(r.key, "feed")}
+                    onRemove={(u) => removePhoto(r.key, "feed", u)}
+                  />
+                </View>
               </View>
               <PerBirdLine qty={num(r.values.feed_1_qty)} birds={birds} />
               {a?.fieldHints.feed_1_qty ? <HintLine hint={a.fieldHints.feed_1_qty} /> : null}
-              <PhotoStrip
-                label="Photos (Feed)"
-                uris={r.photos.feed}
-                onAdd={() => addPhoto(r.key, "feed")}
-                onRemove={(u) => removePhoto(r.key, "feed", u)}
-              />
 
               <Text style={styles.slotHead}>Optional Feed</Text>
-              <FormControl
-                field={F_FEED_2}
-                value={r.values.feed_2 ?? ""}
-                values={r.values}
-                onChange={setRowValue(r.key, "feed_2")}
-              />
-              {a?.fieldHints.feed_2 ? <HintLine hint={a.fieldHints.feed_2} /> : null}
+              {/* Same shape as the primary slot, so the eye reads both the same
+                  way. This slot carries no photograph of its own — the one on
+                  the primary slot evidences the day's feeding. */}
               <View style={styles.pairRow}>
+                <View style={styles.pairCell}>
+                  <FormControl
+                    field={F_FEED_2}
+                    value={r.values.feed_2 ?? ""}
+                    values={r.values}
+                    onChange={setRowValue(r.key, "feed_2")}
+                  />
+                </View>
                 <View style={styles.pairCell}>
                   <StockCell label="Stock-2 (kg)" value={balanceFor(r, "feed_2")} />
                 </View>
+              </View>
+              {a?.fieldHints.feed_2 ? <HintLine hint={a.fieldHints.feed_2} /> : null}
+              <View style={styles.pairRow}>
                 <View style={styles.pairCell}>
                   <FormControl
                     field={F_FEED_2_QTY}
                     value={r.values.feed_2_qty ?? ""}
                     onChange={setRowValue(r.key, "feed_2_qty")}
+                  />
+                </View>
+                <View style={styles.pairCell}>
+                  <PhotoStrip
+                    label="Photos (Feed 2)"
+                    uris={r.photos.feed_2}
+                    onAdd={() => addPhoto(r.key, "feed_2")}
+                    onRemove={(u) => removePhoto(r.key, "feed_2", u)}
                   />
                 </View>
               </View>
@@ -1578,7 +1619,12 @@ const useStyles = makeStyles((colors) => ({
   headerNote: { ...type.caption, color: colors.textMuted },
 
   pairRow: { flexDirection: "row", gap: spacing.md },
-  pairCell: { flex: 1 },
+  pairCell: { flex: 1, minWidth: 0 },
+  // Three across a phone needs a tighter gap than two, and every cell has to
+  // be allowed to shrink or the longest label pushes the row wider than the
+  // card. "Avg. Weight (g)" is the one that does it.
+  tripleRow: { flexDirection: "row", gap: spacing.sm },
+  tripleCell: { flex: 1, minWidth: 0 },
 
   rowHead: {
     flexDirection: "row",
