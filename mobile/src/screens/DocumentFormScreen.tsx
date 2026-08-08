@@ -3,7 +3,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { deleteDocument, loadDocument, saveDocument } from "@/api/documents";
+import { loadDocument } from "@/api/documents";
+import { writeThrough } from "@/net/writeThrough";
 import { farmBatches } from "@/api/lookups";
 import { ApiError } from "@/api/types";
 import { AppIcon, IconName } from "@/components/AppIcon";
@@ -25,7 +26,7 @@ import { queryClient } from "@/query/queryClient";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { isEmpty } from "@/utils/format";
-import { confirm } from "@/ui/confirm";
+import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "DocumentForm">;
 type Dict = Record<string, string>;
@@ -534,8 +535,18 @@ export function DocumentFormScreen({ route, navigation }: Props) {
 
     setSaving(true);
     try {
-      await saveDocument(doc.savePath, payload, editId);
+      const written = await writeThrough(
+        editId != null
+          ? { label: doc.title, method: "PUT",
+              path: `${doc.savePath}/${editId}`, body: { fields: payload } }
+          : { label: doc.title, method: "POST",
+              path: doc.savePath, body: { fields: payload } });
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
+      if (written.queued) {
+        await notify("Saved on this phone",
+          `No signal — this ${doc.title.toLowerCase()} is waiting to send, ` +
+            "and will go to the ERP by itself once you are back in range.");
+      }
       navigation.navigate("List", { resourceKey });
     } catch (e) {
       if (e instanceof ApiError) setFormError(e.message || "Could not save.");
@@ -554,7 +565,8 @@ export function DocumentFormScreen({ route, navigation }: Props) {
       destructive: true,
     }))) return;
     try {
-      await deleteDocument(doc.savePath, editId);
+      await writeThrough({ label: doc.title, method: "DELETE",
+                           path: `${doc.savePath}/${editId}` });
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
       navigation.navigate("List", { resourceKey });
     } catch (e) {

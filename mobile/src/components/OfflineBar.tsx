@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
 import { queryClient } from "@/query/queryClient";
 import { useAutoSync } from "@/net/autoSync";
+import { outboxState, subscribeToOutbox } from "@/net/outbox";
+import { OutboxState } from "@/net/outboxTypes";
 import { makeStyles, spacing, type } from "@/theme";
 
 /**
@@ -29,24 +31,48 @@ function when(ts: number): string {
   return at.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+/** "1 save" / "3 saves" — the count matters more than the wording. */
+const saves = (n: number) => `${n} save${n === 1 ? "" : "s"}`;
+
 /**
- * Says the screen is showing what was kept, not what is true now.
+ * Says the screen is showing what was kept, not what is true now — and what is
+ * still waiting to go the other way.
  *
  * The cache survives on disk, so a register opens on a farm with no signal and
  * looks exactly like a live one. That is the risk worth naming: a supervisor
- * reading yesterday's stock as today's makes a decision on it. The bar says
- * when the figures came from, and disappears the moment the connection does.
+ * reading yesterday's stock as today's makes a decision on it.
+ *
+ * Queued saves are named for the same reason. A day's entry filed with no
+ * signal is on the phone and nowhere else, and a supervisor who is not told
+ * that has no way to know the round is not yet on the ERP.
  */
 export function OfflineBar() {
   const state = useAutoSync();
+  const outbox = useOutbox();
   const styles = useStyles();
-  if (state === "online") return null;
 
-  if (state === "syncing") {
+  if (state === "online" && !outbox.pending && !outbox.rejected) return null;
+
+  if (state === "syncing" || (outbox.sending && state === "online")) {
     return (
       <View style={[styles.bar, styles.syncing]}>
         <Text style={[styles.text, styles.syncingText]} numberOfLines={1}>
-          Back online — updating from the ERP…
+          {outbox.pending
+            ? `Back online — sending ${saves(outbox.pending)}…`
+            : "Back online — updating from the ERP…"}
+        </Text>
+      </View>
+    );
+  }
+
+  // Everything reached the ERP except what it refused. Nothing is waiting on
+  // the network, so an offline bar would be telling the user the wrong thing.
+  if (state === "online") {
+    if (!outbox.rejected) return null;
+    return (
+      <View style={[styles.bar, styles.rejected]}>
+        <Text style={[styles.text, styles.rejectedText]} numberOfLines={1}>
+          {saves(outbox.rejected)} the ERP would not accept — open Menu to review
         </Text>
       </View>
     );
@@ -58,9 +84,17 @@ export function OfflineBar() {
       <Text style={styles.text} numberOfLines={1}>
         Offline — showing saved data
         {synced ? ` · last synced ${when(synced)}` : ""}
+        {outbox.pending ? ` · ${saves(outbox.pending)} waiting to send` : ""}
       </Text>
     </View>
   );
+}
+
+/** The queue's count, kept current without the bar reading the queue itself. */
+function useOutbox(): OutboxState {
+  const [state, setState] = useState<OutboxState>(outboxState);
+  useEffect(() => subscribeToOutbox(setState), []);
+  return state;
 }
 
 const useStyles = makeStyles((colors) => ({
@@ -72,4 +106,6 @@ const useStyles = makeStyles((colors) => ({
   text: { ...type.caption, color: "#8a5a00", textAlign: "center", fontWeight: "700" },
   syncing: { backgroundColor: colors.infoLight },
   syncingText: { color: colors.info },
+  rejected: { backgroundColor: colors.dangerLight },
+  rejectedText: { color: colors.danger },
 }));

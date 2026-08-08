@@ -2,9 +2,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Alert, Text, View } from "react-native";
 
-import { createResource, deleteResource, updateResource } from "@/api/resources";
 import { ApiError, Row } from "@/api/types";
-import { appendImage, isLocalCapture } from "@/capture";
+import { isLocalCapture } from "@/capture";
 import { FormControl } from "@/components/form";
 import { KeyboardAwareScrollView } from "@/components/KeyboardAwareScrollView";
 import { Button } from "@/components/ui";
@@ -16,7 +15,8 @@ import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { colors, makeStyles, spacing, type } from "@/theme";
 import { isEmpty } from "@/utils/format";
-import { confirm } from "@/ui/confirm";
+import { writeThrough, WriteBody } from "@/net/writeThrough";
+import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "Form">;
 
@@ -168,26 +168,17 @@ export function FormScreen({ route, navigation }: Props) {
    * so an edit that doesn't retake the shot keeps the stored image — sending
    * its URL back as a string would make Django try to store the URL as a file.
    */
-  const buildBody = async (): Promise<Record<string, unknown> | FormData> => {
+  const buildBody = (): WriteBody => {
     const photos = pendingPhotos();
     const payload = buildPayload();
-    if (!photos.length) {
-      for (const f of schema.fields) {
-        if (f.type === "photo") delete payload[f.name];
-      }
-      return payload;
+    // Photo fields never travel as text: their value is a local file uri, and
+    // sending it as a string would store the path instead of the picture.
+    for (const f of schema.fields) {
+      if (f.type === "photo") delete payload[f.name];
     }
-
-    const form = new FormData();
-    const photoNames = new Set(photos.map((f) => f.name));
-    for (const [k, v] of Object.entries(payload)) {
-      if (schema.fields.some((f) => f.type === "photo" && f.name === k)) continue;
-      form.append(k, typeof v === "boolean" ? String(v) : String(v));
-    }
-    for (const f of photoNames) {
-      await appendImage(form, f, values[f]);
-    }
-    return form;
+    const files = [...new Set(photos.map((f) => f.name))]
+      .map((field) => ({ field, uri: values[field] }));
+    return { fields: payload, files };
   };
 
   const validate = (): boolean => {
@@ -217,10 +208,19 @@ export function FormScreen({ route, navigation }: Props) {
     }
     setSaving(true);
     try {
-      const body = await buildBody();
-      if (mode === "create") await createResource(config.path, body);
-      else await updateResource(config.path, (row as Row).id, body);
+      const written = await writeThrough(
+        mode === "create"
+          ? { label: config.singular, method: "POST", path: config.path, body: buildBody() }
+          : { label: config.singular, method: "PATCH",
+              path: `${config.path}${(row as Row).id}/`, body: buildBody() });
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
+      if (written.queued) {
+        // Held on the phone and nowhere else. Closing the form in silence
+        // would read as "filed on the ERP".
+        await notify("Saved on this phone",
+          `No signal — this ${config.singular.toLowerCase()} is waiting to send, ` +
+            "and will go to the ERP by itself once you are back in range.");
+      }
       finish();
     } catch (e) {
       handleApiError(e);
@@ -237,7 +237,8 @@ export function FormScreen({ route, navigation }: Props) {
       destructive: true,
     }))) return;
     try {
-      await deleteResource(config.path, (row as Row).id);
+      await writeThrough({ label: config.singular, method: "DELETE",
+                           path: `${config.path}${(row as Row).id}/` });
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
       navigation.navigate("List", { resourceKey });
     } catch (e) {

@@ -135,6 +135,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Enforces the per-group Web-Access matrix server-side (see user/access.py).
     "user.middleware.WebAccessMiddleware",
+    # Performs a keyed API write once however many times the phone sends it,
+    # so replaying the offline outbox on reconnect cannot file a day twice.
+    # Only touches /api/ requests that carry an Idempotency-Key.
+    "api.middleware.IdempotencyMiddleware",
 ]
 
 ROOT_URLCONF = "Hitech_BIMS.urls"

@@ -8,6 +8,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LockGate } from "@/components/LockGate";
 import { OfflineBar } from "@/components/OfflineBar";
 import { startOnlineWatch } from "@/net/online";
+import { enqueue, flushOutbox, outboxState, pendingWrites } from "@/net/outbox";
+import { writeThrough } from "@/net/writeThrough";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { registerForPush } from "@/push";
 import { queryClient } from "@/query/queryClient";
@@ -41,6 +43,16 @@ export default function App() {
   // assumes it is always online, so a request on a farm with no signal spins
   // and fails instead of falling back to the cache already on disk.
   useEffect(() => { startOnlineWatch(); }, []);
+
+  // A handle on the write path for the browser test that pulls the network and
+  // checks the save is neither lost nor made twice. Development builds only —
+  // there is nothing here a release should hand to the page.
+  useEffect(() => {
+    if (!__DEV__) return;
+    (globalThis as Record<string, unknown>).__bimsOffline = {
+      writeThrough, flushOutbox, pendingWrites, outboxState, enqueue,
+    };
+  }, []);
 
   // Once signed in: register for push + load this user's module permissions.
   // On sign-out: clear permissions so the next user starts fresh.

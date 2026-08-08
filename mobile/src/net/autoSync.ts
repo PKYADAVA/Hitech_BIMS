@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
+import { flushOutbox } from "./outbox";
 
 /**
  * Bring everything up to date the moment the connection comes back.
@@ -33,12 +34,18 @@ export function useAutoSync(): "offline" | "syncing" | "online" {
       // whole cache for nothing.
       if (online && !wasOnline) {
         setState("syncing");
-        Promise.allSettled([
-          queryClient.invalidateQueries(),
-          usePermissionsStore.getState().refresh(),
-        ]).then(() => {
-          if (live) setState("online");
-        });
+        // Writes first, then reads. Invalidating ahead of the flush would
+        // refetch registers that are about to change and leave the screen on
+        // figures already out of date by the time they arrive.
+        flushOutbox()
+          .catch(() => undefined)
+          .then(() => Promise.allSettled([
+            queryClient.invalidateQueries(),
+            usePermissionsStore.getState().refresh(),
+          ]))
+          .then(() => {
+            if (live) setState("online");
+          });
       } else if (!online) {
         setState("offline");
       }

@@ -4,6 +4,7 @@ import { logout as apiLogout, fetchMe } from "@/api/auth";
 import { requestLogin, setSessionExpiredHandler } from "@/api/client";
 import { tokenStore } from "@/api/tokenStore";
 import { ApiError, AuthUser } from "@/api/types";
+import { setOutboxUser } from "@/net/outbox";
 import { clearCachedData } from "@/query/cache";
 
 interface AuthState {
@@ -32,6 +33,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const user = await fetchMe();
+      setOutboxUser(String(user.id));
       set({ status: "signedIn", user });
     } catch {
       await tokenStore.clear();
@@ -44,6 +46,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const result = await requestLogin(username, password);
       await tokenStore.set(result.access, result.refresh);
+      // Anything this user queued on a previous session becomes sendable
+      // again; anyone else's stays where it is.
+      setOutboxUser(String(result.user.id));
       set({ status: "signedIn", user: result.user });
     } catch (e) {
       const message =
@@ -64,6 +69,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // one's farms — data their own scope may never have allowed them. Clearing
     // is part of signing out, not a nicety.
     await clearCachedData();
+    // The outbox is deliberately NOT cleared. A day's entry saved with no
+    // signal exists nowhere else, and a supervisor ending their shift before
+    // reaching signal would lose the round. Detaching the user is enough:
+    // the writes stay on disk and go when that user signs in again, never
+    // under the next person's token.
+    setOutboxUser(null);
     set({ status: "signedOut", user: null, error: null });
   },
 }));
