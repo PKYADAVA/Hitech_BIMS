@@ -749,7 +749,7 @@ export function lastWeightNote(
   const taken = lookup?.last_weight_date;
   if (!grams || !taken) return null;
   const days = today ? ageOnDate(taken, today) : null;
-  const parts = [`Last ${trimZeros(grams)} g`, shortDate(taken)];
+  const parts = [`Last weighted ${trimZeros(grams)} g`, `On ${shortDate(taken)}`];
   if (days != null) parts.push(gapText(days));
   return { text: parts.join(" · "), days, tone: weighGapTone(days) };
 }
@@ -761,10 +761,9 @@ export function weighGapTone(days: number | null): Tone {
   return days === 2 ? "warn" : "bad";
 }
 
-/** Abbreviated hard because the whole line has a third of a phone's width to
- *  live in: spelling out "17 days ago" wrapped, and a phrase broken across
- *  two lines reads worse than the short form. */
-const gapText = (days: number): string => (days === 0 ? "today" : `${days}d`);
+/** Days abbreviated: the line spans the row rather than the weight's cell,
+ *  which is room enough for the words around it but not for "17 days ago". */
+const gapText = (days: number): string => (days === 0 ? "today" : `${days}d ago`);
 
 /** 40.00 reads as 40, 38.50 as 38.5 — the trailing zeros are noise in a
  *  line this narrow. */
@@ -772,11 +771,14 @@ export function trimZeros(n: number): string {
   return String(Number(n.toFixed(2)));
 }
 
-/** "22 Jul" — the year is dropped because the weighing is always recent. */
+/** "22 Jul 26" — short year, because a flock runs about six weeks and the
+ *  weighing is always recent, but a bare day and month is ambiguous on a
+ *  screen a supervisor reads months after the fact. */
 function shortDate(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return d.toLocaleDateString(undefined,
+    { day: "numeric", month: "short", year: "2-digit" });
 }
 
 export function feedPerBirdG(qtyKg: number, birds: number): number | null {

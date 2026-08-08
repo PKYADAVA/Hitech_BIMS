@@ -633,12 +633,12 @@ describe("lastWeightNote — the line under the weight box", () => {
   it("counts the days between the weighing and the entry", () => {
     const n = note("40", "2026-07-19", "2026-07-23");
     expect(n!.days).toBe(4);
-    expect(n!.text).toContain("4d");
+    expect(n!.text).toContain("4d ago");
   });
 
   it("reads naturally at nought and one day", () => {
     expect(note("40", "2026-07-23", "2026-07-23")!.text).toContain("today");
-    expect(note("40", "2026-07-22", "2026-07-23")!.text).toContain("1d");
+    expect(note("40", "2026-07-22", "2026-07-23")!.text).toContain("1d ago");
   });
 
   it("stays quiet at a day or less, which is the normal rhythm", () => {

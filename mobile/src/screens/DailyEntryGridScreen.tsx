@@ -1100,9 +1100,12 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
                   {a?.fieldHints.avg_weight_gms ? (
                     <HintLine hint={a.fieldHints.avg_weight_gms} />
                   ) : null}
-                  <LastWeightLine lookup={r.lookup} />
                 </View>
               </View>
+              {/* Spans the row because the wording does not fit a third of a
+                  phone, and is right-aligned so it still reads as the weight
+                  column's rather than the mortality box's. */}
+              <LastWeightLine lookup={r.lookup} />
               <PhotoStrip
                 label="Photos (Mortality)"
                 uris={r.photos.mortality}
@@ -2080,6 +2083,7 @@ const useStyles = makeStyles((colors) => ({
   lastWeight: {
     ...type.caption,
     fontSize: 11,
+    textAlign: "right",
     color: colors.textMuted,
     marginTop: -spacing.sm,
     marginBottom: spacing.md,
