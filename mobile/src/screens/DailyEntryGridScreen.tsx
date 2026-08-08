@@ -3,11 +3,12 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Alert, Image, Linking, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { createResource, listResource, updateResource } from "@/api/resources";
+import { listResource } from "@/api/resources";
+import { writeThrough, WriteBody } from "@/net/writeThrough";
 import { Row } from "@/api/types";
 import { ApiError } from "@/api/types";
 import {
-  appendImage, CapturedPoint, capturePhoto, CapturePermissionError, captureLocation, isLocalCapture,
+  CapturedPoint, capturePhoto, CapturePermissionError, captureLocation, isLocalCapture,
 } from "@/capture";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
@@ -28,7 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { formatDate } from "@/utils/format";
-import { confirm } from "@/ui/confirm";
+import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "DailyEntryGrid">;
 
@@ -491,17 +492,23 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
    * point, and failing the whole save over a photo that did not upload would
    * push the supervisor into re-entering a record that is already filed.
    */
-  const uploadPhotos = async (entryId: number, r: GridRow): Promise<string[]> => {
+  const uploadPhotos = async (entryId: number | string, r: GridRow): Promise<string[]> => {
     const failed: string[] = [];
     for (const { kind, label } of PHOTO_KINDS) {
       for (const uri of r.photos[kind]) {
         if (!isLocalCapture(uri)) continue;          // already on the server
         try {
-          const form = new FormData();
-          form.append("entry", String(entryId));
-          form.append("kind", kind);
-          await appendImage(form, "image", uri);
-          await createResource(PHOTOS_PATH, form);
+          // entryId may be a placeholder when the entry itself is queued; the
+          // outbox substitutes the real id once the entry has landed.
+          await writeThrough({
+            label: "Day Record photo",
+            method: "POST",
+            path: PHOTOS_PATH,
+            body: {
+              fields: { entry: entryId, kind },
+              files: [{ field: "image", uri }],
+            },
+          });
         } catch {
           failed.push(label);
         }
@@ -714,16 +721,19 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
   }, [filled]);
 
   /**
-   * The record's body. JSON normally; multipart the moment a photo was taken,
-   * since a file cannot travel in JSON. The photo fields are dropped from the
-   * text part — their value is a local file URI, and sending it as a string
-   * would store the path instead of the picture.
+   * The record's body, described rather than built.
+   *
+   * Fields and files stay apart because a FormData cannot be written to disk
+   * and read back — an entry saved on a farm with no signal has to survive in
+   * the outbox until there is one, and a ready-made multipart body could not.
+   * The photo fields are kept out of the text part: their value is a local
+   * file uri, and sending it as a string would store the path, not the picture.
    */
-  const buildBody = async (
+  const buildBody = (
     r: GridRow,
     /** A fix taken during this save, which the row's own state does not carry yet. */
     fix?: CapturedPoint
-  ): Promise<Record<string, unknown> | FormData> => {
+  ): WriteBody => {
     const values = fix
       ? { ...r.values, entry_latitude: fix.latitude, entry_longitude: fix.longitude }
       : r.values;
@@ -737,13 +747,10 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
       if (isPhoto(k)) continue;
       plain[k] = v;
     }
-    const shots = PHOTO_FIELDS.filter((f) => isLocalCapture(values[f] ?? ""));
-    if (!shots.length) return plain;
-
-    const form = new FormData();
-    for (const [k, v] of Object.entries(plain)) form.append(k, String(v));
-    for (const f of shots) await appendImage(form, f, values[f]);
-    return form;
+    const files = PHOTO_FIELDS
+      .filter((f) => isLocalCapture(values[f] ?? ""))
+      .map((field) => ({ field, uri: values[field] }));
+    return { fields: plain, files };
   };
 
   const onSave = async () => {
@@ -835,7 +842,10 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     if (editing) {
       try {
         const r = filled[0];
-        await updateResource(PATH, editing.id as number, await buildBody(r, fixes.get(r.key)));
+        await writeThrough({
+          label: "Day Record", method: "PATCH",
+          path: `${PATH}${editing.id}/`, body: buildBody(r, fixes.get(r.key)),
+        });
         const failedPhotos = await uploadPhotos(editing.id as number, r);
         queryClient.invalidateQueries({ queryKey: ["list", PATH] });
         setSaving(false);
@@ -865,12 +875,23 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     const failures = new Map<string, string>();
     const photoTrouble: string[] = [];
     let saved = 0;
+    let queued = 0;
     for (const r of filled) {
       try {
-        const created = await createResource<Row>(PATH, await buildBody(r, fixes.get(r.key)));
+        const written = await writeThrough({
+          label: "Day Record", method: "POST", path: PATH,
+          body: buildBody(r, fixes.get(r.key)),
+          // Offline there is no id yet, so the entry asks for a placeholder
+          // and its photos reference that until it lands.
+          producesId: true,
+        });
         saved += 1;
+        if (written.queued) queued += 1;
         // Photos hang off the entry, so they can only go up once it has an id.
-        const missed = await uploadPhotos(created.id as number, r);
+        const entryId = written.queued
+          ? written.id
+          : ((written.data as Row).id as number);
+        const missed = await uploadPhotos(entryId, r);
         if (missed.length) photoTrouble.push(`${farmLabel(r)}: ${missed.join(", ")}`);
       } catch (e) {
         const msg =
@@ -884,6 +905,18 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     queryClient.invalidateQueries({ queryKey: ["list", PATH] });
 
     if (!failures.size) {
+      if (queued) {
+        // A queued save is on the phone and nowhere else. Going straight back
+        // with the usual silence would read as "filed on the ERP", and the
+        // supervisor would have no reason to keep the handset with them.
+        await notify(
+          "Saved on this phone",
+          `${queued === saved ? "No signal" : "Signal dropped"} — ` +
+            `${queued} ${queued === 1 ? "entry is" : "entries are"} waiting to send. ` +
+            "They will go to the ERP by themselves once you are back in range.");
+        navigation.goBack();
+        return;
+      }
       if (photoTrouble.length) {
         // Every entry is saved — only the pictures fell short, and saying so is
         // better than a silent success that loses the evidence.
@@ -1038,9 +1071,7 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
                   {a?.fieldHints.avg_weight_gms ? (
                     <HintLine hint={a.fieldHints.avg_weight_gms} />
                   ) : null}
-                  {lastWeightNote(r.lookup) ? (
-                    <Text style={styles.lastWeight}>{lastWeightNote(r.lookup)}</Text>
-                  ) : null}
+                  <LastWeightLine lookup={r.lookup} />
                 </View>
               </View>
               <PhotoStrip
@@ -1736,6 +1767,22 @@ function CapGauge({ cap }: { cap: CapProgress }) {
   );
 }
 
+/** The previous weighing, under the box asking for today's. It colours by how
+ *  stale it is: a day between weighings is normal, two is worth noticing, and
+ *  at three the figure is a weighing that was missed, not a reading. */
+function LastWeightLine({ lookup }: { lookup?: DailyEntryLookup | null }) {
+  const styles = useStyles();
+  // Measured from the real day, not the row's date: a row can be backdated to
+  // fill in a missed day, which would call an old weighing fresh.
+  const note = lastWeightNote(lookup, todayISO());
+  if (!note) return null;
+  return (
+    <Text style={[styles.lastWeight, styles[`hint_${note.tone}`]]}>
+      {note.text}
+    </Text>
+  );
+}
+
 function HintLine({ hint, inline }: { hint: Hint; inline?: boolean }) {
   const styles = useStyles();
   return (
@@ -2003,10 +2050,13 @@ const useStyles = makeStyles((colors) => ({
   // from the hint above it and wraps rather than clipping.
   lastWeight: {
     ...type.caption,
+    fontSize: 11,
     color: colors.textMuted,
     marginTop: -spacing.sm,
     marginBottom: spacing.md,
   },
+  // The gap bands share the hint palette above, so an amber here and an
+  // amber there mean the same thing.
   hint_ok: { color: colors.success },
   hint_warn: { color: colors.warning },
   hint_bad: { color: colors.danger },

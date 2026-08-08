@@ -602,27 +602,69 @@ describe("negative stock is a blocker, not a warning", () => {
 });
 
 describe("lastWeightNote — the line under the weight box", () => {
+  const note = (g: string | null, taken: string | null, on?: string) =>
+    lastWeightNote({ last_weight_g: g, last_weight_date: taken }, on);
+
   it("names the weight and the day it was taken", () => {
-    const note = lastWeightNote({ last_weight_g: "38.50", last_weight_date: "2026-07-19" });
-    expect(note).toContain("38.5");
-    expect(note).toContain("Jul");
+    const n = note("38.50", "2026-07-19", "2026-07-21");
+    expect(n!.text).toContain("38.5");
+    expect(n!.text).toContain("Jul");
   });
 
   it("drops the trailing zeros a decimal field stores", () => {
-    expect(lastWeightNote({ last_weight_g: "40.00", last_weight_date: "2026-07-22" }))
-      .toContain("40 g");
+    expect(note("40.00", "2026-07-22", "2026-07-23")!.text).toContain("40 g");
   });
 
   it("stays off when the flock has never been weighed", () => {
-    expect(lastWeightNote({ last_weight_g: null, last_weight_date: null })).toBeNull();
+    expect(note(null, null, "2026-07-23")).toBeNull();
     expect(lastWeightNote(undefined)).toBeNull();
   });
 
   it("stays off when a server too old to send it answers", () => {
-    expect(lastWeightNote({})).toBeNull();
+    expect(lastWeightNote({}, "2026-07-23")).toBeNull();
   });
 
   it("treats a zero weight as never weighed rather than showing 0 g", () => {
-    expect(lastWeightNote({ last_weight_g: "0", last_weight_date: "2026-07-19" })).toBeNull();
+    expect(note("0", "2026-07-19", "2026-07-23")).toBeNull();
+  });
+
+  // ---- how long since ----------------------------------------------------
+
+  it("counts the days between the weighing and the entry", () => {
+    const n = note("40", "2026-07-19", "2026-07-23");
+    expect(n!.days).toBe(4);
+    expect(n!.text).toContain("4d");
+  });
+
+  it("reads naturally at nought and one day", () => {
+    expect(note("40", "2026-07-23", "2026-07-23")!.text).toContain("today");
+    expect(note("40", "2026-07-22", "2026-07-23")!.text).toContain("1d");
+  });
+
+  it("stays quiet at a day or less, which is the normal rhythm", () => {
+    expect(note("40", "2026-07-23", "2026-07-23")!.tone).toBe("info");
+    expect(note("40", "2026-07-22", "2026-07-23")!.tone).toBe("info");
+  });
+
+  it("turns amber at two days", () => {
+    expect(note("40", "2026-07-21", "2026-07-23")!.tone).toBe("warn");
+  });
+
+  it("turns red at three days and beyond", () => {
+    expect(note("40", "2026-07-20", "2026-07-23")!.tone).toBe("bad");
+    expect(note("40", "2026-07-10", "2026-07-23")!.tone).toBe("bad");
+  });
+
+  it("crosses a month end without arithmetic trouble", () => {
+    const n = note("40", "2026-06-29", "2026-07-02");
+    expect(n!.days).toBe(3);
+    expect(n!.tone).toBe("bad");
+  });
+
+  it("omits the gap, and the colour, without a day to measure against", () => {
+    const n = note("40", "2026-07-19", undefined);
+    expect(n!.days).toBeNull();
+    expect(n!.tone).toBe("info");
+    expect(n!.text.split("·")).toHaveLength(2);   // weight and date only
   });
 });

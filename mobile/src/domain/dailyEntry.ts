@@ -730,16 +730,41 @@ export function feedStandard(
 /** The previous weighing on this flock, for the line under the weight box.
  *  A bird is weighed every few days rather than daily, so today's figure is
  *  only read against the last one — "40 g" says nothing on its own, and a
- *  supervisor standing at the shed has no other way to recall it. Returns
- *  null when the flock has never been weighed, so the line stays off. */
+ *  supervisor standing at the shed has no other way to recall it.
+ *
+ *  The gap rides on the same line because it is what makes the figure
+ *  actionable: 40 g eight days ago is not a reading to compare against, it
+ *  is a weighing that was missed. Returns null when the flock has never been
+ *  weighed, so the line stays off.
+ *
+ *  `today` is the real day, not the row's date. A row can be backdated to
+ *  fill in a missed day, and measuring the gap against that date would call
+ *  a fortnight-old weighing fresh.
+ */
 export function lastWeightNote(
   lookup?: { last_weight_g?: string | null; last_weight_date?: string | null } | null,
-): string | null {
+  today?: string | null,
+): { text: string; days: number | null; tone: Tone } | null {
   const grams = num(lookup?.last_weight_g);
-  const on = lookup?.last_weight_date;
-  if (!grams || !on) return null;
-  return `Last ${trimZeros(grams)} g · ${shortDate(on)}`;
+  const taken = lookup?.last_weight_date;
+  if (!grams || !taken) return null;
+  const days = today ? ageOnDate(taken, today) : null;
+  const parts = [`Last ${trimZeros(grams)} g`, shortDate(taken)];
+  if (days != null) parts.push(gapText(days));
+  return { text: parts.join(" · "), days, tone: weighGapTone(days) };
 }
+
+/** A day between weighings is normal. Two is worth noticing. At three the
+ *  reading is too old to compare today's figure against. */
+export function weighGapTone(days: number | null): Tone {
+  if (days == null || days <= 1) return "info";
+  return days === 2 ? "warn" : "bad";
+}
+
+/** Abbreviated hard because the whole line has a third of a phone's width to
+ *  live in: spelling out "17 days ago" wrapped, and a phrase broken across
+ *  two lines reads worse than the short form. */
+const gapText = (days: number): string => (days === 0 ? "today" : `${days}d`);
 
 /** 40.00 reads as 40, 38.50 as 38.5 — the trailing zeros are noise in a
  *  line this narrow. */
