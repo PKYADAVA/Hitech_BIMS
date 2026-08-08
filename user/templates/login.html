@@ -11,53 +11,53 @@
   <link href="{% static 'css/login.css' %}" rel="stylesheet">
 </head>
 <body>
+  <div class="lang" title="English is the only language currently available">
+    <i class="fas fa-globe"></i> English
+  </div>
+
   <div class="login-shell">
 
-    <!-- Left: what the product is. Hidden on phones, where it is scenery in
-         front of the form the user actually came for. -->
-    <section class="login-pitch-col">
-      <div class="login-brand">
-        <img src="{% static 'images/hitech-mark.png' %}" alt="">
-        <div>
-          <div class="name">Hi Tech Farms</div>
-          <div class="sub">Poultry ERP</div>
+    <!-- Left: the product, standing on the farm. The photograph runs the full
+         height of the column with the copy over its sky, rather than sitting in
+         a box below the text. Hidden on phones, where it is scenery in front of
+         the form the user actually came for. -->
+    <section class="pitch">
+      <div class="pitch-photo" role="img"
+           aria-label="Hens on a Hi Tech Farms poultry farm at sunrise"></div>
+      <div class="pitch-wash"></div>
+
+      <div class="pitch-body">
+        <div class="login-brand">
+          <img src="{% static 'images/hitech-mark.png' %}" alt="">
+          <div>
+            <div class="name">Hi Tech Farms</div>
+            <div class="sub">Poultry ERP</div>
+          </div>
         </div>
+
+        <h1>
+          Smart Management<br>
+          for <em>Healthy Farms</em><br>
+          Better Tomorrow
+        </h1>
+        <p>Manage Farms, Hatchery, Feed, Production, Inventory, Sales,
+           Finance and more &ndash; Anytime, Anywhere.</p>
       </div>
 
-      <div class="login-pitch">
-        <h1>Smart Poultry Management<br><em>All in One ERP</em></h1>
-        <p>Manage Farms, Hatchery, Feed, Production, Stocks, Sales, Finance
-           and more — Anytime, Anywhere.</p>
-      </div>
-
-      <!-- The farm itself, not an illustration. This is the same photograph
-           the mobile app already ships on its login, so the two front doors
-           look like one product. It drifts slowly rather than sitting still —
-           motion the design asked for, without a cartoon. -->
-      <div class="login-hero">
-        <div class="hero-photo" role="img"
-             aria-label="Hens on a Hi Tech Farms poultry farm"></div>
-        <div class="hero-veil"></div>
-        <div class="hero-tag">
-          <i class="fas fa-location-dot"></i>
-          <span>Hi Tech Farms</span>
-        </div>
-      </div>
-
-      <div class="login-features">
+      <div class="features">
         <div>
           <div class="f-icon"><i class="fas fa-warehouse"></i></div>
           <div class="f-label">Multi Farm</div>
           <div class="f-sub">Management</div>
         </div>
         <div>
-          <div class="f-icon"><i class="fas fa-boxes-stacked"></i></div>
+          <div class="f-icon"><i class="fas fa-chart-column"></i></div>
           <div class="f-label">Real Time</div>
-          <div class="f-sub">Inventory</div>
+          <div class="f-sub">Reports</div>
         </div>
         <div>
-          <div class="f-icon"><i class="fas fa-chart-column"></i></div>
-          <div class="f-label">Production</div>
+          <div class="f-icon"><i class="fas fa-boxes-stacked"></i></div>
+          <div class="f-label">Inventory</div>
           <div class="f-sub">Tracking</div>
         </div>
         <div>
@@ -69,63 +69,73 @@
     </section>
 
     <!-- Right: the form -->
-    <section class="login-card">
-      <div class="lock"><i class="fas fa-lock"></i></div>
-      <h2>Welcome Back!</h2>
-      <p class="lead">Login to access your ERP account</p>
+    <section class="form-col">
+      <div class="login-card">
+        <div class="lock"><i class="fas fa-lock"></i></div>
+        <h2>Welcome Back!</h2>
+        <p class="lead">Login to access your ERP account</p>
 
-      {% if messages %}
-        {% for message in messages %}
-          <div class="login-error" role="alert">
-            <i class="fas fa-circle-exclamation"></i>
-            <span>{{ message }}</span>
+        {% if messages %}
+          {% for message in messages %}
+            <div class="login-error" role="alert">
+              <i class="fas fa-circle-exclamation"></i>
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <form method="POST" autocomplete="off">
+          {% csrf_token %}
+
+          <div class="field">
+            <label for="username">Username / Employee ID</label>
+            <div class="control">
+              <i class="fas fa-user lead-icon"></i>
+              <input type="text" id="username" name="username"
+                     placeholder="Enter Employee ID or Username" required autofocus>
+            </div>
           </div>
-        {% endfor %}
-      {% endif %}
 
-      <form method="POST" autocomplete="off">
-        {% csrf_token %}
-
-        <div class="field">
-          <label for="username">Username / Employee ID</label>
-          <div class="control">
-            <i class="fas fa-user lead-icon"></i>
-            <input type="text" id="username" name="username"
-                   placeholder="Enter Employee ID or Username" required autofocus>
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="control">
+              <i class="fas fa-lock lead-icon"></i>
+              <input type="password" id="password" name="password"
+                     placeholder="Enter Password" required>
+              <button type="button" class="reveal" id="reveal"
+                      aria-label="Show password" aria-pressed="false">
+                <i class="fas fa-eye" id="revealIcon"></i>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div class="field">
-          <label for="password">Password</label>
-          <div class="control">
-            <i class="fas fa-lock lead-icon"></i>
-            <input type="password" id="password" name="password"
-                   placeholder="Enter Password" required>
-            <button type="button" class="reveal" id="reveal"
-                    aria-label="Show password" aria-pressed="false">
-              <i class="fas fa-eye" id="revealIcon"></i>
-            </button>
+          <div class="row-between">
+            <label class="remember">
+              <input type="checkbox" name="remember" value="1" checked>
+              Remember Me
+            </label>
+            <a class="link-brand" href="{% url 'forgot_password' %}">Forgot Password?</a>
           </div>
-        </div>
 
-        <div class="row-between">
-          <label class="remember">
-            <input type="checkbox" name="remember" value="1" checked>
-            Remember Me
-          </label>
-          <a class="link-brand" href="{% url 'forgot_password' %}">Forgot Password?</a>
-        </div>
+          <button type="submit" class="btn-login">
+            <i class="fas fa-right-to-bracket"></i> Login
+          </button>
+        </form>
 
-        <button type="submit" class="btn-login">
-          <i class="fas fa-right-to-bracket"></i> Login
+        <div class="or-split">OR</div>
+
+        <button type="button" class="btn-otp" disabled
+                aria-describedby="otpNote">
+          <i class="fas fa-shield-alt"></i> Login with OTP
         </button>
-      </form>
+        <p class="btn-otp-note" id="otpNote">Coming soon &mdash; use your password for now</p>
 
-      <div class="assure">
-        <i class="fas fa-shield-alt"></i>
-        <div>
-          <div class="t">Secure Login</div>
-          <div class="d">Your data is protected with enterprise grade security</div>
+        <div class="assure">
+          <i class="fas fa-shield-alt"></i>
+          <div>
+            <div class="t">Secure Login</div>
+            <div class="d">Your data is protected with enterprise grade security</div>
+          </div>
         </div>
       </div>
     </section>
@@ -133,9 +143,12 @@
   </div>
 
   <footer class="login-foot">
-    <a href="mailto:support@hitechfarms.co.in">
+    <!-- tel:, not mailto:. The number is the real contact; the support address
+         that used to sit here was a placeholder I had no basis for. -->
+    <a href="tel:+919451144595">
       <i class="fas fa-headset"></i>
-      <span><strong>Need Help?</strong> Contact Support</span>
+      <span><strong>Need Help?</strong> Contact Support
+        <strong class="foot-tel">+91-9451144595</strong></span>
     </a>
     <span class="powered">Powered by Hi Tech Farms</span>
   </footer>
