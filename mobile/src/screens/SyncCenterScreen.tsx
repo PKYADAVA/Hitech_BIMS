@@ -9,6 +9,7 @@ import {
 } from "@/offline/engine";
 import { listEntries, subscribeToQueue } from "@/offline/queue";
 import { OfflineEntry, SyncStatus } from "@/offline/types";
+import { checkStorage, StorageState } from "@/offline/storage";
 import { useSyncProgress, useSyncSummary } from "@/offline/useSync";
 import { makeStyles, radius, spacing, type } from "@/theme";
 import { confirm, notify } from "@/ui/confirm";
@@ -36,11 +37,13 @@ export function SyncCenterScreen() {
   const progress = useSyncProgress();
   const [entries, setEntries] = useState<OfflineEntry[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [storage, setStorage] = useState<StorageState | null>(null);
 
   const reload = useCallback(async () => setEntries(await listEntries()), []);
 
   useEffect(() => {
     void reload();
+    void checkStorage().then(setStorage);
     return subscribeToQueue(() => { void reload(); });
   }, [reload]);
 
@@ -99,6 +102,20 @@ export function SyncCenterScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={false} onRefresh={reload} />}
     >
+      {storage?.message ? (
+        // Said here rather than as a popup: this is where somebody has come to
+        // deal with unsent work, and it is the one screen where "free up
+        // space" is advice they can act on straight away.
+        <View style={[styles.notice, storage.level === "critical" && styles.noticeBad]}>
+          <AppIcon name="harddisk" size={16}
+                   color={storage.level === "critical" ? "#dc2626" : "#b45309"} />
+          <Text style={[styles.noticeText,
+                        storage.level === "critical" && styles.noticeTextBad]}>
+            {storage.message}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.card}>
         <View style={styles.connRow}>
           <View style={[styles.dot, { backgroundColor: summary.online ? "#22c55e" : "#ef4444" }]} />
@@ -362,6 +379,14 @@ const useStyles = makeStyles((c) => ({
   action: { flexDirection: "row", alignItems: "center", gap: 4 },
   actionText: { ...type.caption, color: "#2563eb", fontWeight: "700" },
   actionDanger: { color: "#dc2626" },
+  notice: {
+    flexDirection: "row", alignItems: "flex-start", gap: spacing.xs,
+    backgroundColor: c.warningLight, borderRadius: radius.md,
+    padding: spacing.md, marginBottom: spacing.md,
+  },
+  noticeBad: { backgroundColor: c.dangerLight },
+  noticeText: { ...type.caption, color: "#8a5a00", flex: 1, fontWeight: "600" },
+  noticeTextBad: { color: c.danger },
   empty: { alignItems: "center", paddingVertical: spacing.xxl, gap: spacing.xs },
   emptyTitle: { ...type.title, color: c.text },
   emptyText: { ...type.caption, color: c.textMuted, textAlign: "center", paddingHorizontal: spacing.lg },

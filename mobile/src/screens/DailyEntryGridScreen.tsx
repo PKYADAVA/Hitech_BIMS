@@ -501,9 +501,12 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
           // entryId may be a placeholder when the entry itself is queued; the
           // outbox substitutes the real id once the entry has landed.
           await writeThrough({
+            type: "photo",
             label: "Day Record photo",
             method: "POST",
             path: PHOTOS_PATH,
+            scope: { farm_id: r.values.farm, batch_id: r.values.batch },
+            date: r.date,
             body: {
               fields: { entry: entryId, kind },
               files: [{ field: "image", uri }],
@@ -753,6 +756,30 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     return { fields: plain, files };
   };
 
+  /**
+   * How a queued Day Record describes itself.
+   *
+   * The Sync Center lists entries a supervisor has to recognise hours later,
+   * and the admin monitor groups them — neither can do that from a URL and a
+   * payload. The farm, batch and date come off the row; the fix is passed in
+   * because `takeLocation` writes to state that has not re-rendered yet, so
+   * reading it back here would report no GPS on the very entries that just
+   * captured it.
+   */
+  const describeRow = (r: GridRow, fix?: CapturedPoint) => {
+    const lat = fix?.latitude ?? r.values.entry_latitude;
+    const lng = fix?.longitude ?? r.values.entry_longitude;
+    return {
+      type: "daily_weight",
+      label: "Day Record",
+      date: r.date,
+      scope: { farm_id: r.values.farm, batch_id: r.values.batch },
+      gps: lat && lng
+        ? { latitude: Number(lat), longitude: Number(lng), accuracy: null }
+        : null,
+    };
+  };
+
   const onSave = async () => {
     setFormError(null);
     if (!filled.length) {
@@ -843,7 +870,8 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
       try {
         const r = filled[0];
         await writeThrough({
-          label: "Day Record", method: "PATCH",
+          ...describeRow(r, fixes.get(r.key)),
+          method: "PATCH",
           path: `${PATH}${editing.id}/`, body: buildBody(r, fixes.get(r.key)),
         });
         const failedPhotos = await uploadPhotos(editing.id as number, r);
@@ -879,7 +907,8 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     for (const r of filled) {
       try {
         const written = await writeThrough({
-          label: "Day Record", method: "POST", path: PATH,
+          ...describeRow(r, fixes.get(r.key)),
+          method: "POST", path: PATH,
           body: buildBody(r, fixes.get(r.key)),
           // Offline there is no id yet, so the entry asks for a placeholder
           // and its photos reference that until it lands.

@@ -14,6 +14,8 @@ import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
+import { writeThrough, WriteBody } from "@/net/writeThrough";
+import { notify } from "@/ui/confirm";
 import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
@@ -378,8 +380,19 @@ export function SupervisorTripFormScreen({ navigation, route }: Props) {
   const setVisit = (index: number, key: keyof Visit, value: string) =>
     setVisits((cur) => cur.map((v, i) => (i === index ? { ...v, [key]: value } : v)));
 
-  const body = async (extra: Record<string, string> = {}) => {
-    const form = new FormData();
+  /**
+   * The trip, described rather than built.
+   *
+   * Fields and photographs stay apart so the same value can go straight out or
+   * be written to the local database — a FormData cannot survive on disk, and
+   * a trip is exactly the thing that gets filled with no signal.
+   */
+  const body = (extra: Record<string, string> = {}): WriteBody => {
+    const fields: Record<string, unknown> = {};
+    const files: { field: string; uri: string }[] = [];
+    const form = {
+      append: (k: string, v: string) => { fields[k] = v; },
+    };
     if (isEmployee === false && values.employee) {
       form.append("employee", values.employee);
     }
@@ -399,7 +412,7 @@ export function SupervisorTripFormScreen({ navigation, route }: Props) {
     // Only pictures taken in this session travel. A stored URL sent back would
     // be fetched and re-uploaded as a copy — or, worse, saved as the string.
     for (const [field, uri] of Object.entries(photos)) {
-      if (uri && isLocalCapture(uri)) await appendImage(form, field, uri);
+      if (uri && isLocalCapture(uri)) files.push({ field, uri });
     }
     form.append("visits", JSON.stringify(
       visits.filter((v) => v.farm).map((v) => ({
@@ -408,8 +421,11 @@ export function SupervisorTripFormScreen({ navigation, route }: Props) {
         checked_out_at: v.checked_out_at || null,
         latitude: v.latitude, longitude: v.longitude,
       }))));
-    return form;
+    return { fields, files };
   };
+
+  // The queued start entry, so a closing save can be held behind it.
+  const startLocalId = React.useRef<string | null>(null);
 
   const save = async (extra: Record<string, string> = {}, thenLeave = false) => {
     setError(null);
@@ -435,13 +451,43 @@ export function SupervisorTripFormScreen({ navigation, route }: Props) {
 
     setSaving(true);
     try {
+      // Ending a trip has to reach the same row that started it. Offline the
+      // ERP has issued no id yet, so the start is queued with a placeholder and
+      // the closing save addresses that — the engine rewrites it with the real
+      // id once the start has landed, and holds the close back until it has.
       const url = tripId ? `/hr/trips/save/${tripId}` : "/hr/trips/save";
-      const { data } = await http.post<Envelope<{
-        id: number; trip_no: string; status: string; distance_km: number;
-      }>>(url, await body(extra), { headers: { "Content-Type": "multipart/form-data" } });
-      setTripId(data.data.id);
-      setTripNo(data.data.trip_no);
-      setStatus(data.data.status);
+      const written = await writeThrough({
+        type: "farm_visit",
+        label: "Supervisor Trip",
+        method: "POST",
+        path: url,
+        date: values.date,
+        body: body(extra),
+        scope: { employee_id: values.employee || null },
+        gps: values.start_latitude && values.start_longitude
+          ? { latitude: Number(values.start_latitude),
+              longitude: Number(values.start_longitude), accuracy: null }
+          : null,
+        producesId: !tripId,
+        dependsOn: tripId ? startLocalId.current : null,
+      });
+
+      if (written.queued) {
+        if (!tripId) {
+          setTripId(written.id as unknown as number);
+          startLocalId.current = written.localId;
+        }
+        setTripNo(written.offlineNo);
+        setStatus("Saved on this phone");
+        await notify("Saved on this phone",
+          "No signal — this trip is stored on the device and will go to the ERP "
+          + "by itself once you are back in range.");
+      } else {
+        const data = written.data as { id: number; trip_no: string; status: string };
+        setTripId(data.id);
+        setTripNo(data.trip_no);
+        setStatus(data.status);
+      }
       queryClient.invalidateQueries({ queryKey: ["resource", "/hr/trips/"] });
       // Home pins today's trip above the dashboard, and it is the screen a
       // driver lands back on — it must not still be offering "Start Trip".
