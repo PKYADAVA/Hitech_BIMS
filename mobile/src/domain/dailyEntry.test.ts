@@ -566,3 +566,37 @@ describe("feedPlanLines flag placement", () => {
     expect(one({ sent_kg: "400.00" }).flagOn).toBeNull();
   });
 });
+
+describe("negative stock is a blocker, not a warning", () => {
+  const lookup = {
+    batch: 1, batch_name: "B1", age_days: 5, start_date: "2026-07-18",
+    next_date: "2026-07-23", feed_phase: null, std_feed_kg: null,
+    std_weight_g: null, std_note: null, bs_curve: [], cum_feed_before_kg: null,
+    consumed_by_item: [], consumed_total_kg: null,
+    consumed_per_bird_actual_g: null, live_birds: 1000,
+  } as any;
+
+  const advise = (qty: string, opening: string) =>
+    adviseDailyEntry(lookup, { feed_1: "13", feed_1_qty: qty } as any,
+                     { feed_1: opening } as any);
+
+  it("refuses feeding more than the farm holds", () => {
+    const a = advise("150", "100");
+    expect(a.blockers).toHaveLength(1);
+    expect(a.blockers[0]).toContain("short by 50.00 kg");
+    // And it is not merely a confirmable warning.
+    expect(a.issues.join(" ")).not.toContain("short by");
+  });
+
+  it("allows feeding exactly what is there", () => {
+    expect(advise("100", "100").blockers).toEqual([]);
+  });
+
+  it("allows feeding less than is there", () => {
+    expect(advise("40", "100").blockers).toEqual([]);
+  });
+
+  it("has no blockers before a flock is known", () => {
+    expect(adviseDailyEntry(null as any, {} as any).blockers).toEqual([]);
+  });
+});

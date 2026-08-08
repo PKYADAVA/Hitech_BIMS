@@ -797,10 +797,25 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
       return;
     }
 
-    const issues = filled.flatMap((r) => {
-      const a = adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r));
-      return a.issues.map((i) => `${farmLabel(r)}: ${i}`);
-    });
+    const advised = filled.map((r) =>
+      [r, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r))] as const);
+
+    // Refused, not confirmed. Feeding more than the farm has been sent is what
+    // the server now rejects outright, and saving through it would leave that
+    // farm's feed ledger in a deficit every later entry carries forward.
+    const blockers = advised.flatMap(([r, a]) =>
+      a.blockers.map((b) => `${farmLabel(r)}: ${b}`));
+    if (blockers.length) {
+      setSaving(false);
+      Alert.alert(
+        "Not enough feed in stock",
+        blockers.map((b) => `• ${b}`).join("\n")
+      );
+      return;
+    }
+
+    const issues = advised.flatMap(([r, a]) =>
+      a.issues.map((i) => `${farmLabel(r)}: ${i}`));
     if (issues.length) {
       const proceed = await confirm({
         title: "Check before saving",

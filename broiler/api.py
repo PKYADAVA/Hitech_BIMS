@@ -184,6 +184,29 @@ class DailyEntrySerializer(serializer_factory(DailyEntry)):
         from .views import _resolve_batch
 
         attrs = super().validate(attrs)
+
+        # DRF does not run Model.clean, so the feed-stock guard is called here
+        # too. Both doors have to be shut: the phone posts through this
+        # serializer and the web form through full_clean, and a rule enforced on
+        # one of them is a rule the other route walks straight past.
+        probe = DailyEntry(
+            farm=attrs.get("farm") or getattr(self.instance, "farm", None),
+            date=attrs.get("date") or getattr(self.instance, "date", None),
+            feed_1=attrs.get("feed_1", getattr(self.instance, "feed_1", None)),
+            feed_2=attrs.get("feed_2", getattr(self.instance, "feed_2", None)),
+            feed_1_qty=attrs.get("feed_1_qty", getattr(self.instance, "feed_1_qty", 0)) or 0,
+            feed_2_qty=attrs.get("feed_2_qty", getattr(self.instance, "feed_2_qty", 0)) or 0,
+        )
+        probe.pk = self.instance.pk if self.instance else None
+        short = probe.feed_shortfalls()
+        if short:
+            raise serializers.ValidationError({
+                "feed_1_qty": [
+                    f"{item}: only {available} kg is at this farm, and this "
+                    f"entry feeds {qty}."
+                    for item, qty, available in short
+                ]
+            })
         farm = attrs.get("farm") or getattr(self.instance, "farm", None)
         if farm is not None:
             # The chosen batch, checked against the farm, falling back to the

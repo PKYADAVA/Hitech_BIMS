@@ -144,19 +144,37 @@ class DailyEntryApiTests(APITestCase):
         self.assertEqual(resp.status_code, 201, resp.content)
         self.assertEqual(DailyEntry.objects.get().age_days, 0)
 
+    def deliver(self, item=None, kg="500", when="2026-07-01"):
+        """Book feed onto the farm.
+
+        The chain tests used to run down from an opening balance of nothing,
+        which is a state the form now refuses: an entry cannot feed what was
+        never delivered. They still test the same thing — each row opening on
+        the one before it closing — from a real delivery.
+        """
+        from inventory.models import StockTransfer, Warehouse
+
+        return StockTransfer.objects.create(
+            item=item or self.feed, date=date.fromisoformat(when),
+            quantity=Decimal(kg),
+            from_location_type="warehouse",
+            from_warehouse=Warehouse.objects.get_or_create(name="Test Store")[0],
+            to_location_type="farm", to_farm=self.farm)
+
     # ---------------------------------------------------------- stock chain
 
     def test_feed_stock_runs_down_across_successive_entries(self):
+        self.deliver()
         self.post(date="2026-07-10", feed_1=self.feed.id, feed_1_qty="40")
         self.post(date="2026-07-11", feed_1=self.feed.id, feed_1_qty="25")
 
         first, second = DailyEntry.objects.order_by("date", "id")
-        # Opening balance 0, so closing stock goes negative as feed is issued —
-        # same convention as the web form (stock is fed in via other modules).
-        self.assertEqual(first.feed_1_stock, Decimal("-40"))
-        self.assertEqual(second.feed_1_stock, Decimal("-65"))
+        # Each row closes where the next one opens: 500 - 40, then - 25.
+        self.assertEqual(first.feed_1_stock, Decimal("460"))
+        self.assertEqual(second.feed_1_stock, Decimal("435"))
 
     def test_editing_an_earlier_row_recomputes_every_later_row(self):
+        self.deliver()
         self.post(date="2026-07-10", feed_1=self.feed.id, feed_1_qty="40")
         self.post(date="2026-07-11", feed_1=self.feed.id, feed_1_qty="25")
         first, second = DailyEntry.objects.order_by("date", "id")
@@ -166,19 +184,20 @@ class DailyEntryApiTests(APITestCase):
 
         first.refresh_from_db()
         second.refresh_from_db()
-        self.assertEqual(first.feed_1_stock, Decimal("-10"))
+        self.assertEqual(first.feed_1_stock, Decimal("490"))
         # The later row's opening balance moved with it — this is the chain
         # that silently went stale before.
-        self.assertEqual(second.feed_1_stock, Decimal("-35"))
+        self.assertEqual(second.feed_1_stock, Decimal("465"))
 
     def test_backfilled_row_slots_into_the_chain_in_date_order(self):
+        self.deliver()
         self.post(date="2026-07-12", feed_1=self.feed.id, feed_1_qty="30")
         self.post(date="2026-07-10", feed_1=self.feed.id, feed_1_qty="20")
 
         early, late = DailyEntry.objects.order_by("date", "id")
         self.assertEqual(early.date, date(2026, 7, 10))
-        self.assertEqual(early.feed_1_stock, Decimal("-20"))
-        self.assertEqual(late.feed_1_stock, Decimal("-50"))
+        self.assertEqual(early.feed_1_stock, Decimal("480"))
+        self.assertEqual(late.feed_1_stock, Decimal("450"))
 
     def test_second_feed_slot_keeps_its_own_balance(self):
         other = Item.objects.create(
@@ -186,12 +205,14 @@ class DailyEntryApiTests(APITestCase):
             valuation_method="Weighted Average", standard_cost_per_unit=Decimal("55"),
             usage="Produced", source="Purchased", type="Raw Material",
             item_account="Expense")
+        self.deliver()
+        self.deliver(item=other, kg="200")
         self.post(date="2026-07-10", feed_1=self.feed.id, feed_1_qty="40",
                   feed_2=other.id, feed_2_qty="15")
 
         entry = DailyEntry.objects.get()
-        self.assertEqual(entry.feed_1_stock, Decimal("-40"))
-        self.assertEqual(entry.feed_2_stock, Decimal("-15"))
+        self.assertEqual(entry.feed_1_stock, Decimal("460"))
+        self.assertEqual(entry.feed_2_stock, Decimal("185"))
 
     # ------------------------------------------------------- field capture
 

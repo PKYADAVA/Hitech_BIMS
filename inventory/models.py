@@ -355,19 +355,44 @@ class StockTransfer(models.Model):
             if item_issue_price(self.item, self.date) is None:
                 raise ValidationError(missing_price_message(self.item, self.date))
 
-        # Never let a warehouse's stock go negative on dispatch out (all items,
-        # new or edited). Farm sources are out of scope (feed is consumed by
-        # birds there, tracked differently). Seeds/admin that skip full_clean
-        # bypass this by design.
-        if (self.from_location_type == 'warehouse' and self.from_warehouse_id
-                and self.item_id and (self.quantity or 0) > 0):
-            available = warehouse_item_stock(
-                self.item_id, self.from_warehouse_id,
-                as_of_date=self.date, exclude_transfer_id=self.pk)
-            if self.quantity > available:
+        # Never let a source's stock go negative on dispatch out, whichever kind
+        # of place it leaves. Seeds/admin that skip full_clean bypass this by
+        # design.
+        if self.item_id and (self.quantity or 0) > 0:
+            available = None
+            where = None
+            if self.from_location_type == 'warehouse' and self.from_warehouse_id:
+                available = warehouse_item_stock(
+                    self.item_id, self.from_warehouse_id,
+                    as_of_date=self.date, exclude_transfer_id=self.pk)
+                where = self.from_warehouse
+            elif self.from_location_type == 'farm' and self.from_farm_id:
+                # A farm was left out of this on the grounds that feed is eaten
+                # there rather than dispatched. It is still moved out — farm to
+                # farm, or back to a store — and those movements could take the
+                # balance below zero exactly as a warehouse's could.
+                from inventory.services.item_summary import location_item_stock
+
+                available = location_item_stock(
+                    'farm', self.from_farm_id, self.item_id, as_of_date=self.date)
+                # The replay above reads the database, which on an edit still
+                # holds this transfer's old quantity — so it is added back, or
+                # a row would be measured against a balance it had itself
+                # already reduced.
+                if self.pk:
+                    prior = (StockTransfer.objects.filter(pk=self.pk)
+                             .values("from_location_type", "from_farm_id",
+                                     "item_id", "quantity").first())
+                    if (prior and prior["from_location_type"] == 'farm'
+                            and prior["from_farm_id"] == self.from_farm_id
+                            and prior["item_id"] == self.item_id):
+                        available += prior["quantity"] or 0
+                where = self.from_farm
+
+            if available is not None and self.quantity > available:
                 raise ValidationError(
                     f"Not enough stock: only {available} of {self.item} available at "
-                    f"{self.from_warehouse} as of {self.date} — cannot transfer {self.quantity}.")
+                    f"{where} as of {self.date} — cannot transfer {self.quantity}.")
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding

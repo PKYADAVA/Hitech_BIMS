@@ -486,6 +486,35 @@ function interpCurve(curve, key, target, out) {
   return curve[curve.length - 1][out];
 }
 
+// The stock a row would take a farm below zero on, if any. The server refuses
+// these outright now; catching them here means the refusal arrives beside the
+// figure that caused it rather than as an error after a round trip.
+function negativeStockRows() {
+  const bad = [];
+  entryRows().forEach((tr, i) => {
+    const farmSel = tr.querySelector('.farm');
+    const farm = farmSel && farmSel.value
+      ? farmSel.options[farmSel.selectedIndex].text : `Row ${i + 1}`;
+    // The preview already chains earlier rows into each row's opening figure,
+    // so reading the closing box is enough.
+    [['.stock-1', '.kgs-1', '.feed-1'], ['.stock-2', '.kgs-2', '.feed-2']]
+      .forEach(([sc, kc, fc]) => {
+        const sel = tr.querySelector(fc);
+        if (!sel || !sel.value) return;
+        const kg = Number(tr.querySelector(kc).value) || 0;
+        if (kg <= 0) return;
+        const opening = parseFloat(tr.querySelector(sc).value || '');
+        if (isNaN(opening)) return;
+        const closing = opening - kg;
+        if (closing < 0) {
+          bad.push(`${farm}: ${feedName(tr, fc)} is short by `
+                   + `${Math.abs(closing).toFixed(2)} kg`);
+        }
+      });
+  });
+  return bad;
+}
+
 function totalFeed(tr) {
   return (parseFloat(tr.querySelector('.kgs-1').value || '0')) + (parseFloat(tr.querySelector('.kgs-2').value || '0'));
 }
@@ -904,6 +933,14 @@ get('single-batch-form').addEventListener('submit', function (e) {
   if (!farm) { alert('Select a Farm.'); return; }
   const batch = get('batch').value;
   if (!batch) { alert('Select a Batch.'); return; }
+  const short = negativeStockRows();
+  if (short.length) {
+    // Refused, not confirmed: saving through it puts the farm's feed ledger
+    // into a deficit that every later entry then carries forward.
+    alert('Not enough feed in stock:\n\n' + short.join('\n')
+          + '\n\nBook the delivery first, or reduce the quantity.');
+    return;
+  }
   const rows = entryRows().map(tr => ({
     batch: batch,
     date: tr.querySelector('.date').value,

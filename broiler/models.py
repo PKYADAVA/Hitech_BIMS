@@ -1114,6 +1114,57 @@ class DailyEntry(models.Model):
                 max_num = max(max_num, int(match.group(1)))
         return f"{prefix}{max_num + 1:04d}"
 
+    def feed_shortfalls(self):
+        """Feed this entry would take that the farm does not have.
+
+        ``[(item, wanted, available)]`` — empty when the entry fits inside what
+        has been delivered. Both slots are weighed together against the same
+        balance: a day that puts one feed through Primary and Optional has
+        taken the sum of the two out of one pile, and checking them separately
+        let a farm feed twice what it held.
+
+        ``previous_stock`` is the balance *available to this row* — it already
+        leaves out the row's own consumption, so editing a saved entry is
+        measured against the stock without it rather than failing on itself.
+        """
+        if not self.farm_id or not self.date:
+            return []
+        wanted = {}
+        for slot in ("feed_1", "feed_2"):
+            item_id = getattr(self, f"{slot}_id")
+            qty = Decimal(str(getattr(self, f"{slot}_qty") or 0))
+            if item_id and qty > 0:
+                wanted[item_id] = wanted.get(item_id, Decimal("0")) + qty
+
+        short = []
+        for item_id, qty in wanted.items():
+            available = Decimal(str(
+                self.previous_stock(self.farm_id, item_id, self.date, self.pk)))
+            if qty > available:
+                item = self.feed_1 if self.feed_1_id == item_id else self.feed_2
+                short.append((item, qty, available))
+        return short
+
+    def clean(self):
+        """Refuse an entry that feeds more than the farm has been sent.
+
+        The Stock column has shown the shortfall for a while; it was still
+        possible to save through it, and the balance then carried the error
+        forward into every later entry on that farm — which is how a feed
+        ledger ends up reading minus twenty-five kilograms.
+        """
+        super().clean()
+        short = self.feed_shortfalls()
+        if short:
+            raise ValidationError({
+                "feed_1_qty": [
+                    "%s: only %s kg is at this farm on %s, and this entry feeds %s."
+                    % (item, available, self.date.strftime("%d.%m.%Y") if self.date else "",
+                       qty)
+                    for item, qty, available in short
+                ]
+            })
+
     @staticmethod
     def previous_stock(farm_id, item_id, before_date, before_id):
         """Feed of this item at this farm, before this row is counted.

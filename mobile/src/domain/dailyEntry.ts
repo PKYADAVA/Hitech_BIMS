@@ -226,6 +226,14 @@ export interface Advice {
   notes: Hint[];
   /** Human-readable problems, for the confirm-before-save prompt. */
   issues: string[];
+  /**
+   * Problems that must not be saved through at all, as opposed to confirmed.
+   *
+   * Feeding more than the farm has been sent is the case: the server refuses
+   * it outright, and saving through it would put that farm's feed ledger into
+   * a deficit every later entry then carries forward.
+   */
+  blockers: string[];
   /** The changeover gauge, when a capped item is selected. */
   cap: CapProgress | null;
   status: EntryStatus;
@@ -393,9 +401,11 @@ export function adviseDailyEntry(
   const fieldHints: Record<string, Hint> = {};
   const notes: Hint[] = [];
   const issues: string[] = [];
+  const blockers: string[] = [];
 
   if (!lookup || !lookup.batch) {
-    return { fieldHints, notes, issues, cap: null, status: "ok", statusLabel: "" };
+    return { fieldHints, notes, issues, blockers, cap: null,
+             status: "ok", statusLabel: "" };
   }
 
   const age = lookup.age_days;
@@ -576,7 +586,10 @@ export function adviseDailyEntry(
         text: `${name} stock after this entry: ${closing.toFixed(2)} kg`,
       });
       if (closing < 0) {
-        issues.push(`${name} stock goes negative (${closing.toFixed(2)} kg) — check the quantity`);
+        blockers.push(
+          `${name} is short by ${Math.abs(closing).toFixed(2)} kg — ` +
+          `book the delivery first, or reduce the quantity`
+        );
       }
     }
   }
@@ -622,7 +635,7 @@ export function adviseDailyEntry(
   const statusLabel =
     status === "warn" ? "Needs Review" : status === "near" ? "Near Limit" : "Within Standard";
 
-  return { fieldHints, notes, issues, cap, status, statusLabel };
+  return { fieldHints, notes, issues, blockers, cap, status, statusLabel };
 }
 
 
