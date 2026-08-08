@@ -1,6 +1,8 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useLayoutEffect, useState } from "react";
-import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Alert, Image, Linking, Modal, Pressable, ScrollView, Text, View,
+} from "react-native";
 
 import { MEDIA_BASE_URL } from "@/config";
 import { reviewChangeRequest } from "@/api/changeRequests";
@@ -225,6 +227,16 @@ export function RecordDetailScreen({ route, navigation }: Props) {
   ) as [string, string][];
 
   /**
+   * Which picture is open, if any.
+   *
+   * A thumbnail is for finding the right one; it is too small to read a cheque
+   * or a licence off, which is what these are. Tapping used to hand the file to
+   * the browser and leave the record behind — now it opens over the page and
+   * closes back onto it.
+   */
+  const [viewing, setViewing] = useState<{ uri: string; label: string } | null>(null);
+
+  /**
    * Attachments carried in a `files` list rather than as fields of their own.
    *
    * A farm capture keeps its photographs and scans in a child table, so none
@@ -295,12 +307,12 @@ export function RecordDetailScreen({ route, navigation }: Props) {
               <Pressable
                 key={k}
                 style={styles.photoItem}
-                onPress={() => Linking.openURL(uri)}
+                onPress={() => setViewing({ uri, label: humanizeKey(k) })}
               >
+                <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
                 <Text style={styles.photoLabel} numberOfLines={1}>
                   {humanizeKey(k)}
                 </Text>
-                <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
               </Pressable>
             ))}
           </View>
@@ -313,32 +325,67 @@ export function RecordDetailScreen({ route, navigation }: Props) {
             Attachments <Text style={styles.photoLabel}>{attachments.length}</Text>
           </Text>
           <View style={styles.photoGrid}>
-            {attachments.map((f, i) => (
-              <Pressable
-                key={f.id ?? `${f.kind}-${i}`}
-                style={styles.photoItem}
-                onPress={() => f.url && Linking.openURL(mediaUrl(f.url))}
-              >
-                <Text style={styles.photoLabel} numberOfLines={1}>
-                  {f.label || humanizeKey(f.kind ?? "File")}
-                </Text>
-                {/* A scan is as often a PDF as a photograph. Both are worth
-                    listing and both open; only one of them can be shown. */}
-                {looksLikeImage(f.url) ? (
-                  <Image source={{ uri: mediaUrl(f.url!) }} style={styles.photo}
-                         resizeMode="cover" />
-                ) : (
-                  <View style={[styles.photo, styles.fileTile]}>
-                    <Text style={styles.fileName} numberOfLines={2}>
-                      {f.name || "Open"}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
+            {attachments.map((f, i) => {
+              const label = f.label || humanizeKey(f.kind ?? "File");
+              const uri = mediaUrl(f.url!);
+              const image = looksLikeImage(f.url);
+              return (
+                <Pressable
+                  key={f.id ?? `${f.kind}-${i}`}
+                  style={styles.thumbItem}
+                  // A picture opens over the record; anything else has to go
+                  // to whatever on the device knows how to read it.
+                  onPress={() => (image
+                    ? setViewing({ uri, label })
+                    : Linking.openURL(uri))}
+                >
+                  {/* A scan is as often a PDF as a photograph. Both are worth
+                      listing and both open; only one of them can be shown. */}
+                  {image ? (
+                    <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.thumb, styles.fileTile]}>
+                      <AppIcon name="file-document-outline" size={20}
+                               color={colors.textMuted} />
+                    </View>
+                  )}
+                  <Text style={styles.thumbLabel} numberOfLines={2}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </Card>
       ) : null}
+
+      <Modal
+        visible={!!viewing}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewing(null)}
+      >
+        {/* Tapping anywhere closes: on a picture opened by accident that is
+            the only gesture anyone tries. */}
+        <Pressable style={styles.viewerBack} onPress={() => setViewing(null)}>
+          <View style={styles.viewerBar}>
+            <Text style={styles.viewerTitle} numberOfLines={1}>
+              {viewing?.label ?? ""}
+            </Text>
+            <Pressable hitSlop={12} onPress={() => setViewing(null)}
+                       accessibilityRole="button" accessibilityLabel="Close">
+              <AppIcon name="close" size={24} color="#fff" />
+            </Pressable>
+          </View>
+          {viewing ? (
+            <Image source={{ uri: viewing.uri }} style={styles.viewerImage}
+                   resizeMode="contain" />
+          ) : null}
+          <Pressable style={styles.viewerOpen}
+                     onPress={() => viewing && Linking.openURL(viewing.uri)}>
+            <AppIcon name="open-in-new" size={16} color="#fff" />
+            <Text style={styles.viewerOpenText}>Open full size</Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Card>
         <Text style={styles.groupTitle}>Details</Text>
@@ -439,6 +486,34 @@ const useStyles = makeStyles((colors) => ({
     alignItems: "center", justifyContent: "center",
     backgroundColor: colors.surfaceAlt, padding: spacing.xs,
   },
-  fileName: { ...type.caption, color: colors.textMuted, textAlign: "center" },
+  // Small on purpose: a thumbnail is for picking the right one out, and a row
+  // of them says at a glance how much evidence a visit carries. Reading it is
+  // what the viewer is for.
+  thumbItem: { width: 76, gap: 4 },
+  thumb: {
+    width: 76, height: 76, borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  thumbLabel: { ...type.caption, fontSize: 10, color: colors.textMuted },
+
+  viewerBack: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.92)",
+    alignItems: "center", justifyContent: "center",
+  },
+  viewerBar: {
+    position: "absolute", top: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, gap: spacing.md,
+  },
+  viewerTitle: { ...type.title, color: "#fff", flex: 1 },
+  viewerImage: { width: "94%", height: "72%" },
+  viewerOpen: {
+    position: "absolute", bottom: spacing.xl,
+    flexDirection: "row", alignItems: "center", gap: spacing.xs,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    borderRadius: radius.pill ?? 999, borderWidth: 1, borderColor: "#ffffff55",
+  },
+  viewerOpenText: { ...type.label, color: "#fff" },
   photoLabel: { ...type.label, color: colors.textMuted },
 }));

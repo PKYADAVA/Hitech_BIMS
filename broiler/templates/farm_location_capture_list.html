@@ -77,6 +77,29 @@
   </div></div>
 </div>
 
+<!-- Picture viewer: a thumbnail is too small to read a cheque off, and opening
+     a new tab loses the row you were looking at. -->
+<div class="modal fade" id="zoomModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <!-- The project stylesheet paints .modal-header white, which on a dark
+           viewer hides the title and the button in it. Stated here so the bar
+           belongs to the picture rather than to the page behind it. -->
+      <div class="modal-header border-0 py-2" style="background:transparent">
+        <h6 class="modal-title text-white" id="zoom-title"></h6>
+        <div class="d-flex align-items-center gap-2">
+          <a class="btn btn-sm btn-outline-light" id="zoom-open" target="_blank" rel="noopener">
+            <i class="fas fa-up-right-from-square me-1"></i>Open full size</a>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+      </div>
+      <div class="modal-body text-center p-2" style="background:transparent">
+        <img id="zoom-image" alt="" style="max-width:100%;max-height:78vh;object-fit:contain">
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Confirm for the two destructive actions; the wording changes per action -->
 <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog"><div class="modal-content">
@@ -103,17 +126,26 @@ $(function () {
 
   // Show an attachment as what it is: images render, anything else gets a file
   // icon that still opens. Both are links, so a click always reaches the file.
+  // Small on purpose: a thumbnail is for picking the right one out of a row,
+  // and a row of them says at a glance how much evidence a visit carries.
+  // Reading a cheque or a licence off one is what the viewer is for — a
+  // picture opens over the register rather than throwing you into a new tab
+  // and losing the row you were on. Anything that is not an image still has
+  // to go to whatever can read it.
   function thumb(f, withLabel) {
-    const label = withLabel ? `<div class="fw-semibold" style="font-size:.62rem">${esc(f.label)}</div>` : '';
+    const label = withLabel ? `<div class="fw-semibold text-truncate" style="font-size:.6rem">${esc(f.label)}</div>` : '';
     const body = f.is_image
       ? `<img src="${esc(f.url)}" alt="${esc(f.name)}"
-              style="width:112px;height:82px;object-fit:cover;border-radius:.3rem">`
+              style="width:72px;height:72px;object-fit:cover;border-radius:.3rem">`
       : `<div class="d-flex align-items-center justify-content-center"
-              style="width:112px;height:82px"><i class="fas fa-file fa-2x text-secondary"></i></div>`;
-    return `<div class="border rounded p-1 text-center" style="width:124px">
-        <a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${body}</a>
+              style="width:72px;height:72px"><i class="fas fa-file fa-lg text-secondary"></i></div>`;
+    const opener = f.is_image
+      ? `<a href="#" class="act-zoom" data-url="${esc(f.url)}"
+            data-label="${esc(f.label || f.name)}" title="${esc(f.name)}">${body}</a>`
+      : `<a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.name)}">${body}</a>`;
+    return `<div class="border rounded p-1 text-center" style="width:84px">
+        ${opener}
         ${label}
-        <div class="text-truncate text-muted" style="font-size:.58rem">${esc(f.name)}</div>
       </div>`;
   }
 
@@ -335,6 +367,15 @@ $(function () {
     $("#confirm-form").attr("action", `/farm-location-capture/${id}/${action}/`);
     new bootstrap.Modal(document.getElementById("confirmModal")).show();
   }
+  $(document).on("click", ".act-zoom", function (e) {
+    e.preventDefault();
+    const url = $(this).data("url");
+    $("#zoom-title").text($(this).data("label") || "");
+    $("#zoom-image").attr("src", url);
+    $("#zoom-open").attr("href", url);
+    new bootstrap.Modal(document.getElementById("zoomModal")).show();
+  });
+
   $(document).on("click", ".act-clear", function () { confirmAction($(this).data("id"), "clear"); });
   $(document).on("click", ".act-delete", function () { confirmAction($(this).data("id"), "delete"); });
 
