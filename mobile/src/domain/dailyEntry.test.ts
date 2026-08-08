@@ -9,7 +9,8 @@
  * pure functions and is checked here.
  */
 import {
-  addDays, adviseDailyEntry, ageOnDate, farmFeedBalance, feedPerBirdG, feedStandard, feedTone,
+  addDays, adviseDailyEntry, ageOnDate, farmFeedBalance, feedPerBirdG, feedPlanLines,
+  feedStandard, feedTone, typedFeed,
   flockSummary, interpCurve, priorListFeed, todayISO, type DailyEntryLookup, type FeedRow,
 } from "./dailyEntry";
 
@@ -452,76 +453,88 @@ describe("adviseDailyEntry — the web grid's notification strip", () => {
   });
 });
 
-describe("feed plan", () => {
-  const base = {
-    batch: 1, batch_name: "B1", age_days: 2, start_date: "2026-07-21",
-    next_date: "2026-07-23", feed_phase: null, std_feed_kg: null,
-    std_weight_g: null, std_note: null, bs_curve: [], cum_feed_before_kg: null,
-    consumed_by_item: [], consumed_total_kg: null,
-    consumed_per_bird_actual_g: null, live_birds: 2284,
-  } as any;
+describe("feedPlanLines", () => {
+  const row = (over: Record<string, string | number> = {}) => ({
+    item: 13, name: "Pre-Starter Feed", cap_per_bird_kg: "0.4",
+    required_kg: "913.60", sent_kg: "1000.00", fed_kg: "25.00",
+    balance_kg: "975.00", remaining_kg: "888.60", excess_kg: "86.40",
+    ...over,
+  }) as any;
 
-  const plan = (over: Partial<Record<string, string>> = {}) => ({
-    ...base,
-    feed_plan: [{
-      item: 13, name: "Pre-Starter Feed", cap_per_bird_kg: "0.4",
-      required_kg: "913.60", sent_kg: "1000.00", fed_kg: "25.00",
-      balance_kg: "975.00", remaining_kg: "888.60", excess_kg: "86.40",
-      ...over,
-    }],
-  });
+  const one = (over = {}, typed = {}, birds = 2284) =>
+    feedPlanLines([row(over)], typed, birds).lines[0];
 
-  const notes = (lookup: any, values: Record<string, string> = {}) =>
-    adviseDailyEntry(lookup as any, { feed_1: "13", feed_1_qty: "0", ...values } as any,
-                     {} as any).notes.map((n) => n.text);
-
-  it("reports what the phase needs, what was sent, and what is left", () => {
-    const text = notes(plan()).find((t) => t.startsWith("Pre-Starter Feed:"));
-    expect(text).toContain("needs 913.6 kg");
-    expect(text).toContain("sent 1000.0");
-    expect(text).toContain("fed 25.0");
-    expect(text).toContain("balance 975.0 kg");
+  it("measures the requirement against the flock, not a stored figure", () => {
+    // 0.4 kg/bird cap x 2,284 birds.
+    expect(one().required).toBeCloseTo(913.6, 1);
+    // Birds booked as lost today do not eat, so it falls with them.
+    expect(one({}, {}, 2084).required).toBeCloseTo(833.6, 1);
   });
 
   it("counts what is being typed, so the balance is the one after this entry", () => {
-    const text = notes(plan(), { feed_1_qty: "40" })
-      .find((t) => t.startsWith("Pre-Starter Feed:"));
-    expect(text).toContain("fed 65.0");
-    expect(text).toContain("balance 935.0 kg");
+    const r = one({}, { "13": 40 });
+    expect(r.fed).toBeCloseTo(65, 1);
+    expect(r.balance).toBeCloseTo(935, 1);
+    expect(r.remaining).toBeCloseTo(848.6, 1);
   });
 
-  it("says when more has been sent than the phase can use", () => {
-    const text = notes(plan()).find((t) => t.startsWith("Pre-Starter Feed:"));
-    expect(text).toContain("86.4 kg sent beyond requirement");
+  it("flags feed sent beyond what the phase can use", () => {
+    expect(one().flag).toBe("86 extra sent");
+    expect(one().warn).toBe(false);
   });
 
-  it("says when more has been fed than was ever delivered", () => {
-    const text = notes(plan({ sent_kg: "0.00" }))
-      .find((t) => t.startsWith("Pre-Starter Feed:"));
-    expect(text).toContain("25.0 kg fed but never received");
+  it("flags feed fed but never received, ahead of anything else", () => {
+    const r = one({ sent_kg: "0.00" });
+    expect(r.flag).toBe("25 unreceived");
+    expect(r.warn).toBe(true);
   });
 
-  it("says when the flock has eaten past the phase cap", () => {
-    const text = notes(plan({ fed_kg: "1000.00" }))
-      .find((t) => t.startsWith("Pre-Starter Feed:"));
-    expect(text).toContain("over the phase cap by 86.4 kg");
+  it("flags a flock fed past its phase cap", () => {
+    const r = one({ fed_kg: "1000.00" });
+    expect(r.flag).toBe("86 over cap");
+    expect(r.warn).toBe(true);
   });
 
-  it("lists what feed is actually on the farm", () => {
-    const text = notes({ ...base, farm_feed_stock: [
-      { item: 13, name: "Pre-Starter Feed", kg: "-25.00" },
-    ] }).find((t) => t.startsWith("Farm feed stock:"));
-    expect(text).toContain("Pre-Starter Feed -25.0 kg");
+  it("says nothing when the position is sound", () => {
+    expect(one({ sent_kg: "913.60" }).flag).toBe("");
   });
 
-  it("omits the lines entirely when the server does not send them", () => {
-    expect(notes(base).some((t) => t.startsWith("Farm feed stock:"))).toBe(false);
+  it("totals every feed, which is what an order is placed against", () => {
+    const { total } = feedPlanLines(
+      [row(), row({ item: 14, name: "Starter Feed", cap_per_bird_kg: "1.2",
+                    sent_kg: "0.00", fed_kg: "0.00" })],
+      {}, 1000);
+    expect(total.required).toBeCloseTo(400 + 1200, 1);
+    expect(total.fed).toBeCloseTo(25, 1);
   });
 
-  it("measures the requirement against the flock this entry leaves behind", () => {
-    // 0.4 kg/bird cap; 2284 live less 200 booked dead on this row = 2084.
-    const text = notes(plan(), { mortality: "200" })
-      .find((t) => t.startsWith("Pre-Starter Feed:"));
-    expect(text).toContain("needs 833.6 kg");
+  it("returns nothing for an empty plan rather than failing", () => {
+    const { lines, total } = feedPlanLines([], {}, 1000);
+    expect(lines).toEqual([]);
+    expect(total.required).toBe(0);
+  });
+});
+
+describe("typedFeed", () => {
+  it("counts both slots", () => {
+    expect(typedFeed({ feed_1: "13", feed_1_qty: "40",
+                       feed_2: "14", feed_2_qty: "10" }))
+      .toEqual({ "13": 40, "14": 10 });
+  });
+
+  it("sums the two when both slots carry the same feed", () => {
+    // The flock ate the total, not whichever slot was read last.
+    expect(typedFeed({ feed_1: "13", feed_1_qty: "40",
+                       feed_2: "13", feed_2_qty: "15" }))
+      .toEqual({ "13": 55 });
+  });
+
+  it("ignores a slot with a feed but no quantity, and the reverse", () => {
+    expect(typedFeed({ feed_1: "13", feed_1_qty: "0",
+                       feed_2: "", feed_2_qty: "20" })).toEqual({});
+  });
+
+  it("is empty when nothing is entered", () => {
+    expect(typedFeed({})).toEqual({});
   });
 });

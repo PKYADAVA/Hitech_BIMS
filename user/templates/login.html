@@ -4,31 +4,81 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login — Hi Tech Farms BIMS</title>
-  <link href="{% static 'css/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+  <title>Login — Hi Tech Farms Poultry ERP</title>
+  <link rel="icon" href="{% static 'images/hitech-mark.png' %}">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link href="{% static 'css/auth.css' %}" rel="stylesheet">
+  <link href="{% static 'css/login.css' %}" rel="stylesheet">
 </head>
 <body>
-  <div class="auth-wrapper">
+  <div class="login-shell">
 
-    <!-- Brand -->
-    <div class="auth-brand">
-      <div class="brand-name">Hi Tech Farms</div>
-      <div class="brand-sub">Business Information Management System</div>
-    </div>
+    <!-- Left: what the product is. Hidden on phones, where it is scenery in
+         front of the form the user actually came for. -->
+    <section class="login-pitch-col">
+      <div class="login-brand">
+        <img src="{% static 'images/hitech-mark.png' %}" alt="">
+        <div>
+          <div class="name">Hi Tech Farms</div>
+          <div class="sub">Poultry ERP</div>
+        </div>
+      </div>
 
-    <!-- Login Card -->
-    <div class="auth-card">
-      <div class="card-title">Welcome back!</div>
-      <div class="card-subtitle">Sign in to your BIMS account to continue</div>
+      <div class="login-pitch">
+        <h1>Smart Poultry Management<br><em>All in One ERP</em></h1>
+        <p>Manage Farms, Hatchery, Feed, Production, Stocks, Sales, Finance
+           and more — Anytime, Anywhere.</p>
+      </div>
+
+      <!-- The farm itself, not an illustration. This is the same photograph
+           the mobile app already ships on its login, so the two front doors
+           look like one product. It drifts slowly rather than sitting still —
+           motion the design asked for, without a cartoon. -->
+      <div class="login-hero">
+        <div class="hero-photo" role="img"
+             aria-label="Hens on a Hi Tech Farms poultry farm"></div>
+        <div class="hero-veil"></div>
+        <div class="hero-tag">
+          <i class="fas fa-location-dot"></i>
+          <span>Hi Tech Farms</span>
+        </div>
+      </div>
+
+      <div class="login-features">
+        <div>
+          <div class="f-icon"><i class="fas fa-warehouse"></i></div>
+          <div class="f-label">Multi Farm</div>
+          <div class="f-sub">Management</div>
+        </div>
+        <div>
+          <div class="f-icon"><i class="fas fa-boxes-stacked"></i></div>
+          <div class="f-label">Real Time</div>
+          <div class="f-sub">Inventory</div>
+        </div>
+        <div>
+          <div class="f-icon"><i class="fas fa-chart-column"></i></div>
+          <div class="f-label">Production</div>
+          <div class="f-sub">Tracking</div>
+        </div>
+        <div>
+          <div class="f-icon"><i class="fas fa-shield-alt"></i></div>
+          <div class="f-label">Secure &amp;</div>
+          <div class="f-sub">Reliable</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: the form -->
+    <section class="login-card">
+      <div class="lock"><i class="fas fa-lock"></i></div>
+      <h2>Welcome Back!</h2>
+      <p class="lead">Login to access your ERP account</p>
 
       {% if messages %}
         {% for message in messages %}
-          <div class="auth-error">
-            <i class="fas fa-exclamation-circle"></i>
-            {{ message }}
+          <div class="login-error" role="alert">
+            <i class="fas fa-circle-exclamation"></i>
+            <span>{{ message }}</span>
           </div>
         {% endfor %}
       {% endif %}
@@ -36,37 +86,76 @@
       <form method="POST" autocomplete="off">
         {% csrf_token %}
 
-        <div>
-          <label class="auth-form-label" for="username">Username</label>
-          <div class="auth-input-wrapper">
-            <i class="fas fa-user input-icon"></i>
-            <input type="text" id="username" name="username" class="form-control"
-                   placeholder="Enter your username" required autofocus>
+        <div class="field">
+          <label for="username">Username / Employee ID</label>
+          <div class="control">
+            <i class="fas fa-user lead-icon"></i>
+            <input type="text" id="username" name="username"
+                   placeholder="Enter Employee ID or Username" required autofocus>
           </div>
         </div>
 
-        <div>
-          <label class="auth-form-label" for="password">Password</label>
-          <div class="auth-input-wrapper">
-            <i class="fas fa-lock input-icon"></i>
-            <input type="password" id="password" name="password" class="form-control"
-                   placeholder="Enter your password" required>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="control">
+            <i class="fas fa-lock lead-icon"></i>
+            <input type="password" id="password" name="password"
+                   placeholder="Enter Password" required>
+            <button type="button" class="reveal" id="reveal"
+                    aria-label="Show password" aria-pressed="false">
+              <i class="fas fa-eye" id="revealIcon"></i>
+            </button>
           </div>
         </div>
 
-        <button type="submit" class="btn-auth">
-          <i class="fas fa-sign-in-alt"></i>
-          Sign In
+        <div class="row-between">
+          <label class="remember">
+            <input type="checkbox" name="remember" value="1" checked>
+            Remember Me
+          </label>
+          <a class="link-brand" href="{% url 'forgot_password' %}">Forgot Password?</a>
+        </div>
+
+        <button type="submit" class="btn-login">
+          <i class="fas fa-right-to-bracket"></i> Login
         </button>
       </form>
 
-      <div class="auth-footer">
-        <a href="{% url 'forgot_password' %}">
-          <i class="fas fa-key me-1"></i>Forgot Password?
-        </a>
+      <div class="assure">
+        <i class="fas fa-shield-alt"></i>
+        <div>
+          <div class="t">Secure Login</div>
+          <div class="d">Your data is protected with enterprise grade security</div>
+        </div>
       </div>
-    </div>
+    </section>
 
   </div>
+
+  <footer class="login-foot">
+    <a href="mailto:support@hitechfarms.co.in">
+      <i class="fas fa-headset"></i>
+      <span><strong>Need Help?</strong> Contact Support</span>
+    </a>
+    <span class="powered">Powered by Hi Tech Farms</span>
+  </footer>
+
+  <script>
+    // Reveal toggle. aria-pressed carries the state for screen readers; the
+    // icon alone would say nothing to them.
+    (function () {
+      var btn = document.getElementById('reveal');
+      var icon = document.getElementById('revealIcon');
+      var input = document.getElementById('password');
+      btn.addEventListener('click', function () {
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        icon.className = show ? 'fas fa-eye-slash' : 'fas fa-eye';
+        btn.setAttribute('aria-pressed', String(show));
+        btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        input.focus();
+      });
+    })();
+  </script>
 </body>
 </html>

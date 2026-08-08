@@ -110,6 +110,79 @@ export interface FeedPlanRow {
   excess_kg: string | null;
 }
 
+/**
+ * The kilos this row is about to feed, per item id.
+ *
+ * Both slots count, and they are summed rather than replacing one another: a
+ * day that puts the same feed through Primary and Optional has fed the total
+ * of the two, and taking only one of them understated what the flock ate.
+ */
+export function typedFeed(values: Record<string, string>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [slot, qty] of [["feed_1", "feed_1_qty"], ["feed_2", "feed_2_qty"]] as const) {
+    const id = values[slot];
+    const kg = num(values[qty]);
+    if (!id || !kg) continue;
+    out[id] = (out[id] ?? 0) + kg;
+  }
+  return out;
+}
+
+/** One feed's position, worked out for display. */
+export interface FeedPlanLine {
+  item: number;
+  name: string;
+  /** Phase cap times the flock this entry leaves behind. */
+  required: number;
+  sent: number;
+  /** Fed to date plus what is being typed on this row. */
+  fed: number;
+  /** Sent less fed — what is in the farm's store. */
+  balance: number;
+  /** Required less fed — what is still owed to the phase. */
+  remaining: number;
+  /** The one thing worth saying about this row, worst first; "" when fine. */
+  flag: string;
+  warn: boolean;
+}
+
+/**
+ * The feed plan as figures, ready to render.
+ *
+ * Kept here rather than in the screen so the arithmetic can be tested without
+ * a rendering harness — it is the part that decides what a supervisor orders,
+ * and it is recomputed on every keystroke.
+ *
+ * `typed` is the kilos being entered on this row, keyed by item id; `birds` is
+ * the flock after this row's losses, because birds booked as dead do not eat.
+ */
+export function feedPlanLines(
+  plan: FeedPlanRow[],
+  typed: Record<string, number>,
+  birds: number
+): { lines: FeedPlanLine[]; total: Omit<FeedPlanLine, "item" | "name" | "flag" | "warn"> } {
+  const total = { required: 0, sent: 0, fed: 0, balance: 0, remaining: 0 };
+  const lines = plan.map((p) => {
+    const fed = num(p.fed_kg) + (typed[String(p.item)] ?? 0);
+    const required = num(p.cap_per_bird_kg) * birds;
+    const sent = num(p.sent_kg);
+    const balance = sent - fed;
+    const remaining = required - fed;
+    const over = sent - required;
+
+    let flag = "";
+    if (balance < 0) flag = `${Math.abs(balance).toFixed(0)} unreceived`;
+    else if (remaining < 0) flag = `${Math.abs(remaining).toFixed(0)} over cap`;
+    else if (over > 0) flag = `${over.toFixed(0)} extra sent`;
+
+    total.required += required; total.sent += sent; total.fed += fed;
+    total.balance += balance; total.remaining += remaining;
+    return { item: p.item, name: p.name, required, sent, fed, balance, remaining,
+             flag, warn: balance < 0 || remaining < 0 };
+  });
+  return { lines, total };
+}
+
 export type Tone = "ok" | "warn" | "bad" | "info";
 
 export interface Hint {
@@ -496,50 +569,9 @@ export function adviseDailyEntry(
     }
   }
 
-  // What each feed type still needs, and whether enough has been sent. The
-  // three questions asked standing at the shed — how much more does this flock
-  // need, has it arrived, and is any of it sitting unused — recomputed against
-  // what is being typed so the balance is the one after this entry.
-  // Birds booked as lost on this entry are not going to eat, so the
-  // requirement is measured against the flock this entry leaves behind rather
-  // than the one the server last saw.
-  const lostNow = (Number(values.mortality) || 0) + (Number(values.culls) || 0);
-  const birdsNow = Math.max(lookup.live_birds - lostNow, 0);
-
-  for (const row of lookup.feed_plan ?? []) {
-    const typed =
-      (values.feed_1 === String(row.item) ? qty1 : 0) +
-      (values.feed_2 === String(row.item) ? qty2 : 0);
-    const fed = num(row.fed_kg) + typed;
-    const required = num(row.cap_per_bird_kg) * birdsNow;
-    const balance = num(row.sent_kg) - fed;
-    const remaining = required - fed;
-    const over = num(row.sent_kg) - required;
-
-    let text =
-      `${row.name}: needs ${required.toFixed(1)} kg · ` +
-      `sent ${num(row.sent_kg).toFixed(1)} · fed ${fed.toFixed(1)} · ` +
-      `balance ${balance.toFixed(1)} kg`;
-    if (remaining >= 0) {
-      text += ` · ${remaining.toFixed(1)} kg still to feed`;
-    } else {
-      text += ` · over the phase cap by ${Math.abs(remaining).toFixed(1)} kg`;
-    }
-    if (over > 0) text += ` · ${over.toFixed(1)} kg sent beyond requirement`;
-    if (balance < 0) text += ` · ${Math.abs(balance).toFixed(1)} kg fed but never received`;
-
-    notes.push({ tone: balance < 0 || remaining < 0 ? "bad" : "info", text });
-  }
-
-  const stock = lookup.farm_feed_stock ?? [];
-  if (stock.length) {
-    notes.push({
-      tone: stock.some((x) => num(x.kg) < 0) ? "bad" : "info",
-      text:
-        "Farm feed stock: " +
-        stock.map((x) => `${x.name} ${num(x.kg).toFixed(1)} kg`).join(" · "),
-    });
-  }
+  // The feed plan is drawn as a grid by the screen (FeedPlanTable), not said
+  // as sentences here: five numbers about three feeds ran past the height of
+  // the phone as prose. The figures it needs travel on the lookup itself.
 
   // The changeover gauge: the first selected item that carries a kg/bird cap,
   // and how far through it the flock is. Returned rather than written as text

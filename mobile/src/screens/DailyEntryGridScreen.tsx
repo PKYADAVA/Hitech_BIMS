@@ -16,7 +16,9 @@ import { Button } from "@/components/ui";
 import { dailyEntryLookup, dailyEntryStock, FormField } from "@/config/forms";
 import {
   addDays, Advice, adviseDailyEntry, ageOnDate, CapProgress, DailyEntryLookup, farmFeedBalance,
-  feedPerBirdG, feedStandard, feedTone, FeedRow, flockSummary, Hint, priorListFeed, PriorFeed,
+  feedPerBirdG, feedPlanLines, FeedPlanRow, feedStandard, feedTone, FeedRow, typedFeed,
+  flockSummary, Hint,
+  priorListFeed, PriorFeed,
   todayISO, Tone,
 } from "@/domain/dailyEntry";
 import { ModuleStackParams } from "@/navigation/types";
@@ -1066,6 +1068,15 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
               <PerBirdLine qty={num(r.values.feed_1_qty)} birds={birds} />
               {a?.fieldHints.feed_1_qty ? <HintLine hint={a.fieldHints.feed_1_qty} /> : null}
 
+              {/* Between the two slots: the figures that decide whether the
+                  optional slot is needed at all. */}
+              <FeedPlanTable
+                plan={r.lookup?.feed_plan ?? []}
+                stock={r.lookup?.farm_feed_stock ?? []}
+                typed={typedFeed(r.values)}
+                birds={birds}
+              />
+
               <Text style={styles.slotHead}>Optional Feed</Text>
               {/* Same shape as the primary slot, so the eye reads both the same
                   way. This slot carries no photograph of its own — the one on
@@ -1394,6 +1405,98 @@ function SectionHead({
 
 /** Feed store left on the farm after this row — the web grid's Stock column.
  *  Read-only: it is derived from the opening balance and the kgs entered. */
+/**
+ * What each feed still needs, what has reached the farm, and what is left.
+ *
+ * A table rather than the run of sentences it started as: five numbers about
+ * three feeds read as a grid and, as prose, ran past the height of the phone.
+ * Placed between the two feed slots, where the decision it informs is made —
+ * whether the optional slot is needed at all.
+ *
+ * Recomputed against what is being typed, so the balance is the one after this
+ * entry. `sent` is farm-level, because a delivery is booked to a farm and not
+ * to a flock.
+ */
+function FeedPlanTable({
+  plan, stock, typed, birds,
+}: {
+  plan: FeedPlanRow[];
+  stock: { item: number; name: string; kg: string }[];
+  /** kg being entered on this row, per item id. */
+  typed: Record<string, number>;
+  /** The flock this entry leaves behind — what the requirement is measured on. */
+  birds: number;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  if (!plan.length && !stock.length) return null;
+
+  const { lines: rows, total: sum } = feedPlanLines(plan, typed, birds);
+
+  const Cell = ({ v, bad }: { v: number; bad?: boolean }) => (
+    <Text style={[styles.fpNum, bad && styles.fpBad]} numberOfLines={1}>
+      {v.toFixed(1)}
+    </Text>
+  );
+
+  return (
+    <View style={styles.fpWrap}>
+      <View style={styles.fpRow}>
+        <Text style={[styles.fpHead, styles.fpName]} numberOfLines={1}>Feed</Text>
+        <Text style={[styles.fpHead, styles.fpNum]}>Req</Text>
+        <Text style={[styles.fpHead, styles.fpNum]}>Sent</Text>
+        <Text style={[styles.fpHead, styles.fpNum]}>Fed</Text>
+        <Text style={[styles.fpHead, styles.fpNum]}>Bal</Text>
+        <Text style={[styles.fpHead, styles.fpNum]}>Left</Text>
+      </View>
+      {rows.map((r) => (
+        <View key={r.item}>
+          <View style={styles.fpRow}>
+            <Text style={[styles.fpCell, styles.fpName]} numberOfLines={1}>{r.name}</Text>
+            <Cell v={r.required} />
+            <Cell v={r.sent} />
+            <Cell v={r.fed} />
+            <Cell v={r.balance} bad={r.balance < 0} />
+            <Cell v={r.remaining} bad={r.remaining < 0} />
+          </View>
+          {r.flag ? (
+            <Text style={[styles.fpFlag, r.warn && styles.fpBad]}>{r.flag}</Text>
+          ) : null}
+        </View>
+      ))}
+      {rows.length > 1 ? (
+        <View style={[styles.fpRow, styles.fpTotalRow]}>
+          <Text style={[styles.fpCell, styles.fpName, styles.fpTotal]} numberOfLines={1}>
+            All feed
+          </Text>
+          <Text style={[styles.fpNum, styles.fpTotal]} numberOfLines={1}>
+            {sum.required.toFixed(1)}
+          </Text>
+          <Text style={[styles.fpNum, styles.fpTotal]} numberOfLines={1}>
+            {sum.sent.toFixed(1)}
+          </Text>
+          <Text style={[styles.fpNum, styles.fpTotal]} numberOfLines={1}>
+            {sum.fed.toFixed(1)}
+          </Text>
+          <Text style={[styles.fpNum, styles.fpTotal, sum.balance < 0 && styles.fpBad]}
+                numberOfLines={1}>
+            {sum.balance.toFixed(1)}
+          </Text>
+          <Text style={[styles.fpNum, styles.fpTotal]} numberOfLines={1}>
+            {sum.remaining.toFixed(1)}
+          </Text>
+        </View>
+      ) : null}
+      {stock.length ? (
+        <Text style={styles.fpStock}>
+          On the farm now:{" "}
+          {stock.map((x) => `${x.name} ${num(x.kg).toFixed(1)}`).join(" · ")} kg
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function StockCell({ label, value }: { label: string; value: number | null }) {
   const styles = useStyles();
   const short = value != null && value < 0;
@@ -1666,6 +1769,34 @@ const useStyles = makeStyles((colors) => ({
   pill_bad: { backgroundColor: colors.dangerLight, color: colors.danger },
   pill_warn: { backgroundColor: colors.warningLight, color: colors.warning },
   pill_info: { backgroundColor: colors.infoLight, color: colors.info },
+
+  /* The feed plan grid — five numbers about three feeds, which as sentences
+     ran past the height of the phone. */
+  fpWrap: {
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm,
+    backgroundColor: colors.surface, paddingVertical: 4, paddingHorizontal: 6,
+    marginTop: spacing.xs, marginBottom: spacing.md,
+  },
+  fpRow: { flexDirection: "row", alignItems: "center", paddingVertical: 2 },
+  fpHead: {
+    ...type.caption, fontSize: 9, color: colors.textMuted, fontWeight: "700",
+    textTransform: "uppercase", letterSpacing: 0,
+  },
+  fpCell: { ...type.caption, fontSize: 10, color: colors.text },
+  // Six columns on a 430pt screen: the name takes what it needs and the five
+  // figures share the rest, each wide enough for "3426.0".
+  fpName: { flex: 1.9, paddingRight: 2 },
+  fpNum: { flex: 1, textAlign: "right", ...type.caption, fontSize: 10,
+           color: colors.text, paddingLeft: 2 },
+  fpBad: { color: colors.danger, fontWeight: "700" },
+  fpFlag: { ...type.caption, fontSize: 9, color: colors.textMuted,
+            textAlign: "right", marginBottom: 2 },
+  fpTotalRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 2, paddingTop: 3 },
+  fpTotal: { fontWeight: "800" },
+  fpStock: {
+    ...type.caption, fontSize: 9, color: colors.textMuted,
+    borderTopWidth: 1, borderTopColor: colors.border, marginTop: 3, paddingTop: 3,
+  },
 
   sectionHead: {
     flexDirection: "row",
