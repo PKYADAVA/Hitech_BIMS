@@ -846,7 +846,7 @@ get('row-table').addEventListener('input', e => {
   else if (e.target.classList.contains('mortality') || e.target.classList.contains('culls')) {
     // Losses booked here change the flock the feed requirement is measured
     // against, and the closing count beside them.
-    updateBirdStock(e.target.closest('tr'));
+    updateAllBirdStock();
     updateFeedFeedback();
     updateSummary();
   }

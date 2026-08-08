@@ -33,6 +33,44 @@
 </style>
 
 <script>
+// Birds already booked as lost on earlier rows of this sheet.
+//
+// The rows of one sheet are consecutive days of the same flock, and none of
+// them is saved yet — so the server's count is the flock before the sheet
+// started, not before *this row*. Without this, day two opened on the same
+// number as day one and the mortality entered above it went nowhere.
+//
+// The Day Record form carries a farm and batch per row, so only rows on the
+// same flock count. The Single Batch form is one flock for the whole sheet and
+// has no such controls, in which case every earlier row counts.
+function priorLosses(tr) {
+  const farmSel = tr.querySelector('.farm');
+  const batchSel = tr.querySelector('.batch');
+  const farmId = farmSel ? farmSel.value : null;
+  const batchId = batchSel ? batchSel.value : null;
+  let lost = 0;
+  for (const r of entryRows()) {
+    if (r === tr) break;                       // only rows BEFORE this one
+    if (farmSel) {
+      const f = r.querySelector('.farm'), b = r.querySelector('.batch');
+      if (!farmId || !f || f.value !== farmId) continue;
+      if (b && b.value !== batchId) continue;
+    }
+    lost += (Number(r.querySelector('.mortality')?.value) || 0)
+          + (Number(r.querySelector('.culls')?.value) || 0);
+  }
+  return lost;
+}
+
+/** The flock this row opens on: the server's count, less what earlier rows of
+ *  this sheet have already taken off it. */
+function openingBirds(tr) {
+  const base = parseInt(tr.dataset.liveBirds || '', 10);
+  if (isNaN(base)) return NaN;
+  return Math.max(base - priorLosses(tr), 0);
+}
+
+
 // Per feed type: what the phase needs for this flock, what has reached the
 // farm, what has been fed, and what is left — recomputed as the kilos are
 // typed, so the balance on screen is the balance after this entry rather than
@@ -67,7 +105,8 @@ function feedPlanTable(tr) {
   // the server last saw.
   const lostNow = (Number(tr.querySelector('.mortality')?.value) || 0)
                 + (Number(tr.querySelector('.culls')?.value) || 0);
-  const birdsNow = Math.max((parseInt(tr.dataset.liveBirds || '0', 10) || 0) - lostNow, 0);
+  const open = openingBirds(tr);
+  const birdsNow = Math.max((isNaN(open) ? 0 : open) - lostNow, 0);
 
   const cell = (v, cls) => `<div class="fp-num ${cls || ''}">${v.toFixed(1)}</div>`;
   // Summed as the rows are built: the whole flock's feed, which is the figure
@@ -138,7 +177,7 @@ function feedPlanTable(tr) {
 // Both are display-only — the server derives the flock from the placements and
 // the entries themselves, and nothing here is submitted.
 function updateBirdStock(tr) {
-  const opening = parseInt(tr.dataset.liveBirds || '', 10);
+  const opening = openingBirds(tr);
   const openBox = tr.querySelector('.opening-birds');
   const closeBox = tr.querySelector('.closing-birds');
   if (!openBox || !closeBox) return;
@@ -152,5 +191,15 @@ function updateBirdStock(tr) {
   // the entry is wrong rather than the flock being negative.
   closeBox.classList.toggle('text-danger', closing < 0);
   closeBox.classList.toggle('fw-bold', closing < 0);
+}
+
+/** Refresh every row's bird counts.
+ *
+ *  A loss booked on one row moves the opening count of every row after it, so
+ *  refreshing only the row being typed in left the ones below it stating a
+ *  flock that had already been reduced.
+ */
+function updateAllBirdStock() {
+  entryRows().forEach(updateBirdStock);
 }
 </script>

@@ -889,7 +889,7 @@ get('row-table').addEventListener('input', e => {
     // booked as dead on this row change what the flock still needs. Without
     // this the table answered for a flock the entry was in the middle of
     // correcting.
-    updateBirdStock(e.target.closest('tr'));
+    updateAllBirdStock();
     updateFeedFeedback();
     updateSummary();
   }
