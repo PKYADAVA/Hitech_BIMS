@@ -3771,6 +3771,69 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     }
 
 
+# The growing-charge block, laid out the way Batch Costing Information and
+# Summary is: a label/value grid read down its columns — the growing charge
+# itself, then incentives, then recoveries, then what is left to pay.
+# ``None`` is a blank cell. Every key is a GrowingChargeSettlement field name,
+# so a saved settlement and a scheme-derived preview fill the same grid.
+_GC = lambda key, label, strong=False: (key, label, strong)
+GC_STATEMENT_GRID = (
+    (_GC("standard_growing_charges", "Standard Growing Charges"),
+     _GC("sales_incentives", "Sales Incentive"),
+     _GC("birds_shortage_amount", "Birds Shortage Recovery"),
+     _GC("gc_paid_per_kg", "Growing Charge / Kg")),
+    (_GC("gc_incentive_decentive", "Incentive / Decentive"),
+     _GC("mortality_incentives", "Mortality Incentive"),
+     _GC("fcr_deduction", "FCR Recovery"),
+     _GC("grade", "Grade")),
+    (_GC("actual_growing_charges", "Actual Growing Charges", True),
+     _GC("fcr_incentives", "FCR Incentive"),
+     _GC("mortality_deduction", "Mortality Decentive"),
+     None),
+    (None,
+     _GC("summer_incentives", "Summer Incentive"),
+     _GC("total_deduction", "Total Deductions", True),
+     None),
+    (None,
+     _GC("total_incentives", "Total Incentives", True),
+     None,
+     _GC("amount_payable", "Amount Payable to Farmer", True)),
+)
+
+
+def _gc_statement(batch, scheme, report=None):
+    """The growing charge itself, as the Growing Charge Master works it out.
+
+    The statement used to stop at this batch's own cost roll-up and never show
+    the charge it is named after — the scheme's standard GC rate, the slab-matched
+    incentives and recoveries, and what the farmer is actually owed. All of that
+    is already worked out by _gc_settlement_autofill against the master's slab
+    tables, so it is read from there rather than restated here and left to drift.
+
+    A settled batch shows what was settled: those figures are a signed snapshot
+    and may have been adjusted by hand on the settlement form, so recomputing
+    them would show the farmer a number nobody agreed to. An unsettled batch
+    shows the scheme's own working, marked as a projection.
+    """
+    saved = (GrowingChargeSettlement.objects
+             .select_related("scheme").filter(batch=batch).first())
+    if saved:
+        values = {f.name: getattr(saved, f.name) for f in GrowingChargeSettlement._meta.fields}
+        scheme_used, settled = saved.scheme, saved
+    elif scheme:
+        values = _gc_settlement_autofill(batch, scheme, report=report)
+        scheme_used, settled = scheme, None
+    else:
+        return None   # No scheme covers this batch — nothing to work the charge from.
+
+    values["grade"] = values.get("grade") or ""
+    rows = [[None if cell is None else
+             {"label": cell[1], "amount": values.get(cell[0]), "strong": cell[2]}
+             for cell in row]
+            for row in GC_STATEMENT_GRID]
+    return {"settled": settled, "scheme": scheme_used, "rows": rows}
+
+
 @login_required
 def broiler_batch_report(request):
     """One Batch's full growing history — feed purchase, chick placement,
@@ -3825,6 +3888,17 @@ def broiler_batch_report(request):
             selected_schema_id = matched.id if matched else None
     schemes = schemes.order_by("schema_name")
 
+    report = (_build_batch_report(batch, fetch_type=fetch_type,
+                                  scheme_override=scheme_override) if batch else None)
+    # The growing charge is settled on the farmer's admin share whoever is
+    # reading, so the Management report's roll-up cannot be handed over — let
+    # _gc_statement build its own farmer-basis pass in that case.
+    gc_statement = _gc_statement(
+        batch,
+        scheme_override or _match_growing_charge_scheme(batch, _placement_date(batch)),
+        report=report if fetch_type == "farmer" else None,
+    ) if batch else None
+
     return render(request, "broiler_batch_report.html", {
         "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         "batches": scope_multi(request.user,
@@ -3835,8 +3909,8 @@ def broiler_batch_report(request):
         "schemes": schemes,
         "batch": batch,
         "batch_requested": bool(batch_id),
-        "report": _build_batch_report(batch, fetch_type=fetch_type,
-                                      scheme_override=scheme_override) if batch else None,
+        "report": report,
+        "gc_statement": gc_statement,
         "company": CompanyProfile.get_solo(),
         "fetch_type": fetch_type,
         "fetch_type_label": "Management" if fetch_type == "management" else "Farmer",
@@ -6550,11 +6624,16 @@ def _shortage_rate(scheme, bc):
     return max(std_prod, prod, avg_rate)  # WHICH_IS_HIGHER
 
 
-def _gc_settlement_autofill(batch, scheme):
+def _gc_settlement_autofill(batch, scheme, report=None):
     """All settlement field defaults for a batch, keyed by the model's field
     names. Read-only figures come from _build_batch_report; incentive/deduction
-    defaults from the scheme's slab tables. Returns Decimals."""
-    report = _build_batch_report(batch, fetch_type="farmer", scheme_override=scheme)
+    defaults from the scheme's slab tables. Returns Decimals.
+
+    ``report`` lets a caller that has already built this batch's report hand it
+    over rather than pay for a second pass. It must be a farmer-basis report —
+    the growing charge is what the farmer is paid, so it is settled on the
+    farmer's admin share whoever happens to be reading the statement."""
+    report = report or _build_batch_report(batch, fetch_type="farmer", scheme_override=scheme)
     bc = report["batch_costing"]
     q2 = Decimal("0.01")
 

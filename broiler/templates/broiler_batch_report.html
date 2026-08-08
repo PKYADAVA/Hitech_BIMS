@@ -135,6 +135,13 @@
     background: var(--ci-bg); color: var(--ci-accent); font-size: .72rem;
   }
 
+  /* Says whether the growing charge shown is a settled figure or this
+     report's own projection off the scheme — the two are not the same claim. */
+  .gc-gc-src {
+    margin-left: auto; font-weight: 600; font-size: .68rem; color: #6b6b6b;
+    background: #f2f4f6; border-radius: 999px; padding: .15rem .55rem; white-space: nowrap;
+  }
+
   .gc-donut-wrap { display: flex; align-items: center; gap: 1rem; }
   .gc-donut-canvas { position: relative; flex: 0 0 140px; height: 140px; }
   .gc-donut-center {
@@ -205,14 +212,14 @@
         <select class="form-select" name="batch" id="report-batch" required>
           <option value="">select</option>
           {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}" data-book="{{ b.book_number }}"
-            {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}</option>{% endfor %}
+            {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}{% if b.is_closed %} (Closed){% endif %}</option>{% endfor %}
         </select>
       </div>
       <div class="col-6 col-md-1">
         <label class="form-label">Book No</label>
         <select class="form-select" name="book_no" id="report-book">
           <option value="">select</option>
-          {% for b in batches %}{% if b.book_number %}<option value="{{ b.book_number }}" data-batch="{{ b.id }}"
+          {% for b in batches %}{% if b.book_number %}<option value="{{ b.book_number }}" data-batch="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
             {% if book_no == b.book_number %}selected{% endif %}>{{ b.book_number }}</option>{% endif %}{% endfor %}
         </select>
       </div>
@@ -712,6 +719,51 @@
       </div>
     </div>
 
+    <!-- The charge the statement is named after, worked out from the Growing
+         Charge Master's scheme — standard rate, slab-matched incentives and
+         recoveries, and what the farmer is owed. -->
+    <div class="gc-card gc-full">
+      <div class="gc-card-header">
+        <span class="gc-card-icon" style="--ci-accent:#008300;--ci-bg:#e0f0e0"><i class="fas fa-scroll"></i></span>
+        Growing Charge Calculation
+        {% if gc_statement %}
+          <span class="gc-gc-src">
+            {% if gc_statement.settled %}
+              <i class="fas fa-lock"></i> Settled &middot; {{ gc_statement.settled.settlement_code }}
+            {% else %}
+              <i class="fas fa-calculator"></i> Projected
+            {% endif %}
+            {% if gc_statement.scheme %}&middot; {{ gc_statement.scheme.scheme_code }} {{ gc_statement.scheme.schema_name }}{% endif %}
+          </span>
+        {% endif %}
+      </div>
+      {% if gc_statement %}
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 report-costing rpt-table ds-grid">
+          <tbody>
+            {% for row in gc_statement.rows %}
+            <tr>
+              {% for cell in row %}
+                {% if cell %}
+                  <td class="lbl">{{ cell.label }}</td>
+                  <td class="{% if cell.strong %}hl{% else %}val{% endif %}">{{ cell.amount }}</td>
+                {% else %}
+                  <td class="lbl"></td><td class="val"></td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="p-3 text-center text-muted">
+          No Growing Charge scheme in the master covers this batch's placement date,
+          so the growing charge cannot be worked out.
+        </div>
+      {% endif %}
+    </div>
+
     <!-- ================= MANAGEMENT DASHBOARD (management report only) ================= -->
     <div class="gc-card gc-full" data-role="management">
       <div class="gc-card-header"><span class="gc-card-icon" style="--ci-accent:#0d5f8a;--ci-bg:#eaf3f8"><i class="fas fa-briefcase"></i></span>Management KPI</div>
@@ -843,12 +895,34 @@
 {% block js %}
 <script>
 $(function () {
+  // Batch and Book No list the selected farm's batches only — open and closed
+  // both, since a history report is usually pulled on a batch that has ended.
+  //
+  // The options are detached and re-appended rather than hidden: main.js turns
+  // every .form-select into a Select2, which renders its own list from the
+  // options and pays no attention to `display: none`. Hiding them left every
+  // farm's batches on show. Detach (not empty) so the options keep their data.
+  const $farm = $('#report-farm');
+  const allOptions = new Map();      // select id -> its full option list
+  $('#report-batch, #report-book').each(function () {
+    allOptions.set(this.id, $(this).children().toArray());
+  });
+
   function filterBatches() {
-    const farmId = $('#report-farm').val();
-    $('#report-batch option').each(function () {
-      const opt = $(this);
-      if (!opt.val()) return;
-      opt.toggle(!farmId || opt.data('farm') == farmId);
+    const farmId = $farm.val();
+    allOptions.forEach(function (options, id) {
+      const $sel = $('#' + id);
+      const chosen = $sel.val();
+      const keep = $(options).filter(function () {
+        return !this.value || !farmId || $(this).data('farm') == farmId;
+      });
+      $sel.children().detach();
+      $sel.append(keep);
+      // Drop a selection the new farm has no option for, rather than leaving
+      // the box showing a batch that is no longer in the list.
+      const survives = keep.filter(function () { return this.value === chosen; }).length;
+      $sel.val(survives ? chosen : '');
+      $sel.trigger('change.select2');
     });
   }
   function updateFarmCode() {
