@@ -35,6 +35,14 @@ _CODE_BY_STATUS = {
 
 
 def api_exception_handler(exc: Exception, context: dict) -> Response:
+    # A sync conflict is not a failure to report but a decision to hand back:
+    # it carries both figures so the phone can show them side by side. Handled
+    # before DRF's own mapping, which would flatten it to a bare 409.
+    from .sync import SyncConflict
+
+    if isinstance(exc, SyncConflict):
+        return exc.as_response()
+
     response = drf_exception_handler(exc, context)
 
     if response is None:

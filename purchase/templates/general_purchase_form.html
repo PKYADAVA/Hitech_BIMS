@@ -104,13 +104,14 @@
               <th class="c-fit m-short">Disc ₹</th>
               <th class="c-fit m-short">GST</th>
               <th class="c-num m-num ds-num">Amount</th>
-              <th class="c-fit m-mid">Sector/Farm <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid">Warehouse / Farm <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid col-batch d-none">Flock / Batch</th>
               <th class="c-fit"></th>
             </tr>
           </thead>
           <tbody></tbody>
           <tfoot>
-            <tr><th colspan="10" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit"></th></tr>
+            <tr><th colspan="10" class="c-num m-num ds-num text-end">Total</th><th class="c-fit m-short" id="total_amount">0.00</th><th class="c-fit"></th><th class="c-fit"></th><th class="c-fit"></th></tr>
           </tfoot>
         </table>
       </div>
@@ -283,7 +284,12 @@
 <script>
 const existingItems = {{ existing_items_json|safe }};
 const taxOptions = `<option value="0">select</option>{% for t in tax_masters %}<option value="{{ t.tax_percentage }}">{{ t.tax_code }} ({{ t.tax_percentage }}%)</option>{% endfor %}`;
-const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
+const destOptions = `<option value="">select</option>`
+  + `<optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>`
+  + `<optgroup label="Farm">{% for f in dest_farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>`;
+// Open flocks per farm, so picking a farm can fill its Batch column without a
+// round trip to the server.
+const farmBatches = {{ farm_batches_json|safe }};
 const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}{% endif %}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const get = id => document.getElementById(id);
 const value = id => get(id).value;
@@ -291,6 +297,45 @@ const value = id => get(id).value;
 function calcBasis() {
   const el = document.querySelector('input[name="calculation_based_on"]:checked');
   return el ? el.value : 'Sent Quantity';
+}
+
+// The Batch column belongs on screen only while some row delivers to a Farm —
+// a Warehouse has no flocks. Header and cells move together, the same rule
+// Stock Transfer applies to its own two Batch columns.
+function refreshBatchColumn() {
+  const rows = [...document.querySelectorAll('#item-table tbody tr')];
+  const wanted = rows.some(tr =>
+    (tr.querySelector('.destination').value || '').startsWith('farm:'));
+  document.querySelectorAll('#item-table .col-batch')
+    .forEach(cell => cell.classList.toggle('d-none', !wanted));
+}
+
+// Fill one row's Batch box from its own destination, then re-decide whether
+// the column belongs on screen at all.
+function refreshBatchBox(tr, keep) {
+  const batchSel = tr.querySelector('.batch');
+  const [kind, id] = (tr.querySelector('.destination').value || '').split(':');
+  if (kind !== 'farm') {
+    // A row switched back to a Warehouse must not keep the batch it had, or
+    // the payload would still carry it while the box no longer shows it.
+    batchSel.innerHTML = '<option value="">select</option>';
+    if (window.jQuery) jQuery(batchSel).trigger('change.select2');
+    refreshBatchColumn();
+    return;
+  }
+  const list = farmBatches[id] || [];
+  batchSel.innerHTML = '<option value="">select</option>'
+    + list.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+  if (keep) batchSel.value = keep;
+  if (window.jQuery) jQuery(batchSel).trigger('change.select2');
+  refreshBatchColumn();
+
+  // The column appearing says a flock is wanted; opening the box says which
+  // one to pick, and saves reaching across a table that scrolls sideways.
+  if (!keep && list.length && window.jQuery && jQuery(batchSel).data('select2')) {
+    batchSel.scrollIntoView({ block: 'nearest', inline: 'center' });
+    jQuery(batchSel).select2('open');
+  }
 }
 
 function itemRow(row = {}) {
@@ -306,14 +351,18 @@ function itemRow(row = {}) {
     <td><input class="form-control disc-amount" type="number" min="0" step=".01" value="${row.discount_amount || 0}"></td>
     <td><select class="form-select gst">${taxOptions}</select></td>
     <td><input class="form-control bg-light amount text-end" readonly value="0.00"></td>
-    <td><select class="form-select farm-warehouse" required>${warehouseOptions}</select></td>
+    <td><select class="form-select destination" required>${destOptions}</select></td>
+    <td class="col-batch d-none"><select class="form-select batch"><option value="">select</option></select></td>
     <td class="text-nowrap">
       <button type="button" class="btn btn-sm btn-outline-primary add-row-inline me-1" title="Add Row"><i class="fas fa-plus"></i></button>
       <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
     </td>`;
   get('item-table').tBodies[0].append(tr);
   if (row.item) tr.querySelector('.item').value = row.item;
-  if (row.farm_warehouse) tr.querySelector('.farm-warehouse').value = row.farm_warehouse;
+  const destSel = tr.querySelector('.destination');
+  if (row.destination) destSel.value = row.destination;
+  refreshBatchBox(tr, row.batch);
+  destSel.addEventListener('change', () => refreshBatchBox(tr));
   if (row.gst_percent) tr.querySelector('.gst').value = row.gst_percent;
   tr.querySelector('.item').addEventListener('change', e => {
     const opt = e.target.selectedOptions[0];
@@ -378,7 +427,10 @@ get('item-table').addEventListener('change', e => {
   calcRow(tr);
 });
 get('item-table').addEventListener('click', e => {
-  if (e.target.closest('.remove')) { e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); totals(); }
+  if (e.target.closest('.remove')) {
+    e.target.closest('tr').remove(); renumberRows(); refreshRowAddButtons(); totals();
+    refreshBatchColumn();
+  }
   if (e.target.closest('.add-row-inline')) { itemRow(); }
 });
 document.querySelectorAll('input[name="calculation_based_on"]').forEach(el => el.addEventListener('change', () => {
@@ -395,11 +447,13 @@ get('general-purchase-form').addEventListener('submit', function (e) {
     sent_qty: tr.querySelector('.sent-qty').value, rcv_qty: tr.querySelector('.rcv-qty').value,
     free_qty: tr.querySelector('.free-qty').value, rate: tr.querySelector('.rate').value,
     discount_percent: tr.querySelector('.disc-percent').value, discount_amount: tr.querySelector('.disc-amount').value,
-    gst_percent: tr.querySelector('.gst').value, farm_warehouse: tr.querySelector('.farm-warehouse').value,
+    gst_percent: tr.querySelector('.gst').value,
+    destination: tr.querySelector('.destination').value,
+    batch: tr.querySelector('.batch').value,
   }));
-  if (!rows.length || rows.some(r => !r.item || !r.farm_warehouse)) {
+  if (!rows.length || rows.some(r => !r.item || !r.destination)) {
     e.preventDefault();
-    alert('Add at least one item row with Item and Sector/Farm selected.');
+    alert('Add at least one item row with Item and Warehouse/Farm selected.');
     return;
   }
   get('items_json').value = JSON.stringify(rows);

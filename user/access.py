@@ -438,6 +438,7 @@ MODULE_REGISTRY = [
                     ("employee_access", "Employee Organization Access",
                      ("employee_access_row", "employee_access_info",
                       "employee_access_delete")),
+                    ("offline_sync_monitor", "Offline Sync Monitor"),
                     ("assign_groups", "Assign Groups"),
                     ("user_analytics", "User Analytics"),
                     ("picklists", "Picklists"),

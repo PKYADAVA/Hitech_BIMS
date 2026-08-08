@@ -163,7 +163,8 @@ describe("syncing", () => {
     onlineManager.setOnline(true);
     await runSync();
     if (!queued.queued) throw new Error("expected it to queue");
-    expect(post.mock.calls[0][2].headers["Idempotency-Key"]).toBe(queued.localId);
+    const [entryCall] = post.mock.calls.filter((c) => c[0] !== "/sync/heartbeat");
+    expect(entryCall[2].headers["Idempotency-Key"]).toBe(queued.localId);
   });
 
   it("tells the ERP when the entry was actually filled", async () => {
@@ -171,7 +172,8 @@ describe("syncing", () => {
     await save();
     onlineManager.setOnline(true);
     await runSync();
-    expect(post.mock.calls[0][2].headers["X-Offline-Created-At"]).toBeTruthy();
+    const [entryCall] = post.mock.calls.filter((c) => c[0] !== "/sync/heartbeat");
+    expect(entryCall[2].headers["X-Offline-Created-At"]).toBeTruthy();
   });
 
   it("stops at a dead link instead of running the whole queue into it", async () => {
@@ -179,7 +181,9 @@ describe("syncing", () => {
     post.mockRejectedValue(failure());
     const outcome = await runSync();
     expect(outcome.sent).toBe(0);
-    expect(post).toHaveBeenCalledTimes(1);
+    // The run also posts a heartbeat; counting every call would make this
+    // pass or fail on unrelated traffic.
+    expect(post.mock.calls.filter((c) => c[0] !== "/sync/heartbeat")).toHaveLength(1);
   });
 
   it("waits before trying a failed entry again", async () => {
@@ -222,7 +226,8 @@ describe("syncing", () => {
                  body: { fields: { entry: parent.ref } } });
     onlineManager.setOnline(true);
     await runSync();
-    expect(post.mock.calls[1][1]).toEqual({ entry: "42" });
+    const entryCalls = post.mock.calls.filter((c) => c[0] !== "/sync/heartbeat");
+    expect(entryCalls[1][1]).toEqual({ entry: "42" });
   });
 
   it("does not overwrite the ERP when the two disagree", async () => {
@@ -237,6 +242,16 @@ describe("syncing", () => {
     expect(outcome.conflicts).toBe(1);
     const conflicted = (await listEntries()).filter((e) => e.sync_status === "conflict");
     expect(conflicted).toHaveLength(1);
+  });
+
+  it("tells the ERP what this phone is still holding", async () => {
+    // The queue is on the handset, so the administrator's monitor has nothing
+    // to show unless the device says.
+    await queueTwo();
+    await runSync();
+    const [beat] = post.mock.calls.filter((c) => c[0] === "/sync/heartbeat");
+    expect(beat[1]).toMatchObject({ pending: 0, failed: 0, synced: 2 });
+    expect(beat[1].device_id).toBeTruthy();
   });
 
   it("leaves another user's round alone", async () => {

@@ -81,6 +81,7 @@ from .reports import (
     MortalityTrendReportView,
 )
 from .stats import StatsOverviewView
+from .sync import SyncHeartbeatView
 from .viewsets import register_model
 
 app_name = "api"
@@ -143,6 +144,8 @@ urlpatterns = [
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    # The phone reporting what it is still holding, for the admin monitor.
+    path("sync/heartbeat", SyncHeartbeatView.as_view(), name="sync-heartbeat"),
     # What a customer owes, for a form raising a document against them.
     path("sales/customer-balance", CustomerBalanceView.as_view(),
          name="sales-customer-balance"),

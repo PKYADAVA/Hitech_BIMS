@@ -294,14 +294,57 @@ class GeneralPurchaseItem(models.Model):
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    # Where the goods landed. Exactly one of these two is set.
+    #
+    # Feed is bought two ways: into a warehouse, and reaching a farm later as a
+    # Stock Transfer; or straight to the farm, off the lorry into the shed. Only
+    # the first could be recorded — the row carried a Warehouse and nothing
+    # else — so a direct delivery had to be booked against some warehouse, and
+    # the Batch History report could only answer "purchases somewhere in this
+    # branch" where it meant "purchases for this flock".
     farm_warehouse = models.ForeignKey("inventory.Warehouse", on_delete=models.PROTECT,
-                                       related_name="general_purchase_items")
+                                       null=True, blank=True,
+                                       related_name="general_purchase_items",
+                                       help_text="Destination when the goods go to a warehouse")
+    farm = models.ForeignKey("broiler.BroilerFarm", on_delete=models.PROTECT,
+                             null=True, blank=True,
+                             related_name="general_purchase_items",
+                             help_text="Destination when the goods go straight to a farm")
+    batch = models.ForeignKey("broiler.BroilerBatch", on_delete=models.PROTECT,
+                              null=True, blank=True,
+                              related_name="general_purchase_items",
+                              help_text="The flock the delivery is for, when it goes to a farm")
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            # One destination, never both and never neither. Enforced by the
+            # database as well as the form: a row with both would be counted
+            # twice by anything summing stock, and a row with neither is a
+            # delivery that arrived nowhere.
+            models.CheckConstraint(
+                name="purchase_item_one_destination",
+                check=(
+                    models.Q(farm_warehouse__isnull=False, farm__isnull=True)
+                    | models.Q(farm_warehouse__isnull=True, farm__isnull=False)
+                ),
+            ),
+            # A batch only means something against the farm it is running on.
+            models.CheckConstraint(
+                name="purchase_item_batch_needs_farm",
+                check=models.Q(batch__isnull=True) | models.Q(farm__isnull=False),
+            ),
+        ]
 
     def __str__(self):
         return f"{self.item} ({self.purchase.purchase_no})"
+
+    @property
+    def destination_name(self):
+        """Where this row's goods went, whichever kind of place that was."""
+        if self.farm_id:
+            return self.farm.farm_name
+        return self.farm_warehouse.name if self.farm_warehouse_id else ""
 
     def effective_qty(self):
         basis = self.purchase.calculation_based_on if self.purchase_id else "Sent Quantity"

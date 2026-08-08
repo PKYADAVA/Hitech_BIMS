@@ -62,7 +62,8 @@ def rate_difference(rule):
         if not compare(rise, rule.operator, rule.threshold):
             continue
 
-        scope = {"warehouse": line.farm_warehouse}
+        # Warehouse or farm — a purchase row now lands at either.
+        scope = {"warehouse": line.farm_warehouse, "farm": line.farm}
         if not rule_applies_to(rule, **scope):
             continue
 

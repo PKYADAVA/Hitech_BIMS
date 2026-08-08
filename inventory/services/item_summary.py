@@ -69,12 +69,20 @@ def _collect(from_date=None, to_date=None, category_id=None, item_id=None,
         return qs
 
     # ---------------- inflows ----------------
-    for r in scope(GeneralPurchaseItem.objects.exclude(farm_warehouse=None)).select_related("purchase"):
+    # Feed is bought both ways: into a warehouse, or straight to a farm off the
+    # lorry. This used to take warehouse rows only, so a delivery made directly
+    # to a farm never entered the ledger — the Batch History report showed it
+    # while the farm's own feed balance stayed short by the same quantity.
+    for r in scope(GeneralPurchaseItem.objects.all()).select_related("purchase"):
         # Billed on Sent or Received quantity per the header's basis; reading
         # rcv_qty alone loses every purchase entered on the Sent basis.
         qty = _d(r.effective_qty()) + _d(r.free_qty)
         cost = (_d(r.amount) / qty) if (qty > 0 and r.amount) else _d(r.rate)
-        add(r.purchase.date, "warehouse", r.farm_warehouse_id, r.item_id, "in", qty, cost, 0, src="purchase")
+        loc_type = "farm" if r.farm_id else "warehouse"
+        loc_id = r.farm_id or r.farm_warehouse_id
+        if not loc_id:
+            continue          # no destination at all; the DB refuses these now
+        add(r.purchase.date, loc_type, loc_id, r.item_id, "in", qty, cost, 0, src="purchase")
 
     for r in scope(StockTransfer.objects.all()):
         to_id = r.to_farm_id if r.to_location_type == "farm" else r.to_warehouse_id

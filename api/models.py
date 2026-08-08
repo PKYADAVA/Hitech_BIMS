@@ -1,6 +1,13 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+
+def _hours_ago(hours):
+    return timezone.now() - timedelta(hours=hours)
 
 
 class IdempotencyRecord(models.Model):
@@ -63,3 +70,74 @@ class IdempotencyRecord(models.Model):
 
     def __str__(self):
         return f"{self.method} {self.path} [{self.key}]"
+
+
+class DeviceSyncState(models.Model):
+    """What one handset last told us about the entries it is still holding.
+
+    The ERP cannot see a phone's queue — that is the point of a queue — so the
+    monitor would have nothing to show unless the phone says. Each device
+    reports its own counts when it syncs, and this is the latest word from it.
+
+    Deliberately a snapshot, not a log. The office needs one question answered
+    at a glance: whose phone is sitting on unsent work, and since when. A
+    history of every heartbeat would bury that, and the entries themselves are
+    already recorded on the device and, once sent, in the ERP.
+
+    A stale ``last_seen_at`` is itself the signal worth acting on: a supervisor
+    whose phone has not spoken since Tuesday either has no coverage or has
+    stopped using the app, and both want a phone call.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="device_sync_states")
+    device_id = models.CharField(max_length=120)
+
+    pending = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    conflicts = models.PositiveIntegerField(default=0)
+    synced = models.PositiveIntegerField(
+        default=0, help_text=_("Entries this device has confirmed, as it counts them"))
+
+    oldest_pending_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=_("When the longest-waiting entry was filed on the device"))
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    app_version = models.CharField(max_length=40, blank=True)
+    platform = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        verbose_name = _("Device Sync State")
+        verbose_name_plural = _("Device Sync States")
+        constraints = [
+            models.UniqueConstraint(fields=["user", "device_id"],
+                                    name="uniq_device_sync_user_device"),
+        ]
+        ordering = ["-last_seen_at"]
+
+    def __str__(self):
+        return f"{self.user} / {self.device_id}"
+
+    #: A round left unsent this long is no longer "still walking back".
+    STUCK_AFTER_HOURS = 12
+    #: A phone that has not spoken in this long is worth a call either way.
+    SILENT_AFTER_HOURS = 24
+
+    @property
+    def needs_attention(self):
+        """Worth someone's time: work stuck on the device, or a silent phone."""
+        return bool(self.failed or self.conflicts or self.is_stuck or self.is_silent)
+
+    @property
+    def is_stuck(self):
+        """Pending work that has been pending too long to be in transit."""
+        if not (self.pending and self.oldest_pending_at):
+            return False
+        return self.oldest_pending_at < _hours_ago(self.STUCK_AFTER_HOURS)
+
+    @property
+    def is_silent(self):
+        """The phone itself has stopped reporting — no coverage, or not in use."""
+        return bool(self.last_seen_at and self.last_seen_at < _hours_ago(self.SILENT_AFTER_HOURS))

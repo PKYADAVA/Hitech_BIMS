@@ -24,6 +24,7 @@ from django.utils import timezone
 from hatchery_master.models import STATES_AND_TERRITORIES
 from account.models import ChartOfAccount
 from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
+from broiler.models import BroilerFarm
 from inventory.models import Item, ItemCategory, Warehouse
 from picklist.services import validate_value
 from .models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase, GeneralPurchaseItem,
@@ -420,14 +421,19 @@ def _general_purchase_to_item_dict(row):
         "sent_qty": str(row.sent_qty), "rcv_qty": str(row.rcv_qty), "free_qty": str(row.free_qty),
         "rate": str(row.rate), "discount_percent": str(row.discount_percent),
         "discount_amount": str(row.discount_amount), "gst_percent": str(row.gst_percent),
-        "amount": str(row.amount), "farm_warehouse": row.farm_warehouse_id,
-        "farm_warehouse_name": row.farm_warehouse.name,
+        "amount": str(row.amount),
+        # One field carrying its own kind, matching what the form posts back.
+        "destination": (f"farm:{row.farm_id}" if row.farm_id
+                        else (f"warehouse:{row.farm_warehouse_id}" if row.farm_warehouse_id else "")),
+        "batch": row.batch_id or "",
+        "farm_warehouse": row.farm_warehouse_id,
+        "farm_warehouse_name": row.destination_name,
     }
 
 
 def _general_purchase_list_dict(gp):
     warehouses = ", ".join(dict.fromkeys(
-        n for n in gp.items.values_list("farm_warehouse__name", flat=True) if n
+        i.destination_name for i in gp.items.select_related("farm_warehouse", "farm") if i.destination_name
     ))
     return {
         "id": gp.id, "date": gp.date.isoformat(), "bill_no": gp.bill_no, "dc_no": gp.dc_no,
@@ -439,6 +445,25 @@ def _general_purchase_list_dict(gp):
     }
 
 
+def _open_batches_by_farm(user):
+    """Open flocks per farm, for the form's Batch column.
+
+    Only open ones: feed is bought for a flock that is still growing, and
+    offering closed batches invites a delivery being booked to one that
+    finished months ago.
+    """
+    from broiler.models import BroilerBatch
+
+    out = {}
+    qs = (BroilerBatch.objects
+          .filter(is_closed=False, broiler_farm__in=farms_for(user, BroilerFarm.objects.all()))
+          .order_by("broiler_farm_id", "-start_date", "-id")
+          .values_list("broiler_farm_id", "id", "batch_name"))
+    for farm_id, batch_id, name in qs:
+        out.setdefault(farm_id, []).append((batch_id, name))
+    return out
+
+
 def _general_purchase_form_context(user, gp=None):
     return {
         "general_purchase": gp,
@@ -446,12 +471,23 @@ def _general_purchase_form_context(user, gp=None):
         "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
         "items": Item.objects.order_by("item_code"),
         "warehouses": warehouses_for(user, Warehouse.objects.order_by("name")),
+        # Feed also goes straight to a farm, so the destination picker offers
+        # both. Scoped like the warehouses are — a user only sees the farms
+        # they may act on.
+        "dest_farms": farms_for(user, BroilerFarm.objects.order_by("farm_name")),
+        # Every open flock, grouped by farm, so choosing a farm can reveal its
+        # batches without a round trip.
+        "farm_batches_json": json.dumps({
+            str(f_id): [{"id": b_id, "name": name} for b_id, name in rows]
+            for f_id, rows in _open_batches_by_farm(user).items()
+        }),
         "accounts": ChartOfAccount.objects.order_by("code"),
         "bank_accounts": bank_cash_accounts(),   # Pay Account = Bank/Cash master only
         "tax_masters": TaxMaster.objects.exclude(tax_percentage__isnull=True).order_by("tax_code"),
         "today": timezone.localdate().isoformat(),
         "existing_items_json": json.dumps(
-            [_general_purchase_to_item_dict(row) for row in gp.items.select_related("item", "farm_warehouse")]
+            [_general_purchase_to_item_dict(row)
+             for row in gp.items.select_related("item", "farm_warehouse", "farm", "batch")]
         ) if gp else "[]",
         "payment_terms_choices": GeneralPurchase.PAYMENT_TERMS_CHOICES,
         "freight_type_choices": GeneralPurchase.FREIGHT_TYPE_CHOICES,
@@ -499,6 +535,23 @@ def _apply_posted_general_purchase_fields(instance, request):
     validate_value("purchase", "GeneralPurchase", "calculation_based_on", instance.calculation_based_on)
 
 
+def _batch_for_farm(farm_id, batch_id):
+    """The chosen batch, but only if it belongs to `farm_id`.
+
+    The client's answer is honoured, not trusted: a batch id posted against a
+    farm that is not running it would credit the delivery to another flock's
+    feed, and nothing downstream would notice.
+    """
+    from broiler.models import BroilerBatch
+
+    if not batch_id:
+        return None
+    return (BroilerBatch.objects
+            .filter(pk=batch_id, broiler_farm_id=farm_id)
+            .values_list("pk", flat=True)
+            .first())
+
+
 def _save_general_purchase_items(instance, request):
     try:
         rows = json.loads(request.POST.get("items_json") or "[]")
@@ -506,8 +559,17 @@ def _save_general_purchase_items(instance, request):
         rows = []
     instance.items.all().delete()
     for row in rows:
-        if not row.get("item") or not row.get("farm_warehouse"):
+        # The destination arrives as one field carrying its own kind, e.g.
+        # "warehouse:4" or "farm:11" — a bare id could not say which table it
+        # belonged to, and the two id spaces overlap.
+        dest = str(row.get("destination") or "")
+        kind, _, dest_id = dest.partition(":")
+        # Older saved rows (and the API) still post a plain farm_warehouse.
+        if not dest_id and row.get("farm_warehouse"):
+            kind, dest_id = "warehouse", str(row["farm_warehouse"])
+        if not row.get("item") or kind not in ("warehouse", "farm") or not dest_id.isdigit():
             continue
+        to_farm = kind == "farm"
         GeneralPurchaseItem.objects.create(
             purchase=instance, item_id=row["item"], unit=row.get("unit") or "",
             sent_qty=Decimal(str(row.get("sent_qty") or 0)),
@@ -517,7 +579,12 @@ def _save_general_purchase_items(instance, request):
             discount_percent=Decimal(str(row.get("discount_percent") or 0)),
             discount_amount=Decimal(str(row.get("discount_amount") or 0)),
             gst_percent=Decimal(str(row.get("gst_percent") or 0)),
-            farm_warehouse_id=row["farm_warehouse"],
+            farm_warehouse_id=None if to_farm else int(dest_id),
+            farm_id=int(dest_id) if to_farm else None,
+            # A batch is only meaningful on a farm delivery, and only when the
+            # farm actually runs it — an id typed against the wrong farm would
+            # credit another flock's feed.
+            batch_id=(_batch_for_farm(int(dest_id), row.get("batch")) if to_farm else None),
         )
     instance.net_amount = instance.compute_net_amount()
     # "remarks" is included so an auto-generated description picks up the total

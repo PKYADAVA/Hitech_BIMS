@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Offline Sync Monitor{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with active_tab='offline_sync_monitor' %}
+
+<div class="container-fluid px-3 py-3">
+  <div class="d-flex align-items-center mb-3">
+    <h5 class="mb-0"><i class="fas fa-cloud-arrow-up me-2"></i>Offline Sync Monitor</h5>
+    <span class="text-muted small ms-3">
+      What each phone last reported it was still holding
+    </span>
+  </div>
+
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-2">
+      <div class="card h-100"><div class="card-body py-2">
+        <div class="small text-muted">Devices</div>
+        <div class="fs-5 fw-bold">{{ totals.devices }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100"><div class="card-body py-2">
+        <div class="small text-muted">Pending</div>
+        <div class="fs-5 fw-bold text-warning">{{ totals.pending }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100"><div class="card-body py-2">
+        <div class="small text-muted">Failed</div>
+        <div class="fs-5 fw-bold text-danger">{{ totals.failed }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100"><div class="card-body py-2">
+        <div class="small text-muted">Conflicts</div>
+        <div class="fs-5 fw-bold text-danger">{{ totals.conflicts }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card h-100"><div class="card-body py-2">
+        <div class="small text-muted">Need a call</div>
+        <div class="fs-5 fw-bold">{{ totals.attention }}</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 rpt-table ds-grid">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Warehouse</th>
+            <th>Device</th>
+            <th class="text-end">Pending</th>
+            <th class="text-end">Failed</th>
+            <th class="text-end">Conflicts</th>
+            <th class="text-end">Synced</th>
+            <th>Oldest waiting</th>
+            <th>Last sync</th>
+            <th>Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr {% if r.attention %}class="table-warning"{% endif %}>
+            <td>{{ r.name }}</td>
+            <td>{{ r.location|default:"—" }}</td>
+            <td class="text-muted small">
+              {{ r.state.device_id }}
+              {% if r.state.platform %}<span class="badge bg-light text-dark ms-1">{{ r.state.platform }}</span>{% endif %}
+            </td>
+            <td class="text-end {% if r.state.pending %}fw-bold text-warning{% endif %}">{{ r.state.pending }}</td>
+            <td class="text-end {% if r.state.failed %}fw-bold text-danger{% endif %}">{{ r.state.failed }}</td>
+            <td class="text-end {% if r.state.conflicts %}fw-bold text-danger{% endif %}">{{ r.state.conflicts }}</td>
+            <td class="text-end text-muted">{{ r.state.synced }}</td>
+            <td>
+              {% if r.state.oldest_pending_at %}
+                {{ r.state.oldest_pending_at|date:"d M, H:i" }}
+                {% if r.state.is_stuck %}<i class="fas fa-triangle-exclamation text-danger ms-1"
+                     title="Waiting longer than a walk back to signal"></i>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ r.state.last_sync_at|date:"d M, H:i"|default:"—" }}</td>
+            <td>
+              {{ r.state.last_seen_at|date:"d M, H:i" }}
+              {% if r.state.is_silent %}<i class="fas fa-signal-slash text-danger ms-1"
+                   title="This phone has not reported in over a day"></i>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" class="text-center text-muted py-4">
+              No phone has reported yet. A device appears here the first time it
+              syncs — until then it works normally, it is simply not visible.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-muted small mt-2 mb-0">
+    These figures are each phone's own count, sent when it last reached the ERP.
+    Entries still waiting on a device cannot be seen or sent from here — the
+    useful action is a call to the person holding it.
+  </p>
+</div>
+{% endblock %}

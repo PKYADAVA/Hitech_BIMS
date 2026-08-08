@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 
 import { http } from "@/api/client";
 import { discardOfflineFile } from "./files";
+import { currentDeviceId } from "./identity";
 import {
   currentQueueUser, deleteEntry, entryProducing, getEntry, listEntries,
   pruneSynced, sendableEntries, updateEntry,
@@ -209,10 +210,45 @@ export async function runSync(): Promise<SyncOutcome> {
       if (outcome.stopped || outcome.sent === before) break;
     }
     await pruneSynced();
+    await reportToErp();
     return outcome;
   } finally {
     running = false;
     report(null);
+  }
+}
+
+/**
+ * Tell the ERP what this phone is still holding.
+ *
+ * The queue is on the handset, so the administrator's monitor has nothing to
+ * show unless the device says. Sent after a run, when the counts have just
+ * changed and the connection has just been proved.
+ *
+ * Never allowed to fail a sync: this is bookkeeping for somebody else's screen,
+ * and a round that reached the ERP has reached it whether or not the heartbeat
+ * did.
+ */
+export async function reportToErp(): Promise<void> {
+  try {
+    const all = await listEntries();
+    const count = (s: string) => all.filter((e) => e.sync_status === s).length;
+    const oldest = all
+      .filter((e) => e.sync_status === "pending")
+      .map((e) => e.device_created_at)
+      .sort()[0];
+    await http.post("/sync/heartbeat", {
+      device_id: await currentDeviceId(),
+      pending: count("pending") + count("syncing"),
+      failed: count("failed"),
+      conflicts: count("conflict"),
+      synced: count("synced"),
+      oldest_pending_at: oldest ?? null,
+      last_sync_at: new Date().toISOString(),
+      platform: Platform.OS,
+    });
+  } catch {
+    // The monitor will be a run out of date. Nothing the user relies on.
   }
 }
 

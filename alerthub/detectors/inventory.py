@@ -201,8 +201,10 @@ def _expiry(rule, title, *, expired, item_ids=None):
 
         days = (purchase.expiry_date - today).days
         for line in lines:
-            warehouse = line.farm_warehouse
-            scope = {"warehouse": warehouse}
+            # A purchase row lands at a warehouse or straight at a farm.
+            # Passing only the warehouse left farm deliveries unscoped, so a
+            # rule limited to particular farms could not match one.
+            scope = {"warehouse": line.farm_warehouse, "farm": line.farm}
             if not rule_applies_to(rule, **scope):
                 continue
 

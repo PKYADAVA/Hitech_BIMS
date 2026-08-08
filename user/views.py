@@ -1576,3 +1576,52 @@ def employee_access_info(request, pk):
         "date_of_joining": (employee.date_of_joining.strftime("%d-%b-%Y")
                             if employee.date_of_joining else ""),
     })
+
+
+@login_required
+def offline_sync_monitor(request):
+    """User > Offline Sync Monitor — which phones are holding unsent work.
+
+    The queue lives on the handset, so the ERP only knows what each device has
+    reported (see api/sync.py). That is enough for the question the office
+    actually has: whose round has not arrived, and how long it has been sitting
+    there.
+
+    Read-only on purpose. Nothing here can reach into a phone and make it sync,
+    and a button implying otherwise would be a lie — the useful action is a
+    phone call, so the page gives the name, the device and the elapsed time to
+    make that call with.
+    """
+    from api.models import DeviceSyncState
+
+    states = (DeviceSyncState.objects
+              .select_related("user")
+              .order_by("-last_seen_at"))
+
+    # Warehouse, not branch: Employee has no branch FK — the two are joined
+    # through the Office Mapping master — and the warehouse is the more useful
+    # locator here anyway, being where the person actually reports.
+    employees = {e.user_id: e for e in Employee.objects.select_related("warehouse")
+                 .exclude(user_id=None)}
+    rows = []
+    for state in states:
+        employee = employees.get(state.user_id)
+        rows.append({
+            "state": state,
+            "employee": employee,
+            "name": (employee.full_name if employee
+                     else state.user.get_full_name() or state.user.username),
+            "location": getattr(getattr(employee, "warehouse", None), "name", ""),
+            "attention": state.needs_attention,
+        })
+
+    return render(request, "offline_sync_monitor.html", {
+        "rows": rows,
+        "totals": {
+            "devices": len(rows),
+            "pending": sum(r["state"].pending for r in rows),
+            "failed": sum(r["state"].failed for r in rows),
+            "conflicts": sum(r["state"].conflicts for r in rows),
+            "attention": sum(1 for r in rows if r["attention"]),
+        },
+    })

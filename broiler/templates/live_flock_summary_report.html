@@ -73,7 +73,7 @@
       <thead><tr>
         <th>Sl.No.</th><th>Branch</th><th>Line</th><th>Supervisor</th><th>Farmer</th><th>Batch</th><th>Book No</th>
         <th>Actual Age</th><th>Placement Date</th><th>Lifting Start Date</th><th>Mean Age</th>
-        <th>Latest Entry Date</th><th class="ds-num">Gap Days</th><th>Housed Chicks</th><th>Mort</th><th class="ds-num">Mort%</th>
+        <th>Latest Entry Date</th><th class="ds-num">Latest Entry Age</th><th class="ds-num">Gap Days</th><th>Housed Chicks</th><th>Mort</th><th class="ds-num">Mort%</th>
         <th>Cull</th><th class="ds-num">Cull%</th><th>Sold Birds</th><th class="ds-num">Sold Weight</th><th>Available Birds</th><th class="ds-num">Available Weight</th>
         <th>Std B.Wt</th><th>Avg B.Wt</th><th>Std B.Wt @ current Feed<br><small class="text-muted">g/Bird</small></th><th>Last B.Wt Date</th><th class="ds-num">B.Wt Gap Days</th><th>Std FCR</th><th>FCR</th><th>CFCR</th><th>EEF</th><th>M PC/Kg</th><th>PC/Bird</th>
         <th>Feed Transferred</th><th>Transfer In From Other Farms</th>
@@ -101,6 +101,7 @@
           <td>{{ r.lifting_start|date:"d.m.Y"|default:"-" }}</td>
           <td class="num">{{ r.mean_age|floatformat:2 }}</td>
           <td>{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.latest_entry|date:"d.m.Y"|default:"-" }}{% endif %}</td>
+          <td class="num">{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.latest_entry_age|default_if_none:"-" }}{% endif %}</td>
           <td class="num {% if not r.not_started and r.gap_days is not None %}{% if r.gap_days >= 2 %}gap-bad{% else %}gap-ok{% endif %}{% endif %}">{% if r.not_started %}<span class="badge-ns">Not Started</span>{% else %}{{ r.gap_days|default:"-" }}{% endif %}</td>
           <td class="num">{{ r.housed|floatformat:0 }}</td>
           <td class="num">{{ r.mort|floatformat:0 }}</td>

@@ -33,6 +33,8 @@ urlpatterns = [
     path('dashboard-access/<int:group_id>/preview/', views.dashboard_access_preview, name='dashboard_access_preview'),
     path('dashboard-access/<int:group_id>/delete/', views.dashboard_access_delete, name='dashboard_access_delete'),
     path('employee-access/', views.employee_access, name='employee_access'),
+    path('offline-sync-monitor/', views.offline_sync_monitor,
+         name='offline_sync_monitor'),
     path('employee-access/<int:pk>/row/', views.employee_access_row,
          name='employee_access_row'),
     path('employee-access/<int:pk>/delete/', views.employee_access_delete,

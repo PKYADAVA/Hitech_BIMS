@@ -3476,33 +3476,30 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     from inventory.models import StockTransfer, MedicineTransfer, Mapping
     from purchase.models import GeneralPurchaseItem
 
-    # Feed Purchase: purchases have no batch/farm FK at all, only a
-    # Warehouse — sometimes that Warehouse directly *is* the farm's own
-    # cost centre (feed bought straight to the farm), sometimes it's a
-    # general warehouse the feed reaches the farm from later via a Stock
-    # Transfer (already captured as Feed Transfer-In). Either way it's
-    # booked to a Warehouse sharing this farm's Branch, so — like Bird Sale
-    # Receipt's balance — it's rolled up at the Branch level, bounded to
-    # this batch's growing window, rather than claimed to be exact-to-batch.
-    # start_date/end_date are both nullable (the Batch form sets neither),
-    # so each bound is applied only when it exists — an unbounded batch
-    # simply shows every purchase at the branch.
-    # A Warehouse (Office) no longer has a direct Branch FK — its Branch is
-    # resolved through inventory.Mapping (TYPE_SECTOR_BRANCH: from_id=office,
-    # to_id=branch), so we first gather the offices mapped to this branch.
-    branch_id = batch.broiler_farm.branch_id
-    branch_office_ids = list(
-        Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH, to_id=branch_id)
-        .values_list("from_id", flat=True)
+    # Feed Purchase: what was bought *for this flock*.
+    #
+    # A purchase row now names where its goods landed — a warehouse, or a farm
+    # (with the flock, when it was bought for one). This column takes the farm
+    # deliveries: feed off the lorry into this batch's shed. Feed that went to a
+    # warehouse first reaches the farm as a Stock Transfer and is already
+    # counted in Feed Transfer-In; showing it here as well would double it.
+    #
+    # It used to sum every purchase at the branch, bounded to the batch's dates,
+    # because the row carried nothing finer than a warehouse. That answered
+    # "purchases somewhere in this branch" for a column headed as this flock's.
+    purchase_items = GeneralPurchaseItem.objects.filter(farm=batch.broiler_farm_id)
+    # Rows saved before the flock could be named fall back to the date window,
+    # so an entry made last week is not silently dropped from the history.
+    purchase_items = purchase_items.filter(
+        Q(batch=batch) | Q(batch__isnull=True)
     )
-    purchase_items = GeneralPurchaseItem.objects.filter(farm_warehouse_id__in=branch_office_ids)
     _placed = _placement_date(batch)
     if _placed:
         purchase_items = purchase_items.filter(purchase__date__gte=_placed)
     if batch.end_date:
         purchase_items = purchase_items.filter(purchase__date__lte=batch.end_date)
     purchase_items = (purchase_items
-                      .select_related("purchase", "item__category", "farm_warehouse")
+                      .select_related("purchase", "item__category", "farm", "batch")
                       .order_by("purchase__date", "id"))
     feed_purchase_rows = []
     for pi in purchase_items:
@@ -3511,7 +3508,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             continue
         feed_purchase_rows.append({
             "date": pi.purchase.date, "trnum": pi.purchase.purchase_no, "dc_no": pi.purchase.dc_no,
-            "from_location": pi.farm_warehouse.name, "item": str(pi.item),
+            "from_location": pi.destination_name, "item": str(pi.item),
             "quantity": pi.rcv_qty, "rate": pi.rate, "amount": pi.amount,
         })
 
@@ -4045,6 +4042,11 @@ def _live_flock_row(batch, today):
     entries = list(DailyEntry.objects.filter(batch=batch).order_by("-date")[:3])
     latest = entries[0].date if entries else None
     gap_days = (today - latest).days if latest else None
+    # The flock's age on the day it was last recorded, not today's. Read beside
+    # the entry date it belongs to, it says how old the birds were when that
+    # reading was taken — Actual Age keeps moving while the entries stop, so on
+    # a flock that has not been recorded for a week the two differ by the gap.
+    latest_age = (latest - placement_date).days if (latest and placement_date) else None
 
     # last *body-weight* reading (skip days with no weight taken) + its gap
     last_wt = (DailyEntry.objects.filter(batch=batch, avg_weight_gms__gt=0)
@@ -4167,7 +4169,7 @@ def _live_flock_row(batch, today):
         "placement_date": placement_date,
         "lifting_start": bc.get("sale_start_date"),
         "mean_age": bc.get("mean_age"),
-        "latest_entry": latest, "gap_days": gap_days,
+        "latest_entry": latest, "latest_entry_age": latest_age, "gap_days": gap_days,
         "not_started": bool(placed > 0 and latest is None),
         "housed": placed, "mort": mort,
         "mort_pct": _num(bc.get("total_mort_pct")),

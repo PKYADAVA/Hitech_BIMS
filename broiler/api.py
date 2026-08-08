@@ -215,7 +215,36 @@ class DailyEntrySerializer(serializer_factory(DailyEntry)):
             # two open flocks had the entry filed against the other.
             chosen = attrs.get("batch") or getattr(self.instance, "batch", None)
             attrs["batch"] = _resolve_batch(farm.id, chosen.id if chosen else None)
+
+        # A day that is already recorded, with different figures, is not a
+        # correction to apply — it is two people's counts of the same shed. Only
+        # on create: an edit is somebody deliberately changing a row they can
+        # already see, which is the opposite situation.
+        if self.instance is None:
+            self._raise_if_conflicting(attrs)
         return attrs
+
+    def _raise_if_conflicting(self, attrs):
+        """Refuse to overwrite a day somebody else has already filed.
+
+        A supervisor records ten dead birds in Shed 2 on the 8th; by the time
+        their phone finds signal the office has entered seven for the same day.
+        Taking the newer one means taking whichever handset found signal last,
+        and losing a real number without telling anybody. The phone is handed
+        both figures instead (see api/sync.py).
+        """
+        from api.sync import check_daily_entry_conflict
+
+        farm = attrs.get("farm")
+        batch = attrs.get("batch")
+        on = attrs.get("date")
+        if not (farm and on):
+            return
+        existing = DailyEntry.objects.filter(farm=farm, date=on, batch=batch).first()
+        raw = getattr(self, "initial_data", {}) or {}
+        conflict = check_daily_entry_conflict({**raw, **attrs}, existing)
+        if conflict:
+            raise conflict
 
     def _current(self, validated_data, name, default=None):
         """Field value for this write: the incoming value when supplied,
@@ -307,7 +336,36 @@ class MedicineVaccineEntrySerializer(serializer_factory(MedicineVaccineEntry)):
         if farm is not None:
             chosen = attrs.get("batch") or getattr(self.instance, "batch", None)
             attrs["batch"] = _resolve_batch(farm.id, chosen.id if chosen else None)
+
+        # A day that is already recorded, with different figures, is not a
+        # correction to apply — it is two people's counts of the same shed. Only
+        # on create: an edit is somebody deliberately changing a row they can
+        # already see, which is the opposite situation.
+        if self.instance is None:
+            self._raise_if_conflicting(attrs)
         return attrs
+
+    def _raise_if_conflicting(self, attrs):
+        """Refuse to overwrite a day somebody else has already filed.
+
+        A supervisor records ten dead birds in Shed 2 on the 8th; by the time
+        their phone finds signal the office has entered seven for the same day.
+        Taking the newer one means taking whichever handset found signal last,
+        and losing a real number without telling anybody. The phone is handed
+        both figures instead (see api/sync.py).
+        """
+        from api.sync import check_daily_entry_conflict
+
+        farm = attrs.get("farm")
+        batch = attrs.get("batch")
+        on = attrs.get("date")
+        if not (farm and on):
+            return
+        existing = DailyEntry.objects.filter(farm=farm, date=on, batch=batch).first()
+        raw = getattr(self, "initial_data", {}) or {}
+        conflict = check_daily_entry_conflict({**raw, **attrs}, existing)
+        if conflict:
+            raise conflict
 
     def _apply_derived(self, validated_data):
         from .views import _placement_date
