@@ -196,7 +196,12 @@ function farmOptionsFor(supId) {
   return '<option value="">select</option>' +
     farms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
 }
-let currentFarmOptions = farmOptions;
+// Farm follows Supervisor, the way Batch follows Farm: until a supervisor is
+// chosen there is no answer to "which farms", and offering every farm in the
+// company invites picking one that is not theirs and being refused at submit.
+// The box says what it is waiting for, exactly as the Batch box does.
+const NO_SUPERVISOR = '<option value="">select a supervisor first</option>';
+let currentFarmOptions = NO_SUPERVISOR;
 
 // Fill a row's Batch <select> from a lookup's `batches`. One open batch is
 // chosen for the user — that is the normal case and there is nothing to
@@ -937,7 +942,7 @@ get('daily-entry-form').addEventListener('submit', function (e) {
 // Selecting a supervisor narrows every row's Farm dropdown to that
 // supervisor's assigned farms (does NOT auto-create rows).
 get('supervisor').addEventListener('change', function () {
-  currentFarmOptions = this.value ? farmOptionsFor(this.value) : farmOptions;
+  currentFarmOptions = this.value ? farmOptionsFor(this.value) : NO_SUPERVISOR;
   entryRows().map(tr => tr.querySelector('.farm')).forEach(sel => {
     sel.innerHTML = currentFarmOptions;
     sel.value = '';

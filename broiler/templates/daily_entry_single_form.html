@@ -116,9 +116,13 @@
         </div>
         <div style="min-width:260px">
           <label class="form-label"><i class="fas fa-warehouse me-1 text-primary"></i>Farm <span class="text-danger">*</span></label>
+          {% comment %}
+            Farm follows Supervisor, the way Batch follows Farm. Filled by the
+            supervisor's change handler; offering every farm up front invites
+            picking one that is not theirs and being refused at submit.
+          {% endcomment %}
           <select class="form-select" id="farm" required>
-            <option value="">select</option>
-            {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+            <option value="">select a supervisor first</option>
           </select>
         </div>
         <div style="min-width:220px">
@@ -181,6 +185,7 @@
 {% include 'broiler/_feed_plan_panel.html' %}
 <script>
 const feedOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
+const NO_SUPERVISOR = '<option value="">select a supervisor first</option>';
 const allFarmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}`;
 // Farms assigned to each supervisor (BroilerFarm.supervisor) — picking a
 // supervisor narrows the Farm dropdown to just their farms.
@@ -777,7 +782,7 @@ function rowNotification(tr) {
 
 // ===== Wiring =====
 get('supervisor').addEventListener('change', function () {
-  get('farm').innerHTML = this.value ? farmOptionsFor(this.value) : allFarmOptions;
+  get('farm').innerHTML = this.value ? farmOptionsFor(this.value) : NO_SUPERVISOR;
   get('farm').value = '';
   if (window.jQuery) jQuery(get('farm')).trigger('change.select2');
   fillBatchSelect(get('batch'), []); batchStartDate = null;
