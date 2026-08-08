@@ -6,6 +6,8 @@ import React, { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { LockGate } from "@/components/LockGate";
+import { OfflineBar } from "@/components/OfflineBar";
+import { startOnlineWatch } from "@/net/online";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { registerForPush } from "@/push";
 import { queryClient } from "@/query/queryClient";
@@ -35,6 +37,11 @@ export default function App() {
     hydrateSettings();
   }, [bootstrap, hydrateSettings]);
 
+  // Tell React Query when the connection comes and goes. Without this it
+  // assumes it is always online, so a request on a farm with no signal spins
+  // and fails instead of falling back to the cache already on disk.
+  useEffect(() => { startOnlineWatch(); }, []);
+
   // Once signed in: register for push + load this user's module permissions.
   // On sign-out: clear permissions so the next user starts fresh.
   useEffect(() => {
@@ -55,6 +62,9 @@ export default function App() {
         >
           <StatusBar style="light" />
           <LockGate>
+            {/* Above the navigator, so it is on every screen: cached data
+                looks exactly like live data, and that is worth saying. */}
+            <OfflineBar />
             <RootNavigator />
           </LockGate>
         </PersistQueryClientProvider>

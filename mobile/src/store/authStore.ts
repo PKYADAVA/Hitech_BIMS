@@ -4,6 +4,7 @@ import { logout as apiLogout, fetchMe } from "@/api/auth";
 import { requestLogin, setSessionExpiredHandler } from "@/api/client";
 import { tokenStore } from "@/api/tokenStore";
 import { ApiError, AuthUser } from "@/api/types";
+import { clearCachedData } from "@/query/cache";
 
 interface AuthState {
   status: "loading" | "signedOut" | "signedIn";
@@ -58,6 +59,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     await apiLogout();
+    // The read cache is on disk and outlives the session. Left there, the next
+    // person to sign in on this handset opens a register and sees the last
+    // one's farms — data their own scope may never have allowed them. Clearing
+    // is part of signing out, not a nicety.
+    await clearCachedData();
     set({ status: "signedOut", user: null, error: null });
   },
 }));

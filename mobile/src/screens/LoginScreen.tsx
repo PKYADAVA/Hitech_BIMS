@@ -12,7 +12,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -41,10 +40,6 @@ const MARK = require("../../assets/hitech-mark.png");
 export function LoginScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
-  const { height } = useWindowDimensions();
-  // The photo takes the top ~44% so the card sits low, within thumb reach —
-  // the fields are what the user came for, not the scenery above them.
-  const heroHeight = Math.max(320, Math.round(height * 0.44));
   const login = useAuthStore((s) => s.login);
   const error = useAuthStore((s) => s.error);
   const [username, setUsername] = useState("");
@@ -91,15 +86,17 @@ export function LoginScreen() {
             automaticallyAdjustKeyboardInsets
             showsVerticalScrollIndicator={false}
           >
-            {/* The web page's hero panel, here as the screen's header. Fixed
-                height on purpose: inside a ScrollView an unbounded
-                ImageBackground grows to the content, which turned the photo
-                into a full-screen backdrop behind the card. */}
-            <ImageBackground source={HERO} style={[styles.hero, { height: heroHeight }]} resizeMode="cover">
+            {/* The web page's hero panel, here as the screen's header. It has
+                no height of its own — see `hero` in the styles: it takes
+                whatever the card leaves, so the page fills any screen without
+                the photo growing into a backdrop behind the card. */}
+            <ImageBackground source={HERO} style={styles.hero} resizeMode="cover">
               <View style={styles.heroVeil} />
               <SafeAreaView edges={["top"]}>
                 <View style={styles.brandRow}>
-                  <Image source={MARK} style={styles.mark} resizeMode="contain" />
+                  <View style={styles.markBadge}>
+                    <Image source={MARK} style={styles.mark} resizeMode="contain" />
+                  </View>
                   <View>
                     <Text style={styles.brandName}>Hi Tech Farms</Text>
                     <Text style={styles.brandSub}>POULTRY ERP</Text>
@@ -109,7 +106,9 @@ export function LoginScreen() {
               <View style={styles.heroCopy}>
                 <Text style={styles.heroPitch}>
                   Smart Poultry Management{"\n"}
-                  <Text style={styles.heroPitchAccent}>All in One ERP</Text>
+                  {/* "App" here, "ERP" on the web page this mirrors: the same
+                      system, named for the door the user is standing at. */}
+                  <Text style={styles.heroPitchAccent}>All in One App</Text>
                 </Text>
               </View>
             </ImageBackground>
@@ -222,9 +221,16 @@ const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.bg },
   safe: { flex: 1 },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, paddingBottom: spacing.xl },
+  scroll: { flexGrow: 1, paddingBottom: spacing.md },
 
-  hero: { justifyContent: "space-between" },   // height set per screen size
+  /**
+   * No fixed height. `flexGrow` on the scroll content plus `flex: 1` here means
+   * the photo takes exactly the room the card does not want: it stretches on a
+   * tall screen and gives way on a short one, so the card is never pushed off
+   * the bottom and there is never a gap under it. `minHeight` keeps it a
+   * photograph rather than a stripe when the keyboard squeezes everything.
+   */
+  hero: { flex: 1, minHeight: 200, justifyContent: "space-between" },
   // Same job as the web's .hero-veil: enough scrim for white text, not so much
   // that the sunset the photo is carrying goes flat.
   heroVeil: {
@@ -238,7 +244,23 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  mark: { width: 44, height: 44 },
+  /**
+   * A white badge, not a bare image. The emblem is drawn on the logo card's
+   * white, so dropped straight onto the photo it read as a stray white tile.
+   * Rounded, padded and shadowed, that same white becomes the badge it is
+   * standing on — deliberate rather than a cut-out that went wrong.
+   */
+  markBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#fff",
+    padding: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadow(1),
+  },
+  mark: { width: "100%", height: "100%" },
   brandName: { ...type.h3, color: colors.onDark },
   brandSub: {
     ...type.caption,
@@ -248,7 +270,7 @@ const useStyles = makeStyles((colors) => ({
     marginTop: 1,
   },
   // Clear of the card, which laps over the photo's bottom edge.
-  heroCopy: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl + spacing.lg },
+  heroCopy: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
   heroPitch: {
     ...type.h2,
     color: colors.onDark,
@@ -343,6 +365,6 @@ const useStyles = makeStyles((colors) => ({
     ...type.caption,
     color: colors.textMuted,
     textAlign: "center",
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
 }));

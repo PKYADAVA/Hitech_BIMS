@@ -35,6 +35,11 @@ def login(request):
 
         if user is not None:
             auth_login(request, user)
+            # "Remember Me", honoured rather than decorative: unchecked, the
+            # session dies with the browser, which is what a supervisor on a
+            # shared office machine is asking for when they clear it.
+            if not request.POST.get("remember"):
+                request.session.set_expiry(0)
             return redirect(
                 "dashboard"
             )  # Redirect to a dashboard or homepage after login

@@ -1,0 +1,301 @@
+/* =========================================================
+   HITECH BIMS — Login page
+   Its own stylesheet, not auth.css: the login page is now a
+   two-panel layout while register and forgot-password remain
+   single centred cards, and folding both into one file would
+   mean every login tweak risking those two.
+   ========================================================= */
+:root {
+  --brand:        #15803d;  /* the logo's green — also the app's icon background */
+  --brand-dark:   #14532d;
+  --brand-light:  #dcfce7;
+  --ink:          #0f172a;
+  --ink-soft:     #475569;
+  --ink-faint:    #94a3b8;
+  --line:         #e2e8f0;
+  --surface:      #ffffff;
+  --canvas:       #f4f7f4;
+  --danger:       #b91c1c;
+  --danger-bg:    #fee2e2;
+  --radius:       12px;
+  --radius-lg:    20px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  font-family: 'Poppins', system-ui, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- layout ---------------------------------------------------- */
+
+.login-shell {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 32px;
+}
+
+/* ---------- left: the pitch ------------------------------------------- */
+
+.login-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 36px; }
+.login-brand img { width: 72px; height: auto; }
+.login-brand .name { font-size: 1.9rem; font-weight: 700; color: var(--brand); line-height: 1.1; }
+.login-brand .sub {
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 3px;
+  color: var(--ink-soft); text-transform: uppercase;
+  border-top: 1.5px solid var(--line); padding-top: 5px; margin-top: 5px;
+}
+
+.login-pitch h1 { font-size: 2.6rem; line-height: 1.15; font-weight: 700; letter-spacing: -0.5px; }
+.login-pitch h1 em { color: var(--brand); font-style: normal; }
+.login-pitch p { margin-top: 18px; font-size: 1rem; line-height: 1.7; color: var(--ink-soft); max-width: 30rem; }
+
+/* The hero. A photograph of the actual subject beats an illustration of it,
+   and this is the same image the mobile app ships on its own login, so the two
+   front doors read as one product.
+
+   The one that used to sit here was a watermarked stock preview — hence the
+   care. This file is bundled with the app already, so nothing new is being
+   licensed. */
+.login-hero {
+  position: relative;
+  margin-top: 32px;
+  height: 240px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--brand-dark);
+}
+
+.hero-photo {
+  position: absolute;
+  inset: 0;
+  /* 55%, not centre: the flock and the sheds sit in the lower-middle band, and
+     a landscape photo in a letterbox panel loses whatever is furthest from the
+     anchor — better that be empty sky than the birds. */
+  background: url("../images/login-hero.jpg") center 55% / cover no-repeat;
+  /* Slow drift, so the panel is alive without asking to be watched. Transform
+     only — a moving background-position would repaint every frame. */
+  animation: hero-drift 28s ease-in-out infinite alternate;
+  transform-origin: center 55%;
+}
+@keyframes hero-drift {
+  from { transform: scale(1.04); }
+  to   { transform: scale(1.12) translateX(-1.5%); }
+}
+
+/* Only enough scrim to keep the caption legible. The earlier version washed
+   the whole frame green, which flattened the sunset this photo is carrying —
+   the brand is already stated three times above it. */
+.hero-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top,
+    rgba(12, 45, 25, 0.72) 0%,
+    rgba(12, 45, 25, 0.28) 26%,
+    rgba(12, 45, 25, 0) 52%);
+}
+
+.hero-tag {
+  position: absolute;
+  left: 22px; bottom: 18px;
+  display: flex; align-items: center; gap: 9px;
+  color: #fff; font-size: 0.9rem; font-weight: 600;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+.hero-tag i { font-size: 0.85rem; opacity: 0.9; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-photo { animation: none; transform: scale(1.06); }
+}
+
+.login-features {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  text-align: center;
+}
+.login-features .f-icon {
+  width: 46px; height: 46px; margin: 0 auto 8px;
+  display: grid; place-items: center;
+  border-radius: var(--radius);
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 1.05rem;
+}
+.login-features .f-label { font-size: 0.76rem; font-weight: 600; color: var(--brand); line-height: 1.35; }
+.login-features .f-sub   { font-size: 0.72rem; color: var(--ink-soft); line-height: 1.35; }
+
+/* ---------- right: the form ------------------------------------------- */
+
+.login-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+  padding: 44px 40px;
+  max-width: 480px;
+  width: 100%;
+  justify-self: end;
+}
+
+.login-card .lock {
+  width: 76px; height: 76px; margin: 0 auto 20px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 1.7rem;
+}
+
+.login-card h2 { text-align: center; font-size: 1.6rem; font-weight: 700; }
+.login-card .lead { text-align: center; color: var(--ink-soft); font-size: 0.92rem; margin: 6px 0 30px; }
+
+.login-error {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 0.86rem;
+  margin-bottom: 20px;
+}
+
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 0.86rem; font-weight: 600; margin-bottom: 8px; }
+
+.control { position: relative; display: flex; align-items: center; }
+.control .lead-icon {
+  position: absolute; left: 15px; color: var(--brand); font-size: 0.95rem; pointer-events: none;
+}
+.control input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.94rem;
+  padding: 15px 46px 15px 44px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.control input::placeholder { color: var(--ink-faint); }
+.control input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.10);
+}
+
+/* Reveal toggle. A <button>, not an icon with a click handler: it has to be
+   reachable by keyboard, and it must not submit the form on Enter. */
+.control .reveal {
+  position: absolute; right: 8px;
+  background: none; border: 0; cursor: pointer;
+  color: var(--ink-faint); font-size: 0.95rem;
+  padding: 8px 10px; border-radius: 8px; line-height: 1;
+}
+.control .reveal:hover  { color: var(--ink-soft); }
+.control .reveal:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+.row-between {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 4px 0 26px;
+}
+.remember { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; cursor: pointer; }
+.remember input { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; }
+.link-brand { color: var(--brand); font-size: 0.88rem; font-weight: 600; text-decoration: none; }
+.link-brand:hover { text-decoration: underline; }
+
+.btn-login {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-family: inherit; font-size: 1rem; font-weight: 600; letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 15px;
+  border: 0; border-radius: var(--radius);
+  background: var(--brand); color: #fff;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.05s;
+}
+.btn-login:hover  { background: var(--brand-dark); }
+.btn-login:active { transform: translateY(1px); }
+
+.assure {
+  display: flex; gap: 12px; align-items: flex-start;
+  margin-top: 26px; padding: 16px;
+  background: #f0fdf4;
+  border-radius: var(--radius);
+}
+.assure i { color: var(--brand); font-size: 1.1rem; margin-top: 2px; }
+.assure .t { font-size: 0.88rem; font-weight: 600; color: var(--brand-dark); }
+.assure .d { font-size: 0.82rem; color: var(--ink-soft); line-height: 1.5; margin-top: 2px; }
+
+/* ---------- single-card variant (reset password) ----------------------- */
+
+/* One column, card centred. The login page earns two panels because it is the
+   front door; a one-field form does not, and stretching it across the same
+   grid would leave a conspicuously empty half. */
+.login-shell--single {
+  grid-template-columns: minmax(0, 460px);
+  justify-content: center;
+}
+.login-shell--single .login-card { justify-self: center; }
+
+.login-brand--stacked {
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+  margin-bottom: 28px;
+}
+.login-brand--stacked img { width: 64px; }
+.login-brand--stacked .name { font-size: 1.5rem; }
+.login-brand--stacked .sub { display: inline-block; }
+
+.card-foot {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+.card-foot .link-brand { margin-left: 4px; }
+
+/* ---------- footer ----------------------------------------------------- */
+
+.login-foot {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 20px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  font-size: 0.84rem; color: var(--ink-soft);
+}
+.login-foot a { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 9px; }
+.login-foot a:hover { color: var(--brand); }
+.login-foot .powered { font-weight: 600; color: var(--ink); }
+
+/* ---------- narrow screens -------------------------------------------- */
+
+@media (max-width: 980px) {
+  .login-shell { grid-template-columns: 1fr; gap: 32px; padding: 28px 20px; }
+  .login-card  { justify-self: stretch; max-width: none; padding: 32px 24px; }
+  .login-pitch h1 { font-size: 2rem; }
+  .login-hero  { height: 170px; }
+}
+
+/* Below tablet the pitch is scenery in front of the thing the user came for. */
+@media (max-width: 640px) {
+  .login-pitch, .login-hero { display: none; }
+  .login-brand { justify-content: center; margin-bottom: 24px; }
+  .login-features { grid-template-columns: repeat(2, 1fr); }
+  .login-foot { justify-content: center; text-align: center; }
+}
