@@ -1433,9 +1433,10 @@ function FeedPlanTable({
 
   const { lines: rows, total: sum } = feedPlanLines(plan, typed, birds);
 
-  const Cell = ({ v, bad }: { v: number; bad?: boolean }) => (
+  const Cell = ({ v, bad, mark }: { v: number; bad?: boolean; mark?: boolean }) => (
     <Text style={[styles.fpNum, bad && styles.fpBad]} numberOfLines={1}>
       {v.toFixed(1)}
+      {mark ? <Text style={styles.fpMark}>*</Text> : null}
     </Text>
   );
 
@@ -1443,25 +1444,21 @@ function FeedPlanTable({
     <View style={styles.fpWrap}>
       <View style={styles.fpRow}>
         <Text style={[styles.fpHead, styles.fpName]} numberOfLines={1}>Feed</Text>
-        <Text style={[styles.fpHead, styles.fpNum]}>Req</Text>
-        <Text style={[styles.fpHead, styles.fpNum]}>Sent</Text>
-        <Text style={[styles.fpHead, styles.fpNum]}>Fed</Text>
-        <Text style={[styles.fpHead, styles.fpNum]}>Bal</Text>
-        <Text style={[styles.fpHead, styles.fpNum]}>Left</Text>
+        {(["Req", "Sent", "Fed", "Bal", "Left"] as const).map((h) => (
+          <Text key={h} style={[styles.fpHead, styles.fpNum]} numberOfLines={1}>
+            {h}
+            <Text style={styles.fpUnit}> kg</Text>
+          </Text>
+        ))}
       </View>
       {rows.map((r) => (
-        <View key={r.item}>
-          <View style={styles.fpRow}>
-            <Text style={[styles.fpCell, styles.fpName]} numberOfLines={1}>{r.name}</Text>
-            <Cell v={r.required} />
-            <Cell v={r.sent} />
-            <Cell v={r.fed} />
-            <Cell v={r.balance} bad={r.balance < 0} />
-            <Cell v={r.remaining} bad={r.remaining < 0} />
-          </View>
-          {r.flag ? (
-            <Text style={[styles.fpFlag, r.warn && styles.fpBad]}>{r.flag}</Text>
-          ) : null}
+        <View key={r.item} style={styles.fpRow}>
+          <Text style={[styles.fpCell, styles.fpName]} numberOfLines={1}>{r.name}</Text>
+          <Cell v={r.required} />
+          <Cell v={r.sent} mark={r.flagOn === "sent"} />
+          <Cell v={r.fed} />
+          <Cell v={r.balance} bad={r.balance < 0} mark={r.flagOn === "balance"} />
+          <Cell v={r.remaining} bad={r.remaining < 0} mark={r.flagOn === "remaining"} />
         </View>
       ))}
       {rows.length > 1 ? (
@@ -1486,6 +1483,11 @@ function FeedPlanTable({
             {sum.remaining.toFixed(1)}
           </Text>
         </View>
+      ) : null}
+      {rows.some((r) => r.flag) ? (
+        <Text style={styles.fpLegend} numberOfLines={2}>
+          {rows.filter((r) => r.flag).map((r) => `* ${r.name}: ${r.flag}`).join("   ")}
+        </Text>
       ) : null}
       {stock.length ? (
         <Text style={styles.fpStock}>
@@ -1776,21 +1778,32 @@ const useStyles = makeStyles((colors) => ({
     borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm,
     backgroundColor: colors.surface, paddingVertical: 4, paddingHorizontal: 6,
     marginTop: spacing.xs, marginBottom: spacing.md,
+    // Capped rather than stretched: on a tablet or the web build the columns
+    // spread until the figures sat a hand apart and stopped reading as rows.
+    maxWidth: 560,
   },
+  // No fixed heights anywhere: a row is as tall as its text, which is what
+  // lets the type size change without the layout having to be retuned.
   fpRow: { flexDirection: "row", alignItems: "center", paddingVertical: 2 },
   fpHead: {
     ...type.caption, fontSize: 9, color: colors.textMuted, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 0,
   },
   fpCell: { ...type.caption, fontSize: 10, color: colors.text },
-  // Six columns on a 430pt screen: the name takes what it needs and the five
-  // figures share the rest, each wide enough for "3426.0".
-  fpName: { flex: 1.9, paddingRight: 2 },
-  fpNum: { flex: 1, textAlign: "right", ...type.caption, fontSize: 10,
-           color: colors.text, paddingLeft: 2 },
+  // The columns size themselves: the figures share the width evenly but never
+  // squash below what "3426.0*" needs, and the name takes whatever is left and
+  // gives it back first when the screen is narrow. Same rule on every row, so
+  // they stay in line whatever each one happens to contain.
+  fpName: { flex: 2, minWidth: 58, flexShrink: 1, paddingRight: 2 },
+  fpNum: { flex: 1, minWidth: 40, textAlign: "right", ...type.caption,
+           fontSize: 10, color: colors.text, paddingLeft: 2 },
   fpBad: { color: colors.danger, fontWeight: "700" },
-  fpFlag: { ...type.caption, fontSize: 9, color: colors.textMuted,
-            textAlign: "right", marginBottom: 2 },
+  fpUnit: { fontSize: 8, fontWeight: "400", color: colors.textFaint },
+  fpMark: { color: colors.danger, fontWeight: "700" },
+  fpLegend: {
+    ...type.caption, fontSize: 9, color: colors.danger,
+    borderTopWidth: 1, borderTopColor: colors.border, marginTop: 3, paddingTop: 3,
+  },
   fpTotalRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 2, paddingTop: 3 },
   fpTotal: { fontWeight: "800" },
   fpStock: {

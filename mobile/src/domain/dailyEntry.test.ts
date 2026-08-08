@@ -538,3 +538,31 @@ describe("typedFeed", () => {
     expect(typedFeed({})).toEqual({});
   });
 });
+
+describe("feedPlanLines flag placement", () => {
+  const row = (over: Record<string, string | number> = {}) => ({
+    item: 13, name: "Pre-Starter Feed", cap_per_bird_kg: "0.4",
+    required_kg: "400.00", sent_kg: "1000.00", fed_kg: "25.00",
+    balance_kg: "975.00", remaining_kg: "375.00", excess_kg: null,
+    ...over,
+  }) as any;
+  const one = (over = {}) => feedPlanLines([row(over)], {}, 1000).lines[0];
+
+  it("puts an unreceived flag against the balance", () => {
+    // The marker has to sit on the figure it explains, or the reader has to
+    // guess which of five numbers is the problem.
+    expect(one({ sent_kg: "0.00" }).flagOn).toBe("balance");
+  });
+
+  it("puts an over-cap flag against what is left to feed", () => {
+    expect(one({ fed_kg: "500.00", sent_kg: "500.00" }).flagOn).toBe("remaining");
+  });
+
+  it("puts an extra-sent flag against what was sent", () => {
+    expect(one().flagOn).toBe("sent");
+  });
+
+  it("marks nothing when the position is sound", () => {
+    expect(one({ sent_kg: "400.00" }).flagOn).toBeNull();
+  });
+});

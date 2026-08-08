@@ -143,6 +143,9 @@ export interface FeedPlanLine {
   remaining: number;
   /** The one thing worth saying about this row, worst first; "" when fine. */
   flag: string;
+  /** Which figure the flag is about, so a marker can sit against that column
+   *  instead of the flag taking a line of its own. */
+  flagOn: "balance" | "remaining" | "sent" | null;
   warn: boolean;
 }
 
@@ -160,7 +163,8 @@ export function feedPlanLines(
   plan: FeedPlanRow[],
   typed: Record<string, number>,
   birds: number
-): { lines: FeedPlanLine[]; total: Omit<FeedPlanLine, "item" | "name" | "flag" | "warn"> } {
+): { lines: FeedPlanLine[];
+     total: Omit<FeedPlanLine, "item" | "name" | "flag" | "flagOn" | "warn"> } {
   const total = { required: 0, sent: 0, fed: 0, balance: 0, remaining: 0 };
   const lines = plan.map((p) => {
     const fed = num(p.fed_kg) + (typed[String(p.item)] ?? 0);
@@ -171,14 +175,22 @@ export function feedPlanLines(
     const over = sent - required;
 
     let flag = "";
-    if (balance < 0) flag = `${Math.abs(balance).toFixed(0)} unreceived`;
-    else if (remaining < 0) flag = `${Math.abs(remaining).toFixed(0)} over cap`;
-    else if (over > 0) flag = `${over.toFixed(0)} extra sent`;
+    let flagOn: FeedPlanLine["flagOn"] = null;
+    if (balance < 0) {
+      flag = `${Math.abs(balance).toFixed(0)} unreceived`;
+      flagOn = "balance";
+    } else if (remaining < 0) {
+      flag = `${Math.abs(remaining).toFixed(0)} over cap`;
+      flagOn = "remaining";
+    } else if (over > 0) {
+      flag = `${over.toFixed(0)} extra sent`;
+      flagOn = "sent";
+    }
 
     total.required += required; total.sent += sent; total.fed += fed;
     total.balance += balance; total.remaining += remaining;
     return { item: p.item, name: p.name, required, sent, fed, balance, remaining,
-             flag, warn: balance < 0 || remaining < 0 };
+             flag, flagOn, warn: balance < 0 || remaining < 0 };
   });
   return { lines, total };
 }
