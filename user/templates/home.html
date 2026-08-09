@@ -125,6 +125,12 @@
   .dw-open { margin-left:auto; font-size:.72rem; color:#6b7890; text-decoration:none; white-space:nowrap; }
   .dw-open:hover { color:#2563eb; }
   .dw-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:9px; }
+  /* Three stats in a narrow card leave the third stranded on a row of its own
+     beside a gap. Where there are exactly three — the balance widgets, whose
+     first figure is the total the other two break down — the total spans the
+     card and the two parts sit side by side under it, which is the shape the
+     numbers actually have. */
+  .dw-stats:has(> :nth-child(3):last-child) > :first-child { grid-column: 1 / -1; }
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
   .dw-stat .dw-label { display:block; font-size:.68rem; color:#6b7890; text-transform:uppercase;
                        letter-spacing:.04em; }
