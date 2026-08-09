@@ -570,8 +570,14 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   display: grid;
   grid-template-columns: 1.05fr 1.15fr .8fr;
   gap: 1rem;
-  align-items: start;
+  /* Stretch, not start. Left to size themselves the three cards ended at three
+     different heights and the row read as three unrelated panels rather than
+     one step-1-2-3 across the page. They share a height instead, set by the
+     tallest — content still starts at the top of each. */
+  align-items: stretch;
 }
+.sn-grid > * { display: flex; flex-direction: column; }
+.sn-grid > * > .ah-card { flex: 1; }
 
 /* Preview and Summary sit under the three columns as one row, because both
    answer "is this right?" and belong together at the point of decision. */
@@ -580,7 +586,9 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   grid-template-columns: 1.6fr 1fr;
   gap: 1rem;
   margin-top: 1rem;
+  align-items: stretch;
 }
+.sn-lower > .ah-card { display: flex; flex-direction: column; }
 
 @media (max-width: 1199.98px) {
   .sn-grid { grid-template-columns: 1fr 1fr; }
@@ -593,7 +601,11 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
 }
 
 .sn-card { padding: 1rem 1.1rem 1.15rem; }
-.sn-card + .sn-card { margin-top: 1rem; }
+/* Only for cards stacked *within* one column. Left unscoped this also caught
+   Summary, which is the grid sibling of Preview Message, and pushed it 16px
+   below the card it is supposed to sit level with — the gap between grid
+   items is the grid's `gap`, never a margin. */
+.sn-grid > * > .sn-card + .sn-card { margin-top: 1rem; }
 
 .sn-card-title {
   display: flex;
