@@ -217,7 +217,7 @@ class DashboardWidgetTests(TestCase):
     def test_a_widget_says_which_filters_it_could_not_apply(self):
         """Receivables has no farm dimension; the card must admit that rather
         than show an unfiltered figure under a filter."""
-        w = self.widget(self.admin, "balances",
+        w = self.widget(self.admin, "receivables",
                         {"branch": self.farm.branch_id, "farm": self.farm.id})
         self.assertIn("Branch", w["ignored"])
         self.assertIn("Farm", w["ignored"])
@@ -226,7 +226,7 @@ class DashboardWidgetTests(TestCase):
         w = self.widget(self.admin, "live_flock", {"farm": self.farm.id})
         self.assertIsNone(w["ignored"])
         # and none at all when nothing is filtered
-        self.assertIsNone(self.widget(self.admin, "balances")["ignored"])
+        self.assertIsNone(self.widget(self.admin, "receivables")["ignored"])
 
     def test_stock_alerts_takes_the_farm_but_not_the_supervisor(self):
         w = self.widget(self.admin, "stock_alerts",
@@ -279,7 +279,7 @@ class DashboardWidgetTests(TestCase):
 
     def test_a_non_broiler_report_link_is_left_clean(self):
         """Sending branch=3 to the Customer Balance report is just noise."""
-        w = self.widget(self.admin, "balances", {"farm": self.farm.id})
+        w = self.widget(self.admin, "receivables", {"farm": self.farm.id})
         self.assertNotIn("?", w["url"])
 
     def test_the_dashboard_renders_the_filter_bar(self):
@@ -303,7 +303,7 @@ class DashboardWidgetTests(TestCase):
         keys = [w["key"] for w in dashboard_widgets(clerk, use_cache=False)]
         self.assertEqual(keys, ["stock_alerts"])
 
-    def test_each_half_of_receivables_and_payables_is_gated_on_its_own_tab(self):
+    def test_receivables_and_payables_are_each_gated_on_their_own_tab(self):
         User = get_user_model()
         clerk = User.objects.create_user("aronly", "r@x.com", "Str0ngPass!")
         group = Group.objects.create(name="Receivables Only")
@@ -311,24 +311,30 @@ class DashboardWidgetTests(TestCase):
         GroupTabPermission.objects.create(group=group, tab_code="customer_balance",
                                           can_view=True)
 
-        w = self.widget(clerk, "balances")
-        labels = [s["label"] for s in w["stats"]]
-        self.assertEqual(labels, ["Receivable"], "the payables half leaked")
+        w = self.widget(clerk, "receivables")
+        self.assertEqual([s["label"] for s in w["stats"]], ["Total receivable"])
+        # And nothing of the supplier side reaches them at all — the two are
+        # separate widgets now, not two halves of one card.
+        self.assertIsNone(self.widget(clerk, "payables"))
 
-    def test_a_widget_links_nowhere_when_its_report_is_off_limits(self):
-        """The balances widget links to the Customer Balance report; someone
-        with only the supplier half must not be handed that link."""
+    def test_a_widget_is_absent_when_its_report_is_off_limits(self):
+        """Someone with only the supplier balance gets Payables and no
+        Receivables — where the combined card used to appear with a link they
+        could not follow."""
         User = get_user_model()
         clerk = User.objects.create_user("aponly", "p@x.com", "Str0ngPass!")
         group = Group.objects.create(name="Payables Only")
         clerk.groups.add(group)
         GroupTabPermission.objects.create(group=group, tab_code="supplier_balance",
                                           can_view=True)
-        self.assertEqual(self.widget(clerk, "balances")["url"], "")
+        self.assertIsNone(self.widget(clerk, "receivables"))
+        self.assertEqual([s["label"] for s in self.widget(clerk, "payables")["stats"]],
+                         ["Total payable"])
 
     def test_the_cache_does_not_share_a_body_between_different_permissions(self):
-        """Both users see the 'balances' widget, but not the same halves - a
-        cache keyed on the widget alone would serve one to the other."""
+        """The two see different widgets entirely — one Receivables, one
+        Payables — and a cache keyed on the user alone would serve one the
+        other's card."""
         User = get_user_model()
         users = []
         for name, tab in (("cacheA", "customer_balance"), ("cacheB", "supplier_balance")):
@@ -340,8 +346,8 @@ class DashboardWidgetTests(TestCase):
 
         first = dashboard_widgets(users[0])[0]        # caching on
         second = dashboard_widgets(users[1])[0]
-        self.assertEqual([s["label"] for s in first["stats"]], ["Receivable"])
-        self.assertEqual([s["label"] for s in second["stats"]], ["Payable"])
+        self.assertEqual(first["key"], "receivables")
+        self.assertEqual(second["key"], "payables")
 
     # ---- robustness -------------------------------------------------------
 
@@ -381,9 +387,10 @@ class DashboardWidgetTests(TestCase):
                 except NoReverseMatch:
                     self.fail(f"{key}: '{url_name}' is not routable")
 
-    def test_a_superuser_gets_all_four(self):
+    def test_a_superuser_gets_them_all(self):
         self.assertEqual([w["key"] for w in dashboard_widgets(self.admin, use_cache=False)],
-                         ["live_flock", "daily_entries", "balances", "stock_alerts"])
+                         ["live_flock", "daily_entries", "receivables", "payables",
+                          "stock_alerts"])
 
     # ---- the endpoint and the page ---------------------------------------
 

@@ -186,6 +186,7 @@
   .gs-blue{background:#e8f0ff;color:#2563eb}.gs-green{background:#e6f7f3;color:#078b75}
   .gs-orange{background:#fff1df;color:#d97706}.gs-purple{background:#f1ebff;color:#7c3aed}
   .gs-red{background:#ffecee;color:#dc465b}.gs-cyan{background:#e5f7fb;color:#0087a5}
+  .gs-amber{background:#fef6e0;color:#b45309}
   @media (max-width:1599.98px) { .gs-kbd { display:none; } }
 </style>
 {% endblock %}
@@ -635,7 +636,7 @@
       if (w.ignored) body += '<span class="dw-ignored"><i class="fa-solid fa-circle-info"></i> '
                            + esc(w.ignored) + '</span>';
 
-      return '<div class="col-12 col-md-6 col-xl-3">'
+      return '<div class="col-12 col-md-6 col-xl">'
            + '<div class="dw-card' + (w.error ? ' is-error' : '') + '">'
            + '<div class="dw-head">'
            + '<span class="dw-head-icon ' + esc(w.colour) + '"><i class="' + esc(w.icon) + '"></i></span>'
@@ -663,7 +664,7 @@
     function skeletons() {
       grid.innerHTML = new Array(5).join('|').split('|')
         .map(function () {
-          return '<div class="col-12 col-md-6 col-xl-3"><div class="dw-skel"></div></div>';
+          return '<div class="col-12 col-md-6 col-xl"><div class="dw-skel"></div></div>';
         }).join('');
     }
 
