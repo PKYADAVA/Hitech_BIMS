@@ -35,10 +35,12 @@ def _div(numerator, denominator):
 #: recorded against it — an absent row reads as a complete statement.
 UNTRACKED_REVENUE = ["Bird Transfer Income", "Litter Sales", "Gunny Bag Sales",
                      "Manure Sales", "Scrap Sales", "Insurance Claim", "Other Income"]
-UNTRACKED_COST = ["Labour", "Electricity", "Diesel", "Water", "Gas",
-                  "Repair & Maintenance", "Biosecurity", "Supervisor Salary",
-                  "Office Expense Allocation", "Depreciation", "Insurance",
-                  "Interest Allocation"]
+GROWING_HEADS = ["Labour", "Electricity", "Diesel", "Water", "Gas",
+                 "Repair & Maintenance", "Biosecurity", "Supervisor Salary",
+                 "Miscellaneous"]
+ADMIN_HEADS = ["Office Expense Allocation", "Accounting Charges", "Depreciation",
+               "Interest Allocation", "Insurance"]
+UNTRACKED_COST = GROWING_HEADS + ADMIN_HEADS
 
 
 def build_production_pl(report, batch):
@@ -74,13 +76,27 @@ def build_production_pl(report, batch):
     chick_cost = sum((_d(r.get("amount")) for r in (report.get("chick_placements") or [])), ZERO)
 
     tracked_cost = (chick_cost + feed_cost + medicine_cost).quantize(Q2)
-    cost_lines = [
-        {"label": "Chick Cost", "amount": chick_cost.quantize(Q2), "tracked": True},
-        {"label": "Feed Cost", "amount": feed_cost, "tracked": True},
-        {"label": "Medicine & Health Cost", "amount": medicine_cost, "tracked": True},
+    # Grouped the way the statement is read: five named blocks, each with its
+    # own total, then one grand total. Two of the five have nothing behind them
+    # in this system yet and say so rather than showing a total of zero.
+    cost_blocks = [
+        {"title": "Chick Cost", "accent": "#2a78d6", "total": chick_cost.quantize(Q2),
+         "tracked": True,
+         "lines": [{"label": "Chick Placement", "amount": chick_cost.quantize(Q2),
+                    "tracked": True}]},
+        {"title": "Feed Cost", "accent": "#1baf7a", "total": feed_cost, "tracked": True,
+         "lines": [{"label": "Feed Consumed", "amount": feed_cost, "tracked": True}]},
+        {"title": "Medicine & Health Cost", "accent": "#e87ba4", "total": medicine_cost,
+         "tracked": True,
+         "lines": [{"label": "Medicine & Vaccine Consumed", "amount": medicine_cost,
+                    "tracked": True}]},
+        {"title": "Growing Expenses", "accent": "#4a3aa7", "total": None, "tracked": False,
+         "lines": [{"label": n, "amount": None, "tracked": False} for n in GROWING_HEADS]},
+        {"title": "Administrative Cost", "accent": "#eda100", "total": None,
+         "tracked": False,
+         "lines": [{"label": n, "amount": None, "tracked": False} for n in ADMIN_HEADS]},
     ]
-    cost_lines += [{"label": name, "amount": None, "tracked": False}
-                   for name in UNTRACKED_COST]
+    cost_lines = [line for block in cost_blocks for line in block["lines"]]
 
     # --- the result -------------------------------------------------------
     sold_weight = _d(costing.get("sold_weight"))
@@ -91,6 +107,7 @@ def build_production_pl(report, batch):
     return {
         "revenue_lines": revenue_lines,
         "total_revenue": total_revenue.quantize(Q2),
+        "cost_blocks": cost_blocks,
         "cost_lines": cost_lines,
         "total_cost": tracked_cost,
         "gross_profit": gross_profit,

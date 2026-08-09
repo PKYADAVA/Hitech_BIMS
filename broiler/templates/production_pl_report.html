@@ -112,13 +112,19 @@ A statement missing its rows reads as complete, and somebody decides on it.
       <div class="gc-card gc-full h-100">
         <div class="gc-card-header">
           <span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-receipt"></i></span>
-          Production Cost — at actual purchase prices
+          Production Cost Breakup — at actual purchase prices
         </div>
-        <div class="table-responsive">
+        {% for block in pl.cost_blocks %}
+        <div class="table-responsive mb-2">
           <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
-            <thead><tr><th>Cost Head</th><th class="ds-num text-end">Amount (₹)</th></tr></thead>
+            <thead>
+              <tr>
+                <th style="background:{{ block.accent }};color:#fff">{{ block.title }}</th>
+                <th class="ds-num text-end" style="background:{{ block.accent }};color:#fff">Amount (₹)</th>
+              </tr>
+            </thead>
             <tbody>
-              {% for line in pl.cost_lines %}
+              {% for line in block.lines %}
               <tr>
                 <td>{{ line.label }}</td>
                 <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
@@ -127,12 +133,48 @@ A statement missing its rows reads as complete, and somebody decides on it.
               </tr>
               {% endfor %}
               <tr class="report-total-row">
-                <td>Total Production Cost</td><td class="text-end">{{ pl.total_cost }}</td>
+                <td>Total {{ block.title }}</td>
+                <td class="text-end {% if not block.tracked %}text-muted{% endif %}">
+                  {% if block.tracked %}{{ block.total }}{% else %}not tracked{% endif %}
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
+        {% endfor %}
       </div>
+    </div>
+  </div>
+
+  {% comment %}
+    The mockup's Total Production Cost strip. Two of its five columns have
+    nothing behind them in this system, and say so — a zero there would read as
+    a flock that cost nothing to grow.
+  {% endcomment %}
+  <div class="gc-card gc-full mt-3">
+    <div class="gc-card-header">
+      <span class="gc-card-icon" style="--ci-accent:#e34948;--ci-bg:#fbe9e9"><i class="fas fa-calculator"></i></span>
+      Total Production Cost
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+        <thead>
+          <tr>
+            {% for block in pl.cost_blocks %}<th class="text-end">{{ block.title }} (₹)</th>{% endfor %}
+            <th class="text-end">Grand Total Cost (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {% for block in pl.cost_blocks %}
+            <td class="text-end {% if not block.tracked %}text-muted{% endif %}">
+              {% if block.tracked %}{{ block.total }}{% else %}not tracked{% endif %}
+            </td>
+            {% endfor %}
+            <td class="text-end"><b>{{ pl.total_cost }}</b></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
