@@ -100,12 +100,16 @@
           <td class="txt">{{ r.line|default:"-" }}</td>
           <td class="txt">{{ r.supervisor|default:"-" }}</td>
           <td class="txt">{{ r.farmer|default:"-" }}</td>
-          {# Straight through to this flock's own register: the summary says a
-             flock is off, and the next question is always which day it went
-             off. Dated from placement so the whole run is on screen. #}
-          {# New tab, not this one: the summary is read across the fleet and a
-             flock is checked out of it, so losing the scroll position and the
-             filters to come back to would cost more than the drill-down. #}
+          {% comment %}
+            Straight through to this flock's own register: the summary says a
+            flock is off, and the next question is always which day it went off.
+            Dated from placement so the whole run is on screen.
+          {% endcomment %}
+          {% comment %}
+            New tab, not this one: the summary is read across the fleet and a
+            flock is checked out of it, so losing the scroll position and the
+            filters to come back to would cost more than the drill-down.
+          {% endcomment %}
           <td class="txt"><a class="lfs-drill" target="_blank" rel="noopener"
               title="Detailed daily entries for this flock (opens in a new tab)"
               href="{% url 'farm_detailed_daily_entry_report' %}?farm={{ r.farm_id }}&amp;batch={{ r.batch_id }}{% if r.placement_date %}&amp;from_date={{ r.placement_date|date:'Y-m-d' }}{% endif %}&amp;to_date={{ today|date:'Y-m-d' }}">{{ r.batch }}<i class="fas fa-arrow-up-right-from-square lfs-drill-ico"></i></a></td>

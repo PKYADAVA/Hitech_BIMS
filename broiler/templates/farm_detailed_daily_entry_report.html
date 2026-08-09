@@ -57,8 +57,10 @@
         <option value="">All</option>
         {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
       </select></div>
-    {# Only offered once a farm is chosen — a batch belongs to one farm, and
-       the unfiltered list runs to thousands. #}
+    {% comment %}
+      Only offered once a farm is chosen — a batch belongs to one farm, and the
+      unfiltered list runs to thousands.
+    {% endcomment %}
     <div class="col-md-2"><label class="form-label">Batch</label>
       <select name="batch" class="form-select form-select-sm" {% if not farm_id %}disabled title="Choose a farm first"{% endif %}>
         <option value="">All</option>
