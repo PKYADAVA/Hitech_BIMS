@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
+import { Db } from "./dbTypes";
+import { openSqlite } from "./sqlite";
 import { SyncStatus } from "./types";
 
 /**
@@ -29,12 +31,6 @@ const WEB_KEY = "bims_offline_web_v1";
 
 type Row = Record<string, unknown>;
 
-export interface Db {
-  run(sql: string, params?: unknown[]): Promise<void>;
-  all<T = Row>(sql: string, params?: unknown[]): Promise<T[]>;
-  first<T = Row>(sql: string, params?: unknown[]): Promise<T | null>;
-}
-
 let ready: Promise<Db> | null = null;
 
 /**
@@ -52,25 +48,9 @@ export function database(): Promise<Db> {
 }
 
 async function open(): Promise<Db> {
-  const db = Platform.OS === "web" ? memoryDb() : await sqliteDb();
+  const db = Platform.OS === "web" ? browserDb() : await openSqlite();
   await migrate(db);
   return db;
-}
-
-async function sqliteDb(): Promise<Db> {
-  const SQLite = await import("expo-sqlite");
-  const handle = await SQLite.openDatabaseAsync(DB_NAME);
-  // WAL keeps a reader (the Sync Center, refreshing) from blocking the writer
-  // (the engine, marking an entry synced) — they run at the same time here.
-  await handle.execAsync("PRAGMA journal_mode = WAL;");
-  await handle.execAsync("PRAGMA foreign_keys = ON;");
-  return {
-    run: async (sql, params = []) => { await handle.runAsync(sql, params as never[]); },
-    all: async <T,>(sql: string, params: unknown[] = []) =>
-      handle.getAllAsync<T>(sql, params as never[]),
-    first: async <T,>(sql: string, params: unknown[] = []) =>
-      (await handle.getFirstAsync<T>(sql, params as never[])) ?? null,
-  };
 }
 
 // --- schema ----------------------------------------------------------------
@@ -163,7 +143,7 @@ async function migrate(db: Db): Promise<void> {
  * through to storage; a read never touches it, because the rows in hand are
  * already the truth.
  */
-function memoryDb(): Db {
+function browserDb(): Db {
   const rows: Row[] = [];
   const meta: Row[] = [];
   let hydrated = false;
@@ -278,3 +258,5 @@ export async function resetDatabase(): Promise<void> {
 export const SYNC_STATUSES: SyncStatus[] = [
   "pending", "syncing", "synced", "failed", "conflict",
 ];
+
+export type { Db };
