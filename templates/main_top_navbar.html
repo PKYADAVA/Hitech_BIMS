@@ -160,6 +160,9 @@
               {% if 'broiler_batch_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'broiler_batch_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-file-alt"></i>Batch History Report
               </a></li>{% endif %}
+              {% if 'production_pl_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'production_pl_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-chart-line"></i>Production Profit &amp; Loss
+              </a></li>{% endif %}
               {% if 'chicks_placement_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chicks_placement_report' %}" target="_blank" rel="noopener">
                 <i class="fa-solid fa-kiwi-bird"></i>Chicks Placement Report
               </a></li>{% endif %}
@@ -180,6 +183,9 @@
               </a></li>{% endif %}
               {% if 'batch_wise_feed_scheduling_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'batch_wise_feed_scheduling_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-calendar-check"></i>Batch wise Feed Scheduling Report
+              </a></li>{% endif %}
+              {% if 'gc_realization_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'gc_realization_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-scale-balanced"></i>GC Realization Report
               </a></li>{% endif %}
             </ul>
           </li>
