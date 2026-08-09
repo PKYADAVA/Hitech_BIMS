@@ -66,14 +66,14 @@ def build_production_pl(report, batch):
     consumption, item_ids = _consumption_rows(report)
     rates = purchase_rates(item_ids, on_or_before=costing.get("sale_start_date"))
 
-    feed_cost, feed_unpriced = value_consumption(
-        [r for r in consumption if r["kind"] == "feed"], rates)
-    medicine_cost, med_unpriced = value_consumption(
-        [r for r in consumption if r["kind"] == "medicine"], rates)
+    feed_rows = [r for r in consumption if r["kind"] == "feed"]
+    med_rows = [r for r in consumption if r["kind"] == "medicine"]
+    feed_cost, feed_unpriced = value_consumption(feed_rows, rates)
+    medicine_cost, med_unpriced = value_consumption(med_rows, rates)
 
     # Chicks are bought as a placement, so what was paid for them is on the
     # placement itself rather than in a feed store's purchase history.
-    chick_cost = sum((_d(r.get("amount")) for r in (report.get("chick_placements") or [])), ZERO)
+    chick_cost = sum((_d(r.get("amount")) for r in (report.get("chick_placement") or [])), ZERO)
 
     tracked_cost = (chick_cost + feed_cost + medicine_cost).quantize(Q2)
     # Grouped the way the statement is read: five named blocks, each with its
@@ -82,14 +82,24 @@ def build_production_pl(report, batch):
     cost_blocks = [
         {"title": "Chick Cost", "accent": "#2a78d6", "total": chick_cost.quantize(Q2),
          "tracked": True,
-         "lines": [{"label": "Chick Placement", "amount": chick_cost.quantize(Q2),
-                    "tracked": True}]},
+         "lines": [{"label": r.get("item") or "Day Old Chicks",
+                    "quantity": _d(r.get("birds") or r.get("quantity")),
+                    "rate": None, "amount": _d(r.get("amount")).quantize(Q2),
+                    "tracked": True}
+                   for r in (report.get("chick_placement") or [])]
+                  or [{"label": "No placement recorded", "amount": ZERO,
+                       "tracked": True}]},
+        # Itemised, because "Feed Cost 25,30,000" tells nobody which phase ran
+        # dear. Each line is that item's own consumption at its own purchase
+        # rate, so the block total is the sum of visible rows rather than a
+        # figure arrived at somewhere else.
         {"title": "Feed Cost", "accent": "#1baf7a", "total": feed_cost, "tracked": True,
-         "lines": [{"label": "Feed Consumed", "amount": feed_cost, "tracked": True}]},
+         "lines": _item_lines(feed_rows, rates) or
+                  [{"label": "No feed consumed", "amount": ZERO, "tracked": True}]},
         {"title": "Medicine & Health Cost", "accent": "#e87ba4", "total": medicine_cost,
          "tracked": True,
-         "lines": [{"label": "Medicine & Vaccine Consumed", "amount": medicine_cost,
-                    "tracked": True}]},
+         "lines": _item_lines(med_rows, rates) or
+                  [{"label": "No medicine consumed", "amount": ZERO, "tracked": True}]},
         {"title": "Growing Expenses", "accent": "#4a3aa7", "total": None, "tracked": False,
          "lines": [{"label": n, "amount": None, "tracked": False} for n in GROWING_HEADS]},
         {"title": "Administrative Cost", "accent": "#eda100", "total": None,
@@ -139,6 +149,27 @@ def build_production_pl(report, batch):
     }
 
 
+def _item_lines(rows, rates):
+    """One line per item: what was consumed, at what it cost.
+
+    An item with no purchase behind it still gets a row, marked untracked. It
+    was eaten either way, and dropping it would make the block total look like
+    the sum of what is shown when it is not.
+    """
+    lines = []
+    for row in rows:
+        rate = rates.get(row.get("item_id"))
+        quantity = _d(row.get("quantity"))
+        lines.append({
+            "label": row.get("name") or "Unnamed item",
+            "quantity": quantity,
+            "rate": rate,
+            "amount": (quantity * rate).quantize(Q2) if rate is not None else None,
+            "tracked": rate is not None,
+        })
+    return [line for line in lines if line["quantity"] or line["amount"]]
+
+
 def _consumption_rows(report):
     """What the flock ate and was treated with, as ``{item_id, quantity, kind}``.
 
@@ -158,12 +189,13 @@ def _consumption_rows(report):
     for row in feed_rows:
         item_id = by_code.get(row.get("item"))
         rows.append({"item_id": item_id, "quantity": _d(row.get("consumed")),
-                     "kind": "feed"})
+                     "name": row.get("item"), "kind": "feed"})
         if item_id:
             item_ids.add(item_id)
     for row in report.get("medicine_consumption") or []:
         item_id = row.get("item_id")
         rows.append({"item_id": item_id, "quantity": _d(row.get("quantity")),
+                     "name": row.get("item") or row.get("item_name"),
                      "kind": "medicine"})
         if item_id:
             item_ids.add(item_id)

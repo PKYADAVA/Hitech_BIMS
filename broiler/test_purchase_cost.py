@@ -106,7 +106,9 @@ class ProductionPLTests(TestCase):
             "batch_costing": {"sold_weight": 3000, "sold_birds": 1500,
                               "chicks_placed": 1600, "fcr": Decimal("1.58")},
             "bird_sales": [{"amount": 300000}],
-            "chick_placements": [{"amount": 56000}],
+            # The report calls it chick_placement, singular. The fixture had
+            # the plural, so it agreed with the bug instead of catching it.
+            "chick_placement": [{"amount": 56000, "birds": 1600}],
             "feed_summary": [], "medicine_consumption": [],
         }
         report.update(over)
