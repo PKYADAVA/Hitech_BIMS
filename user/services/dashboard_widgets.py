@@ -278,55 +278,67 @@ def _daily_entries(viewable, filters, user=None):
     }
 
 
-def _balances(viewable, filters, user=None):
-    """Receivables and payables, each half shown only to those who may see it.
+def _receivables(viewable, filters, user=None):
+    """Money owed to us, by customer.
 
-    Both halves call the balance reports' own per-party row builders, so the
-    dashboard total and the report total are the same number by construction.
-    A customer's balance has no farm, line or supervisor dimension, so only the
-    date applies — it becomes the "as on" date.
+    Split from payables because they were one widget sharing one row list, so
+    the "largest outstanding" under Receivables listed suppliers alongside
+    customers — the same party and the same figure appearing under both
+    headings, which reads as money counted twice.
+
+    Calls the balance report's own per-party row builder, so the dashboard
+    total and the report total are the same number by construction. A party
+    balance has no farm, line or supervisor dimension, so only the date
+    applies — it becomes the "as on" date.
     """
+    from sales.models import Customer
+    from sales.views import _customer_balance_row
+
     day = filters.get("date") or timezone.localdate()
     as_on = filters.get("date")          # None = all time, i.e. today's position
-    stats, rows = [], []
 
-    if "customer_balance" in viewable:
-        from sales.models import Customer
-        from sales.views import _customer_balance_row
-
-        parties = [_customer_balance_row(c, None, as_on, day)
-                   for c in Customer.objects.all()]
-        owed = [p for p in parties if p["debit"] > 0]
-        total = sum((p["debit"] for p in owed), 0)
-        stats.append({"label": "Receivable", "value": "₹" + _inr(total),
-                      "sub": f"from {len(owed)} customer{'' if len(owed) == 1 else 's'}",
-                      "tone": "warn" if total else None})
-        rows += [{"label": p["name"], "value": "₹" + _inr(p["debit"]),
-                  "meta": f"{p['gap']}d"}
-                 for p in sorted(owed, key=lambda p: -p["debit"])[:3]]
-
-    if "supplier_balance" in viewable:
-        from purchase.models import Supplier
-        from purchase.views import _supplier_balance_row
-
-        parties = [_supplier_balance_row(s, None, as_on, day)
-                   for s in Supplier.objects.all()]
-        due = [p for p in parties if p["credit"] > 0]
-        total = sum((p["credit"] for p in due), 0)
-        stats.append({"label": "Payable", "value": "₹" + _inr(total),
-                      "sub": f"to {len(due)} supplier{'' if len(due) == 1 else 's'}",
-                      "tone": "warn" if total else None})
-        rows += [{"label": p["name"], "value": "₹" + _inr(p["credit"]),
-                  "meta": f"{p['gap']}d"}
-                 for p in sorted(due, key=lambda p: -p["credit"])[:3]]
-
-    if not stats:
-        return None
+    parties = [_customer_balance_row(c, None, as_on, day)
+               for c in Customer.objects.all()]
+    owed = [p for p in parties if p["debit"] > 0]
+    total = sum((p["debit"] for p in owed), 0)
     return {
-        "stats": stats,
-        "rows": rows,
-        "rows_title": "Largest outstanding" if rows else None,
-        "note": "Nothing outstanding." if not rows else None,
+        "stats": [{"label": "Total receivable", "value": "₹" + _inr(total),
+                   "sub": f"from {len(owed)} customer{'' if len(owed) == 1 else 's'}",
+                   "tone": "warn" if total else None}],
+        "rows": [{"label": p["name"], "value": "₹" + _inr(p["debit"]),
+                  "meta": f"{p['gap']}d"}
+                 for p in sorted(owed, key=lambda p: -p["debit"])[:3]],
+        "rows_title": "Largest outstanding" if owed else None,
+        "note": "Nothing outstanding." if not owed else None,
+        "filters_used": ["date"],
+    }
+
+
+def _payables(viewable, filters, user=None):
+    """Money we owe, by supplier. The other half of what used to be one widget.
+
+    See _receivables: the two were sharing a row list, so each heading listed
+    the other's parties.
+    """
+    from purchase.models import Supplier
+    from purchase.views import _supplier_balance_row
+
+    day = filters.get("date") or timezone.localdate()
+    as_on = filters.get("date")
+
+    parties = [_supplier_balance_row(s, None, as_on, day)
+               for s in Supplier.objects.all()]
+    due = [p for p in parties if p["credit"] > 0]
+    total = sum((p["credit"] for p in due), 0)
+    return {
+        "stats": [{"label": "Total payable", "value": "₹" + _inr(total),
+                   "sub": f"to {len(due)} supplier{'' if len(due) == 1 else 's'}",
+                   "tone": "warn" if total else None}],
+        "rows": [{"label": p["name"], "value": "₹" + _inr(p["credit"]),
+                  "meta": f"{p['gap']}d"}
+                 for p in sorted(due, key=lambda p: -p["credit"])[:3]],
+        "rows_title": "Largest outstanding" if due else None,
+        "note": "Nothing outstanding." if not due else None,
         "filters_used": ["date"],
     }
 
@@ -390,9 +402,13 @@ WIDGETS = [
      "live_flock_summary_report", "fa-solid fa-egg", "gs-blue", _live_flock),
     ("daily_entries", "Daily Entries", ("daily_entry_list",),
      "daily_entry_list", "fa-solid fa-clipboard-check", "gs-green", _daily_entries),
-    ("balances", "Receivables & Payables",
-     ("customer_balance", "supplier_balance"),
-     "customer_balance", "fa-solid fa-indian-rupee-sign", "gs-orange", _balances),
+    # Two widgets, not one: each answers to its own permission, so a user who
+    # may see customer balances and not supplier ones now gets the half they
+    # are entitled to instead of a card mixing both.
+    ("receivables", "Receivables", ("customer_balance",),
+     "customer_balance", "fa-solid fa-indian-rupee-sign", "gs-orange", _receivables),
+    ("payables", "Payables", ("supplier_balance",),
+     "supplier_balance", "fa-solid fa-indian-rupee-sign", "gs-amber", _payables),
     ("stock_alerts", "Stock Alerts", ("negative_stock_report",),
      "negative_stock_report", "fa-solid fa-triangle-exclamation", "gs-red", _stock_alerts),
 ]
@@ -428,7 +444,7 @@ DEFAULT_PANEL_ORDER = (
     # what needs doing before what happened, and an unread critical alert
     # outranks every figure below it.
     "alerts_widget",
-    "live_flock", "daily_entries", "balances", "stock_alerts",
+    "live_flock", "daily_entries", "receivables", "payables", "stock_alerts",
     "field_team",
 )
 

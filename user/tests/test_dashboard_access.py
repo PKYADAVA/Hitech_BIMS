@@ -59,9 +59,9 @@ class DashboardAccessTests(TestCase):
                 enabled=enabled_by_key.get(key, True), position=index)
 
     def test_a_disabled_widget_disappears(self):
-        self.configure(balances=False)
+        self.configure(receivables=False)
         keys = self.keys(self.user())
-        self.assertNotIn("balances", keys)
+        self.assertNotIn("receivables", keys)
         self.assertIn("live_flock", keys)
 
     def test_disabling_everything_leaves_an_empty_dashboard(self):
@@ -126,15 +126,15 @@ class DashboardAccessTests(TestCase):
         html = self.client.get(reverse("dashboard_access")).content.decode()
         self.assertIn("No group has been configured yet", html)
 
-        self.configure(balances=False)
+        self.configure(receivables=False)
         html = self.client.get(reverse("dashboard_access")).content.decode()
         self.assertIn("Farm Managers", html)
         self.assertIn(f'?group={self.group.id}', html)      # edit link
         self.assertIn(reverse("dashboard_access_delete", args=[self.group.id]), html)
 
     def test_clearing_a_group_returns_it_to_the_default(self):
-        self.configure(balances=False)
-        self.assertNotIn("balances", self.keys(self.user()))
+        self.configure(receivables=False)
+        self.assertNotIn("receivables", self.keys(self.user()))
 
         self.client.force_login(self.admin)
         response = self.client.post(
@@ -149,7 +149,7 @@ class DashboardAccessTests(TestCase):
         data = {"group": self.group.id}
         for index, key in enumerate(ALL_KEYS):
             data[f"pos_{key}"] = len(ALL_KEYS) - index
-            if key != "balances":
+            if key != "receivables":
                 data[f"on_{key}"] = "on"
         response = self.client.post(reverse("dashboard_access_form"), data)
         self.assertEqual(response.status_code, 302)
@@ -157,11 +157,11 @@ class DashboardAccessTests(TestCase):
         rows = {r.widget_key: r for r in
                 GroupDashboardWidget.objects.filter(group=self.group)}
         self.assertEqual(len(rows), len(ALL_PANEL_KEYS))
-        self.assertFalse(rows["balances"].enabled)
+        self.assertFalse(rows["receivables"].enabled)
         self.assertTrue(rows["live_flock"].enabled)
         self.assertEqual(rows[ALL_KEYS[0]].position, len(ALL_KEYS))
         # and it takes effect
-        self.assertNotIn("balances", self.keys(self.user()))
+        self.assertNotIn("receivables", self.keys(self.user()))
 
     def test_saving_replaces_rather_than_accumulates(self):
         self.client.force_login(self.admin)
@@ -429,7 +429,7 @@ class UnsavedPreviewTests(TestCase):
         self.assertEqual(self.widgets(panels=""), [])
 
     def test_the_override_still_cannot_beat_the_tab_matrix(self):
-        self.assertEqual(self.widgets(panels="balances:0"), [])
+        self.assertEqual(self.widgets(panels="receivables:0"), [])
 
     def test_rubbish_in_the_override_is_ignored(self):
         self.assertEqual(self.widgets(panels="not_a_widget:0,live_flock:x"),
@@ -612,9 +612,9 @@ class ManagerOrderTests(TestCase):
 
     def test_switching_a_widget_off_applies_to_a_manager_too(self):
         GroupDashboardWidget.objects.filter(
-            group=self.group, widget_key="balances").update(enabled=False)
+            group=self.group, widget_key="receivables").update(enabled=False)
         self.client.force_login(self.manager)
-        self.assertNotIn("balances", self.cards(self.client))
+        self.assertNotIn("receivables", self.cards(self.client))
 
     def test_a_superuser_in_no_configured_group_is_unaffected(self):
         self.client.force_login(self.admin)
