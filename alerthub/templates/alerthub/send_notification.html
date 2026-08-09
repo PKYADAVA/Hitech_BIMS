@@ -1,14 +1,22 @@
 {% extends 'base.html' %}
+{% load static %}
 {% comment %}
 Send a notification by hand.
 
 Everything else in this module is raised by a rule watching a number. This is
-the one place a person composes a message themselves — a feed delivery running
-late, a shed closing for maintenance — and sends it to named people.
+the one place a person composes a message themselves — a delivery running late,
+a shed closing for maintenance — and addresses it down the organisation.
 
-It writes a real notification rather than a bare push, so the message lands in
-the recipients' bell and stays in the history. A push alone would vanish the
-moment it was swiped away, with no record it had ever been sent.
+Three columns, three questions, in the order they are actually answered: what
+am I sending, who is it for, and is that right. The third column is a preview,
+not a form: every number on it comes from the same helper the send uses
+(`alerthub.recipients.delivery_preview`), so the count the sender confirms is
+the count that goes out.
+
+**No permissions live on this page.** Who may open it is the Web-Access matrix;
+which people may be selected is the Employee Organization Access master. Both
+are read server-side — the dropdowns below only ever contain what the sender is
+already entitled to, and the form re-checks the posted ids on save.
 {% endcomment %}
 
 {% block title %}Send Notification — BIMS{% endblock %}
@@ -16,25 +24,6 @@ moment it was swiped away, with no record it had ever been sent.
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
 
 {% block content %}
-<style>
-  /* Composing and addressing are two halves of one job, so they sit side by
-     side on a desktop rather than stacked down a narrow column — the earlier
-     layout left two thirds of the screen empty and squeezed the recipient
-     lists into two visible rows. */
-  .sn-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; align-items: start; }
-  .sn-card-title i { font-size: .95rem; }
-
-  /* `size="8"` alone does nothing here: the design system sets
-     `.ds .form-select { height: var(--ds-button-h) }`, which outspecifies a
-     plain `.sn-picker select` and squashes both lists to one row. Matching its
-     specificity is what actually makes them tall enough to pick from. */
-  .ds .sn-picker select.form-select { height: 280px; padding: 6px; }
-  .sn-picker option { padding: 5px 8px; border-radius: 6px; }
-  .sn-count { font-size: .78rem; color: #64748b; }
-
-  @media (max-width: 991.98px) { .sn-grid { grid-template-columns: 1fr; } }
-</style>
-
 <div class="ah-wrap wide">
 
   <div class="ah-head">
@@ -45,8 +34,22 @@ moment it was swiped away, with no record it had ever been sent.
       <h1 class="ah-title mt-2">
         <i class="fa-solid fa-paper-plane text-primary"></i> Send Notification
       </h1>
-      <p class="ah-sub">Write a message and send it to chosen users or groups.</p>
+      <p class="ah-sub">
+        Send messages to users and groups based on organization, role and
+        operational scope.
+      </p>
     </div>
+    {% if recent %}
+      <div class="text-end">
+        <div class="sn-count mb-1">Not yet sent</div>
+        {% for row in recent %}
+          <a href="{% url 'alerthub:outgoing_detail' row.pk %}"
+             class="ah-pill {{ row.status_tone }} text-decoration-none d-inline-block mb-1">
+            {{ row.get_status_display }} · {{ row.title|truncatechars:28 }}
+          </a><br>
+        {% endfor %}
+      </div>
+    {% endif %}
   </div>
 
   {% if messages %}
@@ -55,88 +58,377 @@ moment it was swiped away, with no record it had ever been sent.
     {% endfor %}
   {% endif %}
 
-  <form method="post" novalidate>
-    {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger py-2">
+      {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+    </div>
+  {% endif %}
 
-    {% if form.non_field_errors %}
-      <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
-    {% endif %}
+  <form method="post" enctype="multipart/form-data" novalidate id="sn-form"
+        data-recipients-url="{% url 'alerthub:send_notification_recipients' %}"
+        data-type-defaults="{{ type_defaults }}">
+    {% csrf_token %}
+    {{ form.action }}
 
     <div class="sn-grid">
 
-      <div class="ah-card">
-        <h2 class="ah-card-title sn-card-title"><i class="fa-solid fa-pen-to-square me-2"></i>Message</h2>
+      {# ---------------------------------------------------- 1. compose #}
+      <div>
+        <div class="ah-card sn-card">
+          <h2 class="sn-card-title"><span class="sn-step">1</span> Message &amp; Settings</h2>
+          <p class="sn-card-sub">What you are sending, and how urgent it is.</p>
 
-        <div class="mb-3">
-          <label class="form-label" for="{{ form.title.id_for_label }}">Title</label>
-          {{ form.title }}
-          {% if form.title.errors %}<div class="text-danger small mt-1">{{ form.title.errors.0 }}</div>{% endif %}
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label" for="{{ form.message.id_for_label }}">Message</label>
-          {{ form.message }}
-          <div class="form-text">
-            A phone's lock screen shows the first line or two — put what matters first.
+          <div class="sn-field">
+            <label class="sn-label" for="{{ form.notification_type.id_for_label }}">
+              <span>Notification Type <span class="sn-req">*</span></span>
+            </label>
+            {{ form.notification_type }}
+            {% if form.notification_type.errors %}
+              <div class="text-danger small mt-1">{{ form.notification_type.errors.0 }}</div>
+            {% endif %}
           </div>
-        </div>
 
-        <div class="row g-3">
-          <div class="col-sm-6">
-            <label class="form-label" for="{{ form.priority.id_for_label }}">Priority</label>
-            {{ form.priority }}
+          <div class="sn-field">
+            <label class="sn-label" for="{{ form.title.id_for_label }}">
+              <span>Title <span class="sn-req">*</span></span>
+              <span class="sn-count" id="title-count">0 / 100</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.errors %}
+              <div class="text-danger small mt-1">{{ form.title.errors.0 }}</div>
+            {% endif %}
           </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="{{ form.module.id_for_label }}">Category</label>
-            {{ form.module }}
-            <div class="form-text">{{ form.module.help_text }}</div>
+
+          <div class="sn-field">
+            <label class="sn-label" for="{{ form.message.id_for_label }}">
+              <span>Message <span class="sn-req">*</span></span>
+              <span class="sn-count" id="message-count">0 / 500</span>
+            </label>
+            {{ form.message }}
+            {% if form.message.errors %}
+              <div class="text-danger small mt-1">{{ form.message.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div class="sn-field sn-row">
+            <div>
+              <label class="sn-label" for="{{ form.priority.id_for_label }}"><span>Priority</span></label>
+              {{ form.priority }}
+            </div>
+            <div>
+              <label class="sn-label" for="{{ form.category.id_for_label }}"><span>Category</span></label>
+              {{ form.category }}
+            </div>
+          </div>
+
+          <div class="sn-field">
+            <label class="sn-label"><span>Schedule <span class="sn-req">*</span></span></label>
+            <div class="sn-sched">
+              {% for radio in form.schedule %}
+                <label>{{ radio.tag }} <span>{{ radio.choice_label }}</span></label>
+              {% endfor %}
+            </div>
+            <div class="sn-when d-none" id="sn-when">
+              {{ form.send_at }}
+              {% if form.send_at.errors %}
+                <div class="text-danger small mt-1">{{ form.send_at.errors.0 }}</div>
+              {% endif %}
+              {% comment %} Nothing in a web request can wake up at 6pm. Saying so here is
+                 better than a message that silently never goes out. {% endcomment %}
+              <div class="ah-note info mt-2">
+                <i class="fa-solid fa-circle-info mt-1"></i>
+                <span>Scheduled messages are sent by the
+                  <code>send_scheduled_notifications</code> task. If that task is
+                  not running on the server, this will wait rather than send.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sn-field">
+            <label class="sn-label"><span>Attachment <span class="sn-count">(optional)</span></span></label>
+            <div class="sn-file">
+              <i class="fa-solid fa-paperclip"></i>
+              <span class="sn-file-name" id="sn-file-name">
+                {% if form.instance.attachment %}{{ form.instance.attachment_name }}{% else %}No file chosen{% endif %}
+              </span>
+              <span class="sn-file-size" id="sn-file-size">
+                {% if form.instance.attachment %}{{ form.instance.attachment_size_display }}{% endif %}
+              </span>
+              <label class="sn-mini mb-0" for="{{ form.attachment.id_for_label }}">
+                <i class="fa-solid fa-folder-open me-1"></i>Choose File
+              </label>
+              {{ form.attachment }}
+            </div>
+            <div class="sn-count mt-1">
+              Allowed: {{ attachment_extensions }} · max {{ attachment_max_mb }} MB
+            </div>
+            {% if form.attachment.errors %}
+              <div class="text-danger small mt-1">{{ form.attachment.errors.0 }}</div>
+            {% endif %}
           </div>
         </div>
       </div>
 
-      <div class="ah-card sn-picker">
-        <h2 class="ah-card-title sn-card-title"><i class="fa-solid fa-users me-2"></i>Recipients</h2>
-        <p class="ah-hint">
-          Pick groups, users, or both — anyone named twice is only sent to once.
-          Inactive accounts are not offered. Ctrl-click (⌘ on Mac) to choose several.
-        </p>
+      {# -------------------------------------------------- 2. recipients #}
+      <div>
+        <div class="ah-card sn-card">
+          <h2 class="sn-card-title">
+            <span class="sn-step">2</span> Recipients
+            <span class="sn-selected ms-auto" id="sn-sel-count">0 selected</span>
+          </h2>
+          <p class="sn-card-sub">
+            Select recipients based on organizational hierarchy, role, group or
+            individual employee. Leave a level untouched to mean all of it.
+          </p>
 
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label d-flex justify-content-between align-items-end"
-                   for="{{ form.groups.id_for_label }}">
-              <span>Groups</span>
-              <span class="sn-count">{{ form.groups.field.queryset.count }} available</span>
-            </label>
-            {{ form.groups }}
+          {% comment %} One searchable dropdown per level. Untouched means all of it, which
+             is what the placeholder says — so the common case ("everyone in
+             Akbarpur") is one click, not six lists left alone. {% endcomment %}
+          {% for level in hierarchy %}
+            <div class="sn-level" data-level="{{ level.name }}">
+              <div class="sn-level-head">
+                <span class="sn-level-name"><i class="{{ level.icon }}"></i>{{ level.label }}</span>
+                <span class="sn-selected none" data-count-for="{{ level.name }}"
+                      data-all-label="{{ level.all_label }}">{{ level.all_label }}</span>
+              </div>
+              {{ level.field }}
+              {% if level.field.errors %}
+                <div class="text-danger small mt-1">{{ level.field.errors.0 }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+
+          <div class="sn-level">
+            <div class="sn-level-head">
+              <span class="sn-level-name"><i class="fa-solid fa-user-group"></i>Employees</span>
+              <span class="sn-selected none" data-count-for="users">0 selected</span>
+            </div>
+            <div class="sn-emp-tools">
+              <input type="search" class="form-control form-control-sm sn-search"
+                     id="sn-emp-search" placeholder="Search employee name / ID"
+                     autocomplete="off">
+              <button type="button" class="sn-mini" id="sn-select-all">Select All</button>
+              <button type="button" class="sn-mini" id="sn-clear-all">Clear All</button>
+            </div>
+            <div class="sn-chips" id="sn-emp-chips">
+              <span class="sn-checks-empty">Loading employees…</span>
+            </div>
+            <button type="button" class="sn-more mt-1 d-none" id="sn-view-selected">
+              View selected only
+            </button>
+            {% if form.users.errors %}
+              <div class="text-danger small mt-1">{{ form.users.errors.0 }}</div>
+            {% endif %}
           </div>
-          <div class="col-md-6">
-            <label class="form-label d-flex justify-content-between align-items-end"
-                   for="{{ form.users.id_for_label }}">
-              <span>Users</span>
-              <span class="sn-count">{{ form.users.field.queryset.count }} active</span>
-            </label>
-            {{ form.users }}
+
+          <div class="sn-level">
+            <div class="sn-level-head">
+              <span class="sn-level-name"><i class="fa-solid fa-users-rectangle"></i>Notification Groups</span>
+              <span class="sn-selected none" data-count-for="groups"
+                    data-all-label="0 selected">0 selected</span>
+            </div>
+            {% comment %} A dropdown like the levels above, but a real recipient: everyone
+               in a chosen group is sent to. {% endcomment %}
+            <select multiple class="form-select sn-hier" id="sn-group-list"
+                    data-placeholder="No groups"></select>
+          </div>
+
+          {% comment %} The real field. Hidden, driven by the chip UI above, and still the
+             only thing the server reads for employees — so a JavaScript failure
+             means a plain form, not a silently empty send. {% endcomment %}
+          <div class="d-none">{{ form.users }}{{ form.groups }}</div>
+        </div>
+      </div>
+
+      {# ---------------------------------------------------- 3. preview #}
+      <div class="sn-preview-col">
+        <div class="ah-card sn-card">
+          <h2 class="sn-card-title"><span class="sn-step">3</span> Recipient Preview</h2>
+          <p class="sn-card-sub">Where these people sit in the organization.</p>
+
+          <div class="sn-facts" id="sn-facts">
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-building"></i>Company</span>
+              <span class="sn-fact-v" data-fact="companies">All</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-code-branch"></i>Branch</span>
+              <span class="sn-fact-v" data-fact="branches">All</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-house-chimney"></i>Farm</span>
+              <span class="sn-fact-v" data-fact="farms">All Farms</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-warehouse"></i>Warehouse</span>
+              <span class="sn-fact-v" data-fact="warehouses">All</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-sitemap"></i>Department</span>
+              <span class="sn-fact-v" data-fact="departments">All</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-user-tie"></i>Role</span>
+              <span class="sn-fact-v" data-fact="designations">All</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-user-group"></i>Employees</span>
+              <span class="sn-fact-v" data-fact="users">0</span>
+            </div>
+            <div class="sn-fact">
+              <span class="sn-fact-l"><i class="fa-solid fa-users-rectangle"></i>Groups</span>
+              <span class="sn-fact-v" data-fact="groups">0</span>
+            </div>
+          </div>
+
+          <div class="sn-total">
+            <span class="sn-total-l">Total<br>Recipients</span>
+            <span class="sn-total-n" id="sn-total">0</span>
+          </div>
+
+          <div class="sn-bars" id="sn-bars">
+            <div class="sn-bar-row">
+              <span class="sn-bar-l">Employees</span>
+              <span class="sn-bar-track"><span class="sn-bar-fill" data-bar="users" style="width:0"></span></span>
+              <span class="sn-bar-n" data-barn="users">0</span>
+            </div>
+            <div class="sn-bar-row">
+              <span class="sn-bar-l">Groups</span>
+              <span class="sn-bar-track"><span class="sn-bar-fill groups" data-bar="groups" style="width:0"></span></span>
+              <span class="sn-bar-n" data-barn="groups">0</span>
+            </div>
+            <div class="sn-bar-row">
+              <span class="sn-bar-l">Roles</span>
+              <span class="sn-bar-track"><span class="sn-bar-fill roles" data-bar="roles" style="width:0"></span></span>
+              <span class="sn-bar-n" data-barn="roles">0</span>
+            </div>
+            <div class="sn-bar-row">
+              <span class="sn-bar-l">Farms</span>
+              <span class="sn-bar-track"><span class="sn-bar-fill places" data-bar="places" style="width:0"></span></span>
+              <span class="sn-bar-n" data-barn="places">0</span>
+            </div>
+          </div>
+
+          <div class="sn-status ok" id="sn-status">
+            <i class="fa-solid fa-circle-check mt-1"></i>
+            <span id="sn-status-text">All recipients are active</span>
+            <button type="button" class="d-none" id="sn-view-excluded">View Excluded</button>
+          </div>
+
+          <div class="ah-note info">
+            <i class="fa-solid fa-truck-fast mt-1"></i>
+            <div>
+              <div class="fw-semibold mb-1">This notification will be sent to:</div>
+              <ul class="sn-channels" id="sn-channels">
+                <li><i class="fa-solid fa-bell"></i><span data-ch="inapp">0 people — in-app notification</span></li>
+                <li><i class="fa-solid fa-mobile-screen"></i><span data-ch="push">0 mobile app users — push notification</span></li>
+                <li><i class="fa-solid fa-users-rectangle"></i><span data-ch="groups">0 groups</span></li>
+              </ul>
+              {% comment %} Email / SMS / WhatsApp are modelled but have no transport yet.
+                 Listing them would promise a delivery that does not happen. {% endcomment %}
+              <div class="sn-count mt-1">
+                Each recipient receives it only once, however many filters select them.
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="ah-note info mt-3">
-      <i class="fa-solid fa-circle-info mt-1"></i>
-      <span>
-        This reaches everyone chosen in their notification bell. It also goes to
-        the phones of those who have the app installed and have not turned
-        Mobile Push off — the opt-out silences the phone, never the message.
-      </span>
+    {# ------------------------------------------------ preview + summary #}
+    <div class="sn-lower">
+      <div class="ah-card sn-card">
+        <h2 class="sn-card-title"><i class="fa-solid fa-eye text-muted"></i> Preview Message</h2>
+        <p class="sn-card-sub">Exactly what the employee will see.</p>
+        <div class="sn-preview-msg medium" id="sn-preview">
+          <div class="sn-preview-title" id="sn-preview-title">Your title will appear here</div>
+          <div class="sn-preview-body" id="sn-preview-body">And the message underneath it.</div>
+          <div class="sn-preview-meta">
+            <span>Priority: <b id="sn-preview-priority">Medium</b></span>
+            <span>Category: <b id="sn-preview-category">General</b></span>
+            <span>Sent: <b id="sn-preview-when">Immediately</b></span>
+            <span class="d-none" id="sn-preview-attach-wrap">
+              <i class="fa-solid fa-paperclip"></i> <b id="sn-preview-attach"></b>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ah-card sn-card">
+        <h2 class="sn-card-title"><i class="fa-solid fa-list-check text-muted"></i> Summary</h2>
+        <p class="sn-card-sub">The last check before it goes.</p>
+        <div class="sn-facts">
+          <div class="sn-fact">
+            <span class="sn-fact-l">Recipients</span>
+            <span class="sn-fact-v text-primary" id="sn-sum-recipients">0</span>
+          </div>
+          <div class="sn-fact">
+            <span class="sn-fact-l">Priority</span>
+            <span class="sn-fact-v" id="sn-sum-priority">Medium</span>
+          </div>
+          <div class="sn-fact">
+            <span class="sn-fact-l">Category</span>
+            <span class="sn-fact-v" id="sn-sum-category">General</span>
+          </div>
+          <div class="sn-fact">
+            <span class="sn-fact-l">Schedule</span>
+            <span class="sn-fact-v" id="sn-sum-schedule">Send Now</span>
+          </div>
+          <div class="sn-fact">
+            <span class="sn-fact-l">Attachment</span>
+            <span class="sn-fact-v" id="sn-sum-attachment">None</span>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="d-flex gap-2 mt-3">
-      <button type="submit" class="btn btn-primary">
-        <i class="fa-solid fa-paper-plane me-1"></i>Send
+    <div class="sn-actions">
+      <button type="submit" class="btn btn-primary" id="sn-send">
+        <i class="fa-solid fa-paper-plane me-1"></i>Send Notification
       </button>
-      <a href="{% url 'alerthub:notification_center' %}" class="btn btn-outline-secondary">Cancel</a>
+      <button type="button" class="btn btn-outline-secondary" id="sn-draft">
+        <i class="fa-regular fa-floppy-disk me-1"></i>Save as Draft
+      </button>
+      <a href="{% url 'alerthub:notification_center' %}" class="btn btn-link text-muted">Cancel</a>
+      {% if outgoing %}
+        <span class="sn-spacer ah-pill {{ outgoing.status_tone }}">{{ outgoing.get_status_display }}</span>
+      {% endif %}
     </div>
   </form>
 </div>
+
+{# ------------------------------------------------------ confirm dialog #}
+<div class="modal fade" id="sn-confirm" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-paper-plane me-2 text-primary"></i>Send Notification?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">You are about to send this notification to:</p>
+        <div class="sn-total">
+          <span class="sn-total-l">Recipients</span>
+          <span class="sn-total-n" id="sn-confirm-total">0</span>
+        </div>
+        <div class="sn-facts">
+          <div class="sn-fact"><span class="sn-fact-l">Priority</span>
+            <span class="sn-fact-v" id="sn-confirm-priority"></span></div>
+          <div class="sn-fact"><span class="sn-fact-l">Category</span>
+            <span class="sn-fact-v" id="sn-confirm-category"></span></div>
+          <div class="sn-fact"><span class="sn-fact-l">Schedule</span>
+            <span class="sn-fact-v" id="sn-confirm-schedule"></span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="sn-confirm-send">
+          <i class="fa-solid fa-paper-plane me-1"></i>Confirm &amp; Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'js/alerthub-send.js' %}?v=20260809" defer></script>
 {% endblock %}

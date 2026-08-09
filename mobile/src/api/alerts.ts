@@ -29,6 +29,12 @@ export interface AlertNotification {
   module_label: string;
   priority: string;
   priority_label: string;
+  /** Set on messages a person composed; blank on rule-raised alerts. */
+  category: string;
+  category_label: string;
+  /** Absolute — the server builds it, so a LAN build gets a LAN URL. */
+  attachment_url: string;
+  attachment_name: string;
   /** "danger" | "warning" | "info" | "success" — drives the accent colour. */
   tone: string;
   color: string;

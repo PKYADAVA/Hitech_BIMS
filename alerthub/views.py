@@ -23,7 +23,7 @@ from .catalog import CATALOG, BY_KEY
 from .constants import Module, Priority, TYPE_DEFAULTS
 from .dispatch import dispatch
 from .forms import (
-    ATTACHMENT_EXTENSIONS, ATTACHMENT_MAX_BYTES,
+    ATTACHMENT_LABELS, ATTACHMENT_MAX_BYTES,
     AlertRuleForm, ManualNotificationForm, PreferenceForm,
 )
 from .models import (
@@ -306,6 +306,27 @@ def preferences(request):
 # through ``alerthub.recipients``. This module reads both and defines neither.
 
 
+#: The organisational cascade, in the order the page walks down it. Held here
+#: rather than in the template so the label, the icon and the "all" wording for
+#: a level are decided once — the preview panel and the picker both read them.
+HIERARCHY_LEVELS = [
+    ("companies", "Company", "fa-solid fa-building", "All Companies"),
+    ("branches", "Branch", "fa-solid fa-code-branch", "All Branches"),
+    ("farms", "Farm", "fa-solid fa-house-chimney", "All Farms"),
+    ("warehouses", "Warehouse", "fa-solid fa-warehouse", "All Warehouses"),
+    ("departments", "Department", "fa-solid fa-sitemap", "All Departments"),
+    ("designations", "Role", "fa-solid fa-user-tie", "All Roles"),
+]
+
+
+def _hierarchy_levels(form):
+    return [
+        {"name": name, "label": label, "icon": icon,
+         "all_label": all_label, "field": form[name]}
+        for name, label, icon, all_label in HIERARCHY_LEVELS
+    ]
+
+
 def _require_send_permission(user):
     """Gate on the existing Web-Access matrix, or 404.
 
@@ -395,9 +416,8 @@ def send_notification(request, pk=None):
         "active_tab": "send_notification",
         "form": form,
         "outgoing": outgoing,
-        "attachment_extensions": ", ".join(
-            e.upper() for e in ATTACHMENT_EXTENSIONS
-        ),
+        "hierarchy": _hierarchy_levels(form),
+        "attachment_extensions": ", ".join(ATTACHMENT_LABELS),
         "attachment_max_mb": round(ATTACHMENT_MAX_BYTES / 1024 / 1024),
         # Rendered once so the page can pre-select a category the moment the
         # type changes, without a round trip for something already known.
@@ -438,11 +458,12 @@ def send_notification_recipients(request):
         designations=ids("designations"),
     )
 
-    # The already-selected people stay in the count even if a narrowed filter
-    # no longer lists them — the sender chose them on purpose, and silently
-    # dropping someone because a checkbox moved is the bug this avoids.
-    chosen = ids("users") or [e["id"] for e in employees]
-    preview = delivery_preview(user_ids=chosen, group_ids=ids("groups"))
+    # Only who was actually picked. Defaulting to "everyone the filter offers"
+    # was tempting and wrong: the form refuses a send with no recipients, so a
+    # preview counting them would promise a total the send would then reject.
+    # The hierarchy narrows who is *offered*; picking is a separate act, and
+    # Select All is one click away.
+    preview = delivery_preview(user_ids=ids("users"), group_ids=ids("groups"))
 
     return JsonResponse({
         "employees": employees,

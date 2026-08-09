@@ -489,7 +489,16 @@ MODULE_REGISTRY = [
                     # Its own tab, not an extra URL of the one above: an extra
                     # URL grants the right but renders no nav entry, so the
                     # page existed with no way to reach it.
-                    ("send_notification", "Send Notification"),
+                    #
+                    # Its own extras, though, are right: the recipient lookup,
+                    # the draft editor, the sent record and the cancel are all
+                    # the same page's surface and none of them is a menu entry.
+                    # They also do not follow the derive_tab naming convention,
+                    # so without listing them here they would be refused as
+                    # unmapped once enforcement is on.
+                    ("send_notification", "Send Notification",
+                     ("send_notification_recipients", "outgoing_edit",
+                      "outgoing_detail", "outgoing_cancel")),
                     ("alert_catalog", "Alert Catalogue"),
                 ],
             },

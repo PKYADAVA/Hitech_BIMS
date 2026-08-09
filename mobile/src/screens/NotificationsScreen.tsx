@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import React, { useLayoutEffect, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { FlatList, Linking, Pressable, RefreshControl, Text, View } from "react-native";
 
 import {
   AlertNotification, dismissAlert, listAlerts, markAlertRead, markAllAlertsRead,
@@ -220,9 +220,23 @@ function AlertRow({
           {alert.message}
         </Text>
 
+        {alert.attachment_url ? (
+          <Pressable
+            onPress={() => Linking.openURL(alert.attachment_url).catch(() => {})}
+            hitSlop={6}
+            accessibilityRole="link"
+            style={styles.attachRow}
+          >
+            <AppIcon name="paperclip" size={13} color={colors.tint} />
+            <Text style={styles.attachText} numberOfLines={1}>
+              {alert.attachment_name || "Attachment"}
+            </Text>
+          </Pressable>
+        ) : null}
+
         <View style={styles.metaRow}>
           <Text style={[styles.pill, { backgroundColor: colors[`${tone}Light`], color: accent }]}>
-            {alert.priority_label || alert.module_label}
+            {alert.category_label || alert.priority_label || alert.module_label}
           </Text>
           {alert.place ? <Text style={styles.meta} numberOfLines={1}>{alert.place}</Text> : null}
           <Text style={styles.metaWhen}>{formatDateTime(alert.created_at)}</Text>
@@ -297,6 +311,11 @@ const useStyles = makeStyles((colors) => ({
   titleUnread: { fontWeight: "800" },
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
   message: { ...type.caption, color: colors.textMuted, lineHeight: 17 },
+
+  // A file the sender attached. Opened in the phone's own viewer rather than
+  // downloaded here — the app has no document store to put it in.
+  attachRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 },
+  attachText: { ...type.caption, color: colors.tint, flexShrink: 1, textDecorationLine: "underline" },
 
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: 2, flexWrap: "wrap" },
   pill: {

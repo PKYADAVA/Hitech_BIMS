@@ -203,71 +203,9 @@ def unread_count(user) -> int:
 #: Rule key stamped on notifications a person sent by hand. It is not a rule —
 #: nothing raises it on a schedule — but the column is indexed and every read
 #: path groups by it, so a manual send needs one of its own to be filterable.
+#:
+#: Sending one is :mod:`alerthub.dispatch`, not this module. Composing a message
+#: by hand and detecting a breached threshold are different jobs, and the one
+#: thing they must share — writing the notification and its recipient rows — is
+#: shared by both calling the same models, not by a second sender living here.
 MANUAL_RULE_KEY = "manual"
-
-
-def send_manual_notification(
-    *,
-    sender,
-    recipients,
-    title,
-    message="",
-    priority=Priority.MEDIUM,
-    module=Module.SYSTEM,
-):
-    """Send one notification, composed by a person, to named users.
-
-    Unlike :func:`raise_alert` there is no rule: nobody configured this and
-    nothing will raise it again, so there is no cooldown to respect and no
-    audience to resolve — the sender chose the recipients themselves.
-
-    What it deliberately keeps from the alert path:
-
-    * It writes a real ``Notification`` with real recipient rows, so it lands in
-      the bell, the notification centre and the history like anything else. A
-      message that only existed as a push would be gone the moment it was
-      swiped away, with no record it was ever sent.
-    * It respects each user's push preference. Someone who turned Mobile Push
-      off still gets it in their bell — the opt-out narrows the channel, never
-      the message.
-    * The push goes out on commit, for the same reason alerts do.
-
-    Returns the ``Notification``, or ``None`` if there was nobody to send to.
-    """
-    from .push import push_recipients, send_alert_push
-
-    people = [u for u in recipients if getattr(u, "is_active", True)]
-    if not people or not title:
-        return None
-
-    with transaction.atomic():
-        notification = Notification.objects.create(
-            rule=None,
-            rule_key=MANUAL_RULE_KEY,
-            module=module,
-            priority=priority,
-            title=title[:200],
-            message=message,
-            created_by=sender if getattr(sender, "pk", None) else None,
-        )
-        wanted = push_recipients(None, people)
-        channels = [Channel.IN_APP] + ([Channel.PUSH] if wanted else [])
-        NotificationRecipient.objects.bulk_create(
-            [
-                NotificationRecipient(
-                    notification=notification, user=user, delivered_channels=channels,
-                )
-                for user in people
-            ],
-            ignore_conflicts=True,
-        )
-        if wanted:
-            transaction.on_commit(
-                lambda n=notification, w=wanted: send_alert_push(n, w)
-            )
-
-    logger.info(
-        "alerthub: manual notification %s sent to %s user(s) by %s",
-        notification.pk, len(people), getattr(sender, "username", "?"),
-    )
-    return notification

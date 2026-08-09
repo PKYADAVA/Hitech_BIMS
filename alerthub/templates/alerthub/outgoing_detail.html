@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+{% comment %}
+The record of one send, and who it reached.
+
+Read-only on purpose. A sent notification is a record of what people were told,
+and the argument this page settles — "was I informed, and when" — depends on it
+not being editable afterwards.
+
+The delivery rows are not a log written alongside the send. They are the actual
+``NotificationRecipient`` rows the bell reads, so "Delivered · Read 10:32" is
+the live state of that person's notification rather than a second copy of it
+that could disagree.
+{% endcomment %}
+
+{% block title %}{{ outgoing.title|truncatechars:40 }} — Send Notification{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
+
+{% block content %}
+<div class="ah-wrap">
+
+  <div class="ah-head">
+    <div>
+      <a href="{% url 'alerthub:send_notification' %}" class="text-muted small text-decoration-none">
+        <i class="fa-solid fa-arrow-left me-1"></i>Send another notification
+      </a>
+      <h1 class="ah-title mt-2">
+        <i class="{{ outgoing.notification.icon|default:'fa-solid fa-paper-plane' }}"></i>
+        {{ outgoing.title }}
+      </h1>
+      <p class="ah-sub">
+        Notification #{{ outgoing.pk }} ·
+        {{ outgoing.created_by.get_full_name|default:outgoing.created_by.username|default:"—" }} ·
+        {{ outgoing.created_at|date:"d M Y, h:i A" }}
+      </p>
+    </div>
+    <div class="text-end">
+      <span class="ah-pill {{ outgoing.status_tone }}">{{ outgoing.get_status_display }}</span>
+      {% if outgoing.status == 'scheduled' %}
+        <form method="post" action="{% url 'alerthub:outgoing_cancel' outgoing.pk %}" class="mt-2">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-outline-danger">Cancel send</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} py-2">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {% if outgoing.error %}
+    <div class="ah-note warn">
+      <i class="fa-solid fa-triangle-exclamation mt-1"></i>
+      <span>{{ outgoing.error }}</span>
+    </div>
+  {% endif %}
+
+  <div class="sn-lower">
+
+    <div class="ah-card sn-card">
+      <h2 class="sn-card-title"><i class="fa-solid fa-envelope-open-text text-muted"></i> Message</h2>
+      <div class="sn-preview-msg {{ outgoing.priority }}">
+        <div class="sn-preview-title">{{ outgoing.title }}</div>
+        <div class="sn-preview-body">{{ outgoing.message }}</div>
+        <div class="sn-preview-meta">
+          <span>Priority: <b>{{ outgoing.get_priority_display }}</b></span>
+          <span>Category: <b>{{ outgoing.get_category_display }}</b></span>
+          <span>Type: <b>{{ outgoing.get_notification_type_display }}</b></span>
+          {% if outgoing.attachment %}
+            <span><i class="fa-solid fa-paperclip"></i>
+              <a href="{{ outgoing.attachment.url }}" target="_blank" rel="noopener">
+                {{ outgoing.attachment_name }}</a>
+              <span class="sn-file-size">{{ outgoing.attachment_size_display }}</span>
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="ah-card sn-card">
+      <h2 class="sn-card-title"><i class="fa-solid fa-list-check text-muted"></i> Record</h2>
+      <div class="sn-facts">
+        <div class="sn-fact"><span class="sn-fact-l">Recipients</span>
+          <span class="sn-fact-v">{{ outgoing.recipient_count }}</span></div>
+        <div class="sn-fact"><span class="sn-fact-l">Delivered</span>
+          <span class="sn-fact-v text-success">{{ outgoing.success_count }}</span></div>
+        <div class="sn-fact"><span class="sn-fact-l">Failed</span>
+          <span class="sn-fact-v {% if outgoing.failed_count %}text-danger{% endif %}">
+            {{ outgoing.failed_count }}</span></div>
+        <div class="sn-fact"><span class="sn-fact-l">Scheduled for</span>
+          <span class="sn-fact-v">
+            {% if outgoing.send_at %}{{ outgoing.send_at|date:"d M Y, h:i A" }}{% else %}Immediate{% endif %}
+          </span></div>
+        <div class="sn-fact"><span class="sn-fact-l">Sent at</span>
+          <span class="sn-fact-v">
+            {% if outgoing.sent_at %}{{ outgoing.sent_at|date:"d M Y, h:i A" }}{% else %}—{% endif %}
+          </span></div>
+        <div class="sn-fact"><span class="sn-fact-l">Status</span>
+          <span class="sn-fact-v">{{ outgoing.get_status_display }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  {% comment %} What it was aimed at — the filters that produced the list, kept so the
+     record can answer "who was this for" and not only "who got it". {% endcomment %}
+  <div class="ah-card sn-card mt-3">
+    <h2 class="sn-card-title"><i class="fa-solid fa-sitemap text-muted"></i> Addressed to</h2>
+    <div class="sn-facts">
+      <div class="sn-fact"><span class="sn-fact-l">Branch</span>
+        <span class="sn-fact-v">
+          {% for b in outgoing.branches.all %}{{ b.branch_name }}{% if not forloop.last %}, {% endif %}
+          {% empty %}All Branches{% endfor %}</span></div>
+      <div class="sn-fact"><span class="sn-fact-l">Farm</span>
+        <span class="sn-fact-v">
+          {% for f in outgoing.farms.all %}{{ f.farm_name }}{% if not forloop.last %}, {% endif %}
+          {% empty %}All Farms{% endfor %}</span></div>
+      <div class="sn-fact"><span class="sn-fact-l">Warehouse</span>
+        <span class="sn-fact-v">
+          {% for w in outgoing.warehouses.all %}{{ w.name }}{% if not forloop.last %}, {% endif %}
+          {% empty %}All Warehouses{% endfor %}</span></div>
+      <div class="sn-fact"><span class="sn-fact-l">Department</span>
+        <span class="sn-fact-v">
+          {% for d in outgoing.departments.all %}{{ d.name }}{% if not forloop.last %}, {% endif %}
+          {% empty %}All Departments{% endfor %}</span></div>
+      <div class="sn-fact"><span class="sn-fact-l">Role</span>
+        <span class="sn-fact-v">
+          {% for d in outgoing.designations.all %}{{ d.title }}{% if not forloop.last %}, {% endif %}
+          {% empty %}All Roles{% endfor %}</span></div>
+      <div class="sn-fact"><span class="sn-fact-l">Groups</span>
+        <span class="sn-fact-v">
+          {% for g in outgoing.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}
+          {% empty %}—{% endfor %}</span></div>
+    </div>
+  </div>
+
+  <div class="ah-card sn-card mt-3">
+    <h2 class="sn-card-title">
+      <i class="fa-solid fa-truck-fast text-muted"></i> Delivery History
+    </h2>
+    <p class="sn-card-sub">
+      Live read state, straight from each recipient's own notification row.
+    </p>
+
+    {% if deliveries %}
+      <div class="table-responsive">
+        <table class="table ah-table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Recipient</th>
+              <th>Delivery</th>
+              <th>Read</th>
+              <th class="text-end">Read at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in deliveries %}
+              <tr>
+                <td>
+                  <div class="sn-deliv-name">
+                    {{ row.user.get_full_name|default:row.user.username }}
+                  </div>
+                  <div class="sn-deliv-sub">{{ row.user.username }}</div>
+                </td>
+                <td>
+                  <i class="fa-solid fa-circle-check sn-dot-ok"></i> Delivered
+                  {% if row.delivered_channels %}
+                    <span class="ah-chip ms-1">{{ row.delivered_channels|join:" · " }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.is_read %}
+                    <i class="fa-solid fa-circle-check sn-dot-ok"></i> Read
+                  {% else %}
+                    <i class="fa-regular fa-circle sn-dot-wait"></i> Unread
+                  {% endif %}
+                  {% if row.is_dismissed %}
+                    <span class="ah-chip ms-1">Cleared</span>
+                  {% endif %}
+                </td>
+                <td class="text-end ah-nowrap">
+                  {% if row.read_at %}{{ row.read_at|date:"d M, h:i A" }}{% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="ah-empty">
+        <i class="fa-regular fa-paper-plane"></i>
+        {% if outgoing.status == 'scheduled' %}
+          Not sent yet — due {{ outgoing.send_at|date:"d M Y, h:i A" }}.
+        {% elif outgoing.status == 'draft' %}
+          Still a draft. Nothing has been sent.
+        {% else %}
+          No delivery rows.
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

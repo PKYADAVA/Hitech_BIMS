@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.contrib.auth.models import Group
+from django.utils import timezone
 
 from .catalog import BY_KEY, rule_key_choices
 from .constants import Module, Priority
-from .models import AlertRule, NotificationPreference
+from .models import AlertRule, NotificationPreference, OutgoingNotification
+from .recipients import delivery_preview, employee_queryset, sender_scope
 
 
 class AlertRuleForm(forms.ModelForm):
@@ -132,63 +135,239 @@ class PreferenceForm(forms.ModelForm):
                 field.widget.attrs["class"] = "form-check-input"
 
 
-class ManualNotificationForm(forms.Form):
-    """Compose one notification and send it to chosen people.
+#: What an attachment may be, and how big. Mirrors what the page tells the
+#: sender — a limit the form states and does not enforce is not a limit.
+#:
+#: Deliberately *not* read from ``FILE_UPLOAD_MAX_MEMORY_SIZE``: that setting is
+#: the threshold at which Django spills an upload to a temp file, not a ceiling
+#: on what may be uploaded, and quoting its 2.5 MB to the sender would refuse
+#: files the ERP accepts everywhere else. ``ALERTHUB_ATTACHMENT_MAX_BYTES``
+#: overrides it where a deployment wants a different number.
+ATTACHMENT_EXTENSIONS = ["pdf", "jpg", "jpeg", "png", "docx"]
+#: What the page shows. JPEG is accepted but not listed — naming both spellings
+#: of one format reads as two.
+ATTACHMENT_LABELS = ["PDF", "JPG", "PNG", "DOCX"]
+ATTACHMENT_MAX_BYTES = getattr(
+    settings, "ALERTHUB_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024
+)
 
-    Users *or* groups, because both are how the office thinks about it — "the
-    Bahraich supervisors" is a group, "Amrendra" is a user, and demanding one
-    shape would mean ticking twelve boxes to reach a team.
+
+class ManualNotificationForm(forms.ModelForm):
+    """Compose one notification and address it down the organisation.
+
+    Two ways to name recipients, because both are how the office thinks about
+    it: "the Bahraich supervisors" is a group and "Amrendra" is a person, and
+    demanding one shape would mean ticking twelve boxes to reach a team.
+
+    **The hierarchy selects are filters, not recipients.** Choosing a branch
+    narrows who is *offered*; it never sends to a branch. That distinction is
+    what stops a careless click reaching four hundred people: nothing goes to
+    anyone who is not in ``users`` or a chosen group, and the sender saw and
+    confirmed that list.
+
+    **The sender's own scope bounds every choice.** Each queryset below comes
+    from :func:`alerthub.recipients.sender_scope`, which reads the Employee
+    Organization Access master. No permission is defined here — a sender
+    attached to Akbarpur simply never sees Tulsipur in a dropdown, and
+    :meth:`clean` re-checks the posted ids so a hand-made request cannot reach
+    past the same boundary.
     """
 
-    title = forms.CharField(
-        max_length=200,
-        widget=forms.TextInput(attrs={"class": "form-control",
-                                      "placeholder": "e.g. Feed delivery delayed to Monday"}),
-    )
-    message = forms.CharField(
-        required=False,
-        widget=forms.Textarea(attrs={"class": "form-control", "rows": 4,
-                                     "placeholder": "The detail people need. Kept short — a phone shows the first line or two."}),
-    )
-    priority = forms.ChoiceField(
-        choices=Priority.choices, initial=Priority.MEDIUM,
-        widget=forms.Select(attrs={"class": "form-select"}),
-    )
-    module = forms.ChoiceField(
-        choices=Module.choices, initial=Module.SYSTEM,
-        widget=forms.Select(attrs={"class": "form-select"}),
-        help_text="Only decides the icon and how it files in the centre.",
-    )
-    groups = forms.ModelMultipleChoiceField(
-        queryset=Group.objects.order_by("name"), required=False,
-        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": 8}),
-    )
-    users = forms.ModelMultipleChoiceField(
-        queryset=None, required=False,
-        widget=forms.SelectMultiple(attrs={"class": "form-select", "size": 8}),
+    class Meta:
+        model = OutgoingNotification
+        fields = [
+            "notification_type", "title", "message", "priority", "category",
+            "attachment", "send_at",
+            "companies", "branches", "farms", "warehouses", "departments",
+            "designations", "groups", "users",
+        ]
+        widgets = {
+            "notification_type": forms.Select(attrs={"class": "form-select"}),
+            "priority": forms.Select(attrs={"class": "form-select"}),
+            "category": forms.Select(attrs={"class": "form-select"}),
+            "title": forms.TextInput(attrs={
+                "class": "form-control", "maxlength": 100,
+                "placeholder": "e.g. High Mortality Alert — Akbarpur Broiler Farm",
+                "data-counter": "title-count",
+            }),
+            "message": forms.Textarea(attrs={
+                "class": "form-control", "rows": 5, "maxlength": 500,
+                "placeholder": "The detail people need. A phone's lock screen "
+                               "shows the first line or two — put what matters "
+                               "first.",
+                "data-counter": "message-count",
+            }),
+            "send_at": forms.DateTimeInput(
+                attrs={"class": "form-control", "type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+        }
+
+    #: Send Now vs Schedule for Later. Not a model field — the model records
+    #: *when*, and "now" is simply the absence of a time. Asking the sender to
+    #: express "now" as a timestamp would invite one typed in the past.
+    schedule = forms.ChoiceField(
+        choices=[("now", "Send Now"), ("later", "Schedule for Later")],
+        initial="now", required=False, widget=forms.RadioSelect,
     )
 
-    def __init__(self, *args, **kwargs):
+    #: Which button was pressed. Send and Save as Draft post the same form —
+    #: a draft is the same composition that has not gone out yet — so the
+    #: action decides the resulting status rather than a separate view.
+    action = forms.ChoiceField(
+        choices=[("send", "Send"), ("draft", "Save as Draft")],
+        initial="send", required=False, widget=forms.HiddenInput,
+    )
+
+    #: Placeholder wording per level, so an untouched dropdown says what
+    #: leaving it alone means rather than sitting empty.
+    PLACEHOLDERS = {
+        "companies": "Companies", "branches": "Branches", "farms": "Farms",
+        "warehouses": "Warehouses", "departments": "Departments",
+        "designations": "Roles",
+    }
+
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
+
+        scope = sender_scope(user) if user is not None else None
+
+        # Every hierarchy level is optional and multi-valued, and each renders
+        # as one searchable dropdown. Checkbox lists were the obvious reading of
+        # "multi-select" and the wrong one: six scrolling lists stacked made the
+        # column taller than the screen, so the recipient count it exists to
+        # justify was never visible beside it.
+        hierarchy = ("companies", "branches", "farms", "warehouses",
+                     "departments", "designations")
+        for name in hierarchy:
+            field = self.fields[name]
+            field.required = False
+            if scope is not None:
+                field.queryset = scope[name]
+            field.widget = forms.SelectMultiple(attrs={
+                "class": "form-select sn-hier",
+                "data-placeholder": f"All {self.PLACEHOLDERS[name]}",
+            })
+            field.widget.choices = field.choices
+
+        self.fields["groups"].required = False
+        if scope is not None:
+            self.fields["groups"].queryset = scope["groups"]
+
         User = get_user_model()
         # Inactive accounts are not offered: a notification addressed to one is
-        # a row nobody will ever read.
-        self.fields["users"].queryset = User.objects.filter(is_active=True).order_by("username")
+        # a row nobody will ever read. ``clean_users`` refuses them too, in case
+        # someone deactivates an account between load and submit.
+        self.fields["users"].queryset = User.objects.filter(is_active=True)
+        self.fields["users"].required = False
+        # Both recipient lists are driven by the chip UI. They stay real form
+        # fields so validation, error redisplay and reopening a draft need no
+        # special case.
+        for name in ("groups", "users"):
+            self.fields[name].widget = forms.SelectMultiple(
+                attrs={"class": "js-recipient-source d-none"}
+            )
+            self.fields[name].widget.choices = self.fields[name].choices
+
+        self.fields["send_at"].required = False
+        self.fields["attachment"].required = False
+        self.fields["message"].required = True
+        self.fields["title"].required = True
+
+    # -- validation --------------------------------------------------------
+
+    def clean_attachment(self):
+        f = self.cleaned_data.get("attachment")
+        # A FieldFile that came back unchanged from an existing draft has no
+        # freshly-uploaded content to check.
+        if not f or not hasattr(f, "size"):
+            return f
+        if f.size > ATTACHMENT_MAX_BYTES:
+            limit = ATTACHMENT_MAX_BYTES / 1024 / 1024
+            raise forms.ValidationError(
+                f"That file is {f.size / 1024 / 1024:.1f} MB. "
+                f"The limit is {limit:.0f} MB."
+            )
+        ext = (f.name.rsplit(".", 1)[-1] if "." in f.name else "").lower()
+        if ext not in ATTACHMENT_EXTENSIONS:
+            raise forms.ValidationError(
+                "Attachments must be PDF, JPG, PNG or DOCX."
+            )
+        return f
+
+    def clean_users(self):
+        """Refuse anyone the sender is not entitled to reach.
+
+        The dropdowns already exclude them, so this only fires on a hand-made
+        request or on a draft reopened after the sender's scope was narrowed.
+        Either way the answer is the same, and it is checked against the same
+        access master the picker reads — not against a second list kept here.
+        """
+        people = self.cleaned_data.get("users")
+        if not people or self.user is None:
+            return people
+
+        from user.services.scoping import is_unscoped
+
+        if is_unscoped(self.user):
+            return people
+
+        reachable = set(
+            employee_queryset(self.user).values_list("user_id", flat=True)
+        )
+        outside = [u for u in people if u.pk not in reachable]
+        if outside:
+            names = ", ".join(u.get_full_name() or u.username for u in outside[:3])
+            more = f" and {len(outside) - 3} more" if len(outside) > 3 else ""
+            raise forms.ValidationError(
+                f"{names}{more} are outside your organization access, so they "
+                f"cannot be sent to."
+            )
+        return people
 
     def clean(self):
         cleaned = super().clean()
-        if not cleaned.get("groups") and not cleaned.get("users"):
-            raise forms.ValidationError(
-                "Choose at least one group or user to send this to."
-            )
+        action = cleaned.get("action") or "send"
+
+        # A draft is allowed to be incomplete — that is the point of saving one
+        # — so recipients and the schedule are only required on the way out.
+        if action == "send":
+            if not cleaned.get("groups") and not cleaned.get("users"):
+                raise forms.ValidationError("No eligible recipients selected.")
+
+            if cleaned.get("schedule") == "later":
+                when = cleaned.get("send_at")
+                if not when:
+                    self.add_error("send_at", "Pick the date and time to send it.")
+                elif when <= timezone.now():
+                    # Silently sending it now would be the wrong kindness: the
+                    # sender asked for a specific hour and needs to know they
+                    # named one that has already passed.
+                    self.add_error("send_at", "That time has already passed.")
+            else:
+                # Send Now wins over any stale time left in the field.
+                cleaned["send_at"] = None
+
         return cleaned
 
-    def recipients(self):
-        """Every active user named directly or through a group, de-duplicated."""
-        User = get_user_model()
-        chosen = self.cleaned_data
-        qs = User.objects.filter(is_active=True).filter(
-            Q(pk__in=chosen.get("users") or [])
-            | Q(groups__in=chosen.get("groups") or [])
-        ).distinct()
-        return list(qs)
+    # -- what the view needs ----------------------------------------------
+
+    @property
+    def is_draft(self) -> bool:
+        return (self.cleaned_data.get("action") or "send") == "draft"
+
+    @property
+    def is_scheduled(self) -> bool:
+        return (
+            self.cleaned_data.get("schedule") == "later"
+            and bool(self.cleaned_data.get("send_at"))
+        )
+
+    def preview(self):
+        """The counts the confirmation dialog quotes, from the same helper the
+        send uses — so the number in the dialog is the number that goes out."""
+        return delivery_preview(
+            user_ids=self.cleaned_data.get("users") or [],
+            group_ids=self.cleaned_data.get("groups") or [],
+        )

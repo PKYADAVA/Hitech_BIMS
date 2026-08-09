@@ -554,3 +554,352 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
    switched on. Shown as unavailable rather than hidden — somebody configured
    it expecting alerts. */
 .ah-toggle:disabled { cursor: not-allowed; opacity: .5; }
+
+
+/* ================================================================ send page
+
+   Send Notification. Three columns on a desktop — compose, address, confirm —
+   because they are three questions asked once each, and stacking them made the
+   page a long scroll where the recipient count was never on screen beside the
+   message it belonged to.
+
+   Everything below reuses the tokens at the top of this file; no new colours
+   are defined here. Colour is spent on priority, status and icons only. */
+
+.sn-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1.15fr .8fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Preview and Summary sit under the three columns as one row, because both
+   answer "is this right?" and belong together at the point of decision. */
+.sn-lower {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 1199.98px) {
+  .sn-grid { grid-template-columns: 1fr 1fr; }
+  /* The preview is the answer, so on two columns it spans the full width
+     rather than being squeezed beside the recipient picker. */
+  .sn-grid > .sn-preview-col { grid-column: 1 / -1; }
+}
+@media (max-width: 767.98px) {
+  .sn-grid, .sn-lower { grid-template-columns: 1fr; }
+}
+
+.sn-card { padding: 1rem 1.1rem 1.15rem; }
+.sn-card + .sn-card { margin-top: 1rem; }
+
+.sn-card-title {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--ah-ink);
+  margin: 0 0 .15rem;
+}
+/* A numbered step, so the order of the three columns is stated rather than
+   implied by their position — which stops being a hint once they stack. */
+.sn-step {
+  flex: 0 0 auto;
+  width: 1.35rem; height: 1.35rem;
+  border-radius: 50%;
+  background: var(--ah-low);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sn-card-sub { font-size: .78rem; color: var(--ah-muted); margin: 0 0 .9rem; }
+
+.sn-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: .8rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: .3rem;
+}
+.sn-req { color: var(--ah-critical); }
+.sn-count { font-size: .72rem; color: var(--ah-faint); font-weight: 500; }
+.sn-count.over { color: var(--ah-critical); font-weight: 700; }
+
+.sn-field { margin-bottom: .85rem; }
+.sn-field:last-child { margin-bottom: 0; }
+.sn-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+
+/* -- schedule ---------------------------------------------------------- */
+
+.sn-sched { display: flex; gap: .5rem; flex-wrap: wrap; }
+.sn-sched label {
+  flex: 1 1 auto;
+  display: flex; align-items: center; gap: .45rem;
+  border: 1px solid var(--ah-line);
+  border-radius: .55rem;
+  padding: .5rem .7rem;
+  font-size: .82rem;
+  cursor: pointer;
+}
+.sn-sched label:has(input:checked) {
+  border-color: var(--ah-low);
+  background: var(--ah-low-soft);
+  font-weight: 600;
+}
+.sn-when { margin-top: .6rem; }
+
+/* -- attachment -------------------------------------------------------- */
+
+/* The real file input is hidden behind a styled row so the chosen file's name
+   and size can be shown — which is the only part a sender actually checks. */
+.sn-file {
+  display: flex; align-items: center; gap: .6rem;
+  border: 1px dashed var(--ah-line);
+  border-radius: .55rem;
+  padding: .55rem .7rem;
+  background: var(--ah-canvas);
+}
+.sn-file i { color: var(--ah-muted); }
+.sn-file-name { font-size: .8rem; font-weight: 600; flex: 1; word-break: break-all; }
+.sn-file-size { font-size: .72rem; color: var(--ah-faint); white-space: nowrap; }
+.sn-file input[type="file"] { display: none; }
+
+/* -- hierarchy --------------------------------------------------------- */
+
+.sn-level { border-top: 1px solid var(--ah-line); padding-top: .7rem; margin-top: .7rem; }
+.sn-level:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+
+.sn-level-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; margin-bottom: .4rem;
+}
+.sn-level-name {
+  font-size: .78rem; font-weight: 700; color: #374151;
+  display: flex; align-items: center; gap: .4rem;
+}
+.sn-level-name i { color: var(--ah-muted); width: .95rem; text-align: center; }
+.sn-selected {
+  font-size: .7rem; font-weight: 600;
+  color: var(--ah-low); white-space: nowrap;
+}
+.sn-selected.none { color: var(--ah-faint); font-weight: 500; }
+
+/* Each level is one searchable multi-select. Six scrolling checkbox lists was
+   the first attempt and made the column taller than the screen — the recipient
+   count it exists to justify scrolled off before you could read it. A dropdown
+   collapses to one row when untouched, which is the common case. */
+.sn-level .select2-container { width: 100% !important; }
+.sn-level .select2-selection--multiple {
+  min-height: 2.4rem;
+  border-color: var(--ah-line) !important;
+  border-radius: .55rem !important;
+  /* The right inset is style.css's, not spare space: it is what the site-wide
+     caret on a multi-select sits in. Collapsing it puts the chips under it. */
+  padding: .2rem 2.25rem .2rem .35rem !important;
+}
+/* The bootstrap-5 theme lays choices out as blocks, so one chosen branch made
+   the control three rows tall and six levels overflowed the column again.
+   Flowing them inline is what keeps a level one row until it earns two. */
+.sn-level .select2-selection--multiple .select2-selection__rendered {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.sn-level .select2-selection__choice {
+  background: var(--ah-medium-soft) !important;
+  border: 0 !important;
+  color: #1e40af !important;
+  border-radius: 1rem !important;
+  font-size: .75rem;
+  line-height: 1.35;
+  margin: 0 !important;
+  padding: .05rem .5rem .05rem .3rem !important;
+}
+.sn-level .select2-selection__choice__remove { margin-right: .15rem !important; }
+.sn-level .select2-search--inline { display: inline-flex !important; margin: 0 !important; }
+.sn-level .select2-search--inline .select2-search__field {
+  margin: 0 !important;
+  height: 1.45rem;
+  min-height: 0;
+  font-size: .8rem;
+}
+.sn-level .select2-selection__placeholder { color: var(--ah-faint) !important; font-size: .82rem; }
+/* A native multi-select is the no-JavaScript fallback. Capped so the page
+   stays usable if Select2 never initialises. */
+.sn-level select.sn-hier { max-height: 6rem; }
+
+.sn-checks {
+  max-height: 8.5rem;
+  overflow-y: auto;
+  border: 1px solid var(--ah-line);
+  border-radius: .55rem;
+  padding: .35rem;
+  background: #fff;
+}
+.sn-checks label {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .28rem .4rem;
+  border-radius: .4rem;
+  font-size: .81rem;
+  cursor: pointer;
+}
+.sn-checks label:hover { background: var(--ah-canvas); }
+.sn-checks input { margin: 0; flex: 0 0 auto; }
+.sn-checks .sn-sub { color: var(--ah-faint); font-size: .72rem; margin-left: auto; }
+.sn-checks-empty { font-size: .76rem; color: var(--ah-faint); padding: .5rem .4rem; }
+
+/* -- employee picker --------------------------------------------------- */
+
+.sn-emp-tools { display: flex; gap: .4rem; align-items: center; margin-bottom: .5rem; }
+.sn-search { flex: 1; }
+.sn-mini {
+  border: 1px solid var(--ah-line);
+  background: #fff;
+  border-radius: .45rem;
+  padding: .3rem .55rem;
+  font-size: .74rem;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+.sn-mini:hover { background: var(--ah-canvas); }
+
+.sn-chips {
+  display: flex; flex-wrap: wrap; gap: .35rem;
+  max-height: 11rem; overflow-y: auto;
+  padding: .1rem;
+}
+.sn-chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  background: var(--ah-canvas);
+  border: 1px solid var(--ah-line);
+  border-radius: 1rem;
+  padding: .18rem .3rem .18rem .18rem;
+  font-size: .78rem;
+}
+.sn-chip.off { opacity: .55; }
+.sn-avatar {
+  width: 1.35rem; height: 1.35rem; border-radius: 50%;
+  background: var(--ah-medium-soft); color: var(--ah-medium);
+  font-size: .62rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto;
+}
+.sn-chip-x {
+  border: 0; background: none; color: var(--ah-faint);
+  font-size: .85rem; line-height: 1; padding: 0 .25rem; cursor: pointer;
+}
+.sn-chip-x:hover { color: var(--ah-critical); }
+.sn-more { font-size: .74rem; font-weight: 600; color: var(--ah-medium); cursor: pointer; }
+
+/* -- preview column ---------------------------------------------------- */
+
+.sn-facts { display: grid; gap: .05rem; }
+.sn-fact {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .6rem; padding: .32rem 0;
+  border-bottom: 1px dashed var(--ah-line);
+  font-size: .81rem;
+}
+.sn-fact:last-child { border-bottom: 0; }
+.sn-fact-l { color: var(--ah-muted); display: flex; align-items: center; gap: .4rem; }
+.sn-fact-l i { width: .95rem; text-align: center; color: var(--ah-faint); }
+.sn-fact-v { font-weight: 600; color: var(--ah-ink); text-align: right; }
+
+.sn-total {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--ah-medium-soft);
+  border-radius: .6rem;
+  padding: .7rem .85rem;
+  margin: .7rem 0;
+}
+.sn-total-l {
+  font-size: .68rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: #1e40af;
+}
+.sn-total-n { font-size: 1.9rem; font-weight: 800; line-height: 1; color: #1e3a8a; }
+
+/* A horizontal breakdown rather than a donut: four bars read at a glance and
+   stay legible at this width, where a pie chart would need a legend to say
+   what its slices were. */
+.sn-bars { display: grid; gap: .35rem; margin-bottom: .7rem; }
+.sn-bar-row { display: grid; grid-template-columns: 5.2rem 1fr 2rem; gap: .45rem; align-items: center; }
+.sn-bar-l { font-size: .74rem; color: var(--ah-muted); }
+.sn-bar-track { height: .4rem; background: #eef2f7; border-radius: 1rem; overflow: hidden; }
+.sn-bar-fill { height: 100%; border-radius: 1rem; background: var(--ah-medium); }
+.sn-bar-fill.groups { background: var(--ah-low); }
+.sn-bar-fill.roles { background: var(--ah-high); }
+.sn-bar-fill.places { background: #8b5cf6; }
+.sn-bar-n { font-size: .74rem; font-weight: 700; text-align: right; }
+
+.sn-status {
+  display: flex; align-items: flex-start; gap: .45rem;
+  border-radius: .55rem; padding: .5rem .65rem;
+  font-size: .78rem; margin-bottom: .55rem;
+}
+.sn-status.ok { background: var(--ah-low-soft); color: #166534; }
+.sn-status.warn { background: var(--ah-high-soft); color: #9a3412; }
+.sn-status button {
+  border: 0; background: none; padding: 0; margin-left: auto;
+  font-size: .74rem; font-weight: 700; color: inherit;
+  text-decoration: underline; cursor: pointer;
+}
+
+.sn-channels { list-style: none; margin: .15rem 0 0; padding: 0; }
+.sn-channels li {
+  font-size: .78rem; color: #1e40af;
+  display: flex; align-items: center; gap: .4rem; padding: .1rem 0;
+}
+.sn-channels li i { width: .9rem; text-align: center; }
+
+/* -- message preview --------------------------------------------------- */
+
+/* Shown the way the recipient will see it, so the sender checks the message
+   rather than the form they typed it into. */
+.sn-preview-msg {
+  border: 1px solid var(--ah-line);
+  border-left: 3px solid var(--ah-medium);
+  border-radius: .6rem;
+  padding: .8rem .9rem;
+  background: var(--ah-canvas);
+}
+.sn-preview-msg.critical { border-left-color: var(--ah-critical); }
+.sn-preview-msg.high     { border-left-color: var(--ah-high); }
+.sn-preview-msg.medium   { border-left-color: var(--ah-medium); }
+.sn-preview-msg.low      { border-left-color: var(--ah-low); }
+.sn-preview-title { font-weight: 700; font-size: .92rem; margin-bottom: .3rem; }
+.sn-preview-body { font-size: .83rem; color: #475569; white-space: pre-wrap; margin-bottom: .5rem; }
+.sn-preview-meta { display: flex; flex-wrap: wrap; gap: .8rem; font-size: .73rem; color: var(--ah-muted); }
+.sn-preview-meta b { color: #374151; font-weight: 600; }
+
+/* -- actions ----------------------------------------------------------- */
+
+.sn-actions {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.sn-actions .sn-spacer { margin-left: auto; }
+
+/* -- delivery history -------------------------------------------------- */
+
+.sn-deliv-name { font-weight: 600; }
+.sn-deliv-sub { font-size: .72rem; color: var(--ah-faint); }
+.sn-dot-ok { color: var(--ah-low); }
+.sn-dot-wait { color: var(--ah-faint); }
+
+@media (max-width: 575.98px) {
+  /* Touch targets: a 40px row is the smallest that is comfortably tappable,
+     and the hierarchy lists are the part most used on a phone. */
+  .sn-checks label { padding: .5rem .45rem; }
+  .sn-actions .btn { flex: 1 1 100%; }
+  .sn-actions .sn-spacer { margin-left: 0; }
+}

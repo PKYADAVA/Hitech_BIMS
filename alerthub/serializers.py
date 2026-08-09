@@ -33,17 +33,39 @@ class NotificationSerializer(serializers.ModelSerializer):
         source="warehouse.name", read_only=True, default=""
     )
     detail_url = serializers.SerializerMethodField()
+    category_label = serializers.CharField(
+        source="get_category_display", read_only=True, default=""
+    )
+    # A file the sender attached by hand. Absolute so the phone, which has no
+    # notion of the site root, can open it directly.
+    attachment_url = serializers.SerializerMethodField()
+    attachment_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
         fields = [
             "id", "rule_key", "module", "module_label", "priority",
-            "priority_label", "tone", "color", "icon", "title", "message",
+            "priority_label", "category", "category_label",
+            "tone", "color", "icon", "title", "message",
             "place", "branch_name", "farm_name", "warehouse_name",
             "object_display", "voucher_no", "action_url", "detail_url",
+            "attachment_url", "attachment_name",
             "measured_value", "threshold_value", "metadata",
             "is_read", "read_at", "created_at",
         ]
+
+    def get_attachment_url(self, obj) -> str:
+        if not obj.attachment:
+            return ""
+        try:
+            url = obj.attachment.url
+        except ValueError:
+            return ""
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
+
+    def get_attachment_name(self, obj) -> str:
+        return obj.attachment_name if obj.attachment else ""
 
     # ``_recipient`` is annotated by the viewset via prefetch so these do not
     # cost a query per row; falling back to a lookup keeps the serializer

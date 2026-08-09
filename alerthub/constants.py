@@ -89,6 +89,110 @@ MODULE_ICON = {
 }
 
 
+class Category(models.TextChoices):
+    """What a hand-written notification is *about*, one level below Module.
+
+    Module answers "which part of the business" and is what the automatic rules
+    already carry. A person composing a message knows something narrower —
+    "Mortality", "Vaccination" — and filing by it is what makes a month of sent
+    messages searchable later.
+
+    Deliberately a short, closed list. Free-text tags would drift into
+    "mortality", "Mortality " and "high mortality" inside a week, and none of
+    the three would find the others.
+    """
+
+    MORTALITY = "mortality", "Mortality"
+    FEED = "feed", "Feed"
+    MEDICINE = "medicine", "Medicine"
+    VACCINATION = "vaccination", "Vaccination"
+    WEIGHT = "weight", "Weight & FCR"
+    STOCK = "stock", "Stock"
+    DISPATCH = "dispatch", "Dispatch"
+    PAYMENT = "payment", "Payment"
+    APPROVAL = "approval", "Approval"
+    ATTENDANCE = "attendance", "Attendance"
+    MAINTENANCE = "maintenance", "Maintenance"
+    ANNOUNCEMENT = "announcement", "Announcement"
+    GENERAL = "general", "General"
+
+
+#: Category -> Font Awesome icon, on the same principle as MODULE_ICON: one
+#: place decides, so a category cannot look like two things on two screens.
+CATEGORY_ICON = {
+    Category.MORTALITY: "fa-solid fa-skull-crossbones",
+    Category.FEED: "fa-solid fa-wheat-awn",
+    Category.MEDICINE: "fa-solid fa-prescription-bottle-medical",
+    Category.VACCINATION: "fa-solid fa-syringe",
+    Category.WEIGHT: "fa-solid fa-weight-scale",
+    Category.STOCK: "fa-solid fa-boxes-stacked",
+    Category.DISPATCH: "fa-solid fa-truck-fast",
+    Category.PAYMENT: "fa-solid fa-indian-rupee-sign",
+    Category.APPROVAL: "fa-solid fa-circle-check",
+    Category.ATTENDANCE: "fa-solid fa-user-clock",
+    Category.MAINTENANCE: "fa-solid fa-screwdriver-wrench",
+    Category.ANNOUNCEMENT: "fa-solid fa-bullhorn",
+    Category.GENERAL: "fa-solid fa-circle-info",
+}
+
+
+class NotificationType(models.TextChoices):
+    """What kind of message a person is composing.
+
+    This is the one field the sender actually thinks in — "I am sending a
+    mortality alert" — and Module and Category are both derivable from it (see
+    :data:`TYPE_DEFAULTS`). Deriving them rather than asking three times is what
+    keeps a "Mortality Alert" from being filed under Finance because a second
+    dropdown was left on its default.
+
+    Category stays editable afterwards, because the derivation is a sensible
+    starting point and not a law: a Production Alert may legitimately be about
+    weights rather than mortality.
+    """
+
+    GENERAL = "general", "General Notification"
+    PRODUCTION = "production", "Production Alert"
+    MORTALITY = "mortality", "Mortality Alert"
+    FEED = "feed", "Feed Alert"
+    MEDICINE = "medicine", "Medicine / Veterinary"
+    VACCINATION = "vaccination", "Vaccination"
+    HATCHERY = "hatchery", "Hatchery"
+    INVENTORY = "inventory", "Inventory"
+    PURCHASE = "purchase", "Purchase"
+    SALES = "sales", "Sales / Dispatch"
+    FINANCE = "finance", "Finance"
+    HR = "hr", "HR"
+    ATTENDANCE = "attendance", "Attendance"
+    SYSTEM = "system", "System"
+
+
+#: Notification type -> (module, suggested category). The page pre-selects the
+#: category from here as the type changes; the sender may override it.
+TYPE_DEFAULTS = {
+    NotificationType.GENERAL: (Module.SYSTEM, Category.GENERAL),
+    NotificationType.PRODUCTION: (Module.PRODUCTION, Category.GENERAL),
+    NotificationType.MORTALITY: (Module.PRODUCTION, Category.MORTALITY),
+    NotificationType.FEED: (Module.FEED, Category.FEED),
+    NotificationType.MEDICINE: (Module.HEALTH, Category.MEDICINE),
+    NotificationType.VACCINATION: (Module.HEALTH, Category.VACCINATION),
+    NotificationType.HATCHERY: (Module.HATCHERY, Category.GENERAL),
+    NotificationType.INVENTORY: (Module.INVENTORY, Category.STOCK),
+    NotificationType.PURCHASE: (Module.PURCHASE, Category.APPROVAL),
+    NotificationType.SALES: (Module.SALES, Category.DISPATCH),
+    NotificationType.FINANCE: (Module.FINANCE, Category.PAYMENT),
+    NotificationType.HR: (Module.HR, Category.GENERAL),
+    NotificationType.ATTENDANCE: (Module.HR, Category.ATTENDANCE),
+    NotificationType.SYSTEM: (Module.SYSTEM, Category.GENERAL),
+}
+
+
+def defaults_for_type(notification_type):
+    """``(module, category)`` for a type, falling back to System/General."""
+    return TYPE_DEFAULTS.get(
+        notification_type, (Module.SYSTEM, Category.GENERAL)
+    )
+
+
 class Channel(models.TextChoices):
     """Delivery routes. Only IN_APP is wired; the rest are configurable now and
     delivered when a provider is connected.

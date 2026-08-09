@@ -1,6 +1,6 @@
 """Persistence for business alerts.
 
-Four tables, each with one job:
+Five tables, each with one job:
 
 * :class:`AlertRule` — the Alert Configuration master. What to watch, at what
   threshold, at what priority, and who to tell.
@@ -10,6 +10,8 @@ Four tables, each with one job:
 * :class:`NotificationRecipient` — the fan-out. One row per user who was told,
   holding *their* read state.
 * :class:`NotificationPreference` — per-user delivery choices.
+* :class:`OutgoingNotification` — a message a person composed: draft, waiting
+  for its hour, or already sent. The composition, as against the delivery.
 
 **Why recipients are a separate table.** Read state is per person: the same
 "High Mortality" alert is unread for the supervisor and read for the manager,
@@ -25,12 +27,16 @@ than deleting a piece of history — the same reasoning
 from __future__ import annotations
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import models
 from django.utils import timezone
 
 from .catalog import BY_KEY, rule_key_choices
-from .constants import Channel, Module, Operator, Priority
+from .constants import (
+    Category, Channel, Module, NotificationType, Operator, Priority,
+    defaults_for_type,
+)
 
 
 class AlertRule(models.Model):
@@ -219,8 +225,24 @@ class Notification(models.Model):
         db_index=True,
     )
 
+    category = models.CharField(
+        max_length=20, choices=Category.choices, blank=True, db_index=True,
+        help_text="What it is about, one level below module. Set on messages "
+                  "composed by hand; blank on rule-raised alerts, which are "
+                  "already identified by their rule key.",
+    )
+
     title = models.CharField(max_length=200)
     message = models.TextField(blank=True)
+
+    #: Optional file that travels with the message — a delivery note, a lab
+    #: report. Lives on the notification rather than only on the outgoing draft
+    #: so it is still reachable from the bell years later, after the draft that
+    #: composed it has been cleared out.
+    attachment = models.FileField(
+        upload_to="alerthub/attachments/%Y/%m/", blank=True, null=True,
+        help_text="Optional PDF/image/document sent with the message.",
+    )
 
     # --- scope: the security columns -------------------------------------
     branch = models.ForeignKey(
@@ -302,9 +324,24 @@ class Notification(models.Model):
 
     @property
     def icon(self) -> str:
-        from .constants import MODULE_ICON
+        """The glyph for this alert.
 
+        A hand-written message says what it is about more precisely than its
+        module does — "Mortality" beats "Production" on a crowded list — so the
+        category wins where one was chosen.
+        """
+        from .constants import CATEGORY_ICON, MODULE_ICON
+
+        if self.category:
+            return CATEGORY_ICON.get(self.category, "fa-solid fa-bell")
         return MODULE_ICON.get(self.module, "fa-solid fa-bell")
+
+    @property
+    def attachment_name(self) -> str:
+        """Just the file's own name — the stored path carries a date folder."""
+        import os
+
+        return os.path.basename(self.attachment.name) if self.attachment else ""
 
     @property
     def scope_label(self) -> str:
@@ -429,3 +466,229 @@ class NotificationPreference(models.Model):
             Channel.SMS: self.receive_sms,
             Channel.WHATSAPP: self.receive_whatsapp,
         }.get(channel, False)
+
+
+class OutgoingNotification(models.Model):
+    """One message a person composed, in whatever state it has reached.
+
+    The Send Notification page needs four things a bare :class:`Notification`
+    cannot give it — a message can be *saved and finished later*, *scheduled for
+    an hour that has not arrived*, *carry a file*, and *answer for how many of
+    its recipients it actually reached* — and all of them are the same object at
+    different points in its life. Splitting them into a drafts table, a schedule
+    table and a send log would mean three places to keep in step and three
+    answers to "what did we send on Tuesday".
+
+    So this is the **composition**; ``Notification`` is the **delivery**.
+    Sending creates the notification and links it here, which is what lets the
+    audit row report a real recipient count rather than the count it was
+    composed with.
+
+    **This model stores no permissions.** The organisation fields below are
+    *filters that chose an audience*, not grants — nothing here decides what
+    anyone may see or do. Which people a sender is allowed to aim at comes from
+    ``user.services.scoping`` and the Employee Organization Access master, and
+    who may open this page at all comes from the Web-Access matrix. Both are
+    read; neither is duplicated.
+
+    **Recipients are frozen at composition, not resolved at send.** The
+    hierarchy selections are stored so a draft reopens showing what was chosen,
+    and so the history can say who a message was aimed at, but ``users`` is the
+    list the sender actually saw and approved. Re-running the filters at send
+    time would mean a message scheduled for Monday reaching people who joined
+    the branch over the weekend and were on nobody's list.
+    """
+
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    SENDING = "sending"
+    SENT = "sent"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (DRAFT, "Draft"),
+        (SCHEDULED, "Scheduled"),
+        (SENDING, "Sending"),
+        (SENT, "Sent"),
+        (PARTIAL, "Partially Sent"),
+        (FAILED, "Failed"),
+        (CANCELLED, "Cancelled"),
+    ]
+
+    #: Statuses that mean the work is over, one way or another. Used to decide
+    #: whether a row may still be edited or cancelled.
+    TERMINAL = {SENT, PARTIAL, FAILED, CANCELLED}
+
+    # --- the message ------------------------------------------------------
+    notification_type = models.CharField(
+        max_length=20, choices=NotificationType.choices,
+        default=NotificationType.GENERAL,
+        help_text="What kind of message this is. Module and category are "
+                  "derived from it on save.",
+    )
+    module = models.CharField(
+        max_length=20, choices=Module.choices, default=Module.SYSTEM,
+        help_text="Derived from the type; stored so the history can filter "
+                  "without re-deriving.",
+    )
+    category = models.CharField(
+        max_length=20, choices=Category.choices, default=Category.GENERAL,
+        help_text="Suggested by the type and editable — a production alert may "
+                  "legitimately be about weights rather than mortality.",
+    )
+    priority = models.CharField(
+        max_length=10, choices=Priority.choices, default=Priority.MEDIUM,
+    )
+    title = models.CharField(max_length=100)
+    message = models.TextField(max_length=500)
+    attachment = models.FileField(
+        upload_to="alerthub/attachments/%Y/%m/", blank=True, null=True,
+    )
+
+    # --- who it is aimed at ----------------------------------------------
+    # The hierarchy that produced the employee list. Every level is optional,
+    # and empty means "all": a send that named no branch was aimed at every
+    # branch the sender may reach, not at none of them.
+    companies = models.ManyToManyField(
+        "account.CompanyProfile", blank=True,
+        related_name="outgoing_notifications")
+    branches = models.ManyToManyField(
+        "broiler.Branch", blank=True, related_name="outgoing_notifications")
+    farms = models.ManyToManyField(
+        "broiler.BroilerFarm", blank=True, related_name="outgoing_notifications")
+    warehouses = models.ManyToManyField(
+        "inventory.Warehouse", blank=True, related_name="outgoing_notifications")
+    departments = models.ManyToManyField(
+        "hr.Department", blank=True, related_name="outgoing_notifications")
+    #: Role, as the ERP already records it — the HR designation. Kept distinct
+    #: from ``groups`` because they answer different questions: a role is what
+    #: someone *is*, a group is a list somebody maintains.
+    designations = models.ManyToManyField(
+        "hr.Designation", blank=True, related_name="outgoing_notifications")
+
+    #: Whole groups named as recipients — "the Bahraich supervisors" — expanded
+    #: to their members at send time.
+    groups = models.ManyToManyField(
+        Group, blank=True, related_name="outgoing_notifications")
+    #: The people the sender picked and saw counted. The authoritative list.
+    users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name="outgoing_notifications")
+
+    # --- state ------------------------------------------------------------
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default=DRAFT, db_index=True)
+    send_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text="When a scheduled message is due. Null means send now.",
+    )
+    sent_at = models.DateTimeField(null=True, blank=True)
+    notification = models.OneToOneField(
+        Notification, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="outgoing",
+        help_text="What this became once it went out.",
+    )
+
+    # Counted at send and stored, not derived on read: recipient rows can be
+    # cleared by their owners, and an audit trail that quietly shrinks when
+    # someone tidies their bell is not an audit trail.
+    recipient_count = models.PositiveIntegerField(default=0)
+    success_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+
+    #: Why a send failed or fell short, so the list can say so instead of
+    #: sitting at 'scheduled' forever with no explanation.
+    error = models.CharField(max_length=300, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="outgoing_notifications_created")
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["status", "send_at"]),
+            models.Index(fields=["created_by", "-created_at"]),
+        ]
+        verbose_name = "Outgoing notification"
+        verbose_name_plural = "Outgoing notifications"
+
+    def __str__(self) -> str:
+        return f"[{self.get_status_display()}] {self.title}"
+
+    def save(self, *args, **kwargs):
+        # Module follows the type always; category only when nothing has been
+        # chosen, because the sender is allowed to overrule the suggestion.
+        module, category = defaults_for_type(self.notification_type)
+        self.module = module
+        if not self.category:
+            self.category = category
+        return super().save(*args, **kwargs)
+
+    # --- state questions the page asks ------------------------------------
+
+    @property
+    def is_editable(self) -> bool:
+        """A sent message is a record, not a document. Only the unsent open."""
+        return self.status in (self.DRAFT, self.SCHEDULED)
+
+    @property
+    def is_due(self) -> bool:
+        return (
+            self.status == self.SCHEDULED
+            and self.send_at is not None
+            and self.send_at <= timezone.now()
+        )
+
+    @property
+    def status_tone(self) -> str:
+        return {
+            self.DRAFT: "secondary",
+            self.SCHEDULED: "info",
+            self.SENDING: "info",
+            self.SENT: "success",
+            self.PARTIAL: "warning",
+            self.FAILED: "danger",
+            self.CANCELLED: "secondary",
+        }.get(self.status, "secondary")
+
+    @property
+    def attachment_name(self) -> str:
+        """Just the file's own name — the stored path carries a date folder."""
+        import os
+
+        return os.path.basename(self.attachment.name) if self.attachment else ""
+
+    @property
+    def attachment_size_display(self) -> str:
+        if not self.attachment:
+            return ""
+        try:
+            size = self.attachment.size
+        except (OSError, ValueError):
+            # The file is gone from storage; the row still describes a send
+            # that happened, so this must not raise on a history page.
+            return ""
+        if size < 1024 * 1024:
+            return f"{size / 1024:.0f} KB"
+        return f"{size / 1024 / 1024:.1f} MB"
+
+    def resolve_recipients(self):
+        """The active users this will actually reach, de-duplicated.
+
+        Named users and group members are unioned, so someone picked directly
+        *and* covered by a chosen group is sent to once — the arithmetic the
+        preview panel promises. Inactive accounts drop out here rather than at
+        the point of delivery, so the count the sender confirmed is the count
+        that goes out.
+        """
+        User = get_user_model()
+        return list(
+            User.objects.filter(is_active=True)
+            .filter(models.Q(outgoing_notifications=self)
+                    | models.Q(groups__outgoing_notifications=self))
+            .distinct()
+        )
