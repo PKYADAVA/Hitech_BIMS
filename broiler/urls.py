@@ -111,6 +111,8 @@ urlpatterns = [
     path('bird-sale-receipt/balance-lookup/', views.bird_sale_receipt_balance_lookup, name='bird_sale_receipt_balance_lookup'),
 
     path('broiler-report/', views.broiler_batch_report, name='broiler_batch_report'),
+    path('production-pl-report/', views.production_pl_report,
+         name='production_pl_report'),
     path('chicks-placement-report/', views.chicks_placement_report, name='chicks_placement_report'),
     path('feed-dispatch-stock-report/', views.feed_dispatch_stock_report, name='feed_dispatch_stock_report'),
     path('live-flock-summary/', views.live_flock_summary_report, name='live_flock_summary_report'),

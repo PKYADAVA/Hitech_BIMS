@@ -105,6 +105,7 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("farmer_farm_report", "Farmer & Farm Report"),
                     ("broiler_batch_report", "Batch History Report"),
+                    ("production_pl_report", "Production Profit & Loss"),
                     ("chicks_placement_report", "Chicks Placement Report"),
                     ("feed_dispatch_stock_report", "Feed Dispatch & Stock Report"),
                     ("live_flock_summary_report", "Live Flock Summary Report"),

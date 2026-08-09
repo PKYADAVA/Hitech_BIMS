@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% comment %}
+Production Profit & Loss — one batch's result for the company.
+
+Deliberately not a second Growing Charge Statement. That page answers what the
+farmer is owed against the rates in the master; this one answers what the flock
+made or lost, so every cost on it is money actually spent (see
+services/purchase_cost.py).
+
+Heads this ERP records nothing against — labour, electricity, depreciation,
+litter and manure sales — are printed with "not tracked" rather than left out.
+A statement missing its rows reads as complete, and somebody decides on it.
+{% endcomment %}
+
+{% block title %}Production Profit &amp; Loss — BIMS{% endblock %}
+
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='production_pl_report' %}
+
+<div class="report-doc">
+  {% include '_report_letterhead.html' with title='Production Profit & Loss Report' %}
+  <div class="report-doc-title">Production Profit &amp; Loss Report</div>
+  <div class="text-center text-muted small mb-2">Batch Wise Profitability Statement</div>
+
+  <div class="rpt-filter no-print">
+    <form method="get" class="row g-2 align-items-end flex-nowrap">
+      <div class="col-6 col-md-3">
+        <label class="form-label">Farm</label>
+        <select class="form-select" id="pl-farm">
+          <option value="">select</option>
+          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label">Batch <span class="text-danger">*</span></label>
+        <select class="form-select" name="batch" id="pl-batch" required>
+          <option value="">select</option>
+          {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
+            {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}{% if b.is_closed %} (Closed){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary" type="submit">View Report</button>
+        {% if batch %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>{% endif %}
+      </div>
+    </form>
+  </div>
+
+{% if batch %}
+  <div class="gc-card gc-full mb-3">
+    <div class="gc-card-header">
+      <span class="gc-card-icon" style="--ci-accent:#0d5f8a;--ci-bg:#eaf3f8"><i class="fas fa-kiwi-bird"></i></span>
+      Batch Summary
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 report-costing rpt-table ds-grid">
+        <tbody>
+          <tr>
+            <td class="lbl">Batch No.</td><td class="val">{{ batch.batch_name }}</td>
+            <td class="lbl">Farm</td><td class="val">{{ batch.broiler_farm.farm_name }}</td>
+            <td class="lbl">Branch</td><td class="val">{{ batch.broiler_farm.branch.branch_name }}</td>
+            <td class="lbl">Supervisor</td><td class="val">{{ batch.broiler_farm.supervisor.name }}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Placement Date</td><td class="val">{{ report.batch_costing.placement_date|date:"d.m.Y" }}</td>
+            <td class="lbl">Sale Start</td><td class="val">{{ report.batch_costing.sale_start_date|date:"d.m.Y" }}</td>
+            <td class="lbl">Chicks Placed</td><td class="val">{{ report.batch_costing.chicks_placed }}</td>
+            <td class="lbl">Birds Sold</td><td class="val">{{ report.batch_costing.sold_birds }}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Sold Weight</td><td class="val">{{ report.batch_costing.sold_weight }}</td>
+            <td class="lbl">Avg Weight</td><td class="val">{{ pl.kpis.avg_weight }}</td>
+            <td class="lbl">FCR</td><td class="val">{{ pl.kpis.fcr }}</td>
+            <td class="lbl">Mortality %</td><td class="val">{{ pl.kpis.mortality_pct }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="gc-card gc-full h-100">
+        <div class="gc-card-header">
+          <span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-indian-rupee-sign"></i></span>
+          Revenue
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+            <thead><tr><th>Particular</th><th class="ds-num text-end">Amount (₹)</th></tr></thead>
+            <tbody>
+              {% for line in pl.revenue_lines %}
+              <tr>
+                <td>{{ line.label }}</td>
+                <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
+                  {% if line.tracked %}{{ line.amount }}{% else %}not tracked{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              <tr class="report-total-row">
+                <td>Total Revenue</td><td class="text-end">{{ pl.total_revenue }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="gc-card gc-full h-100">
+        <div class="gc-card-header">
+          <span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-receipt"></i></span>
+          Production Cost — at actual purchase prices
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+            <thead><tr><th>Cost Head</th><th class="ds-num text-end">Amount (₹)</th></tr></thead>
+            <tbody>
+              {% for line in pl.cost_lines %}
+              <tr>
+                <td>{{ line.label }}</td>
+                <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
+                  {% if line.tracked %}{{ line.amount }}{% else %}not tracked{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              <tr class="report-total-row">
+                <td>Total Production Cost</td><td class="text-end">{{ pl.total_cost }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gc-card gc-full mt-3">
+    <div class="gc-card-header">
+      <span class="gc-card-icon" style="--ci-accent:#008300;--ci-bg:#e0f0e0"><i class="fas fa-chart-line"></i></span>
+      Profit Analysis
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 report-costing rpt-table ds-grid">
+        <tbody>
+          <tr>
+            <td class="lbl">Total Revenue</td><td class="val">{{ pl.total_revenue }}</td>
+            <td class="lbl">Total Cost</td><td class="val">{{ pl.total_cost }}</td>
+            <td class="lbl">Gross Profit</td><td class="hl">{{ pl.gross_profit }}</td>
+            <td class="lbl">Profit %</td><td class="hl">{{ pl.profit_pct }}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Profit / Bird Placed</td><td class="val">{{ pl.profit_per_bird_placed }}</td>
+            <td class="lbl">Profit / Bird Sold</td><td class="val">{{ pl.profit_per_bird_sold }}</td>
+            <td class="lbl">Profit / Kg Live Weight</td><td class="val">{{ pl.profit_per_kg }}</td>
+            <td class="lbl"></td><td class="val"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small text-muted mt-2 mb-0">{{ pl.untracked_note }}</p>
+  </div>
+
+  <div class="gc-card gc-full mt-3">
+    <div class="gc-card-header">
+      <span class="gc-card-icon" style="--ci-accent:#2a78d6;--ci-bg:#eaf2fc"><i class="fas fa-gauge-high"></i></span>
+      Production KPIs
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered mb-0 report-costing rpt-table ds-grid">
+        <tbody>
+          <tr>
+            <td class="lbl">Average Sale Rate</td><td class="val">{{ pl.kpis.average_sale_rate }}</td>
+            <td class="lbl">Cost / Kg Live Weight</td><td class="val">{{ pl.kpis.cost_per_kg_live_weight }}</td>
+            <td class="lbl">Feed Cost / Kg</td><td class="val">{{ pl.kpis.feed_cost_per_kg }}</td>
+            <td class="lbl">Chick Cost / Bird</td><td class="val">{{ pl.kpis.chick_cost_per_bird }}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Medicine Cost / Bird</td><td class="val">{{ pl.kpis.medicine_cost_per_bird }}</td>
+            <td class="lbl">CFCR</td><td class="val">{{ pl.kpis.cfcr }}</td>
+            <td class="lbl">EEF</td><td class="val">{{ pl.kpis.eef }}</td>
+            <td class="lbl">Livability %</td><td class="val">{{ pl.kpis.livability_pct }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if pl.unpriced_items %}
+  <div class="alert alert-warning mt-3 mb-0 small">
+    <i class="fas fa-triangle-exclamation me-1"></i>
+    {{ pl.unpriced_items|length }} item(s) consumed by this batch have no purchase
+    on record, so their cost is not included above. The profit shown is higher
+    than the flock's real result by whatever those items cost.
+  </div>
+  {% endif %}
+
+{% elif batch_requested %}
+  <div class="ah-empty text-center text-muted py-5">
+    That batch is not one you can see, or it no longer exists.
+  </div>
+{% else %}
+  <div class="text-center text-muted py-5">
+    Choose a farm and a batch, then View Report.
+  </div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  // Batch lists the chosen farm's batches only. The options are detached and
+  // re-appended rather than hidden: main.js turns every .form-select into a
+  // Select2, which builds its own list and ignores `display: none`.
+  var all = $('#pl-batch').children().toArray();
+  function filterBatches() {
+    var farmId = $('#pl-farm').val();
+    var chosen = $('#pl-batch').val();
+    var keep = $(all).filter(function () {
+      return !this.value || !farmId || $(this).data('farm') == farmId;
+    });
+    $('#pl-batch').children().detach();
+    $('#pl-batch').append(keep);
+    var survives = keep.filter(function () { return this.value === chosen; }).length;
+    $('#pl-batch').val(survives ? chosen : '').trigger('change.select2');
+  }
+  $('#pl-farm').on('change', filterBatches);
+  {% if batch %}$('#pl-farm').val('{{ batch.broiler_farm_id }}');{% endif %}
+  filterBatches();
+});
+</script>
+{% endblock %}
