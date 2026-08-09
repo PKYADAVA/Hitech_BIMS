@@ -5772,6 +5772,109 @@ def _feed_scheduling_export(rows, totals, export, feed_summary=()):
     return response
 
 
+# ---------------------------------------------------------------------------
+# Growing Charge Realization Report (Broiler > Growing Charges > Reports)
+# ---------------------------------------------------------------------------
+
+@login_required
+def gc_realization_report(request):
+    """Standard vs Farmer Realization vs Management Realization, one triplet
+    of rows per farm's batch — see broiler.services.gc_realization for what
+    each of the three costing lenses means and where every figure comes from.
+
+    Live (open, unsettled) batches are the default: this report exists to be
+    read *before* a batch is settled, so someone can see how much of the gap
+    between the scheme's promise and the company's real spend is the farm's
+    performance versus the price the company itself paid. Closed and All are
+    there to look back afterwards.
+    """
+    from broiler.services.gc_realization import build_gc_realization_grid
+
+    branch_id = (request.GET.get("branch") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    status = (request.GET.get("status") or "live").strip().lower()
+    export = (request.GET.get("export") or "display").strip().lower()
+    submitted = bool(branch_id or farm_id or request.GET.get("status") or request.GET.get("submit"))
+
+    grid = None
+    if submitted:
+        batches = (BroilerBatch.objects
+                   .select_related("broiler_farm__branch", "breed")
+                   .order_by("broiler_farm__farm_name", "batch_name"))
+        batches = scope_multi(request.user, batches,
+                              farms="broiler_farm_id",
+                              branches="broiler_farm__branch_id")
+        if status == "closed":
+            batches = batches.filter(Q(end_date__isnull=False) | Q(is_closed=True))
+        elif status != "all":
+            batches = batches.filter(end_date__isnull=True, is_closed=False)
+        if branch_id.isdigit():
+            batches = batches.filter(broiler_farm__branch_id=branch_id)
+        if farm_id.isdigit():
+            batches = batches.filter(broiler_farm_id=farm_id)
+        grid = build_gc_realization_grid(batches)
+
+        if export == "excel":
+            return _gc_realization_excel(grid)
+
+    return render(request, "gc_realization_report.html", {
+        "active_tab": "gc_realization_report",
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "branch_id": branch_id,
+        "farm_id": farm_id,
+        "status": status,
+        "submitted": submitted,
+        "grid": grid,
+    })
+
+
+def _gc_realization_excel(grid):
+    """One flat row per (farm, scenario) — a farm's Standard row, its Farmer
+    Realization row and its Management Realization row each stand alone,
+    rather than reproducing the on-screen 2-column farm/scenario header,
+    which a spreadsheet has no clean way to represent as data."""
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    particulars = grid["particulars"]
+    headers = ["Farm", "Batch", "Basis"] + [label for _k, label, _u, _p in particulars]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "GC Realization"
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    for group in grid["groups"]:
+        for scenario in group["scenarios"]:
+            row = [group["farm_name"], group["batch_name"], scenario["label"]]
+            for key, _label, _unit, _places in particulars:
+                v = scenario["values"].get(key)
+                row.append(float(v) if isinstance(v, Decimal) else v)
+            ws.append(row)
+
+    for total in grid["totals"]:
+        row = ["Total", "", total["label"]]
+        for key, _label, _unit, _places in particulars:
+            v = total["values"].get(key)
+            row.append(float(v) if isinstance(v, Decimal) else v)
+        ws.append(row)
+        for cell in ws[ws.max_row]:
+            cell.font = Font(bold=True)
+
+    for i, label in enumerate(headers, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = max(len(label) + 2, 12)
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="gc_realization_report.xlsx"'
+    wb.save(response)
+    return response
+
+
 @login_required
 def feed_dispatch_stock_report(request):
     """Feed Dispatch & Stock ledger for a single Warehouse (Broiler > Reports

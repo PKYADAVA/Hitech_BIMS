@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}GC Realization Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+
+{% block nav %}{% endblock nav %}
+
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='gc_realization_report' %}
+
+{% comment %}
+Standard vs Farmer Realization vs Management Realization, one triplet of rows
+per farm's batch. Particulars run across as columns — the same layout the
+reference sheet for this report used — because the table is read a farm at a
+time ("is Akbarpur's flock costing more under real prices than the scheme
+promised?"), not a metric at a time. See broiler.services.gc_realization for
+what each of the three rows means and where every figure comes from.
+{% endcomment %}
+
+<style>
+  body { background: #eef2f5; }
+  .report-doc { width: 98%; max-width: 1900px; margin: 0 auto; }
+  .report-filter-bar {
+    border: 1px solid #dee2e6; border-top: none; padding: .75rem 1.25rem; background: #f8f9fa;
+  }
+  .report-filter-bar form > [class*="col-md-"] { flex-shrink: 1; min-width: 0; }
+  .report-filter-bar .col-auto { white-space: nowrap; }
+
+  /* Wide by design — ~30 particular columns plus two label columns — so the
+     table scrolls sideways inside its own box rather than the page. */
+  .gcr-scroll { max-height: 78vh; overflow: auto; border: 1px solid #9fc3d6; }
+  .gcr-table { border-collapse: collapse; font-size: .74rem; white-space: nowrap; }
+  .gcr-table th, .gcr-table td { border: 1px solid #dbe9f0; padding: .3rem .5rem; }
+  .gcr-table thead th {
+    background: #cfe3ec; font-weight: 700; position: sticky; top: 0; z-index: 3;
+  }
+  /* Farm + Basis are the row's own label, not a figure — frozen on the left so
+     they stay in view across the horizontal scroll the particular columns need.
+     Neither column has a fixed width: a long farm/batch name should get the
+     room it needs rather than truncate, so both size to their own content.
+     That means the second frozen column's offset can't be a fixed guess —
+     "Bahraich Branch" and "Green Valley Farm" are not the same width, and a
+     constant left value sized for one buries the header of the column after
+     it under the other. The script below measures the first column's actual
+     rendered width and sets --gcr-col1-w from it; the 11rem here is only the
+     fallback for the instant before that script runs. */
+  .gcr-table th.gcr-frozen, .gcr-table td.gcr-frozen {
+    position: sticky; left: 0; z-index: 2; background: #fff;
+  }
+  .gcr-table th.gcr-frozen.gcr-frozen-2, .gcr-table td.gcr-frozen.gcr-frozen-2 {
+    left: var(--gcr-col1-w, 11rem);
+  }
+  .gcr-table thead th.gcr-frozen { z-index: 4; }
+  .gcr-table td.gcr-num { text-align: right; }
+  .gcr-table td.gcr-label { font-weight: 600; }
+
+  /* One farm = three rows (Standard / Farmer / Management). The farm-name
+     cell spans all three via rowspan in the markup below; this just keeps the
+     basis row itself visually distinct without a repeated farm name reading
+     as three different farms. */
+  .gcr-row-standard td.gcr-basis { color: #555; }
+  .gcr-row-farmer td.gcr-basis { color: #0d5f8a; font-weight: 700; }
+  .gcr-row-management td.gcr-basis { color: #b02a2a; font-weight: 700; }
+  .gcr-row-farmer, .gcr-row-management { background: #fbfdff; }
+
+  .gcr-total-row td { font-weight: 700; background: #dbe9f0 !important; }
+  .gcr-no-scheme { color: #b02a2a; font-style: italic; }
+  .gcr-empty { padding: 3rem 1rem; text-align: center; color: #888; }
+</style>
+
+<div class="report-doc">
+  <div class="report-filter-bar">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-6 col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" name="branch">
+          <option value="">All Branches</option>
+          {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:"s" %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Farm</label>
+        <select class="form-select" name="farm">
+          <option value="">All Farms</option>
+          {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:"s" %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Batch Status</label>
+        <select class="form-select" name="status">
+          <option value="live" {% if status == 'live' %}selected{% endif %}>Live (Open) Batches</option>
+          <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed / Settled</option>
+          <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary" type="submit">Submit</button>
+        {% if grid and grid.has_any_batch %}
+          <a class="btn btn-outline-secondary" href="?{{ request.GET.urlencode }}&amp;export=excel">
+            <i class="fas fa-file-excel"></i> Excel
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if submitted %}
+    {% if grid.has_any_batch %}
+      <div class="gcr-scroll">
+        <table class="gcr-table">
+          <thead>
+            <tr>
+              <th class="gcr-frozen" style="left:0;">Farm / Batch</th>
+              <th class="gcr-frozen gcr-frozen-2">Basis</th>
+              {% for key, label, unit, places in grid.particulars %}
+                <th>{{ label }}{% if unit %}<br><span style="font-weight:400;font-size:.68rem;">({{ unit }})</span>{% endif %}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for group in grid.groups %}
+              {% for scenario in group.scenarios %}
+                <tr class="gcr-row-{{ scenario.key }}">
+                  {% if forloop.first %}
+                    <td class="gcr-frozen gcr-label" rowspan="3">
+                      {{ group.farm_name }}<br>
+                      <span style="font-weight:400;color:#777;">{{ group.batch_name }}</span>
+                      {% if not group.has_scheme %}<br><span class="gcr-no-scheme">No scheme matched</span>{% endif %}
+                    </td>
+                  {% endif %}
+                  <td class="gcr-frozen gcr-frozen-2 gcr-basis">{{ scenario.label }}</td>
+                  {% for cell in scenario.cells %}
+                    <td class="gcr-num">{{ cell }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            {% endfor %}
+
+            {% for total in grid.totals %}
+              <tr class="gcr-total-row">
+                {% if forloop.first %}<td class="gcr-frozen" rowspan="3">Total</td>{% endif %}
+                <td class="gcr-frozen gcr-frozen-2">{{ total.label }}</td>
+                {% for cell in total.cells %}
+                  <td class="gcr-num">{{ cell }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="gcr-empty"><i class="fas fa-inbox fa-2x mb-2"></i><br>No batches match this filter.</div>
+    {% endif %}
+  {% else %}
+    <div class="gcr-empty"><i class="fas fa-filter fa-2x mb-2"></i><br>Choose a filter and press Submit.</div>
+  {% endif %}
+</div>
+
+<script>
+  // The frozen Basis column's left offset has to equal the frozen Farm/Batch
+  // column's real rendered width — which varies with the farm and batch names
+  // actually on this page, so it cannot be a number chosen ahead of time.
+  // Measured after layout (fonts loaded, rowspan cells sized), and again on
+  // resize/reflow, so a name that wraps differently at a narrower viewport
+  // still lines up.
+  (function () {
+    var table = document.querySelector(".gcr-table");
+    if (!table) return;
+
+    function alignFrozenColumn() {
+      var first = table.querySelector("td.gcr-frozen:not(.gcr-frozen-2), th.gcr-frozen:not(.gcr-frozen-2)");
+      if (!first) return;
+      table.style.setProperty("--gcr-col1-w", first.getBoundingClientRect().width + "px");
+    }
+
+    alignFrozenColumn();
+    window.addEventListener("resize", alignFrozenColumn);
+    // Web fonts finishing their swap can change label widths after the first
+    // measurement; re-measure once they're in rather than trusting a fallback
+    // system-font width.
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(alignFrozenColumn);
+    }
+  })();
+</script>
+{% endblock %}

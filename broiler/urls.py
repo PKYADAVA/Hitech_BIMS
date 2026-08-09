@@ -124,6 +124,7 @@ urlpatterns = [
     path('farmer-farm-report/', views.farmer_farm_report,
          name='farmer_farm_report'),
     path('batch-wise-feed-scheduling-report/', views.batch_wise_feed_scheduling_report, name='batch_wise_feed_scheduling_report'),
+    path('gc-realization-report/', views.gc_realization_report, name='gc_realization_report'),
 
     path('chicks-placement/', views.ChicksPlacementListTemplateView.as_view(), name='chicks_placement_list'),
     path('chicks-placement/add/', views.ChicksPlacementFormTemplateView.as_view(), name='chicks_placement_add'),
