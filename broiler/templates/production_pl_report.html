@@ -91,14 +91,17 @@ A statement missing its rows reads as complete, and somebody decides on it.
   .gc-kpi-value { font-size: 1.05rem; font-weight: 700; color: #0b0b0b; line-height: 1.2; }
 
   {% comment %}
-    Three blocks per row on a wide screen — Chick / Feed / Medicine level with
-    each other — and whatever is left (Growing, Administrative) wraps onto the
-    next row rather than each claiming a full-width row of its own.
+    Two rows, sized for what is actually in them, rather than one grid track
+    width asked to fit both a four-column priced table and a two-column typed
+    one. flex-basis is a target, not a cap — flex-grow lets each block use
+    real space it needs instead of every block in the row being forced equal.
   {% endcomment %}
-  .pl-cost-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem;
-  }
+  .pl-cost-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: stretch; }
+  .pl-cost-block-priced { flex: 1 1 320px; min-width: 0; }
+  .pl-cost-block-entered { flex: 1 1 260px; min-width: 0; }
   .pl-cost-block table { height: 100%; }
+  .pl-cost-table th, .pl-cost-table td { padding: .3rem .4rem; }
+  .pl-cost-table th.ds-num, .pl-cost-table td.text-end { font-size: .7rem; }
   {% comment %}
     A number input's own min-width can be wider than the ₹ column ever gets in
     a three-across grid, which is what clipped "not tracked" to "not tracl" —
@@ -259,41 +262,102 @@ A statement missing its rows reads as complete, and somebody decides on it.
           Production Cost Breakup — at actual purchase prices
         </div>
         {% comment %}
-          A real grid, not a stack: three blocks per row on a wide screen so
-          Chick / Feed / Medicine sit level with each other the way the design
-          has them, and Growing / Administrative fill the row beneath rather
-          than each claiming a full width of their own.
+          Two explicit rows, not one grid asked to serve two different shapes.
+          Chick / Feed / Medicine are costed at quantity × rate and need four
+          columns; Growing / Administrative are typed straight in and only
+          need two. A single auto-fit grid sized one set of tracks for both,
+          which either cramped the four-column tables or, on a wide screen,
+          packed a fourth and fifth block into the first row instead of
+          starting a second one — neither is what the design has.
         {% endcomment %}
-        <div class="pl-cost-grid">
-          {% for block in pl.cost_blocks %}
-          <div class="pl-cost-block">
-            <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+        <div class="pl-cost-row">
+          {% for block in pl.cost_blocks %}{% if block.tracked %}
+          <div class="pl-cost-block pl-cost-block-priced">
+            {% comment %}
+              A table does not shrink below its content. table-responsive is
+              the same overflow-x:auto wrapper every other report table in
+              this codebase uses, so a row that still does not fit scrolls
+              inside its own block instead of overflowing into the next one.
+            {% endcomment %}
+            <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table rpt-table ds-grid pl-cost-table">
               <thead>
                 <tr>
                   <th style="background:{{ block.accent }} !important;color:#fff !important">{{ block.title }}</th>
+                  {% comment %}
+                    Costed as quantity × purchase rate, so the rate is shown —
+                    it is the number that explains the amount next to it, and
+                    the one somebody checks first if a figure looks wrong.
+                  {% endcomment %}
                   <th class="ds-num text-end"
-                      style="background:{{ block.accent }} !important;color:#fff !important">₹</th>
+                      style="background:{{ block.accent }} !important;color:#fff !important">Qty</th>
+                  <th class="ds-num text-end"
+                      style="background:{{ block.accent }} !important;color:#fff !important">Rate (₹)</th>
+                  <th class="ds-num text-end"
+                      style="background:{{ block.accent }} !important;color:#fff !important">Amount (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {% for line in block.lines %}
                 <tr>
                   <td>{{ line.label }}</td>
-                  <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
-                    {% if line.tracked %}{{ line.amount }}{% else %}<input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end" data-kind="cost" data-head="{{ line.label }}" value="{{ line.amount|default_if_none:'' }}" placeholder="—">{% endif %}
+                  <td class="text-end text-muted">{{ line.quantity|default_if_none:"" }}</td>
+                  <td class="text-end text-muted">
+                    {% if line.rate is not None %}{{ line.rate }}{% elif line.tracked %}—{% else %}no purchase{% endif %}
+                  </td>
+                  <td class="text-end">{{ line.amount }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="report-total-row">
+                  <td colspan="3">Total {{ block.title }}</td>
+                  <td class="text-end">{{ block.total }}</td>
+                </tr>
+              </tbody>
+            </table>
+            </div>
+          </div>
+          {% endif %}{% endfor %}
+        </div>
+
+        <div class="pl-cost-row mt-3">
+          {% for block in pl.cost_blocks %}{% if not block.tracked %}
+          <div class="pl-cost-block pl-cost-block-entered">
+            <div class="table-responsive">
+            <table class="table table-bordered mb-0 report-table rpt-table ds-grid pl-cost-table">
+              <thead>
+                <tr>
+                  <th style="background:{{ block.accent }} !important;color:#fff !important">{{ block.title }}</th>
+                  <th class="ds-num text-end"
+                      style="background:{{ block.accent }} !important;color:#fff !important">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for line in block.lines %}
+                <tr>
+                  <td>{{ line.label }}</td>
+                  <td class="text-end">
+                    <input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end" data-kind="cost" data-head="{{ line.label }}" value="{{ line.amount|default_if_none:'' }}" placeholder="—">
                   </td>
                 </tr>
                 {% endfor %}
                 <tr class="report-total-row">
                   <td>Total {{ block.title }}</td>
-                  <td class="text-end {% if not block.tracked %}text-muted{% endif %}">
-                    {% if block.tracked %}{{ block.total }}{% else %}not tracked{% endif %}
+                  {% comment %}
+                    block.total is None only when nothing under this head has
+                    been entered — that is the "not tracked" case. Once even
+                    one field is filled the block has a real sum, and showing
+                    "not tracked" over it (as a hasty edit briefly did here)
+                    would hide the very figures somebody just typed in.
+                  {% endcomment %}
+                  <td class="text-end {% if block.total is None %}text-muted{% endif %}">
+                    {% if block.total is not None %}{{ block.total }}{% else %}not tracked{% endif %}
                   </td>
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
-          {% endfor %}
+          {% endif %}{% endfor %}
         </div>
       </div>
     </div>

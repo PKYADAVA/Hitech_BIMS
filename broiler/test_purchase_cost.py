@@ -123,6 +123,21 @@ class ProductionPLTests(TestCase):
         self.assertEqual(pl["total_cost"], Decimal("56000.00"))
         self.assertEqual(pl["gross_profit"], Decimal("244000.00"))
 
+    def test_the_chick_line_shows_the_rate_it_was_bought_at(self):
+        # 56,000 for 1,600 birds is 35 a bird — the figure that explains the
+        # amount, and the first thing somebody checks if it looks wrong.
+        line = self.build()["cost_blocks"][0]["lines"][0]
+        self.assertEqual(line["quantity"], Decimal("1600"))
+        self.assertEqual(line["rate"], Decimal("35.00"))
+
+    def test_a_row_with_nothing_consumed_leaves_qty_and_rate_blank_not_wrong(self):
+        # Explicit None rather than a missing key, so the page shows "—" and
+        # not an empty cell that looks like the row forgot to render.
+        line = self.build()["cost_blocks"][1]["lines"][0]
+        self.assertEqual(line["label"], "No feed consumed")
+        self.assertIsNone(line["quantity"])
+        self.assertIsNone(line["rate"])
+
     def test_untracked_heads_are_shown_rather_than_dropped(self):
         # An absent row reads as a complete statement. A row saying nothing is
         # recorded reads as the truth.

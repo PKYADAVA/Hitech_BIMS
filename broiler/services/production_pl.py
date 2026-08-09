@@ -90,24 +90,17 @@ def build_production_pl(report, batch):
     cost_blocks = [
         {"title": "Chick Cost", "accent": "#2a78d6", "total": chick_cost.quantize(Q2),
          "tracked": True,
-         "lines": [{"label": r.get("item") or "Day Old Chicks",
-                    "quantity": _d(r.get("birds") or r.get("quantity")),
-                    "rate": None, "amount": _d(r.get("amount")).quantize(Q2),
-                    "tracked": True}
-                   for r in (report.get("chick_placement") or [])]
-                  or [{"label": "No placement recorded", "amount": ZERO,
-                       "tracked": True}]},
+         "lines": [_chick_line(r) for r in (report.get("chick_placement") or [])]
+                  or [_empty_line("No placement recorded")]},
         # Itemised, because "Feed Cost 25,30,000" tells nobody which phase ran
         # dear. Each line is that item's own consumption at its own purchase
         # rate, so the block total is the sum of visible rows rather than a
         # figure arrived at somewhere else.
         {"title": "Feed Cost", "accent": "#1baf7a", "total": feed_cost, "tracked": True,
-         "lines": _item_lines(feed_rows, rates) or
-                  [{"label": "No feed consumed", "amount": ZERO, "tracked": True}]},
+         "lines": _item_lines(feed_rows, rates) or [_empty_line("No feed consumed")]},
         {"title": "Medicine & Health Cost", "accent": "#e87ba4", "total": medicine_cost,
          "tracked": True,
-         "lines": _item_lines(med_rows, rates) or
-                  [{"label": "No medicine consumed", "amount": ZERO, "tracked": True}]},
+         "lines": _item_lines(med_rows, rates) or [_empty_line("No medicine consumed")]},
         _entered_block("Growing Expenses", "#4a3aa7", GROWING_HEADS, entered),
         _entered_block("Administrative Cost", "#eda100", ADMIN_HEADS, entered),
     ]
@@ -184,6 +177,40 @@ def _entered_block(title, accent, heads, entered):
             "entered": any_entered,
             "total": total.quantize(Q2) if any_entered else None,
             "lines": lines}
+
+
+def _empty_line(label):
+    """A row saying nothing was consumed — with the same shape as a real one.
+
+    Without explicit quantity/rate keys here, a template asking for them on a
+    dict that never set them gets Django's silent empty-string default rather
+    than None, and `{% if x is not None %}` reads that as "yes, show it" — an
+    empty cell where the Qty and Rate columns should read "—". Setting them
+    outright is what makes that column behave the same whether the row is real
+    or this placeholder.
+    """
+    return {"label": label, "quantity": None, "rate": None, "amount": ZERO,
+            "tracked": True}
+
+
+def _chick_line(row):
+    """The placement row, with a rate worked back out of what was paid.
+
+    A chick placement already comes as one amount for however many birds — it
+    is not priced against a purchase rate the way feed and medicine are — but
+    the per-bird figure is the same question asked the same way, so it is shown
+    the same way: amount ÷ quantity, not left as the only untracked-looking
+    figure on an otherwise rate-and-quantity table.
+    """
+    quantity = _d(row.get("birds") or row.get("quantity"))
+    amount = _d(row.get("amount")).quantize(Q2)
+    return {
+        "label": row.get("item") or "Day Old Chicks",
+        "quantity": quantity,
+        "rate": _div(amount, quantity) if quantity else None,
+        "amount": amount,
+        "tracked": True,
+    }
 
 
 def _item_lines(rows, rates):
