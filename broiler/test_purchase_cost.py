@@ -94,3 +94,49 @@ class ValueConsumptionTests(TestCase):
         total, unpriced = value_consumption(rows, rates)
         self.assertEqual(total, Decimal("400.00"))
         self.assertEqual(unpriced, {9})
+
+
+class ProductionPLTests(TestCase):
+    """The statement itself, from an already-built batch report."""
+
+    def build(self, **over):
+        from broiler.services.production_pl import build_production_pl
+
+        report = {
+            "batch_costing": {"sold_weight": 3000, "sold_birds": 1500,
+                              "chicks_placed": 1600, "fcr": Decimal("1.58")},
+            "bird_sales": [{"amount": 300000}],
+            "chick_placements": [{"amount": 56000}],
+            "feed_summary": [], "medicine_consumption": [],
+        }
+        report.update(over)
+        return build_production_pl(report, batch=None)
+
+    def test_revenue_is_what_the_birds_sold_for(self):
+        pl = self.build()
+        self.assertEqual(pl["total_revenue"], Decimal("300000.00"))
+
+    def test_profit_is_revenue_less_the_costs_that_are_tracked(self):
+        pl = self.build()
+        self.assertEqual(pl["total_cost"], Decimal("56000.00"))
+        self.assertEqual(pl["gross_profit"], Decimal("244000.00"))
+
+    def test_untracked_heads_are_shown_rather_than_dropped(self):
+        # An absent row reads as a complete statement. A row saying nothing is
+        # recorded reads as the truth.
+        pl = self.build()
+        untracked = [l["label"] for l in pl["cost_lines"] if not l["tracked"]]
+        self.assertIn("Labour", untracked)
+        self.assertIn("Depreciation", untracked)
+        self.assertTrue(all(l["amount"] is None for l in pl["cost_lines"]
+                            if not l["tracked"]))
+
+    def test_it_says_the_profit_is_before_the_untracked_costs(self):
+        # Otherwise the figure reads as the flock's actual margin.
+        self.assertIn("before those costs", self.build()["untracked_note"])
+
+    def test_a_flock_that_sold_nothing_does_not_divide_by_zero(self):
+        pl = self.build(bird_sales=[], batch_costing={"sold_weight": 0, "sold_birds": 0,
+                                                      "chicks_placed": 1600})
+        self.assertEqual(pl["profit_per_kg"], Decimal("0.00"))
+        self.assertEqual(pl["profit_pct"], Decimal("0.00"))
