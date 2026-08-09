@@ -97,11 +97,37 @@ A statement missing its rows reads as complete, and somebody decides on it.
     real space it needs instead of every block in the row being forced equal.
   {% endcomment %}
   .pl-cost-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: stretch; }
-  .pl-cost-block-priced { flex: 1 1 320px; min-width: 0; }
+  .pl-cost-block-priced { flex: 1 1 340px; min-width: 0; }
   .pl-cost-block-entered { flex: 1 1 260px; min-width: 0; }
   .pl-cost-block table { height: 100%; }
-  .pl-cost-table th, .pl-cost-table td { padding: .3rem .4rem; }
-  .pl-cost-table th.ds-num, .pl-cost-table td.text-end { font-size: .7rem; }
+  {% comment %}
+    A table's default table-layout: auto sizes every column to fit its
+    content and ignores how wide the container actually is — which is what
+    was forcing a horizontal scrollbar under every block regardless of screen
+    size, rather than the numbers wrapping or the table simply filling its
+    box. Fixed layout with widths pinned by column count makes the table
+    honour the flex box it sits in instead of fighting it.
+  {% endcomment %}
+  .pl-cost-table { table-layout: fixed; width: 100%; }
+  .pl-cost-table th, .pl-cost-table td {
+    padding: .3rem .35rem; font-size: .7rem; overflow-wrap: break-word;
+    {% comment %}
+      .report-table th sets white-space: nowrap globally, which is right for
+      a normal report but wrong here: a fixed-width column cannot grow to fit
+      a header like "MEDICINE & HEALTH COST" on one line, so nowrap would
+      have clipped it instead of letting it wrap onto a second.
+    {% endcomment %}
+    white-space: normal;
+  }
+  .pl-cost-block-priced .pl-cost-table th:first-child,
+  .pl-cost-block-priced .pl-cost-table td:first-child { width: 34%; }
+  .pl-cost-block-priced .pl-cost-table th:not(:first-child),
+  .pl-cost-block-priced .pl-cost-table td:not(:first-child) { width: 22%; }
+  .pl-cost-block-entered .pl-cost-table th:first-child,
+  .pl-cost-block-entered .pl-cost-table td:first-child { width: 58%; }
+  .pl-cost-block-entered .pl-cost-table th:not(:first-child),
+  .pl-cost-block-entered .pl-cost-table td:not(:first-child) { width: 42%; }
+  .pl-cost-table .pl-entry { font-size: .7rem; padding: .15rem .3rem; }
   {% comment %}
     A number input's own min-width can be wider than the ₹ column ever gets in
     a three-across grid, which is what clipped "not tracked" to "not tracl" —
@@ -305,12 +331,20 @@ A statement missing its rows reads as complete, and somebody decides on it.
                   <td class="text-end text-muted">
                     {% if line.rate is not None %}{{ line.rate }}{% elif line.tracked %}—{% else %}no purchase{% endif %}
                   </td>
-                  <td class="text-end">{{ line.amount }}</td>
+                  {% comment %}
+                    default_if_none, not a bare {{ line.amount }}: Django
+                    stringifies None as the literal text "None" rather than
+                    printing nothing, so an item with no purchase to price —
+                    Finisher Feed here — was showing that word in the Amount
+                    column instead of the em dash every other blank cell on
+                    this page uses.
+                  {% endcomment %}
+                  <td class="text-end">{{ line.amount|default_if_none:"—" }}</td>
                 </tr>
                 {% endfor %}
                 <tr class="report-total-row">
                   <td colspan="3">Total {{ block.title }}</td>
-                  <td class="text-end">{{ block.total }}</td>
+                  <td class="text-end">{{ block.total|default_if_none:"—" }}</td>
                 </tr>
               </tbody>
             </table>
