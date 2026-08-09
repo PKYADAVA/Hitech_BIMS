@@ -116,7 +116,7 @@
   @media (min-width:1400px) { .dw-bar { flex-wrap:nowrap; } }
   .dw-filter.is-busy { opacity:.6; pointer-events:none; }
   .dw-ignored { display:block; font-size:.71rem; color:#b45309; margin-top:9px; }
-  .dw-card { display:flex; flex-direction:column; background:#fff;
+  .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
              border:1px solid #e7edf5; border-radius:16px; padding:17px 18px; }
   .dw-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
   .dw-head-icon { width:32px; height:32px; flex:0 0 32px; border-radius:10px; display:grid;
@@ -136,6 +136,9 @@
                        letter-spacing:.04em; }
   .dw-stat .dw-value { display:block; font-size:1.12rem; font-weight:700; margin-top:3px; line-height:1.2; }
   .dw-stat .dw-sub { display:block; font-size:.69rem; color:#8494ab; margin-top:2px; }
+  /* The card fills the row's height; its contents should not be spread to
+     match. Anything after the last block simply sits below it. */
+  .dw-card > :last-child { margin-bottom:auto; }
   .dw-stat.t-good .dw-value { color:#078b75; } .dw-stat.t-good { background:#f2fbf8; border-color:#d8f0e9; }
   .dw-stat.t-warn .dw-value { color:#b45309; } .dw-stat.t-warn { background:#fffaf1; border-color:#f6e6cd; }
   .dw-stat.t-bad  .dw-value { color:#dc465b; } .dw-stat.t-bad  { background:#fff5f6; border-color:#f7dbdf; }
@@ -401,8 +404,7 @@
     {% endif %}
 
     <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
-    <div class="row g-3 mb-4 align-items-start" id="dash-widgets"
-         style="order:{{ dash_widgets_order }};"></div>
+    <div class="row g-3 mb-4" id="dash-widgets" style="order:{{ dash_widgets_order }};"></div>
 
     {% if 'field_team' in dash_panels %}
     {% csrf_token %}
