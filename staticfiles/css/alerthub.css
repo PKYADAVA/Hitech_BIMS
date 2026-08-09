@@ -490,3 +490,67 @@ label.ah-check.disabled { opacity: .6; cursor: not-allowed; }
   .ah-filters select, .ah-filters input { min-width: 0; width: 100%; }
   .ah-head { align-items: flex-start; }
 }
+
+/* ---------------------------------------------------------------------------
+   Status switch on Alert Configuration
+
+   The status column used to be a badge, which said what a rule was but not
+   that it could be changed. Turning a noisy alert off is the edit made in a
+   hurry — usually while it is still firing — and it should not cost a form and
+   a page load. This reads as the badge did at a glance and behaves as a switch
+   under the pointer.
+--------------------------------------------------------------------------- */
+.ah-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+.ah-toggle-track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  /* Red for off, green for on — the same two colours the status badge used, so
+     the column still reads at a glance from across the room. */
+  background: #dc2626;
+  transition: background .15s ease;
+  flex: 0 0 34px;
+}
+.ah-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .35);
+  transition: transform .15s ease;
+}
+.ah-toggle.on .ah-toggle-track { background: #16a34a; }
+.ah-toggle.on .ah-toggle-knob { transform: translateX(16px); }
+
+.ah-toggle-label {
+  font-size: .75rem;
+  font-weight: 700;
+  color: #dc2626;
+  min-width: 3.8em;      /* holds its width so the row does not jump on toggle */
+  text-align: left;
+}
+.ah-toggle.on .ah-toggle-label { color: #16a34a; }
+
+.ah-toggle:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; border-radius: 4px; }
+
+/* Mid-flight: the click has been taken but the server has not answered. */
+.ah-toggle.busy { opacity: .55; pointer-events: none; }
+
+/* A rule whose alert type has no data source cannot fire, so it cannot be
+   switched on. Shown as unavailable rather than hidden — somebody configured
+   it expecting alerts. */
+.ah-toggle:disabled { cursor: not-allowed; opacity: .5; }

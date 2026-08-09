@@ -12,6 +12,11 @@ source is missing is the only honest way to explain a rule that never fires.
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='alerts' %}{% endblock %}
 
 {% block content %}
+{% comment %}
+  The page has no form of its own, so nothing would set the CSRF cookie and the
+  status toggle's POST would be rejected.
+{% endcomment %}
+{% csrf_token %}
 <div class="ah-wrap wide">
 
   <div class="ah-head">
@@ -97,11 +102,26 @@ source is missing is the only honest way to explain a rule that never fires.
               <td class="ah-nowrap small">{{ row.rule.cooldown_hours }}h</td>
               <td class="small">{{ row.rule.raised }}</td>
               <td>
-                {% if row.rule.is_active %}
-                  <span class="badge bg-success-subtle text-success">Enabled</span>
-                {% else %}
-                  <span class="badge bg-secondary-subtle text-secondary">Disabled</span>
-                {% endif %}
+                {% comment %}
+                  A switch, not a badge: turning a noisy alert off is the one
+                  edit made in a hurry, and it used to mean opening the form
+                  and finding a checkbox among a dozen fields.
+                {% endcomment %}
+                <button type="button"
+                        class="ah-toggle{% if row.rule.is_active %} on{% endif %}"
+                        data-toggle-url="{% url 'alerthub:alert_rule_toggle' row.rule.pk %}"
+                        data-name="{{ row.rule.name }}"
+                        {% if not row.supported and not row.rule.is_active %}
+                          disabled title="{{ row.requires }}"
+                        {% else %}
+                          title="Click to {% if row.rule.is_active %}disable{% else %}enable{% endif %}"
+                        {% endif %}
+                        aria-pressed="{{ row.rule.is_active|yesno:"true,false" }}">
+                  <span class="ah-toggle-track"><span class="ah-toggle-knob"></span></span>
+                  <span class="ah-toggle-label">
+                    {% if row.rule.is_active %}Enabled{% else %}Disabled{% endif %}
+                  </span>
+                </button>
               </td>
               <td class="ah-nowrap">
                 <a href="{% url 'alerthub:alert_rule_edit' row.rule.pk %}"
@@ -132,4 +152,53 @@ source is missing is the only honest way to explain a rule that never fires.
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block js %}
+<script>
+/**
+ * One-click enable/disable on the Status column.
+ *
+ * The switch is flipped before the server answers, because on a good
+ * connection the wait is invisible and the delay is what makes a toggle feel
+ * broken. If the answer disagrees — or never comes — it is put back exactly as
+ * it was, so what is on screen never quietly diverges from what is stored.
+ */
+$(function () {
+  const csrf = $('input[name=csrfmiddlewaretoken]').val()
+    || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+  function paint($btn, on) {
+    $btn.toggleClass('on', on)
+        .attr('aria-pressed', on ? 'true' : 'false')
+        .attr('title', 'Click to ' + (on ? 'disable' : 'enable'))
+        .find('.ah-toggle-label').text(on ? 'Enabled' : 'Disabled');
+  }
+
+  $(document).on('click', '.ah-toggle', function () {
+    const $btn = $(this);
+    const was = $btn.hasClass('on');
+    paint($btn, !was);
+    $btn.addClass('busy');
+
+    fetch($btn.data('toggle-url'), {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin',
+    })
+      .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        // Trust the server's answer over the optimistic guess: a rule the
+        // server refuses to enable must not be left showing Enabled.
+        paint($btn, !!body.is_active);
+        if (!ok && body.message) window.alert(body.message);
+      })
+      .catch(() => {
+        paint($btn, was);
+        window.alert('Could not reach the server. The rule is unchanged.');
+      })
+      .finally(() => $btn.removeClass('busy'));
+  });
+});
+</script>
 {% endblock %}

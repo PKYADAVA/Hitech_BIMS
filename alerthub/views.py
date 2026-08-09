@@ -11,14 +11,29 @@ from __future__ import annotations
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
+
+import json
+
+from django.utils import timezone
 
 from .catalog import CATALOG, BY_KEY
-from .constants import Module, Priority
-from .forms import AlertRuleForm, ManualNotificationForm, PreferenceForm
-from .models import AlertRule, Notification, NotificationPreference
-from .engine import send_manual_notification
+from .constants import Module, Priority, TYPE_DEFAULTS
+from .dispatch import dispatch
+from .forms import (
+    ATTACHMENT_EXTENSIONS, ATTACHMENT_MAX_BYTES,
+    AlertRuleForm, ManualNotificationForm, PreferenceForm,
+)
+from .models import (
+    AlertRule, Notification, NotificationPreference, NotificationRecipient,
+    OutgoingNotification,
+)
+from .recipients import (
+    delivery_preview, employee_options, farms_for_branches, group_options,
+    warehouses_for_branches,
+)
 from .scoping import can_see
 
 
@@ -180,6 +195,43 @@ def alert_rule_form(request, pk=None):
 
 
 @login_required(login_url="login")
+@require_POST
+def alert_rule_toggle(request, pk):
+    """Turn one rule on or off from the list, without opening the form.
+
+    Switching a watch off is the one edit that is made in a hurry — an alert
+    firing too often at two in the morning, and the person who can stop it is
+    looking at a list of forty rules. Making them open a form, find the right
+    checkbox among a dozen fields and save was several steps and a page load
+    away from the thing they actually wanted.
+
+    POST only. A GET that changes state is a link a browser or a crawler will
+    follow on its own, and "something disabled our alerts and nobody knows
+    what" is a bad afternoon.
+    """
+    rule = get_object_or_404(AlertRule, pk=pk)
+
+    # A rule whose alert type has no data source behind it cannot fire, so
+    # letting it be switched "on" would show an Enabled badge that means
+    # nothing. The form says the same thing at more length.
+    spec = rule.spec
+    if not rule.is_active and not (spec and spec.supported):
+        return JsonResponse(
+            {"ok": False,
+             "is_active": rule.is_active,
+             "message": spec.requires if spec else "This alert type is not available."},
+            status=400)
+
+    rule.is_active = not rule.is_active
+    rule.save(update_fields=["is_active"])
+    return JsonResponse({
+        "ok": True,
+        "is_active": rule.is_active,
+        "message": f"“{rule.name}” {'enabled' if rule.is_active else 'disabled'}.",
+    })
+
+
+@login_required(login_url="login")
 def alert_rule_delete(request, pk):
     """Delete a configuration. The alerts it already raised are kept.
 
@@ -244,46 +296,219 @@ def preferences(request):
     })
 
 
-@login_required(login_url="login")
-def send_notification(request):
-    """Compose one notification and send it to chosen users or groups.
+# ---------------------------------------------------------------------------
+# Send Notification
+# ---------------------------------------------------------------------------
+#
+# Three views and one rule between them: nothing decides *who may do what*
+# here. ``user_can`` answers that from the Web-Access matrix, and which people
+# a sender may aim at comes from the Employee Organization Access master
+# through ``alerthub.recipients``. This module reads both and defines neither.
 
-    Gated on the same right as Alert Configuration: deciding who the system
-    notifies and notifying them by hand are the same kind of authority, and a
-    separate permission would be one more thing to forget to grant.
 
-    The message is a real notification, not a bare push — it lands in the
-    recipients' bell and stays in the history, so there is a record of what was
-    sent, to whom, and by whom.
+def _require_send_permission(user):
+    """Gate on the existing Web-Access matrix, or 404.
+
+    404 rather than 403 deliberately, matching the rest of the module: a tab
+    someone cannot use should not advertise that it exists.
     """
     from user.access import user_can
 
-    if not user_can(request.user, "send_notification", "add"):
+    if not user_can(user, "send_notification", "add"):
         raise Http404
 
-    form = ManualNotificationForm(request.POST or None)
+
+@login_required(login_url="login")
+def send_notification(request, pk=None):
+    """Compose a notification and send it, schedule it, or save it as a draft.
+
+    One view for all three because they are one composition at different points
+    in its life — the difference is which button was pressed, not which form was
+    filled in. Reopening a draft (``pk``) posts back here too, so a message
+    saved on Monday and sent on Tuesday travels exactly one code path.
+
+    Sending itself is delegated to :func:`alerthub.dispatch.dispatch`, which the
+    scheduled-send command also calls. The page never writes a ``Notification``
+    directly; that is what keeps a hand-sent message and a scheduled one
+    identical in the bell, in the mobile app and in the history.
+    """
+    _require_send_permission(request.user)
+
+    outgoing = None
+    if pk is not None:
+        outgoing = get_object_or_404(OutgoingNotification, pk=pk)
+        if not outgoing.is_editable:
+            messages.info(
+                request,
+                "That notification has already gone out — opening it read-only.",
+            )
+            return redirect("alerthub:outgoing_detail", pk=outgoing.pk)
+
+    form = ManualNotificationForm(
+        request.POST or None, request.FILES or None,
+        instance=outgoing, user=request.user,
+    )
+
     if request.method == "POST" and form.is_valid():
-        people = form.recipients()
-        notification = send_manual_notification(
-            sender=request.user,
-            recipients=people,
-            title=form.cleaned_data["title"],
-            message=form.cleaned_data["message"],
-            priority=form.cleaned_data["priority"],
-            module=form.cleaned_data["module"],
+        record = form.save(commit=False)
+        if record.created_by_id is None:
+            record.created_by = request.user
+        record.status = (
+            OutgoingNotification.DRAFT if form.is_draft
+            else OutgoingNotification.SCHEDULED if form.is_scheduled
+            else OutgoingNotification.SENDING
         )
-        if notification is None:
-            messages.error(request, "Nobody active matched that selection — nothing was sent.")
-        else:
-            pushed = sum(1 for u in people if getattr(u, "pk", None))
+        record.error = ""
+        record.save()
+        form.save_m2m()
+
+        if form.is_draft:
+            messages.success(request, "Saved as a draft. It has not been sent.")
+            return redirect("alerthub:outgoing_edit", pk=record.pk)
+
+        if form.is_scheduled:
             messages.success(
                 request,
-                f"Sent to {len(people)} user(s). It is in their notifications now, "
-                f"and on the phones of those with the app installed."
+                f"Scheduled for {timezone.localtime(record.send_at):%d %b %Y, %I:%M %p}. "
+                f"It will go out then whether or not you are signed in.",
             )
-            return redirect("alerthub:send_notification")
+            return redirect("alerthub:outgoing_detail", pk=record.pk)
+
+        dispatch(record, force=True)
+        if record.status == OutgoingNotification.FAILED:
+            messages.error(request, record.error or "Nothing was sent.")
+        elif record.status == OutgoingNotification.PARTIAL:
+            messages.warning(
+                request,
+                f"Sent to {record.success_count} of {record.recipient_count} "
+                f"recipients. {record.error}",
+            )
+        else:
+            messages.success(
+                request,
+                f"Notification sent successfully. "
+                f"{record.success_count} recipient(s) notified.",
+            )
+        return redirect("alerthub:outgoing_detail", pk=record.pk)
 
     return render(request, "alerthub/send_notification.html", {
         "active_tab": "send_notification",
         "form": form,
+        "outgoing": outgoing,
+        "attachment_extensions": ", ".join(
+            e.upper() for e in ATTACHMENT_EXTENSIONS
+        ),
+        "attachment_max_mb": round(ATTACHMENT_MAX_BYTES / 1024 / 1024),
+        # Rendered once so the page can pre-select a category the moment the
+        # type changes, without a round trip for something already known.
+        "type_defaults": json.dumps({
+            key: {"category": category}
+            for key, (_module, category) in TYPE_DEFAULTS.items()
+        }),
+        "recent": (
+            OutgoingNotification.objects
+            .filter(created_by=request.user)
+            .exclude(status=OutgoingNotification.SENT)[:5]
+        ),
     })
+
+
+@login_required(login_url="login")
+def send_notification_recipients(request):
+    """Live employee list and delivery counts for the Recipients panel.
+
+    The panel re-asks this whenever a hierarchy box is ticked. It exists so the
+    picker and the preview cannot drift apart: both are rendered from one
+    response, computed by :mod:`alerthub.recipients`, which is the same module
+    the save path revalidates against.
+    """
+    _require_send_permission(request.user)
+
+    def ids(name):
+        return [int(v) for v in request.GET.getlist(name) if str(v).lstrip("-").isdigit()]
+
+    branch_ids = ids("branches")
+    employees = employee_options(
+        sender=request.user,
+        companies=ids("companies"),
+        branches=branch_ids,
+        farms=ids("farms"),
+        warehouses=ids("warehouses"),
+        departments=ids("departments"),
+        designations=ids("designations"),
+    )
+
+    # The already-selected people stay in the count even if a narrowed filter
+    # no longer lists them — the sender chose them on purpose, and silently
+    # dropping someone because a checkbox moved is the bug this avoids.
+    chosen = ids("users") or [e["id"] for e in employees]
+    preview = delivery_preview(user_ids=chosen, group_ids=ids("groups"))
+
+    return JsonResponse({
+        "employees": employees,
+        "groups": group_options(),
+        # Both cascade from the chosen branches, so the page never offers a
+        # farm or a store that belongs to a branch nobody ticked.
+        "farms": [
+            {"id": f.pk, "name": f.farm_name,
+             "branch": f.branch.branch_name if f.branch_id else ""}
+            for f in farms_for_branches(request.user, branch_ids)
+        ],
+        "warehouses": [
+            {"id": w.pk, "name": w.name}
+            for w in warehouses_for_branches(request.user, branch_ids)
+        ],
+        "preview": preview,
+    })
+
+
+@login_required(login_url="login")
+def outgoing_detail(request, pk):
+    """The audit record for one send, and its per-recipient delivery history.
+
+    Delivery and read state are not stored twice: the rows come from
+    ``NotificationRecipient``, the same table the bell reads, so "Rahul Singh ·
+    Delivered · Read 10:32" is the actual state of his notification rather than
+    a log written alongside it that could disagree.
+    """
+    _require_send_permission(request.user)
+    outgoing = get_object_or_404(
+        OutgoingNotification.objects.select_related("notification", "created_by"),
+        pk=pk,
+    )
+
+    deliveries = []
+    if outgoing.notification_id:
+        deliveries = (
+            NotificationRecipient.objects
+            .filter(notification_id=outgoing.notification_id)
+            .select_related("user")
+            .order_by("-is_read", "user__first_name", "user__username")
+        )
+
+    return render(request, "alerthub/outgoing_detail.html", {
+        "active_tab": "send_notification",
+        "outgoing": outgoing,
+        "deliveries": deliveries,
+    })
+
+
+@login_required(login_url="login")
+@require_POST
+def outgoing_cancel(request, pk):
+    """Call off a scheduled message before its hour.
+
+    Cancelling is a status, not a delete: "we decided not to send this" is
+    itself worth keeping, and a row that vanished would leave the person who
+    scheduled it wondering whether it went out.
+    """
+    _require_send_permission(request.user)
+    outgoing = get_object_or_404(OutgoingNotification, pk=pk)
+
+    if outgoing.status != OutgoingNotification.SCHEDULED:
+        messages.error(request, "Only a scheduled notification can be cancelled.")
+    else:
+        outgoing.status = OutgoingNotification.CANCELLED
+        outgoing.save(update_fields=["status", "updated_at"])
+        messages.success(request, "Cancelled. It will not be sent.")
+    return redirect("alerthub:outgoing_detail", pk=outgoing.pk)
