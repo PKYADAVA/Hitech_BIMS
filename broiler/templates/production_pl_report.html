@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% comment %}
 Production Profit & Loss — one batch's result for the company.
 
@@ -13,12 +14,128 @@ A statement missing its rows reads as complete, and somebody decides on it.
 {% endcomment %}
 
 {% block title %}Production Profit &amp; Loss — BIMS{% endblock %}
+{% comment %}
+  Without this the page has no styling at all — .report-doc, .rpt-filter,
+  .rpt-table and the rest are only classes on bare elements until this loads,
+  and every sibling report (Batch History, Chicks Placement, …) pulls it in the
+  same way. This template never did, which is why it rendered as plain HTML
+  regardless of anything else on the page.
+{% endcomment %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
 
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
 
 {% block content %}
 {% csrf_token %}
 {% include '_broiler_report_subnavbar.html' with active_tab='production_pl_report' %}
+
+{% comment %}
+  The .gc-* card/KPI classes are not in report.css — the Batch History Report
+  carries them in a <style> block of its own, and every report in this family
+  does the same rather than share one. This page had neither report.css nor
+  this block until now, which is the whole reason it rendered as plain text:
+  the classes were on the elements with nothing to give them a background,
+  a border or a font size.
+{% endcomment %}
+<style>
+  body { background: #eef2f5; }
+  .report-doc { width: 98%; max-width: 1900px; margin: 0 auto; }
+  .report-doc-title {
+    text-align: center; font-size: 1.4rem; font-weight: 600; color: #222;
+    border: 1px solid #9fc3d6; border-top: none; padding: .5rem; background: #fff;
+  }
+  .report-table { border: 1px solid #9fc3d6; }
+  .report-table th {
+    background: #cfe3ec; border-color: #9fc3d6 !important; font-size: .8rem;
+    font-weight: 700; padding: .35rem .5rem; white-space: nowrap;
+  }
+  .report-table td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; }
+  .report-table tbody tr:nth-child(even) { background: #f7f4fb; }
+  .report-table tfoot td, .report-table tr.report-total-row td {
+    font-weight: 700; background: #dbe9f0 !important;
+  }
+  .report-costing td { font-size: .82rem; padding: .3rem .5rem; border-color: #dbe9f0; }
+  .ds .report-costing td.lbl,
+  .report-costing td.lbl { background: #eaf3f8; font-weight: 700; white-space: nowrap; }
+  .ds .report-costing td.lbl:empty,
+  .report-costing td.lbl:empty { background: transparent; }
+  .report-costing td.val { text-align: right; }
+  .report-costing td.hl { color: #b02a2a; font-weight: 700; text-align: right; }
+
+  .gc-full { margin-top: 1rem; }
+  .gc-card { background: #fff; border: 1px solid #e1e0d9; border-radius: .5rem; padding: .85rem 1rem; }
+  .gc-card-header {
+    display: flex; align-items: center; gap: .55rem; font-weight: 700; font-size: .85rem;
+    color: #222; margin-bottom: .65rem; padding-bottom: .55rem; border-bottom: 1px solid #eee;
+  }
+  .gc-card-icon {
+    flex: 0 0 26px; height: 26px; width: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--ci-bg); color: var(--ci-accent); font-size: .72rem;
+  }
+
+  .gc-kpi-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .6rem;
+  }
+  .gc-kpi {
+    display: flex; align-items: center; gap: .6rem;
+    background: #fbfdff; border: 1px solid #e1e0d9; border-radius: .5rem; padding: .6rem .7rem;
+  }
+  .gc-kpi-icon {
+    flex: 0 0 34px; height: 34px; width: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--kpi-bg); color: var(--kpi-accent); font-size: .95rem;
+  }
+  .gc-kpi-label { font-size: .68rem; color: #52514e; font-weight: 600; }
+  .gc-kpi-value { font-size: 1.05rem; font-weight: 700; color: #0b0b0b; line-height: 1.2; }
+
+  {% comment %}
+    Three blocks per row on a wide screen — Chick / Feed / Medicine level with
+    each other — and whatever is left (Growing, Administrative) wraps onto the
+    next row rather than each claiming a full-width row of its own.
+  {% endcomment %}
+  .pl-cost-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .75rem;
+  }
+  .pl-cost-block table { height: 100%; }
+  {% comment %}
+    A number input's own min-width can be wider than the ₹ column ever gets in
+    a three-across grid, which is what clipped "not tracked" to "not tracl" —
+    the placeholder was never wrapping, it was hitting the input's edge. The
+    placeholder is a single em dash for the same reason: short enough that no
+    column width can cut it off again.
+  {% endcomment %}
+  .pl-entry { min-width: 0; }
+
+  .pl-footer { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; }
+  .pl-net {
+    display: flex; align-items: center; gap: .75rem;
+    border-right: 1px dashed #e1e0d9; padding-right: 1.25rem; flex: 0 0 auto;
+  }
+  .pl-net i { font-size: 1.6rem; color: #008300; }
+  .pl-net.bad i { color: #d03b3b; }
+  .pl-net span { display: block; font-size: .68rem; color: #898781; font-weight: 600; }
+  .pl-net b { display: block; font-size: 1.35rem; color: #008300; line-height: 1.2; }
+  .pl-net.bad b { color: #d03b3b; }
+  .pl-net small { display: block; font-size: .68rem; color: #52514e; }
+  .pl-tiles { display: flex; flex-wrap: wrap; gap: 1rem; flex: 1 1 auto; }
+  .pl-tile { text-align: center; min-width: 80px; }
+  .pl-tile i { color: #1baf7a; font-size: .85rem; }
+  .pl-tile span { display: block; font-size: .62rem; color: #898781; }
+  .pl-tile b { display: block; font-size: .95rem; }
+  .pl-notes {
+    font-size: .68rem; color: #6b6b6b; border-left: 1px dashed #e1e0d9;
+    padding-left: 1.25rem; flex: 0 0 auto;
+  }
+  .pl-notes ul { margin: .2rem 0 0; padding-left: 1rem; }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .gc-card { break-inside: avoid; }
+  }
+</style>
 
 <div class="report-doc">
   {% include '_report_letterhead.html' with title='Production Profit & Loss Report' %}
@@ -79,10 +196,26 @@ A statement missing its rows reads as complete, and somebody decides on it.
         </tbody>
       </table>
     </div>
+
+    {% comment %}
+      The four round badges the design puts beside Batch Summary — same
+      gc-kpi-row markup the Batch History Report uses, so the two pages read as
+      one family rather than two different ideas of what a summary looks like.
+    {% endcomment %}
+    <div class="gc-kpi-row mt-3">
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#1baf7a;--kpi-bg:#e6f7f1"><i class="fas fa-dove"></i></div>
+        <div><div class="gc-kpi-label">Saleable Birds</div><div class="gc-kpi-value">{{ report.batch_costing.sold_birds }}</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#4a3aa7;--kpi-bg:#ece9f8"><i class="fas fa-weight-hanging"></i></div>
+        <div><div class="gc-kpi-label">Avg Weight</div><div class="gc-kpi-value">{{ pl.kpis.avg_weight }} Kg</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:#2a78d6;--kpi-bg:#eaf2fc"><i class="fas fa-chart-line"></i></div>
+        <div><div class="gc-kpi-label">FCR</div><div class="gc-kpi-value">{{ pl.kpis.fcr }}</div></div></div>
+      <div class="gc-kpi"><div class="gc-kpi-icon" style="--kpi-accent:{% if pl.gross_profit < 0 %}#e34948{% else %}#008300{% endif %};--kpi-bg:{% if pl.gross_profit < 0 %}#fbe9e9{% else %}#e0f0e0{% endif %}"><i class="fas fa-indian-rupee-sign"></i></div>
+        <div><div class="gc-kpi-label">Profit %</div><div class="gc-kpi-value">{{ pl.profit_pct }}%</div></div></div>
+    </div>
   </div>
 
   <div class="row g-3">
-    <div class="col-md-6">
+    <div class="col-md-4">
       <div class="gc-card gc-full h-100">
         <div class="gc-card-header">
           <span class="gc-card-icon" style="--ci-accent:#1baf7a;--ci-bg:#e6f7f1"><i class="fas fa-indian-rupee-sign"></i></span>
@@ -105,7 +238,7 @@ A statement missing its rows reads as complete, and somebody decides on it.
                   <input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end"
                          data-kind="revenue" data-head="{{ line.label }}"
                          value="{{ line.amount|default_if_none:'' }}"
-                         placeholder="not tracked">
+                         placeholder="—">
                   {% endif %}
                 </td>
               </tr>
@@ -119,41 +252,49 @@ A statement missing its rows reads as complete, and somebody decides on it.
       </div>
     </div>
 
-    <div class="col-md-6">
+    <div class="col-md-8">
       <div class="gc-card gc-full h-100">
         <div class="gc-card-header">
           <span class="gc-card-icon" style="--ci-accent:#eb6834;--ci-bg:#fdece5"><i class="fas fa-receipt"></i></span>
           Production Cost Breakup — at actual purchase prices
         </div>
-        {% for block in pl.cost_blocks %}
-        <div class="table-responsive mb-2">
-          <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
-            <thead>
-              <tr>
-                <th style="background:{{ block.accent }} !important;color:#fff !important">{{ block.title }}</th>
-                <th class="ds-num text-end"
-                    style="background:{{ block.accent }} !important;color:#fff !important">Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for line in block.lines %}
-              <tr>
-                <td>{{ line.label }}</td>
-                <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
-                  {% if line.tracked %}{{ line.amount }}{% else %}<input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end" data-kind="cost" data-head="{{ line.label }}" value="{{ line.amount|default_if_none:'' }}" placeholder="not tracked">{% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-              <tr class="report-total-row">
-                <td>Total {{ block.title }}</td>
-                <td class="text-end {% if not block.tracked %}text-muted{% endif %}">
-                  {% if block.tracked %}{{ block.total }}{% else %}not tracked{% endif %}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        {% comment %}
+          A real grid, not a stack: three blocks per row on a wide screen so
+          Chick / Feed / Medicine sit level with each other the way the design
+          has them, and Growing / Administrative fill the row beneath rather
+          than each claiming a full width of their own.
+        {% endcomment %}
+        <div class="pl-cost-grid">
+          {% for block in pl.cost_blocks %}
+          <div class="pl-cost-block">
+            <table class="table table-bordered mb-0 report-table rpt-table ds-grid">
+              <thead>
+                <tr>
+                  <th style="background:{{ block.accent }} !important;color:#fff !important">{{ block.title }}</th>
+                  <th class="ds-num text-end"
+                      style="background:{{ block.accent }} !important;color:#fff !important">₹</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for line in block.lines %}
+                <tr>
+                  <td>{{ line.label }}</td>
+                  <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
+                    {% if line.tracked %}{{ line.amount }}{% else %}<input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end" data-kind="cost" data-head="{{ line.label }}" value="{{ line.amount|default_if_none:'' }}" placeholder="—">{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+                <tr class="report-total-row">
+                  <td>Total {{ block.title }}</td>
+                  <td class="text-end {% if not block.tracked %}text-muted{% endif %}">
+                    {% if block.tracked %}{{ block.total }}{% else %}not tracked{% endif %}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {% endfor %}
         </div>
-        {% endfor %}
       </div>
     </div>
   </div>
@@ -238,6 +379,39 @@ A statement missing its rows reads as complete, and somebody decides on it.
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  {% comment %}
+    The closing strip the design ends on: the one number that matters, a row
+    of the figures somebody reads it alongside, and the notes a printed
+    statement needs. Kept separate from Profit Analysis above rather than
+    repeating it — this is the takeaway, not a third rendering of the same
+    table.
+  {% endcomment %}
+  <div class="gc-card gc-full mt-3 pl-footer">
+    <div class="pl-net {% if pl.gross_profit < 0 %}bad{% endif %}">
+      <i class="fas fa-sack-dollar"></i>
+      <div>
+        <span>Net Production Profit</span>
+        <b>₹{{ pl.gross_profit }}</b>
+        <small>Profit Percentage: {{ pl.profit_pct }}%</small>
+      </div>
+    </div>
+    <div class="pl-tiles">
+      <div class="pl-tile"><i class="fas fa-dove"></i><span>Profit / Bird</span><b>₹{{ pl.profit_per_bird_sold }}</b></div>
+      <div class="pl-tile"><i class="fas fa-weight-hanging"></i><span>Profit / Kg</span><b>₹{{ pl.profit_per_kg }}</b></div>
+      <div class="pl-tile"><i class="fas fa-skull"></i><span>Mortality</span><b>{{ pl.kpis.mortality_pct }}%</b></div>
+      <div class="pl-tile"><i class="fas fa-chart-line"></i><span>FCR</span><b>{{ pl.kpis.fcr }}</b></div>
+      <div class="pl-tile"><i class="fas fa-leaf"></i><span>EEF</span><b>{{ pl.kpis.eef }}</b></div>
+    </div>
+    <div class="pl-notes">
+      <b>Report Notes</b>
+      <ul>
+        <li>All amounts are in INR (₹)</li>
+        <li>Costs are priced from actual purchases, not master rates</li>
+        <li>This report is system generated</li>
+      </ul>
     </div>
   </div>
 
