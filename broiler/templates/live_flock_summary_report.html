@@ -29,6 +29,12 @@
   .vb-critical { background:#fdecea; color:#c0392b; }
   .vb-ns       { background:#e9ecef; color:#495057; }
   .lfs-scroll { max-height:72vh; overflow:auto; border:1px solid #eef0f4; border-radius:.5rem; }
+  /* The batch name is a way in to the flock's register, and has to look like
+     one — in a table this dense a plain-coloured word reads as data. */
+  .lfs-drill { color:#0d6efd; font-weight:600; text-decoration:none; border-bottom:1px dotted currentColor; }
+  .lfs-drill:hover { text-decoration:none; border-bottom-style:solid; }
+  .lfs-drill-ico { font-size:.58rem; margin-left:.3rem; opacity:.55; }
+  @media print { .lfs-drill { color:inherit; border-bottom:0; } .lfs-drill-ico { display:none; } }
 </style>
 
 {% include '_report_letterhead.html' with title='Live Flock Summary Report' %}
@@ -94,7 +100,15 @@
           <td class="txt">{{ r.line|default:"-" }}</td>
           <td class="txt">{{ r.supervisor|default:"-" }}</td>
           <td class="txt">{{ r.farmer|default:"-" }}</td>
-          <td class="txt">{{ r.batch }}</td>
+          {# Straight through to this flock's own register: the summary says a
+             flock is off, and the next question is always which day it went
+             off. Dated from placement so the whole run is on screen. #}
+          {# New tab, not this one: the summary is read across the fleet and a
+             flock is checked out of it, so losing the scroll position and the
+             filters to come back to would cost more than the drill-down. #}
+          <td class="txt"><a class="lfs-drill" target="_blank" rel="noopener"
+              title="Detailed daily entries for this flock (opens in a new tab)"
+              href="{% url 'farm_detailed_daily_entry_report' %}?farm={{ r.farm_id }}&amp;batch={{ r.batch_id }}{% if r.placement_date %}&amp;from_date={{ r.placement_date|date:'Y-m-d' }}{% endif %}&amp;to_date={{ today|date:'Y-m-d' }}">{{ r.batch }}<i class="fas fa-arrow-up-right-from-square lfs-drill-ico"></i></a></td>
           <td>{{ r.book_no|default:"-" }}</td>
           <td class="num">{{ r.actual_age }}</td>
           <td>{{ r.placement_date|date:"d.m.Y"|default:"-" }}</td>

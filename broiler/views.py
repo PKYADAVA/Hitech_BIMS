@@ -3195,6 +3195,49 @@ def bird_sale_receipt_balance_lookup(request):
     return JsonResponse({"balance": str(balance)})
 
 
+@login_required
+def production_pl_report(request):
+    """Broiler > Reports > Production Profit & Loss — one batch's result.
+
+    The Growing Charge Statement answers what the farmer is owed, against the
+    rates in the Growing Charge Master. This answers what the flock made or
+    lost for the company, and for that only money actually spent counts — so
+    every cost is priced from purchases (see services/purchase_cost.py).
+
+    Batch-scoped like the Batch History Report, and off the same assembled
+    report, so the two pages cannot disagree about one flock's placements,
+    feed or sales.
+    """
+    from account.models import CompanyProfile
+
+    from .services.production_pl import build_production_pl
+
+    batch_id = (request.GET.get("batch") or "").strip()
+    batch = (scope_multi(request.user,
+                         BroilerBatch.objects
+                         .select_related("broiler_farm__branch",
+                                         "broiler_farm__supervisor",
+                                         "broiler_farm__farmer"),
+                         farms="broiler_farm_id",
+                         branches="broiler_farm__branch_id")
+             .filter(id=batch_id).first()) if batch_id else None
+
+    report = _build_batch_report(batch) if batch else None
+    return render(request, "production_pl_report.html", {
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        "batches": scope_multi(request.user,
+                               BroilerBatch.objects.select_related("broiler_farm")
+                               .order_by("-start_date", "-id"),
+                               farms="broiler_farm_id",
+                               branches="broiler_farm__branch_id"),
+        "batch": batch,
+        "batch_requested": bool(batch_id),
+        "report": report,
+        "pl": build_production_pl(report, batch) if report else None,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Batch History Report (Broiler > Reports)
 # ---------------------------------------------------------------------------
@@ -4164,6 +4207,8 @@ def _live_flock_row(batch, today):
         "supervisor": farm.supervisor.name if farm.supervisor_id else "",
         "farmer": farm.farmer.farmer_name if farm.farmer_id else "",
         "batch": batch.batch_name,
+        "batch_id": batch.id,
+        "farm_id": farm.id,
         "book_no": batch.book_number or "",
         "actual_age": actual_age,
         "placement_date": placement_date,
@@ -4231,6 +4276,7 @@ def live_flock_summary_report(request):
 
     return render(request, "live_flock_summary_report.html", {
         "rows": rows,
+        "today": today,
         "regions": Region.objects.order_by("description"),
         "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
         "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
@@ -4472,6 +4518,9 @@ def farm_detailed_daily_entry_report(request):
     line = (request.GET.get("line") or "").strip()
     supervisor_id = (request.GET.get("supervisor") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
+    # Live Flock Summary links here for one flock, so the register can be read
+    # down to a single batch rather than the farm's whole history.
+    batch_id = (request.GET.get("batch") or "").strip()
 
     to_date = parse_date(request.GET.get("to_date") or "") or timezone.localdate()
     from_date = parse_date(request.GET.get("from_date") or "") or (to_date - timedelta(days=30))
@@ -4490,6 +4539,8 @@ def farm_detailed_daily_entry_report(request):
         entries = entries.filter(Q(supervisor_id=supervisor_id) | Q(farm__supervisor_id=supervisor_id))
     if farm_id:
         entries = entries.filter(farm_id=farm_id)
+    if batch_id:
+        entries = entries.filter(batch_id=batch_id)
 
     feed_ids = list(feed_items().values_list("id", flat=True))
     chick_ids = list(chick_items().values_list("id", flat=True))
@@ -4538,6 +4589,11 @@ def farm_detailed_daily_entry_report(request):
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "branch_id": branch_id, "line": line,
         "supervisor_id": supervisor_id, "farm_id": farm_id,
+        # Only the chosen farm's batches: the full list runs to thousands, and
+        # a batch on another farm can never match the rest of the filters.
+        "batches": (BroilerBatch.objects.filter(broiler_farm_id=farm_id)
+                    .order_by("-start_date") if farm_id else []),
+        "batch_id": batch_id,
         "company": CompanyProfile.get_solo(),
     })
 

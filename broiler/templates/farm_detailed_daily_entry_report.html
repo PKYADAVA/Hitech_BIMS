@@ -57,6 +57,13 @@
         <option value="">All</option>
         {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_code }} — {{ f.farm_name }}</option>{% endfor %}
       </select></div>
+    {# Only offered once a farm is chosen — a batch belongs to one farm, and
+       the unfiltered list runs to thousands. #}
+    <div class="col-md-2"><label class="form-label">Batch</label>
+      <select name="batch" class="form-select form-select-sm" {% if not farm_id %}disabled title="Choose a farm first"{% endif %}>
+        <option value="">All</option>
+        {% for b in batches %}<option value="{{ b.id }}" {% if batch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.batch_name }}</option>{% endfor %}
+      </select></div>
     <div class="col-md-2"><label class="form-label">Font Size</label>
       <select class="form-select form-select-sm" onchange="document.documentElement.style.setProperty('--drr-fs', this.value)">
         <option value=".72rem">Default</option>
