@@ -96,13 +96,27 @@ export function SideNav() {
     setTimeout(() => navigation.navigate(item.target as never), 0);
   };
 
+  const goProfile = () => {
+    close();
+    setTimeout(() => navigation.navigate("Profile" as never), 0);
+  };
+
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       {/* Tapping the dimmed area closes, which is what a sidebar overlay does
           everywhere else and saves reaching for a close button. */}
       <Pressable style={styles.scrim} onPress={close} accessibilityLabel="Close menu">
         <Pressable style={[styles.panel, { paddingTop: insets.top + spacing.lg }]}>
-          <View style={styles.brand}>
+          {/* Tapping your own name opens Profile. Profile is no longer a
+              bottom tab — it was doing the same job as the avatar on Home —
+              and the avatar is only on Home, so this is what keeps it
+              reachable from inside a module, where the bottom bar is hidden. */}
+          <Pressable
+            style={styles.brand}
+            onPress={goProfile}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+          >
             <View style={styles.brandMark}>
               <AppIcon emoji="🐔" size={20} color="#fff" />
             </View>
@@ -112,7 +126,8 @@ export function SideNav() {
                 {user?.full_name || user?.username || "Poultry ERP"}
               </Text>
             </View>
-          </View>
+            <AppIcon name="chevron-right" size={18} color={colors.textFaint} />
+          </Pressable>
 
           <ScrollView showsVerticalScrollIndicator={false}>
             {items
@@ -153,15 +168,9 @@ export function SideNav() {
   );
 }
 
-/** The hamburger that opens it. */
-export function SideNavButton({ tint = "#fff" }: { tint?: string }) {
-  const openNav = useSideNav((s) => s.openNav);
-  return (
-    <Pressable onPress={() => openNav()} hitSlop={12} accessibilityLabel="Open menu">
-      <AppIcon name="menu" size={22} color={tint} />
-    </Pressable>
-  );
-}
+// The hamburger that used to open this is gone. The Menu tab in the bottom bar
+// opens it now — one control, where a thumb already rests, instead of an icon
+// in the top-left corner that a phone hand cannot comfortably reach.
 
 const useStyles = makeStyles((c) => ({
   scrim: { flex: 1, backgroundColor: "rgba(15,23,42,0.45)", flexDirection: "row" },

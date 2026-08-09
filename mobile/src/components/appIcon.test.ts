@@ -29,6 +29,21 @@ describe("iconFor", () => {
     expect(iconFor("🫠")).toBe("circle-outline");
   });
 
+  /**
+   * The chrome asks for these by name and nothing else asserts them, so a
+   * rename in the icon set would turn the Menu tab into a blank ring exactly
+   * the way the Daily Trip shortcut did. "☰" is in the list as a counter-
+   * example: it is the obvious thing to reach for and it does not resolve,
+   * which is how the Menu tab was nearly shipped hollow.
+   */
+  it("resolves the icons the app chrome asks for", () => {
+    for (const name of ["menu", "chevron-down", "chevron-right", "paperclip"]) {
+      expect(iconFor(name)).toBe(name);
+      expect(name in MaterialCommunityIcons.glyphMap).toBe(true);
+    }
+    expect(iconFor("☰")).toBe("circle-outline");
+  });
+
   it("resolves every icon the register screens ask for", () => {
     const blank = Object.values(RESOURCES)
       .filter((r) => r.icon !== "circle-outline" && iconFor(r.icon) === "circle-outline")

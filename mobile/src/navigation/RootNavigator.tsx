@@ -6,7 +6,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { AlertBell } from "@/components/AlertBell";
 import { AppIcon } from "@/components/AppIcon";
-import { SideNav, SideNavButton } from "@/components/SideNav";
+import { SideNav } from "@/components/SideNav";
 import { useSideNav } from "@/store/sideNavStore";
 import { Loading } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
@@ -152,9 +152,10 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           // back button on this first screen — hide it; the bar below is the
           // way out, and swipe/back still works.
           //
-          // No hamburger here: this screen already carries a module bar with
-          // Menu on it, and two buttons opening the same sidebar is one too
-          // many. Home and Reports have no such bar and keep theirs.
+          // No hamburger here, and none anywhere now: this screen carries a
+          // module bar with Menu on it, and Home and Reports have the Menu tab
+          // in the bottom bar. One control for the sidebar, always within a
+          // thumb's reach, rather than an icon in the far top-left corner.
           headerBackVisible: false,
           // The module's one create action, beside its title as the reference
           // has it — hidden when the user may not add, and absent for modules
@@ -301,7 +302,9 @@ function AppTabs() {
       <Tab.Screen
         name="Menu"
         component={MenuTabPlaceholder}
-        options={{ tabBarIcon: tabIcon("☰") }}
+        // "menu", not "☰": the emoji is not in the map and would have rendered
+        // as the neutral fallback ring — see the iconFor tests.
+        options={{ tabBarIcon: tabIcon("menu") }}
         listeners={{
           tabPress: (e) => {
             e.preventDefault();

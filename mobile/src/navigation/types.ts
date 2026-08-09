@@ -48,7 +48,12 @@ export type TabParams = {
   Broiler: NavigatorScreenParams<ModuleStackParams>;
   Hatchery: NavigatorScreenParams<ModuleStackParams>;
   SMS: NavigatorScreenParams<ModuleStackParams>;
-  Profile: undefined;
+  /**
+   * Opens the side navigation rather than showing a screen — the tab press is
+   * intercepted, so nothing is ever rendered here. It is a tab because that is
+   * where a thumb already is, which is what let the header hamburger go.
+   */
+  Menu: undefined;
 };
 
 export type ModuleTab = Extract<keyof TabParams, ModuleKey>;
