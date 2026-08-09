@@ -116,7 +116,7 @@
   @media (min-width:1400px) { .dw-bar { flex-wrap:nowrap; } }
   .dw-filter.is-busy { opacity:.6; pointer-events:none; }
   .dw-ignored { display:block; font-size:.71rem; color:#b45309; margin-top:9px; }
-  .dw-card { display:flex; flex-direction:column; height:100%; background:#fff;
+  .dw-card { display:flex; flex-direction:column; background:#fff;
              border:1px solid #e7edf5; border-radius:16px; padding:17px 18px; }
   .dw-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
   .dw-head-icon { width:32px; height:32px; flex:0 0 32px; border-radius:10px; display:grid;
@@ -395,7 +395,8 @@
     {% endif %}
 
     <!-- Widgets: filled from /api/dashboard-widgets/ after the page paints -->
-    <div class="row g-3 mb-4" id="dash-widgets" style="order:{{ dash_widgets_order }};"></div>
+    <div class="row g-3 mb-4 align-items-start" id="dash-widgets"
+         style="order:{{ dash_widgets_order }};"></div>
 
     {% if 'field_team' in dash_panels %}
     {% csrf_token %}
