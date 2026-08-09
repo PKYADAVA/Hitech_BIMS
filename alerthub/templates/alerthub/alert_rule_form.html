@@ -38,6 +38,16 @@ pushed into the form rather than duplicated in this template.
       <h2><i class="fa-solid fa-tag text-primary"></i> What to watch</h2>
       <p class="ah-hint">Give the rule a name your team will recognise, then pick the alert it configures.</p>
 
+      {% comment %}
+        On this form an empty box means "watch everything", which a blank
+        control does not say — it reads as unset, or as a field somebody forgot.
+        The placeholder says it out loud, so "All branches" and "BAHRAICH,
+        VARANASI" are two visibly different answers rather than one blank and
+        one filled.
+
+        Set here rather than on the widget because alerthub/forms.py is being
+        worked on, and the wording belongs next to the labels it has to match.
+      {% endcomment %}
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label small fw-semibold">Rule name</label>
@@ -58,6 +68,16 @@ pushed into the form rather than duplicated in this template.
       <h2><i class="fa-solid fa-gauge-high text-primary"></i> Trigger condition</h2>
       <p class="ah-hint">When should this fire, and how urgent is it?</p>
 
+      {% comment %}
+        On this form an empty box means "watch everything", which a blank
+        control does not say — it reads as unset, or as a field somebody forgot.
+        The placeholder says it out loud, so "All branches" and "BAHRAICH,
+        VARANASI" are two visibly different answers rather than one blank and
+        one filled.
+
+        Set here rather than on the widget because alerthub/forms.py is being
+        worked on, and the wording belongs next to the labels it has to match.
+      {% endcomment %}
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label small fw-semibold">Comparison</label>
@@ -105,7 +125,17 @@ pushed into the form rather than duplicated in this template.
         nobody can be notified about a branch they cannot see.
       </p>
 
-      <div class="row g-3">
+      {% comment %}
+        On this form an empty box means "watch everything", which a blank
+        control does not say — it reads as unset, or as a field somebody forgot.
+        The placeholder says it out loud, so "All branches" and "BAHRAICH,
+        VARANASI" are two visibly different answers rather than one blank and
+        one filled.
+
+        Set here rather than on the widget because alerthub/forms.py is being
+        worked on, and the wording belongs next to the labels it has to match.
+      {% endcomment %}
+      <div class="row g-3" id="notify-scope">
         <div class="col-md-6">
           <label class="form-label small fw-semibold">Notify user groups</label>
           {{ form.notify_groups }}
@@ -128,6 +158,56 @@ pushed into the form rather than duplicated in this template.
           {{ form.notify_warehouses }}
         </div>
       </div>
+
+      {% comment %}
+        "All" has to be in the list, not only in the empty box.
+
+        These fields mean "everything" when nothing is picked, which is a rule
+        somebody has to be told — and once a branch has been chosen there was no
+        obvious way back to all of them except deselecting one by one. So each
+        list carries an All row that simply clears the selection, and the empty
+        box then says All in words.
+
+        Written here rather than on the widget because alerthub/forms.py is
+        being worked on, and because what an empty box means is this form's
+        business: elsewhere on the site an empty multi-select means "none", and
+        the shared helper in main.js deliberately takes no view.
+
+        The options are added at parse time. main.js registers its ready handler
+        when base.html loads it — before this — so anything done on ready would
+        arrive after Select2 had already been built.
+      {% endcomment %}
+      <script>
+        (function () {
+          var ALL = {
+            notify_groups: 'All user groups',
+            notify_branches: 'All branches',
+            notify_org_centres: 'All organization / cost centres',
+            notify_farms: 'All farms',
+            notify_warehouses: 'All warehouses / offices'
+          };
+          Object.keys(ALL).forEach(function (name) {
+            var el = document.querySelector('#notify-scope [name="' + name + '"]');
+            if (!el) return;
+            el.setAttribute('data-placeholder', ALL[name]);
+            var all = document.createElement('option');
+            // Never submitted: choosing it clears the box, and an empty box is
+            // what "all" already means to the server.
+            all.value = '__all__';
+            all.textContent = ALL[name];
+            el.insertBefore(all, el.firstChild);
+          });
+
+          // After Select2 exists — main.js builds it on ready, and this handler
+          // is delegated so it does not matter which runs first.
+          jQuery(function ($) {
+            $('#notify-scope').on('select2:select', 'select', function (e) {
+              if (e.params.data.id !== '__all__') return;
+              $(this).val([]).trigger('change');
+            });
+          });
+        })();
+      </script>
     </div>
 
     <div class="ah-form-card">
@@ -163,78 +243,4 @@ pushed into the form rather than duplicated in this template.
     </div>
   </form>
 </div>
-{% endblock %}
-
-{% block js %}
-<script>
-(function () {
-  var form = document.getElementById("ahRuleForm");
-  var catalog = JSON.parse(form.dataset.catalog);
-  var select = document.getElementById("{{ form.rule_key.auto_id }}");
-  var threshold = document.getElementById("{{ form.threshold.auto_id }}");
-  var priority = document.getElementById("{{ form.priority.auto_id }}");
-  var operator = document.getElementById("{{ form.operator.auto_id }}");
-  var label = document.getElementById("ahThresholdLabel");
-  var unit = document.getElementById("ahThresholdUnit");
-  var help = document.getElementById("ahThresholdHelp");
-  var note = document.getElementById("ahSpecNote");
-  var editing = {% if rule %}true{% else %}false{% endif %};
-
-  function apply(prefill) {
-    var spec = catalog[select.value];
-    if (!spec) {
-      note.className = "d-none";
-      label.textContent = "Threshold";
-      unit.textContent = "—";
-      help.textContent = "";
-      return;
-    }
-
-    /* The description, and the honest warning when nothing can raise it. */
-    if (spec.requires) {
-      note.className = "ah-note warn";
-      note.innerHTML = '<i class="fa-solid fa-triangle-exclamation mt-1"></i><span>' +
-        "<strong>This alert has no data source yet.</strong> " +
-        AlertHub.esc(spec.requires) +
-        " You can configure the rule now; it will start firing once that exists." +
-        "</span>";
-    } else {
-      note.className = "ah-note info";
-      note.innerHTML = '<i class="fa-solid fa-circle-info mt-1"></i><span>' +
-        AlertHub.esc(spec.description) + "</span>";
-    }
-
-    if (spec.threshold) {
-      threshold.disabled = false;
-      label.textContent = spec.threshold.label;
-      unit.textContent = spec.threshold.unit || "—";
-      help.textContent = spec.threshold.help || "";
-      /* Only prefill when the user changed the type. Overwriting a saved
-         threshold on page load would silently reset a tuned rule. */
-      if (prefill) {
-        threshold.value = spec.threshold.default;
-        operator.value = spec.threshold.operator;
-      }
-    } else {
-      label.textContent = "Threshold";
-      unit.textContent = "n/a";
-      help.textContent = "This alert fires on the condition itself and takes no threshold.";
-      if (prefill) threshold.value = "";
-      threshold.disabled = true;
-    }
-
-    if (prefill) priority.value = spec.priority;
-  }
-
-  select.addEventListener("change", function () { apply(true); });
-  apply(false);
-
-  /* A disabled input is not submitted, and the model needs the null. Re-enable
-     just before submit so a thresholdless rule posts an empty value rather than
-     keeping whatever was there before. */
-  form.addEventListener("submit", function () {
-    if (threshold.disabled) { threshold.value = ""; threshold.disabled = false; }
-  });
-})();
-</script>
 {% endblock %}

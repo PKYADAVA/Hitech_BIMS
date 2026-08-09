@@ -80,7 +80,13 @@ $.extend(true, $.fn.dataTable.defaults, {
 (function ($) {
   function searchableSelect(el) {
     const $el = $(el);
-    if (!$el.is('select.form-select') || el.multiple || el.size > 1) return;
+    // Multi-selects are included. Left native they render as a short scrolling
+    // box that shows two or three rows of a list that may run to hundreds, with
+    // no search and with ctrl-click as the only way to pick a second item —
+    // which is not discoverable and is impossible on a touch screen. `size` is
+    // still respected on single selects, where it is an explicit ask for a list.
+    if (!$el.is('select.form-select')) return;
+    if (!el.multiple && el.size > 1) return;
     if ($el.is('[data-no-search]') || $el.hasClass('select2-hidden-accessible')) return;
     if ($el.closest('.dataTables_length').length) return; // keep DataTables' page-size menu native
     const small = $el.hasClass('form-select-sm');
@@ -97,6 +103,13 @@ $.extend(true, $.fn.dataTable.defaults, {
       selectionCssClass: small ? 'select2--small' : '',
       dropdownCssClass: small ? 'select2--small' : '',
       dropdownParent: $modalContent.length ? $modalContent : $(document.body),
+      // What an empty box means is the field's business, not this helper's:
+      // on some forms nothing selected means "everything", on others it means
+      // "none". Whoever knows says so with data-placeholder.
+      placeholder: $el.data('placeholder') || null,
+      // Picking several is the normal case on a multi-select, and closing the
+      // list after each one makes choosing four branches four journeys.
+      closeOnSelect: !el.multiple,
     });
     // Select2 raises only jQuery events; re-dispatch native input/change so
     // vanilla listeners (onchange=..., addEventListener) keep working.
