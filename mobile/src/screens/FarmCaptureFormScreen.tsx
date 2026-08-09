@@ -5,13 +5,15 @@ import { Alert, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { http } from "@/api/client";
 import { Envelope } from "@/api/types";
 import {
-  appendImage, capturePhoto, CapturePermissionError, captureLocation, pickDocument, pickPhoto,
+  capturePhoto, CapturePermissionError, captureLocation, pickDocument, pickPhoto,
 } from "@/capture";
 import { AppIcon } from "@/components/AppIcon";
 import { FormControl } from "@/components/form";
 import { FormField } from "@/config/forms";
 import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
+import { writeThrough } from "@/net/writeThrough";
+import { notify } from "@/ui/confirm";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 
@@ -288,26 +290,42 @@ export function FarmCaptureFormScreen({ navigation, route }: Props) {
 
     setSaving(true);
     try {
-      const form = new FormData();
+      // Described rather than built: a FormData cannot be written to the
+      // offline queue, and a capture is made at the farm gate.
+      const fields: Record<string, unknown> = {};
       for (const key of ["date", "farm", "latitude", "longitude",
                          "state", "district", "area", "address", "remarks"]) {
-        if (values[key]) form.append(key, values[key]);
+        if (values[key]) fields[key] = values[key];
       }
-      for (const uri of pictures) await appendImage(form, "photos", uri);
-      for (const uri of documents) await appendImage(form, "documents", uri);
-      for (const [slot, uri] of Object.entries(slots)) {
-        if (uri) await appendImage(form, `slot_${slot}`, uri);
-      }
+      const files: { field: string; uri: string }[] = [
+        ...pictures.map((uri) => ({ field: "photos", uri })),
+        ...documents.map((uri) => ({ field: "documents", uri })),
+        ...Object.entries(slots)
+          .filter(([, uri]) => !!uri)
+          .map(([slot, uri]) => ({ field: `slot_${slot}`, uri: uri as string })),
+      ];
       // Files are only ever *added* by a save: the ERP's _save_capture attaches
       // whatever came with the request and leaves the existing ones alone, so
       // re-sending nothing does not clear what is already on the record.
       const url = editing
         ? `/broiler/location-captures/save/${editing.id}`
         : "/broiler/location-captures/save";
-      await http.post(url, form, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const written = await writeThrough({
+        type: "farm_visit", label: "Farm Location & Address",
+        method: "POST", path: url, date: values.date,
+        body: { fields, files },
+        scope: { farm_id: values.farm || null },
+        gps: values.latitude && values.longitude
+          ? { latitude: Number(values.latitude),
+              longitude: Number(values.longitude), accuracy: null }
+          : null,
       });
       queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/location-captures/"] });
+      if (written.queued) {
+        await notify("Saved on this phone",
+          "No signal — this capture is stored on the device and will go to the "
+          + "ERP by itself once you are back in range.");
+      }
       navigation.goBack();
     } catch (e: unknown) {
       const message = (e as { message?: string })?.message ?? "Could not save the capture.";

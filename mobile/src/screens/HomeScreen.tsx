@@ -5,6 +5,7 @@ import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AlertBell } from "@/components/AlertBell";
+import { SyncStatusChip } from "@/components/SyncStatusChip";
 import { AppIcon } from "@/components/AppIcon";
 import { Badge, Button, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
 import { colors, makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
@@ -17,7 +18,6 @@ import { describeTodayTrip } from "@/domain/todayTrip";
 import { useAuthStore } from "@/store/authStore";
 import { RESOURCE_TABS } from "@/api/permissions";
 import { usePermissionsStore } from "@/store/permissionsStore";
-import { useSideNav } from "@/store/sideNavStore";
 
 const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
 
@@ -355,16 +355,9 @@ function HomeHeader({
     <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
       {/* Brand row */}
       <View style={styles.brandRow}>
+        {/* No hamburger. The Menu tab in the bar below opens the same side
+            navigation, and a thumb is already there. */}
         <View style={styles.brand}>
-          <Pressable
-            onPress={() => useSideNav.getState().openNav("dashboard")}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Open menu"
-            style={styles.menuButton}
-          >
-            <AppIcon name="menu" size={22} color={colors.onDark} />
-          </Pressable>
           <View>
             <Text style={styles.brandName}>Hi Tech BIMS</Text>
             <Text style={styles.brandTag}>Farm management</Text>
@@ -372,15 +365,27 @@ function HomeHeader({
         </View>
 
         <View style={styles.headerActions}>
+          {/* The dashboard is the screen the app opens on, and the one a
+              supervisor checks before setting out — so it is where "have my
+              entries gone?" is asked first. It sits outside the stack
+              navigators, so it needs the chip placed by hand. */}
+          <SyncStatusChip tint="#fff" />
           <AlertBell />
+          {/* A bare circle of initials reads as a label, not a button. The
+              ring and the caret are what say it opens something — the same
+              two cues the ERP's own top-right avatar uses, so the habit
+              carries between the desk and the phone. */}
           <Pressable
             onPress={onProfile}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Open profile"
-            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.avatarBtn, pressed && styles.pressed]}
           >
-            <Text style={styles.avatarText}>{initialsOf(user)}</Text>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initialsOf(user)}</Text>
+            </View>
+            <AppIcon name="chevron-down" size={14} color={colors.onDark} />
           </Pressable>
         </View>
       </View>
@@ -459,9 +464,12 @@ export function HomeScreen({ navigation }: Props) {
           <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={theme.primary} />
         }
       >
+        {/* Profile is a Root screen now, not a sibling tab, so the name bubbles
+            up to the parent navigator — the same cast the module tiles below
+            use for the same reason. */}
         <HomeHeader
           user={user}
-          onProfile={() => navigation.navigate("Profile")}
+          onProfile={() => navigation.navigate("Profile" as any)}
           filters={
             <View style={styles.filterRow}>
               <FilterChip label={farmName} onPress={() => setPickFarm(true)} />
@@ -606,13 +614,26 @@ const useStyles = makeStyles((colors) => ({
   brandName: { ...type.h3, color: colors.onDark },
   brandTag: { ...type.caption, color: ON_DARK_SOFT },
 
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: withAlpha(colors.onDark, 0.16),
+  // The pill around the avatar and its caret are the affordance: a circle of
+  // initials on its own is read as a name badge, and people did not try
+  // tapping it.
+  avatarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingLeft: 3,
+    paddingRight: 7,
+    paddingVertical: 3,
+    borderRadius: 24,
+    backgroundColor: withAlpha(colors.onDark, 0.12),
     borderWidth: 1,
-    borderColor: withAlpha(colors.onDark, 0.3),
+    borderColor: withAlpha(colors.onDark, 0.28),
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: withAlpha(colors.onDark, 0.22),
     alignItems: "center",
     justifyContent: "center",
   },

@@ -5,7 +5,7 @@ import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { http } from "@/api/client";
 import { Row } from "@/api/types";
 import {
-  appendImage, capturePhoto, CapturePermissionError, captureLocation,
+  capturePhoto, CapturePermissionError, captureLocation,
   isLocalCapture, pickDocument, pickPhoto,
 } from "@/capture";
 import { AppIcon } from "@/components/AppIcon";
@@ -15,6 +15,7 @@ import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
+import { writeThrough } from "@/net/writeThrough";
 import { notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "FarmCaptureFill">;
@@ -136,27 +137,44 @@ export function FarmCaptureFillScreen({ navigation, route }: Props) {
 
   const save = async () => {
     setError("");
-    const body = new FormData();
+    // Described rather than built: a FormData cannot be written to the offline
+    // queue, and a capture is filled at the farm gate, which is where there is
+    // no signal.
+    const fields: Record<string, unknown> = {};
+    const files: { field: string; uri: string }[] = [];
     if (!pinned && values.latitude && values.longitude) {
-      body.append("latitude", values.latitude);
-      body.append("longitude", values.longitude);
+      fields.latitude = values.latitude;
+      fields.longitude = values.longitude;
     }
     (["state", "district", "area", "address"] as const).forEach((f) => {
       // Only fields that were blank on the record are sent. The server ignores
       // the rest anyway; not sending them keeps the request honest.
-      if (!str(row[f]) && values[f].trim()) body.append(f, values[f].trim());
+      if (!str(row[f]) && values[f].trim()) fields[f] = values[f].trim();
     });
     Object.entries(slots).forEach(([key, uri]) => {
-      if (uri) appendImage(body, `slot_${key}`, uri);
+      if (uri) files.push({ field: `slot_${key}`, uri });
     });
-    photos.forEach((uri) => appendImage(body, "photos", uri));
-    docs.forEach((uri) => appendImage(body, "documents", uri));
+    photos.forEach((uri) => files.push({ field: "photos", uri }));
+    docs.forEach((uri) => files.push({ field: "documents", uri }));
 
     setSaving(true);
     try {
-      await http.post(`/broiler/location-captures/${row.id}/fill`, body, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const written = await writeThrough({
+        type: "farm_visit", label: "Farm Location & Address",
+        method: "POST",
+        path: `/broiler/location-captures/${row.id}/fill`,
+        body: { fields, files },
+        scope: { farm_id: (row as { farm?: number }).farm ?? null },
+        gps: values.latitude && values.longitude
+          ? { latitude: Number(values.latitude),
+              longitude: Number(values.longitude), accuracy: null }
+          : null,
       });
+      if (written.queued) {
+        await notify("Saved on this phone",
+          "No signal — this capture is stored on the device and will go to the "
+          + "ERP by itself once you are back in range.");
+      }
       queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/location-captures/"] });
       navigation.goBack();
     } catch (e: unknown) {

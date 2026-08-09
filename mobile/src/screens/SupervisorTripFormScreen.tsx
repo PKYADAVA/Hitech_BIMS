@@ -6,7 +6,7 @@ import { fetchMe } from "@/api/auth";
 import { http } from "@/api/client";
 import { Envelope, Row } from "@/api/types";
 import {
-  appendImage, capturePhoto, CapturePermissionError, isLocalCapture,
+  capturePhoto, CapturePermissionError, isLocalCapture,
   LocationUnavailableError, openLocationSettings, requireLocation,
 } from "@/capture";
 import { AppIcon } from "@/components/AppIcon";

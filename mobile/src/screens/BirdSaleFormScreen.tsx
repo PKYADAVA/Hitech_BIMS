@@ -7,7 +7,7 @@ import { http } from "@/api/client";
 import { createResource, deleteResource, listResource, updateResource } from "@/api/resources";
 import { ApiError, Envelope, Row } from "@/api/types";
 import {
-  appendImage, capturePhoto, CapturePermissionError, isLocalCapture, pickPhoto, requireLocation,
+  capturePhoto, CapturePermissionError, isLocalCapture, pickPhoto, requireLocation,
   LocationUnavailableError, openLocationSettings,
 } from "@/capture";
 import { AppIcon, IconName } from "@/components/AppIcon";
@@ -20,6 +20,7 @@ import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
 import { isEmpty } from "@/utils/format";
+import { writeThrough } from "@/net/writeThrough";
 import { confirm } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "BirdSaleForm">;
@@ -390,11 +391,14 @@ export function BirdSaleFormScreen({ route, navigation }: Props) {
       for (const uri of block.photos[kind]) {
         if (!isLocalCapture(uri)) continue;              // already on the server
         try {
-          const form = new FormData();
-          form.append("sale", String(saleId));
-          form.append("kind", kind);
-          await appendImage(form, "image", uri);
-          await createResource(PHOTOS_PATH, form);
+          // saleId may be a placeholder when the sale itself is queued; the
+          // engine substitutes the real id once the sale has landed.
+          await writeThrough({
+            type: "photo", label: "Bird Sale photo",
+            method: "POST", path: PHOTOS_PATH,
+            body: { fields: { sale: saleId, kind },
+                    files: [{ field: "image", uri }] },
+          });
         } catch {
           failed.push(PHOTO_KINDS.find((p) => p.kind === kind)?.label ?? "Extra photos");
         }
