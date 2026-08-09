@@ -1421,6 +1421,27 @@ img, svg, video, canvas {
   .select2-container--bootstrap-5 .select2-selection { min-height: 44px; }
 }
 
+/* A multi-select is a dropdown and should say so.
+   Select2's Bootstrap theme draws a caret on single selects only, so a
+   multi-select renders as a plain bordered box — indistinguishable from a text
+   input, and nothing about it suggests there is a list behind it. Same caret,
+   same inset, so the two kinds of control read as the same family. */
+.select2-container--bootstrap-5 .select2-selection--multiple {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right .75rem center;
+  background-size: 16px 12px;
+  padding-right: 2.25rem;
+}
+.select2-container--bootstrap-5.select2-container--open .select2-selection--multiple {
+  /* Points the other way while the list is open, as a native select does. */
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 11 6-6 6 6'/%3e%3c/svg%3e");
+}
+/* The clear cross would otherwise sit under the caret. */
+.select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__clear {
+  margin-right: 1.4rem;
+}
+
 /* Navbar collapses at xl (see navbar-expand-xl), so its collapsed styling
    applies below 1200px. */
 @media (max-width: 1199.98px) {
