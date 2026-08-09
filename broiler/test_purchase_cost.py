@@ -133,9 +133,21 @@ class ProductionPLTests(TestCase):
         self.assertTrue(all(l["amount"] is None for l in pl["cost_lines"]
                             if not l["tracked"]))
 
-    def test_it_says_the_profit_is_before_the_untracked_costs(self):
-        # Otherwise the figure reads as the flock's actual margin.
-        self.assertIn("before those costs", self.build()["untracked_note"])
+    def test_it_says_where_the_untracked_figures_came_from(self):
+        # They are typed against the batch, not posted anywhere — and a head
+        # nobody filled in is not counted as zero. Both need saying, or the
+        # total reads as though the system knew.
+        note = self.build()["untracked_note"]
+        self.assertIn("entered by hand", note)
+        self.assertIn("blank are not counted", note)
+
+    def test_a_head_nobody_filled_in_is_not_counted_as_zero(self):
+        # "Electricity: 0" says the flock used none. Blank says nobody has told
+        # us yet, and only one of those is true.
+        pl = self.build()
+        growing = [b for b in pl["cost_blocks"] if b["title"] == "Growing Expenses"][0]
+        self.assertIsNone(growing["total"])
+        self.assertTrue(all(line["amount"] is None for line in growing["lines"]))
 
     def test_a_flock_that_sold_nothing_does_not_divide_by_zero(self):
         pl = self.build(bird_sales=[], batch_costing={"sold_weight": 0, "sold_birds": 0,

@@ -3196,6 +3196,46 @@ def bird_sale_receipt_balance_lookup(request):
 
 
 @login_required
+@require_POST
+def production_pl_entry_save(request, batch_id):
+    """Store one hand-entered head against a batch, from the P&L page.
+
+    Blanking a field deletes the row rather than storing zero. Zero is a
+    figure — "the flock used no electricity" — and blank means nobody has said
+    yet; the report shows them differently, so they have to be stored
+    differently.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from .models import BatchOtherEntry
+
+    batch = get_object_or_404(
+        scope_multi(request.user, BroilerBatch.objects.all(),
+                    farms="broiler_farm_id", branches="broiler_farm__branch_id"),
+        pk=batch_id)
+
+    kind = (request.POST.get("kind") or "").strip()
+    head = (request.POST.get("head") or "").strip()
+    raw = (request.POST.get("amount") or "").strip()
+    if kind not in ("cost", "revenue") or not head:
+        return JsonResponse({"ok": False, "message": "Unknown head."}, status=400)
+
+    if raw == "":
+        BatchOtherEntry.objects.filter(batch=batch, kind=kind, head=head).delete()
+        return JsonResponse({"ok": True, "amount": None})
+
+    try:
+        amount = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        return JsonResponse({"ok": False, "message": "Enter a number."}, status=400)
+
+    BatchOtherEntry.objects.update_or_create(
+        batch=batch, kind=kind, head=head,
+        defaults={"amount": amount, "entered_by": request.user})
+    return JsonResponse({"ok": True, "amount": str(amount)})
+
+
+@login_required
 def production_pl_report(request):
     """Broiler > Reports > Production Profit & Loss — one batch's result.
 

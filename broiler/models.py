@@ -2272,3 +2272,50 @@ class FarmCaptureFile(models.Model):
         if getattr(owner, field) != latest.file.name:
             setattr(owner, field, latest.file.name)
             owner.save(update_fields=[field])
+
+
+class BatchOtherEntry(models.Model):
+    """A cost or income the ERP has no transaction for, entered against a batch.
+
+    Labour, electricity, depreciation, litter and manure sales: real money, and
+    nothing in this system records them. Until each has a transaction of its
+    own, the Production P&L would either omit them — making every flock look
+    more profitable than it was — or wait for modules that may be a year away.
+
+    So the report lets someone type them in. Deliberately narrow: one amount per
+    head per batch, no dates, no ledger, no posting. It is a note on a statement,
+    not an accounting entry, and it is stored where the statement can find it
+    rather than pretending to be a voucher.
+
+    Replaced by the real thing whenever a head gets a transaction behind it —
+    at which point its rows here should be migrated, not left to double-count.
+    """
+
+    class Kind(models.TextChoices):
+        COST = "cost", _("Cost")
+        REVENUE = "revenue", _("Revenue")
+
+    batch = models.ForeignKey(BroilerBatch, on_delete=models.CASCADE,
+                              related_name="other_entries")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    #: The head as the report names it, e.g. "Labour". Free text rather than a
+    #: choice field: the list lives in services/production_pl.py, and a second
+    #: copy here would be one more thing to keep in step.
+    head = models.CharField(max_length=100)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    entered_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL,
+                                   null=True, blank=True,
+                                   related_name='batch_other_entries')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Batch Other Entry")
+        verbose_name_plural = _("Batch Other Entries")
+        constraints = [
+            models.UniqueConstraint(fields=["batch", "kind", "head"],
+                                    name="uniq_batch_other_entry"),
+        ]
+
+    def __str__(self):
+        return f"{self.batch} / {self.head}: {self.amount}"

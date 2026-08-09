@@ -17,6 +17,7 @@ A statement missing its rows reads as complete, and somebody decides on it.
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 {% include '_broiler_report_subnavbar.html' with active_tab='production_pl_report' %}
 
 <div class="report-doc">
@@ -94,8 +95,18 @@ A statement missing its rows reads as complete, and somebody decides on it.
               {% for line in pl.revenue_lines %}
               <tr>
                 <td>{{ line.label }}</td>
-                <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
-                  {% if line.tracked %}{{ line.amount }}{% else %}not tracked{% endif %}
+                <td class="text-end">
+                  {% if line.tracked %}{{ line.amount }}{% else %}
+                  {% comment %}
+                    Typed here because nothing in the ERP records it. Blank is
+                    not zero: leaving it empty keeps the head out of the total,
+                    which is the truthful state until somebody knows the figure.
+                  {% endcomment %}
+                  <input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end"
+                         data-kind="revenue" data-head="{{ line.label }}"
+                         value="{{ line.amount|default_if_none:'' }}"
+                         placeholder="not tracked">
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}
@@ -129,7 +140,7 @@ A statement missing its rows reads as complete, and somebody decides on it.
               <tr>
                 <td>{{ line.label }}</td>
                 <td class="text-end {% if not line.tracked %}text-muted{% endif %}">
-                  {% if line.tracked %}{{ line.amount }}{% else %}not tracked{% endif %}
+                  {% if line.tracked %}{{ line.amount }}{% else %}<input type="number" step="0.01" class="form-control form-control-sm pl-entry text-end" data-kind="cost" data-head="{{ line.label }}" value="{{ line.amount|default_if_none:'' }}" placeholder="not tracked">{% endif %}
                 </td>
               </tr>
               {% endfor %}
@@ -254,6 +265,34 @@ A statement missing its rows reads as complete, and somebody decides on it.
 {% block js %}
 <script>
 $(function () {
+  // Save a hand-entered head as soon as the field is left. No Save button:
+  // there are twenty of these and one round trip each is cheaper than asking
+  // somebody to remember. The page reloads afterwards so every total the
+  // figure feeds — the block, the strip, the profit — moves with it.
+  $(document).on('change', '.pl-entry', function () {
+    var $f = $(this);
+    $f.prop('disabled', true);
+    fetch('{% url "production_pl_entry_save" batch.pk %}', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': $('input[name=csrfmiddlewaretoken]').val()
+          || (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      credentials: 'same-origin',
+      body: new URLSearchParams({ kind: $f.data('kind'), head: $f.data('head'),
+                                  amount: $f.val() }),
+    }).then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (!body.ok) { window.alert(body.message || 'Could not save.'); $f.prop('disabled', false); return; }
+        window.location.reload();
+      })
+      .catch(function () {
+        $f.prop('disabled', false);
+        window.alert('Could not reach the server. The figure is unchanged.');
+      });
+  });
+
   // Batch lists the chosen farm's batches only. The options are detached and
   // re-appended rather than hidden: main.js turns every .form-select into a
   // Select2, which builds its own list and ignores `display: none`.

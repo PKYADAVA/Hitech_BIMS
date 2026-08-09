@@ -53,14 +53,21 @@ def build_production_pl(report, batch):
     """
     costing = report.get("batch_costing") or {}
     sales = report.get("bird_sales") or []
+    # Heads with no transaction behind them, as somebody typed them against
+    # this batch. Absent means nobody has filled it in — which is not zero, and
+    # the page keeps saying so until they do.
+    entered = _entered_amounts(batch)
 
     # --- revenue ---------------------------------------------------------
     live_bird_sales = sum((_d(r.get("amount")) for r in sales), ZERO)
     revenue_lines = [{"label": "Live Bird Sales", "amount": live_bird_sales,
                       "tracked": True}]
-    revenue_lines += [{"label": name, "amount": None, "tracked": False}
-                      for name in UNTRACKED_REVENUE]
-    total_revenue = live_bird_sales
+    for name in UNTRACKED_REVENUE:
+        amount = entered.get(("revenue", name))
+        revenue_lines.append({"label": name, "amount": amount, "tracked": False,
+                              "entered": amount is not None})
+    total_revenue = live_bird_sales + sum(
+        (a for (kind, _h), a in entered.items() if kind == "revenue"), ZERO)
 
     # --- what the flock consumed, priced from purchases -------------------
     consumption, item_ids = _consumption_rows(report)
@@ -75,7 +82,8 @@ def build_production_pl(report, batch):
     # placement itself rather than in a feed store's purchase history.
     chick_cost = sum((_d(r.get("amount")) for r in (report.get("chick_placement") or [])), ZERO)
 
-    tracked_cost = (chick_cost + feed_cost + medicine_cost).quantize(Q2)
+    entered_cost = sum((a for (kind, _h), a in entered.items() if kind == "cost"), ZERO)
+    tracked_cost = (chick_cost + feed_cost + medicine_cost + entered_cost).quantize(Q2)
     # Grouped the way the statement is read: five named blocks, each with its
     # own total, then one grand total. Two of the five have nothing behind them
     # in this system yet and say so rather than showing a total of zero.
@@ -100,11 +108,8 @@ def build_production_pl(report, batch):
          "tracked": True,
          "lines": _item_lines(med_rows, rates) or
                   [{"label": "No medicine consumed", "amount": ZERO, "tracked": True}]},
-        {"title": "Growing Expenses", "accent": "#4a3aa7", "total": None, "tracked": False,
-         "lines": [{"label": n, "amount": None, "tracked": False} for n in GROWING_HEADS]},
-        {"title": "Administrative Cost", "accent": "#eda100", "total": None,
-         "tracked": False,
-         "lines": [{"label": n, "amount": None, "tracked": False} for n in ADMIN_HEADS]},
+        _entered_block("Growing Expenses", "#4a3aa7", GROWING_HEADS, entered),
+        _entered_block("Administrative Cost", "#eda100", ADMIN_HEADS, entered),
     ]
     cost_lines = [line for block in cost_blocks for line in block["lines"]]
 
@@ -141,12 +146,44 @@ def build_production_pl(report, batch):
         # Named, not swallowed: a total that silently drops an item reads as a
         # cheaper flock rather than an incomplete one.
         "unpriced_items": sorted(feed_unpriced | med_unpriced),
+        "entered_cost": entered_cost.quantize(Q2),
         "untracked_note": (
-            "Growing and administrative costs are not recorded against a batch "
-            "in this system, so this statement covers chick, feed and medicine "
-            "only. Profit shown is before those costs."
+            "Growing and administrative costs have no transaction in this "
+            "system; the figures shown for them were entered by hand against "
+            "this batch. Heads left blank are not counted."
         ),
     }
+
+
+def _entered_amounts(batch):
+    """What somebody typed against this batch, as ``{(kind, head): Decimal}``."""
+    if batch is None:
+        return {}
+    from broiler.models import BatchOtherEntry
+
+    return {(e.kind, e.head): _d(e.amount)
+            for e in BatchOtherEntry.objects.filter(batch=batch)}
+
+
+def _entered_block(title, accent, heads, entered):
+    """A cost block whose figures come from the form rather than a transaction.
+
+    Its total counts only the heads actually filled in. A head left blank stays
+    blank: treating it as zero would say the flock used no electricity, when
+    what it means is that nobody has said yet.
+    """
+    lines, total, any_entered = [], ZERO, False
+    for head in heads:
+        amount = entered.get(("cost", head))
+        lines.append({"label": head, "amount": amount, "tracked": False,
+                      "entered": amount is not None})
+        if amount is not None:
+            total += amount
+            any_entered = True
+    return {"title": title, "accent": accent, "tracked": False,
+            "entered": any_entered,
+            "total": total.quantize(Q2) if any_entered else None,
+            "lines": lines}
 
 
 def _item_lines(rows, rates):
