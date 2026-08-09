@@ -161,6 +161,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           // with nothing obvious to create.
           headerRight: () => (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <SyncStatusChip tint={colors.onDark} />
               <ModulePrimaryButton moduleKey={moduleKey} />
               <AlertBell />
             </View>
@@ -177,18 +178,23 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
           return {
             title: RESOURCES[key].title,
             headerTitle: headerTitleWithIcon(RESOURCES[key].icon, RESOURCES[key].title),
-            headerRight:
-              isEditable(key) &&
-              usePermissionsStore.getState().canResource(key, RESOURCES[key].module, "add")
-              ? () => (
+            // The chip travels with the add button rather than replacing it,
+            // and stays when there is nothing to add — a register is exactly
+            // where somebody wonders whether what they are reading is live.
+            headerRight: () => (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+                <SyncStatusChip tint={colors.onDark} />
+                {isEditable(key) &&
+                usePermissionsStore.getState().canResource(key, RESOURCES[key].module, "add") ? (
                   <Pressable
                     hitSlop={12}
                     onPress={() => openRecordForm(navigation, key, "create")}
                   >
                     <AppIcon name="plus" size={24} color={colors.onDark} />
                   </Pressable>
-                )
-              : undefined,
+                ) : null}
+              </View>
+            ),
           };
         }}
       />
@@ -243,7 +249,9 @@ function ReportsStack() {
         component={ReportsHubScreen}
         options={{
           title: "Reports & Analytics",
-          headerLeft: () => <SideNavButton tint={colors.onDark} />,
+          // No hamburger: the Menu tab in the bar below opens the same side
+          // navigation, and two controls for one drawer taught nobody where it
+          // lived.
           headerRight: () => <SyncStatusChip tint={colors.onDark} />,
         }}
       />
@@ -285,9 +293,35 @@ function AppTabs() {
       {show("sms") && (
         <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬"), tabBarStyle: { display: "none" } }} />
       )}
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: tabIcon("👤") }} />
+      {/* Not a screen: pressing it opens the side navigation. Profile used to
+          sit here and did the same job as the avatar in the Home header, so
+          the tab is spent on the one thing that had no home of its own — the
+          module list, which until now needed a hamburger in the header to
+          reach. Profile moved to the Root stack, where the avatar opens it. */}
+      <Tab.Screen
+        name="Menu"
+        component={MenuTabPlaceholder}
+        options={{ tabBarIcon: tabIcon("☰") }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            useSideNav.getState().openNav();
+          },
+        }}
+      />
     </Tab.Navigator>
   );
+}
+
+/**
+ * Never rendered — `tabPress` is prevented above, so the navigator never
+ * switches to this route. It exists because a Tab.Screen must name a
+ * component, and it paints the app background rather than returning null so
+ * that a deep link aimed here shows a page rather than a white flash.
+ */
+function MenuTabPlaceholder() {
+  const { colors } = useTheme();
+  return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 }
 
 export function RootNavigator() {
@@ -330,6 +364,21 @@ export function RootNavigator() {
               options={{
                 headerShown: true,
                 title: "Alerts & Notifications",
+                headerStyle: { backgroundColor: colors.tint },
+                headerTintColor: colors.onDark,
+                headerTitleStyle: { fontWeight: "800" },
+                headerShadowVisible: false,
+              }}
+            />
+            {/* Reached from the avatar in the Home header. A Root screen, not
+                a tab: it was a tab doing the same job as that avatar, and one
+                way in is enough. */}
+            <Root.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{
+                headerShown: true,
+                title: "Profile",
                 headerStyle: { backgroundColor: colors.tint },
                 headerTintColor: colors.onDark,
                 headerTitleStyle: { fontWeight: "800" },
