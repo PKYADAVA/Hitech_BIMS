@@ -11,6 +11,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,7 +19,7 @@ from rest_framework.views import APIView
 from account.models import ChartOfAccount, Voucher
 from alerthub.models import NotificationRecipient
 from api.viewsets import V1ViewMixin
-from broiler.models import BroilerBatch, BroilerFarm, DailyEntry
+from broiler.models import Branch, BroilerBatch, BroilerFarm, DailyEntry, Supervisor
 from hatchery.models import EggPurchase, HatchEntry
 from hr.models import SupervisorTripVisit
 from purchase.models import GeneralPurchase
@@ -39,11 +40,37 @@ class StatsOverviewView(V1ViewMixin, APIView):
 
     def get(self, request):
         today = timezone.localdate()
+        # An explicit day, so the phone can answer "what did yesterday look
+        # like?" without a second screen — the same Date box the ERP's own
+        # dashboard filter bar carries. A date that will not parse is ignored
+        # rather than rejected: a half-typed dd-mm-yyyy should show today, not
+        # an error.
+        asked = parse_date((request.query_params.get("date") or "").strip() or "x")
+        if asked and asked <= timezone.localdate():
+            today = asked
         # Every figure below is the signed-in user's, not the company's. A
         # supervisor scoped to one branch was being shown the whole business's
         # placements, feed and flock counts — the same leak the web reports
         # had, one layer further out.
         farms = farms_for(request.user)
+        # Kept before the narrowing below: the filter lists are built from it,
+        # so each picker still offers everything the user could choose next.
+        scope = farms
+
+        # Branch, Line and Supervisor narrow which farms count, exactly as the
+        # ERP's dashboard filter bar does. Applied to the *scoped* queryset, so
+        # naming a branch in the query string can only ever narrow what the
+        # user may already see — never widen it.
+        for param, field in (("branch", "branch_id"),
+                             ("line", "line"),
+                             ("supervisor", "supervisor_id")):
+            value = (request.query_params.get(param) or "").strip()
+            if not value:
+                continue
+            if field.endswith("_id") and not value.isdigit():
+                continue
+            farms = farms.filter(**{field: value})
+
         farm_ids = list(farms.values_list("id", flat=True))
 
         # The dashboard's two filters. A farm named in the query string is
@@ -189,9 +216,26 @@ class StatsOverviewView(V1ViewMixin, APIView):
             "date": str(today),
             "filters": {"farm": chosen if chosen.isdigit() else "",
                         "period": period if period in ("today", "week", "month") else "today"},
-            # The picker's options: the farms this user may look at.
+            # The pickers' options: only what this user may look at, and —
+            # for farms — only what the *other* filters still leave standing,
+            # so choosing a branch does not leave a farm from elsewhere on
+            # offer. The branch, line and supervisor lists come off the user's
+            # whole scope rather than the narrowed set, or picking one would
+            # empty the list it was picked from.
             "farm_options": [{"id": f.id, "name": f.farm_name}
                              for f in farms.order_by("farm_name")[:200]],
+            "branch_options": [{"id": b.id, "name": b.branch_name} for b in
+                               Branch.objects.filter(
+                                   id__in=scope.values_list("branch_id", flat=True))
+                               .order_by("branch_name")[:200]],
+            "line_options": [{"id": line, "name": line} for line in
+                             scope.exclude(line="").exclude(line=None)
+                             .values_list("line", flat=True).distinct()
+                             .order_by("line")[:200]],
+            "supervisor_options": [{"id": sv.id, "name": sv.name} for sv in
+                                   Supervisor.objects.filter(
+                                       id__in=scope.values_list("supervisor_id", flat=True))
+                                   .order_by("name")[:200]],
             "broiler": broiler,
             "hatchery": hatchery,
             "sms": sms,

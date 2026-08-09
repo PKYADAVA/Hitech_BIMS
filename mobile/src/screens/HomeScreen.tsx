@@ -418,9 +418,14 @@ export function HomeScreen({ navigation }: Props) {
   const navOrder = usePermissionsStore((s) => s.navOrder);
   const refreshPerms = usePermissionsStore((s) => s.refresh);
   const [farm, setFarm] = React.useState("");
+  const [branch, setBranch] = React.useState("");
+  const [line, setLine] = React.useState("");
+  const [supervisor, setSupervisor] = React.useState("");
   const [period, setPeriod] = React.useState<"today" | "week" | "month">("today");
-  const [pickFarm, setPickFarm] = React.useState(false);
-  const { data: ov, refetch, isFetching } = useOverview({ farm, period });
+  /** Which picker sheet is open, if any. */
+  const [picking, setPicking] = React.useState<null | "farm" | "branch" | "line" | "supervisor">(null);
+  const { data: ov, refetch, isFetching } =
+    useOverview({ farm, branch, line, supervisor, period });
 
   // Whoever is granted the trip tab gets the card. Whether their login maps to
   // an employee decides what it *says* — not whether it appears at all: an
@@ -433,11 +438,23 @@ export function HomeScreen({ navigation }: Props) {
   const openTrip = (params: { row?: Row; ending?: boolean }) =>
     navigation.navigate("HrModule" as any, { screen: "SupervisorTripForm", params });
 
-  const farmName = farm
-    ? ov?.farm_options?.find((f) => String(f.id) === farm)?.name ?? "Farm"
-    : "All Farms";
+  const nameFrom = (
+    options: { id: number | string; name: string }[] | undefined,
+    value: string,
+    all: string
+  ) => (value ? options?.find((o) => String(o.id) === value)?.name ?? all : all);
+
+  const farmName = nameFrom(ov?.farm_options, farm, "All Farms");
+  const branchName = nameFrom(ov?.branch_options, branch, "All Branches");
+  const lineName = nameFrom(ov?.line_options, line, "All Lines");
+  const supervisorName = nameFrom(ov?.supervisor_options, supervisor, "All Supervisors");
+  const anyFilter = !!(farm || branch || line || supervisor) || period !== "today";
+  const clearFilters = () => {
+    setFarm(""); setBranch(""); setLine(""); setSupervisor(""); setPeriod("today");
+  };
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "Today";
   // Three choices cycle faster than they pick from a sheet.
+  // Today / This Week / This Month cycle faster than they pick from a sheet.
   const nextPeriod = () =>
     setPeriod(PERIODS[(PERIODS.findIndex((p) => p.key === period) + 1) % PERIODS.length].key);
 
@@ -471,10 +488,38 @@ export function HomeScreen({ navigation }: Props) {
           user={user}
           onProfile={() => navigation.navigate("Profile" as any)}
           filters={
-            <View style={styles.filterRow}>
-              <FilterChip label={farmName} onPress={() => setPickFarm(true)} />
+            /* One row, in the ERP filter bar's order, scrolled rather than
+               wrapped. Five dropdowns and two buttons do not fit across a
+               phone at a readable size — laid out as a grid they would push
+               the day's figures below the fold, which is the one thing the
+               dashboard exists to show. Scrolling keeps it a single row and
+               keeps the first two filters, the ones actually changed daily,
+               where the thumb already is. */
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* The ERP's Date box, as the app already expresses it: Today,
+                  This Week, This Month. The endpoint takes an explicit date as
+                  well, for when a picker is added. */}
               <FilterChip label={periodLabel} onPress={nextPeriod} />
-            </View>
+              <FilterChip label={branchName} onPress={() => setPicking("branch")} />
+              <FilterChip label={lineName} onPress={() => setPicking("line")} />
+              <FilterChip label={supervisorName} onPress={() => setPicking("supervisor")} />
+              <FilterChip label={farmName} onPress={() => setPicking("farm")} />
+              {anyFilter ? (
+                <Pressable
+                  onPress={clearFilters}
+                  style={styles.filterReset}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear filters"
+                >
+                  <AppIcon name="refresh" size={16} color={colors.onDark} />
+                </Pressable>
+              ) : null}
+            </ScrollView>
           }
         />
 
@@ -555,35 +600,53 @@ export function HomeScreen({ navigation }: Props) {
         </View>
       </ScrollView>
 
-      {/* Farm picker. "All Farms" leads, because it is the default and the one
-          someone returns to. */}
-      <Modal visible={pickFarm} animationType="slide" onRequestClose={() => setPickFarm(false)}>
-        <Screen edges={["top", "left", "right"]}>
-          <View style={styles.sheetHead}>
-            <Text style={styles.sheetTitle}>Farm</Text>
-            <Pressable onPress={() => setPickFarm(false)} hitSlop={8}>
-              <Text style={styles.sheetClose}>Close</Text>
-            </Pressable>
-          </View>
-          <ScrollView>
-            {[{ id: 0, name: "All Farms" }, ...(ov?.farm_options ?? [])].map((f) => {
-              const value = f.id ? String(f.id) : "";
-              return (
-                <Pressable
-                  key={f.id}
-                  style={styles.sheetRow}
-                  onPress={() => { setFarm(value); setPickFarm(false); }}
-                >
-                  <Text style={styles.sheetRowText}>{f.name}</Text>
-                  {farm === value ? (
-                    <AppIcon name="check" size={18} color={colors.tint} />
-                  ) : null}
+      {/* One sheet for whichever chip was tapped. The four lists differ only
+          in their title, their options and where the choice lands, and four
+          near-identical modals is four places for them to drift apart. */}
+      {picking ? (() => {
+        const sheet = {
+          farm: { title: "Farm", all: "All Farms",
+                  options: ov?.farm_options, value: farm, set: setFarm },
+          branch: { title: "Branch", all: "All Branches",
+                    options: ov?.branch_options, value: branch, set: setBranch },
+          line: { title: "Line", all: "All Lines",
+                  options: ov?.line_options, value: line, set: setLine },
+          supervisor: { title: "Supervisor", all: "All Supervisors",
+                        options: ov?.supervisor_options, value: supervisor,
+                        set: setSupervisor },
+        }[picking];
+        return (
+          <Modal visible animationType="slide" onRequestClose={() => setPicking(null)}>
+            <Screen edges={["top", "left", "right"]}>
+              <View style={styles.sheetHead}>
+                <Text style={styles.sheetTitle}>{sheet.title}</Text>
+                <Pressable onPress={() => setPicking(null)} hitSlop={8}>
+                  <Text style={styles.sheetClose}>Close</Text>
                 </Pressable>
-              );
-            })}
-          </ScrollView>
-        </Screen>
-      </Modal>
+              </View>
+              <ScrollView>
+                {/* "All" leads, because it is the default and the one somebody
+                    comes back to. */}
+                {[{ id: "", name: sheet.all }, ...(sheet.options ?? [])].map((o) => {
+                  const value = o.id === "" ? "" : String(o.id);
+                  return (
+                    <Pressable
+                      key={value || "all"}
+                      style={styles.sheetRow}
+                      onPress={() => { sheet.set(value); setPicking(null); }}
+                    >
+                      <Text style={styles.sheetRowText}>{o.name}</Text>
+                      {sheet.value === value ? (
+                        <AppIcon name="check" size={18} color={colors.tint} />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </Screen>
+          </Modal>
+        );
+      })() : null}
     </Screen>
   );
 }
@@ -659,7 +722,16 @@ const useStyles = makeStyles((colors) => ({
 
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: GAP },
   menuButton: { paddingRight: spacing.xs },
-  filterRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  // A scrolling row: paddingRight so the last chip clears the screen edge.
+  filterRow: {
+    flexDirection: "row", gap: spacing.sm, marginTop: spacing.md,
+    paddingRight: spacing.md, alignItems: "center",
+  },
+  filterReset: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
   sheetHead: {
     flexDirection: "row",
     alignItems: "center",

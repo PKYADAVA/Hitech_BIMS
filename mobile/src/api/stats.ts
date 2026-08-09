@@ -51,6 +51,9 @@ export interface Overview {
   filters?: { farm: string; period: string };
   /** The farm picker's options — the user's own farms. */
   farm_options?: { id: number; name: string }[];
+  branch_options?: { id: number; name: string }[];
+  line_options?: { id: string; name: string }[];
+  supervisor_options?: { id: number; name: string }[];
   system?: {
     users: number;
     farms: number;
@@ -60,8 +63,18 @@ export interface Overview {
   };
 }
 
-/** The dashboard's filters: a farm (blank = all) and how wide a window. */
+/**
+ * The dashboard's filters — the same set the ERP's own filter bar carries.
+ *
+ * Blank means "all" throughout, which is what the ERP's -All- means, so the
+ * two products answer the same question the same way. `date` is an explicit
+ * day; `period` is how wide a window around it.
+ */
 export interface OverviewFilters {
+  date?: string;
+  branch?: string;
+  line?: string;
+  supervisor?: string;
   farm?: string;
   period?: "today" | "week" | "month";
 }
@@ -69,6 +82,10 @@ export interface OverviewFilters {
 export async function fetchOverview(filters: OverviewFilters = {}): Promise<Overview> {
   const resp = await http.get<Envelope<Overview>>("/stats/overview", {
     params: {
+      ...(filters.date ? { date: filters.date } : {}),
+      ...(filters.branch ? { branch: filters.branch } : {}),
+      ...(filters.line ? { line: filters.line } : {}),
+      ...(filters.supervisor ? { supervisor: filters.supervisor } : {}),
       ...(filters.farm ? { farm: filters.farm } : {}),
       ...(filters.period && filters.period !== "today" ? { period: filters.period } : {}),
     },
@@ -81,7 +98,9 @@ export function useOverview(filters: OverviewFilters = {}) {
   return useQuery({
     // The filters are part of the key, so switching farm or window fetches
     // rather than showing the previous selection's numbers.
-    queryKey: ["stats-overview", filters.farm ?? "", filters.period ?? "today"],
+    queryKey: ["stats-overview", filters.date ?? "", filters.branch ?? "",
+               filters.line ?? "", filters.supervisor ?? "",
+               filters.farm ?? "", filters.period ?? "today"],
     queryFn: () => fetchOverview(filters),
     staleTime: 60_000,
   });
