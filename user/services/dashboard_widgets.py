@@ -278,6 +278,37 @@ def _daily_entries(viewable, filters, user=None):
     }
 
 
+def _ageing(parties, amount_key, credit_days):
+    """Split what is outstanding into overdue, due today, and the rest.
+
+    A party's ``gap`` is how many days its balance has been standing. Against
+    the credit period agreed with them, that says whether the money is late,
+    falling due now, or simply not yet payable — which is the distinction
+    somebody scanning a dashboard is actually after: a large total that is all
+    within terms needs no action, and a small one that is all overdue does.
+
+    Parties with no credit period agreed are treated as due immediately, which
+    is what "no terms" means, and matches how the balance reports read them.
+    """
+    overdue, due_today = [], []
+    for p in parties:
+        days = credit_days(p)
+        gap = p.get("gap") or 0
+        if gap > days:
+            overdue.append(p)
+        elif gap == days:
+            due_today.append(p)
+    total = lambda group: sum((g[amount_key] for g in group), 0)
+    return (
+        {"label": "Overdue", "value": "₹" + _inr(total(overdue)),
+         "sub": f"{len(overdue)} part{'y' if len(overdue) == 1 else 'ies'}",
+         "tone": "bad" if overdue else None},
+        {"label": "Due today", "value": "₹" + _inr(total(due_today)),
+         "sub": f"{len(due_today)} part{'y' if len(due_today) == 1 else 'ies'}",
+         "tone": None},
+    )
+
+
 def _receivables(viewable, filters, user=None):
     """Money owed to us, by customer.
 
@@ -301,10 +332,13 @@ def _receivables(viewable, filters, user=None):
                for c in Customer.objects.all()]
     owed = [p for p in parties if p["debit"] > 0]
     total = sum((p["debit"] for p in owed), 0)
+    # Credit period is per customer; none agreed means the money is due now.
+    terms = {c.id: (c.credit_period or 0) for c in Customer.objects.all()}
     return {
         "stats": [{"label": "Total receivable", "value": "₹" + _inr(total),
                    "sub": f"from {len(owed)} customer{'' if len(owed) == 1 else 's'}",
-                   "tone": "warn" if total else None}],
+                   "tone": "warn" if total else None},
+                  *_ageing(owed, "debit", lambda p: terms.get(p["id"], 0))],
         "rows": [{"label": p["name"], "value": "₹" + _inr(p["debit"]),
                   "meta": f"{p['gap']}d"}
                  for p in sorted(owed, key=lambda p: -p["debit"])[:3]],
@@ -330,10 +364,13 @@ def _payables(viewable, filters, user=None):
                for s in Supplier.objects.all()]
     due = [p for p in parties if p["credit"] > 0]
     total = sum((p["credit"] for p in due), 0)
+    # Suppliers carry no credit period in this system, so everything owed is
+    # due now — stated here rather than left implied by a zero.
     return {
         "stats": [{"label": "Total payable", "value": "₹" + _inr(total),
                    "sub": f"to {len(due)} supplier{'' if len(due) == 1 else 's'}",
-                   "tone": "warn" if total else None}],
+                   "tone": "warn" if total else None},
+                  *_ageing(due, "credit", lambda _p: 0)],
         "rows": [{"label": p["name"], "value": "₹" + _inr(p["credit"]),
                   "meta": f"{p['gap']}d"}
                  for p in sorted(due, key=lambda p: -p["credit"])[:3]],

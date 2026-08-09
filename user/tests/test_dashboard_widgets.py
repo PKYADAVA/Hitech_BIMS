@@ -312,7 +312,8 @@ class DashboardWidgetTests(TestCase):
                                           can_view=True)
 
         w = self.widget(clerk, "receivables")
-        self.assertEqual([s["label"] for s in w["stats"]], ["Total receivable"])
+        self.assertEqual([s["label"] for s in w["stats"]],
+                         ["Total receivable", "Overdue", "Due today"])
         # And nothing of the supplier side reaches them at all — the two are
         # separate widgets now, not two halves of one card.
         self.assertIsNone(self.widget(clerk, "payables"))
@@ -329,7 +330,7 @@ class DashboardWidgetTests(TestCase):
                                           can_view=True)
         self.assertIsNone(self.widget(clerk, "receivables"))
         self.assertEqual([s["label"] for s in self.widget(clerk, "payables")["stats"]],
-                         ["Total payable"])
+                         ["Total payable", "Overdue", "Due today"])
 
     def test_the_cache_does_not_share_a_body_between_different_permissions(self):
         """The two see different widgets entirely — one Receivables, one
