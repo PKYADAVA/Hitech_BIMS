@@ -1,10 +1,11 @@
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback } from "react";
-import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Modal, Platform, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AlertBell } from "@/components/AlertBell";
+import { DatePicker } from "@/components/DatePicker";
 import { SyncStatusChip } from "@/components/SyncStatusChip";
 import { AppIcon } from "@/components/AppIcon";
 import { Badge, Button, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
@@ -422,10 +423,13 @@ export function HomeScreen({ navigation }: Props) {
   const [line, setLine] = React.useState("");
   const [supervisor, setSupervisor] = React.useState("");
   const [period, setPeriod] = React.useState<"today" | "week" | "month">("today");
+  const [date, setDate] = React.useState("");
   /** Which picker sheet is open, if any. */
-  const [picking, setPicking] = React.useState<null | "farm" | "branch" | "line" | "supervisor">(null);
+  const [picking, setPicking] =
+    React.useState<null | "when" | "farm" | "branch" | "line" | "supervisor">(null);
+  const [showCalendar, setShowCalendar] = React.useState(false);
   const { data: ov, refetch, isFetching } =
-    useOverview({ farm, branch, line, supervisor, period });
+    useOverview({ farm, branch, line, supervisor, date, period });
 
   // Whoever is granted the trip tab gets the card. Whether their login maps to
   // an employee decides what it *says* — not whether it appears at all: an
@@ -448,11 +452,19 @@ export function HomeScreen({ navigation }: Props) {
   const branchName = nameFrom(ov?.branch_options, branch, "All Branches");
   const lineName = nameFrom(ov?.line_options, line, "All Lines");
   const supervisorName = nameFrom(ov?.supervisor_options, supervisor, "All Supervisors");
-  const anyFilter = !!(farm || branch || line || supervisor) || period !== "today";
-  const clearFilters = () => {
-    setFarm(""); setBranch(""); setLine(""); setSupervisor(""); setPeriod("today");
-  };
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "Today";
+  // A chosen day replaces "Today" on the chip; the period still says how wide
+  // a window sits around it, so "This Week" of the 3rd is the week ending then.
+  const whenLabel = date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString(undefined,
+        { day: "numeric", month: "short" })
+      + (period === "today" ? "" : ` · ${periodLabel}`)
+    : periodLabel;
+  const anyFilter = !!(farm || branch || line || supervisor || date) || period !== "today";
+  const clearFilters = () => {
+    setFarm(""); setBranch(""); setLine(""); setSupervisor("");
+    setPeriod("today"); setDate("");
+  };
   // Three choices cycle faster than they pick from a sheet.
   // Today / This Week / This Month cycle faster than they pick from a sheet.
   const nextPeriod = () =>
@@ -501,10 +513,9 @@ export function HomeScreen({ navigation }: Props) {
               contentContainerStyle={styles.filterRow}
               keyboardShouldPersistTaps="handled"
             >
-              {/* The ERP's Date box, as the app already expresses it: Today,
-                  This Week, This Month. The endpoint takes an explicit date as
-                  well, for when a picker is added. */}
-              <FilterChip label={periodLabel} onPress={nextPeriod} />
+              {/* The ERP's Date box: the three windows people ask for daily,
+                  and a calendar for the day they occasionally need. */}
+              <FilterChip label={whenLabel} onPress={() => setPicking("when")} />
               <FilterChip label={branchName} onPress={() => setPicking("branch")} />
               <FilterChip label={lineName} onPress={() => setPicking("line")} />
               <FilterChip label={supervisorName} onPress={() => setPicking("supervisor")} />
@@ -603,7 +614,67 @@ export function HomeScreen({ navigation }: Props) {
       {/* One sheet for whichever chip was tapped. The four lists differ only
           in their title, their options and where the choice lands, and four
           near-identical modals is four places for them to drift apart. */}
-      {picking ? (() => {
+      {picking === "when" ? (
+        <Modal visible animationType="slide" onRequestClose={() => setPicking(null)}>
+          <Screen edges={["top", "left", "right"]}>
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetTitle}>Date</Text>
+              <Pressable onPress={() => setPicking(null)} hitSlop={8}>
+                <Text style={styles.sheetClose}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView>
+              {PERIODS.map((p) => (
+                <Pressable
+                  key={p.key}
+                  style={styles.sheetRow}
+                  onPress={() => { setPeriod(p.key); setPicking(null); }}
+                >
+                  <Text style={styles.sheetRowText}>{p.label}</Text>
+                  {period === p.key && !date ? (
+                    <AppIcon name="check" size={18} color={colors.tint} />
+                  ) : null}
+                </Pressable>
+              ))}
+              {/* A specific day, for "what did the 3rd look like?". Kept below
+                  the three windows because it is the rarer question. */}
+              <Pressable style={styles.sheetRow} onPress={() => setShowCalendar(true)}>
+                <Text style={styles.sheetRowText}>
+                  {date ? `Change day (${whenLabel})` : "Pick a day…"}
+                </Text>
+                <AppIcon name="calendar" size={18} color={colors.tint} />
+              </Pressable>
+              {date ? (
+                <Pressable
+                  style={styles.sheetRow}
+                  onPress={() => { setDate(""); setPicking(null); }}
+                >
+                  <Text style={styles.sheetRowText}>Back to today</Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
+            {showCalendar ? (
+              <View style={styles.sheetRow}>
+                <DatePicker
+                  value={date}
+                  // Tomorrow's figures do not exist; offering the date is a
+                  // way to be shown an empty dashboard and wonder what broke.
+                  maximumDate={new Date()}
+                  onPick={(iso) => {
+                    setShowCalendar(false);
+                    if (iso) {
+                      setDate(iso);
+                      setPicking(null);
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
+          </Screen>
+        </Modal>
+      ) : null}
+
+      {picking && picking !== "when" ? (() => {
         const sheet = {
           farm: { title: "Farm", all: "All Farms",
                   options: ov?.farm_options, value: farm, set: setFarm },
