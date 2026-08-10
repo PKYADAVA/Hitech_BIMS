@@ -706,7 +706,9 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
   const advice = useMemo(
     () =>
       new Map(
-        rows.map((r) => [r.key, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r))] as const)
+        rows.map((r) =>
+          [r.key, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r), r.date || undefined)] as const
+        )
       ),
     [rows, priorFor]
   );
@@ -833,17 +835,17 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     }
 
     const advised = filled.map((r) =>
-      [r, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r))] as const);
+      [r, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r), r.date || undefined)] as const);
 
-    // Refused, not confirmed. Feeding more than the farm has been sent is what
-    // the server now rejects outright, and saving through it would leave that
-    // farm's feed ledger in a deficit every later entry carries forward.
+    // Refused, not confirmed — see Advice.blockers for the two cases (feed
+    // over stock, a weighing gone stale): both are missing/wrong data, not a
+    // judgement call to let the supervisor save through.
     const blockers = advised.flatMap(([r, a]) =>
       a.blockers.map((b) => `${farmLabel(r)}: ${b}`));
     if (blockers.length) {
       setSaving(false);
       Alert.alert(
-        "Not enough feed in stock",
+        "Can't save yet",
         blockers.map((b) => `• ${b}`).join("\n")
       );
       return;

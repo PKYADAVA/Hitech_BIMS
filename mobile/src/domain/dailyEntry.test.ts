@@ -601,6 +601,59 @@ describe("negative stock is a blocker, not a warning", () => {
   });
 });
 
+describe("a weighing gone stale is a blocker too", () => {
+  const lookup = (lastWeightDate: string | null) => ({
+    batch: 1, batch_name: "B1", age_days: 20, start_date: "2026-07-01",
+    next_date: "2026-07-23", feed_phase: null, std_feed_kg: null,
+    std_weight_g: null, std_note: null, bs_curve: [], cum_feed_before_kg: null,
+    consumed_by_item: [], consumed_total_kg: null,
+    consumed_per_bird_actual_g: null, live_birds: 1000,
+    last_weight_g: lastWeightDate ? "45.00" : null, last_weight_date: lastWeightDate,
+  } as any);
+
+  const advise = (lastWeightDate: string | null, today: string, values: Record<string, string> = {}) =>
+    adviseDailyEntry(lookup(lastWeightDate), values, undefined, undefined, today);
+
+  it("refuses to save with no weight entered three days after the last weighing", () => {
+    const a = advise("2026-07-18", "2026-07-21");
+    expect(a.blockers).toHaveLength(1);
+    expect(a.blockers[0]).toContain("2 days");
+  });
+
+  it("is not merely a confirmable warning", () => {
+    const a = advise("2026-07-18", "2026-07-21");
+    expect(a.issues.join(" ")).not.toContain("Body weight");
+  });
+
+  it("is resolved the moment today's weight is entered", () => {
+    const a = advise("2026-07-18", "2026-07-21", { avg_weight_gms: "620" });
+    expect(a.blockers).toEqual([]);
+  });
+
+  it("does not block at a two-day gap, only three and beyond", () => {
+    expect(advise("2026-07-19", "2026-07-21").blockers).toEqual([]);
+  });
+
+  it("does not block a flock that has never been weighed at all", () => {
+    expect(advise(null, "2026-07-21").blockers).toEqual([]);
+  });
+
+  it("measures against the entry's own date, not whenever it happens to be saved", () => {
+    // A supervisor backfilling a missed day is filing an entry dated
+    // 2026-07-19 — two days after the last weighing, so no block — even
+    // though this is actually being saved much later, on 2026-07-25.
+    const a = advise("2026-07-18", "2026-07-19");
+    expect(a.blockers).toEqual([]);
+  });
+
+  it("still blocks a backfilled day that was itself three days stale", () => {
+    // The entry being filed is dated 2026-07-21 — three real days after the
+    // last weighing on 2026-07-18 — regardless of when it is actually saved.
+    const a = advise("2026-07-18", "2026-07-21");
+    expect(a.blockers).toHaveLength(1);
+  });
+});
+
 describe("lastWeightNote — the line under the weight box", () => {
   const note = (g: string | null, taken: string | null, on?: string) =>
     lastWeightNote({ last_weight_g: g, last_weight_date: taken }, on);

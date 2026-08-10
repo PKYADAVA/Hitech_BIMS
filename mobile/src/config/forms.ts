@@ -351,7 +351,7 @@ export const FORMS: Record<string, FormSchema> = {
     },
     advise: (ctx, values) => {
       const c = ctx as DailyEntryContext | null;
-      return adviseDailyEntry(c?.lookup ?? null, values, c?.opening);
+      return adviseDailyEntry(c?.lookup ?? null, values, c?.opening, undefined, values.date || undefined);
     },
   },
   /**

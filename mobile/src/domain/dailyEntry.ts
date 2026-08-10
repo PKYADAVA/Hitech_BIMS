@@ -10,8 +10,12 @@
  * Pure and view-free on purpose: the single-entry form and the multi-row grid
  * both drive their hints from here, and the thresholds stay testable.
  *
- * None of it blocks a save. These are advisory — a farm genuinely can be off
- * standard, and a supervisor standing in the shed is the one who knows why.
+ * Almost none of it blocks a save — a farm genuinely can be off standard, and
+ * a supervisor standing in the shed is the one who knows why, so most of this
+ * is advisory (`issues`, confirmed through rather than refused). The two
+ * exceptions are `blockers` (see `Advice.blockers`): feeding more than stock
+ * allows, and a weighing gone stale — both are missing/wrong data the app can
+ * check for certain, not a judgement call to defer to the supervisor on.
  */
 
 /** Allow 10% over the breed-standard daily feed before flagging (web FEED_TOLERANCE). */
@@ -232,9 +236,12 @@ export interface Advice {
   /**
    * Problems that must not be saved through at all, as opposed to confirmed.
    *
-   * Feeding more than the farm has been sent is the case: the server refuses
+   * Two cases: feeding more than the farm has been sent (the server refuses
    * it outright, and saving through it would put that farm's feed ledger into
-   * a deficit every later entry then carries forward.
+   * a deficit every later entry then carries forward), and a weighing gone
+   * more than two days stale with no fresh one on this entry (missing data,
+   * not a judgement call a supervisor can defend the way an off-standard
+   * reading can).
    */
   blockers: string[];
   /** The changeover gauge, when a capped item is selected. */
@@ -399,7 +406,16 @@ export function adviseDailyEntry(
    */
   opening?: Record<string, string>,
   /** Feed already typed on earlier rows of the same farm+batch (web `priorListFeed`). */
-  prior?: PriorFeed
+  prior?: PriorFeed,
+  /**
+   * The entry's own calendar date, for the stale-weighing block below — the
+   * day this row is actually being recorded for, not the device's real
+   * "now" (a supervisor backfilling a missed day is filing an entry dated
+   * in the past, and the gap has to be measured as of that day, not today).
+   * Callers pass the row/form's own `date` field; defaults to the device's
+   * today only when none is available, so existing tests still work.
+   */
+  today: string = todayISO()
 ): Advice {
   const fieldHints: Record<string, Hint> = {};
   const notes: Hint[] = [];
@@ -503,6 +519,21 @@ export function adviseDailyEntry(
         `Avg weight ${actW.toFixed(0)} g is ${sign}${diff.toFixed(0)}% against the standard ${stdW.toFixed(0)} g`
       );
     }
+  }
+
+  // Weighing gone three days stale (as of this entry's own date) is the one
+  // other thing here that blocks a save (alongside feeding more than stock
+  // allows, above) rather than just warning: a supervisor can defend an
+  // off-standard weight, but a flock nobody has actually weighed in three
+  // days is missing data, not a judgement call. Resolved the moment this
+  // entry carries its own weight — the gap is measured off the *last saved*
+  // weighing, not this one.
+  if (!actW && weighGapTone(lastWeightNote(lookup, today)?.days ?? null) === "bad") {
+    blockers.push(
+      `Body weight hasn't been recorded in over 2 days (last: ${
+        lookup.last_weight_date ? shortDate(lookup.last_weight_date) : "never"
+      }) — enter this entry's Avg. Weight before saving`
+    );
   }
 
   // Cross-references off the breed curve, as the Live Flock report reads it:
