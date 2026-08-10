@@ -67,9 +67,10 @@ $(function () {
   let table = null;
   let allRows = [];
 
-  const today = new Date().toISOString().slice(0, 10);
-  $("#from-date").val(today);
-  $("#to-date").val(today);
+  // Left blank on load, not defaulted to today: this register is read to
+  // find a past entry as often as today's, and a same-day default silently
+  // hid every earlier record behind an unset-looking filter that was
+  // actually already narrowed to nothing.
 
   // escapeHtml() provided globally by main.js
 
