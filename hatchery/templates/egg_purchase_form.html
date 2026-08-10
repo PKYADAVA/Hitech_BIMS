@@ -113,8 +113,8 @@
           </div>
         </div>
         <div class="col-md-3">
-          <label for="pay_account" class="form-label">Pay Account <span class="text-danger">*</span></label>
-          <select class="form-select" id="pay_account" name="pay_account" required>
+          <label for="pay_account" class="form-label">Pay Account</label>
+          <select class="form-select" id="pay_account" name="pay_account">
             <option value="">select</option>
             {% for a in bank_accounts %}
               <option value="{{ a.id }}">{{ a.code }} - {{ a.description }}</option>

@@ -451,7 +451,9 @@ class EggPurchaseAPI(BaseAPIView):
 
         header_data["supplier"] = get_object_or_404(Supplier, id=data["supplier"])
         header_data["warehouse"] = get_object_or_404(Warehouse, id=data["warehouse"])
-        header_data["pay_account"] = get_object_or_404(ChartOfAccount, id=data["pay_account"])
+        header_data["pay_account"] = (
+            get_object_or_404(ChartOfAccount, id=data["pay_account"])
+            if data.get("pay_account") else None)
         if data.get("freight_account"):
             header_data["freight_account"] = get_object_or_404(ChartOfAccount, id=data["freight_account"])
         else:

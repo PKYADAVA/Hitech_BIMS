@@ -280,9 +280,12 @@ class EggPurchase(models.Model):
 
     freight_type = models.CharField(max_length=10, choices=FREIGHT_TYPE_CHOICES, default='Exclude')
     payment_mode = models.CharField(max_length=15, choices=PAYMENT_MODE_CHOICES, default='pay_later')
+    # Optional: an egg purchase is usually booked before anyone decides which
+    # account settles it, and nothing downstream reads this field — it is
+    # stored and shown back, not posted anywhere.
     pay_account = models.ForeignKey(
         ChartOfAccount, on_delete=models.PROTECT, related_name='egg_purchase_pay_accounts',
-        help_text=_("Account this purchase is paid from")
+        null=True, blank=True, help_text=_("Account this purchase is paid from")
     )
     freight_account = models.ForeignKey(
         ChartOfAccount, on_delete=models.PROTECT, related_name='egg_purchase_freight_accounts',
