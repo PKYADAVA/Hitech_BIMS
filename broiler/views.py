@@ -3359,6 +3359,37 @@ def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", me
         row["amount"] = Decimal(str(row.get("quantity") or 0)) * real_rate
 
 
+def _item_rate_map(rows):
+    """{item_id: blended ``amount``/``quantity`` rate} across ``rows`` — read
+    after :func:`_price_rows_for_management` so it is the batch's own real
+    acquisition cost per item, not a second, independent valuation."""
+    totals = {}
+    for row in rows:
+        item_id = row.get("item_id")
+        if not item_id:
+            continue
+        qty, amt = totals.setdefault(item_id, [Decimal("0"), Decimal("0")])
+        totals[item_id][0] = qty + Decimal(str(row.get("quantity") or 0))
+        totals[item_id][1] = amt + Decimal(str(row.get("amount") or 0))
+    return {item_id: (amt / qty) for item_id, (qty, amt) in totals.items() if qty}
+
+
+def _price_outgoing_rows_at_batch_cost(rows, item_rate_by_id):
+    """Feed/medicine leaving the batch (a return to warehouse, or a transfer
+    on to another farm) has no warehouse cost ledger of its own to price
+    against — the batch isn't a warehouse. What it actually cost the company
+    is what the batch itself paid to bring that item in, so outgoing rows are
+    repriced at that same blended real rate instead of compute_issue_rate.
+    A row for an item with nothing incoming to blend from (e.g. a return
+    predating item_id being captured) is left exactly as it was."""
+    for row in rows:
+        rate = item_rate_by_id.get(row.get("item_id"))
+        if rate is None:
+            continue
+        row["rate"] = rate
+        row["amount"] = Decimal(str(row.get("quantity") or 0)) * rate
+
+
 def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, mortality_rows,
                          chick_rows, feed_rows, feed_summary_rows, feed_return_rows,
                          medicine_transfer_rows, medicine_consumption_rows, medicine_return_rows,
@@ -3708,7 +3739,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         row = {
             "date": t.date, "trnum": t.trnum, "dc_no": t.dc_no,
             "to_location": _transfer_to_location_name(t),
-            "item": str(t.item), "quantity": t.quantity, "rate": t.rate,
+            "item": str(t.item), "item_id": t.item_id, "quantity": t.quantity, "rate": t.rate,
             "amount": (t.quantity or 0) * (t.rate or 0),
         }
         (feed_return_rows if t.to_warehouse_id else feed_transfer_out_rows).append(row)
@@ -3723,7 +3754,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         for line in mt.items.all():
             target.append({
                 "date": mt.date, "trnum": mt.trnum, "dc_no": mt.dc_no,
-                "to_location": location_name, "item": str(line.item),
+                "to_location": location_name, "item": str(line.item), "item_id": line.item_id,
                 "quantity": line.quantity, "rate": line.rate,
                 "amount": (line.quantity or 0) * (line.rate or 0),
             })
@@ -3879,6 +3910,18 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         _price_rows_for_management(chick_rows, items_by_id)
         _price_rows_for_management(feed_rows, items_by_id)
         _price_rows_for_management(medicine_transfer_rows, items_by_id, med_key="transfer_item_id")
+
+        # Feed/medicine leaving the batch — a return to warehouse, or a
+        # transfer on to another farm — priced at the same blended real rate
+        # the batch itself just paid to bring that item in (see
+        # _price_outgoing_rows_at_batch_cost's own docstring for why not
+        # compute_issue_rate here).
+        feed_rate_by_item = _item_rate_map(feed_rows)
+        med_rate_by_item = _item_rate_map(medicine_transfer_rows)
+        _price_outgoing_rows_at_batch_cost(feed_return_rows, feed_rate_by_item)
+        _price_outgoing_rows_at_batch_cost(feed_transfer_out_rows, feed_rate_by_item)
+        _price_outgoing_rows_at_batch_cost(medicine_return_rows, med_rate_by_item)
+        _price_outgoing_rows_at_batch_cost(medicine_transfer_out_rows, med_rate_by_item)
 
     batch_costing = _build_batch_costing(
         batch, placement_total, cum_mortality, cum_culls, mortality_rows,
