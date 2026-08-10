@@ -88,6 +88,7 @@
         <th class="ds-num num">Free Qty</th><th class="ds-num num">Rate</th>
         <th class="ds-num num">Disc%</th><th class="ds-num num">Disc Amount</th><th class="ds-num num">Amount</th>
         <th class="ds-num num">Gst%</th><th class="ds-num num">Total Amount</th>
+        <th class="ds-num num">Net Rate</th>
         <th>Farm/Warehouse</th><th>Farm/Warehouse Code</th><th>Farm Batch</th>
         <th>Vehicle No.</th><th>Driver Name</th><th>Remarks</th>
         <th>Upload Status</th><th>Added By</th><th>Added Time</th>
@@ -112,6 +113,7 @@
           <td class="num">{{ r.amount|indian_currency }}</td>
           <td class="num">{{ r.gst_percent|floatformat:2 }}</td>
           <td class="num rpt-amount">{{ r.total_amount|indian_currency }}</td>
+          <td class="num">{{ r.net_rate|indian_currency }}</td>
           <td>{{ r.warehouse }}</td>
           <td>{{ r.warehouse_code }}</td>
           <td>{{ r.farm_batch }}</td>
@@ -136,6 +138,7 @@
         <td class="num">{{ totals.amount|indian_currency }}</td>
         <td class="num"></td>
         <td class="num rpt-amount">{{ totals.total_amount|indian_currency }}</td>
+        <td class="num">{{ totals.net_rate|indian_currency }}</td>
         <td colspan="9"></td>
       </tr></tfoot>
     </table>

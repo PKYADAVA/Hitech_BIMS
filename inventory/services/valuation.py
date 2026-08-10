@@ -120,17 +120,31 @@ def warehouse_inflow_layers(item_id, warehouse_id, as_of_date=None):
     return layers
 
 
-def warehouse_outflow_events(item_id, warehouse_id, as_of_date=None, exclude_issue_id=None):
+def warehouse_outflow_events(item_id, warehouse_id, as_of_date=None, exclude_issue_id=None,
+                             exclude_transfer_id=None, exclude_medicine_transfer_item_id=None):
     """Outflows of ``item`` at ``warehouse`` as (date, seq, qty) tuples,
-    oldest first. Value is not needed — outflows leave at the method's cost."""
+    oldest first. Value is not needed — outflows leave at the method's cost.
+
+    ``exclude_issue_id`` was the only exclusion this took originally, for
+    re-costing a ``StockIssue`` against the state *before* it. Pricing a
+    ``StockTransfer`` (a farm/batch placement or feed dispatch) the same way
+    needs its own exclusion — otherwise the transfer being priced is also one
+    of the outflows this replays as "already consumed", drawing FIFO/LIFO
+    layers down past themselves before the caller ever asks for a rate.
+    ``exclude_medicine_transfer_item_id`` is the same fix for a
+    ``MedicineTransferItem`` line, which this function tracks under its own
+    id (tag "e"), a separate id space from ``StockTransfer``'s (tag "c").
+    """
     from inventory.models import (StockTransfer, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
     from hatchery.models import ChickSaleItem
     events = []
 
-    for r in _dcap(StockTransfer.objects.filter(
-            item_id=item_id, from_location_type="warehouse", from_warehouse_id=warehouse_id
-    ), "date", as_of_date):
+    transfers = StockTransfer.objects.filter(
+        item_id=item_id, from_location_type="warehouse", from_warehouse_id=warehouse_id)
+    if exclude_transfer_id:
+        transfers = transfers.exclude(id=exclude_transfer_id)
+    for r in _dcap(transfers, "date", as_of_date):
         events.append((r.date, ("c", r.id), _q(r.quantity)))
 
     issued = _dcap(StockIssueItem.objects.filter(
@@ -147,10 +161,12 @@ def warehouse_outflow_events(item_id, warehouse_id, as_of_date=None, exclude_iss
     ).select_related("adjustment"), "adjustment__date", as_of_date):
         events.append((r.adjustment.date, ("d", r.id), _q(r.quantity)))
 
-    for r in _dcap(MedicineTransferItem.objects.filter(
-            item_id=item_id, transfer__from_location_type="warehouse",
-            transfer__from_warehouse_id=warehouse_id
-    ).select_related("transfer"), "transfer__date", as_of_date):
+    med_lines = MedicineTransferItem.objects.filter(
+        item_id=item_id, transfer__from_location_type="warehouse",
+        transfer__from_warehouse_id=warehouse_id)
+    if exclude_medicine_transfer_item_id:
+        med_lines = med_lines.exclude(id=exclude_medicine_transfer_item_id)
+    for r in _dcap(med_lines.select_related("transfer"), "transfer__date", as_of_date):
         events.append((r.transfer.date, ("e", r.id), _q(r.quantity)))
 
     # Chick Sale (hatchery) - total_qty left the stock point, mortality and
@@ -164,11 +180,13 @@ def warehouse_outflow_events(item_id, warehouse_id, as_of_date=None, exclude_iss
     return events
 
 
-def weighted_average_rate(item_id, warehouse_id, as_of_date=None, exclude_issue_id=None):
+def weighted_average_rate(item_id, warehouse_id, as_of_date=None, exclude_issue_id=None,
+                          exclude_transfer_id=None, exclude_medicine_transfer_item_id=None):
     """Perpetual moving-average cost of ``item`` at ``warehouse`` as of the
     date. Returns Decimal 0 when nothing is on hand and there is no history."""
     inflows = warehouse_inflow_layers(item_id, warehouse_id, as_of_date)
-    outflows = warehouse_outflow_events(item_id, warehouse_id, as_of_date, exclude_issue_id)
+    outflows = warehouse_outflow_events(item_id, warehouse_id, as_of_date, exclude_issue_id,
+                                        exclude_transfer_id, exclude_medicine_transfer_item_id)
 
     # Merge, taking inflows before outflows on the same date so same-day
     # receipts are available to same-day issues.
@@ -199,7 +217,8 @@ def weighted_average_rate(item_id, warehouse_id, as_of_date=None, exclude_issue_
 
 
 def fifo_lifo_rate(item_id, warehouse_id, quantity, newest_first,
-                   as_of_date=None, exclude_issue_id=None, prior_consumed=Z):
+                   as_of_date=None, exclude_issue_id=None, prior_consumed=Z,
+                   exclude_transfer_id=None, exclude_medicine_transfer_item_id=None):
     """Unit cost of ``quantity`` units taken from the oldest (FIFO) or newest
     (LIFO) remaining cost layers, after prior outflows have drawn down layers
     in the same order. Returns None when there are no layers at all."""
@@ -213,7 +232,8 @@ def fifo_lifo_rate(item_id, warehouse_id, quantity, newest_first,
     # Draw down what prior outflows (+ earlier lines in this submission) already
     # consumed, from the front of the ordering.
     already = sum((qty for (_d, _seq, qty) in
-                   warehouse_outflow_events(item_id, warehouse_id, as_of_date, exclude_issue_id)), Z)
+                   warehouse_outflow_events(item_id, warehouse_id, as_of_date, exclude_issue_id,
+                                            exclude_transfer_id, exclude_medicine_transfer_item_id)), Z)
     already += prior_consumed
     idx = 0
     while already > 0 and idx < len(layers):
@@ -421,12 +441,24 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
 
 
 def compute_issue_rate(item, warehouse_id, as_of_date, quantity,
-                       exclude_issue_id=None, prior_consumed=Z):
+                       exclude_issue_id=None, prior_consumed=Z,
+                       exclude_transfer_id=None, exclude_medicine_transfer_item_id=None):
     """The authoritative unit cost at which ``quantity`` of ``item`` is issued
     from ``warehouse_id`` on ``as_of_date``, per the item's valuation method.
 
     ``warehouse_id`` may be None (e.g. a farm-location issue), in which case
     there is no warehouse cost pool and the standard cost is used.
+
+    ``exclude_transfer_id``/``exclude_medicine_transfer_item_id`` are for the
+    same case ``exclude_issue_id`` exists for, on a different transaction: a
+    ``StockTransfer`` or ``MedicineTransferItem`` being priced is itself one of
+    the outflows the ledger would otherwise replay as "already consumed",
+    which would draw FIFO/LIFO layers down past themselves before ever pricing
+    the thing being asked about. Weighted Average does not need the exclusion
+    to be *correct* — removing one outflow from a ratio and re-deriving the
+    same ratio from it comes out the same — but it is threaded through
+    regardless so a caller can pass one exclusion and get the right answer
+    whichever method the item turns out to be configured for.
     """
     method = (item.valuation_method or "").strip()
     std = Decimal(str(item.standard_cost_per_unit or 0))
@@ -435,14 +467,17 @@ def compute_issue_rate(item, warehouse_id, as_of_date, quantity,
         return std
 
     if method == "Weighted Average":
-        rate = weighted_average_rate(item.id, warehouse_id, as_of_date, exclude_issue_id)
+        rate = weighted_average_rate(item.id, warehouse_id, as_of_date, exclude_issue_id,
+                                     exclude_transfer_id, exclude_medicine_transfer_item_id)
         return rate if rate and rate > 0 else std
 
     if method in ("FIFO", "LIFO", "FEFO"):
         rate = fifo_lifo_rate(item.id, warehouse_id, quantity,
                               newest_first=(method == "LIFO"),
                               as_of_date=as_of_date, exclude_issue_id=exclude_issue_id,
-                              prior_consumed=prior_consumed)
+                              prior_consumed=prior_consumed,
+                              exclude_transfer_id=exclude_transfer_id,
+                              exclude_medicine_transfer_item_id=exclude_medicine_transfer_item_id)
         return rate if rate and rate > 0 else std
 
     return std

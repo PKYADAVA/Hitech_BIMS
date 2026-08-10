@@ -1670,6 +1670,27 @@ class GrowingChargeScheme(models.Model):
         max_digits=12, decimal_places=2, default=0,
         help_text=_("Fixed medicine cost value (used when basis = Fixed)")
     )
+    # Distinct from medicine_cost above, which is only meaningful when
+    # medicine_cost_basis is "Fixed" and otherwise sits at its unused default
+    # of 0 — every scheme in practice runs Actual or Master basis, so that
+    # field carries no real number for most schemes. This one is what the
+    # Standard column of the GC Realization Report always shows for medicine
+    # cost per bird, independent of whichever basis this scheme runs.
+    standard_medicine_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, default=3,
+        help_text=_("Standard medicine cost per bird shown on the GC Realization "
+                    "Report's Standard column — read regardless of Medicine Cost Basis.")
+    )
+    # Same reasoning as standard_medicine_cost just above: the Breed Standard
+    # curve gives an age-matched body weight, but the GC Realization Report's
+    # Standard column wants one flat number for the scheme, editable in place
+    # on that report — not dependent on this batch's breed having a curve row
+    # at exactly this age.
+    standard_avg_weight = models.DecimalField(
+        max_digits=12, decimal_places=2, default=2,
+        help_text=_("Standard avg. live weight per bird (kg) shown on the GC "
+                    "Realization Report's Standard column.")
+    )
     farmer_admin_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     management_admin_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     std_production_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)

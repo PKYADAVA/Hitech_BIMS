@@ -26,19 +26,23 @@ layered on top of them:
   master rate but the real quantity consumed, is the one place the farmer's
   own performance already flows through.
 * **Management Realization** — the same real performance, costed at what the
-  company actually paid: feed at the weighted average of real purchase
-  invoices (see purchase_cost.purchase_rates), chicks at the batch's real
-  placement cost (the closest this system can get to an invoice rate today —
-  see the note on chick costing below). This is the company's own economics,
-  procurement price swings and all.
+  company actually paid: feed, chicks and medicine each priced through
+  ``inventory.services.valuation.compute_issue_rate`` — the same engine
+  ``StockIssue`` re-costing uses — at the source warehouse's own cost ledger,
+  as of each transfer's own date, per that Item's configured valuation method
+  (Standard Costing / Weighted Average / FIFO / LIFO). This is the company's
+  own economics, procurement price swings and all.
 
-**Why chick cost has no true "real purchase cost" of its own.** Chicks are
-bought into a branch warehouse and reach a batch only through a Stock
-Transfer, which is valued at the Item Price Master rate, not a traceable
-invoice. There is no per-batch invoice to weight-average, the way there is
-for feed. So Management's chick cost reuses the batch's own placement amount
-(``batch_costing["chick_cost"]``) — the same figure the Production P&L
-already treats as the best available answer to "what did these chicks cost."
+None of that pricing happens in this module. It comes straight from
+``_build_batch_costing`` called with ``fetch_type="management"`` — the same
+function the Batch History Report's own Management view uses — so the two
+pages can never disagree about what a batch's feed or chicks cost the
+company. This module only decides how to *compare* that figure against the
+Standard and Farmer bases; see broiler.views._build_batch_costing for the
+pricing itself, including why chicks needed their own lookup
+(``ChicksPurchaseItem`` prices through the purchase header's Item, not a
+line, and bills on the chargeable count after mortality/shortage/weak-chick
+reconciliation — not a raw received quantity).
 
 Nothing here writes anything. This is a comparison, not a settlement — the
 farmer is still paid whatever GrowingChargeSettlement computes; this exists
@@ -54,6 +58,21 @@ Q2 = Decimal("0.01")
 Q4 = Decimal("0.0001")
 ZERO = Decimal("0.00")
 
+#: The Standard column's medicine cost per bird — a flat figure, by request,
+#: rather than GrowingChargeScheme.medicine_cost. That field only carries a
+#: real number when a scheme's medicine_cost_basis is "Fixed" (its own help
+#: text says so); every scheme in practice runs "Actual" or "Master" basis, so
+#: the field sits at its default 0 and Standard's medicine line went blank
+#: with it. Standard needs a number regardless of what any scheme's basis is
+#: set to, so this is it — independent of every scheme, not read from one.
+STANDARD_MEDICINE_COST_PER_BIRD = Decimal("3.00")
+
+#: Fallback for the Standard column's avg. live weight per bird when no
+#: scheme was matched at all — scheme.standard_avg_weight is the normal
+#: source (editable from the report itself), this only covers the case where
+#: there is no scheme row to have stored an edited value on.
+STANDARD_AVG_WEIGHT_PER_BIRD = Decimal("2.00")
+
 
 def _d(value):
     return Decimal(str(value)) if value not in (None, "", "No Data") else ZERO
@@ -68,14 +87,20 @@ def _pct(numerator, denominator):
     return _div(numerator * 100, denominator)
 
 
-def build_gc_realization(batch, report, scheme):
+def build_gc_realization(batch, report, management_report, scheme):
     """The three-column comparison for one batch.
 
-    ``report`` is an already-built ``_build_batch_report(batch,
-    fetch_type="farmer")`` — reused rather than rebuilt, on the same principle
-    every other report in this module follows: the Growing Charge Statement,
-    the Production P&L and this comparison must never independently recompute
-    a batch's mortality or feed consumption and risk disagreeing about it.
+    ``report``/``management_report`` are already-built
+    ``_build_batch_report(batch, fetch_type="farmer"/"management")`` —
+    reused rather than rebuilt, on the same principle every other report in
+    this module follows: the Growing Charge Statement, the Production P&L and
+    this comparison must never independently recompute a batch's mortality or
+    feed consumption and risk disagreeing about it. Two passes rather than one
+    because the two columns need different costing bases for the same real
+    events, and ``_build_batch_costing`` is what already knows how to price
+    each — feed, chicks and medicine through the real valuation engine (see
+    ``inventory.services.valuation.compute_issue_rate``) for the management
+    pass, the scheme's own rates for the farmer one.
 
     Returns ``{"particulars": [...], "scenarios": [...], "has_scheme": bool}``.
     A missing scheme collapses to just the real, actual-basis figures under
@@ -83,11 +108,27 @@ def build_gc_realization(batch, report, scheme):
     to be computed from, and is shown as "No Data" rather than zero, the same
     convention ``_build_batch_costing`` already uses.
     """
-    from broiler.services.purchase_cost import purchase_rates, value_consumption
-    from broiler.views import _actual_gc_rate, _breed_standard_at
+    from django.utils import timezone
+
+    from broiler.views import _actual_gc_rate, _gc_settlement_autofill
 
     bc = report["batch_costing"]
+    mbc = management_report["batch_costing"]
 
+    # Physical facts about this one batch — the same for all three scenario
+    # rows, the same reason chicks_placed is: a costing basis changes what a
+    # bird cost, never when it was placed or how old the flock is.
+    placement_date = bc.get("placement_date")
+    # Days since the last Daily Entry — the same staleness figure the Live
+    # Flock Summary and Feed Scheduling reports already show, computed the
+    # same way (_build_batch_costing carries no entry-recency field of its
+    # own, so this reads the batch's own entries directly rather than
+    # inventing a second definition of "gap").
+    from broiler.models import DailyEntry
+
+    latest_entry_date = (DailyEntry.objects.filter(batch=batch)
+                         .order_by("-date").values_list("date", flat=True).first())
+    gap_days = (timezone.localdate() - latest_entry_date).days if latest_entry_date else None
     placed = _d(bc.get("chicks_placed"))
     actual_survivors = _d(bc.get("sold_birds"))
     actual_sold_weight = _d(bc.get("sold_weight"))
@@ -99,11 +140,22 @@ def build_gc_realization(batch, report, scheme):
     mean_age = _d(bc.get("mean_age"))
 
     has_scheme = bool(scheme)
+    # Editable per scheme, from the report itself (see the Standard row's
+    # Medicine Cost cell) — this is scheme.standard_medicine_cost, not
+    # scheme.medicine_cost; see that field's own comment for why they're kept
+    # apart. Falls back to the constant only when no scheme was matched at
+    # all, since there is then nowhere to have stored an edited value.
+    std_med_rate = _d(scheme.standard_medicine_cost) if has_scheme else STANDARD_MEDICINE_COST_PER_BIRD
+    # Editable the same way, and for the same reason: the Breed Standard curve
+    # is age-matched, but it's a second master this batch's breed has to have
+    # a row for at exactly this age, and the report wants one flat number for
+    # the scheme, settable in place rather than dependent on that.
+    std_avg_weight = _d(scheme.standard_avg_weight) if has_scheme else STANDARD_AVG_WEIGHT_PER_BIRD
+
     if not has_scheme:
         std_survivors = ZERO
-        std_avg_weight = ZERO
         std_mort_pct = ZERO
-        std_chick_rate = std_feed_rate = std_med_rate = std_admin_rate = ZERO
+        std_chick_rate = std_feed_rate = std_admin_rate = ZERO
         std_fcr = ZERO
     else:
         std_mort_pct = _d(scheme.standard_mortality)
@@ -111,15 +163,7 @@ def build_gc_realization(batch, report, scheme):
         std_fcr = _d(scheme.standard_fcr)
         std_chick_rate = _d(scheme.chick_cost)
         std_feed_rate = _d(scheme.feed_cost)
-        std_med_rate = _d(scheme.medicine_cost)
         std_admin_rate = _d(scheme.farmer_admin_cost)
-        # The scheme has no body-weight field of its own — that lives on the
-        # Breed Standard curve, keyed by (breed, age), which is the master this
-        # batch's own breed already points at. Reuses the same exact-age-else-
-        # nearest-below lookup the Live Flock Summary Report already relies on.
-        age = int(mean_age.to_integral_value()) if mean_age > 0 else None
-        std_row = _breed_standard_at(batch.breed_id, age)
-        std_avg_weight = _d(std_row.body_weight) if std_row else ZERO
 
     std_live_weight = (std_survivors * std_avg_weight).quantize(Q2)
 
@@ -134,40 +178,58 @@ def build_gc_realization(batch, report, scheme):
     )
 
     # --- Farmer Realization: real performance, standard rates --------------
-    # Medicine follows the scheme's own basis: a scheme configured for actual
-    # medicine cost is answered with the batch's real spend, not the flat
-    # per-bird rate, for both realization columns — Standard alone stays
-    # hypothetical regardless of the basis, since it has no real spend to show.
-    med_qty, med_rate, med_amount = _medicine_actual_or_rate(
-        scheme, has_scheme, bc, placed, std_med_rate)
+    # Medicine is unconditionally real here — the farmer report's own actual
+    # spend (bc["med_cost"]), not gated behind the scheme's medicine_cost_basis
+    # the way a farmer's *settlement* charge would be. This column shows what
+    # medicine actually cost this flock, the same convention Management's own
+    # medicine line already follows (see its own comment a few lines down).
+    # Divided by chicks placed, not medicine consumed, for the same reason:
+    # "Medicine Cost" reads ₹/bird everywhere else in this table.
+    real_med_cost_farmer = _d(bc.get("med_cost"))
+    farmer_med_rate = _div(real_med_cost_farmer, placed) if placed else ZERO
     farmer = _cost_column(
         chick_qty=std_survivors, chick_rate=std_chick_rate,
         feed_qty=actual_feed_consumed, feed_rate=std_feed_rate,
-        med_qty=med_qty, med_rate=med_rate, med_amount=med_amount,
+        med_qty=placed, med_rate=farmer_med_rate, med_amount=real_med_cost_farmer,
         admin_qty=placed, admin_rate=std_admin_rate,
         birds_sold=actual_survivors, live_weight=actual_sold_weight,
     )
 
     # --- Management Realization: real performance, real cost ---------------
-    feed_item_ids = _feed_item_ids(report)
-    real_feed_rates = purchase_rates(feed_item_ids, on_or_before=bc.get("sale_start_date")) \
-        if feed_item_ids else {}
-    real_feed_cost, feed_unpriced = value_consumption(
-        _feed_rows_for_pricing(report), real_feed_rates)
-    # No purchase to price feed from at all -> nothing to fall back to except
-    # the master rate, flagged rather than silently substituted.
+    # feed_cost/chick_cost here come straight from the management-basis batch
+    # report, which prices every transfer through the real valuation engine
+    # (inventory.services.valuation.compute_issue_rate) — each one at its
+    # source warehouse's own cost ledger, as of its own date, per that Item's
+    # configured valuation method (Weighted Average / FIFO / LIFO / Standard).
+    # That supersedes this module's own earlier feed-only purchase-average and
+    # "no better data" chick-cost note — chicks now get the same real pricing
+    # feed already had, once ChicksPurchaseItem is what's actually behind it.
+    real_feed_cost = _d(mbc.get("feed_cost"))
     real_feed_rate = _div(real_feed_cost, actual_feed_consumed) if real_feed_cost else std_feed_rate
-
-    # Chicks have no invoice to weight-average (see module docstring); the
-    # batch's own real placement spend is the best available "real" figure.
-    real_chick_cost = _d(bc.get("chick_cost"))
+    real_chick_cost = _d(mbc.get("chick_cost"))
     real_chick_rate = _div(real_chick_cost, placed) if placed else ZERO
+    # Unconditionally real, the same as feed and chicks above, and the same as
+    # Farmer's own medicine line a few lines up — neither is gated behind the
+    # scheme's medicine_cost_basis, which answers a settlement question (is
+    # the farmer *billed* on real consumption or the flat rate), not "what did
+    # medicine actually cost this flock". Both realization columns show that
+    # regardless of how the scheme is configured to settle.
+    #
+    # Divided by chicks placed, not medicine consumed — "Medicine Cost" is a
+    # ₹/bird figure everywhere else in this table (see Farmer's own version,
+    # a few lines up, and Standard's), and medicine quantity is measured in
+    # whatever unit that item uses (ml, doses, tablets), not birds. Dividing
+    # the real spend by a non-bird quantity would answer "what did a unit of
+    # medicine cost", not "what did medicine cost per bird" — a different
+    # question from the one this column is asking everywhere else in the row.
+    real_med_cost = _d(mbc.get("med_cost"))
+    real_med_rate = _div(real_med_cost, placed) if placed else ZERO
 
     management = _cost_column(
         chick_qty=placed, chick_rate=real_chick_rate, chick_amount=real_chick_cost,
         feed_qty=actual_feed_consumed, feed_rate=real_feed_rate,
         feed_amount=real_feed_cost if real_feed_cost else None,
-        med_qty=med_qty, med_rate=med_rate, med_amount=med_amount,
+        med_qty=placed, med_rate=real_med_rate, med_amount=real_med_cost,
         admin_qty=placed, admin_rate=std_admin_rate,
         birds_sold=actual_survivors, live_weight=actual_sold_weight,
     )
@@ -180,15 +242,93 @@ def build_gc_realization(batch, report, scheme):
     # chick/feed/medicine/admin breakdown).
     std_cost_ref = _d(bc.get("std_prod_per_kg"))
     base_gc_rate = _d(bc.get("base_gc_rate"))
-    for column in (standard, farmer, management):
-        gc_rate = _actual_gc_rate(scheme, std_cost_ref, column["production_cost_per_kg"],
+    # Standard Prod Cost means something different per column, not one figure
+    # repeated three times:
+    #  - Standard shows its own production_cost_per_kg — the hypothetical
+    #    build-up of *this* column's chick/feed/medicine/admin, not the
+    #    scheme's separate master field (which can legitimately disagree with
+    #    what those add up to).
+    #  - Farmer shows the scheme's own master figure (std_cost_ref /
+    #    bc["std_prod_per_kg"]) — the fixed promise the farmer is measured
+    #    against, i.e. it genuinely comes "from the schema" here.
+    #  - Management shows the real production cost per kg the underlying
+    #    management-basis batch costing already computed
+    #    (mbc["production_cost_per_kg"]) — the true, original figure the
+    #    Batch History Report's own Management view would show, priced with
+    #    the full real admin cost rather than this module's std_admin_rate
+    #    stand-in on the `management` column above.
+    if has_scheme:
+        standard["std_prod_per_kg"] = standard["production_cost_per_kg"]
+        farmer["std_prod_per_kg"] = std_cost_ref
+    else:
+        standard["std_prod_per_kg"] = farmer["std_prod_per_kg"] = None
+    for column in (standard, farmer):
+        # Fed this column's own Standard Prod Cost, not the single scheme
+        # master figure every column used to share — Standard's slab lookup
+        # has to compare its own build-up against itself too, the same
+        # baseline Diff from Std Cost uses below, or the two would disagree
+        # about whether Standard is "at standard" (Diff reads 0 while the
+        # slab engine, fed a genuinely different number, produces a nonzero
+        # Penalty/Incentive for a row that never deviated from its own promise).
+        gc_rate = _actual_gc_rate(scheme, column["std_prod_per_kg"], column["production_cost_per_kg"],
                                   base_gc_rate) if has_scheme else ZERO
         column["base_gc_rate"] = base_gc_rate
-        column["diff_from_std_cost"] = (column["production_cost_per_kg"] - std_cost_ref).quantize(Q2) \
+        # Standard minus Actual, not the other way round — negative reads as
+        # "cost overrun" (unfavourable), positive as "came in under standard",
+        # matching the sign Penalty/Incentive already carries.
+        column["diff_from_std_cost"] = (column["std_prod_per_kg"] - column["production_cost_per_kg"]).quantize(Q2) \
             if has_scheme else ZERO
         column["penalty_incentive"] = (gc_rate - base_gc_rate).quantize(Q4)
         column["actual_gc_rate"] = gc_rate.quantize(Q4)
         column["farmer_gc_income_payable"] = (gc_rate * column["live_weight"]).quantize(Q2)
+
+    # Management has no growing charge settlement of its own to compute — the
+    # farmer is paid once, on the Farmer basis, regardless of which costing
+    # lens the company is looking at its own numbers through. Management
+    # mirrors Farmer's Actual GC Rate and Farmer GC Income Payable for
+    # reference rather than running a second, spurious settlement against its
+    # own real production cost — and Standard Prod Cost / Diff from Std Cost /
+    # Penalty-Incentive stay blank here for the same reason: there is no
+    # "management basis" promise to measure this column against.
+    management["base_gc_rate"] = base_gc_rate
+    management["std_prod_per_kg"] = None
+    management["diff_from_std_cost"] = None
+    management["penalty_incentive"] = None
+    management["actual_gc_rate"] = farmer["actual_gc_rate"]
+    management["farmer_gc_income_payable"] = farmer["farmer_gc_income_payable"]
+
+    # --- The rest of the scheme's own incentive/decentive slabs ------------
+    # Sales/Mortality/FCR/Summer Incentives and the Mortality/FCR-Recovery
+    # Decentives — every incentive/decentive band on the Growing Charge
+    # master besides the Production-Cost one already broken out above as
+    # Actual GC Rate / PC Incentive-Decentive. These come straight from
+    # broiler.views._gc_settlement_autofill — the exact function
+    # GrowingChargeSettlement itself defaults its own fields from — reused
+    # rather than reimplemented, so this table can never disagree with what
+    # a real settlement would actually compute.
+    #
+    # One real settlement, shown on both realization columns: like Actual GC
+    # Rate above, these are settled once on the Farmer basis regardless of
+    # which costing lens is being read, so Management mirrors Farmer instead
+    # of running its own. Standard has no settlement of its own to draw
+    # from — these slabs are keyed on the flock's real mortality/CFCR/sale
+    # rate/production cost, not a hypothetical one this module could invent.
+    if has_scheme:
+        settlement = _gc_settlement_autofill(batch, scheme, report=report)
+        for column in (farmer, management):
+            column["sales_incentive"] = settlement["sales_incentives"].quantize(Q2)
+            column["mortality_incentive"] = settlement["mortality_incentives"].quantize(Q2)
+            column["fcr_incentive"] = settlement["fcr_incentives"].quantize(Q2)
+            column["summer_incentive"] = settlement["summer_incentives"].quantize(Q2)
+            column["mortality_decentive"] = settlement["mortality_deduction"].quantize(Q2)
+            column["fcr_recovery_decentive"] = settlement["fcr_deduction"].quantize(Q2)
+    else:
+        for column in (farmer, management):
+            column["sales_incentive"] = column["mortality_incentive"] = column["fcr_incentive"] = None
+            column["summer_incentive"] = column["mortality_decentive"] = column["fcr_recovery_decentive"] = None
+    for key in ("sales_incentive", "mortality_incentive", "fcr_incentive",
+               "summer_incentive", "mortality_decentive", "fcr_recovery_decentive"):
+        standard[key] = None
 
     # --- market price / revenue / profit ------------------------------------
     # Standard has no sale of its own to price from — it is charged at the
@@ -199,6 +339,17 @@ def build_gc_realization(batch, report, scheme):
     farmer["market_price"] = actual_avg_sale_rate
     management["market_price"] = actual_avg_sale_rate
 
+    # What each row's own real production cost would need to sell at to clear
+    # the Base GC Rate margin — the same break-even Standard's own Market
+    # Price already is, extended to Farmer/Management so their real sale rate
+    # (Market Price, just above) can be read against it directly. Fed each
+    # column's own production_cost_per_kg rather than the shared master
+    # figure std_cost_ref uses, the same distinction Standard Prod Cost draws
+    # elsewhere in this row.
+    for column in (standard, farmer, management):
+        column["breakeven_sale_rate"] = (column["production_cost_per_kg"] + column["base_gc_rate"]).quantize(Q4) \
+            if has_scheme else None
+
     for column in (standard, farmer, management):
         column["total_market_revenue"] = (column["market_price"] * column["live_weight"]).quantize(Q2)
         column["market_sale_profit"] = (column["total_market_revenue"]
@@ -206,15 +357,24 @@ def build_gc_realization(batch, report, scheme):
         column["profit_per_kg"] = _div(column["market_sale_profit"], column["live_weight"])
         column["profit_per_bird"] = _div(column["market_sale_profit"], column["birds_sold"])
 
-    std_profit = standard["market_sale_profit"]
     for column in (standard, farmer, management):
-        # How much better or worse off the company is under this column's
-        # basis than under the Standard scenario — zero for Standard itself,
-        # by construction.
-        column["total_company_revenue"] = (column["market_sale_profit"] - std_profit).quantize(Q2)
+        # What the company actually keeps: the market sale profit after
+        # paying out the growing charge it owes the farmer for this column's
+        # own live weight — not a comparison against the Standard scenario.
+        column["total_company_revenue"] = (column["market_sale_profit"]
+                                           - column["farmer_gc_income_payable"]).quantize(Q2)
 
     def scenario(key, label, column, mort_pct, mort_no, avg_weight, feed_consumed):
-        values = _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_scheme)
+        # placement_date, mean_age and gap_days are the same physical batch
+        # under every costing lens, so they come from the enclosing scope
+        # rather than being threaded through each of the three calls below.
+        # Actual Medicine Cost stays blank for Standard specifically — that
+        # column reports real spend, and Standard is fully hypothetical, so
+        # placed x flat rate (what column["med_amount"] would otherwise show
+        # here) is not an "actual" figure however the arithmetic reads.
+        actual_med = None if key == "standard" else (column["med_amount"] or None)
+        values = _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed,
+                     has_scheme, placement_date, mean_age, gap_days, actual_med)
         return {"key": key, "label": label, "values": values, "cells": _format_cells(values)}
 
     scenarios = [
@@ -231,10 +391,8 @@ def build_gc_realization(batch, report, scheme):
         "scenarios": scenarios,
         "has_scheme": has_scheme,
         "scheme_code": scheme.scheme_code if scheme else "",
-        # Named rather than silently folded into the rate: a feed item this
-        # flock ate with no purchase behind it would otherwise make
-        # Management's feed cost look cheaper than it really was.
-        "feed_unpriced": sorted(feed_unpriced),
+        "scheme_id": scheme.id if scheme else None,
+        "standard_medicine_cost": std_med_rate,
     }
 
 
@@ -267,57 +425,26 @@ def _cost_column(*, chick_qty, chick_rate, feed_qty, feed_rate, med_qty, med_rat
     }
 
 
-def _medicine_actual_or_rate(scheme, has_scheme, bc, placed, std_med_rate):
-    """(quantity, rate, amount) for the medicine line, per the scheme's own
-    ``medicine_cost_basis`` — "actual" prices this flock's real consumption,
-    anything else charges the flat per-bird rate. Standard never sees this: it
-    always uses the flat rate, since it has no real consumption to show."""
-    from broiler.models import GrowingChargeScheme
-
-    if has_scheme and scheme.medicine_cost_basis == GrowingChargeScheme.MedicineCostBasis.ACTUAL:
-        amount = _d(bc.get("med_cost"))
-        return placed, _div(amount, placed), amount
-    return placed, std_med_rate, None
-
-
-def _feed_item_ids(report):
-    from inventory.models import Item
-
-    codes = [r.get("item") for r in (report.get("feed_summary") or []) if r.get("item")]
-    if not codes:
-        return []
-    return list(Item.objects.filter(description__in=codes).values_list("id", flat=True))
-
-
-def _feed_rows_for_pricing(report):
-    """This batch's feed consumption as ``{item_id, quantity}`` rows, resolved
-    from the feed summary's item codes — the same join production_pl.py's
-    ``_consumption_rows`` does, kept local so this module has no import-order
-    dependency on it."""
-    from inventory.models import Item
-
-    feed_rows = report.get("feed_summary") or []
-    codes = [r.get("item") for r in feed_rows if r.get("item")]
-    by_code = {i.description: i.id for i in Item.objects.filter(description__in=codes)} if codes else {}
-    return [{"item_id": by_code.get(r.get("item")), "quantity": _d(r.get("consumed"))}
-            for r in feed_rows]
-
-
-def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_scheme):
+def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_scheme,
+         placement_date, age, gap_days, actual_medicine_cost):
     """Flatten one column into the particular-keyed dict the template reads."""
     return {
+        "placement_date": placement_date,
+        "age": age,
+        "gap_days": gap_days,
         "chicks_placed": placed,
         "chick_cost_rate": column["chick_rate"],
         "feed_cost_rate": column["feed_rate"],
         "standard_fcr": _div(column["feed_qty"], column["live_weight"], Decimal("0.0001")),
         "medicine_cost_rate": column["med_rate"],
-        "actual_medicine_cost": column["med_amount"] if column["med_amount"] else None,
+        "actual_medicine_cost": actual_medicine_cost,
         "actual_feed_consumption": feed_consumed,
         "admin_cost_rate": column["admin_rate"],
         "free_mortality_pct": mort_pct,
         "mortality_no": mort_no,
         "avg_live_weight": avg_weight,
         "market_price": column["market_price"],
+        "breakeven_sale_rate": column["breakeven_sale_rate"],
         "base_gc_rate": column["base_gc_rate"],
         "birds_sold": column["birds_sold"],
         "total_live_weight": column["live_weight"],
@@ -330,9 +457,16 @@ def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_schem
         "total_production_cost": column["total_production_cost"],
         "production_cost_per_kg": column["production_cost_per_kg"],
         "production_cost_per_bird": column["production_cost_per_bird"],
+        "std_prod_per_kg": column["std_prod_per_kg"],
         "diff_from_std_cost": column["diff_from_std_cost"],
         "penalty_incentive": column["penalty_incentive"],
         "actual_gc_rate": column["actual_gc_rate"],
+        "sales_incentive": column["sales_incentive"],
+        "mortality_incentive": column["mortality_incentive"],
+        "fcr_incentive": column["fcr_incentive"],
+        "summer_incentive": column["summer_incentive"],
+        "mortality_decentive": column["mortality_decentive"],
+        "fcr_recovery_decentive": column["fcr_recovery_decentive"],
         "farmer_gc_income_payable": column["farmer_gc_income_payable"],
         "total_market_revenue": column["total_market_revenue"],
         "market_sale_profit": column["market_sale_profit"],
@@ -346,6 +480,9 @@ def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_schem
 #: ordered list, read by both the JSON API and the template, so a row added
 #: here appears in the same place on both without being listed twice.
 PARTICULARS = [
+    ("placement_date", "Placement Date", "", "date"),
+    ("age", "Age", "days", 1),
+    ("gap_days", "Entry Gap Days", "days", 0),
     ("chicks_placed", "Number of Chicks Placed", "", 0),
     ("chick_cost_rate", "Chick Cost", "₹/bird", 2),
     ("feed_cost_rate", "Feed Cost", "₹/kg", 2),
@@ -358,7 +495,9 @@ PARTICULARS = [
     ("mortality_no", "Mortality No.", "", 0),
     ("avg_live_weight", "Avg Live Weight per Bird", "kg", 3),
     ("market_price", "Market Price", "₹/kg", 4),
+    ("breakeven_sale_rate", "Breakeven Sale Rate", "₹/kg", 4),
     ("base_gc_rate", "Base GC Rate", "₹/kg", 2),
+    ("std_prod_per_kg", "Standard Prod Cost", "₹/kg", 2),
     ("birds_sold", "Birds Sold", "", 0),
     ("total_live_weight", "Total Live Weight", "kg", 2),
     ("total_feed_required", "Total Feed Required", "kg", 2),
@@ -371,8 +510,14 @@ PARTICULARS = [
     ("production_cost_per_kg", "Production Cost per kg", "₹", 4),
     ("production_cost_per_bird", "Production Cost per bird", "₹", 4),
     ("diff_from_std_cost", "Diff from Std Cost", "₹/kg", 2),
-    ("penalty_incentive", "Penalty/Incentive", "₹/kg", 4),
+    ("penalty_incentive", "PC Incentive/Decentive", "₹/kg", 4),
     ("actual_gc_rate", "Actual GC Rate", "₹/kg", 4),
+    ("sales_incentive", "Sales Incentive", "₹", 2),
+    ("mortality_incentive", "Mortality Incentive", "₹", 2),
+    ("fcr_incentive", "FCR Incentive", "₹", 2),
+    ("summer_incentive", "Summer Incentive", "₹", 2),
+    ("mortality_decentive", "Mortality Decentive", "₹", 2),
+    ("fcr_recovery_decentive", "FCR Recovery Decentive", "₹", 2),
     ("farmer_gc_income_payable", "Farmer GC Income Payable", "₹", 2),
     ("total_market_revenue", "Total Market Revenue", "₹", 2),
     ("market_sale_profit", "Market Sale Profit", "₹", 2),
@@ -395,6 +540,8 @@ ADDITIVE = {
     "mortality_no", "birds_sold", "total_live_weight", "total_feed_required",
     "total_feed_cost", "total_chick_cost", "total_medicine_cost",
     "total_admin_cost", "total_production_cost", "farmer_gc_income_payable",
+    "sales_incentive", "mortality_incentive", "fcr_incentive", "summer_incentive",
+    "mortality_decentive", "fcr_recovery_decentive",
     "total_market_revenue", "market_sale_profit", "total_company_revenue",
 }
 
@@ -412,27 +559,69 @@ DERIVED_TOTALS = {
 }
 
 
-def build_gc_realization_grid(batches):
+def build_gc_realization_grid(batches, scheme_override_id=None):
     """The multi-farm listing: one Standard/Farmer/Management triplet per
     batch, and a Total row summing the additive columns across all of them.
 
     ``batches`` is an iterable of ``BroilerBatch``, already scoped and ordered
     by the caller — data-scoping and "which batches belong on this report" are
     the view's job, the same division every other report in this module keeps.
+
+    ``scheme_override_id``, when given, is the filter bar's own "Schema"
+    dropdown, hand-picked the same way the Batch History Report's Schema
+    dropdown already overrides ``_match_growing_charge_scheme``'s pick (see
+    that view's own comment). It is *not* a filter on each batch's own
+    auto-match winner: two schemes can legitimately overlap the same branch
+    and date range (e.g. a region's general scheme and a "Summer" scheme both
+    covering April-July), and ``_match_growing_charge_scheme`` only ever
+    surfaces one of them per batch — the other would never be selectable at
+    all if this only kept batches that already "won" the auto-match. Instead,
+    a batch is included whenever the picked scheme's own region/branch/date
+    range actually covers it (the same test ``_match_growing_charge_scheme``
+    itself applies before ranking), and is then costed under that scheme
+    specifically, replacing whatever it would have auto-matched to.
     """
     from broiler.views import _build_batch_report, _match_growing_charge_scheme, _placement_date
 
+    override_scheme = None
+    if scheme_override_id:
+        from broiler.models import GrowingChargeScheme
+        override_scheme = GrowingChargeScheme.objects.filter(id=scheme_override_id).first()
+
     groups = []
     for batch in batches:
-        scheme = _match_growing_charge_scheme(batch, _placement_date(batch))
+        placement = _placement_date(batch)
+        if override_scheme:
+            branch = batch.broiler_farm.branch
+            eligible = (placement is not None
+                       and override_scheme.region_id == branch.region_id
+                       and override_scheme.from_date <= placement <= override_scheme.to_date
+                       and (override_scheme.branch_id is None or override_scheme.branch_id == branch.id))
+            if not eligible:
+                continue
+            scheme = override_scheme
+        else:
+            scheme = _match_growing_charge_scheme(batch, placement)
         report = _build_batch_report(batch, fetch_type="farmer", scheme_override=scheme)
-        result = build_gc_realization(batch, report, scheme)
+        # A second pass at the same batch, this time asking for the
+        # management-basis costing — which is what now carries feed/chick/
+        # medicine priced through the real valuation engine (see
+        # broiler.views._build_batch_costing) rather than a rate this module
+        # would otherwise have to work out a second, different way.
+        management_report = _build_batch_report(batch, fetch_type="management", scheme_override=scheme)
+        result = build_gc_realization(batch, report, management_report, scheme)
         groups.append({
             "farm_name": batch.broiler_farm.farm_name,
             "batch_name": batch.batch_name,
             "batch_id": batch.pk,
             "has_scheme": result["has_scheme"],
             "scenarios": result["scenarios"],
+            # For the Standard row's inline-editable Medicine Cost cell — the
+            # value edited there lives on the scheme, not the batch, so every
+            # batch sharing one scheme shows (and edits) the same number.
+            "scheme_id": result["scheme_id"],
+            "scheme_code": result["scheme_code"],
+            "standard_medicine_cost": result["standard_medicine_cost"],
         })
 
     return {
@@ -471,8 +660,9 @@ def _totals_row(groups):
 
 
 def _format_cells(values):
-    """``values`` (a particular-keyed dict) as an ordered list of display
-    strings, one per :data:`PARTICULARS` entry, in that exact order.
+    """``values`` (a particular-keyed dict) as an ordered list of
+    ``{"key": ..., "text": ...}`` dicts, one per :data:`PARTICULARS` entry, in
+    that exact order.
 
     Built here rather than looked up by key in the template: Django templates
     have no built-in "index a dict by a loop variable" operation, and this
@@ -481,14 +671,22 @@ def _format_cells(values):
     list the template can simply iterate needs no such lookup at all, and
     keeps the per-particular decimal formatting in one place instead of
     scattered across template filters.
+
+    A dict per cell rather than a bare string so the template can pick one out
+    by its ``key`` — the Standard row's Medicine Cost cell renders as an
+    editable field instead of plain text, and a plain list would give the
+    template nothing to match against.
     """
     cells = []
     for key, _label, _unit, places in PARTICULARS:
         value = values.get(key)
         if value is None:
-            cells.append("—")
+            text = "—"
+        elif places == "date":
+            text = value.strftime("%d.%m.%Y")
         elif places == 0:
-            cells.append(f"{int(value):,}")
+            text = f"{int(value):,}"
         else:
-            cells.append(f"{Decimal(str(value)):,.{places}f}")
+            text = f"{Decimal(str(value)):,.{places}f}"
+        cells.append({"key": key, "text": text})
     return cells

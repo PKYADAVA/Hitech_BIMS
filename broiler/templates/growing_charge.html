@@ -122,6 +122,7 @@
       <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Standard GC Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_gc_cost" placeholder="0.00"></div></div>
       <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Minimum GC Cost</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="minimum_gc_cost" placeholder="0.00"></div></div>
       <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Standard FCR</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_fcr" placeholder="0.00"></div></div>
+      <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Std Average Body Weight</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_avg_weight" placeholder="0.00"></div></div>
       <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Standard Mortality</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="standard_mortality" placeholder="0.00"></div></div>
       <div class="row mb-3 align-items-center"><label class="col-6 col-form-label text-end fw-semibold">Unloading Charges</label><div class="col-6"><input type="number" step="0.01" class="form-control" id="unloading_charges" placeholder="0.00"></div></div>
     </div></div>
@@ -316,7 +317,7 @@ $(document).ready(function () {
   };
   const SCALARS = ['schema_name','from_date','to_date','chick_cost','feed_cost','medicine_cost',
     'farmer_admin_cost','management_admin_cost','std_production_cost','standard_gc_cost',
-    'minimum_gc_cost','standard_fcr','standard_mortality','unloading_charges',
+    'minimum_gc_cost','standard_fcr','standard_avg_weight','standard_mortality','unloading_charges',
     'maximum_prod_cost','maximum_rate_incentive','mort_dec_first_week_exceeds',
     'mort_dec_overall_above','mort_dec_first_week_value'];
 

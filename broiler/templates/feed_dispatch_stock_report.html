@@ -355,7 +355,21 @@
         {% if ledger_rows %}
         <tfoot>
           <tr>
-            <td colspan="{{ opening_label_colspan }}" class="text-end">TOTAL</td>
+            {% comment %}One <td> per leading column here too, for the same reason the
+               opening row avoids colspan: the Column Settings button lets someone hide
+               any of these seven, and a fixed colspan doesn't shrink with them — it goes
+               on spanning as many columns as it always did, now covering real data in
+               whichever column slid left to fill the gap. "TOTAL" is placed by script
+               into whichever of these seven is currently the rightmost *visible* one,
+               so it always sits at the true boundary of the data instead of a
+               once-correct guess. {% endcomment %}
+            <td class="total-label-cell text-end" data-total-idx="0"></td>
+            <td class="total-label-cell text-end" data-total-idx="1"></td>
+            <td class="total-label-cell text-end" data-total-idx="2"></td>
+            <td class="total-label-cell text-end" data-total-idx="3"></td>
+            <td class="total-label-cell text-end" data-total-idx="4"></td>
+            <td class="total-label-cell text-end" data-total-idx="5"></td>
+            <td class="total-label-cell text-end" data-total-idx="6"></td>
             {% for v in ledger_totals.dispatch_bags %}<td>{{ v }}</td>{% endfor %}
             <td>{{ ledger_totals.total_bag }}</td>
             <td>{{ ledger_totals.total_kg }}</td>
@@ -457,6 +471,27 @@ $(function () {
     language: { emptyTable: 'No data available in table' },
   });
   $.fn.dataTable.defaults.buttons = savedDefaultButtons;
+
+  // Column Settings (colvis, wired below) lets any of the seven leading
+  // columns be hidden. The TOTAL label used to live in one <td colspan="7">
+  // sized for all seven — which doesn't shrink when some of them are hidden,
+  // so it goes on covering the same physical width and ends up sitting over
+  // real dispatch/received figures that slid left to fill the gap. Found
+  // fresh after every visibility change instead, and placed in whichever of
+  // the seven is currently the rightmost one still shown — so it always sits
+  // at the true boundary of the visible data, not a guess made once.
+  function positionTotalLabel() {
+    const cells = document.querySelectorAll('#ledger-table tfoot td.total-label-cell');
+    if (!cells.length) return;
+    let lastVisible = null;
+    cells.forEach(function (td) {
+      td.textContent = '';
+      if (ledgerTable.column(+td.dataset.totalIdx).visible()) lastVisible = td;
+    });
+    if (lastVisible) lastVisible.textContent = 'TOTAL';
+  }
+  positionTotalLabel();
+  ledgerTable.on('column-visibility.dt', positionTotalLabel);
 
   // A4-landscape print of the *actual* styled ledger — clones the real table
   // (grouped 2-row header + colour-coded cells preserved, unlike DataTables'

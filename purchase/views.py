@@ -1670,6 +1670,7 @@ PURCHASE_REPORT_COLUMNS = [
     ("rcv_qty", "Received Qty (Bags/Qty)"), ("free_qty", "Free Qty"),
     ("rate", "Rate"), ("disc_percent", "Disc%"), ("disc_amount", "Disc Amount"),
     ("amount", "Amount"), ("gst_percent", "Gst%"), ("total_amount", "Total Amount"),
+    ("net_rate", "Net Rate"),
     ("warehouse", "Farm/Warehouse"), ("warehouse_code", "Farm/Warehouse Code"),
     ("farm_batch", "Farm Batch"), ("vehicle", "Vehicle No."),
     ("driver", "Driver Name"), ("remarks", "Remarks"),
@@ -1842,6 +1843,12 @@ def purchase_report(request):
             "amount": amount,
             "gst_percent": Decimal(str(getattr(line, "gst_percent", 0) or 0)),
             "total_amount": total_amount,
+            # What was actually paid per unit received, once discount and GST
+            # are folded in — as against "rate", the line's entered pre-tax
+            # unit price. Divides by received quantity, matching how the
+            # totals row's own blended figure is worked out below; a line with
+            # nothing received yet has no per-unit cost to show.
+            "net_rate": (total_amount / rcv) if rcv else Decimal("0"),
             "warehouse": wh.name if wh else "",
             "warehouse_code": wh.code if wh else "",
             "farm_batch": getattr(line, "batch", "") or getattr(purchase, "batch_no", "") or "",
@@ -1891,6 +1898,10 @@ def purchase_report(request):
               for k in ("sent_qty", "sent_bags", "rcv_qty", "rcv_bags", "free_qty",
                         "disc_amount", "amount", "total_amount")}
     totals["rate"] = (totals["total_amount"] / totals["rcv_qty"]) if totals["rcv_qty"] else Decimal("0")
+    # Same figure, its own name: "rate" above feeds the KPI strip's Avg Rate;
+    # this is what the Net Rate column's own totals cell reads, kept distinct
+    # so a later change to one doesn't quietly retitle the other.
+    totals["net_rate"] = totals["rate"]
 
     # Headline figures for the KPI strip. Bills are counted per invoice, not
     # per line, so a multi-item bill counts once.
@@ -1953,7 +1964,7 @@ def _purchase_report_excel(ctx):
         cell.alignment = Alignment(horizontal="center")
 
     numeric = {"sent_qty", "rcv_qty", "free_qty", "rate", "disc_percent",
-               "disc_amount", "amount", "gst_percent", "total_amount"}
+               "disc_amount", "amount", "gst_percent", "total_amount", "net_rate"}
 
     for r in ctx["rows"]:
         line = []
@@ -1985,7 +1996,7 @@ def _purchase_report_excel(ctx):
         cell.font = bold
 
     widths = [11, 16, 14, 26, 11, 12, 22, 17, 19, 10, 10, 8, 12, 13, 8,
-              14, 22, 18, 14, 14, 14, 24, 14, 12, 20]
+              14, 22, 12, 18, 14, 14, 14, 24, 14, 12, 20]
     for col, width in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(col)].width = width
 

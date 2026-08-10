@@ -389,6 +389,8 @@ function applyFeedPhase(tr, data) {
   tr.dataset.liveBirds = data.live_birds || 0;
   tr.dataset.feedPlan = JSON.stringify(data.feed_plan || []);
   tr.dataset.farmFeedStock = JSON.stringify(data.farm_feed_stock || []);
+  tr.dataset.lastWeightG = data.last_weight_g || '';
+  tr.dataset.lastWeightDate = data.last_weight_date || '';
   updateBirdStock(tr);   // needs liveBirds, so it follows it
   tr.dataset.expectName = (cur && cur.phase_name) || '';
   tr.dataset.nextFeed   = (cur && cur.next_feed_item) || '';
@@ -511,6 +513,39 @@ function negativeStockRows() {
                    + `${Math.abs(closing).toFixed(2)} kg`);
         }
       });
+  });
+  return bad;
+}
+
+// Whole calendar days between two "YYYY-MM-DD" strings — parsed as date
+// parts, not timestamps, so a browser timezone can't shift which day either
+// one lands on.
+function daysBetween(fromISO, toISO) {
+  const [fy, fm, fd] = fromISO.split('-').map(Number);
+  const [ty, tm, td] = toISO.split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000);
+}
+
+// Rows whose flock has gone more than two days without a weighing, as of
+// this row's own entry date, and carry none on this entry either — the same
+// rule the app enforces (see mobile's adviseDailyEntry). Missing data, not a
+// judgement call the office can defend the way an off-standard weight can, so
+// it is refused rather than merely warned about.
+function staleWeightRows() {
+  const bad = [];
+  entryRows().forEach((tr, i) => {
+    const farmSel = tr.querySelector('.farm');
+    const farm = farmSel && farmSel.value
+      ? farmSel.options[farmSel.selectedIndex].text : `Row ${i + 1}`;
+    const lastDate = tr.dataset.lastWeightDate || '';
+    if (!lastDate) return;   // never weighed at all — a different problem
+    const actW = parseFloat(tr.querySelector('.avg-wt').value || '0');
+    if (actW) return;        // resolved the moment this entry carries a weight
+    const entryDate = tr.querySelector('.date').value || TODAY;
+    if (daysBetween(lastDate, entryDate) > 2) {
+      bad.push(`${farm}: Body weight hasn't been recorded in over 2 days `
+                + `(last: ${lastDate}) — enter this entry's Avg. Weight before saving`);
+    }
   });
   return bad;
 }
@@ -939,6 +974,11 @@ get('single-batch-form').addEventListener('submit', function (e) {
     // into a deficit that every later entry then carries forward.
     alert('Not enough feed in stock:\n\n' + short.join('\n')
           + '\n\nBook the delivery first, or reduce the quantity.');
+    return;
+  }
+  const staleWeights = staleWeightRows();
+  if (staleWeights.length) {
+    alert("Can't save yet:\n\n" + staleWeights.join('\n'));
     return;
   }
   const rows = entryRows().map(tr => ({

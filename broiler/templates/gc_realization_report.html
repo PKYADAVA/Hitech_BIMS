@@ -35,25 +35,46 @@ what each of the three rows means and where every figure comes from.
   .gcr-table thead th {
     background: #cfe3ec; font-weight: 700; position: sticky; top: 0; z-index: 3;
   }
-  /* Farm + Basis are the row's own label, not a figure — frozen on the left so
-     they stay in view across the horizontal scroll the particular columns need.
-     Neither column has a fixed width: a long farm/batch name should get the
-     room it needs rather than truncate, so both size to their own content.
-     That means the second frozen column's offset can't be a fixed guess —
-     "Bahraich Branch" and "Green Valley Farm" are not the same width, and a
-     constant left value sized for one buries the header of the column after
-     it under the other. The script below measures the first column's actual
-     rendered width and sets --gcr-col1-w from it; the 11rem here is only the
-     fallback for the instant before that script runs. */
+  /* Sr No + Farm + Basis are the row's own label, not a figure — frozen on
+     the left so they stay in view across the horizontal scroll the particular
+     columns need. Sr No has a fixed width (it's always a short number), so
+     its own offset is a plain constant; Farm/Batch does not (a long farm or
+     batch name should get the room it needs rather than truncate), so the
+     third tier's offset can't be a fixed guess — "Bahraich Branch" and
+     "Green Valley Farm" are not the same width, and a constant left value
+     sized for one buries the header of the column after it under the other.
+     The script below measures the Farm/Batch column's actual rendered width
+     and sets --gcr-col2-w from it; the 11rem here is only the fallback for
+     the instant before that script runs. */
   .gcr-table th.gcr-frozen, .gcr-table td.gcr-frozen {
     position: sticky; left: 0; z-index: 2; background: #fff;
   }
   .gcr-table th.gcr-frozen.gcr-frozen-2, .gcr-table td.gcr-frozen.gcr-frozen-2 {
-    left: var(--gcr-col1-w, 11rem);
+    left: 2.75rem;
+  }
+  .gcr-table th.gcr-frozen.gcr-frozen-3, .gcr-table td.gcr-frozen.gcr-frozen-3 {
+    left: calc(2.75rem + var(--gcr-col2-w, 11rem));
   }
   .gcr-table thead th.gcr-frozen { z-index: 4; }
   .gcr-table td.gcr-num { text-align: right; }
   .gcr-table td.gcr-label { font-weight: 600; }
+  .gcr-table td.gcr-sr { text-align: center; color: #777; }
+
+  /* A visible gap between one farm's three-row block and the next, so the
+     table reads as a stack of separate farms rather than one continuous
+     grid — the group's first row gets a heavier top border than the plain
+     1px grid lines every other row uses. */
+  .gcr-table tr.gcr-group-start td { border-top: 3px solid #7fa8bd; }
+
+  /* The editable figures in the table — bordered and white against the
+     tinted Standard row, so they read as controls and not numbers that
+     merely happen to be right-aligned like their neighbours. */
+  .gcr-entry {
+    width: 5.5rem; text-align: right; font-size: .74rem;
+    padding: .15rem .35rem; border: 1px solid #9fc3d6; border-radius: .3rem;
+    background: #fff;
+  }
+  .gcr-entry:disabled { background: #eef2f5; color: #888; }
 
   /* One farm = three rows (Standard / Farmer / Management). The farm-name
      cell spans all three via rowspan in the markup below; this just keeps the
@@ -67,9 +88,20 @@ what each of the three rows means and where every figure comes from.
   .gcr-total-row td { font-weight: 700; background: #dbe9f0 !important; }
   .gcr-no-scheme { color: #b02a2a; font-style: italic; }
   .gcr-empty { padding: 3rem 1rem; text-align: center; color: #888; }
+  /* Bootstrap's .btn-sm still renders cramped at this table's .74rem base
+     font-size — pad it out to a real tap target rather than a hard-to-hit
+     sliver next to the batch name. */
+  .gcr-batch-link {
+    margin-left: .35rem; padding: .2rem .4rem; font-size: .8rem;
+    line-height: 1; vertical-align: middle;
+  }
 </style>
 
 <div class="report-doc">
+  {% comment %} Not inside the GET filter form below — a hidden field there
+     would round-trip into the URL as a query param on every filter submit.
+     Only here for the inline-edit save script to read. {% endcomment %}
+  {% csrf_token %}
   <div class="report-filter-bar">
     <form method="get" class="row g-2 align-items-end">
       <div class="col-6 col-md-2">
@@ -94,6 +126,13 @@ what each of the three rows means and where every figure comes from.
           <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
         </select>
       </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Schema</label>
+        <select class="form-select" name="schema">
+          <option value="">All Schemes</option>
+          {% for s in schemes %}<option value="{{ s.id }}" {% if selected_schema_id == s.id %}selected{% endif %}>{{ s.scheme_code }} - {{ s.schema_name }}</option>{% endfor %}
+        </select>
+      </div>
       <div class="col-auto">
         <button class="btn btn-primary" type="submit">Submit</button>
         {% if grid and grid.has_any_batch %}
@@ -111,8 +150,9 @@ what each of the three rows means and where every figure comes from.
         <table class="gcr-table">
           <thead>
             <tr>
-              <th class="gcr-frozen" style="left:0;">Farm / Batch</th>
-              <th class="gcr-frozen gcr-frozen-2">Basis</th>
+              <th class="gcr-frozen" style="left:0;width:2.75rem;">Sr No.</th>
+              <th class="gcr-frozen gcr-frozen-2">Farm / Batch</th>
+              <th class="gcr-frozen gcr-frozen-3">Basis</th>
               {% for key, label, unit, places in grid.particulars %}
                 <th>{{ label }}{% if unit %}<br><span style="font-weight:400;font-size:.68rem;">({{ unit }})</span>{% endif %}</th>
               {% endfor %}
@@ -121,28 +161,49 @@ what each of the three rows means and where every figure comes from.
           <tbody>
             {% for group in grid.groups %}
               {% for scenario in group.scenarios %}
-                <tr class="gcr-row-{{ scenario.key }}">
+                <tr class="gcr-row-{{ scenario.key }}{% if forloop.first %} gcr-group-start{% endif %}">
                   {% if forloop.first %}
-                    <td class="gcr-frozen gcr-label" rowspan="3">
+                    <td class="gcr-frozen gcr-sr" rowspan="3">{{ forloop.parentloop.counter }}</td>
+                    <td class="gcr-frozen gcr-frozen-2 gcr-label" rowspan="3">
                       {{ group.farm_name }}<br>
                       <span style="font-weight:400;color:#777;">{{ group.batch_name }}</span>
+                      {% if 'broiler_batch_report' in allowed_tabs %}
+                        <a href="{% url 'broiler_batch_report' %}?batch={{ group.batch_id }}"
+                           target="_blank" rel="noopener" title="Batch history for {{ group.batch_name }}"
+                           class="btn btn-sm btn-outline-secondary gcr-batch-link"><i class="fas fa-file-alt"></i></a>
+                      {% endif %}
                       {% if not group.has_scheme %}<br><span class="gcr-no-scheme">No scheme matched</span>{% endif %}
                     </td>
                   {% endif %}
-                  <td class="gcr-frozen gcr-frozen-2 gcr-basis">{{ scenario.label }}</td>
+                  <td class="gcr-frozen gcr-frozen-3 gcr-basis">{{ scenario.label }}</td>
                   {% for cell in scenario.cells %}
-                    <td class="gcr-num">{{ cell }}</td>
+                    <td class="gcr-num">
+                      {% if cell.key == "medicine_cost_rate" and scenario.key == "standard" and group.scheme_id %}
+                        {% comment %} The scheme's own standard rate, entered by hand — saved
+                           on blur to the scheme, so every batch sharing it shows (and edits)
+                           the same number. {% endcomment %}
+                        <input type="number" step="0.01" min="0" class="gcr-entry"
+                               data-url="{% url 'gc_realization_medicine_cost_save' group.scheme_id %}"
+                               value="{{ group.standard_medicine_cost }}"
+                               title="Standard medicine cost per bird — scheme {{ group.scheme_code }}">
+                      {% else %}
+                        {{ cell.text }}
+                      {% endif %}
+                    </td>
                   {% endfor %}
                 </tr>
               {% endfor %}
             {% endfor %}
 
             {% for total in grid.totals %}
-              <tr class="gcr-total-row">
-                {% if forloop.first %}<td class="gcr-frozen" rowspan="3">Total</td>{% endif %}
-                <td class="gcr-frozen gcr-frozen-2">{{ total.label }}</td>
+              <tr class="gcr-total-row{% if forloop.first %} gcr-group-start{% endif %}">
+                {% if forloop.first %}
+                  <td class="gcr-frozen" rowspan="3"></td>
+                  <td class="gcr-frozen gcr-frozen-2" rowspan="3">Total</td>
+                {% endif %}
+                <td class="gcr-frozen gcr-frozen-3">{{ total.label }}</td>
                 {% for cell in total.cells %}
-                  <td class="gcr-num">{{ cell }}</td>
+                  <td class="gcr-num">{{ cell.text }}</td>
                 {% endfor %}
               </tr>
             {% endfor %}
@@ -158,20 +219,20 @@ what each of the three rows means and where every figure comes from.
 </div>
 
 <script>
-  // The frozen Basis column's left offset has to equal the frozen Farm/Batch
-  // column's real rendered width — which varies with the farm and batch names
-  // actually on this page, so it cannot be a number chosen ahead of time.
-  // Measured after layout (fonts loaded, rowspan cells sized), and again on
-  // resize/reflow, so a name that wraps differently at a narrower viewport
-  // still lines up.
+  // The frozen Basis column's left offset has to equal the fixed Sr No width
+  // plus the frozen Farm/Batch column's real rendered width — which varies
+  // with the farm and batch names actually on this page, so it cannot be a
+  // number chosen ahead of time. Measured after layout (fonts loaded, rowspan
+  // cells sized), and again on resize/reflow, so a name that wraps
+  // differently at a narrower viewport still lines up.
   (function () {
     var table = document.querySelector(".gcr-table");
     if (!table) return;
 
     function alignFrozenColumn() {
-      var first = table.querySelector("td.gcr-frozen:not(.gcr-frozen-2), th.gcr-frozen:not(.gcr-frozen-2)");
-      if (!first) return;
-      table.style.setProperty("--gcr-col1-w", first.getBoundingClientRect().width + "px");
+      var second = table.querySelector("td.gcr-frozen-2, th.gcr-frozen-2");
+      if (!second) return;
+      table.style.setProperty("--gcr-col2-w", second.getBoundingClientRect().width + "px");
     }
 
     alignFrozenColumn();
@@ -183,5 +244,33 @@ what each of the three rows means and where every figure comes from.
       document.fonts.ready.then(alignFrozenColumn);
     }
   })();
+
+  // Save the Standard row's Medicine Cost as soon as the field is left — the
+  // same "no Save button, save on blur, reload after" pattern the Production
+  // P&L's hand-entered heads already use. Reloading is what moves the edited
+  // rate through every figure it feeds (Total Medicine Cost, Total Production
+  // Cost, the GC-rate block, profit) without recomputing any of that here.
+  $(document).on('change', '.gcr-entry', function () {
+    var $f = $(this);
+    $f.prop('disabled', true);
+    fetch($f.data('url'), {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': $('input[name=csrfmiddlewaretoken]').val()
+          || (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      credentials: 'same-origin',
+      body: new URLSearchParams({ value: $f.val() }),
+    }).then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (!body.ok) { window.alert(body.message || 'Could not save.'); $f.prop('disabled', false); return; }
+        window.location.reload();
+      })
+      .catch(function () {
+        $f.prop('disabled', false);
+        window.alert('Could not reach the server. The figure is unchanged.');
+      });
+  });
 </script>
 {% endblock %}

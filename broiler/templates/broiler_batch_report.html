@@ -196,18 +196,25 @@
 
   <div class="rpt-filter no-print">
     <form method="get" class="row g-2 align-items-end flex-nowrap">
-      <div class="col-6 col-md-2">
+      <div class="col">
+        <label class="form-label">Branch</label>
+        <select class="form-select" id="report-branch">
+          <option value="">select</option>
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col">
         <label class="form-label">Farm</label>
         <select class="form-select" id="report-farm">
           <option value="">select</option>
-          {% for f in farms %}<option value="{{ f.id }}" data-code="{{ f.farm_code }}">{{ f.farm_name }}</option>{% endfor %}
+          {% for f in farms %}<option value="{{ f.id }}" data-code="{{ f.farm_code }}" data-branch="{{ f.branch_id }}">{{ f.farm_name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-6 col-md-1">
+      <div class="col-auto">
         <label class="form-label">Farm Code</label>
-        <input type="text" class="form-control" id="report-farm-code" readonly placeholder="-">
+        <input type="text" class="form-control" id="report-farm-code" readonly placeholder="-" style="width:6.5rem;">
       </div>
-      <div class="col-6 col-md-2">
+      <div class="col">
         <label class="form-label">Batch <span class="text-danger">*</span></label>
         <select class="form-select" name="batch" id="report-batch" required>
           <option value="">select</option>
@@ -215,31 +222,31 @@
             {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}{% if b.is_closed %} (Closed){% endif %}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-6 col-md-1">
+      <div class="col-auto">
         <label class="form-label">Book No</label>
-        <select class="form-select" name="book_no" id="report-book">
+        <select class="form-select" name="book_no" id="report-book" style="width:7rem;">
           <option value="">select</option>
           {% for b in batches %}{% if b.book_number %}<option value="{{ b.book_number }}" data-batch="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
             {% if book_no == b.book_number %}selected{% endif %}>{{ b.book_number }}</option>{% endif %}{% endfor %}
         </select>
       </div>
-      <div class="col-6 col-md-2">
+      <div class="col">
         <label class="form-label">Report Type</label>
         <select class="form-select" name="fetch_type" id="report-type">
           <option value="farmer" {% if fetch_type == 'farmer' %}selected{% endif %}>Farmer Report</option>
           <option value="management" {% if fetch_type == 'management' %}selected{% endif %}>Management Report</option>
         </select>
       </div>
-      <div class="col-6 col-md-2">
+      <div class="col">
         <label class="form-label">Schema</label>
         <select class="form-select" name="schema">
           <option value="">select</option>
           {% for s in schemes %}<option value="{{ s.id }}" {% if selected_schema_id == s.id %}selected{% endif %}>{{ s.schema_name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-6 col-md-1">
+      <div class="col-auto">
         <label class="form-label">Export</label>
-        <select class="form-select" name="export">
+        <select class="form-select" name="export" style="width:7.5rem;">
           <option value="display" {% if export == 'display' %}selected{% endif %}>Display</option>
           <option value="pdf" {% if export == 'pdf' %}selected{% endif %}>PDF</option>
         </select>
@@ -704,15 +711,20 @@
               <td class="lbl">Shortage Birds</td><td class="val">{{ c.shortage_birds }}</td>
               <td class="lbl">Day Gain</td><td class="val">{{ c.day_gain }}</td>
               <td class="lbl">EEF</td><td class="val">{{ c.eef }}</td>
-              <td class="lbl">Total Production Cost</td><td class="hl">{{ c.total_production_cost }}</td>
-              <td class="lbl"></td><td class="val"></td>
+              {% comment %} Nothing follows this pair — the Med/Vac/Admin
+                 column has nothing left to show once EEF has printed — so the
+                 label and value each take the width of the two column-groups
+                 that would otherwise sit empty, rather than leaving a pair of
+                 dead cells beside them. {% endcomment %}
+              <td class="lbl" colspan="2">Total Production Cost</td>
+              <td class="hl" colspan="2">{{ c.total_production_cost }}</td>
             </tr>
             <tr>
               <td class="lbl">Grade</td><td class="val">{{ c.grade }}</td>
               <td class="lbl">FCR</td><td class="val">{{ c.fcr }}</td>
               <td class="lbl">CFCR</td><td class="val">{{ c.cfcr }}</td>
-              <td class="lbl">Production Cost Per Kg</td><td class="hl">{{ c.production_cost_per_kg }}</td>
-              <td class="lbl"></td><td class="val"></td>
+              <td class="lbl" colspan="2">Production Cost Per Kg</td>
+              <td class="hl" colspan="2">{{ c.production_cost_per_kg }}</td>
             </tr>
           </tbody>
         </table>
@@ -895,19 +907,35 @@
 {% block js %}
 <script>
 $(function () {
-  // Batch and Book No list the selected farm's batches only — open and closed
-  // both, since a history report is usually pulled on a batch that has ended.
+  // Branch narrows Farm, Farm narrows Batch/Book No — three levels of the
+  // same cascade, each following the batch/book's own long-standing pattern.
   //
   // The options are detached and re-appended rather than hidden: main.js turns
   // every .form-select into a Select2, which renders its own list from the
   // options and pays no attention to `display: none`. Hiding them left every
   // farm's batches on show. Detach (not empty) so the options keep their data.
+  const $branch = $('#report-branch');
   const $farm = $('#report-farm');
+  const allFarmOptions = $farm.children().toArray();
   const allOptions = new Map();      // select id -> its full option list
   $('#report-batch, #report-book').each(function () {
     allOptions.set(this.id, $(this).children().toArray());
   });
 
+  function filterFarms() {
+    const branchId = $branch.val();
+    const chosen = $farm.val();
+    const keep = $(allFarmOptions).filter(function () {
+      return !this.value || !branchId || $(this).data('branch') == branchId;
+    });
+    $farm.children().detach();
+    $farm.append(keep);
+    // Drop a selection the new branch has no option for, rather than leaving
+    // the box showing a farm that is no longer in the list.
+    const survives = keep.filter(function () { return this.value === chosen; }).length;
+    $farm.val(survives ? chosen : '');
+    $farm.trigger('change.select2');
+  }
   function filterBatches() {
     const farmId = $farm.val();
     allOptions.forEach(function (options, id) {
@@ -928,7 +956,12 @@ $(function () {
   function updateFarmCode() {
     $('#report-farm-code').val($('#report-farm option:selected').data('code') || '');
   }
-  $('#report-farm').on('change', function () { filterBatches(); updateFarmCode(); });
+  function updateBranchFromFarm() {
+    const branchId = $farm.find('option:selected').data('branch');
+    if (branchId) $branch.val(branchId).trigger('change.select2');
+  }
+  $branch.on('change', filterFarms);
+  $farm.on('change', function () { updateBranchFromFarm(); filterBatches(); updateFarmCode(); });
 
   // Book No is the batch's book number — keep Batch and Book No in lock-step.
   function syncBookFromBatch() {
@@ -936,7 +969,7 @@ $(function () {
   }
   $('#report-batch').on('change', function () {
     const farmId = $('#report-batch option:selected').data('farm');
-    if (farmId) { $('#report-farm').val(farmId); updateFarmCode(); }
+    if (farmId) { $('#report-farm').val(farmId); updateBranchFromFarm(); updateFarmCode(); }
     syncBookFromBatch();
   });
   $('#report-book').on('change', function () {
@@ -944,7 +977,10 @@ $(function () {
     if (batchId) { $('#report-batch').val(batchId).trigger('change'); }
   });
 
-  {% if batch %}$('#report-farm').val('{{ batch.broiler_farm_id }}');{% endif %}
+  {% if batch %}
+    $('#report-branch').val('{{ batch.broiler_farm.branch_id }}');
+    $('#report-farm').val('{{ batch.broiler_farm_id }}');
+  {% endif %}
   filterBatches();
   updateFarmCode();
   syncBookFromBatch();
