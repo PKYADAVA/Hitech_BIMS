@@ -3322,6 +3322,43 @@ def _match_growing_charge_scheme(batch, on_date):
             or qs.filter(branch__isnull=True).order_by("-from_date").first())
 
 
+def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", med_key=None):
+    """Repriced in place, each row's own ``rate``/``amount`` replaced by what
+    that transfer actually cost the company — ``inventory.services.valuation.
+    compute_issue_rate``, the same engine ``StockIssue`` re-costing uses, at
+    the source warehouse's own cost ledger as of that transfer's own date, per
+    the Item's configured valuation method — rather than the Item Price
+    Master rate the transfer happened to be recorded at.
+
+    Called once, on the same ``chick_rows``/``feed_rows``/
+    ``medicine_transfer_rows`` lists both the Batch History Report's detail
+    tables AND ``_build_batch_costing``'s own totals read from — so a
+    Management-basis Chick Placement row and the Total Chick Cost above it
+    can never disagree about what a transfer cost. A row with no resolvable
+    item (e.g. one from before item_id was captured) is left exactly as it
+    was rather than zeroed out.
+
+    Each transfer excludes itself from the ledger replay (its own id, or its
+    own line id for medicine) — without that, the transfer being priced is
+    also one of the outflows the ledger would replay as "already consumed",
+    which would draw FIFO/LIFO layers down past themselves before ever
+    pricing the thing being asked about.
+    """
+    from inventory.services.valuation import compute_issue_rate
+
+    for row in rows:
+        item = items_by_id.get(row.get("item_id"))
+        if not item:
+            continue
+        real_rate = compute_issue_rate(
+            item, row.get("warehouse_id"), row["date"], row.get("quantity") or 0,
+            exclude_transfer_id=row.get(transfer_key) if med_key is None else None,
+            exclude_medicine_transfer_item_id=row.get(med_key) if med_key else None,
+        )
+        row["rate"] = real_rate
+        row["amount"] = Decimal(str(row.get("quantity") or 0)) * real_rate
+
+
 def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, mortality_rows,
                          chick_rows, feed_rows, feed_summary_rows, feed_return_rows,
                          medicine_transfer_rows, medicine_consumption_rows, medicine_return_rows,
@@ -3380,68 +3417,21 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
     med_return_qty = sum((r["quantity"] or 0) for r in medicine_return_rows)
     avg_med_rate = _div(med_in_amount, med_in_qty)
 
-    if fetch_type == "management":
-        # The Management report asks what this flock cost the company in money
-        # it actually spent — not the Item Price Master rate the Stock
-        # Transfer that moved the feed/medicine/chicks was valued at, which is
-        # what feed_cost/med_cost/chick_cost priced at avg_feed_rate/
-        # avg_med_rate/the transfer's own rate really are.
-        #
-        # Priced instead through inventory.services.valuation.compute_issue_rate
-        # — the same engine StockIssue re-costing already uses — one transfer
-        # at a time, each at the source warehouse's own cost ledger as of that
-        # transfer's own date, per the Item's own configured valuation_method
-        # (Standard Costing / Weighted Average / FIFO / LIFO). A transaction
-        # that falls between two purchases is exactly what that ledger already
-        # resolves correctly: Weighted Average carries a perpetual moving
-        # average through it, FIFO/LIFO blends across whichever layers it
-        # actually draws from — nothing here re-derives either.
-        #
-        # Each transfer excludes itself from the ledger replay (its own id, or
-        # its own line id for medicine) — without that, the transfer being
-        # priced is also one of the outflows the ledger would replay as
-        # "already consumed", which would draw FIFO/LIFO layers down past
-        # themselves before ever pricing the thing being asked about.
-        from inventory.services.valuation import compute_issue_rate
-
-        item_ids = {r["item_id"] for r in chick_rows + feed_rows + medicine_transfer_rows
-                   if r.get("item_id")}
-        items_by_id = Item.objects.in_bulk(item_ids)
-
-        def _real_rate(row, transfer_key="transfer_id", med_key=None):
-            item = items_by_id.get(row.get("item_id"))
-            if not item:
-                return Decimal(str(row.get("rate") or 0))
-            return compute_issue_rate(
-                item, row.get("warehouse_id"), row["date"], row.get("quantity") or 0,
-                exclude_transfer_id=row.get(transfer_key) if med_key is None else None,
-                exclude_medicine_transfer_item_id=row.get(med_key) if med_key else None,
-            )
-
-        chick_cost = sum(
-            (Decimal(str(r.get("quantity") or 0)) * _real_rate(r) for r in chick_rows),
-            Decimal("0"),
-        )
-        # Each row is priced individually and summed to a real transferred-in
-        # amount, then spread over consumption the same way the farmer basis
-        # already does (feed_cost = consumed x a blended rate) — only the rate
-        # each transfer contributed to that blend is now real, not the Item
-        # Price Master figure it used to be.
-        real_feed_in_amount = sum(
-            (Decimal(str(r.get("quantity") or 0)) * _real_rate(r) for r in feed_rows),
-            Decimal("0"),
-        )
-        real_med_in_amount = sum(
-            (Decimal(str(r.get("quantity") or 0)) * _real_rate(r, med_key="transfer_item_id")
-             for r in medicine_transfer_rows),
-            Decimal("0"),
-        )
-        feed_cost = feed_consumed * _div(real_feed_in_amount, feed_in_kg)
-        med_cost = med_consumed * _div(real_med_in_amount, med_in_qty)
-    else:
-        feed_cost = feed_consumed * avg_feed_rate
-        med_cost = med_consumed * avg_med_rate
-        chick_cost = sum(((r["amount"] or 0) for r in chick_rows), Decimal("0"))
+    # The Management report asks what this flock cost the company in money it
+    # actually spent, not the Item Price Master rate a transfer happened to
+    # be recorded at. For fetch_type="management", the caller
+    # (_build_batch_report) has already repriced chick_rows/feed_rows/
+    # medicine_transfer_rows in place via _price_rows_for_management — through
+    # inventory.services.valuation.compute_issue_rate, the same engine
+    # StockIssue re-costing uses — so avg_feed_rate/med_in_amount above and
+    # chick_cost below already carry real money for that basis, and this
+    # function needs no fetch_type branch of its own. That repricing is also
+    # what the Batch History Report's own Chick Placement/Feed Transfer-In/
+    # Medicine Transfer-In tables read, so a Management-basis detail row and
+    # the Total Cost above it can never disagree about what it cost.
+    feed_cost = feed_consumed * avg_feed_rate
+    med_cost = med_consumed * avg_med_rate
+    chick_cost = sum(((r["amount"] or 0) for r in chick_rows), Decimal("0"))
 
     # --- FCR / CFCR / Livability / EEF (per client KPI definitions) ---
     # Mortality Weight = weight of birds that died, from each day's mortality
@@ -3874,6 +3864,21 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     _bs_birds = sum(r["birds"] for r in bird_sale_rows)
     _bs_weight = sum(r["net_weight"] for r in bird_sale_rows)
     _bs_amount = sum(r["amount"] for r in bird_sale_rows)
+
+    if fetch_type == "management":
+        # Repriced here, once, before either the detail tables below or
+        # _build_batch_costing read these rows — see _price_rows_for_
+        # management's own docstring for why: a Management-basis Chick
+        # Placement/Feed Transfer-In/Medicine Transfer-In row and the Total
+        # Cost figures built from the same rows must never disagree about
+        # what a transfer actually cost the company.
+        items_by_id = Item.objects.in_bulk(
+            {r["item_id"] for r in chick_rows + feed_rows + medicine_transfer_rows
+             if r.get("item_id")}
+        )
+        _price_rows_for_management(chick_rows, items_by_id)
+        _price_rows_for_management(feed_rows, items_by_id)
+        _price_rows_for_management(medicine_transfer_rows, items_by_id, med_key="transfer_item_id")
 
     batch_costing = _build_batch_costing(
         batch, placement_total, cum_mortality, cum_culls, mortality_rows,

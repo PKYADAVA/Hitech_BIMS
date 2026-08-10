@@ -137,7 +137,12 @@ def build_gc_realization(batch, report, management_report, scheme):
     actual_mort_pct = _d(bc.get("total_mort_pct"))
     actual_mort_no = _d(bc.get("mortality"))
     actual_avg_weight = _d(bc.get("avg_body_weight"))
-    mean_age = _d(bc.get("mean_age"))
+    # Days old today, not bc["mean_age"] — that field is a weighted average
+    # age *at sale*, computed from bird_sale_rows, so it reads 0 for every
+    # live (unsold) batch, which is the default filter this report opens on.
+    # "Age" here means the same thing it does on the Live Flock Summary
+    # Report: how old the flock is right now.
+    current_age = (timezone.localdate() - placement_date).days if placement_date else None
 
     has_scheme = bool(scheme)
     # Editable per scheme, from the report itself (see the Standard row's
@@ -365,16 +370,16 @@ def build_gc_realization(batch, report, management_report, scheme):
                                            - column["farmer_gc_income_payable"]).quantize(Q2)
 
     def scenario(key, label, column, mort_pct, mort_no, avg_weight, feed_consumed):
-        # placement_date, mean_age and gap_days are the same physical batch
-        # under every costing lens, so they come from the enclosing scope
-        # rather than being threaded through each of the three calls below.
-        # Actual Medicine Cost stays blank for Standard specifically — that
-        # column reports real spend, and Standard is fully hypothetical, so
-        # placed x flat rate (what column["med_amount"] would otherwise show
-        # here) is not an "actual" figure however the arithmetic reads.
+        # placement_date, current_age and gap_days are the same physical
+        # batch under every costing lens, so they come from the enclosing
+        # scope rather than being threaded through each of the three calls
+        # below. Actual Medicine Cost stays blank for Standard specifically —
+        # that column reports real spend, and Standard is fully hypothetical,
+        # so placed x flat rate (what column["med_amount"] would otherwise
+        # show here) is not an "actual" figure however the arithmetic reads.
         actual_med = None if key == "standard" else (column["med_amount"] or None)
         values = _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed,
-                     has_scheme, placement_date, mean_age, gap_days, actual_med)
+                     has_scheme, placement_date, current_age, gap_days, actual_med)
         return {"key": key, "label": label, "values": values, "cells": _format_cells(values)}
 
     scenarios = [
@@ -481,7 +486,7 @@ def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_schem
 #: here appears in the same place on both without being listed twice.
 PARTICULARS = [
     ("placement_date", "Placement Date", "", "date"),
-    ("age", "Age", "days", 1),
+    ("age", "Age", "days", 0),
     ("gap_days", "Entry Gap Days", "days", 0),
     ("chicks_placed", "Number of Chicks Placed", "", 0),
     ("chick_cost_rate", "Chick Cost", "₹/bird", 2),
