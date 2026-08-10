@@ -106,6 +106,14 @@
         <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed</option>
         <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
       </select></div>
+    {% comment %}
+      The dispatch horizon. Three days answers "what is urgent"; a buyer
+      ordering for the week needs seven or fourteen.
+    {% endcomment %}
+    <div class="filter-field"><label class="form-label">Plan Ahead</label>
+      <select name="horizon" class="form-select form-select-sm">
+        {% for h in horizon_choices %}<option value="{{ h }}" {% if horizon == h %}selected{% endif %}>{{ h }} days</option>{% endfor %}
+      </select></div>
     <div class="filter-field"><label class="form-label">Order By</label>
       <select name="sort" class="form-select form-select-sm">
         <option value="farm" {% if sort == 'farm' %}selected{% endif %}>Farm name</option>
@@ -153,8 +161,8 @@
           <th class="ds-num num">Farm Stock <span class="unit">(Kg)</span></th>
           <th class="ds-num num">Farm Stock <span class="unit">(Bags)</span></th>
           <th class="num">Day's Intake <span class="unit">(Kg/day)</span></th>
-          <th class="ds-num num">Next 3 Days <span class="unit">(Kg)</span></th>
-          <th class="ds-num num">Next 3 Days <span class="unit">(Bags)</span></th>
+          <th class="ds-num num">Next {{ horizon }} Days <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Next {{ horizon }} Days <span class="unit">(Bags)</span></th>
         </tr>
       </thead>
       <tbody>
@@ -162,35 +170,39 @@
         <tr>
           <td class="item">{{ b.item }}</td>
           <td class="num">{{ b.batches }}</td>
-          <td class="num">{{ b.req_qty|floatformat:2 }}</td>
+          {% comment %}
+            No programme behind this feed means no requirement, and every
+            figure derived from it is withheld rather than guessed at.
+          {% endcomment %}
+          <td class="num">{% if b.has_req %}{{ b.req_qty|floatformat:2 }}{% else %}<span class="text-muted" title="No feed programme applies to the flocks eating this feed">-</span>{% endif %}</td>
           <td class="num">{{ b.feed_in|floatformat:2 }}</td>
-          <td class="num {% if b.to_send > 0 %}gap-warn{% endif %}">{{ b.to_send|floatformat:2 }}</td>
+          <td class="num {% if b.to_send > 0 %}gap-warn{% endif %}">{% if b.to_send != None %}{{ b.to_send|floatformat:2 }}{% else %}<span class="text-muted" title="Unknown until a feed programme applies">-</span>{% endif %}</td>
           <td class="num {% if b.wh_stock < 0 %}neg{% endif %}"
               {% if b.wh_stock < 0 %}title="Warehouse books have gone negative — more dispatched than ever received"{% endif %}>{{ b.wh_stock|floatformat:2 }}</td>
-          <td class="num {% if b.short_by > 0 %}neg{% endif %}">{{ b.short_by|floatformat:2 }}</td>
+          <td class="num {% if b.short_by > 0 %}neg{% endif %}">{% if b.short_by != None %}{{ b.short_by|floatformat:2 }}{% else %}<span class="text-muted" title="Unknown until a feed programme applies">-</span>{% endif %}</td>
           <td class="num">{{ b.cons_qty|floatformat:2 }}</td>
           <td class="num {% if b.avail_qty < 0 %}neg{% endif %}">{{ b.avail_qty|floatformat:2 }}</td>
           <td class="num">{{ b.bags|floatformat:2 }}</td>
           <td class="num">{{ b.intake_qty|floatformat:2 }}</td>
-          <td class="num">{{ b.next_3_days|floatformat:2 }}</td>
-          <td class="num">{% if b.next_3_bags != None %}{{ b.next_3_bags|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{{ b.next_days|floatformat:2 }}</td>
+          <td class="num">{% if b.next_bags != None %}{{ b.next_bags|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
       <tfoot><tr>
         <td class="text-center">Total</td>
         <td class="num">{{ totals.batches }}</td>
-        <td class="num">{{ totals.req_qty|floatformat:2 }}</td>
+        <td class="num">{% if totals.has_req %}{{ totals.req_qty|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         <td class="num">{{ totals.feed_in|floatformat:2 }}</td>
         <td></td>
         <td class="num">{{ totals.wh_stock|floatformat:2 }}</td>
-        <td class="num {% if totals.short_by > 0 %}neg{% endif %}">{{ totals.short_by|floatformat:2 }}</td>
+        <td class="num {% if totals.short_by > 0 %}neg{% endif %}">{% if totals.has_req %}{{ totals.short_by|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         <td class="num">{{ totals.cons_qty|floatformat:2 }}</td>
         <td class="num">{{ totals.avail_qty|floatformat:2 }}</td>
         <td class="num">{{ totals.bags|floatformat:2 }}</td>
         <td class="num">{{ totals.intake_qty|floatformat:2 }}</td>
-        <td class="num">{{ totals.next_3_days|floatformat:2 }}</td>
-        <td class="num">{{ totals.next_3_bags|floatformat:2 }}</td>
+        <td class="num">{{ totals.next_days|floatformat:2 }}</td>
+        <td class="num">{{ totals.next_bags|floatformat:2 }}</td>
       </tr></tfoot>
     </table>
   </div>
@@ -243,7 +255,7 @@
           <th class="ds-num num">Transferred Out Qty <span class="unit">(Kg)</span></th>
           <th class="ds-num num">Available Qty <span class="unit">(Kg)</span></th><th class="num">Bags</th>
           <th class="num">Feed/Bird <span class="unit">(gm)</span></th><th class="num">Feed <span class="unit">(Kg)</span></th>
-          <th class="ds-num num">Daily Rate <span class="unit">(Kg)</span></th><th class="ds-num num">Days Cover <span class="unit">(days)</span></th><th class="ds-num num">Next 3 Days <span class="unit">(Kg)</span></th>
+          <th class="ds-num num">Daily Rate <span class="unit">(Kg)</span></th><th class="ds-num num">Days Cover <span class="unit">(days)</span></th><th class="ds-num num">Next {{ horizon }} Days <span class="unit">(Kg)</span></th>
         </tr>
       </thead>
       <tbody>
@@ -299,7 +311,7 @@
           <td class="num">{% if r.daily_rate %}{{ r.daily_rate|floatformat:2 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
           <td class="num {% if r.days_cover != None and r.days_cover < 3 %}low{% endif %}">
             {% if r.days_cover != None %}{{ r.days_cover|floatformat:1 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
-          <td class="num">{% if r.next_3_days %}{{ r.next_3_days|floatformat:2 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+          <td class="num">{% if r.next_days %}{{ r.next_days|floatformat:2 }}{% if r.rate_basis == 'std' %}<sup class="basis" title="{{ rate_std_hint }}">std</sup>{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
           <td class="act">
             {% for level, text in r.actions %}<span class="act-badge act-{{ level }}">{{ text }}</span>{% empty %}<span class="text-muted">-</span>{% endfor %}
           </td>
@@ -312,7 +324,7 @@
       {% if rows %}
       <tfoot><tr>
         <td colspan="11" class="text-center">Total</td>
-        <td class="num">{{ totals.req_qty|floatformat:2 }}</td>
+        <td class="num">{% if totals.has_req %}{{ totals.req_qty|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
         <td></td>
         <td class="num">{{ totals.intake_qty|floatformat:2 }}</td>
         <td></td>
@@ -327,7 +339,7 @@
         <td class="num {% if totals.diff_kgs < 0 %}neg{% endif %}">{{ totals.diff_kgs|floatformat:2 }}</td>
         <td class="num">{{ totals.daily_rate|floatformat:2 }}</td>
         <td></td>
-        <td class="num">{{ totals.next_3_days|floatformat:2 }}</td>
+        <td class="num">{{ totals.next_days|floatformat:2 }}</td>
         <td></td>
       </tr></tfoot>
       {% endif %}
@@ -343,7 +355,7 @@
     <sup class="basis">cap</sup> the whole cap on an open-ended final phase. Difference is that cumulative figure less
     Consumed — positive means the flock is behind its curve, negative means ahead of it.
     Feed Outlook is built on what the flock is actually eating — the mean of its last three entries for that feed.
-    A <sup class="basis">std</sup> on Daily Rate, Days Cover or Next 3 Days means there were no recent entries to
+    A <sup class="basis">std</sup> on Daily Rate, Days Cover or Next {{ horizon }} Days means there were no recent entries to
     average and the figure is projected from the breed standard's daily intake instead.
     Action Required reads red for today, amber for this week.
   </div>
@@ -405,7 +417,7 @@
   const PHASE = [['Item', 6], ['Phase Age', 9], ['Cap (gm)', 10], ['Total Required (Kg)', 11],
                  ["Day's Intake (gm)", 12], ["Day's Intake (Kg)", 13], ['Cum. Intake/Bird (gm)', 14],
                  ['Consumed/Bird (gm)', 17], ['Stock (Kg)', 20], ['Bags', 21],
-                 ['Rate (Kg)', 24], ['Days Cover', 25], ['Next 3 Days (Kg)', 26]];
+                 ['Rate (Kg)', 24], ['Days Cover', 25], ['Next {{ horizon }} Days (Kg)', 26]];
 
   table.addEventListener('click', function (e) {
     const btn = e.target.closest('.fs-view');

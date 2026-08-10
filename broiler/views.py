@@ -3372,14 +3372,76 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
     avg_feed_rate = _div(feed_in_amount, feed_in_kg)
     feed_consumed = sum((r["consumed"] or 0) for r in feed_summary_rows)
     feed_return_kg = sum((r["quantity"] or 0) for r in feed_return_rows)
-    feed_cost = feed_consumed * avg_feed_rate
 
     # --- medicine / vaccine ---
     med_in_qty = sum((r["quantity"] or 0) for r in medicine_transfer_rows)
     med_in_amount = sum((r["amount"] or 0) for r in medicine_transfer_rows)
     med_consumed = sum((r["quantity"] or 0) for r in medicine_consumption_rows)
     med_return_qty = sum((r["quantity"] or 0) for r in medicine_return_rows)
-    med_cost = med_consumed * _div(med_in_amount, med_in_qty)
+    avg_med_rate = _div(med_in_amount, med_in_qty)
+
+    if fetch_type == "management":
+        # The Management report asks what this flock cost the company in money
+        # it actually spent — not the Item Price Master rate the Stock
+        # Transfer that moved the feed/medicine/chicks was valued at, which is
+        # what feed_cost/med_cost/chick_cost priced at avg_feed_rate/
+        # avg_med_rate/the transfer's own rate really are.
+        #
+        # Priced instead through inventory.services.valuation.compute_issue_rate
+        # — the same engine StockIssue re-costing already uses — one transfer
+        # at a time, each at the source warehouse's own cost ledger as of that
+        # transfer's own date, per the Item's own configured valuation_method
+        # (Standard Costing / Weighted Average / FIFO / LIFO). A transaction
+        # that falls between two purchases is exactly what that ledger already
+        # resolves correctly: Weighted Average carries a perpetual moving
+        # average through it, FIFO/LIFO blends across whichever layers it
+        # actually draws from — nothing here re-derives either.
+        #
+        # Each transfer excludes itself from the ledger replay (its own id, or
+        # its own line id for medicine) — without that, the transfer being
+        # priced is also one of the outflows the ledger would replay as
+        # "already consumed", which would draw FIFO/LIFO layers down past
+        # themselves before ever pricing the thing being asked about.
+        from inventory.services.valuation import compute_issue_rate
+
+        item_ids = {r["item_id"] for r in chick_rows + feed_rows + medicine_transfer_rows
+                   if r.get("item_id")}
+        items_by_id = Item.objects.in_bulk(item_ids)
+
+        def _real_rate(row, transfer_key="transfer_id", med_key=None):
+            item = items_by_id.get(row.get("item_id"))
+            if not item:
+                return Decimal(str(row.get("rate") or 0))
+            return compute_issue_rate(
+                item, row.get("warehouse_id"), row["date"], row.get("quantity") or 0,
+                exclude_transfer_id=row.get(transfer_key) if med_key is None else None,
+                exclude_medicine_transfer_item_id=row.get(med_key) if med_key else None,
+            )
+
+        chick_cost = sum(
+            (Decimal(str(r.get("quantity") or 0)) * _real_rate(r) for r in chick_rows),
+            Decimal("0"),
+        )
+        # Each row is priced individually and summed to a real transferred-in
+        # amount, then spread over consumption the same way the farmer basis
+        # already does (feed_cost = consumed x a blended rate) — only the rate
+        # each transfer contributed to that blend is now real, not the Item
+        # Price Master figure it used to be.
+        real_feed_in_amount = sum(
+            (Decimal(str(r.get("quantity") or 0)) * _real_rate(r) for r in feed_rows),
+            Decimal("0"),
+        )
+        real_med_in_amount = sum(
+            (Decimal(str(r.get("quantity") or 0)) * _real_rate(r, med_key="transfer_item_id")
+             for r in medicine_transfer_rows),
+            Decimal("0"),
+        )
+        feed_cost = feed_consumed * _div(real_feed_in_amount, feed_in_kg)
+        med_cost = med_consumed * _div(real_med_in_amount, med_in_qty)
+    else:
+        feed_cost = feed_consumed * avg_feed_rate
+        med_cost = med_consumed * avg_med_rate
+        chick_cost = sum(((r["amount"] or 0) for r in chick_rows), Decimal("0"))
 
     # --- FCR / CFCR / Livability / EEF (per client KPI definitions) ---
     # Mortality Weight = weight of birds that died, from each day's mortality
@@ -3395,7 +3457,6 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
 
     # --- costs from the applicable Growing Charge Scheme ---
     scheme = scheme_override or _match_growing_charge_scheme(batch, placement_date)
-    chick_cost = sum((r["amount"] or 0) for r in chick_rows)
     if scheme:
         farmer_rate = scheme.farmer_admin_cost or 0
         mgmt_rate = scheme.management_admin_cost or 0
@@ -3604,8 +3665,15 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
         row = {
             "date": t.date, "trnum": t.trnum, "dc_no": t.dc_no,
             "from_location": _transfer_location_name(t),
-            "item": str(t.item), "quantity": t.quantity, "rate": t.rate,
+            "item": str(t.item), "item_id": t.item_id, "quantity": t.quantity, "rate": t.rate,
             "amount": (t.quantity or 0) * (t.rate or 0),
+            # For pricing this exact transfer off the warehouse's own cost
+            # ledger under Management (see _build_batch_costing): which
+            # warehouse it left from (None if it left a farm — no cost pool
+            # there), and the transfer's own id, so the ledger replay can
+            # exclude this row from "already consumed" rather than double
+            # counting the very outflow being priced.
+            "warehouse_id": t.from_warehouse_id, "transfer_id": t.id,
         }
         category_name = t.item.category.name if t.item.category_id else ""
         # Chick-placement transfers are ordinary Stock Transfers of a
@@ -3628,8 +3696,13 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             medicine_transfer_rows.append({
                 "date": mt.date, "trnum": mt.trnum, "dc_no": mt.dc_no,
                 "from_location": location_name, "item": str(line.item),
+                "item_id": line.item_id,
                 "quantity": line.quantity, "rate": line.rate,
                 "amount": (line.quantity or 0) * (line.rate or 0),
+                # See the matching comment on the feed/chick StockTransfer
+                # rows above — same reason, same exclusion mechanism, just
+                # keyed by this line's own id rather than the transfer's.
+                "warehouse_id": mt.from_warehouse_id, "transfer_item_id": line.id,
             })
 
     # Feed/Medicine Return and Transfer-to-Other-Farm are the same "moved
@@ -3742,6 +3815,7 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
     medicine_entries = MedicineVaccineEntry.objects.filter(batch=batch).select_related("item").order_by("date", "id")
     medicine_consumption_rows = [{
         "date": me.date, "age": me.age_days, "item": str(me.item) if me.item_id else "",
+        "item_id": me.item_id,
         "quantity": me.qty, "stock": me.stock, "remarks": me.remarks,
     } for me in medicine_entries]
 
@@ -3783,12 +3857,16 @@ def _build_batch_report(batch, fetch_type="farmer", scheme_override=None):
             _feed_bucket(de.feed_1.item_code)["consumed"] += de.feed_1_qty or 0
         if de.feed_2_id:
             _feed_bucket(de.feed_2.item_code)["consumed"] += de.feed_2_qty or 0
-    # Bucketed by item_code (stable key), but display the item name.
-    feed_name_by_code = dict(
-        Item.objects.filter(item_code__in=feed_summary.keys()).values_list("item_code", "description")
-    )
+    # Bucketed by item_code (stable key), but display the item name — and carry
+    # the item id too, so the Management costing pass below can price
+    # consumption at real purchase rates without a second lookup.
+    feed_item_by_code = {
+        i.item_code: i for i in Item.objects.filter(item_code__in=feed_summary.keys())
+    }
     feed_summary_rows = [{
-        "item": feed_name_by_code.get(item_code, item_code), **b,
+        "item": feed_item_by_code[item_code].description if item_code in feed_item_by_code else item_code,
+        "item_id": feed_item_by_code[item_code].id if item_code in feed_item_by_code else None,
+        **b,
         "balance": b["purchased"] + b["transfer_in"] - b["consumed"] - b["returned"] - b["transferred_out"],
     } for item_code, b in feed_summary.items()]
 
@@ -3980,7 +4058,8 @@ def broiler_batch_report(request):
     ) if batch else None
 
     return render(request, "broiler_batch_report.html", {
-        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "batches": scope_multi(request.user,
                                BroilerBatch.objects.select_related("broiler_farm")
                                .order_by("-start_date", "-id"),
@@ -5032,6 +5111,36 @@ def _feed_phase_master_for(batch, on_date, masters):
             or (next((m for m in masters if cat_id and m.bird_category_id == cat_id and eff_ok(m)), None)))
 
 
+def _feed_programme_gap(batch, on_date, masters):
+    """Why no Feed Phase Master applies to this batch — the sentence that says
+    what to go and fix.
+
+    "No feed programme" sends someone hunting for a master that, more often
+    than not, already exists and has simply run out of window: the report went
+    blank across every live flock because one programme's effective_to had
+    passed a week earlier, and nothing on the page said so. The three causes
+    need three different fixes, so they are named separately.
+    """
+    if not batch.breed_id:
+        return "Batch has no breed - cannot match a feed programme"
+
+    cat_id = batch.breed.bird_category_id
+    # The same two hops the matcher takes, but ignoring the date, so a master
+    # that would have matched can be reported as the near miss it is.
+    near = [m for m in masters
+            if m.breed_id == batch.breed_id
+            or (cat_id and m.bird_category_id == cat_id)]
+    if not near:
+        return f"No feed programme for {batch.breed.description or 'this breed'}"
+
+    for m in near:
+        if on_date and m.effective_to and on_date > m.effective_to:
+            return f"Feed programme expired {m.effective_to.strftime('%d.%m.%Y')}"
+        if on_date and m.effective_from and on_date < m.effective_from:
+            return f"Feed programme starts {m.effective_from.strftime('%d.%m.%Y')}"
+    return "No feed programme"
+
+
 def _feed_curve_at(curve, age):
     """Cumulative standard feed (g/bird) at `age`, read off a breed's ordered
     (age, cum_feed, body_weight, feed_intake) curve and carried forward from
@@ -5156,7 +5265,7 @@ def _feed_row_actions(r, *, is_current, next_phase, bag_kg):
     if r["avail_qty"] < 0:
         out.append(("urgent", "Stock negative - check transfers"))
     if cover is not None and cover >= 0 and r["daily_rate"] > 0:
-        need = r["next_3_days"]
+        need = r["next_days"]
         bags = f" ({(need / bag_kg).quantize(Decimal('0.1'))} bags)" if bag_kg else ""
         if cover < 1.5:
             out.append(("urgent", f"Dispatch {need:.0f} Kg{bags} - {cover:.1f} d cover"))
@@ -5179,7 +5288,9 @@ def _feed_batch_actions(*, is_live, gap_days, no_programme, mort_pct, avg_bwt, s
     item, drawn from the same signals Live Flock Summary reads."""
     out = []
     if no_programme:
-        out.append(("warn", "No feed programme - nothing to schedule against"))
+        # The reason, not the symptom: an expired window and a breed with no
+        # programme at all need different people to fix different records.
+        out.append(("warn", f"{no_programme} - nothing to schedule against"))
     if is_live and gap_days is not None and gap_days >= 2:
         out.append(("urgent" if gap_days >= 7 else "warn", f"Entries {gap_days} d stale"))
     if mort_pct is not None and mort_pct >= 5:
@@ -5247,6 +5358,14 @@ def batch_wise_feed_scheduling_report(request):
     status = (request.GET.get("status") or "live").strip().lower()
     sort = (request.GET.get("sort") or "farm").strip().lower()
     export = (request.GET.get("export") or "display").strip().lower()
+    # How far ahead to project the dispatch. Three days was hardcoded, which
+    # answers "what is urgent" but not "what do I order for the week" — the
+    # question a feed buyer actually brings to this page.
+    try:
+        horizon = int(request.GET.get("horizon") or 3)
+    except ValueError:
+        horizon = 3
+    horizon = horizon if horizon in (3, 7, 14) else 3
     submitted = bool(branch_id or line or supervisor_id or farm_id or excess_only
                      or request.GET.get("status") or request.GET.get("submit"))
 
@@ -5489,7 +5608,7 @@ def batch_wise_feed_scheduling_report(request):
                     # No rate at all means no honest projection — a finished
                     # phase with no standard to fall back on, not "0 days".
                     "days_cover": _div(avail_qty, rate).quantize(q2) if rate > 0 else None,
-                    "next_3_days": (rate * 3).quantize(q2),
+                    "next_days": (rate * horizon).quantize(q2),
                     "is_current": is_current, "next_phase": next_phase,
                     "bag_kg": kg_per_bag,
                     # Feeding order, so the per-feed summary below lists items
@@ -5516,7 +5635,7 @@ def batch_wise_feed_scheduling_report(request):
                                "avail_qty": Decimal("0.00"), "bags": None,
                                "diff_bird": None, "diff_kgs": None,
                                "daily_rate": Decimal("0.00"), "rate_basis": "",
-                               "days_cover": None, "next_3_days": Decimal("0.00"),
+                               "days_cover": None, "next_days": Decimal("0.00"),
                                "is_current": False, "next_phase": "", "bag_kg": None,
                                "sort_age": 9999}]
             if not batch_rows:
@@ -5526,8 +5645,10 @@ def batch_wise_feed_scheduling_report(request):
             # than say why: no programme to schedule against, a flock that has
             # stopped reporting, or stock that has gone impossible.
             flags = []
-            if master is None:
-                flags.append("No feed programme")
+            programme_gap = (_feed_programme_gap(batch, as_of, masters)
+                             if master is None else "")
+            if programme_gap:
+                flags.append(programme_gap)
             if not is_live:
                 flags.append(f"Closed {as_of.strftime('%d.%m.%Y')}")
             elif last_entry and (today - last_entry).days > 14:
@@ -5538,7 +5659,7 @@ def batch_wise_feed_scheduling_report(request):
                 flags.append("Negative stock")
 
             batch_actions = _feed_batch_actions(
-                is_live=is_live, gap_days=gap_days, no_programme=master is None,
+                is_live=is_live, gap_days=gap_days, no_programme=programme_gap,
                 mort_pct=mort_pct, avg_bwt=avg_bwt, std_bwt=std_bwt)
             for r in batch_rows:
                 r["actions"] = _feed_row_actions(
@@ -5553,6 +5674,7 @@ def batch_wise_feed_scheduling_report(request):
                 "age": age, "placed": placed, "birds": birds, "as_of": as_of,
                 "last_entry": last_entry, "gap_days": gap_days,
                 "start": start, "min_cover": min(covers) if covers else None,
+                "programme_gap": programme_gap,
             })
 
         # Urgency ordering is what makes this a dispatch list rather than a
@@ -5564,11 +5686,12 @@ def batch_wise_feed_scheduling_report(request):
         t_req = t_intake = t_due = t_in = t_cons = t_out = t_avail = Decimal("0")
         t_rate = t_next3 = t_bags = Decimal("0")
         t_low_cover = t_negative = t_no_prog = t_urgent = 0
+        t_has_req = False
         for sl_no, g in enumerate(groups, start=1):
             batch, farm = g["batch"], g["farm"]
             search_key = " ".join([farm.farm_name or "", farm.farm_code or "", batch.batch_name or "",
                                    farm.line or "", *(r["item"] for r in g["rows"])]).lower()
-            if "No feed programme" in g["flags"]:
+            if g["programme_gap"]:
                 t_no_prog += 1
             for i, r in enumerate(g["rows"]):
                 r.update({
@@ -5592,13 +5715,15 @@ def batch_wise_feed_scheduling_report(request):
                     "entry_from": g["start"].isoformat() if g["start"] else "",
                     "entry_to": g["as_of"].isoformat(),
                 })
-                t_req += r["req_qty"] or Decimal("0")
+                if r["req_qty"] is not None:
+                    t_req += r["req_qty"]
+                    t_has_req = True
                 t_intake += r["intake_qty"] or Decimal("0")
                 t_due += r["due_qty"] or Decimal("0")
                 t_in += r["feed_in"]; t_cons += r["cons_qty"]
                 t_out += r["out_qty"]; t_avail += r["avail_qty"]
                 t_bags += r["bags"] or Decimal("0")
-                t_rate += r["daily_rate"]; t_next3 += r["next_3_days"]
+                t_rate += r["daily_rate"]; t_next3 += r["next_days"]
                 if r["days_cover"] is not None and r["days_cover"] < 3:
                     t_low_cover += 1
                 if r["avail_qty"] < 0:
@@ -5618,14 +5743,19 @@ def batch_wise_feed_scheduling_report(request):
                 "item": r["item"] or "(no feed item)", "item_id": r["item_id"],
                 "sort_age": r["sort_age"],
                 "batches": set(), "bag_kg": r["bag_kg"],
-                "req_qty": Decimal("0"), "intake_qty": Decimal("0"), "next_3_days": Decimal("0"),
+                "req_qty": Decimal("0"), "intake_qty": Decimal("0"), "next_days": Decimal("0"),
                 "feed_in": Decimal("0"), "cons_qty": Decimal("0"), "avail_qty": Decimal("0"),
                 "bags": Decimal("0"),
+                # Whether any flock eating this feed has a programme to be
+                # measured against. Without one there is no requirement, and
+                # every figure derived from it is guesswork dressed as a total.
+                "has_req": False,
             })
+            b["has_req"] = b["has_req"] or r["req_qty"] is not None
             b["sort_age"] = min(b["sort_age"], r["sort_age"])
             b["batches"].add(r["group"])
             b["bag_kg"] = b["bag_kg"] or r["bag_kg"]
-            for k in ("req_qty", "intake_qty", "next_3_days", "feed_in", "cons_qty", "avail_qty", "bags"):
+            for k in ("req_qty", "intake_qty", "next_days", "feed_in", "cons_qty", "avail_qty", "bags"):
                 b[k] += r[k] or Decimal("0")
         feed_summary = sorted(by_feed.values(), key=lambda b: (b["sort_age"], b["item"]))
         # What the branch warehouses could actually dispatch against that. A
@@ -5641,28 +5771,41 @@ def batch_wise_feed_scheduling_report(request):
             b["batches"] = len(b["batches"])
             # What is still to reach the farms for the whole programme; a
             # negative reads as already over-delivered, not as nothing to send.
-            b["to_send"] = b["req_qty"] - b["feed_in"]
-            b["next_3_bags"] = (b["next_3_days"] / b["bag_kg"]).quantize(q2) if b["bag_kg"] else None
+            #
+            # None when no flock eating this feed has a programme. Subtracting
+            # deliveries from a requirement of zero produced a large negative —
+            # "3 tonnes over-delivered" — for a requirement nobody had worked
+            # out, which is the one number on this page a buyer must not be
+            # given wrongly.
+            b["to_send"] = (b["req_qty"] - b["feed_in"]) if b["has_req"] else None
+            b["next_bags"] = (b["next_days"] / b["bag_kg"]).quantize(q2) if b["bag_kg"] else None
             b["wh_stock"] = wh_stock.get(b["item_id"], Decimal("0"))
             # Nothing can be dispatched out of a negative balance, so the
             # shortfall is measured against stock actually on hand: a warehouse
             # whose books have gone negative is a data problem to fix (flagged
             # in red), not extra feed to go and buy.
-            b["short_by"] = max(b["to_send"] - max(b["wh_stock"], Decimal("0")), Decimal("0"))
+            b["short_by"] = (max(b["to_send"] - max(b["wh_stock"], Decimal("0")), Decimal("0"))
+                             if b["to_send"] is not None else None)
 
-        totals = {"next_3_bags": sum((b["next_3_bags"] or Decimal("0") for b in feed_summary),
+        totals = {"next_bags": sum((b["next_bags"] or Decimal("0") for b in feed_summary),
                                      Decimal("0")),
                   "wh_stock": sum((b["wh_stock"] for b in feed_summary), Decimal("0")),
-                  "short_by": sum((b["short_by"] for b in feed_summary), Decimal("0")),
-                  "req_qty": t_req, "intake_qty": t_intake,
+                  "short_by": sum((b["short_by"] or Decimal("0") for b in feed_summary),
+                                  Decimal("0")),
+                  # None rather than zero when nothing selected has a
+                  # programme: an empty total reads as "nothing needed", which
+                  # is the opposite of "not yet worked out".
+                  "req_qty": t_req if t_has_req else None,
+                  "has_req": t_has_req,
+                  "intake_qty": t_intake,
                   "due_qty": t_due, "feed_in": t_in, "cons_qty": t_cons,
                   "out_qty": t_out, "avail_qty": t_avail, "bags": t_bags,
-                  "diff_kgs": t_due - t_cons, "daily_rate": t_rate, "next_3_days": t_next3,
+                  "diff_kgs": t_due - t_cons, "daily_rate": t_rate, "next_days": t_next3,
                   "low_cover": t_low_cover, "negative": t_negative, "no_programme": t_no_prog,
                   "urgent": t_urgent, "batches": len(groups)}
 
         if export in ("csv", "excel"):
-            return _feed_scheduling_export(rows, totals, export, feed_summary)
+            return _feed_scheduling_export(rows, totals, export, feed_summary, horizon)
 
     lines = (farms_for(request.user).exclude(line="").order_by("line")
              .values_list("line", flat=True).distinct())
@@ -5674,6 +5817,7 @@ def batch_wise_feed_scheduling_report(request):
         "farms": farms_for(request.user, BroilerFarm.objects.select_related("branch").order_by("farm_name")),
         "branch_id": branch_id, "line": line, "supervisor_id": supervisor_id, "farm_id": farm_id,
         "excess_only": excess_only, "export": export, "sort": sort, "status": status,
+        "horizon": horizon, "horizon_choices": (3, 7, 14),
         "submitted": submitted, "rows": rows, "totals": totals, "feed_summary": feed_summary,
     })
 
@@ -5694,7 +5838,7 @@ FEED_SCHEDULING_COLUMNS = [
     ("bags", "Available Bags"),
     ("diff_bird", "Difference Feed/Bird (gm)"), ("diff_kgs", "Difference Feed (Kg)"),
     ("daily_rate", "Daily Rate (Kg)"), ("rate_basis", "Rate Basis"), ("days_cover", "Days Cover"),
-    ("next_3_days", "Next 3 Days Req. (Kg)"), ("action_text", "Action Required"),
+    ("next_days", "Next N Days Req. (Kg)"), ("action_text", "Action Required"),
 ]
 
 
@@ -5706,25 +5850,32 @@ FEED_SUMMARY_COLUMNS = [
     ("cons_qty", "Consumed (Kg)"),
     ("avail_qty", "Farm Stock (Kg)"), ("bags", "Farm Stock (Bags)"),
     ("intake_qty", "Day's Intake (Kg/day)"),
-    ("next_3_days", "Next 3 Days (Kg)"), ("next_3_bags", "Next 3 Days (Bags)"),
+    ("next_days", "Next N Days (Kg)"), ("next_bags", "Next N Days (Bags)"),
 ]
 
 
-def _feed_scheduling_export(rows, totals, export, feed_summary=()):
+def _feed_scheduling_export(rows, totals, export, feed_summary=(), horizon=3):
     """Batch wise Feed Scheduling rows as a CSV or Excel download. Excel also
     carries the per-feed-type summary on its own sheet, since that is the sheet
-    a buyer orders from; CSV stays one table and keeps only the detail."""
+    a buyer orders from; CSV stays one table and keeps only the detail.
+
+    The horizon is written into the column heading rather than left as a bare
+    "Next Days": the sheet outlives the screen it was run from, and a quantity
+    whose period is unstated is a quantity nobody can order against."""
     from django.http import HttpResponse
     import csv as _csv
 
-    headers = [label for _key, label in FEED_SCHEDULING_COLUMNS]
+    def name(label):
+        return label.replace("Next N Days", f"Next {horizon} Days")
+
+    headers = [name(label) for _key, label in FEED_SCHEDULING_COLUMNS]
     data = [[("" if r.get(key) is None else r.get(key, "")) for key, _label in FEED_SCHEDULING_COLUMNS]
             for r in rows]
     total_row = ["", "", "", "", "", "", "Total", "", "", "", "", totals["req_qty"],
                  "", totals["intake_qty"], "", totals["due_qty"], "", totals["feed_in"],
                  "", totals["cons_qty"], totals["out_qty"], totals["avail_qty"],
                  totals["bags"], "", totals["diff_kgs"], totals["daily_rate"], "", "",
-                 totals["next_3_days"], ""]
+                 totals["next_days"], ""]
 
     if export == "csv":
         response = HttpResponse(content_type="text/csv")
@@ -5755,7 +5906,7 @@ def _feed_scheduling_export(rows, totals, export, feed_summary=()):
 
     if feed_summary:
         ws2 = wb.create_sheet("By Feed Type")
-        s_headers = [label for _key, label in FEED_SUMMARY_COLUMNS]
+        s_headers = [name(label) for _key, label in FEED_SUMMARY_COLUMNS]
         ws2.append(s_headers)
         for cell in ws2[1]:
             cell.font = Font(bold=True)
@@ -5777,6 +5928,41 @@ def _feed_scheduling_export(rows, totals, export, feed_summary=()):
 # ---------------------------------------------------------------------------
 
 @login_required
+@require_POST
+def gc_realization_medicine_cost_save(request, scheme_id):
+    """Save the Standard row's Medicine Cost (₹/bird), edited inline from the
+    GC Realization Report itself — the same "edit in place, save on blur, then
+    reload" pattern the Production P&L's hand-entered heads already use.
+
+    Lives on the scheme (``GrowingChargeScheme.standard_medicine_cost``), not
+    the batch — every batch this scheme applies to reads and edits the same
+    number, since it is the scheme's own standard figure. Gated on this
+    report's own "edit" right rather than the separate Growing Charge Scheme
+    master permission: this page is where the figure is edited, and someone
+    who cannot open the scheme master directly should not need to for this.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from user.access import user_can
+
+    if not user_can(request.user, "gc_realization_report", "edit"):
+        return JsonResponse({"ok": False, "message": "Not permitted."}, status=403)
+
+    scheme = get_object_or_404(GrowingChargeScheme, pk=scheme_id)
+    raw = (request.POST.get("value") or "").strip()
+    try:
+        value = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        return JsonResponse({"ok": False, "message": "Enter a number."}, status=400)
+    if value < 0:
+        return JsonResponse({"ok": False, "message": "Cannot be negative."}, status=400)
+
+    scheme.standard_medicine_cost = value
+    scheme.save(update_fields=["standard_medicine_cost"])
+    return JsonResponse({"ok": True, "value": str(value)})
+
+
+@login_required
 def gc_realization_report(request):
     """Standard vs Farmer Realization vs Management Realization, one triplet
     of rows per farm's batch — see broiler.services.gc_realization for what
@@ -5794,7 +5980,21 @@ def gc_realization_report(request):
     farm_id = (request.GET.get("farm") or "").strip()
     status = (request.GET.get("status") or "live").strip().lower()
     export = (request.GET.get("export") or "display").strip().lower()
-    submitted = bool(branch_id or farm_id or request.GET.get("status") or request.GET.get("submit"))
+    schema_id = (request.GET.get("schema") or "").strip()
+    submitted = bool(branch_id or farm_id or schema_id or request.GET.get("status")
+                     or request.GET.get("submit"))
+
+    # Schema dropdown: only schemes for the selected Branch's region — "which
+    # schemes could this filter bar's own batches even be under" — same
+    # narrowing the Batch History Report's own Schema dropdown already does,
+    # just region-wide here since this page filters by branch, not one batch.
+    schemes = GrowingChargeScheme.objects.filter(is_active=True)
+    if branch_id.isdigit():
+        schemes = schemes.filter(Q(branch_id=branch_id) | Q(branch__isnull=True),
+                                 region_id=Branch.objects.filter(id=branch_id)
+                                 .values_list("region_id", flat=True).first())
+    schemes = schemes.order_by("schema_name")
+    selected_schema_id = int(schema_id) if schema_id.isdigit() else None
 
     grid = None
     if submitted:
@@ -5812,7 +6012,7 @@ def gc_realization_report(request):
             batches = batches.filter(broiler_farm__branch_id=branch_id)
         if farm_id.isdigit():
             batches = batches.filter(broiler_farm_id=farm_id)
-        grid = build_gc_realization_grid(batches)
+        grid = build_gc_realization_grid(batches, scheme_override_id=selected_schema_id)
 
         if export == "excel":
             return _gc_realization_excel(grid)
@@ -5821,9 +6021,11 @@ def gc_realization_report(request):
         "active_tab": "gc_realization_report",
         "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "schemes": schemes,
         "branch_id": branch_id,
         "farm_id": farm_id,
         "status": status,
+        "selected_schema_id": selected_schema_id,
         "submitted": submitted,
         "grid": grid,
     })
@@ -6488,8 +6690,8 @@ class GrowingChargeSchemeAPI(BaseAPIView):
         "schema_name", "from_date", "to_date",
         "chick_cost", "feed_cost", "medicine_cost_basis", "medicine_cost",
         "farmer_admin_cost", "management_admin_cost", "std_production_cost",
-        "standard_gc_cost", "minimum_gc_cost", "standard_fcr", "standard_mortality",
-        "unloading_charges", "maximum_prod_cost", "maximum_rate_incentive",
+        "standard_gc_cost", "minimum_gc_cost", "standard_fcr", "standard_avg_weight",
+        "standard_mortality", "unloading_charges", "maximum_prod_cost", "maximum_rate_incentive",
         "mort_dec_first_week_exceeds", "mort_dec_overall_above", "mort_dec_first_week_value",
         "shortage_basis",
     ]
@@ -6497,9 +6699,9 @@ class GrowingChargeSchemeAPI(BaseAPIView):
     DECIMAL_FIELDS = {
         "chick_cost", "feed_cost", "medicine_cost", "farmer_admin_cost",
         "management_admin_cost", "std_production_cost", "standard_gc_cost",
-        "minimum_gc_cost", "standard_fcr", "standard_mortality", "unloading_charges",
-        "maximum_prod_cost", "maximum_rate_incentive", "mort_dec_first_week_exceeds",
-        "mort_dec_overall_above", "mort_dec_first_week_value",
+        "minimum_gc_cost", "standard_fcr", "standard_avg_weight", "standard_mortality",
+        "unloading_charges", "maximum_prod_cost", "maximum_rate_incentive",
+        "mort_dec_first_week_exceeds", "mort_dec_overall_above", "mort_dec_first_week_value",
     }
 
     def get(self, request, id: Optional[int] = None) -> JsonResponse:
