@@ -37,6 +37,9 @@ export type ModuleStackParams = {
   FarmCaptureForm: { row?: Row } | undefined;
   /** Fill only what a capture is still missing — the register's "+". */
   FarmCaptureFill: { row: Row };
+  /** `row` reopens a saved request — a draft stays editable, anything past
+   *  it (pending/approved/rejected) opens read-only with its review note. */
+  FarmerFarmSetupRequestForm: { row?: Row } | undefined;
   /** `ending` opens the trip at the closing evidence it still needs. */
   SupervisorTripForm: { row?: Row; ending?: boolean } | undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */

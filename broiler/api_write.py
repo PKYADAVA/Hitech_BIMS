@@ -21,7 +21,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.urls import path
 from rest_framework.exceptions import NotFound, ValidationError
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -262,6 +262,29 @@ class FarmCaptureFillView(V1ViewMixin, APIView):
             "Capture updated.")
 
 
+class FarmerFarmSetupRequestWriteView(V1ViewMixin, APIView):
+    """POST /api/v1/broiler/farmer-farm-setup-requests/save[/<id>].
+
+    Delegates to the web ``FarmerFarmSetupRequestAPI`` so a phone save runs
+    the identical draft/submit validation and shed-row replacement the web
+    form runs — reviewable only means something if both sides built the
+    request the same way. Every field is optional on a draft, including
+    every file, so ``writeThrough`` sends plain JSON (no ``Content-Type:
+    multipart/form-data``) whenever nothing was attached that save — JSON
+    still has to parse then, or DRF answers 415 before the view ever runs.
+    """
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request, pk=None):
+        args = () if pk is None else (pk,)
+        return _delegate(web.FarmerFarmSetupRequestAPI().post, _CaptureRequest(request), *args)
+
+    def delete(self, request, pk):
+        return _delegate(web.FarmerFarmSetupRequestAPI().delete, _CaptureRequest(request), pk)
+
+
 class FarmCaptureClearView(V1ViewMixin, APIView):
     """POST /api/v1/broiler/location-captures/<id>/clear — drop the pin.
 
@@ -301,4 +324,8 @@ def write_urls() -> list:
              name="broiler-medicine-entries-save-new"),
         path("broiler/medicine-entries/save/<int:pk>", MedicineEntryWriteView.as_view(),
              name="broiler-medicine-entries-save"),
+        path("broiler/farmer-farm-setup-requests/save",
+             FarmerFarmSetupRequestWriteView.as_view(), name="broiler-ffsr-save-new"),
+        path("broiler/farmer-farm-setup-requests/save/<int:pk>",
+             FarmerFarmSetupRequestWriteView.as_view(), name="broiler-ffsr-save"),
     ]

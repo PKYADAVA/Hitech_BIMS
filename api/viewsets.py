@@ -154,6 +154,13 @@ API_SCOPES = {
     # Copied from broiler/views.py::farm_location_capture_api, which scopes the
     # register with scope_multi on exactly these two fields.
     "broiler.FarmLocationCapture": {"branches": "farm__branch_id", "farms": "farm_id"},
+    # Same branch scope broiler/views.py::FarmerFarmSetupRequestAPI uses for a
+    # reviewer's queue. The web additionally narrows a non-reviewer to their
+    # own submissions; the phone doesn't have a submitter-only scope to plug
+    # in here, so a field supervisor sees their branch's queue rather than
+    # only their own rows — acceptable since Mobile Access already gates who
+    # gets this tab at all, and everyone on it can see the rest of the branch.
+    "broiler.FarmerFarmSetupRequest": {"branches": "branch_id"},
     "broiler.BroilerFarmShed": {"farms": "farm_id"},
 
     # A trip is one employee's day, and an employee belongs to a branch

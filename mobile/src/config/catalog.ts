@@ -177,6 +177,30 @@ const broilerResources: ResourceConfig[] = [
     }),
   },
   {
+    key: "broiler-farmer-farm-setup-request",
+    module: "broiler",
+    path: "/broiler/farmer-farm-setup-requests/",
+    title: "Farmer & Farm Setup Request",
+    singular: "Farmer & Farm Setup Request",
+    createLabel: "New Request",
+    icon: "account-plus",
+    accent: B,
+    emptyMessage: "No setup requests yet.",
+    searchKeys: ["request_no", "farmer_name", "farm_name"],
+    card: (r) => {
+      const tone: BadgeTone =
+        r.status === "approved" ? "success"
+        : r.status === "rejected" ? "danger"
+        : r.status === "pending" ? "warning"
+        : "neutral";
+      return {
+        title: pick(r, ["request_no"], `Request #${r.id}`),
+        subtitle: joinParts([pick(r, ["farmer_name", "farm_name"]), formatDate(r.created_at)]),
+        badge: { label: String(r.status || "draft"), tone },
+      };
+    },
+  },
+  {
     key: "broiler-medicine-vaccine",
     module: "broiler",
     path: "/broiler/medicine-vaccine-entries/",
@@ -1889,6 +1913,7 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "broiler-daily-entries",
           "broiler-medicine-vaccine",
           "broiler-farm-location-capture",
+          "broiler-farmer-farm-setup-request",
           "broiler-bird-sales",
           "broiler-sale-receipts",
           "broiler-chicks-placement",

@@ -40,6 +40,7 @@ from .models import (
     DailyEntry,
     DailyEntryPhoto,
     FarmCaptureFile,
+    FarmerFarmSetupRequest,
     FarmLocationCapture,
     Farmer,
     FarmerGroup,
@@ -443,6 +444,26 @@ class FarmLocationCaptureSerializer(serializer_factory(FarmLocationCapture)):
         } for f in obj.files.all()]
 
 
+class FarmerFarmSetupRequestSerializer(serializer_factory(FarmerFarmSetupRequest)):
+    """A setup request as the phone's register and form want it.
+
+    ``sheds`` comes as its own list, the same shape the web form's detail API
+    returns, so the mobile screen's row/area UI can be rebuilt from a saved
+    draft exactly as it was left — the child rows are not a `__all__` field
+    (they're a reverse FK, not a column on this model) and need surfacing the
+    same way ``FarmLocationCaptureSerializer.files`` surfaces its own children.
+    """
+
+    sheds = serializers.SerializerMethodField()
+
+    def get_sheds(self, obj) -> list:
+        return [{
+            "id": s.id,
+            "length": str(s.length) if s.length is not None else "",
+            "width": str(s.width) if s.width is not None else "",
+        } for s in obj.sheds.all()]
+
+
 class ReverseGeocodeView(V1ViewMixin, APIView):
     """GET /api/v1/geo/reverse?lat=&lon= — a pin as an address.
 
@@ -823,6 +844,15 @@ def register(router) -> None:
                    ordering=["-date", "-id"], cursor=True)
     register_model(router, "broiler/medicine-vaccine-entries", MedicineVaccineEntry,
                    serializer=MedicineVaccineEntrySerializer, cursor=True)
+    # Creates and edits go to broiler/farmer-farm-setup-requests/save, where
+    # the web form's own FarmerFarmSetupRequestAPI.post runs the draft/submit
+    # rules and replaces the shed rows. Full CRUD is registered here anyway
+    # for the register's list and its Delete on a draft, same reasoning as
+    # broiler/location-captures above.
+    register_model(router, "broiler/farmer-farm-setup-requests", FarmerFarmSetupRequest,
+                   serializer=FarmerFarmSetupRequestSerializer,
+                   search_fields=["request_no", "farmer_name", "farm_name"],
+                   ordering=["-created_at"], cursor=True)
     register_model(router, "broiler/bird-sales", BirdSale, serializer=BirdSaleSerializer,
                    search_fields=["sale_no", "doc_no", "vehicle", "driver"], cursor=True)
     # Lifting evidence, one row per picture. Uploaded after the sale itself,

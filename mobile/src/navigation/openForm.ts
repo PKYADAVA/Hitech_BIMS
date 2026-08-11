@@ -21,7 +21,7 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
  */
 const ROW_FORM_SCREEN: Record<string,
   "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"
-  | "SupervisorTripForm" | "BatchForm"> = {
+  | "SupervisorTripForm" | "BatchForm" | "FarmerFarmSetupRequestForm"> = {
   // The shed picker has to know which units are free, and the batch number is
   // minted server-side — neither fits the generic form.
   "broiler-batches": "BatchForm",
@@ -32,6 +32,9 @@ const ROW_FORM_SCREEN: Record<string,
   "broiler-farm-location-capture": "FarmCaptureForm",
   // Photographs, GPS stamps and odometer shots, all taken on the road.
   "hr-supervisor-trips": "SupervisorTripForm",
+  // GPS pin, shed rows and KYC scans staged for office approval — none of
+  // which the generic form has a shape for.
+  "broiler-farmer-farm-setup-request": "FarmerFarmSetupRequestForm",
 };
 
 /**
