@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+{% load static %}
+{% comment %}
+Production Cost — what the flocks cost to grow.
+
+Not the Production P&L. That page is busy with revenue; this one only ever
+looks at the cost side and answers two questions: where the money went, and
+whether it was more than it should have been. The second is measured against
+the item master's standard cost applied to real consumption, so the variance
+is a price variance rather than a forecast.
+
+Every figure comes from the same batch report and P&L service the other pages
+use, so a flock's feed cost is one number across the ERP.
+{% endcomment %}
+
+{% block title %}Production Cost Report &mdash; BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+
+{% block content %}
+{% include '_broiler_report_subnavbar.html' with active_tab='production_cost_report' %}
+
+<style>
+  body { background: #eef2f5; }
+  .report-doc { width: 98%; max-width: 1900px; margin: 0 auto; }
+
+  .pc-card { background:#fff; border:1px solid #e1e0d9; border-radius:.5rem; margin-bottom:.75rem; }
+  .pc-head {
+    display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+    font-weight:700; font-size:.82rem; padding:.6rem .85rem; border-bottom:1px solid #eee;
+  }
+  .pc-body { padding:.75rem .85rem; }
+
+  /* Summary tiles. Each carries a second line saying what the headline is
+     measured against — a cost per kilo means nothing without the standard. */
+  .pc-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:.6rem; }
+  .pc-kpi { background:#fbfdff; border:1px solid #e1e0d9; border-radius:.5rem; padding:.65rem .8rem; }
+  .pc-kpi .lbl { font-size:.66rem; font-weight:700; color:#52514e; letter-spacing:.03em; }
+  .pc-kpi .val { font-size:1.3rem; font-weight:700; color:#0b0b0b; line-height:1.25; }
+  .pc-kpi .sub { font-size:.68rem; color:#7a7a75; }
+
+  .pc-table { width:100%; font-size:.75rem; border-collapse:collapse; }
+  .pc-table th, .pc-table td { padding:.35rem .5rem; border:1px solid #e6e8ea; white-space:nowrap; }
+  .pc-table thead th { background:#f1f3f5; font-size:.7rem; letter-spacing:.02em; }
+  .pc-table tfoot td { background:#f8f9fa; font-weight:700; }
+  .pc-table td.num, .pc-table th.num { text-align:right; }
+  .pc-table tbody tr:hover { background:#f6fbff; }
+
+  .pc-split { display:flex; flex-wrap:wrap; gap:.75rem; }
+  .pc-split > * { flex:1 1 380px; min-width:0; }
+
+  /* The component bar is the chart: a share of the total read at a glance,
+     without a plotting library on a page that is otherwise a table. */
+  .pc-bar { height:6px; border-radius:3px; background:#e9edf1; overflow:hidden; margin-top:.2rem; }
+  .pc-bar i { display:block; height:100%; background:#2a78d6; }
+
+  .pc-good { color:#1a7f37; font-weight:700; }
+  .pc-bad  { color:#d03b3b; font-weight:700; }
+  .pc-muted { color:#8b8b86; }
+
+  .pc-perf { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.6rem; text-align:center; }
+  .pc-perf .lbl { font-size:.66rem; font-weight:700; color:#52514e; }
+  .pc-perf .val { font-size:1.15rem; font-weight:700; color:#0b0b0b; }
+
+  /* Per-unit figures boxed off from the totals above: the same variance read
+     per kilo and per bird, which is the form a production manager argues in. */
+  .pc-unit { background:#fffdf3; border:1px solid #f0e6c8; border-radius:.4rem; padding:.55rem .7rem; }
+  .pc-unit .lbl { font-size:.64rem; font-weight:700; letter-spacing:.05em; color:#8a6d00; margin-bottom:.35rem; }
+  .pc-unit .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.3rem .9rem; }
+  .pc-unit .grid > div { display:flex; justify-content:space-between; gap:.5rem; font-size:.75rem; }
+  .pc-unit .grid span { color:#52514e; }
+
+  {% comment %}
+    The drill-down is a drawer, not a page and not a modal over the middle of
+    the screen: the row it came from stays visible beside it, so a figure can
+    be read against the table it was picked out of.
+  {% endcomment %}
+  .pc-scrim {
+    position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:1040;
+    opacity:0; pointer-events:none; transition:opacity .18s ease;
+  }
+  .pc-scrim.open { opacity:1; pointer-events:auto; }
+  .pc-drawer {
+    position:fixed; top:0; right:0; height:100%; width:390px; max-width:92vw;
+    background:#fff; z-index:1050; box-shadow:-8px 0 24px rgba(0,0,0,.12);
+    transform:translateX(100%); transition:transform .22s ease;
+    display:flex; flex-direction:column;
+  }
+  .pc-drawer.open { transform:translateX(0); }
+  .pc-drawer header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:.75rem .9rem; border-bottom:1px solid #eee; font-weight:700; font-size:.9rem;
+  }
+  .pc-drawer .body { overflow:auto; padding:.85rem .9rem; flex:1 1 auto; }
+  .pc-drawer footer { padding:.7rem .9rem; border-top:1px solid #eee; }
+  .pc-sec { font-size:.68rem; font-weight:700; letter-spacing:.05em; color:#6b7280;
+            margin:.9rem 0 .35rem; }
+  .pc-sec:first-child { margin-top:0; }
+  .pc-kv { display:flex; justify-content:space-between; gap:1rem; padding:.22rem 0;
+           font-size:.8rem; border-bottom:1px dashed #f0f0ee; }
+  .pc-kv b { font-weight:700; }
+  .pc-kv.total { border-bottom:0; border-top:1px solid #d8d8d4; margin-top:.3rem;
+                 padding-top:.4rem; font-weight:700; }
+
+  @media print {
+    .no-print, .pc-drawer, .pc-scrim { display:none !important; }
+  }
+</style>
+
+<div class="report-doc">
+  {% include '_report_letterhead.html' with title='Production Cost Report' %}
+
+  <div class="rpt-filter no-print">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-6 col-md-2">
+        <label class="form-label">Farm</label>
+        <select class="form-select" name="farm">
+          <option value="">All Farms</option>
+          {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Batch</label>
+        <select class="form-select" name="batch">
+          <option value="">All Batches</option>
+          {% for b in batches %}<option value="{{ b.id }}" {% if batch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.broiler_farm.farm_name }} &mdash; {{ b.batch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Bird Type</label>
+        <select class="form-select" name="bird_type">
+          <option value="">All</option>
+          {% for t in bird_types %}<option value="{{ t.id }}" {% if bird_type_id == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" class="form-control" name="from_date" value="{{ from_date|date:'Y-m-d' }}">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" class="form-control" name="to_date" value="{{ to_date|date:'Y-m-d' }}">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary" type="submit">View Report</button>
+        <button class="btn btn-outline-secondary" type="button" onclick="window.print()"><i class="fas fa-print"></i></button>
+      </div>
+    </form>
+  </div>
+
+{% if summary %}
+  <div class="pc-card">
+    <div class="pc-head"><span>Production Cost Summary</span>
+      <span class="pc-muted" style="font-weight:400;font-size:.72rem;">
+        {{ rows|length }} flock{{ rows|length|pluralize }} running between
+        {{ from_date|date:"d M Y" }} and {{ to_date|date:"d M Y" }}</span></div>
+    <div class="pc-body">
+      <div class="pc-kpis">
+        <div class="pc-kpi">
+          <div class="lbl">TOTAL BIRDS PLACED</div>
+          <div class="val">{{ summary.birds_placed|floatformat:0 }}</div>
+          <div class="sub">Live {{ summary.live_birds|floatformat:0 }}{% if summary.mortality_pct is not None %} &middot; {{ summary.mortality_pct }}% lost{% endif %}</div>
+        </div>
+        <div class="pc-kpi">
+          <div class="lbl">TOTAL LIVE WEIGHT</div>
+          <div class="val">{{ summary.live_weight|floatformat:0 }} Kg</div>
+          <div class="sub">{% if summary.avg_weight %}Avg {{ summary.avg_weight }} Kg{% else %}<span class="pc-muted">nothing sold yet</span>{% endif %}</div>
+        </div>
+        <div class="pc-kpi">
+          <div class="lbl">TOTAL PRODUCTION COST</div>
+          <div class="val">{{ summary.total_cost|floatformat:2 }}</div>
+          <div class="sub">Actual cost</div>
+        </div>
+        <div class="pc-kpi">
+          <div class="lbl">COST / LIVE KG</div>
+          <div class="val">{% if summary.cost_per_kg %}{{ summary.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</div>
+          <div class="sub">
+            {% if summary.variance_per_kg is not None and summary.std_cost_per_kg %}
+              vs standard {{ summary.std_cost_per_kg }}
+              {% if summary.variance_per_kg < 0 %}<span class="pc-good">&darr;</span>{% else %}<span class="pc-bad">&uarr;</span>{% endif %}
+              {{ summary.variance_per_kg }}
+            {% else %}<span class="pc-muted">no standard to compare</span>{% endif %}
+          </div>
+        </div>
+        <div class="pc-kpi">
+          <div class="lbl">FEED COST %</div>
+          <div class="val">{% if summary.feed_cost_pct is not None %}{{ summary.feed_cost_pct }}%{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</div>
+          <div class="sub">{{ summary.feed_cost|floatformat:0 }} of {{ summary.total_cost|floatformat:0 }}</div>
+        </div>
+        <div class="pc-kpi">
+          <div class="lbl">AVERAGE FCR</div>
+          <div class="val">{% if summary.fcr %}{{ summary.fcr }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</div>
+          <div class="sub">{% if summary.std_fcr %}vs standard {{ summary.std_fcr }}{% else %}<span class="pc-muted">no breed curve</span>{% endif %}</div>
+        </div>
+      </div>
+      {% if summary.unpriced or summary.no_standard %}
+      <div class="mt-2" style="font-size:.72rem;">
+        {% if summary.unpriced %}<div class="pc-bad"><i class="fas fa-triangle-exclamation me-1"></i>
+          No purchase to price: {{ summary.unpriced|join:", " }} &mdash; the actual cost is understated.</div>{% endif %}
+        {% if summary.no_standard %}<div class="pc-muted"><i class="fas fa-circle-info me-1"></i>
+          No standard cost on: {{ summary.no_standard|join:", " }} &mdash; excluded from the variance.</div>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="pc-card">
+    <div class="pc-head"><span>Batch-wise Production Cost</span></div>
+    <div class="table-responsive">
+      <table class="pc-table">
+        <thead>
+          <tr>
+            <th rowspan="2">#</th><th rowspan="2">Batch</th><th rowspan="2">Farm / Shed</th>
+            <th rowspan="2">Bird Type</th>
+            <th class="num" rowspan="2">Birds<br>Placed</th>
+            <th class="num" colspan="2">Mortality</th>
+            <th class="num" rowspan="2">Live<br>Birds</th>
+            <th class="num" rowspan="2">Live Weight<br>(Kg)</th>
+            <th class="num" rowspan="2">Feed Cons.<br>(Kg)</th>
+            <th class="num" colspan="3">Cost</th>
+            <th class="num" rowspan="2">Cost / Kg</th>
+            <th class="num" rowspan="2">Cost / Bird</th>
+            <th class="num" rowspan="2">FCR</th><th class="num" rowspan="2">CFCR</th>
+            <th class="num" rowspan="2">Variance</th>
+            <th class="no-print" rowspan="2">Action</th>
+          </tr>
+          <tr>
+            <th class="num">No.</th><th class="num">%</th>
+            <th class="num">Feed</th><th class="num">Other</th><th class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.batch.batch_name }}</td>
+            <td>{{ r.farm.farm_name }}{% if r.shed %}<br><span class="pc-muted">{{ r.shed }}</span>{% endif %}</td>
+            <td>{{ r.bird_type|default:"-" }}</td>
+            <td class="num">{{ r.placed|floatformat:0 }}</td>
+            <td class="num">{{ r.mortality|floatformat:0 }}</td>
+            <td class="num">{% if r.mortality_pct is not None %}{{ r.mortality_pct }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{{ r.live_birds|floatformat:0 }}</td>
+            <td class="num">{{ r.weight|floatformat:2 }}</td>
+            <td class="num">{{ r.feed_kg|floatformat:2 }}</td>
+            <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
+            <td class="num">{{ r.other_cost|floatformat:2 }}</td>
+            <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
+            <td class="num">{% if r.cost_per_kg %}{{ r.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.fcr %}{{ r.fcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.cfcr %}{{ r.cfcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num {% if r.variance > 0 %}pc-bad{% elif r.variance < 0 %}pc-good{% endif %}">{{ r.variance|floatformat:2 }}</td>
+            <td class="no-print text-center">
+              <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 pc-view"
+                      data-batch="{{ r.batch.id }}" title="Open this flock's cost detail">
+                <i class="fas fa-eye"></i></button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">TOTAL</td>
+            <td class="num">{{ summary.birds_placed|floatformat:0 }}</td>
+            <td class="num">{{ summary.mortality|floatformat:0 }}</td>
+            <td class="num">{% if summary.mortality_pct is not None %}{{ summary.mortality_pct }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{{ summary.live_birds|floatformat:0 }}</td>
+            <td class="num">{{ summary.live_weight|floatformat:2 }}</td>
+            <td class="num">{{ summary.feed_kg|floatformat:2 }}</td>
+            <td class="num">{{ summary.feed_cost|floatformat:2 }}</td>
+            <td class="num">{{ summary.other_cost|floatformat:2 }}</td>
+            <td class="num">{{ summary.total_cost|floatformat:2 }}</td>
+            <td class="num">{% if summary.cost_per_kg %}{{ summary.cost_per_kg }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if summary.cost_per_bird %}{{ summary.cost_per_bird }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if summary.fcr %}{{ summary.fcr }}{% else %}&mdash;{% endif %}</td>
+            <td class="num"></td>
+            <td class="num {% if summary.variance > 0 %}pc-bad{% elif summary.variance < 0 %}pc-good{% endif %}">{{ summary.variance|floatformat:2 }}</td>
+            <td class="no-print"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="pc-split">
+    <div class="pc-card">
+      <div class="pc-head"><span>Cost Component</span><span class="pc-muted" style="font-weight:400;font-size:.72rem;">share of total</span></div>
+      <div class="pc-body">
+        {% for c in summary.components %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between" style="font-size:.78rem;">
+            <span>{{ c.head }}</span>
+            <span><b>{{ c.amount|floatformat:2 }}</b>
+              <span class="pc-muted ms-2">{% if c.pct %}{{ c.pct }}%{% else %}—{% endif %}</span></span>
+          </div>
+          <div class="pc-bar"><i style="width:{% if c.pct %}{{ c.pct }}{% else %}0{% endif %}%"></i></div>
+        </div>
+        {% empty %}
+        <div class="pc-muted" style="font-size:.8rem;">Nothing has been costed against these flocks yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="pc-card">
+      <div class="pc-head"><span>Cost Performance (Actual vs Standard)</span></div>
+      <div class="pc-body">
+        <table class="pc-table">
+          <thead><tr><th>Particulars</th><th class="num">Actual</th>
+            <th class="num">Standard</th><th class="num">Variance</th><th class="num">Var %</th></tr></thead>
+          <tbody>
+            <tr><td>Total Feed Cost</td>
+              <td class="num">{{ summary.feed_cost|floatformat:2 }}</td>
+              <td class="num">{{ summary.std_feed_cost|floatformat:2 }}</td>
+              <td class="num {% if summary.feed_variance > 0 %}pc-bad{% elif summary.feed_variance < 0 %}pc-good{% endif %}">{{ summary.feed_variance|floatformat:2 }}</td>
+              <td class="num">{% if summary.feed_variance_pct is not None %}{{ summary.feed_variance_pct }}%{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td></tr>
+            <tr><td>Total Other Cost</td>
+              <td class="num">{{ summary.other_cost|floatformat:2 }}</td>
+              <td class="num">{{ summary.std_other_cost|floatformat:2 }}</td>
+              <td class="num {% if summary.other_variance > 0 %}pc-bad{% elif summary.other_variance < 0 %}pc-good{% endif %}">{{ summary.other_variance|floatformat:2 }}</td>
+              <td class="num">{% if summary.other_variance_pct is not None %}{{ summary.other_variance_pct }}%{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td></tr>
+            <tr class="fw-bold"><td>Total Production Cost</td>
+              <td class="num">{{ summary.total_cost|floatformat:2 }}</td>
+              <td class="num">{{ summary.std_cost|floatformat:2 }}</td>
+              <td class="num {% if summary.variance > 0 %}pc-bad{% elif summary.variance < 0 %}pc-good{% endif %}">{{ summary.variance|floatformat:2 }}</td>
+              <td class="num">{% if summary.variance_pct is not None %}{{ summary.variance_pct }}%{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td></tr>
+          </tbody>
+        </table>
+
+        <div class="pc-unit mt-2">
+          <div class="lbl">PER UNIT PERFORMANCE</div>
+          <div class="grid">
+            <div><span>Actual Cost / Kg</span><b>{% if summary.cost_per_kg %}{{ summary.cost_per_kg }}{% else %}&mdash;{% endif %}</b></div>
+            <div><span>Standard Cost / Kg</span><b>{% if summary.std_cost_per_kg %}{{ summary.std_cost_per_kg }}{% else %}&mdash;{% endif %}</b></div>
+            <div><span>Variance / Kg</span>
+              <b class="{% if summary.variance_per_kg > 0 %}pc-bad{% elif summary.variance_per_kg < 0 %}pc-good{% endif %}">{% if summary.variance_per_kg is not None %}{{ summary.variance_per_kg }}{% else %}&mdash;{% endif %}</b></div>
+            <div><span>Actual Cost / Bird</span><b>{% if summary.cost_per_bird %}{{ summary.cost_per_bird }}{% else %}&mdash;{% endif %}</b></div>
+            <div><span>Standard Cost / Bird</span><b>{% if summary.std_cost_per_bird %}{{ summary.std_cost_per_bird }}{% else %}&mdash;{% endif %}</b></div>
+            <div><span>Variance / Bird</span>
+              <b class="{% if summary.variance_per_bird > 0 %}pc-bad{% elif summary.variance_per_bird < 0 %}pc-good{% endif %}">{% if summary.variance_per_bird is not None %}{{ summary.variance_per_bird }}{% else %}&mdash;{% endif %}</b></div>
+          </div>
+        </div>
+
+        <div class="pc-muted mt-2" style="font-size:.7rem;">
+          Standard is each item's rate in the Item Master applied to what these
+          flocks actually consumed, so the variance is a price difference on real
+          usage. Chicks and hand-entered heads have no master rate and stand at
+          their actual value, which is why Other Cost usually shows no variance.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pc-card">
+    <div class="pc-head"><span>Production Performance</span></div>
+    <div class="pc-body">
+      <div class="pc-perf">
+        <div><div class="lbl">MORTALITY %</div><div class="val">{% if summary.mortality_pct is not None %}{{ summary.mortality_pct }}{% else %}—{% endif %}</div></div>
+        <div><div class="lbl">FCR</div><div class="val">{% if summary.fcr %}{{ summary.fcr }}{% else %}—{% endif %}</div></div>
+        <div><div class="lbl">AVG WEIGHT</div><div class="val">{% if summary.avg_weight %}{{ summary.avg_weight }} Kg{% else %}—{% endif %}</div></div>
+        <div><div class="lbl">FEED / BIRD</div><div class="val">{% if summary.feed_per_bird %}{{ summary.feed_per_bird }} Kg{% else %}—{% endif %}</div></div>
+        <div><div class="lbl">COST / BIRD</div><div class="val">{% if summary.cost_per_bird %}{{ summary.cost_per_bird }}{% else %}—{% endif %}</div></div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="pc-card"><div class="pc-body text-center text-muted py-5">
+    No flocks were running between {{ from_date|date:"d M Y" }} and {{ to_date|date:"d M Y" }} with these filters.
+  </div></div>
+{% endif %}
+</div>
+
+<div class="pc-scrim" id="pcScrim"></div>
+<aside class="pc-drawer" id="pcDrawer" aria-hidden="true">
+  <header><span id="pcTitle"></span>
+    <button type="button" class="btn-close" id="pcClose" aria-label="Close"></button></header>
+  <div class="body" id="pcBody"></div>
+  <footer><a class="btn btn-outline-primary btn-sm w-100" id="pcLedger" href="#">View Cost Ledger</a></footer>
+</aside>
+{% endblock %}
+
+{% block js %}
+{{ pc_json|json_script:"pc-data" }}
+<script>
+$(function () {
+  // Every row's detail is already on the page — the drawer is a different way
+  // of reading the same figures, not a second trip to the server, so opening
+  // one cannot disagree with the row it came from.
+  var DATA = JSON.parse(document.getElementById('pc-data').textContent || '{}');
+  var $drawer = $('#pcDrawer'), $scrim = $('#pcScrim');
+
+  function money(v) {
+    if (v === null || v === undefined || v === '') return '&mdash;';
+    return Number(v).toLocaleString(undefined, {minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2});
+  }
+  function num(v, d) {
+    if (v === null || v === undefined || v === '') return '&mdash;';
+    return Number(v).toLocaleString(undefined, {minimumFractionDigits: d || 0,
+                                                maximumFractionDigits: d || 0});
+  }
+  function kv(label, value, cls) {
+    return '<div class="pc-kv' + (cls ? ' ' + cls : '') + '"><span>' + label +
+           '</span><b>' + value + '</b></div>';
+  }
+
+  function open(id) {
+    var d = DATA[id];
+    if (!d) return;
+    $('#pcTitle').text(d.batch + ' — Production Cost');
+    var html = '<div class="pc-sec">PRODUCTION</div>' +
+      kv('Birds Placed', num(d.placed)) +
+      kv('Mortality &amp; Culls', num(d.mortality)) +
+      kv('Live Birds', num(d.live_birds)) +
+      kv('Sold Weight', num(d.weight, 2) + ' Kg');
+    html += '<div class="pc-sec">COST BREAKUP</div>';
+    d.components.forEach(function (c) { html += kv(c[0], money(c[1])); });
+    html += kv('Total', money(d.total_cost), 'total');
+    html += '<div class="pc-sec">PERFORMANCE</div>' +
+      kv('FCR', d.fcr === null ? '&mdash;' : d.fcr) +
+      kv('CFCR', d.cfcr === null ? '&mdash;' : d.cfcr) +
+      kv('Cost / Kg', money(d.cost_per_kg)) +
+      kv('Cost / Bird', money(d.cost_per_bird)) +
+      kv('Standard Cost', money(d.std_cost)) +
+      kv('Variance', money(d.variance));
+    $('#pcBody').html(html);
+    // The ledger is the flock's own P&L statement — the itemised lines behind
+    // every figure in this drawer, rather than a report of its own.
+    $('#pcLedger').attr('href', '{% url "production_pl_report" %}?batch=' + id);
+    $drawer.addClass('open').attr('aria-hidden', 'false');
+    $scrim.addClass('open');
+  }
+  function close() {
+    $drawer.removeClass('open').attr('aria-hidden', 'true');
+    $scrim.removeClass('open');
+  }
+
+  $(document).on('click', '.pc-view', function () { open($(this).data('batch')); });
+  $('#pcClose, #pcScrim').on('click', close);
+  $(document).on('keydown', function (e) { if (e.key === 'Escape') close(); });
+});
+</script>
+{% endblock %}

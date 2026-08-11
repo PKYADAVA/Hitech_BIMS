@@ -3633,6 +3633,207 @@ def production_pl_report(request):
     })
 
 
+def _std_fcr(batch, costing):
+    """What the breed standard says this flock's FCR ought to be by now.
+
+    Cumulative standard feed over standard body weight at the flock's age —
+    the same curve the feed schedule and Live Flock Summary read, so "vs
+    standard" means one thing across the reports. None when the breed has no
+    curve, rather than a ratio invented from nothing.
+    """
+    if not batch.breed_id:
+        return None
+    curve = [(r["age"], r["cum_feed"] or Decimal("0"), r["body_weight"], r["feed_intake"])
+             for r in BreedStandard.objects
+             .filter(breed_id=batch.breed_id, is_active=True).order_by("age")
+             .values("age", "cum_feed", "body_weight", "feed_intake")]
+    if not curve:
+        return None
+    age = costing.get("mean_age") or costing.get("age_days")
+    if age is None:
+        return None
+    row, found = None, None
+    for row in curve:
+        if row[0] > int(age):
+            break
+        found = row
+    found = found or curve[0]
+    cum_feed, body_weight = _num(found[1]), _num(found[2])
+    if not body_weight:
+        return None
+    # Body weight is grams on the curve, cumulative feed kilos.
+    return (cum_feed / (body_weight / Decimal("1000"))).quantize(Decimal("0.01"))
+
+
+def _production_cost_row(batch, pl_row_cache=None):
+    """One flock's cost, for the Production Cost Report.
+
+    Built on the same assembled report and the same P&L service as the
+    Profit & Loss page, so a flock's feed cost is one figure across the ERP.
+    The standard side is this report's own: consumption re-costed at the item
+    master's standard rate, which is the only standard the system holds.
+    """
+    from .services.production_pl import build_production_pl, _consumption_rows
+    from .services.production_cost import (cost_rows_from_pl,
+                                           standard_consumption_cost)
+
+    report = _build_batch_report(batch)
+    pl = build_production_pl(report, batch)
+    costing = report.get("batch_costing") or {}
+    farm = batch.broiler_farm
+
+    consumption, _ids = _consumption_rows(report)
+    std_consumed, no_standard = standard_consumption_cost(consumption)
+    # Feed on its own as well as the whole, so the performance table can set
+    # feed against feed rather than only totals against totals.
+    std_feed_cost, _ = standard_consumption_cost(
+        [r for r in consumption if r.get("kind") == "feed"])
+    # Chicks are bought as a placement, not consumed out of a store, so there
+    # is no item-master rate for them. What was actually paid stands as the
+    # standard: otherwise every flock shows a variance the size of its chicks.
+    chick_cost = next((_num(b["total"]) for b in pl["cost_blocks"]
+                       if b["title"] == "Chick Cost"), Decimal("0"))
+    entered = _num(pl["entered_cost"])
+    std_cost = (std_consumed + chick_cost + entered).quantize(Decimal("0.01"))
+
+    feed_cost = next((_num(b["total"]) for b in pl["cost_blocks"]
+                      if b["title"] == "Feed Cost"), Decimal("0"))
+    feed_kg = sum((_num(r["quantity"]) for r in consumption
+                   if r.get("kind") == "feed"), Decimal("0"))
+    total_cost = _num(pl["total_cost"])
+    placed = _num(costing.get("chicks_placed"))
+    mortality = _num(costing.get("mortality")) + _num(costing.get("culls"))
+    live_birds = max(placed - mortality - _num(costing.get("sold_birds")), Decimal("0"))
+    weight = _num(costing.get("sold_weight"))
+    variance = total_cost - std_cost
+
+    return {
+        "batch": batch, "farm": farm,
+        "shed": batch.shed.shed_name if batch.shed_id else "",
+        "branch": farm.branch.branch_name if farm.branch_id else "",
+        "bird_type": (batch.breed.bird_category.name
+                      if batch.breed_id and batch.breed.bird_category_id else ""),
+        "placed": placed, "mortality": mortality,
+        "live_birds": live_birds,
+        "sold_birds": _num(costing.get("sold_birds")),
+        "weight": weight,
+        "feed_kg": feed_kg.quantize(Decimal("0.01")),
+        "feed_cost": feed_cost,
+        "other_cost": (total_cost - feed_cost).quantize(Decimal("0.01")),
+        "total_cost": total_cost,
+        "std_cost": std_cost,
+        "std_feed_cost": std_feed_cost,
+        "sale_value": _num(pl["total_revenue"]),
+        "variance": variance.quantize(Decimal("0.01")),
+        "cost_per_kg": _pc_div(total_cost, weight),
+        "cost_per_bird": _pc_div(total_cost, placed),
+        "feed_per_bird": _pc_div(feed_kg, live_birds),
+        "mortality_pct": _pc_div(mortality * 100, placed),
+        "fcr": costing.get("fcr"),
+        "cfcr": costing.get("cfcr"),
+        "std_fcr": _std_fcr(batch, costing),
+        "avg_weight": costing.get("avg_body_weight"),
+        "components": cost_rows_from_pl(pl),
+        # The P&L carries these as item ids, which is all its own page needs;
+        # here they are read as a sentence, and "No purchase to price: 15"
+        # names nothing anybody can go and fix.
+        "unpriced": set(Item.objects.filter(id__in=pl["unpriced_items"])
+                        .values_list("description", flat=True)),
+        "no_standard": no_standard,
+    }
+
+
+def _pc_div(numerator, denominator):
+    """None rather than zero when the denominator is nothing — see the note in
+    services/production_cost.py. Kept beside the row builder so the view and
+    the service round the same way."""
+    n, d = _num(numerator), _num(denominator)
+    return (n / d).quantize(Decimal("0.01")) if d else None
+
+
+@login_required
+def production_cost_report(request):
+    """Broiler > Reports > Production Cost — what the flocks cost to grow.
+
+    Two questions, which the Profit & Loss page does not answer because it is
+    busy with revenue: where the money went, and whether it was more than it
+    should have been. The second is measured against the item master's
+    standard cost, the only standard this system holds, applied to what was
+    really consumed — so the variance is a price variance, not a forecast.
+
+    The date window selects flocks that were running in it: a batch placed
+    before "To" and not finished before "From". A cost report filtered to
+    flocks that merely started inside the month would drop every batch the
+    month was actually spent on.
+    """
+    from account.models import CompanyProfile
+    from django.utils.dateparse import parse_date
+
+    from .services.production_cost import build_production_cost
+
+    farm_id = (request.GET.get("farm") or "").strip()
+    batch_id = (request.GET.get("batch") or "").strip()
+    bird_type_id = (request.GET.get("bird_type") or "").strip()
+    to_date = parse_date(request.GET.get("to_date") or "") or timezone.localdate()
+    from_date = (parse_date(request.GET.get("from_date") or "")
+                 or (to_date - timedelta(days=30)))
+
+    flocks = scope_multi(request.user,
+                         BroilerBatch.objects
+                         .select_related("broiler_farm__branch", "broiler_farm__supervisor",
+                                         "shed", "breed__bird_category"),
+                         farms="broiler_farm_id",
+                         branches="broiler_farm__branch_id")
+    # Running in the window, not started in it.
+    flocks = flocks.filter(Q(start_date__isnull=True) | Q(start_date__lte=to_date))
+    flocks = flocks.filter(Q(end_date__isnull=True) | Q(end_date__gte=from_date))
+    if farm_id.isdigit():
+        flocks = flocks.filter(broiler_farm_id=farm_id)
+    if batch_id.isdigit():
+        flocks = flocks.filter(id=batch_id)
+    if bird_type_id.isdigit():
+        flocks = flocks.filter(breed__bird_category_id=bird_type_id)
+
+    rows = [_production_cost_row(b) for b in
+            flocks.order_by("broiler_farm__farm_name", "batch_name")]
+    summary = build_production_cost(rows) if rows else None
+
+    # The drawer reads these rather than fetching again, so what it shows and
+    # what the row shows cannot drift apart. Decimals go out as strings: JSON
+    # floats would round money on the way to a panel that displays it.
+    def _s(v):
+        return None if v is None else str(v)
+
+    detail = {
+        str(r["batch"].id): {
+            "batch": r["batch"].batch_name,
+            "farm": r["farm"].farm_name,
+            "placed": _s(r["placed"]), "mortality": _s(r["mortality"]),
+            "live_birds": _s(r["live_birds"]), "weight": _s(r["weight"]),
+            "components": [[head, str(amount)] for head, amount in r["components"]],
+            "total_cost": _s(r["total_cost"]), "std_cost": _s(r["std_cost"]),
+            "variance": _s(r["variance"]),
+            "cost_per_kg": _s(r["cost_per_kg"]), "cost_per_bird": _s(r["cost_per_bird"]),
+            "fcr": _s(r["fcr"]), "cfcr": _s(r["cfcr"]),
+        }
+        for r in rows
+    }
+
+    return render(request, "production_cost_report.html", {
+        "rows": rows, "summary": summary, "pc_json": detail,
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        "batches": scope_multi(request.user,
+                               BroilerBatch.objects.select_related("broiler_farm")
+                               .order_by("-start_date", "-id"),
+                               farms="broiler_farm_id",
+                               branches="broiler_farm__branch_id"),
+        "bird_types": BirdCategory.objects.filter(is_active=True).order_by("sort_order", "name"),
+        "farm_id": farm_id, "batch_id": batch_id, "bird_type_id": bird_type_id,
+        "from_date": from_date, "to_date": to_date,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Batch History Report (Broiler > Reports)
 # ---------------------------------------------------------------------------

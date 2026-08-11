@@ -92,6 +92,10 @@ MODULE_REGISTRY = [
                     ("farm_location_capture_list", "Farm Location & Photos",
                      ("farm_location_capture_api", "farm_capture_file_delete",
                       "farm_location_capture_complete")),
+                    ("farmer_farm_setup_request_list", "Farmer & Farm Setup Request",
+                     ("farmer_farm_setup_request_add", "farmer_farm_setup_request_edit",
+                      "farmer_farm_setup_request_api", "farmer_farm_setup_request_api_detail",
+                      "farmer_farm_setup_request_approve", "farmer_farm_setup_request_reject")),
                 ],
             },
             {
@@ -106,6 +110,7 @@ MODULE_REGISTRY = [
                     ("farmer_farm_report", "Farmer & Farm Report"),
                     ("broiler_batch_report", "Batch History Report"),
                     ("production_pl_report", "Production Profit & Loss"),
+                    ("production_cost_report", "Production Cost Report"),
                     ("chicks_placement_report", "Chicks Placement Report"),
                     ("feed_dispatch_stock_report", "Feed Dispatch & Stock Report"),
                     ("live_flock_summary_report", "Live Flock Summary Report"),
