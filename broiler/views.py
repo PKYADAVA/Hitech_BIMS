@@ -3820,28 +3820,47 @@ def _production_cost_row(batch, fetch_type="management"):
             name = pl_line.feed_item.description
             std_feed_kg[name] = (std_feed_kg.get(name, Decimal("0"))
                                  + _num(pl_line.max_feed_qty) * eating)
-    # Live weight. A sale is a weighbridge figure and always wins; before one
-    # exists the flock still weighs something, and sold_weight reads zero —
-    # which took Cost/Kg, Standard/Kg and FCR down with it on every flock that
-    # had not lifted. The last weighing across the birds still alive is what a
-    # supervisor would quote, and it is marked as the estimate it is.
-    weight = _num(costing.get("sold_weight"))
-    weight_basis = "sold" if weight else "none"
-    if not weight and live_birds > 0:
-        last_weight_g = (DailyEntry.objects
-                         .filter(batch=batch, avg_weight_gms__gt=0)
-                         .order_by("-date", "-id")
-                         .values_list("avg_weight_gms", flat=True).first())
-        if last_weight_g:
-            weight = ((_num(last_weight_g) / Decimal("1000")) * live_birds
-                      ).quantize(Decimal("0.01"))
-            weight_basis = "weighed"
+    # Weight, in three parts that reconcile.
+    #
+    #   Sold Weight            what left the farm, on a weighbridge
+    #   Available Live Weight  what is still standing, at today's body weight
+    #   the two together       the live weight this flock has produced so far,
+    #                          which is what every ₹/kg on the page divides by
+    #
+    # Cost was incurred on the birds that left and the birds still here, so a
+    # cost per kilo measured only against what has been sold overstates itself
+    # on a flock mid-lift.
+    sold_weight = _num(costing.get("sold_weight"))
+    sold_birds = _num(costing.get("sold_birds"))
 
-    # Weight per bird behind the live weight beside it, so the two always tell
-    # the same story: the sale's own average once birds are sold, the last
-    # weighing while they are still on the farm.
-    avg_bwt = (_pc_div(weight, _num(costing.get("sold_birds")))
-               if weight_basis == "sold" else _pc_div(weight, live_birds))
+    # What a bird weighs: the average the sale itself came out at once birds
+    # have gone over a weighbridge, and only otherwise the last weighing.
+    #
+    # A weighing is a sample taken by hand and is not always kept up: one
+    # flock here last recorded 82 g while lifting birds at 1.90 kg, and
+    # preferring the sample would have valued its standing birds at a
+    # twenty-third of what they weigh. The sale wins wherever there is one,
+    # which is also the rule the GC Realization report follows.
+    last_weighed = (DailyEntry.objects
+                    .filter(batch=batch, avg_weight_gms__gt=0)
+                    .order_by("-date", "-id")
+                    .values("avg_weight_gms", "date").first())
+    avg_bwt = _pc_div(sold_weight, sold_birds)
+    weight_basis = "sold" if avg_bwt else "none"
+    if not avg_bwt and last_weighed:
+        avg_bwt = (_num(last_weighed["avg_weight_gms"]) / Decimal("1000")
+                   ).quantize(Decimal("0.0001"))
+        weight_basis = "weighed"
+
+    # How long since anyone put birds on a scale. Separate from the entry gap:
+    # a flock can be recorded daily and still not have been weighed for a
+    # fortnight, and it is the weighing that every kilo on this page rests on.
+    bwt_gap = ((timezone.localdate() - last_weighed["date"]).days
+               if last_weighed else None)
+
+    available_weight = ((avg_bwt * live_birds).quantize(Decimal("0.01"))
+                        if avg_bwt and live_birds > 0 else Decimal("0"))
+    weight = (sold_weight + available_weight).quantize(Decimal("0.01"))
 
     # The farmer is settled against his scheme's rates, so his view of what a
     # flock cost is real quantities at those rates. Management's is real
@@ -3868,16 +3887,33 @@ def _production_cost_row(batch, fetch_type="management"):
                 + (_num(admin_cost) if admin_source == "schema" else Decimal("0")))
     variance = total_cost - std_cost
 
+    # Where the flock sits in the organisation, how old it is, and whether it
+    # is still being recorded — the context a cost figure is argued in. Age
+    # runs to the day the flock closed rather than to today, so a finished
+    # batch does not keep ageing on the page.
+    placed_on = costing.get("placement_date") or batch.start_date
+    as_of = batch.end_date or timezone.localdate()
+    age_days = (as_of - placed_on).days if placed_on else None
+    last_entry = (DailyEntry.objects.filter(batch=batch)
+                  .order_by("-date").values_list("date", flat=True).first())
+    gap_days = (timezone.localdate() - last_entry).days if last_entry else None
+
     return {
         "batch": batch, "farm": farm,
         "shed": batch.shed.shed_name if batch.shed_id else "",
+        "line": farm.line or "",
+        "supervisor": farm.supervisor.name if farm.supervisor_id else "",
+        "placed_on": placed_on, "age_days": age_days,
+        "last_entry": last_entry, "gap_days": gap_days,
         "branch": farm.branch.branch_name if farm.branch_id else "",
         "bird_type": (batch.breed.bird_category.name
                       if batch.breed_id and batch.breed.bird_category_id else ""),
         "placed": placed, "mortality": mortality,
         "live_birds": live_birds,
-        "sold_birds": _num(costing.get("sold_birds")),
+        "sold_birds": sold_birds,
         "weight": weight, "weight_basis": weight_basis, "avg_bwt": avg_bwt,
+        "bwt_gap": bwt_gap,
+        "sold_weight": sold_weight, "available_weight": available_weight,
         "feed_kg": feed_kg.quantize(Decimal("0.01")),
         "chick_cost": chick_cost,
         "feed_cost": feed_cost,

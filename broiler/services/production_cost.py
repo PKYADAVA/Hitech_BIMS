@@ -215,6 +215,8 @@ def build_production_cost(rows):
         return sum(vals, ZERO).quantize(Q2) if vals else None
 
     return {
+        "sold_weight": sum((_d(r["sold_weight"]) for r in rows), ZERO).quantize(Q2),
+        "available_weight": sum((_d(r["available_weight"]) for r in rows), ZERO).quantize(Q2),
         "sub_total": sum((_d(r["sub_total"]) for r in rows), ZERO).quantize(Q2),
         "chick_cost": col("chick_cost"),
         "medicine_cost": col("medicine_cost"),

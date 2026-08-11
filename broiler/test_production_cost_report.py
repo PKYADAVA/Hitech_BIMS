@@ -85,6 +85,7 @@ class SummaryTests(TestCase):
         row = {
             "placed": Decimal("1000"), "live_birds": Decimal("900"),
             "mortality": Decimal("100"), "weight": Decimal("2000"),
+            "sold_weight": Decimal("2000"), "available_weight": Decimal("0"),
             "feed_kg": Decimal("3200"), "total_cost": Decimal("90000"),
             "std_cost": Decimal("100000"), "feed_cost": Decimal("60000"),
             "std_feed_cost": Decimal("70000"), "sale_value": Decimal("120000"),
@@ -225,6 +226,48 @@ class PageTests(TestCase):
         self.assertEqual(len(self.page(line="nope").context["rows"]), 0)
         self.assertEqual(
             len(self.page(supervisor=self.farm.supervisor_id).context["rows"]), 1)
+
+    def test_each_row_carries_where_the_flock_sits_and_how_old_it_is(self):
+        row = self.page().context["rows"][0]
+        self.assertEqual(row["branch"], self.farm.branch.branch_name)
+        self.assertEqual(row["line"], self.farm.line)
+        self.assertEqual(row["supervisor"], self.farm.supervisor.name)
+        self.assertEqual(row["placed_on"], self.batch.start_date)
+        self.assertEqual(row["age_days"], 20)
+
+    def test_a_closed_flock_stops_ageing_on_the_page(self):
+        """Age runs to the day it closed, not to today."""
+        self.batch.is_closed = True
+        self.batch.end_date = self.today - timedelta(days=5)
+        self.batch.save()
+        row = self.page().context["rows"][0]
+        self.assertEqual(row["age_days"], 15)
+
+    def test_the_entry_gap_counts_from_the_last_daily_entry(self):
+        DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.farm.supervisor,
+            date=self.today - timedelta(days=3), mortality=1)
+        self.assertEqual(self.page().context["rows"][0]["gap_days"], 3)
+
+    def test_the_body_weight_gap_is_its_own_figure(self):
+        """A flock can be recorded daily and still not have been weighed for a
+        fortnight, and it is the weighing every kilo on this page rests on."""
+        DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.farm.supervisor,
+            date=self.today - timedelta(days=1), mortality=2)
+        DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.farm.supervisor,
+            date=self.today - timedelta(days=9), avg_weight_gms=Decimal("1500"))
+        row = self.page().context["rows"][0]
+        self.assertEqual(row["gap_days"], 1)
+        self.assertEqual(row["bwt_gap"], 9)
+
+    def test_a_flock_never_weighed_has_no_body_weight_gap(self):
+        self.assertIsNone(self.page().context["rows"][0]["bwt_gap"])
+
+    def test_a_flock_never_recorded_has_no_gap_rather_than_a_zero(self):
+        """"No entry" and "recorded today" are different answers."""
+        self.assertIsNone(self.page().context["rows"][0]["gap_days"])
 
     def test_the_report_type_defaults_to_management_and_rejects_nonsense(self):
         """It reaches the batch report builder, so it cannot be taken on trust."""
@@ -563,20 +606,30 @@ class LiveWeightBeforeALiftingTests(TestCase):
         return _production_cost_row(self.batch)
 
     def test_with_no_placement_there_are_no_birds_to_weigh(self):
-        """Live birds come from the placement, so an unplaced flock stays at
-        nothing rather than multiplying a weight by zero and pretending."""
+        """A weighing says what one bird weighs; with no placement there are
+        no birds to apply it to, so the weight stays at nothing rather than
+        multiplying by zero and calling the result a stock."""
         self.weigh(2, 1800)
         r = self.row()
         self.assertEqual(r["live_birds"], Decimal("0"))
+        self.assertEqual(r["available_weight"], Decimal("0"))
         self.assertEqual(r["weight"], Decimal("0"))
-        self.assertEqual(r["weight_basis"], "none")
+        self.assertEqual(r["avg_bwt"], Decimal("1.8000"))
 
     def test_a_never_weighed_flock_reports_nothing(self):
+        """No sale and no weighing is genuinely no figure."""
         r = self.row()
         self.assertEqual(r["weight"], Decimal("0"))
         self.assertEqual(r["weight_basis"], "none")
         self.assertIsNone(r["cost_per_kg"])
         self.assertIsNone(r["avg_bwt"])
+
+    def test_sold_and_available_add_up_to_the_weight_the_ratios_divide_by(self):
+        """Cost was incurred on the birds that left and the birds still here,
+        so a cost per kilo measured only against what has been sold overstates
+        itself on a flock mid-lift."""
+        r = self.row()
+        self.assertEqual(r["sold_weight"] + r["available_weight"], r["weight"])
 
     def test_avg_body_weight_reconciles_with_the_live_weight_beside_it(self):
         """The two columns have to tell the same story: per-bird times birds
