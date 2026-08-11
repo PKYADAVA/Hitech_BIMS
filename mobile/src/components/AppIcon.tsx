@@ -36,7 +36,11 @@ const EMOJI_TO_ICON: Record<string, IconName> = {
   "🏬": "storefront-outline",
   "🏭": "factory",
   "🏷️": "tag-outline",
-  "🐔": "food-drumstick-outline",
+  // A live flock, not a meal: the drumstick this used to map to read as a
+  // butchered leg on the Broiler tab, and the module is about birds being
+  // reared. It carries the Bird Sale action too, where a sale is of live
+  // birds off the farm.
+  "🐔": "bird",
   "🐣": "egg-easter",
   "🐥": "bird",
   "👤": "account-outline",

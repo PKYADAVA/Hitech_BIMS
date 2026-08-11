@@ -47,7 +47,7 @@ export type TabParams = {
   Home: undefined;
   Broiler: NavigatorScreenParams<ModuleStackParams>;
   Hatchery: NavigatorScreenParams<ModuleStackParams>;
-  SMS: NavigatorScreenParams<ModuleStackParams>;
+  Inventory: NavigatorScreenParams<ModuleStackParams>;
   /**
    * Opens the side navigation rather than showing a screen — the tab press is
    * intercepted, so nothing is ever rendered here. It is a tab because that is

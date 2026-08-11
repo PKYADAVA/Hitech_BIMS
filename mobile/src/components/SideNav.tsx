@@ -46,10 +46,10 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "purchase", title: "Purchase", icon: "truck", color: colors.purchase, target: "PurchaseModule" },
   { key: "sales", title: "Sales", icon: "cart", color: colors.sales, target: "SalesModule" },
   { key: "account", title: "Account", icon: "book-open-variant", color: colors.account, target: "AccountModule" },
-  { key: "inventory", title: "Inventory", icon: "package-variant-closed", color: colors.inventory, target: "InventoryModule" },
+  { key: "inventory", title: "Inventory", icon: "package-variant-closed", color: colors.inventory, target: "Inventory" },
   { key: "hr", title: "Human Resource", icon: "account-tie", color: colors.hr, target: "HrModule" },
   { key: "user", title: "User", icon: "shield-account", color: colors.user, target: "UserModule" },
-  { key: "sms", title: "SMS Management", icon: "message-text", color: colors.sms, target: "SMS" },
+  { key: "sms", title: "SMS Management", icon: "message-text", color: colors.sms, target: "SmsModule" },
   { key: "change_requests", title: "Change Requests", icon: "file-document-edit",
     color: colors.change_requests, target: "ChangeRequestModule" },
   // Not a nav group of its own on the web — reports live inside each module

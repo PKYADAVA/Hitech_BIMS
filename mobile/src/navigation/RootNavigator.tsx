@@ -291,8 +291,11 @@ function AppTabs() {
       {show("hatchery") && (
         <Tab.Screen name="Hatchery" component={HatcheryStack} options={{ tabBarIcon: tabIcon("🥚"), tabBarStyle: { display: "none" } }} />
       )}
-      {show("sms") && (
-        <Tab.Screen name="SMS" component={SmsStack} options={{ tabBarIcon: tabIcon("💬"), tabBarStyle: { display: "none" } }} />
+      {/* Inventory rather than SMS: feed and medicine stock is what a
+          supervisor opens between farm visits, and SMS is reached from the
+          module list like every other occasional screen. */}
+      {show("inventory") && (
+        <Tab.Screen name="Inventory" component={InventoryStack} options={{ tabBarIcon: tabIcon("📦"), tabBarStyle: { display: "none" } }} />
       )}
       {/* Not a screen: pressing it opens the side navigation. Profile used to
           sit here and did the same job as the avatar in the Home header, so
@@ -349,6 +352,9 @@ export function RootNavigator() {
             {/* Modules reached from Home tiles (not bottom tabs) — presented as cards. */}
             <Root.Screen name="AccountModule" component={AccountStack} />
             <Root.Screen name="InventoryModule" component={InventoryStack} />
+            {/* SMS lost its bottom tab to Inventory, so it needs a route of
+                its own for the sidebar to open. */}
+            <Root.Screen name="SmsModule" component={SmsStack} />
             <Root.Screen name="SalesModule" component={SalesStack} />
             <Root.Screen name="PurchaseModule" component={PurchaseStack} />
             <Root.Screen name="HrModule" component={HrStack} />
