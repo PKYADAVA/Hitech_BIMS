@@ -3665,6 +3665,43 @@ def _std_fcr(batch, costing):
     return (cum_feed / (body_weight / Decimal("1000"))).quantize(Decimal("0.01"))
 
 
+def _cost_detail(pl, growing_cost, gc_source, admin_cost, admin_source, admin_heads):
+    """The statement's blocks, with the two this report sources itself.
+
+    The P&L only ever knew hand-typed figures for growing and admin, so its
+    blocks read "not entered" for both however much a settlement or a scheme
+    had to say. The drawer showed that while the table beside it showed a
+    figure, which is the kind of disagreement a report cannot afford.
+    """
+    out = []
+    for b in pl["cost_blocks"]:
+        lines = [ln for ln in b["lines"]
+                 if ln.get("amount") is not None or ln.get("quantity")]
+        total = b["total"]
+        if b["title"] == "Growing Expenses" and gc_source == "settlement":
+            total = growing_cost
+            lines = [{"label": "Growing Charge settlement", "amount": growing_cost,
+                      "quantity": None, "rate": None}]
+        elif b["title"] == "Administrative Cost" and admin_source == "schema":
+            total = admin_cost
+            lines = [{"label": head, "amount": amount, "quantity": None, "rate": None}
+                     for head, amount in sorted(admin_heads.items())]
+        out.append({"title": b["title"], "total": total, "lines": lines})
+    return out
+
+
+def _cost_components(pl, growing_cost, gc_source, admin_cost, admin_source, admin_heads):
+    """The component split, with the same two sourced rather than typed."""
+    from .services.production_cost import cost_rows_from_pl
+
+    rows = [(head, amount) for head, amount in cost_rows_from_pl(pl)]
+    if gc_source == "settlement" and growing_cost:
+        rows.append(("Growing Charges", _num(growing_cost)))
+    if admin_source == "schema":
+        rows.extend(sorted(admin_heads.items()))
+    return rows
+
+
 def _production_cost_row(batch, pl_row_cache=None):
     """One flock's cost, for the Production Cost Report.
 
@@ -3826,13 +3863,10 @@ def _production_cost_row(batch, pl_row_cache=None):
         # All five blocks, including the ones nobody has filled in: a breakup
         # that lists only what has a figure reads as a complete account of the
         # flock's cost, and Admin missing from it looks like Admin was nil.
-        "cost_detail": [
-            {"title": b["title"], "total": b["total"],
-             "lines": [ln for ln in b["lines"]
-                       if ln.get("amount") is not None or ln.get("quantity")]}
-            for b in pl["cost_blocks"]
-        ],
-        "components": cost_rows_from_pl(pl),
+        "cost_detail": _cost_detail(pl, growing_cost, gc_source,
+                                    admin_cost, admin_source, admin_heads),
+        "components": _cost_components(pl, growing_cost, gc_source,
+                                       admin_cost, admin_source, admin_heads),
         # The P&L carries these as item ids, which is all its own page needs;
         # here they are read as a sentence, and "No purchase to price: 15"
         # names nothing anybody can go and fix.

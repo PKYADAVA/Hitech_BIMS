@@ -354,3 +354,66 @@ class GrowingChargeSourceTests(TestCase):
             start_date=timezone.localdate() - timedelta(days=5))
         self.settle(total_amount_payable=Decimal("42000"))
         self.assertIsNone(growing_charge_for(other))
+
+
+class SourcedBlocksReachTheDrawerTests(TestCase):
+    """What the row shows and what the panel shows have to be one figure.
+
+    The P&L's blocks only ever knew hand-typed growing and admin costs, so the
+    drawer read "not entered" for both while the columns beside it showed a
+    settlement and a scheme figure. A report cannot disagree with itself one
+    click apart.
+    """
+
+    def pl(self):
+        return {"cost_blocks": [
+            {"title": "Feed Cost", "total": Decimal("100"),
+             "lines": [{"label": "Pre-Starter", "quantity": Decimal("2"),
+                        "rate": Decimal("50"), "amount": Decimal("100")}]},
+            {"title": "Growing Expenses", "total": None, "lines": []},
+            {"title": "Administrative Cost", "total": None, "lines": []},
+        ]}
+
+    def detail(self, **over):
+        from broiler.views import _cost_detail
+        kw = dict(growing_cost=None, gc_source="unsettled",
+                  admin_cost=None, admin_source="no scheme", admin_heads={})
+        kw.update(over)
+        return {b["title"]: b for b in _cost_detail(self.pl(), **kw)}
+
+    def test_a_settled_growing_charge_replaces_not_entered(self):
+        block = self.detail(growing_cost=Decimal("42000"),
+                            gc_source="settlement")["Growing Expenses"]
+        self.assertEqual(block["total"], Decimal("42000"))
+        self.assertEqual([ln["label"] for ln in block["lines"]],
+                         ["Growing Charge settlement"])
+
+    def test_scheme_admin_lands_in_the_block_head_by_head(self):
+        block = self.detail(
+            admin_cost=Decimal("48000"), admin_source="schema",
+            admin_heads={"Farmer Admin Cost": Decimal("36000"),
+                         "Management Admin Cost": Decimal("12000")},
+        )["Administrative Cost"]
+        self.assertEqual(block["total"], Decimal("48000"))
+        self.assertEqual([ln["label"] for ln in block["lines"]],
+                         ["Farmer Admin Cost", "Management Admin Cost"])
+
+    def test_a_hand_typed_figure_is_left_exactly_as_the_statement_had_it(self):
+        """Only the sourced cases are substituted; everything else is the P&L's."""
+        block = self.detail()["Feed Cost"]
+        self.assertEqual(block["total"], Decimal("100"))
+        self.assertEqual(block["lines"][0]["rate"], Decimal("50"))
+
+    def test_nothing_is_substituted_when_there_is_nothing_to_substitute(self):
+        blocks = self.detail()
+        self.assertIsNone(blocks["Growing Expenses"]["total"])
+        self.assertIsNone(blocks["Administrative Cost"]["total"])
+
+    def test_the_component_split_counts_the_sourced_heads(self):
+        from broiler.views import _cost_components
+
+        heads = [h for h, _a in _cost_components(
+            self.pl(), Decimal("42000"), "settlement", Decimal("48000"), "schema",
+            {"Farmer Admin Cost": Decimal("36000")})]
+        self.assertIn("Growing Charges", heads)
+        self.assertIn("Farmer Admin Cost", heads)
