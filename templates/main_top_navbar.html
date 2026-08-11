@@ -129,6 +129,9 @@
               {% if 'farm_location_capture_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_location_capture_list' %}">
                 <i class="fas fa-location-dot"></i>Farm Location &amp; Photos
               </a></li>{% endif %}
+              {% if 'farmer_farm_setup_request_list' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farmer_farm_setup_request_list' %}">
+                <i class="fas fa-user-plus"></i>Farmer &amp; Farm Setup Request
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
@@ -162,6 +165,9 @@
               </a></li>{% endif %}
               {% if 'production_pl_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'production_pl_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-chart-line"></i>Production Profit &amp; Loss
+              </a></li>{% endif %}
+              {% if 'production_cost_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'production_cost_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-indian-rupee-sign"></i>Production Cost Report
               </a></li>{% endif %}
               {% if 'chicks_placement_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'chicks_placement_report' %}" target="_blank" rel="noopener">
                 <i class="fa-solid fa-kiwi-bird"></i>Chicks Placement Report
