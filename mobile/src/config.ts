@@ -86,3 +86,9 @@ export function toApiPath(link: string): string {
 }
 
 export const REQUEST_TIMEOUT_MS = 20000;
+
+/** This build's own version, as shipped — read from app.json rather than
+ *  hand-kept in sync with it, so a screen that shows it can never drift from
+ *  what was actually built. */
+export const APP_VERSION: string = Constants.expoConfig?.version ?? "0.0.0";
+export const APP_VERSION_CODE: number = Constants.expoConfig?.android?.versionCode ?? 0;

@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { LockGate } from "@/components/LockGate";
 import { OfflineBar } from "@/components/OfflineBar";
+import { UpdateGate } from "@/components/UpdateGate";
 import { startOnlineWatch } from "@/net/online";
 import { runSync } from "@/offline/engine";
 import { saveOffline } from "@/offline/save";
@@ -79,6 +80,7 @@ export default function App() {
             {/* Above the navigator, so it is on every screen: cached data
                 looks exactly like live data, and that is worth saying. */}
             <OfflineBar />
+            <UpdateGate />
             <RootNavigator />
           </LockGate>
         </PersistQueryClientProvider>

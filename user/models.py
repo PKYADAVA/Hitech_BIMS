@@ -411,3 +411,33 @@ class GroupDashboardWidget(models.Model):
     def __str__(self):
         state = "on" if self.enabled else "off"
         return f"{self.group.name} · {self.widget_key} ({state}, #{self.position})"
+
+
+class AppRelease(models.Model):
+    """One published build of the phone app.
+
+    The app is sideloaded, not distributed through a store, so there is no
+    platform update mechanism behind it — this is that mechanism. The phone
+    polls the latest row (by ``version_code``, Android's own integer) against
+    its own installed version and offers or forces an update accordingly.
+
+    ``apk_file`` is public: the file itself carries nothing sensitive, and a
+    signed private-storage URL would only complicate a plain download link.
+    """
+
+    version = models.CharField(max_length=20, help_text="e.g. 0.2.1")
+    version_code = models.PositiveIntegerField(
+        unique=True, help_text="Android versionCode — must increase with every release")
+    apk_file = models.FileField(upload_to="app-releases/")
+    #: Blocks the app (no dismiss) until the user updates — for a release the
+    #: old client cannot safely keep talking to the API on, e.g. a breaking
+    #: change. Optional releases just show a dismissible banner.
+    force_update = models.BooleanField(default=False)
+    release_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version_code"]
+
+    def __str__(self):
+        return f"v{self.version} (code {self.version_code})"

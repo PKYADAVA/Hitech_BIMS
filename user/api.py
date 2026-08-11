@@ -45,7 +45,7 @@ from django.contrib.auth.models import User as AuthUser  # noqa: E402
 from django.contrib.auth.password_validation import validate_password  # noqa: E402
 from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: E402
 from rest_framework.exceptions import NotFound, ValidationError  # noqa: E402
-from rest_framework.permissions import IsAuthenticated  # noqa: E402
+from rest_framework.permissions import AllowAny, IsAuthenticated  # noqa: E402
 from rest_framework.response import Response  # noqa: E402
 from rest_framework.views import APIView  # noqa: E402
 
@@ -305,6 +305,7 @@ class RoleView(V1ViewMixin, APIView):
             raise NotFound("Role not found.")
         GroupTabPermission.objects.filter(group=group).delete()
         group.delete()
+        return Response({"deleted": True})
 
 
 class DashboardWidgetsView(V1ViewMixin, APIView):
@@ -325,4 +326,31 @@ class DashboardWidgetsView(V1ViewMixin, APIView):
 
         filters = parse_filters(request.query_params)
         return Response(dashboard_widgets(request.user, filters))
-        return Response({"deleted": True})
+
+
+class AppVersionView(V1ViewMixin, APIView):
+    """GET /app-version — the latest published build, for the phone's own
+    sideload-update check.
+
+    Deliberately open: the client that needs this most is the one furthest
+    behind, and a breaking API change is exactly the case a login-gated
+    check would fail on — the app has to be able to learn it needs updating
+    before it can necessarily still log in.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from .models import AppRelease
+
+        latest = AppRelease.objects.first()
+        if latest is None:
+            return Response({"latest_version": None, "latest_version_code": None,
+                             "download_url": None, "force_update": False, "notes": ""})
+        return Response({
+            "latest_version": latest.version,
+            "latest_version_code": latest.version_code,
+            "download_url": request.build_absolute_uri(latest.apk_file.url) if latest.apk_file else None,
+            "force_update": latest.force_update,
+            "notes": latest.release_notes,
+        })

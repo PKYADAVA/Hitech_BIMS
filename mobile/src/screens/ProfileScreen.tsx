@@ -7,12 +7,11 @@ import { biometricsAvailable } from "@/components/LockGate";
 import { AppIcon, IconName } from "@/components/AppIcon";
 import { Card, IconCircle, Screen, withAlpha } from "@/components/ui";
 import { AuthUser } from "@/api/types";
+import { APP_VERSION } from "@/config";
 import { makeStyles, spacing, radius, type, ThemePreference, useTheme } from "@/theme";
 import { confirm } from "@/ui/confirm";
 import { useAuthStore } from "@/store/authStore";
 import { useSettingsStore } from "@/store/settingsStore";
-
-const APP_VERSION = "0.1.0";
 
 function initialsOf(user: AuthUser | null): string {
   return (user?.full_name || user?.username || "?")
