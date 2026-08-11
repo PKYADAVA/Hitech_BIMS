@@ -137,21 +137,58 @@ use, so a flock's feed cost is one number across the ERP.
 
 <div class="report-doc">
   {% include '_report_letterhead.html' with title='Production Cost Report' %}
+  <div class="text-center text-muted small mb-2">
+    {% if report_type == 'farmer' %}Farmer{% else %}Management{% endif %} view
+    &mdash; {% if report_type == 'farmer' %}the farmer's admin share only{% else %}farmer and management admin together{% endif %}
+  </div>
 
   <div class="rpt-filter no-print">
     <form method="get" class="row g-2 align-items-end">
       <div class="col-6 col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" name="branch" id="pc-branch">
+          <option value="">All Branches</option>
+          {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Line</label>
+        <select class="form-select" name="line" id="pc-line">
+          <option value="">All Lines</option>
+          {% for l, branch_ids in lines %}<option value="{{ l }}" data-branches="{{ branch_ids }}"
+            {% if line == l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Supervisor</label>
+        <select class="form-select" name="supervisor" id="pc-supervisor">
+          <option value="">All Supervisors</option>
+          {% for sv in supervisors %}<option value="{{ sv.id }}" data-branch="{{ sv.branch_id }}"
+            {% if supervisor_id == sv.id|stringformat:'s' %}selected{% endif %}>{{ sv.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
         <label class="form-label">Farm</label>
-        <select class="form-select" name="farm">
+        <select class="form-select" name="farm" id="pc-farm">
           <option value="">All Farms</option>
-          {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
+          {% for f in farms %}<option value="{{ f.id }}" data-branch="{{ f.branch_id }}"
+            data-line="{{ f.line|default:'' }}" data-supervisor="{{ f.supervisor_id|default:'' }}"
+            {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-6 col-md-2">
         <label class="form-label">Batch</label>
-        <select class="form-select" name="batch">
+        <select class="form-select" name="batch" id="pc-batch">
           <option value="">All Batches</option>
-          {% for b in batches %}<option value="{{ b.id }}" {% if batch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.broiler_farm.farm_name }} &mdash; {{ b.batch_name }}</option>{% endfor %}
+          {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
+            {% if batch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.broiler_farm.farm_name }} &mdash; {{ b.batch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Report Type</label>
+        <select class="form-select" name="report_type">
+          <option value="farmer" {% if report_type == 'farmer' %}selected{% endif %}>1 &mdash; Farmer</option>
+          <option value="management" {% if report_type == 'management' %}selected{% endif %}>2 &mdash; Management</option>
         </select>
       </div>
       <div class="col-6 col-md-2">
@@ -422,6 +459,57 @@ use, so a flock's feed cost is one number across the ERP.
 {{ pc_json|json_script:"pc-data" }}
 <script>
 $(function () {
+  // Branch narrows Line, Supervisor and Farm; Farm narrows Batch. The options
+  // are detached and re-appended rather than hidden: main.js turns every
+  // .form-select into a Select2, which builds its own list and ignores
+  // `display: none`.
+  var pools = {};
+  ['#pc-line', '#pc-supervisor', '#pc-farm', '#pc-batch'].forEach(function (sel) {
+    pools[sel] = $(sel).children().toArray();
+  });
+
+  function narrow(sel, keep) {
+    var $sel = $(sel), chosen = $sel.val();
+    var options = $(pools[sel]).filter(function () {
+      return !this.value || keep(this);
+    });
+    $sel.children().detach();
+    $sel.append(options);
+    var survives = options.filter(function () { return this.value === chosen; }).length;
+    $sel.val(survives ? chosen : '').trigger('change.select2');
+  }
+
+  function cascade() {
+    var branch = $('#pc-branch').val();
+    // A line can run in more than one branch, so the option carries every
+    // branch id it appears in rather than a single one.
+    narrow('#pc-line', function (o) {
+      var ids = String($(o).data('branches') || '').split(',');
+      return !branch || ids.indexOf(String(branch)) !== -1;
+    });
+    var line = $('#pc-line').val();
+    narrow('#pc-supervisor', function (o) {
+      return !branch || $(o).data('branch') == branch;
+    });
+    // Re-read: the supervisor may have been cleared by the line above, and a
+    // farm list narrowed on a supervisor that no longer applies would be empty
+    // for no reason the user can see.
+    var sup = $('#pc-supervisor').val();
+    narrow('#pc-farm', function (o) {
+      var $o = $(o);
+      return (!branch || $o.data('branch') == branch)
+          && (!line || $o.data('line') == line)
+          && (!sup || $o.data('supervisor') == sup);
+    });
+    var farm = $('#pc-farm').val();
+    narrow('#pc-batch', function (o) {
+      return !farm || $(o).data('farm') == farm;
+    });
+  }
+
+  $('#pc-branch, #pc-line, #pc-supervisor, #pc-farm').on('change', cascade);
+  cascade();
+
   // Every row's detail is already on the page — the drawer is a different way
   // of reading the same figures, not a second trip to the server, so opening
   // one cannot disagree with the row it came from.

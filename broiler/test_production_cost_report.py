@@ -218,6 +218,22 @@ class PageTests(TestCase):
                .context["rows"]]
         self.assertIn(self.batch.id, ids)
 
+    def test_the_branch_line_and_supervisor_filters_narrow_the_list(self):
+        rows = self.page(branch=self.farm.branch_id).context["rows"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(self.page(line="L1").context["rows"]), 1)
+        self.assertEqual(len(self.page(line="nope").context["rows"]), 0)
+        self.assertEqual(
+            len(self.page(supervisor=self.farm.supervisor_id).context["rows"]), 1)
+
+    def test_the_report_type_defaults_to_management_and_rejects_nonsense(self):
+        """It reaches the batch report builder, so it cannot be taken on trust."""
+        self.assertEqual(self.page().context["report_type"], "management")
+        self.assertEqual(self.page(report_type="farmer").context["report_type"],
+                         "farmer")
+        self.assertEqual(self.page(report_type="both").context["report_type"],
+                         "management")
+
     def test_the_bird_type_filter_uses_the_breed_s_category(self):
         other, _ = BirdCategory.objects.get_or_create(name="Layer")
         self.assertEqual(len(self.page(bird_type=other.id).context["rows"]), 0)
@@ -298,6 +314,18 @@ class AdminCostFromSchemeTests(TestCase):
     def test_a_flock_with_no_placement_carries_no_overhead(self):
         self.scheme()
         self.assertEqual(admin_cost_for(self.batch, Decimal("0")), {})
+
+    def test_the_farmer_view_bills_only_the_farmer_s_share(self):
+        """His statement carries his admin cost, not the company's."""
+        self.scheme()
+        self.assertEqual(admin_cost_for(self.batch, Decimal("1000"), "farmer"),
+                         {"Farmer Admin Cost": Decimal("3000.00")})
+
+    def test_the_management_view_bills_both_shares(self):
+        self.scheme()
+        self.assertEqual(sorted(admin_cost_for(self.batch, Decimal("1000"),
+                                               "management")),
+                         ["Farmer Admin Cost", "Management Admin Cost"])
 
 
 class GrowingChargeSourceTests(TestCase):

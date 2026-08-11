@@ -86,7 +86,7 @@ def cost_rows_from_pl(pl):
     return out
 
 
-def admin_cost_for(batch, placed):
+def admin_cost_for(batch, placed, fetch_type="management"):
     """Administrative overhead for a flock, from its Growing Charge Scheme.
 
     The scheme already carries it — ``farmer_admin_cost`` and
@@ -106,9 +106,14 @@ def admin_cost_for(batch, placed):
     scheme = _match_growing_charge_scheme(batch, batch.start_date)
     if not scheme:
         return {}
+    # The farmer's own statement bills only his share; the management view
+    # bills both. That split is what the scheme's two fields exist to express,
+    # and the Batch History report has always read them the same way.
+    shares = [("Farmer Admin Cost", scheme.farmer_admin_cost)]
+    if fetch_type != "farmer":
+        shares.append(("Management Admin Cost", scheme.management_admin_cost))
     heads = {}
-    for label, rate in (("Farmer Admin Cost", scheme.farmer_admin_cost),
-                        ("Management Admin Cost", scheme.management_admin_cost)):
+    for label, rate in shares:
         amount = (_d(rate) * _d(placed)).quantize(Q2)
         if amount:
             heads[label] = amount

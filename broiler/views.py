@@ -3702,7 +3702,19 @@ def _cost_components(pl, growing_cost, gc_source, admin_cost, admin_source, admi
     return rows
 
 
-def _production_cost_row(batch, pl_row_cache=None):
+def _lines_with_branches(user):
+    """``[(line, "1,3"), ...]`` — every line the user can see, with the ids of
+    the branches it runs in, so the filter bar can narrow lines by branch."""
+    pairs = {}
+    for line, branch_id in (farms_for(user, BroilerFarm.objects.exclude(line=""))
+                            .order_by("line")
+                            .values_list("line", "branch_id")):
+        pairs.setdefault(line, set()).add(branch_id)
+    return [(line, ",".join(str(b) for b in sorted(ids) if b))
+            for line, ids in sorted(pairs.items())]
+
+
+def _production_cost_row(batch, fetch_type="management"):
     """One flock's cost, for the Production Cost Report.
 
     Built on the same assembled report and the same P&L service as the
@@ -3760,7 +3772,8 @@ def _production_cost_row(batch, pl_row_cache=None):
     admin_source = "entered"
     admin_heads = {}
     if admin_cost is None:
-        admin_heads = admin_cost_for(batch, _num(costing.get("chicks_placed")))
+        admin_heads = admin_cost_for(batch, _num(costing.get("chicks_placed")),
+                                     fetch_type)
         if admin_heads:
             admin_cost = sum(admin_heads.values(), Decimal("0")).quantize(Decimal("0.01"))
             admin_source = "schema"
@@ -3904,9 +3917,17 @@ def production_cost_report(request):
 
     from .services.production_cost import build_production_cost
 
+    branch_id = (request.GET.get("branch") or "").strip()
+    line = (request.GET.get("line") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
     farm_id = (request.GET.get("farm") or "").strip()
     batch_id = (request.GET.get("batch") or "").strip()
     bird_type_id = (request.GET.get("bird_type") or "").strip()
+    # Farmer or Management, as the Batch History report asks it: the farmer's
+    # statement carries only his admin share, the management view carries both.
+    report_type = (request.GET.get("report_type") or "management").strip().lower()
+    if report_type not in ("farmer", "management"):
+        report_type = "management"
     to_date = parse_date(request.GET.get("to_date") or "") or timezone.localdate()
     from_date = (parse_date(request.GET.get("from_date") or "")
                  or (to_date - timedelta(days=30)))
@@ -3920,6 +3941,12 @@ def production_cost_report(request):
     # Running in the window, not started in it.
     flocks = flocks.filter(Q(start_date__isnull=True) | Q(start_date__lte=to_date))
     flocks = flocks.filter(Q(end_date__isnull=True) | Q(end_date__gte=from_date))
+    if branch_id.isdigit():
+        flocks = flocks.filter(broiler_farm__branch_id=branch_id)
+    if line:
+        flocks = flocks.filter(broiler_farm__line=line)
+    if supervisor_id.isdigit():
+        flocks = flocks.filter(broiler_farm__supervisor_id=supervisor_id)
     if farm_id.isdigit():
         flocks = flocks.filter(broiler_farm_id=farm_id)
     if batch_id.isdigit():
@@ -3927,7 +3954,7 @@ def production_cost_report(request):
     if bird_type_id.isdigit():
         flocks = flocks.filter(breed__bird_category_id=bird_type_id)
 
-    rows = [_production_cost_row(b) for b in
+    rows = [_production_cost_row(b, report_type) for b in
             flocks.order_by("broiler_farm__farm_name", "batch_name")]
     summary = build_production_cost(rows) if rows else None
 
@@ -3966,14 +3993,29 @@ def production_cost_report(request):
 
     return render(request, "production_cost_report.html", {
         "rows": rows, "summary": summary, "pc_json": detail,
-        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        # Each select carries the keys the one above it filters on, so the
+        # cascade can narrow in the browser without a round trip per choice.
+        "farms": farms_for(request.user,
+                           BroilerFarm.objects.select_related("branch", "supervisor")
+                           .order_by("farm_name")),
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "supervisors": supervisors_for(request.user,
+                                       Supervisor.objects.select_related("branch")
+                                       .order_by("name")),
+        # A line is a farm attribute, not a master, so which branches it runs
+        # in has to be gathered from the farms themselves — and a line can run
+        # in more than one, which is why this is a list per line rather than a
+        # single branch id.
+        "lines": _lines_with_branches(request.user),
         "batches": scope_multi(request.user,
                                BroilerBatch.objects.select_related("broiler_farm")
                                .order_by("-start_date", "-id"),
                                farms="broiler_farm_id",
                                branches="broiler_farm__branch_id"),
         "bird_types": BirdCategory.objects.filter(is_active=True).order_by("sort_order", "name"),
+        "branch_id": branch_id, "line": line, "supervisor_id": supervisor_id,
         "farm_id": farm_id, "batch_id": batch_id, "bird_type_id": bird_type_id,
+        "report_type": report_type,
         "from_date": from_date, "to_date": to_date,
         "company": CompanyProfile.get_solo(),
     })
