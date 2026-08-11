@@ -537,6 +537,7 @@ A statement missing its rows reads as complete, and somebody decides on it.
 {% block js %}
 <script>
 $(function () {
+  {% if batch %}
   // Save a hand-entered head as soon as the field is left. No Save button:
   // there are twenty of these and one round trip each is cheaper than asking
   // somebody to remember. The page reloads afterwards so every total the
@@ -564,6 +565,11 @@ $(function () {
         window.alert('Could not reach the server. The figure is unchanged.');
       });
   });
+  {% endif %}
+  // Above is skipped with no batch chosen: there are no entry fields to wire
+  // up, and the save URL cannot be reversed without a pk — which took the
+  // whole page down rather than just the handler. What follows still has to
+  // run, because choosing a batch is the entire point of that state.
 
   // Batch lists the chosen farm's batches only. The options are detached and
   // re-appended rather than hidden: main.js turns every .form-select into a
