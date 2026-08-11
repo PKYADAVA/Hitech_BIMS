@@ -29,7 +29,8 @@ from .models import (
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
     GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement, MedicineVaccineEntry,
     Region, Supervisor, FeedPhaseMaster, FeedPhaseLine, BirdCategory,
-    FarmLocationCapture, FarmCaptureFile,
+    FarmLocationCapture, FarmCaptureFile, FarmerFarmSetupRequest, FarmerFarmSetupRequestShed,
+    FarmerFarmSetupRequestPhoto,
 )
 from account.models import ChartOfAccount
 from inventory.models import Item, Warehouse
@@ -1219,6 +1220,229 @@ class FarmerAPI(BaseAPIView):
             return JsonResponse({"message": "Farmer deleted"})
         except Exception as e:
             return self.handle_exception(e)
+
+
+# ---------------------------------------------------------------------------
+# Farmer & Farm Setup Request (Broiler > Transactions)
+# ---------------------------------------------------------------------------
+
+@method_decorator(login_required, name="dispatch")
+class FarmerFarmSetupRequestListTemplateView(View):
+    """Renders the Register List page — Broiler > Transactions > Farmer &
+    Farm Setup Request."""
+
+    def get(self, request):
+        return render(request, "farmer_farm_setup_request_list.html")
+
+
+@method_decorator(login_required, name="dispatch")
+class FarmerFarmSetupRequestFormTemplateView(View):
+    """Renders the 4-section submission form, for a new request or an
+    existing draft (a submitted/reviewed request opens read-only — see the
+    template)."""
+
+    def get(self, request, id: Optional[int] = None):
+        from user.access import user_can
+        instance = get_object_or_404(FarmerFarmSetupRequest, id=id) if id else None
+        # A submitter may reopen only their own; a reviewer (edit right) may
+        # open any — same split the API list uses.
+        if instance and instance.submitted_by_id != request.user.id \
+                and not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+            raise Http404("Request not found")
+        return render(request, "farmer_farm_setup_request_form.html", {
+            "request_id": id,
+            "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+            "farmer_groups": FarmerGroup.objects.filter(is_active=True).order_by("description"),
+            "farm_types": BroilerFarm.FARM_TYPES,
+            "shed_types": FarmerFarmSetupRequest.SHED_TYPES,
+            "states_and_union_territories": STATES_AND_TERRITORIES,
+            "file_slots": [
+                ("agreement_copy", "Agreement Copy"), ("security_cheque", "Security Cheque"),
+            ],
+            "next_request_no": FarmerFarmSetupRequest.next_request_no() if id is None else None,
+            "can_review": user_can(request.user, "farmer_farm_setup_request_list", "edit"),
+        })
+
+
+@method_decorator(login_required, name="dispatch")
+class FarmerFarmSetupRequestAPI(BaseAPIView):
+    """CRUD + list for the request itself. Approve/Reject are separate
+    endpoints below — they change the record's meaning (create real masters),
+    not just its fields, so they don't belong on the generic post()."""
+
+    FILE_FIELDS = ["farmer_photo", "aadhaar_front", "aadhaar_back", "pan_upload",
+                   "agreement_copy", "security_cheque"]
+    FK_FIELDS = {"branch": "branch_id", "farmer_group": "farmer_group_id", "supervisor": "supervisor_id"}
+    BOOL_FIELDS = {"physically_verified"}
+    FORM_FIELDS = [
+        "branch", "supervisor", "latitude", "longitude", "gps_accuracy_m", "gps_captured_at",
+        "state", "district", "village_area", "line", "full_address",
+        "farmer_name", "father_spouse_name", "primary_mobile", "whatsapp_number",
+        "alternate_mobile", "email", "farmer_address",
+        "farm_name", "farm_type", "farmer_group", "capacity_birds", "shed_type", "remarks",
+        "aadhaar_number", "pan_card", "physically_verified",
+        "account_holder_name", "acc_no", "ifsc_code", "bank_name", "bank_branch",
+    ]
+
+    def get(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            from user.access import user_can
+            if id:
+                req = (FarmerFarmSetupRequest.objects
+                      .select_related("branch", "farmer_group", "submitted_by", "reviewed_by")
+                      .get(id=id))
+                data = {f: getattr(req, f) for f in self.FORM_FIELDS if f not in self.FK_FIELDS}
+                data["id"] = req.id
+                data["branch"] = req.branch_id
+                data["farmer_group"] = req.farmer_group_id
+                data["supervisor"] = req.supervisor_id
+                data["status"] = req.status
+                data["request_no"] = req.request_no
+                data["review_note"] = req.review_note
+                data["submitted_by"] = req.submitted_by.get_full_name() or req.submitted_by.username
+                data["created_at"] = req.created_at.isoformat()
+                data["gps_captured_at"] = req.gps_captured_at.isoformat() if req.gps_captured_at else None
+                for field in self.FILE_FIELDS:
+                    file_obj = getattr(req, field)
+                    data[field] = file_obj.url if file_obj else None
+                    data[f"{field}_name"] = (file_obj.name.rsplit("/", 1)[-1] if file_obj else None)
+                data["sheds"] = [
+                    {"id": s.id, "length": str(s.length) if s.length is not None else None,
+                     "width": str(s.width) if s.width is not None else None}
+                    for s in req.sheds.all()
+                ]
+                data["photos"] = [{"id": p.id, "url": p.photo.url} for p in req.photos.all()]
+                return JsonResponse(data)
+
+            qs = FarmerFarmSetupRequest.objects.select_related("branch", "farmer_group", "submitted_by")
+            if user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+                qs = scope_multi(request.user, qs, branches="branch_id")
+            else:
+                qs = qs.filter(submitted_by=request.user)
+            rows = [{
+                "id": r.id, "request_no": r.request_no, "status": r.status,
+                "farmer_name": r.farmer_name, "farm_name": r.farm_name,
+                "farmer_address": r.farmer_address,
+                "branch_name": r.branch.branch_name,
+                "submitted_by": r.submitted_by.get_full_name() or r.submitted_by.username,
+                "created_at": r.created_at.isoformat(),
+                "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+                "review_note": r.review_note,
+            } for r in qs.order_by("-created_at")]
+            return JsonResponse(rows, safe=False)
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def post(self, request, id: Optional[int] = None) -> JsonResponse:
+        try:
+            from user.access import user_can
+            data = request.POST
+            with transaction.atomic():
+                if id:
+                    instance = FarmerFarmSetupRequest.objects.get(id=id)
+                    # Same ownership split as the edit page's GET: a submitter
+                    # may only update their own; a reviewer (edit right) may
+                    # update any. Without this, the page's 404 was cosmetic —
+                    # the API underneath took anyone's edit for anyone's draft.
+                    if instance.submitted_by_id != request.user.id \
+                            and not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+                        return JsonResponse({"error": "Not permitted."}, status=403)
+                    if instance.status != FarmerFarmSetupRequest.Status.DRAFT:
+                        return JsonResponse({"error": "Only a draft can be edited."}, status=400)
+                else:
+                    instance = FarmerFarmSetupRequest(submitted_by=request.user)
+                for field in self.FORM_FIELDS:
+                    if field not in data:
+                        continue
+                    if field in self.FK_FIELDS:
+                        setattr(instance, self.FK_FIELDS[field], data[field] or None)
+                    elif field in self.BOOL_FIELDS:
+                        setattr(instance, field, data[field] in ("true", "1", "on", "True"))
+                    else:
+                        setattr(instance, field, data[field] or "")
+                for field in self.FILE_FIELDS:
+                    if field in request.FILES:
+                        setattr(instance, field, request.FILES[field])
+                instance.full_clean(exclude=self.FILE_FIELDS)
+                instance.save()
+                if "sheds" in data:
+                    # Replaced wholesale, like BroilerFarmAPI._save_sheds does
+                    # for the master form's own shed rows — simpler than
+                    # diffing, and a draft has no downstream references yet
+                    # to preserve ids across.
+                    instance.sheds.all().delete()
+                    for row in json.loads(data.get("sheds") or "[]"):
+                        length, width = row.get("length"), row.get("width")
+                        if not length and not width:
+                            continue
+                        FarmerFarmSetupRequestShed.objects.create(
+                            request=instance, length=length or None, width=width or None)
+                if "remove_photo_ids" in data:
+                    remove_ids = json.loads(data.get("remove_photo_ids") or "[]")
+                    if remove_ids:
+                        instance.photos.filter(id__in=remove_ids).delete()
+                # Added, not replaced: unlike sheds, a picture already on the
+                # request has no editable fields to resend, so re-sending
+                # nothing must not clear what a previous save attached.
+                for photo in request.FILES.getlist("photos"):
+                    FarmerFarmSetupRequestPhoto.objects.create(request=instance, photo=photo)
+                if data.get("action") == "submit":
+                    instance.submit()
+            return JsonResponse(
+                {"message": "Saved", "id": instance.id, "request_no": instance.request_no,
+                 "status": instance.status},
+                status=200 if id else 201,
+            )
+        except Exception as e:
+            return self.handle_exception(e)
+
+    def delete(self, request, id: int) -> JsonResponse:
+        try:
+            from user.access import user_can
+            if not user_can(request.user, "farmer_farm_setup_request_list", "delete"):
+                return JsonResponse({"error": "Not permitted."}, status=403)
+            instance = FarmerFarmSetupRequest.objects.get(id=id)
+            # Any status, not just Draft: the request is only ever a staging
+            # record — deleting a Pending/Approved/Rejected one removes the
+            # paper trail but never the Farmer/Farm it already created
+            # (created_farmer/created_farm are PROTECT *from* this model, so
+            # there is nothing on the other side to leave dangling).
+            instance.delete()
+            return JsonResponse({"message": "Request deleted"})
+        except Exception as e:
+            return self.handle_exception(e)
+
+
+@login_required
+@require_POST
+def farmer_farm_setup_request_approve(request, id):
+    from user.access import user_can
+    if not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+    instance = get_object_or_404(FarmerFarmSetupRequest, id=id)
+    try:
+        instance.approve(request.user, note=(request.POST.get("note") or "").strip())
+    except ValidationError as e:
+        return JsonResponse({"error": "; ".join(e.messages)}, status=400)
+    return JsonResponse({
+        "message": "Approved — Farmer and Farm created",
+        "farmer_id": instance.created_farmer_id, "farm_id": instance.created_farm_id,
+    })
+
+
+@login_required
+@require_POST
+def farmer_farm_setup_request_reject(request, id):
+    from user.access import user_can
+    if not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+        return JsonResponse({"error": "Not permitted."}, status=403)
+    instance = get_object_or_404(FarmerFarmSetupRequest, id=id)
+    try:
+        instance.reject(request.user, note=(request.POST.get("note") or "").strip())
+    except ValidationError as e:
+        return JsonResponse({"error": "; ".join(e.messages)}, status=400)
+    return JsonResponse({"message": "Rejected"})
+
 
 def _active_batch_on_shed(shed_id, exclude_batch_id=None):
     """Return the open/active batch occupying `shed_id`, if any.
@@ -3235,9 +3459,51 @@ def production_pl_entry_save(request, batch_id):
     return JsonResponse({"ok": True, "amount": str(amount)})
 
 
+def _production_pl_row(batch):
+    """One flock's bottom line, for the fleet-wide list.
+
+    Built from the same assembled report and the same P&L service the detail
+    page uses, so a farm's profit cannot read one way in the list and another
+    when opened. That costs a report build per flock — the price Live Flock
+    Summary already pays for the same reason.
+    """
+    from .services.production_pl import build_production_pl
+
+    report = _build_batch_report(batch)
+    pl = build_production_pl(report, batch)
+    costing = report.get("batch_costing") or {}
+    farm = batch.broiler_farm
+    return {
+        "batch": batch, "farm": farm,
+        "branch": farm.branch.branch_name if farm.branch_id else "",
+        "supervisor": farm.supervisor.name if farm.supervisor_id else "",
+        "is_live": batch.end_date is None and not batch.is_closed,
+        "placed": _num(costing.get("chicks_placed")),
+        "sold_birds": _num(costing.get("sold_birds")),
+        "sold_weight": _num(costing.get("sold_weight")),
+        "revenue": pl["total_revenue"],
+        "cost": pl["total_cost"],
+        "profit": pl["gross_profit"],
+        # The service divides to zero rather than to None, which on a flock
+        # that has sold nothing yet prints "0.00%" beside a loss of ₹81,240 —
+        # a ratio nobody can compute, shown as if it were nil. Withheld here.
+        "profit_pct": (pl["profit_pct"] if _num(pl["total_revenue"]) else None),
+        "per_bird": (pl["profit_per_bird_placed"]
+                     if _num(costing.get("chicks_placed")) else None),
+        "per_kg": (pl["profit_per_kg"]
+                   if _num(costing.get("sold_weight")) else None),
+        "fcr": costing.get("fcr"),
+        "mort_pct": costing.get("total_mort_pct"),
+        # A flock whose feed has no purchase behind it shows a cost lower than
+        # it really was, and therefore a profit higher. Said on the row, because
+        # in a list the reader cannot see the block that names the items.
+        "unpriced": len(pl["unpriced_items"]),
+    }
+
+
 @login_required
 def production_pl_report(request):
-    """Broiler > Reports > Production Profit & Loss — one batch's result.
+    """Broiler > Reports > Production Profit & Loss — every flock's result.
 
     The Growing Charge Statement answers what the farmer is owed, against the
     rates in the Growing Charge Master. This answers what the flock made or
@@ -3253,6 +3519,11 @@ def production_pl_report(request):
     from .services.production_pl import build_production_pl
 
     batch_id = (request.GET.get("batch") or "").strip()
+    branch_id = (request.GET.get("branch") or "").strip()
+    supervisor_id = (request.GET.get("supervisor") or "").strip()
+    farm_id = (request.GET.get("farm") or "").strip()
+    status = (request.GET.get("status") or "live").strip().lower()
+
     batch = (scope_multi(request.user,
                          BroilerBatch.objects
                          .select_related("broiler_farm__branch",
@@ -3263,6 +3534,54 @@ def production_pl_report(request):
              .filter(id=batch_id).first()) if batch_id else None
 
     report = _build_batch_report(batch) if batch else None
+
+    # No batch chosen is the fleet view, not an empty page: the question this
+    # report is usually opened with is which farms are making money, and that
+    # cannot be answered one flock at a time.
+    overview, totals = [], None
+    if not batch:
+        flocks = scope_multi(request.user,
+                             BroilerBatch.objects
+                             .select_related("broiler_farm__branch",
+                                             "broiler_farm__supervisor",
+                                             "broiler_farm__farmer"),
+                             farms="broiler_farm_id",
+                             branches="broiler_farm__branch_id")
+        if status == "closed":
+            flocks = flocks.filter(Q(end_date__isnull=False) | Q(is_closed=True))
+        elif status != "all":
+            flocks = flocks.filter(end_date__isnull=True, is_closed=False)
+        if branch_id.isdigit():
+            flocks = flocks.filter(broiler_farm__branch_id=branch_id)
+        if supervisor_id.isdigit():
+            flocks = flocks.filter(broiler_farm__supervisor_id=supervisor_id)
+        if farm_id.isdigit():
+            flocks = flocks.filter(broiler_farm_id=farm_id)
+        overview = [_production_pl_row(b) for b in
+                    flocks.order_by("broiler_farm__farm_name", "batch_name")]
+        # Worst first: a list read top-down should start with the flock that
+        # needs an explanation.
+        overview.sort(key=lambda r: r["profit"])
+        z = Decimal("0")
+        t_rev = sum((r["revenue"] for r in overview), z)
+        t_cost = sum((r["cost"] for r in overview), z)
+        t_weight = sum((r["sold_weight"] for r in overview), z)
+        t_placed = sum((r["placed"] for r in overview), z)
+        totals = {
+            "flocks": len(overview),
+            "placed": t_placed,
+            "sold_birds": sum((r["sold_birds"] for r in overview), z),
+            "sold_weight": t_weight,
+            "revenue": t_rev, "cost": t_cost, "profit": t_rev - t_cost,
+            # Recomputed from the totals, never averaged from the rows: a mean
+            # of per-kg figures weights a 200 kg flock like a 12,000 kg one.
+            "per_kg": _div(t_rev - t_cost, t_weight) if t_weight else None,
+            "per_bird": _div(t_rev - t_cost, t_placed) if t_placed else None,
+            "profit_pct": _div((t_rev - t_cost) * 100, t_rev) if t_rev else None,
+            "losing": sum(1 for r in overview if r["profit"] < 0),
+            "unpriced": sum(1 for r in overview if r["unpriced"]),
+        }
+
     return render(request, "production_pl_report.html", {
         "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
         "batches": scope_multi(request.user,
@@ -3272,6 +3591,11 @@ def production_pl_report(request):
                                branches="broiler_farm__branch_id"),
         "batch": batch,
         "batch_requested": bool(batch_id),
+        "overview": overview, "overview_totals": totals,
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "branch_id": branch_id, "supervisor_id": supervisor_id,
+        "farm_id": farm_id, "status": status,
         "report": report,
         "pl": build_production_pl(report, batch) if report else None,
         "company": CompanyProfile.get_solo(),

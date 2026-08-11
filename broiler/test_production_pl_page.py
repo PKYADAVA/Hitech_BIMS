@@ -48,6 +48,52 @@ class ProductionPlPageTests(TestCase):
         """There is nothing to save to, and reversing one was the crash."""
         self.assertNotIn("/entry", self.page().content.decode())
 
+    # ---- the fleet view -----------------------------------------------------
+
+    def test_no_batch_lists_every_flock_rather_than_asking_for_one(self):
+        """The question the report is opened with is which farms are making
+        money, and that cannot be answered one flock at a time."""
+        rows = self.page().context["overview"]
+        self.assertEqual([r["batch"].id for r in rows], [self.batch.id])
+
+    def test_the_list_defaults_to_live_flocks(self):
+        closed = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-OLD", is_closed=True,
+            start_date=self.today - timedelta(days=90),
+            end_date=self.today - timedelta(days=30))
+        live_ids = [r["batch"].id for r in self.page().context["overview"]]
+        self.assertIn(self.batch.id, live_ids)
+        self.assertNotIn(closed.id, live_ids)
+        all_ids = [r["batch"].id for r in self.page(status="all").context["overview"]]
+        self.assertIn(closed.id, all_ids)
+
+    def test_a_farm_filter_narrows_the_list(self):
+        other = BroilerFarm.objects.create(
+            branch=self.farm.branch, supervisor=self.farm.supervisor,
+            farmer=self.farm.farmer, region=self.farm.region, line="L1",
+            farm_name="Other Farm", farm_capacity=5000)
+        BroilerBatch.objects.create(broiler_farm=other, batch_name="O-1",
+                                    start_date=self.today - timedelta(days=5))
+        self.assertEqual(len(self.page().context["overview"]), 2)
+        self.assertEqual(len(self.page(farm=other.id).context["overview"]), 1)
+
+    def test_totals_are_recomputed_not_averaged_from_the_rows(self):
+        """A mean of per-kg figures weights a 200 kg flock like a 12,000 kg one."""
+        totals = self.page().context["overview_totals"]
+        rows = self.page().context["overview"]
+        self.assertEqual(totals["revenue"], sum(r["revenue"] for r in rows))
+        self.assertEqual(totals["profit"], totals["revenue"] - totals["cost"])
+
+    def test_a_ratio_with_no_denominator_is_withheld_not_shown_as_zero(self):
+        """A flock that has sold nothing showed "0.00%" beside a real loss."""
+        row = self.page().context["overview"][0]
+        self.assertEqual(row["revenue"], 0)
+        self.assertIsNone(row["profit_pct"])
+        self.assertIsNone(row["per_kg"])
+
+    def test_each_row_links_to_that_flock_s_own_statement(self):
+        self.assertIn(f"?batch={self.batch.id}", self.page().content.decode())
+
     def test_the_filter_bar_still_runs_on_the_empty_page(self):
         """Choosing a batch is the entire point of that state, so the script
         under the guarded handler must not be skipped with it."""

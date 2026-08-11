@@ -137,6 +137,14 @@ A statement missing its rows reads as complete, and somebody decides on it.
   {% endcomment %}
   .pl-entry { min-width: 0; }
 
+  /* The fleet list: a loss has to be findable while scanning a column of
+     figures, so it carries colour rather than only a minus sign. */
+  .pl-fleet { font-size: .74rem; }
+  .pl-fleet th, .pl-fleet td { white-space: nowrap; padding: .3rem .45rem; vertical-align: middle; }
+  .pl-fleet thead th { background: #f1f3f5; }
+  .pl-fleet tfoot td { background: #f8f9fa; }
+  .pl-neg { color: #d03b3b; font-weight: 700; }
+
   .pl-footer { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; }
   .pl-net {
     display: flex; align-items: center; gap: .75rem;
@@ -173,24 +181,47 @@ A statement missing its rows reads as complete, and somebody decides on it.
 
   <div class="rpt-filter no-print">
     <form method="get" class="row g-2 align-items-end flex-nowrap">
-      <div class="col-6 col-md-3">
-        <label class="form-label">Farm</label>
-        <select class="form-select" id="pl-farm">
-          <option value="">select</option>
-          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
+      <div class="col-6 col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" name="branch">
+          <option value="">-All-</option>
+          {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id|stringformat:'s' %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-6 col-md-3">
-        <label class="form-label">Batch <span class="text-danger">*</span></label>
-        <select class="form-select" name="batch" id="pl-batch" required>
-          <option value="">select</option>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Supervisor</label>
+        <select class="form-select" name="supervisor">
+          <option value="">-All-</option>
+          {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Farm</label>
+        <select class="form-select" name="farm" id="pl-farm">
+          <option value="">-All-</option>
+          {% for f in farms %}<option value="{{ f.id }}" {% if farm_id == f.id|stringformat:'s' %}selected{% endif %}>{{ f.farm_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+          <option value="live" {% if status == 'live' %}selected{% endif %}>Live</option>
+          <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed</option>
+          <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+        </select>
+      </div>
+      {# Optional now: blank means every farm, which is how the page opens. #}
+      <div class="col-6 col-md-2">
+        <label class="form-label">Batch</label>
+        <select class="form-select" name="batch" id="pl-batch">
+          <option value="">-All farms-</option>
           {% for b in batches %}<option value="{{ b.id }}" data-farm="{{ b.broiler_farm_id }}"
             {% if batch and b.id == batch.id %}selected{% endif %}>{{ b.broiler_farm.farm_name }} — {{ b.batch_name }}{% if b.is_closed %} (Closed){% endif %}</option>{% endfor %}
         </select>
       </div>
       <div class="col-auto">
         <button class="btn btn-primary" type="submit">View Report</button>
-        {% if batch %}<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>{% endif %}
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
       </div>
     </form>
   </div>
@@ -526,9 +557,76 @@ A statement missing its rows reads as complete, and somebody decides on it.
   <div class="ah-empty text-center text-muted py-5">
     That batch is not one you can see, or it no longer exists.
   </div>
+{% elif overview %}
+  {% comment %}
+    The fleet view. No batch chosen used to mean an empty page, but the
+    question this report is usually opened with is which farms are making
+    money — and that cannot be answered one flock at a time.
+  {% endcomment %}
+  <div class="gc-card gc-full mb-3">
+    <div class="gc-card-header">
+      <span>All Farms &mdash; {{ overview_totals.flocks }}{% if status == 'live' %} live{% elif status == 'closed' %} closed{% endif %} flock{{ overview_totals.flocks|pluralize }}</span>
+      <span class="small">
+        {% if overview_totals.losing %}<span class="pl-neg">{{ overview_totals.losing }} at a loss</span>{% endif %}
+        {% if overview_totals.unpriced %}<span class="text-muted ms-3">{{ overview_totals.unpriced }} with unpriced items</span>{% endif %}
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0 pl-fleet">
+        <thead>
+          <tr>
+            <th>Farm</th><th>Batch</th><th>Branch</th><th>Supervisor</th>
+            <th class="text-end">Placed</th><th class="text-end">Sold</th>
+            <th class="text-end">Sold Wt (Kg)</th>
+            <th class="text-end">Revenue</th><th class="text-end">Cost</th>
+            <th class="text-end">Profit</th><th class="text-end">Profit %</th>
+            <th class="text-end">Per Bird</th><th class="text-end">Per Kg</th>
+            <th class="text-end">FCR</th><th class="text-end">Mort %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in overview %}
+          <tr>
+            <td>{{ r.farm.farm_name }}</td>
+            <td><a href="?batch={{ r.batch.id }}" title="Open this flock's full statement">{{ r.batch.batch_name }}</a>{% if r.unpriced %}
+              <i class="fas fa-triangle-exclamation text-warning ms-1" title="{{ r.unpriced }} item(s) have no purchase behind them, so the cost is understated and the profit overstated"></i>{% endif %}</td>
+            <td>{{ r.branch|default:"-" }}</td>
+            <td>{{ r.supervisor|default:"-" }}</td>
+            <td class="text-end">{{ r.placed|floatformat:0 }}</td>
+            <td class="text-end">{{ r.sold_birds|floatformat:0 }}</td>
+            <td class="text-end">{{ r.sold_weight|floatformat:2 }}</td>
+            <td class="text-end">{{ r.revenue|floatformat:2 }}</td>
+            <td class="text-end">{{ r.cost|floatformat:2 }}</td>
+            <td class="text-end {% if r.profit < 0 %}pl-neg{% endif %}">{{ r.profit|floatformat:2 }}</td>
+            <td class="text-end {% if r.profit < 0 %}pl-neg{% endif %}">{% if r.profit_pct is not None %}{{ r.profit_pct|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td class="text-end">{% if r.per_bird is not None %}{{ r.per_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td class="text-end">{% if r.per_kg is not None %}{{ r.per_kg|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td class="text-end">{% if r.fcr %}{{ r.fcr|floatformat:3 }}{% else %}-{% endif %}</td>
+            <td class="text-end">{% if r.mort_pct is not None %}{{ r.mort_pct|floatformat:2 }}{% else %}-{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="fw-bold">
+            <td colspan="4">Total</td>
+            <td class="text-end">{{ overview_totals.placed|floatformat:0 }}</td>
+            <td class="text-end">{{ overview_totals.sold_birds|floatformat:0 }}</td>
+            <td class="text-end">{{ overview_totals.sold_weight|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.revenue|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.cost|floatformat:2 }}</td>
+            <td class="text-end {% if overview_totals.profit < 0 %}pl-neg{% endif %}">{{ overview_totals.profit|floatformat:2 }}</td>
+            <td class="text-end">{% if overview_totals.profit_pct is not None %}{{ overview_totals.profit_pct|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td class="text-end">{% if overview_totals.per_bird is not None %}{{ overview_totals.per_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td class="text-end">{% if overview_totals.per_kg is not None %}{{ overview_totals.per_kg|floatformat:2 }}{% else %}-{% endif %}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
 {% else %}
   <div class="text-center text-muted py-5">
-    Choose a farm and a batch, then View Report.
+    No {{ status }} flocks match these filters.
   </div>
 {% endif %}
 </div>
