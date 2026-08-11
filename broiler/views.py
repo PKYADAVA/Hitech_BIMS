@@ -3674,7 +3674,8 @@ def _production_cost_row(batch, pl_row_cache=None):
     master's standard rate, which is the only standard the system holds.
     """
     from .services.production_pl import build_production_pl, _consumption_rows
-    from .services.production_cost import (cost_rows_from_pl,
+    from .services.production_cost import (admin_cost_for, cost_rows_from_pl,
+                                           growing_charge_for,
                                            standard_consumption_cost)
 
     report = _build_batch_report(batch)
@@ -3704,10 +3705,38 @@ def _production_cost_row(batch, pl_row_cache=None):
     medicine_cost = _num(block.get("Medicine & Health Cost"))
     growing_cost = block.get("Growing Expenses")
     admin_cost = block.get("Administrative Cost")
+
+    # Growing charges come from the flock's GC settlement, where the rate, the
+    # incentives and the deductions have already been worked out. A figure
+    # typed against the batch still wins — somebody entering a real number
+    # knows more than a settlement that may not be final.
+    gc_source = "entered"
+    if growing_cost is None:
+        settled = growing_charge_for(batch)
+        if settled is not None:
+            growing_cost, gc_source = settled, "settlement"
+        else:
+            gc_source = "unsettled"
+
+    # Administrative overhead from the rate schema, per bird placed, unless
+    # somebody has typed it against this batch.
+    admin_source = "entered"
+    admin_heads = {}
+    if admin_cost is None:
+        admin_heads = admin_cost_for(batch, _num(costing.get("chicks_placed")))
+        if admin_heads:
+            admin_cost = sum(admin_heads.values(), Decimal("0")).quantize(Decimal("0.01"))
+            admin_source = "schema"
+        else:
+            admin_source = "unset"
     feed_kg = sum((_num(r["quantity"]) for r in consumption
                    if r.get("kind") == "feed"), Decimal("0"))
 
-    total_cost = _num(pl["total_cost"])
+    # The P&L knows nothing about either source, so the total is rebuilt here
+    # rather than taken from it.
+    total_cost = (_num(pl["total_cost"])
+                  + (_num(growing_cost) if gc_source == "settlement" else Decimal("0"))
+                  + (_num(admin_cost) if admin_source == "schema" else Decimal("0")))
     placed = _num(costing.get("chicks_placed"))
     mortality = _num(costing.get("mortality")) + _num(costing.get("culls"))
     live_birds = max(placed - mortality - _num(costing.get("sold_birds")), Decimal("0"))
@@ -3729,6 +3758,13 @@ def _production_cost_row(batch, pl_row_cache=None):
             std_feed_kg[name] = (std_feed_kg.get(name, Decimal("0"))
                                  + _num(pl_line.max_feed_qty) * eating)
     weight = _num(costing.get("sold_weight"))
+    # Neither a growing charge nor an admin allocation has a master rate to be
+    # measured against, so each stands at its actual value on the standard side
+    # too. Otherwise every flock would show a variance the size of its
+    # overhead, which says nothing about price.
+    std_cost = (std_cost
+                + (_num(growing_cost) if gc_source == "settlement" else Decimal("0"))
+                + (_num(admin_cost) if admin_source == "schema" else Decimal("0")))
     variance = total_cost - std_cost
 
     return {
@@ -3747,8 +3783,9 @@ def _production_cost_row(batch, pl_row_cache=None):
         "medicine_cost": medicine_cost,
         # None where nobody has typed a single head: not the same as nil, and
         # the column says so rather than printing 0.00.
-        "growing_cost": growing_cost,
-        "admin_cost": admin_cost,
+        "growing_cost": growing_cost, "gc_source": gc_source,
+        "admin_cost": admin_cost, "admin_source": admin_source,
+        "admin_heads": admin_heads,
         "other_cost": (total_cost - feed_cost).quantize(Decimal("0.01")),
         # The four blocks the Cost group shows. Growing is added after it, so
         # the group has to sub-total without it or the columns beside it would

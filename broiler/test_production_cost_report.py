@@ -20,8 +20,10 @@ from django.utils import timezone
 
 from broiler.models import (BirdCategory, Branch, Breed, BroilerBatch,
                             BroilerFarm, DailyEntry, Farmer, Region, Supervisor)
-from broiler.services.production_cost import (build_production_cost,
+from broiler.services.production_cost import (admin_cost_for,
+                                              build_production_cost,
                                               cost_rows_from_pl,
+                                              growing_charge_for,
                                               standard_consumption_cost)
 from inventory.models import Item, ItemCategory
 
@@ -238,3 +240,134 @@ class PageTests(TestCase):
         res = self.page(from_date=far, to_date=far)
         self.assertEqual(res.status_code, 200)
         self.assertIsNone(res.context["summary"])
+
+
+class AdminCostRateTests(TestCase):
+    """Overhead defined once, not typed against every batch."""
+
+    def setUp(self):
+        region = Region.objects.create(description="East")
+        self.branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                            prefix="AKB")
+        sup = Supervisor.objects.create(branch=self.branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=self.branch, supervisor=sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=timezone.localdate() - timedelta(days=20))
+
+    def rate(self, head, value, **where):
+        from broiler.models import AdminCostRate
+        return AdminCostRate.objects.create(head=head, rate_per_bird=Decimal(value),
+                                            **where)
+
+    def test_a_branch_rate_applies_per_bird_placed(self):
+        self.rate("Depreciation", "0.40", branch=self.branch)
+        self.assertEqual(admin_cost_for(self.batch, Decimal("12000")),
+                         {"Depreciation": Decimal("4800.00")})
+
+    def test_each_head_is_kept_apart_rather_than_lumped(self):
+        """A breakup showing one "Admin 17,400" is a figure nobody can question."""
+        self.rate("Depreciation", "0.40", branch=self.branch)
+        self.rate("Insurance", "0.25", branch=self.branch)
+        got = admin_cost_for(self.batch, Decimal("1000"))
+        self.assertEqual(got, {"Depreciation": Decimal("400.00"),
+                               "Insurance": Decimal("250.00")})
+
+    def test_a_batch_rate_beats_its_branch(self):
+        """A flock genuinely different from the rest of its branch."""
+        self.rate("Depreciation", "0.40", branch=self.branch)
+        self.rate("Depreciation", "1.00", batch=self.batch)
+        self.assertEqual(admin_cost_for(self.batch, Decimal("1000")),
+                         {"Depreciation": Decimal("1000.00")})
+
+    def test_another_branch_s_rate_does_not_reach_this_flock(self):
+        other = Branch.objects.create(branch_name="Bahraich",
+                                      region=self.branch.region, prefix="BHR")
+        self.rate("Depreciation", "9.00", branch=other)
+        self.assertEqual(admin_cost_for(self.batch, Decimal("1000")), {})
+
+    def test_an_inactive_rate_is_ignored(self):
+        r = self.rate("Depreciation", "0.40", branch=self.branch)
+        r.is_active = False
+        r.save()
+        self.assertEqual(admin_cost_for(self.batch, Decimal("1000")), {})
+
+    def test_a_flock_with_no_placement_carries_no_overhead(self):
+        self.rate("Depreciation", "0.40", branch=self.branch)
+        self.assertEqual(admin_cost_for(self.batch, Decimal("0")), {})
+
+    def test_a_rate_cannot_name_a_branch_and_a_batch_at_once(self):
+        from django.core.exceptions import ValidationError
+        from broiler.models import AdminCostRate
+
+        row = AdminCostRate(head="Depreciation", branch=self.branch,
+                            batch=self.batch, rate_per_bird=Decimal("1"))
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+    def test_a_negative_rate_is_refused(self):
+        from django.core.exceptions import ValidationError
+        from broiler.models import AdminCostRate
+
+        with self.assertRaises(ValidationError):
+            AdminCostRate(head="Depreciation", branch=self.branch,
+                          rate_per_bird=Decimal("-1")).full_clean()
+
+
+class GrowingChargeSourceTests(TestCase):
+    """What the company owes the farmer, from the settlement that worked it out."""
+
+    def setUp(self):
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region, prefix="AKB")
+        sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=timezone.localdate() - timedelta(days=40))
+
+    def settle(self, **over):
+        from broiler.models import GrowingChargeSettlement
+        row = dict(batch=self.batch, farm=self.farm,
+                   gc_date=timezone.localdate())
+        row.update(over)
+        return GrowingChargeSettlement.objects.create(**row)
+
+    def test_an_unsettled_flock_reports_nothing_rather_than_zero(self):
+        """"Not settled" and "cost nothing to grow" are different answers."""
+        self.assertIsNone(growing_charge_for(self.batch))
+
+    def test_the_amount_payable_is_the_cost(self):
+        """After incentives and deductions, before TDS and advance recovery —
+        those are financing, not what the flock cost to grow."""
+        self.settle(total_amount_payable=Decimal("42000"),
+                    actual_growing_charges=Decimal("40000"))
+        self.assertEqual(growing_charge_for(self.batch), Decimal("42000.00"))
+
+    def test_it_falls_back_to_the_growing_charge_when_nothing_is_payable_yet(self):
+        self.settle(total_amount_payable=Decimal("0"),
+                    actual_growing_charges=Decimal("40000"))
+        self.assertEqual(growing_charge_for(self.batch), Decimal("40000.00"))
+
+    def test_a_flock_can_only_be_settled_once(self):
+        """The model enforces it, so there is never a second figure to choose
+        between — which is the whole reason this is read from the settlement
+        rather than typed against the batch."""
+        from django.db import IntegrityError, transaction
+
+        self.settle(total_amount_payable=Decimal("42000"))
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.settle(total_amount_payable=Decimal("10000"))
+
+    def test_another_flock_s_settlement_is_not_borrowed(self):
+        other = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-2",
+            start_date=timezone.localdate() - timedelta(days=5))
+        self.settle(total_amount_payable=Decimal("42000"))
+        self.assertIsNone(growing_charge_for(other))

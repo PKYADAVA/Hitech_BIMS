@@ -1848,6 +1848,67 @@ class GCFarmerClassification(models.Model):
         ordering = ['id']
 
 
+class AdminCostRate(models.Model):
+    """Administrative overhead a flock carries, defined once rather than typed
+    against every batch.
+
+    Office expense, accounting, depreciation and the rest have no transaction
+    in this ERP, so the Production Cost report had nothing to show but figures
+    somebody had keyed in per batch — which on most flocks meant nothing at
+    all. A rate here is applied per bird placed, the same basis chick cost
+    already works on: it scales with the flock and does not move as birds are
+    sold.
+
+    Defined for a branch, or for one batch when a flock is genuinely different.
+    The batch rate wins where both exist. A figure typed by hand against the
+    batch still beats both — somebody entering a real invoice knows more than
+    a rate does.
+    """
+
+    HEAD_CHOICES = [(h, h) for h in (
+        "Office Expense Allocation", "Accounting Charges", "Depreciation",
+        "Interest Allocation", "Insurance",
+    )]
+
+    head = models.CharField(max_length=64, choices=HEAD_CHOICES)
+    branch = models.ForeignKey("broiler.Branch", on_delete=models.CASCADE,
+                               null=True, blank=True, related_name="admin_cost_rates",
+                               help_text=_("Applies to every flock of this branch"))
+    batch = models.ForeignKey("broiler.BroilerBatch", on_delete=models.CASCADE,
+                              null=True, blank=True, related_name="admin_cost_rates",
+                              help_text=_("Overrides the branch rate for one flock"))
+    rate_per_bird = models.DecimalField(max_digits=12, decimal_places=4, default=0,
+                                        help_text=_("Rupees per bird placed"))
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Admin Cost Rate"
+        verbose_name_plural = "Admin Cost Rates"
+        constraints = [
+            models.UniqueConstraint(fields=["head", "branch"], name="uniq_admin_rate_branch",
+                                    condition=models.Q(batch__isnull=True)),
+            models.UniqueConstraint(fields=["head", "batch"], name="uniq_admin_rate_batch",
+                                    condition=models.Q(batch__isnull=False)),
+        ]
+
+    def __str__(self):
+        where = self.batch.batch_name if self.batch_id else (
+            self.branch.branch_name if self.branch_id else "All branches")
+        return f"{self.head} @ {self.rate_per_bird}/bird ({where})"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.batch_id and self.branch_id:
+            raise ValidationError({
+                "branch": _("A rate belongs to a branch or to one batch, not both."),
+            })
+        if self.rate_per_bird is not None and self.rate_per_bird < 0:
+            raise ValidationError({"rate_per_bird": _("A rate cannot be negative.")})
+
+
 class GrowingChargeSettlement(models.Model):
     """Farmer Growing Charge settlement / batch-closing transaction — the
     "Add Rearing Charges" screen. One per Batch (closing it). Auto-loaded from
@@ -2293,6 +2354,363 @@ class FarmCaptureFile(models.Model):
         if getattr(owner, field) != latest.file.name:
             setattr(owner, field, latest.file.name)
             owner.save(update_fields=[field])
+
+
+class FarmerFarmSetupRequest(models.Model):
+    """A field supervisor's on-site submission to create a brand-new Farmer +
+    BroilerFarm — Broiler > Transactions > Farmer & Farm Setup Request.
+
+    This is a staging record, not a master: the GPS pin, KYC scans and shed
+    details captured here describe a farm that does not exist in the system
+    yet. Nothing here is real until a reviewer approves it — only then does
+    :meth:`approve` create the actual ``Farmer``/``BroilerFarm``/
+    ``BroilerFarmShed`` rows, mirroring the same "share the stored file,
+    don't duplicate the bytes" approach ``FarmCaptureFile.sync_slot`` already
+    uses for KYC scans elsewhere in this file.
+
+    Kept deliberately separate from ``hatchery.ChangeRequest``: that model
+    requires an existing ``object_id`` to attach an edit/delete to, and has
+    nowhere to stage files pending approval — neither fits "there is no row
+    yet, and there are half a dozen documents attached to the row that
+    doesn't exist yet."
+    """
+
+    SHED_TYPES = [
+        ("open", _("Open Shed")),
+        ("closed", _("Closed Shed")),
+        ("ec", _("Environmental Controlled")),
+    ]
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", _("Draft")
+        PENDING = "pending", _("Pending")
+        APPROVED = "approved", _("Approved")
+        REJECTED = "rejected", _("Rejected")
+
+    request_no = models.CharField(
+        max_length=30, unique=True, editable=False, blank=True,
+        help_text=_("Auto-generated, e.g. FFR-2627-0001"))
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.DRAFT)
+    branch = models.ForeignKey(
+        Branch, on_delete=models.PROTECT,
+        related_name='farmer_farm_setup_requests',
+        help_text=_("Branch this request was raised for; drives numbering and who can review it"))
+    supervisor = models.ForeignKey(
+        Supervisor, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='farmer_farm_setup_requests',
+        help_text=_("Who takes ownership of the farm on approval; required to submit, not to draft"))
+
+    # --- workflow / audit --------------------------------------------------
+    submitted_by = models.ForeignKey(
+        'auth.User', on_delete=models.PROTECT,
+        related_name='farmer_farm_setup_requests_submitted')
+    submitted_at = models.DateTimeField(null=True, blank=True,
+        help_text=_("Set when the request moves from Draft to Pending"))
+    reviewed_by = models.ForeignKey(
+        'auth.User', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='farmer_farm_setup_requests_reviewed')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
+    # SET_NULL, not PROTECT: this is only a backward pointer for the audit
+    # trail ("this request became that record"). The request keeps its own
+    # captured data regardless, so a master-data cleanup deleting the Farmer
+    # or Farm it produced must not be blocked by a request from months ago —
+    # it only loses the link, not the history.
+    created_farmer = models.ForeignKey(
+        Farmer, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='setup_requests',
+        help_text=_("Set on approval — the real Farmer this request became"))
+    created_farm = models.ForeignKey(
+        BroilerFarm, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='setup_requests',
+        help_text=_("Set on approval — the real BroilerFarm this request became"))
+
+    # --- 1. Farm Location & GPS --------------------------------------------
+    latitude = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)])
+    longitude = models.FloatField(
+        null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)])
+    gps_accuracy_m = models.FloatField(null=True, blank=True)
+    gps_captured_at = models.DateTimeField(null=True, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
+    village_area = models.CharField(max_length=100, blank=True)
+    # Free text, matching BroilerFarm.line's own convention — not FK to
+    # BroilerLine, so a request reads the same way the farm it becomes will.
+    line = models.CharField(max_length=100, blank=True)
+    full_address = models.TextField(blank=True)
+
+    # --- 2. Farmer Profile & Contact ---------------------------------------
+    # blank=True here (and on every other "required-looking" field below)
+    # even though the mockup marks them with an asterisk: a Draft is allowed
+    # to be genuinely incomplete, so nothing here is enforced by full_clean.
+    # REQUIRED_FOR_SUBMIT below is what actually enforces the asterisks, and
+    # only at the point of submit() — the one place "incomplete" must stop
+    # meaning something.
+    farmer_name = models.CharField(max_length=150, blank=True)
+    father_spouse_name = models.CharField(max_length=150, blank=True)
+    primary_mobile = models.CharField(max_length=15, blank=True)
+    whatsapp_number = models.CharField(max_length=15, blank=True)
+    alternate_mobile = models.CharField(max_length=15, blank=True)
+    email = models.EmailField(blank=True)
+    # Where the farmer actually lives — distinct from full_address (the
+    # farm's own GPS-captured location in Section 1); the two are often not
+    # the same place, so approve() no longer falls back to one for the other
+    # once this has something in it.
+    farmer_address = models.TextField(blank=True)
+    farmer_photo = models.ImageField(upload_to='farmer_farm_requests/photos/', blank=True, null=True)
+
+    # --- 3. Farm & Shed Details ---------------------------------------------
+    farm_name = models.CharField(max_length=100, blank=True)
+    farm_type = models.CharField(
+        max_length=50, choices=BroilerFarm.FARM_TYPES, default='own')
+    farmer_group = models.ForeignKey(
+        FarmerGroup, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='farmer_farm_setup_requests')
+    capacity_birds = models.PositiveIntegerField(null=True, blank=True)
+    shed_type = models.CharField(max_length=10, choices=SHED_TYPES, default="open")
+    remarks = models.TextField(blank=True)
+
+    # --- 4. KYC & Documents --------------------------------------------------
+    aadhaar_number = models.CharField(max_length=12, blank=True)
+    pan_card = models.CharField(max_length=10, blank=True)
+    pan_upload = models.FileField(
+        upload_to='farmer_farm_requests/kyc/', storage=private_media_storage, blank=True, null=True)
+    aadhaar_front = models.FileField(
+        upload_to='farmer_farm_requests/kyc/', storage=private_media_storage, blank=True, null=True)
+    aadhaar_back = models.FileField(
+        upload_to='farmer_farm_requests/kyc/', storage=private_media_storage, blank=True, null=True)
+    agreement_copy = models.FileField(
+        upload_to='farmer_farm_requests/kyc/', storage=private_media_storage, blank=True, null=True)
+    security_cheque = models.FileField(
+        upload_to='farmer_farm_requests/kyc/', storage=private_media_storage, blank=True, null=True)
+    physically_verified = models.BooleanField(
+        default=False,
+        help_text=_("Field supervisor confirms the farmer, farm location and basic farm details have been physically verified"))
+
+    # --- 5. Bank Details (optional; not enforced by REQUIRED_FOR_SUBMIT) ----
+    # Same names as Farmer's own bank fields, so approve() can pass them
+    # straight across without a translation table.
+    account_holder_name = models.CharField(max_length=150, blank=True)
+    acc_no = models.CharField(max_length=30, blank=True)
+    ifsc_code = models.CharField(max_length=15, blank=True)
+    bank_name = models.CharField(max_length=100, blank=True)
+    bank_branch = models.CharField(max_length=100, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Farmer & Farm Setup Request")
+        verbose_name_plural = _("Farmer & Farm Setup Requests")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.request_no or f"(unsaved request for {self.farmer_name})"
+
+    @classmethod
+    def next_request_no(cls, on_date=None):
+        """FY-scoped, same shape as FarmLocationCapture._next_no — e.g. the
+        1st request of FY2026-27 is FFR-2627-0001."""
+        current_date = on_date or now().date()
+        start_year = current_date.year if current_date.month >= 4 else current_date.year - 1
+        fy = f"{start_year % 100:02d}{(start_year + 1) % 100:02d}"
+        prefix = f"FFR-{fy}-"
+        max_num = 0
+        for existing in cls.objects.filter(request_no__startswith=prefix).values_list("request_no", flat=True):
+            match = re.match(rf"^{re.escape(prefix)}(\d+)$", existing or "")
+            if match:
+                max_num = max(max_num, int(match.group(1)))
+        return f"{prefix}{max_num + 1:04d}"
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.request_no:
+            self.request_no = self.next_request_no()
+        super().save(*args, **kwargs)
+
+    #: (field, label) pairs the mockup marks with a red asterisk — enforced
+    #: only here, at the draft->pending transition, not by full_clean on
+    #: every save (a draft is allowed to be genuinely incomplete).
+    REQUIRED_FOR_SUBMIT = [
+        ("state", _("State")), ("district", _("District")), ("line", _("Line / Route")),
+        ("village_area", _("Village / Area")), ("full_address", _("Full Farm Address")),
+        ("farmer_name", _("Farmer Name")), ("primary_mobile", _("Primary Mobile")),
+        ("farmer_photo", _("Farmer Photo")), ("supervisor", _("Supervisor")),
+        ("farm_name", _("Farm Name")), ("capacity_birds", _("Capacity (Birds)")),
+    ]
+
+    def submit(self):
+        """Draft -> Pending: the point this enters the review queue."""
+        if self.status != self.Status.DRAFT:
+            raise ValidationError(_("Only a draft can be submitted for approval."))
+        missing = [str(label) for field, label in self.REQUIRED_FOR_SUBMIT if not getattr(self, field)]
+        if not self.physically_verified:
+            missing.append(str(_("Physical verification confirmation")))
+        if not self.sheds.exists():
+            missing.append(str(_("At least one Shed row")))
+        if missing:
+            raise ValidationError(
+                _("Fill in before submitting: %(fields)s") % {"fields": ", ".join(missing)})
+        self.status = self.Status.PENDING
+        self.submitted_at = now()
+        self.save(update_fields=["status", "submitted_at", "updated_at"])
+
+    def reject(self, reviewer, note=""):
+        if self.status != self.Status.PENDING:
+            raise ValidationError(_("Only a pending request can be rejected."))
+        self.status = self.Status.REJECTED
+        self.reviewed_by = reviewer
+        self.reviewed_at = now()
+        self.review_note = note
+        self.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_note", "updated_at"])
+
+    def approve(self, reviewer, note=""):
+        """Creates the real Farmer + BroilerFarm + shed rows, then shares
+        (not copies) each uploaded file onto its matching master field — the
+        same convention FarmCaptureFile.sync_slot already uses, since both
+        this model's files and the masters' KYC fields sit on the same
+        private storage backend."""
+        if self.status != self.Status.PENDING:
+            raise ValidationError(_("Only a pending request can be approved."))
+        from django.db import transaction
+        with transaction.atomic():
+            farmer = Farmer(
+                farmer_name=self.farmer_name,
+                mobile_no=self.primary_mobile,
+                mobile_2=self.whatsapp_number or self.alternate_mobile,
+                pan_no=self.pan_card,
+                aadhar_no=self.aadhaar_number,
+                farmer_group=self.farmer_group,
+                address=self.farmer_address or self.full_address,
+                account_holder_name=self.account_holder_name,
+                acc_no=self.acc_no,
+                ifsc_code=self.ifsc_code,
+                bank_name=self.bank_name,
+                bank_branch=self.bank_branch,
+            )
+            if self.farmer_photo:
+                farmer.farmer_photo = self.farmer_photo.name
+            if self.aadhaar_front:
+                farmer.aadhar_upload_front = self.aadhaar_front.name
+            if self.aadhaar_back:
+                farmer.aadhar_upload_back = self.aadhaar_back.name
+            if self.pan_upload:
+                farmer.pan_upload = self.pan_upload.name
+            # farmer_group is nullable but not blank=True on Farmer itself (a
+            # pre-existing quirk of that model) — excluded here too, since
+            # it's genuinely optional on this request (no asterisk in the
+            # mockup) and a request without one must still be approvable.
+            farmer.full_clean(exclude=["farmer_photo", "aadhar_upload_front", "aadhar_upload_back",
+                                       "pan_upload", "farmer_group"])
+            farmer.save()
+
+            # submit() already refused to queue this without one — Supervisor
+            # is picked by the field supervisor themselves now, not guessed
+            # from the branch's own records.
+            if self.supervisor_id is None:
+                raise ValidationError(_("This request has no Supervisor set."))
+
+            farm = BroilerFarm(
+                branch=self.branch,
+                supervisor=self.supervisor,
+                farmer=farmer,
+                region=self.state,
+                line=self.line,
+                farm_name=self.farm_name or self.farmer_name,
+                farm_capacity=self.capacity_birds or 0,
+                farm_type=self.farm_type,
+                state=self.state,
+                district=self.district,
+                area=self.village_area,
+                farm_address=self.full_address,
+                farm_latitude=self.latitude,
+                farm_longitude=self.longitude,
+                remarks=self.remarks,
+            )
+            if self.agreement_copy:
+                farm.agreement_copy = self.agreement_copy.name
+            if self.security_cheque:
+                farm.cheque_1_file = self.security_cheque.name
+            farm.full_clean(exclude=["farm_code", "agreement_copy", "other_documents",
+                                     "cheque_1_file", "cheque_2_file", "cheque_3_file", "cheque_4_file"])
+            farm.save()
+
+            shed_rows = list(self.sheds.all())
+            sheds = max(len(shed_rows), 1)
+            per_shed_capacity = (self.capacity_birds or 0) // sheds
+            shed_type_label = dict(self.SHED_TYPES).get(self.shed_type, self.shed_type)
+            for i, row in enumerate(shed_rows or [None]):
+                # BroilerFarmShed.shed_type is a different axis (bird type:
+                # broiler/breeder/layer/…) from this request's shed_type
+                # (construction: open/closed/EC) — left at its own default
+                # rather than force-mapped; the construction type is folded
+                # into the shed name instead, since the model has no field
+                # for it.
+                BroilerFarmShed.objects.create(
+                    farm=farm,
+                    shed_name=f"{shed_type_label} Shed {i + 1}",
+                    capacity=per_shed_capacity,
+                    length=row.length if row else None,
+                    width=row.width if row else None,
+                )
+
+            self.status = self.Status.APPROVED
+            self.reviewed_by = reviewer
+            self.reviewed_at = now()
+            self.review_note = note
+            self.created_farmer = farmer
+            self.created_farm = farm
+            self.save(update_fields=["status", "reviewed_by", "reviewed_at", "review_note",
+                                     "created_farmer", "created_farm", "updated_at"])
+        return farmer, farm
+
+
+class FarmerFarmSetupRequestShed(models.Model):
+    """One prospective shed row on a Farmer & Farm Setup Request — its own
+    dimensions, added/removed on the form the same way Farm Location &
+    Photos' picture rows are. Becomes one real BroilerFarmShed per row on
+    approval (see FarmerFarmSetupRequest.approve)."""
+
+    request = models.ForeignKey(
+        FarmerFarmSetupRequest, on_delete=models.CASCADE, related_name='sheds')
+    length = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    width = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Farmer & Farm Setup Request Shed")
+        verbose_name_plural = _("Farmer & Farm Setup Request Sheds")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.length or '?'} x {self.width or '?'} ft ({self.request_id})"
+
+    @property
+    def area_sqft(self):
+        if self.length is None or self.width is None:
+            return None
+        return self.length * self.width
+
+
+class FarmerFarmSetupRequestPhoto(models.Model):
+    """One of any number of farm pictures attached to a request, added or
+    removed on the form the same way the shed rows are.
+
+    Kept as evidence for the reviewer only — unlike the KYC/master slots and
+    the shed rows, nothing on BroilerFarm mirrors these; the farm itself has
+    no photo gallery of its own to copy them onto."""
+
+    request = models.ForeignKey(
+        FarmerFarmSetupRequest, on_delete=models.CASCADE, related_name='photos')
+    photo = models.ImageField(upload_to='farmer_farm_requests/photos/')
+
+    class Meta:
+        verbose_name = _("Farmer & Farm Setup Request Photo")
+        verbose_name_plural = _("Farmer & Farm Setup Request Photos")
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"Photo for {self.request_id}"
 
 
 class BatchOtherEntry(models.Model):

@@ -18,6 +18,8 @@ on the statement.
 """
 from decimal import Decimal
 
+from django.db import models
+
 ZERO = Decimal("0")
 Q2 = Decimal("0.01")
 
@@ -82,6 +84,55 @@ def cost_rows_from_pl(pl):
         elif block.get("total") is not None:
             out.append((title, _d(block["total"])))
     return out
+
+
+def admin_cost_for(batch, placed):
+    """Administrative overhead for a flock, from the rate schema.
+
+    Batch rate first, then the flock's branch. Returns ``{head: amount}`` —
+    per head rather than one figure, so the breakup can name what the overhead
+    is made of instead of showing a lump nobody can question.
+    """
+    from broiler.models import AdminCostRate
+
+    if not placed:
+        return {}
+    branch_id = batch.broiler_farm.branch_id if batch.broiler_farm_id else None
+    rates = AdminCostRate.objects.filter(is_active=True).filter(
+        models.Q(batch_id=batch.id) | models.Q(branch_id=branch_id, batch__isnull=True))
+    chosen = {}
+    for rate in rates:
+        # A batch rate is a deliberate exception to its branch's, so it wins
+        # wherever both name the same head.
+        if rate.head in chosen and not rate.batch_id:
+            continue
+        chosen[rate.head] = rate
+    return {head: (_d(r.rate_per_bird) * _d(placed)).quantize(Q2)
+            for head, r in chosen.items()}
+
+
+def growing_charge_for(batch):
+    """What the company owes the farmer for growing this flock.
+
+    Taken from the flock's Growing Charge settlement rather than typed against
+    the batch: the settlement is where the rate, the incentives and the
+    deductions have already been worked out, and a second figure keyed in by
+    hand would be a second answer to a question that already has one.
+
+    ``total_amount_payable`` is the cost — after incentives and deductions,
+    before TDS and advance recovery, which are financing rather than what the
+    flock cost to grow. None when the flock has not been settled yet, so the
+    report says "not settled" instead of "nothing".
+    """
+    from broiler.models import GrowingChargeSettlement
+
+    row = (GrowingChargeSettlement.objects.filter(batch=batch)
+           .order_by("-gc_date", "-id")
+           .values("total_amount_payable", "actual_growing_charges").first())
+    if not row:
+        return None
+    payable = _d(row["total_amount_payable"])
+    return payable.quantize(Q2) if payable else _d(row["actual_growing_charges"]).quantize(Q2)
 
 
 def build_production_cost(rows):

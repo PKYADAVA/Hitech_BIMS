@@ -78,6 +78,10 @@ use, so a flock's feed cost is one number across the ERP.
   .pc-drawer .pc-blk td { background:#f4f6f8; font-weight:700; }
   .pc-drawer .pc-sub { padding-left:1rem !important; color:#52514e; }
 
+  /* Where a figure came from, when it was not typed by hand: the difference
+     between a rate and an invoice matters to whoever questions it. */
+  .pc-src { font-size:.55rem; color:#6b7280; margin-left:.15rem; font-weight:600; }
+
   .pc-good { color:#1a7f37; font-weight:700; }
   .pc-bad  { color:#d03b3b; font-weight:700; }
   .pc-muted { color:#8b8b86; }
@@ -273,11 +277,11 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.chick_cost|floatformat:2 }}</td>
             <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
             <td class="num">{{ r.medicine_cost|floatformat:2 }}</td>
-            <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% if r.admin_source == 'schema' %}<sup class="pc-src" title="From the Admin Cost Rate schema, per bird placed">rate</sup>{% endif %}{% else %}<span class="pc-muted" title="No admin rate set for this branch or batch">no rate</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.sub_total|floatformat:2 }}</td>
             <td class="num">{% if r.cost_per_kg %}{{ r.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
-            <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% if r.gc_source == 'settlement' %}<sup class="pc-src" title="From this flock's Growing Charge settlement">gc</sup>{% endif %}{% else %}<span class="pc-muted" title="This flock has no Growing Charge settlement yet">not settled</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
             <td class="num">{% if r.fcr %}{{ r.fcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cfcr %}{{ r.cfcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
