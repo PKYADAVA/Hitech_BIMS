@@ -451,6 +451,10 @@ $(function () {
       kv('Birds Placed', num(d.placed)) +
       kv('Mortality &amp; Culls', num(d.mortality)) +
       kv('Live Birds', num(d.live_birds)) +
+      // Placed less mortality less sold is what leaves Live Birds at 692 on a
+      // flock of 2,429 that lost 11 — without the sold count the three
+      // figures above read as an arithmetic error.
+      kv('Sold Birds', num(d.sold_birds)) +
       kv('Sold Weight', num(d.weight, 2) + ' Kg');
     if (d.feed_lines.length) {
       html += '<div class="pc-sec">FEED CONSUMPTION</div>' +

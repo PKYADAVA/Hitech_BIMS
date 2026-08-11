@@ -3908,7 +3908,8 @@ def production_cost_report(request):
             "batch": r["batch"].batch_name,
             "farm": r["farm"].farm_name,
             "placed": _s(r["placed"]), "mortality": _s(r["mortality"]),
-            "live_birds": _s(r["live_birds"]), "weight": _s(r["weight"]),
+            "live_birds": _s(r["live_birds"]), "sold_birds": _s(r["sold_birds"]),
+            "weight": _s(r["weight"]),
             "components": [[head, str(amount)] for head, amount in r["components"]],
             "sub_total": _s(r["sub_total"]),
             "cost_detail": [
