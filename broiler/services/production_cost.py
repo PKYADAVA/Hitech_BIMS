@@ -87,28 +87,32 @@ def cost_rows_from_pl(pl):
 
 
 def admin_cost_for(batch, placed):
-    """Administrative overhead for a flock, from the rate schema.
+    """Administrative overhead for a flock, from its Growing Charge Scheme.
 
-    Batch rate first, then the flock's branch. Returns ``{head: amount}`` —
-    per head rather than one figure, so the breakup can name what the overhead
-    is made of instead of showing a lump nobody can question.
+    The scheme already carries it — ``farmer_admin_cost`` and
+    ``management_admin_cost``, both rupees per bird placed — and the Batch
+    History and GC Realization reports have always read it from there. A
+    second master would have been a second answer to a settled question.
+
+    Returned per head rather than as one figure, so the breakup can name what
+    the overhead is made of. The management report bills both shares; the
+    farmer's own statement bills only his, which is the split those two fields
+    exist to express.
     """
-    from broiler.models import AdminCostRate
+    from broiler.views import _match_growing_charge_scheme
 
     if not placed:
         return {}
-    branch_id = batch.broiler_farm.branch_id if batch.broiler_farm_id else None
-    rates = AdminCostRate.objects.filter(is_active=True).filter(
-        models.Q(batch_id=batch.id) | models.Q(branch_id=branch_id, batch__isnull=True))
-    chosen = {}
-    for rate in rates:
-        # A batch rate is a deliberate exception to its branch's, so it wins
-        # wherever both name the same head.
-        if rate.head in chosen and not rate.batch_id:
-            continue
-        chosen[rate.head] = rate
-    return {head: (_d(r.rate_per_bird) * _d(placed)).quantize(Q2)
-            for head, r in chosen.items()}
+    scheme = _match_growing_charge_scheme(batch, batch.start_date)
+    if not scheme:
+        return {}
+    heads = {}
+    for label, rate in (("Farmer Admin Cost", scheme.farmer_admin_cost),
+                        ("Management Admin Cost", scheme.management_admin_cost)):
+        amount = (_d(rate) * _d(placed)).quantize(Q2)
+        if amount:
+            heads[label] = amount
+    return heads
 
 
 def growing_charge_for(batch):

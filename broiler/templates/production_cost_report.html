@@ -277,7 +277,7 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.chick_cost|floatformat:2 }}</td>
             <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
             <td class="num">{{ r.medicine_cost|floatformat:2 }}</td>
-            <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% if r.admin_source == 'schema' %}<sup class="pc-src" title="From the Admin Cost Rate schema, per bird placed">rate</sup>{% endif %}{% else %}<span class="pc-muted" title="No admin rate set for this branch or batch">no rate</span>{% endif %}</td>
+            <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% if r.admin_source == 'schema' %}<sup class="pc-src" title="From this flock's Growing Charge Scheme, per bird placed">rate</sup>{% endif %}{% else %}<span class="pc-muted" title="No Growing Charge Scheme covers this flock's placement date">no scheme</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.sub_total|floatformat:2 }}</td>
             <td class="num">{% if r.cost_per_kg %}{{ r.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>

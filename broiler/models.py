@@ -1848,67 +1848,6 @@ class GCFarmerClassification(models.Model):
         ordering = ['id']
 
 
-class AdminCostRate(models.Model):
-    """Administrative overhead a flock carries, defined once rather than typed
-    against every batch.
-
-    Office expense, accounting, depreciation and the rest have no transaction
-    in this ERP, so the Production Cost report had nothing to show but figures
-    somebody had keyed in per batch — which on most flocks meant nothing at
-    all. A rate here is applied per bird placed, the same basis chick cost
-    already works on: it scales with the flock and does not move as birds are
-    sold.
-
-    Defined for a branch, or for one batch when a flock is genuinely different.
-    The batch rate wins where both exist. A figure typed by hand against the
-    batch still beats both — somebody entering a real invoice knows more than
-    a rate does.
-    """
-
-    HEAD_CHOICES = [(h, h) for h in (
-        "Office Expense Allocation", "Accounting Charges", "Depreciation",
-        "Interest Allocation", "Insurance",
-    )]
-
-    head = models.CharField(max_length=64, choices=HEAD_CHOICES)
-    branch = models.ForeignKey("broiler.Branch", on_delete=models.CASCADE,
-                               null=True, blank=True, related_name="admin_cost_rates",
-                               help_text=_("Applies to every flock of this branch"))
-    batch = models.ForeignKey("broiler.BroilerBatch", on_delete=models.CASCADE,
-                              null=True, blank=True, related_name="admin_cost_rates",
-                              help_text=_("Overrides the branch rate for one flock"))
-    rate_per_bird = models.DecimalField(max_digits=12, decimal_places=4, default=0,
-                                        help_text=_("Rupees per bird placed"))
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Admin Cost Rate"
-        verbose_name_plural = "Admin Cost Rates"
-        constraints = [
-            models.UniqueConstraint(fields=["head", "branch"], name="uniq_admin_rate_branch",
-                                    condition=models.Q(batch__isnull=True)),
-            models.UniqueConstraint(fields=["head", "batch"], name="uniq_admin_rate_batch",
-                                    condition=models.Q(batch__isnull=False)),
-        ]
-
-    def __str__(self):
-        where = self.batch.batch_name if self.batch_id else (
-            self.branch.branch_name if self.branch_id else "All branches")
-        return f"{self.head} @ {self.rate_per_bird}/bird ({where})"
-
-    def clean(self):
-        from django.core.exceptions import ValidationError
-
-        if self.batch_id and self.branch_id:
-            raise ValidationError({
-                "branch": _("A rate belongs to a branch or to one batch, not both."),
-            })
-        if self.rate_per_bird is not None and self.rate_per_bird < 0:
-            raise ValidationError({"rate_per_bird": _("A rate cannot be negative.")})
-
-
 class GrowingChargeSettlement(models.Model):
     """Farmer Growing Charge settlement / batch-closing transaction — the
     "Add Rearing Charges" screen. One per Batch (closing it). Auto-loaded from

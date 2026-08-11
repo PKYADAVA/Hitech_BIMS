@@ -3718,8 +3718,8 @@ def _production_cost_row(batch, pl_row_cache=None):
         else:
             gc_source = "unsettled"
 
-    # Administrative overhead from the rate schema, per bird placed, unless
-    # somebody has typed it against this batch.
+    # Administrative overhead from the flock's Growing Charge Scheme, per bird
+    # placed, unless somebody has typed it against this batch.
     admin_source = "entered"
     admin_heads = {}
     if admin_cost is None:
@@ -3728,7 +3728,7 @@ def _production_cost_row(batch, pl_row_cache=None):
             admin_cost = sum(admin_heads.values(), Decimal("0")).quantize(Decimal("0.01"))
             admin_source = "schema"
         else:
-            admin_source = "unset"
+            admin_source = "no scheme"
     feed_kg = sum((_num(r["quantity"]) for r in consumption
                    if r.get("kind") == "feed"), Decimal("0"))
 

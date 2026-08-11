@@ -242,79 +242,62 @@ class PageTests(TestCase):
         self.assertIsNone(res.context["summary"])
 
 
-class AdminCostRateTests(TestCase):
-    """Overhead defined once, not typed against every batch."""
+class AdminCostFromSchemeTests(TestCase):
+    """Overhead read from the Growing Charge Scheme, which already holds it."""
 
     def setUp(self):
-        region = Region.objects.create(description="East")
-        self.branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+        self.region = Region.objects.create(description="East")
+        self.branch = Branch.objects.create(branch_name="Akbarpur", region=self.region,
                                             prefix="AKB")
         sup = Supervisor.objects.create(branch=self.branch, name="R. Verma")
         farmer = Farmer.objects.create(farmer_name="S. Yadav")
         self.farm = BroilerFarm.objects.create(
-            branch=self.branch, supervisor=sup, farmer=farmer, region=region,
+            branch=self.branch, supervisor=sup, farmer=farmer, region=self.region,
             line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.placed_on = date(2026, 7, 1)
         self.batch = BroilerBatch.objects.create(
-            broiler_farm=self.farm, batch_name="B-1",
-            start_date=timezone.localdate() - timedelta(days=20))
+            broiler_farm=self.farm, batch_name="B-1", start_date=self.placed_on)
 
-    def rate(self, head, value, **where):
-        from broiler.models import AdminCostRate
-        return AdminCostRate.objects.create(head=head, rate_per_bird=Decimal(value),
-                                            **where)
+    def scheme(self, **over):
+        from broiler.models import GrowingChargeScheme
+        row = dict(region=self.region, schema_name="S1", is_active=True,
+                   from_date=date(2026, 1, 1), to_date=date(2026, 12, 31),
+                   farmer_admin_cost=Decimal("3"), management_admin_cost=Decimal("1"))
+        row.update(over)
+        return GrowingChargeScheme.objects.create(**row)
 
-    def test_a_branch_rate_applies_per_bird_placed(self):
-        self.rate("Depreciation", "0.40", branch=self.branch)
+    def test_both_shares_are_billed_per_bird_placed(self):
+        """The management view bills farmer and management admin together —
+        the same rule the Batch History report has always followed."""
+        self.scheme()
         self.assertEqual(admin_cost_for(self.batch, Decimal("12000")),
-                         {"Depreciation": Decimal("4800.00")})
+                         {"Farmer Admin Cost": Decimal("36000.00"),
+                          "Management Admin Cost": Decimal("12000.00")})
 
-    def test_each_head_is_kept_apart_rather_than_lumped(self):
-        """A breakup showing one "Admin 17,400" is a figure nobody can question."""
-        self.rate("Depreciation", "0.40", branch=self.branch)
-        self.rate("Insurance", "0.25", branch=self.branch)
-        got = admin_cost_for(self.batch, Decimal("1000"))
-        self.assertEqual(got, {"Depreciation": Decimal("400.00"),
-                               "Insurance": Decimal("250.00")})
+    def test_each_share_is_named_rather_than_lumped(self):
+        """A breakup showing one "Admin 48,000" is a figure nobody can question."""
+        self.scheme()
+        self.assertEqual(sorted(admin_cost_for(self.batch, Decimal("1000"))),
+                         ["Farmer Admin Cost", "Management Admin Cost"])
 
-    def test_a_batch_rate_beats_its_branch(self):
-        """A flock genuinely different from the rest of its branch."""
-        self.rate("Depreciation", "0.40", branch=self.branch)
-        self.rate("Depreciation", "1.00", batch=self.batch)
-        self.assertEqual(admin_cost_for(self.batch, Decimal("1000")),
-                         {"Depreciation": Decimal("1000.00")})
+    def test_a_share_set_to_nothing_does_not_take_a_row(self):
+        self.scheme(management_admin_cost=Decimal("0"))
+        self.assertEqual(list(admin_cost_for(self.batch, Decimal("1000"))),
+                         ["Farmer Admin Cost"])
 
-    def test_another_branch_s_rate_does_not_reach_this_flock(self):
-        other = Branch.objects.create(branch_name="Bahraich",
-                                      region=self.branch.region, prefix="BHR")
-        self.rate("Depreciation", "9.00", branch=other)
+    def test_no_scheme_covering_the_placement_means_no_overhead(self):
+        """Not zero overhead — no scheme to say. The page prints "no scheme"."""
+        self.scheme(from_date=date(2027, 1, 1), to_date=date(2027, 12, 31))
         self.assertEqual(admin_cost_for(self.batch, Decimal("1000")), {})
 
-    def test_an_inactive_rate_is_ignored(self):
-        r = self.rate("Depreciation", "0.40", branch=self.branch)
-        r.is_active = False
-        r.save()
+    def test_another_region_s_scheme_is_not_borrowed(self):
+        other = Region.objects.create(description="West")
+        self.scheme(region=other)
         self.assertEqual(admin_cost_for(self.batch, Decimal("1000")), {})
 
     def test_a_flock_with_no_placement_carries_no_overhead(self):
-        self.rate("Depreciation", "0.40", branch=self.branch)
+        self.scheme()
         self.assertEqual(admin_cost_for(self.batch, Decimal("0")), {})
-
-    def test_a_rate_cannot_name_a_branch_and_a_batch_at_once(self):
-        from django.core.exceptions import ValidationError
-        from broiler.models import AdminCostRate
-
-        row = AdminCostRate(head="Depreciation", branch=self.branch,
-                            batch=self.batch, rate_per_bird=Decimal("1"))
-        with self.assertRaises(ValidationError):
-            row.full_clean()
-
-    def test_a_negative_rate_is_refused(self):
-        from django.core.exceptions import ValidationError
-        from broiler.models import AdminCostRate
-
-        with self.assertRaises(ValidationError):
-            AdminCostRate(head="Depreciation", branch=self.branch,
-                          rate_per_bird=Decimal("-1")).full_clean()
 
 
 class GrowingChargeSourceTests(TestCase):
