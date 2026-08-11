@@ -220,9 +220,10 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num" rowspan="2">Live<br>Birds</th>
             <th class="num" rowspan="2">Live Weight<br>(Kg)</th>
             <th class="num" rowspan="2">Feed Cons.<br>(Kg)</th>
-            <th class="pc-grp" colspan="6">Cost</th>
+            <th class="pc-grp" colspan="5">Cost</th>
             <th class="num" rowspan="2">Cost / Kg</th>
             <th class="num" rowspan="2">Cost / Bird</th>
+            <th class="num" rowspan="2">Growing</th>
             <th class="num" rowspan="2">FCR</th><th class="num" rowspan="2">CFCR</th>
             <th class="num" rowspan="2">Variance</th>
             <th class="no-print" rowspan="2">Action</th>
@@ -231,7 +232,7 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num">No.</th><th class="num">%</th>
             <th class="num">Chicks</th><th class="num">Feed</th>
             <th class="num">Vaccine &amp;<br>Medicine</th>
-            <th class="num">Admin</th><th class="num">Growing</th><th class="num">Total</th>
+            <th class="num">Admin</th><th class="num">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -251,10 +252,10 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
             <td class="num">{{ r.medicine_cost|floatformat:2 }}</td>
             <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
-            <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
             <td class="num">{% if r.cost_per_kg %}{{ r.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.fcr %}{{ r.fcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cfcr %}{{ r.cfcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num {% if r.variance > 0 %}pc-bad{% elif r.variance < 0 %}pc-good{% endif %}">{{ r.variance|floatformat:2 }}</td>
@@ -279,10 +280,10 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ summary.feed_cost|floatformat:2 }}</td>
             <td class="num">{% if summary.medicine_cost is not None %}{{ summary.medicine_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.admin_cost is not None %}{{ summary.admin_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
-            <td class="num">{% if summary.growing_cost is not None %}{{ summary.growing_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ summary.total_cost|floatformat:2 }}</td>
             <td class="num">{% if summary.cost_per_kg %}{{ summary.cost_per_kg }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.cost_per_bird %}{{ summary.cost_per_bird }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if summary.growing_cost is not None %}{{ summary.growing_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.fcr %}{{ summary.fcr }}{% else %}&mdash;{% endif %}</td>
             <td class="num"></td>
             <td class="num {% if summary.variance > 0 %}pc-bad{% elif summary.variance < 0 %}pc-good{% endif %}">{{ summary.variance|floatformat:2 }}</td>
