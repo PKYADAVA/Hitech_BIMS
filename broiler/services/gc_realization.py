@@ -136,7 +136,25 @@ def build_gc_realization(batch, report, management_report, scheme):
     actual_feed_consumed = _d(bc.get("feed_consumed"))
     actual_mort_pct = _d(bc.get("total_mort_pct"))
     actual_mort_no = _d(bc.get("mortality"))
+    # Weight per bird, from the sale when there has been one.
+    #
+    # bc["avg_body_weight"] is sold_weight / sold_birds, so it reads 0.000 for
+    # every flock that has not lifted yet — and this report opens on live
+    # flocks. Until a real sale happens the honest figure is the last weighing
+    # taken on the flock, which is what a supervisor would quote if asked what
+    # the birds weigh. It is superseded the moment birds are actually sold:
+    # a sale is measured on a weighbridge, a weighing is a sample.
     actual_avg_weight = _d(bc.get("avg_body_weight"))
+    weighed_from_sale = bool(actual_avg_weight)
+    if not weighed_from_sale:
+        last_weight_g = (DailyEntry.objects
+                         .filter(batch=batch, avg_weight_gms__gt=0)
+                         .order_by("-date", "-id")
+                         .values_list("avg_weight_gms", flat=True).first())
+        if last_weight_g:
+            # The curve and the daily entry hold grams; every weight on this
+            # report is kilos.
+            actual_avg_weight = (_d(last_weight_g) / Decimal("1000")).quantize(Q4)
     # Days old today, not bc["mean_age"] — that field is a weighted average
     # age *at sale*, computed from bird_sale_rows, so it reads 0 for every
     # live (unsold) batch, which is the default filter this report opens on.
