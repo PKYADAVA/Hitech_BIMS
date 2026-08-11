@@ -3706,10 +3706,28 @@ def _production_cost_row(batch, pl_row_cache=None):
     admin_cost = block.get("Administrative Cost")
     feed_kg = sum((_num(r["quantity"]) for r in consumption
                    if r.get("kind") == "feed"), Decimal("0"))
+
     total_cost = _num(pl["total_cost"])
     placed = _num(costing.get("chicks_placed"))
     mortality = _num(costing.get("mortality")) + _num(costing.get("culls"))
     live_birds = max(placed - mortality - _num(costing.get("sold_birds")), Decimal("0"))
+
+    # The programme's own allowance per feed type, to set beside what was
+    # actually eaten. Same source the Feed Scheduling report reads, so the two
+    # pages cannot disagree about what a phase allows.
+    std_feed_kg = {}
+    masters = list(FeedPhaseMaster.objects.filter(status="active")
+                   .select_related("breed", "bird_category")
+                   .prefetch_related("lines__feed_item"))
+    master = _feed_phase_master_for(batch, batch.end_date or timezone.localdate(), masters)
+    if master:
+        eating = live_birds if live_birds > 0 else placed
+        for pl_line in master.lines.all():
+            if pl_line.status != "active" or not pl_line.feed_item_id:
+                continue
+            name = pl_line.feed_item.description
+            std_feed_kg[name] = (std_feed_kg.get(name, Decimal("0"))
+                                 + _num(pl_line.max_feed_qty) * eating)
     weight = _num(costing.get("sold_weight"))
     variance = total_cost - std_cost
 
@@ -3732,6 +3750,10 @@ def _production_cost_row(batch, pl_row_cache=None):
         "growing_cost": growing_cost,
         "admin_cost": admin_cost,
         "other_cost": (total_cost - feed_cost).quantize(Decimal("0.01")),
+        # The four blocks the Cost group shows. Growing is added after it, so
+        # the group has to sub-total without it or the columns beside it would
+        # not sum to the figure they sit under.
+        "sub_total": (total_cost - _num(growing_cost)).quantize(Decimal("0.01")),
         "total_cost": total_cost,
         "std_cost": std_cost,
         "std_feed_cost": std_feed_cost,
@@ -3745,6 +3767,34 @@ def _production_cost_row(batch, pl_row_cache=None):
         "cfcr": costing.get("cfcr"),
         "std_fcr": _std_fcr(batch, costing),
         "avg_weight": costing.get("avg_body_weight"),
+        # Feed broken down by type, so the consumption figure in the table can
+        # be opened rather than only totalled. The lines come from the P&L's
+        # own feed block, which already carries each item's quantity at the
+        # rate it was actually costed at.
+        "feed_lines": [
+            {"name": ln.get("label") or "", "kg": _num(ln.get("quantity")),
+             "rate": ln.get("rate"), "amount": ln.get("amount"),
+             # What the feed programme says this flock should have eaten of
+             # that type: the phase's cap per bird across the birds that ate
+             # it. None where no programme applies — a blank, not a zero,
+             # because "no standard" and "should have eaten nothing" are
+             # different answers.
+             "std_kg": std_feed_kg.get(ln.get("label"))}
+            for b in pl["cost_blocks"] if b["title"] == "Feed Cost"
+            for ln in b["lines"] if _num(ln.get("quantity"))
+        ],
+        # Each block with its own lines, so the drawer can show what a cost was
+        # worked out from — 4,20,000 of chicks is a quantity at a rate, and the
+        # rate is the part somebody argues about.
+        # All five blocks, including the ones nobody has filled in: a breakup
+        # that lists only what has a figure reads as a complete account of the
+        # flock's cost, and Admin missing from it looks like Admin was nil.
+        "cost_detail": [
+            {"title": b["title"], "total": b["total"],
+             "lines": [ln for ln in b["lines"]
+                       if ln.get("amount") is not None or ln.get("quantity")]}
+            for b in pl["cost_blocks"]
+        ],
         "components": cost_rows_from_pl(pl),
         # The P&L carries these as item ids, which is all its own page needs;
         # here they are read as a sentence, and "No purchase to price: 15"
@@ -3823,6 +3873,17 @@ def production_cost_report(request):
             "placed": _s(r["placed"]), "mortality": _s(r["mortality"]),
             "live_birds": _s(r["live_birds"]), "weight": _s(r["weight"]),
             "components": [[head, str(amount)] for head, amount in r["components"]],
+            "sub_total": _s(r["sub_total"]),
+            "cost_detail": [
+                {"title": b["title"], "total": _s(b["total"]),
+                 "lines": [[ln.get("label") or "", _s(ln.get("quantity")),
+                            _s(ln.get("rate")), _s(ln.get("amount"))]
+                           for ln in b["lines"]]}
+                for b in r["cost_detail"]
+            ],
+            "feed_kg": _s(r["feed_kg"]), "feed_cost": _s(r["feed_cost"]),
+            "feed_lines": [[f["name"], _s(f["kg"]), _s(f["rate"]), _s(f["amount"]),
+                            _s(f["std_kg"])] for f in r["feed_lines"]],
             "total_cost": _s(r["total_cost"]), "std_cost": _s(r["std_cost"]),
             "variance": _s(r["variance"]),
             "cost_per_kg": _s(r["cost_per_kg"]), "cost_per_bird": _s(r["cost_per_bird"]),

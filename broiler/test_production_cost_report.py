@@ -88,6 +88,7 @@ class SummaryTests(TestCase):
             "std_feed_cost": Decimal("70000"), "sale_value": Decimal("120000"),
             "chick_cost": Decimal("30000"), "medicine_cost": Decimal("0"),
             "growing_cost": None, "admin_cost": None,
+            "sub_total": Decimal("90000"),
             "sold_birds": Decimal("900"), "std_fcr": Decimal("1.60"),
             "components": [("Feed Cost", Decimal("60000")),
                            ("Chick Cost", Decimal("30000"))],
@@ -143,6 +144,15 @@ class SummaryTests(TestCase):
         parts = sum(v for v in (s["chick_cost"], s["feed_cost"], s["medicine_cost"],
                                 s["growing_cost"], s["admin_cost"]) if v is not None)
         self.assertEqual(parts, s["total_cost"])
+
+    def test_growing_is_added_after_the_sub_total_not_inside_it(self):
+        """The Cost group sub-totals the four blocks under it; Growing is a
+        column of its own further right, and the grand total takes both."""
+        s = build_production_cost([self.row(
+            sub_total=Decimal("80000"), growing_cost=Decimal("10000"),
+            total_cost=Decimal("90000"))])
+        self.assertEqual(s["sub_total"], Decimal("80000.00"))
+        self.assertEqual(s["sub_total"] + s["growing_cost"], s["total_cost"])
 
     def test_a_block_no_flock_has_filled_in_totals_to_none(self):
         s = build_production_cost([self.row(admin_cost=None)])

@@ -57,6 +57,27 @@ use, so a flock's feed cost is one number across the ERP.
   .pc-bar { height:6px; border-radius:3px; background:#e9edf1; overflow:hidden; margin-top:.2rem; }
   .pc-bar i { display:block; height:100%; background:#2a78d6; }
 
+  /* A figure that opens something has to look like it does, without turning
+     a numeric column into a row of links. */
+  .pc-drill {
+    background:none; border:0; padding:0; color:#0d6efd; font:inherit;
+    border-bottom:1px dotted currentColor; cursor:pointer;
+  }
+  .pc-drill:hover { border-bottom-style:solid; }
+
+  /* Block rows carry the block's own total; the lines under them are what it
+     was worked out from, indented so the two do not read as one list. */
+  /* The breakup is four columns in a panel, so it gets its own tighter
+     metrics — at the page's size the Amount column was clipping. */
+  .pc-drawer .pc-table { table-layout:fixed; width:100%; }
+  .pc-drawer .pc-table th, .pc-drawer .pc-table td {
+    padding:.25rem .35rem; font-size:.7rem; white-space:normal; overflow-wrap:break-word;
+  }
+  .pc-drawer .pc-table th:first-child, .pc-drawer .pc-table td:first-child { width:32%; }
+  .pc-drawer .pc-table th { white-space:nowrap; }
+  .pc-drawer .pc-blk td { background:#f4f6f8; font-weight:700; }
+  .pc-drawer .pc-sub { padding-left:1rem !important; color:#52514e; }
+
   .pc-good { color:#1a7f37; font-weight:700; }
   .pc-bad  { color:#d03b3b; font-weight:700; }
   .pc-muted { color:#8b8b86; }
@@ -84,7 +105,7 @@ use, so a flock's feed cost is one number across the ERP.
   }
   .pc-scrim.open { opacity:1; pointer-events:auto; }
   .pc-drawer {
-    position:fixed; top:0; right:0; height:100%; width:390px; max-width:92vw;
+    position:fixed; top:0; right:0; height:100%; width:540px; max-width:96vw;
     background:#fff; z-index:1050; box-shadow:-8px 0 24px rgba(0,0,0,.12);
     transform:translateX(100%); transition:transform .22s ease;
     display:flex; flex-direction:column;
@@ -224,6 +245,7 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num" rowspan="2">Cost / Kg</th>
             <th class="num" rowspan="2">Cost / Bird</th>
             <th class="num" rowspan="2">Growing</th>
+            <th class="num" rowspan="2">Total<br>Cost</th>
             <th class="num" rowspan="2">FCR</th><th class="num" rowspan="2">CFCR</th>
             <th class="num" rowspan="2">Variance</th>
             <th class="no-print" rowspan="2">Action</th>
@@ -232,7 +254,7 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num">No.</th><th class="num">%</th>
             <th class="num">Chicks</th><th class="num">Feed</th>
             <th class="num">Vaccine &amp;<br>Medicine</th>
-            <th class="num">Admin</th><th class="num">Total</th>
+            <th class="num">Admin</th><th class="num">Sub Total</th>
           </tr>
         </thead>
         <tbody>
@@ -252,10 +274,11 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
             <td class="num">{{ r.medicine_cost|floatformat:2 }}</td>
             <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
-            <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
+            <td class="num fw-bold">{{ r.sub_total|floatformat:2 }}</td>
             <td class="num">{% if r.cost_per_kg %}{{ r.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
+            <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
             <td class="num">{% if r.fcr %}{{ r.fcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cfcr %}{{ r.cfcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num {% if r.variance > 0 %}pc-bad{% elif r.variance < 0 %}pc-good{% endif %}">{{ r.variance|floatformat:2 }}</td>
@@ -280,10 +303,11 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ summary.feed_cost|floatformat:2 }}</td>
             <td class="num">{% if summary.medicine_cost is not None %}{{ summary.medicine_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.admin_cost is not None %}{{ summary.admin_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
-            <td class="num">{{ summary.total_cost|floatformat:2 }}</td>
+            <td class="num">{{ summary.sub_total|floatformat:2 }}</td>
             <td class="num">{% if summary.cost_per_kg %}{{ summary.cost_per_kg }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.cost_per_bird %}{{ summary.cost_per_bird }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.growing_cost is not None %}{{ summary.growing_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{{ summary.total_cost|floatformat:2 }}</td>
             <td class="num">{% if summary.fcr %}{{ summary.fcr }}{% else %}&mdash;{% endif %}</td>
             <td class="num"></td>
             <td class="num {% if summary.variance > 0 %}pc-bad{% elif summary.variance < 0 %}pc-good{% endif %}">{{ summary.variance|floatformat:2 }}</td>
@@ -424,9 +448,77 @@ $(function () {
       kv('Mortality &amp; Culls', num(d.mortality)) +
       kv('Live Birds', num(d.live_birds)) +
       kv('Sold Weight', num(d.weight, 2) + ' Kg');
-    html += '<div class="pc-sec">COST BREAKUP</div>';
-    d.components.forEach(function (c) { html += kv(c[0], money(c[1])); });
-    html += kv('Total', money(d.total_cost), 'total');
+    if (d.feed_lines.length) {
+      html += '<div class="pc-sec">FEED CONSUMPTION</div>' +
+        // Standard against consumed, and nothing else: the rate each type was
+        // costed at and what it came to are in the breakup below, and
+        // repeating them here made five columns of a three-column question.
+        '<table class="pc-table"><thead><tr><th>Feed Type</th>' +
+        '<th class="num">Standard (Kg)</th><th class="num">Consumed (Kg)</th>' +
+        '<th class="num">Diff</th></tr></thead><tbody>';
+      var stdTotal = 0, anyStd = false;
+      d.feed_lines.forEach(function (f) {
+        // Rate is what the item was actually costed at, not a list price —
+        // a line with no purchase behind it says so rather than showing a
+        // blank that reads as free.
+        // Over the programme's allowance is the thing worth seeing at a
+        // glance, so it carries colour rather than only a larger number.
+        var std = f[4], over = std !== null && Number(f[1]) > Number(std);
+        if (std !== null) { stdTotal += Number(std); anyStd = true; }
+        var diff = std === null ? null : Number(f[1]) - Number(std);
+        html += '<tr><td>' + f[0] + '</td>' +
+                '<td class="num">' + (std === null ? '<span class="pc-muted">no plan</span>' : num(std, 2)) +
+                '</td><td class="num">' + num(f[1], 2) +
+                '</td><td class="num' + (over ? ' pc-bad' : (diff !== null ? ' pc-good' : '')) + '">' +
+                (diff === null ? '<span class="pc-muted">&mdash;</span>'
+                               : (diff > 0 ? '+' : '') + num(diff, 2)) +
+                '</td></tr>';
+      });
+      var totDiff = anyStd ? Number(d.feed_kg) - stdTotal : null;
+      html += '<tr class="fw-bold"><td>Total</td>' +
+              '<td class="num">' + (anyStd ? num(stdTotal, 2) : '<span class="pc-muted">&mdash;</span>') + '</td>' +
+              '<td class="num">' + num(d.feed_kg, 2) + '</td>' +
+              '<td class="num' + (totDiff > 0 ? ' pc-bad' : (totDiff !== null ? ' pc-good' : '')) + '">' +
+              (totDiff === null ? '<span class="pc-muted">&mdash;</span>'
+                                : (totDiff > 0 ? '+' : '') + num(totDiff, 2)) + '</td></tr>';
+      html += '</tbody></table>';
+    }
+    // Every block, including the ones nobody has filled in: a breakup that
+    // lists only what has a figure reads as the whole account of the flock's
+    // cost, and Admin missing from it looks like Admin was nil.
+    html += '<div class="pc-sec">COST BREAKUP</div>' +
+      '<table class="pc-table"><thead><tr><th>Head</th><th class="num">Qty</th>' +
+      '<th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>';
+    // Growing is held back and shown after the sub total, the same order the
+    // table reads in: the four blocks add to a figure, then the growing
+    // charge is added to it.
+    var growing = null;
+    var blocks = d.cost_detail.filter(function (b) {
+      if (b.title === 'Growing Expenses') { growing = b; return false; }
+      return true;
+    });
+    function block(b) {
+      var blank = b.total === null;
+      html += '<tr class="pc-blk"><td colspan="3">' + b.title + '</td>' +
+              '<td class="num">' + (blank ? '<span class="pc-muted">not entered</span>'
+                                          : money(b.total)) + '</td></tr>';
+      b.lines.forEach(function (ln) {
+        // A hand-entered head has no quantity and no rate; a purchased item
+        // has both, and the rate is the part somebody argues about.
+        if (ln[3] === null && !Number(ln[1])) return;
+        html += '<tr><td class="pc-sub">' + ln[0] + '</td>' +
+                '<td class="num">' + (Number(ln[1]) ? num(ln[1], 2) : '') + '</td>' +
+                '<td class="num">' + (ln[2] === null ? '' : money(ln[2])) + '</td>' +
+                '<td class="num">' + (ln[3] === null ? '<span class="pc-muted">no purchase</span>'
+                                                     : money(ln[3])) + '</td></tr>';
+      });
+    }
+    blocks.forEach(block);
+    html += '<tr class="fw-bold"><td colspan="3">Sub Total</td><td class="num">' +
+            money(d.sub_total) + '</td></tr>';
+    if (growing) block(growing);
+    html += '<tr class="fw-bold"><td colspan="3">Total Cost</td><td class="num">' +
+            money(d.total_cost) + '</td></tr></tbody></table>';
     html += '<div class="pc-sec">PERFORMANCE</div>' +
       kv('FCR', d.fcr === null ? '&mdash;' : d.fcr) +
       kv('CFCR', d.cfcr === null ? '&mdash;' : d.cfcr) +
