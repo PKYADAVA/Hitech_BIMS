@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+
 import { http } from "./client";
 import { API_BASE_URL } from "@/config";
 
@@ -128,4 +130,48 @@ export async function markAllAlertsRead(): Promise<number> {
     `${ALERTS_BASE}/notifications/mark_all_read/`
   );
   return resp.data.unread ?? 0;
+}
+
+/** Counts behind the Home dashboard's Alerts & Notifications widget — the
+ *  same scoped `summary` the web widget reads, so the two never disagree. */
+export interface AlertSummary {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unread: number;
+  tiles: { key: string; label: string; icon: string; count: number }[];
+}
+
+export async function fetchAlertSummary(): Promise<AlertSummary> {
+  const resp = await http.get<AlertSummary>(`${ALERTS_BASE}/notifications/summary/`);
+  return resp.data;
+}
+
+/** The widget's own list — newest unread first, urgency-ordered, capped at 10
+ *  server-side. A separate endpoint from `listAlerts` because the widget
+ *  wants that fixed ordering, not the centre's filterable paging. */
+export async function fetchRecentAlerts(): Promise<AlertNotification[]> {
+  const resp = await http.get<{ results: AlertNotification[]; unread: number }>(
+    `${ALERTS_BASE}/notifications/recent/`
+  );
+  return resp.data.results ?? [];
+}
+
+export function useAlertSummary() {
+  return useQuery({
+    queryKey: ["alerts", "summary"],
+    queryFn: fetchAlertSummary,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useRecentAlerts() {
+  return useQuery({
+    queryKey: ["alerts", "recent"],
+    queryFn: fetchRecentAlerts,
+    staleTime: 30_000,
+    retry: false,
+  });
 }

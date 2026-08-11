@@ -7,96 +7,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlertBell } from "@/components/AlertBell";
 import { DatePicker } from "@/components/DatePicker";
 import { SyncStatusChip } from "@/components/SyncStatusChip";
-import { AppIcon } from "@/components/AppIcon";
+import { AppIcon, IconName } from "@/components/AppIcon";
 import { Badge, Button, Card, Screen, SectionHeader, withAlpha } from "@/components/ui";
 import { colors, makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
 import { TabParams } from "@/navigation/types";
 import { AuthUser, Row } from "@/api/types";
 import { Overview, useOverview } from "@/api/stats";
+import { DashboardWidget, useDashboardWidgets } from "@/api/dashboardWidgets";
+import { useAlertSummary, useRecentAlerts } from "@/api/alerts";
 import { useTodayTrip } from "@/api/trips";
-import { IndicatorCarousel, Indicator } from "@/components/IndicatorCarousel";
 import { describeTodayTrip } from "@/domain/todayTrip";
 import { useAuthStore } from "@/store/authStore";
 import { RESOURCE_TABS } from "@/api/permissions";
 import { usePermissionsStore } from "@/store/permissionsStore";
 
-const kpi = (v?: number) => (v === undefined || v === null ? "–" : String(v));
-
 /** The Mobile Access tab behind the trip register, taken from the one map that
  *  already pairs screens with tabs rather than spelled out a second time. */
 const TRIP_RESOURCE = "hr-supervisor-trips";
 const TRIP_TAB = RESOURCE_TABS[TRIP_RESOURCE];
-
-/** Cross-module headline indicators for the Home carousel. */
-function buildIndicators(ov?: Overview): Indicator[] {
-  return [
-    {
-      key: "mortality",
-      label: "Mortality",
-      value: kpi(ov?.broiler.mortality_today),
-      caption: "birds today · 7-day trend",
-      icon: "⚠️",
-      accent: colors.danger,
-      trend: ov?.broiler.mortality_7d,
-    },
-    {
-      key: "entries",
-      label: "Daily Entries",
-      value: kpi(ov?.broiler.entries_today),
-      caption: "logged today",
-      icon: "📋",
-      accent: colors.broiler,
-    },
-    {
-      key: "batches",
-      label: "Active Batches",
-      value: kpi(ov?.broiler.active_batches),
-      caption: "in production",
-      icon: "📦",
-      accent: colors.tint,
-    },
-    {
-      key: "eggs",
-      label: "Egg Purchases",
-      value: kpi(ov?.hatchery.egg_purchases_today),
-      caption: "today",
-      icon: "🥚",
-      accent: colors.hatchery,
-    },
-    {
-      key: "chicks",
-      label: "Chicks Hatched",
-      value: kpi(ov?.hatchery.chicks_today),
-      caption: "today",
-      icon: "🐥",
-      accent: colors.hatchery,
-    },
-    {
-      key: "sms",
-      label: "SMS Sent",
-      value: kpi(ov?.sms.sent_today),
-      caption: `${kpi(ov?.sms.failed_today)} failed today`,
-      icon: "💬",
-      accent: colors.sms,
-    },
-    {
-      key: "items",
-      label: "Inventory Items",
-      value: kpi(ov?.inventory?.items),
-      caption: `${kpi(ov?.inventory?.transfers_today)} transfers today`,
-      icon: "📦",
-      accent: colors.inventory,
-    },
-    {
-      key: "vouchers",
-      label: "Vouchers",
-      value: kpi(ov?.account?.vouchers_today),
-      caption: "posted today",
-      icon: "📒",
-      accent: colors.account,
-    },
-  ];
-}
 
 type Props = BottomTabScreenProps<TabParams, "Home">;
 
@@ -210,27 +138,140 @@ function ListPanel({
   );
 }
 
-/** The System Summary strip: five counts of what exists, not of what happened. */
-function SystemSummary({ ov }: { ov?: Overview }) {
+/** Widget key → glyph. Fixed set (the five ``dashboard_widgets()`` builds),
+ *  so a small lookup beats parsing the web's Font Awesome class string. */
+const WIDGET_ICON: Record<string, IconName> = {
+  live_flock: "egg-outline",
+  daily_entries: "clipboard-check-outline",
+  receivables: "cash-plus",
+  payables: "cash-minus",
+  stock_alerts: "alert-outline",
+};
+
+/** One of the ERP dashboard's data widgets — same figures, same tab gate and
+ *  Dashboard Access ordering as the web page's own widget grid. */
+function WidgetCard({ w }: { w: DashboardWidget }) {
   const styles = useStyles();
-  const s = ov?.system;
-  const cells: [string, string][] = [
-    ["Users", num(s?.users)],
-    ["Farms", num(s?.farms)],
-    ["Stores", num(s?.stores)],
-    ["Items", num(s?.items)],
-    ["Batches", num(s?.batches)],
-  ];
+  const { colors } = useTheme();
+  const toneColor = (tone?: string | null) =>
+    tone === "bad" ? colors.danger : tone === "warn" ? colors.warning
+      : tone === "good" ? colors.success : colors.text;
+
   return (
-    <Card style={styles.panel}>
-      <View style={styles.summaryRow}>
-        {cells.map(([label, value]) => (
-          <View key={label} style={styles.summaryCell}>
-            <Text style={styles.summaryValue}>{value}</Text>
-            <Text style={styles.summaryLabel}>{label}</Text>
+    <Card style={styles.widgetCard}>
+      <View style={styles.widgetHead}>
+        <AppIcon name={WIDGET_ICON[w.key] ?? "view-dashboard-outline"} size={18} color={colors.tint} />
+        <Text style={styles.widgetTitle}>{w.title}</Text>
+      </View>
+      {w.error ? (
+        <Text style={styles.panelEmpty}>This figure could not be calculated just now.</Text>
+      ) : (
+        <>
+          {w.stats?.length ? (
+            <View style={styles.widgetStatsRow}>
+              {w.stats.map((s, i) => (
+                <View key={i} style={styles.widgetStatCell}>
+                  <Text style={[styles.widgetStatValue, { color: toneColor(s.tone) }]}>{s.value}</Text>
+                  <Text style={styles.widgetStatLabel} numberOfLines={1}>{s.label}</Text>
+                  {s.sub ? <Text style={styles.widgetStatSub} numberOfLines={1}>{s.sub}</Text> : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {w.rows?.length ? (
+            <View style={styles.widgetRows}>
+              {w.rows_title ? <Text style={styles.widgetRowsTitle}>{w.rows_title}</Text> : null}
+              {w.rows.map((r, i) => (
+                <View key={i} style={styles.widgetRow}>
+                  <Text style={styles.widgetRowLabel} numberOfLines={1}>{r.label}</Text>
+                  {r.meta ? <Text style={styles.widgetRowMeta}>{r.meta}</Text> : null}
+                  {r.value ? <Text style={styles.widgetRowValue}>{r.value}</Text> : null}
+                </View>
+              ))}
+              {w.more ? <Text style={styles.panelEmpty}>and {w.more} more</Text> : null}
+            </View>
+          ) : null}
+          {w.note ? <Text style={styles.panelEmpty}>{w.note}</Text> : null}
+          {w.ignored ? <Text style={styles.widgetIgnored}>{w.ignored}</Text> : null}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** Priority key → tone, for both the count cells and the recent rows. */
+const PRIORITY_TONE: Record<string, "bad" | "warn" | undefined> = {
+  critical: "bad", high: "bad", medium: "warn", low: undefined,
+};
+
+/**
+ * Alerts & Notifications — the same widget home.html's Alert Hub card shows,
+ * reading the identical scoped `summary`/`recent` the bell and the
+ * notification centre read, so the count here, the badge on the bell and the
+ * office dashboard can never disagree.
+ */
+function AlertsWidget({ onOpen }: { onOpen: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const { data: summary } = useAlertSummary();
+  const { data: recent } = useRecentAlerts();
+  const toneColor = (tone?: string) =>
+    tone === "bad" ? colors.danger : tone === "warn" ? colors.warning : colors.text;
+
+  const counts: { label: string; value: number; tone?: "bad" | "warn" }[] = [
+    { label: "Critical", value: summary?.critical ?? 0, tone: PRIORITY_TONE.critical },
+    { label: "High", value: summary?.high ?? 0, tone: PRIORITY_TONE.high },
+    { label: "Medium", value: summary?.medium ?? 0, tone: PRIORITY_TONE.medium },
+    { label: "Low", value: summary?.low ?? 0, tone: PRIORITY_TONE.low },
+  ];
+  const activeTiles = (summary?.tiles ?? []).filter((t) => t.count > 0);
+  const rows = (recent ?? []).slice(0, 5);
+
+  return (
+    <Card style={styles.widgetCard}>
+      <Pressable style={styles.widgetHead} onPress={onOpen} accessibilityRole="button">
+        <AppIcon name="bell-alert-outline" size={18} color={colors.danger} />
+        <Text style={styles.widgetTitle}>Alerts &amp; Notifications</Text>
+        {summary?.unread ? (
+          <Badge label={summary.unread > 99 ? "99+" : String(summary.unread)} tone="danger" />
+        ) : null}
+      </Pressable>
+
+      <View style={styles.widgetStatsRow}>
+        {counts.map((c) => (
+          <View key={c.label} style={styles.widgetStatCell}>
+            <Text style={[styles.widgetStatValue, { color: toneColor(c.tone) }]}>{c.value}</Text>
+            <Text style={styles.widgetStatLabel}>{c.label}</Text>
           </View>
         ))}
       </View>
+
+      {activeTiles.length ? (
+        <View style={styles.widgetRows}>
+          {activeTiles.map((t) => (
+            <View key={t.key} style={styles.widgetRow}>
+              <Text style={styles.widgetRowLabel} numberOfLines={1}>{t.label}</Text>
+              <Text style={styles.widgetRowValue}>{t.count}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {rows.length ? (
+        rows.map((n) => (
+          <Pressable key={n.id} style={styles.panelRow} onPress={onOpen}>
+            <View style={styles.panelMain}>
+              <Text style={styles.panelTitle} numberOfLines={1}>{n.title}</Text>
+              {n.message ? <Text style={styles.panelMeta} numberOfLines={1}>{n.message}</Text> : null}
+            </View>
+            <Badge label={n.priority_label}
+                   tone={(["danger", "warning", "info", "success"].includes(n.tone)
+                     ? n.tone : "neutral") as any} />
+          </Pressable>
+        ))
+      ) : (
+        <Text style={styles.panelEmpty}>No open alerts — you're all caught up</Text>
+      )}
     </Card>
   );
 }
@@ -430,6 +471,7 @@ export function HomeScreen({ navigation }: Props) {
   const [showCalendar, setShowCalendar] = React.useState(false);
   const { data: ov, refetch, isFetching } =
     useOverview({ farm, branch, line, supervisor, date, period });
+  const { data: widgets } = useDashboardWidgets();
 
   // Whoever is granted the trip tab gets the card. Whether their login maps to
   // an employee decides what it *says* — not whether it appears at all: an
@@ -548,11 +590,6 @@ export function HomeScreen({ navigation }: Props) {
         ) : null}
 
         <View style={styles.body}>
-          <SectionHeader title="At a glance" subtitle="Today's key numbers across your farm" />
-        </View>
-        <IndicatorCarousel indicators={buildIndicators(ov)} />
-
-        <View style={styles.body}>
           <SectionHeader title="Today's Overview" subtitle="The day so far" />
           <TodayOverview ov={ov} />
 
@@ -586,13 +623,15 @@ export function HomeScreen({ navigation }: Props) {
             ))}
           </View>
 
-          <SectionHeader title="Recent Alerts" subtitle={`${ov?.alerts?.pending ?? 0} unread`} />
-          <ListPanel
-            empty="Nothing unread."
-            rows={(ov?.alerts?.rows ?? []).map((a, i) => ({
-              key: `a${i}`, title: a.title, meta: a.at, tone: a.severity,
-            }))}
-          />
+          {widgets && widgets.length ? (
+            <>
+              <SectionHeader title="Dashboard Widgets" subtitle="Live figures from across the ERP" />
+              {widgets.map((w) => <WidgetCard key={w.key} w={w} />)}
+            </>
+          ) : null}
+
+          <SectionHeader title="Alerts & Notifications" subtitle="What needs doing before what happened" />
+          <AlertsWidget onOpen={() => (navigation as any).navigate("Notifications")} />
 
           <SectionHeader
             title="Farm Visit Today"
@@ -605,9 +644,6 @@ export function HomeScreen({ navigation }: Props) {
               tone: v.done ? "Done" : "Open",
             }))}
           />
-
-          <SectionHeader title="System Summary" subtitle="What is on the books" />
-          <SystemSummary ov={ov} />
         </View>
       </ScrollView>
 
@@ -848,10 +884,23 @@ const useStyles = makeStyles((colors) => ({
   panelTitle: { ...type.body, color: colors.text },
   panelMeta: { ...type.caption, color: colors.textMuted, marginTop: 1 },
   panelEmpty: { ...type.body, color: colors.textFaint, paddingVertical: spacing.sm },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: spacing.xs },
-  summaryCell: { alignItems: "center", flex: 1 },
-  summaryValue: { ...type.h3, color: colors.text },
-  summaryLabel: { ...type.caption, color: colors.textMuted, marginTop: 2 },
+
+  widgetCard: { marginBottom: spacing.sm, gap: spacing.xs },
+  widgetHead: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginBottom: spacing.xs },
+  widgetTitle: { ...type.title, color: colors.text },
+  widgetStatsRow: { flexDirection: "row", flexWrap: "wrap" },
+  widgetStatCell: { minWidth: "25%", flexGrow: 1, paddingVertical: spacing.xs },
+  widgetStatValue: { ...type.h3, color: colors.text },
+  widgetStatLabel: { ...type.caption, color: colors.textMuted },
+  widgetStatSub: { ...type.caption, color: colors.textFaint },
+  widgetRows: { marginTop: spacing.xs, gap: 2 },
+  widgetRowsTitle: { ...type.caption, color: colors.textMuted, marginBottom: 2 },
+  widgetRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  widgetRowLabel: { ...type.body, color: colors.text, flex: 1 },
+  widgetRowMeta: { ...type.caption, color: colors.textMuted },
+  widgetRowValue: { ...type.body, color: colors.text },
+  widgetIgnored: { ...type.caption, color: colors.textFaint, marginTop: spacing.xs },
+
   tripCard: { marginBottom: spacing.sm, gap: spacing.sm },
   tripTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   tripIcon: {

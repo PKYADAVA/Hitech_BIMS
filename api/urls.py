@@ -41,8 +41,8 @@ from hr.api_write import write_urls as hr_write_urls
 from purchase.api import register as register_purchase
 from purchase.api_write import write_urls as purchase_write_urls
 from sales.api import CustomerBalanceView
-from user.api import (RoleMobileModuleView, RoleModuleView, RolesAccessView,
-                      RoleView, UserCreateView, UserRolesView)
+from user.api import (DashboardWidgetsView, RoleMobileModuleView, RoleModuleView,
+                      RolesAccessView, RoleView, UserCreateView, UserRolesView)
 from user.api import register as register_user
 from sales.api import register as register_sales
 from sales.api_write import write_urls as sales_write_urls
@@ -144,6 +144,9 @@ urlpatterns = [
     path("docs", SpectacularSwaggerView.as_view(url_name="api:schema"), name="docs"),
     path("auth/", include((auth_patterns, "auth"))),
     path("stats/overview", StatsOverviewView.as_view(), name="stats-overview"),
+    # The same five widgets home.html's own dashboard-widgets fetch renders,
+    # for the phone's dashboard — same tab gate, same Dashboard Access config.
+    path("dashboard-widgets", DashboardWidgetsView.as_view(), name="dashboard-widgets"),
     # The phone reporting what it is still holding, for the admin monitor.
     path("sync/heartbeat", SyncHeartbeatView.as_view(), name="sync-heartbeat"),
     # What a customer owes, for a form raising a document against them.

@@ -45,6 +45,7 @@ from django.contrib.auth.models import User as AuthUser  # noqa: E402
 from django.contrib.auth.password_validation import validate_password  # noqa: E402
 from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: E402
 from rest_framework.exceptions import NotFound, ValidationError  # noqa: E402
+from rest_framework.permissions import IsAuthenticated  # noqa: E402
 from rest_framework.response import Response  # noqa: E402
 from rest_framework.views import APIView  # noqa: E402
 
@@ -304,4 +305,24 @@ class RoleView(V1ViewMixin, APIView):
             raise NotFound("Role not found.")
         GroupTabPermission.objects.filter(group=group).delete()
         group.delete()
+
+
+class DashboardWidgetsView(V1ViewMixin, APIView):
+    """GET /dashboard-widgets — the same five data widgets home.html's own
+    dashboard-widgets fetch renders, for the phone's dashboard.
+
+    Calls the identical ``dashboard_widgets()`` the web page uses, so a widget
+    is gated by the same tab matrix and the same admin-configured on/off +
+    ordering (``GroupDashboardWidget`` — Dashboard Access) either side reads.
+    Query params mirror the web filter bar: date, branch, line, supervisor,
+    farm — all optional.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .services.dashboard_widgets import dashboard_widgets, parse_filters
+
+        filters = parse_filters(request.query_params)
+        return Response(dashboard_widgets(request.user, filters))
         return Response({"deleted": True})
