@@ -285,6 +285,7 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num" rowspan="2">Birds<br>Placed</th>
             <th class="pc-grp" colspan="2">Mortality</th>
             <th class="num" rowspan="2">Live<br>Birds</th>
+            <th class="num" rowspan="2">Avg Body<br>Weight (Kg)</th>
             <th class="num" rowspan="2">Live Weight<br>(Kg)</th>
             <th class="num" rowspan="2">Feed Cons.<br>(Kg)</th>
             <th class="pc-grp" colspan="5">Cost</th>
@@ -314,7 +315,8 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.mortality|floatformat:0 }}</td>
             <td class="num">{% if r.mortality_pct is not None %}{{ r.mortality_pct }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ r.live_birds|floatformat:0 }}</td>
-            <td class="num">{{ r.weight|floatformat:2 }}</td>
+            <td class="num">{% if r.avg_bwt %}{{ r.avg_bwt }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num">{{ r.weight|floatformat:2 }}{% if r.weight_basis == 'weighed' %}<sup class="pc-src" title="Nothing sold yet — the last weighing across the birds still alive, not a weighbridge figure">est</sup>{% endif %}</td>
             <td class="num">{{ r.feed_kg|floatformat:2 }}</td>
             <td class="num">{{ r.chick_cost|floatformat:2 }}{% if r.priced_at == 'scheme' %}<sup class="pc-src" title="At the Growing Charge Scheme's chick rate">sch</sup>{% elif r.priced_at == 'no scheme' %}<sup class="pc-src" title="No scheme covers this flock, so actual purchase rates are shown">act</sup>{% endif %}</td>
             <td class="num">{{ r.feed_cost|floatformat:2 }}{% if r.priced_at == 'scheme' %}<sup class="pc-src" title="At the Growing Charge Scheme's feed rate">sch</sup>{% elif r.priced_at == 'no scheme' %}<sup class="pc-src" title="No scheme covers this flock, so actual purchase rates are shown">act</sup>{% endif %}</td>
@@ -343,6 +345,7 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ summary.mortality|floatformat:0 }}</td>
             <td class="num">{% if summary.mortality_pct is not None %}{{ summary.mortality_pct }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ summary.live_birds|floatformat:0 }}</td>
+            <td class="num">{% if summary.avg_weight %}{{ summary.avg_weight }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ summary.live_weight|floatformat:2 }}</td>
             <td class="num">{{ summary.feed_kg|floatformat:2 }}</td>
             <td class="num">{% if summary.chick_cost is not None %}{{ summary.chick_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>

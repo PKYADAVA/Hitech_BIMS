@@ -525,3 +525,65 @@ class SchemePricingTests(TestCase):
         blocks = {b["title"]: b for b in _cost_detail(
             pl, None, "unsettled", None, "no scheme", {}, None, None, None)}
         self.assertEqual(blocks["Chick Cost"]["total"], Decimal("80115"))
+
+
+class LiveWeightBeforeALiftingTests(TestCase):
+    """Cost per kilo on a flock that has not sold anything yet.
+
+    Live weight came from the batch costing's sold_weight, which is nothing
+    before a lifting — so Cost/Kg, Standard/Kg and FCR were all withheld on
+    every live flock, which is most of what this report lists. The birds still
+    weigh something; the last weighing across the birds still alive is what a
+    supervisor would quote, and it is marked as an estimate rather than passed
+    off as a weighbridge figure.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=self.today - timedelta(days=30))
+
+    def weigh(self, days_ago, grams):
+        return DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.sup,
+            date=self.today - timedelta(days=days_ago),
+            avg_weight_gms=Decimal(str(grams)))
+
+    def row(self):
+        from broiler.views import _production_cost_row
+        return _production_cost_row(self.batch)
+
+    def test_with_no_placement_there_are_no_birds_to_weigh(self):
+        """Live birds come from the placement, so an unplaced flock stays at
+        nothing rather than multiplying a weight by zero and pretending."""
+        self.weigh(2, 1800)
+        r = self.row()
+        self.assertEqual(r["live_birds"], Decimal("0"))
+        self.assertEqual(r["weight"], Decimal("0"))
+        self.assertEqual(r["weight_basis"], "none")
+
+    def test_a_never_weighed_flock_reports_nothing(self):
+        r = self.row()
+        self.assertEqual(r["weight"], Decimal("0"))
+        self.assertEqual(r["weight_basis"], "none")
+        self.assertIsNone(r["cost_per_kg"])
+        self.assertIsNone(r["avg_bwt"])
+
+    def test_avg_body_weight_reconciles_with_the_live_weight_beside_it(self):
+        """The two columns have to tell the same story: per-bird times birds
+        is the total, whichever basis produced it."""
+        from broiler.views import _production_cost_row
+
+        r = _production_cost_row(self.batch)
+        if r["avg_bwt"] and r["live_birds"]:
+            self.assertEqual((r["avg_bwt"] * r["live_birds"]).quantize(Decimal("1")),
+                             r["weight"].quantize(Decimal("1")))

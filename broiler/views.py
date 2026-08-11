@@ -3820,7 +3820,28 @@ def _production_cost_row(batch, fetch_type="management"):
             name = pl_line.feed_item.description
             std_feed_kg[name] = (std_feed_kg.get(name, Decimal("0"))
                                  + _num(pl_line.max_feed_qty) * eating)
+    # Live weight. A sale is a weighbridge figure and always wins; before one
+    # exists the flock still weighs something, and sold_weight reads zero —
+    # which took Cost/Kg, Standard/Kg and FCR down with it on every flock that
+    # had not lifted. The last weighing across the birds still alive is what a
+    # supervisor would quote, and it is marked as the estimate it is.
     weight = _num(costing.get("sold_weight"))
+    weight_basis = "sold" if weight else "none"
+    if not weight and live_birds > 0:
+        last_weight_g = (DailyEntry.objects
+                         .filter(batch=batch, avg_weight_gms__gt=0)
+                         .order_by("-date", "-id")
+                         .values_list("avg_weight_gms", flat=True).first())
+        if last_weight_g:
+            weight = ((_num(last_weight_g) / Decimal("1000")) * live_birds
+                      ).quantize(Decimal("0.01"))
+            weight_basis = "weighed"
+
+    # Weight per bird behind the live weight beside it, so the two always tell
+    # the same story: the sale's own average once birds are sold, the last
+    # weighing while they are still on the farm.
+    avg_bwt = (_pc_div(weight, _num(costing.get("sold_birds")))
+               if weight_basis == "sold" else _pc_div(weight, live_birds))
 
     # The farmer is settled against his scheme's rates, so his view of what a
     # flock cost is real quantities at those rates. Management's is real
@@ -3856,7 +3877,7 @@ def _production_cost_row(batch, fetch_type="management"):
         "placed": placed, "mortality": mortality,
         "live_birds": live_birds,
         "sold_birds": _num(costing.get("sold_birds")),
-        "weight": weight,
+        "weight": weight, "weight_basis": weight_basis, "avg_bwt": avg_bwt,
         "feed_kg": feed_kg.quantize(Decimal("0.01")),
         "chick_cost": chick_cost,
         "feed_cost": feed_cost,
