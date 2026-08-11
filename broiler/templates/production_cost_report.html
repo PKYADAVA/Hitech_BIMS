@@ -138,8 +138,13 @@ use, so a flock's feed cost is one number across the ERP.
 <div class="report-doc">
   {% include '_report_letterhead.html' with title='Production Cost Report' %}
   <div class="text-center text-muted small mb-2">
-    {% if report_type == 'farmer' %}Farmer{% else %}Management{% endif %} view
-    &mdash; {% if report_type == 'farmer' %}the farmer's admin share only{% else %}farmer and management admin together{% endif %}
+    {% if report_type == 'farmer' %}
+      Farmer view &mdash; chicks and feed at the Growing Charge Scheme's rates,
+      with the farmer's admin share
+    {% else %}
+      Management view &mdash; chicks and feed at actual purchase rates, with
+      the management admin share
+    {% endif %}
   </div>
 
   <div class="rpt-filter no-print">
@@ -311,8 +316,8 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.live_birds|floatformat:0 }}</td>
             <td class="num">{{ r.weight|floatformat:2 }}</td>
             <td class="num">{{ r.feed_kg|floatformat:2 }}</td>
-            <td class="num">{{ r.chick_cost|floatformat:2 }}</td>
-            <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
+            <td class="num">{{ r.chick_cost|floatformat:2 }}{% if r.priced_at == 'scheme' %}<sup class="pc-src" title="At the Growing Charge Scheme's chick rate">sch</sup>{% elif r.priced_at == 'no scheme' %}<sup class="pc-src" title="No scheme covers this flock, so actual purchase rates are shown">act</sup>{% endif %}</td>
+            <td class="num">{{ r.feed_cost|floatformat:2 }}{% if r.priced_at == 'scheme' %}<sup class="pc-src" title="At the Growing Charge Scheme's feed rate">sch</sup>{% elif r.priced_at == 'no scheme' %}<sup class="pc-src" title="No scheme covers this flock, so actual purchase rates are shown">act</sup>{% endif %}</td>
             <td class="num">{{ r.medicine_cost|floatformat:2 }}</td>
             <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% if r.admin_source == 'schema' %}<sup class="pc-src" title="From this flock's Growing Charge Scheme, per bird placed">rate</sup>{% endif %}{% else %}<span class="pc-muted" title="No Growing Charge Scheme covers this flock's placement date">no scheme</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.sub_total|floatformat:2 }}</td>

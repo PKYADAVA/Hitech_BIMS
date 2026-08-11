@@ -106,18 +106,45 @@ def admin_cost_for(batch, placed, fetch_type="management"):
     scheme = _match_growing_charge_scheme(batch, batch.start_date)
     if not scheme:
         return {}
-    # The farmer's own statement bills only his share; the management view
-    # bills both. That split is what the scheme's two fields exist to express,
-    # and the Batch History report has always read them the same way.
-    shares = [("Farmer Admin Cost", scheme.farmer_admin_cost)]
-    if fetch_type != "farmer":
-        shares.append(("Management Admin Cost", scheme.management_admin_cost))
+    # One share or the other, never both: the two fields are the same overhead
+    # seen from two sides, so a flock cannot carry each of them at once.
+    #
+    # Note this differs from Batch History and GC Realization, which add the
+    # two together for their management view. That convention was carried over
+    # here at first and corrected — on this report the views are alternatives,
+    # not a subset and a superset.
+    shares = ([("Farmer Admin Cost", scheme.farmer_admin_cost)]
+              if fetch_type == "farmer"
+              else [("Management Admin Cost", scheme.management_admin_cost)])
     heads = {}
     for label, rate in shares:
         amount = (_d(rate) * _d(placed)).quantize(Q2)
         if amount:
             heads[label] = amount
     return heads
+
+
+def scheme_rates_for(batch):
+    """The Growing Charge Scheme's own rates for a flock, or None.
+
+    The farmer's view of what a flock cost is real quantities at the rates his
+    scheme names — that is what he is settled against — while management's is
+    real quantities at what was actually paid for them. GC Realization already
+    draws the same distinction between its Farmer and Management columns; this
+    is the same rule applied to the cost report.
+
+    Medicine is left out deliberately. The scheme's ``medicine_cost`` only
+    carries a real figure when its basis is "Fixed", and in practice every
+    scheme runs "Actual" or "Master" — so pricing medicine from it would read
+    as free rather than as unpriced. GC Realization's farmer column shows real
+    medicine spend for the same reason.
+    """
+    from broiler.views import _match_growing_charge_scheme
+
+    scheme = _match_growing_charge_scheme(batch, batch.start_date)
+    if not scheme:
+        return None
+    return {"chick": _d(scheme.chick_cost), "feed": _d(scheme.feed_cost)}
 
 
 def growing_charge_for(batch):

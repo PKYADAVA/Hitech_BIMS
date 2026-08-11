@@ -3665,7 +3665,8 @@ def _std_fcr(batch, costing):
     return (cum_feed / (body_weight / Decimal("1000"))).quantize(Decimal("0.01"))
 
 
-def _cost_detail(pl, growing_cost, gc_source, admin_cost, admin_source, admin_heads):
+def _cost_detail(pl, growing_cost, gc_source, admin_cost, admin_source, admin_heads,
+                 scheme_rates=None, placed=None, feed_kg=None):
     """The statement's blocks, with the two this report sources itself.
 
     The P&L only ever knew hand-typed figures for growing and admin, so its
@@ -3682,6 +3683,18 @@ def _cost_detail(pl, growing_cost, gc_source, admin_cost, admin_source, admin_he
             total = growing_cost
             lines = [{"label": "Growing Charge settlement", "amount": growing_cost,
                       "quantity": None, "rate": None}]
+        elif b["title"] == "Chick Cost" and scheme_rates:
+            total = (scheme_rates["chick"] * _num(placed)).quantize(Decimal("0.01"))
+            lines = [{"label": "Day Old Chicks at scheme rate",
+                      "quantity": placed, "rate": scheme_rates["chick"],
+                      "amount": total}]
+        elif b["title"] == "Feed Cost" and scheme_rates:
+            # One line, not the per-item breakdown: the scheme names a single
+            # feed rate, so splitting it by item would invent rates it does
+            # not set.
+            total = (scheme_rates["feed"] * _num(feed_kg)).quantize(Decimal("0.01"))
+            lines = [{"label": "Feed at scheme rate", "quantity": feed_kg,
+                      "rate": scheme_rates["feed"], "amount": total}]
         elif b["title"] == "Administrative Cost" and admin_source == "schema":
             total = admin_cost
             lines = [{"label": head, "amount": amount, "quantity": None, "rate": None}
@@ -3724,7 +3737,7 @@ def _production_cost_row(batch, fetch_type="management"):
     """
     from .services.production_pl import build_production_pl, _consumption_rows
     from .services.production_cost import (admin_cost_for, cost_rows_from_pl,
-                                           growing_charge_for,
+                                           growing_charge_for, scheme_rates_for,
                                            standard_consumption_cost)
 
     report = _build_batch_report(batch)
@@ -3808,6 +3821,23 @@ def _production_cost_row(batch, fetch_type="management"):
             std_feed_kg[name] = (std_feed_kg.get(name, Decimal("0"))
                                  + _num(pl_line.max_feed_qty) * eating)
     weight = _num(costing.get("sold_weight"))
+
+    # The farmer is settled against his scheme's rates, so his view of what a
+    # flock cost is real quantities at those rates. Management's is real
+    # quantities at what was actually paid, which is what the P&L already
+    # priced from purchases. Medicine stays actual in both — see
+    # scheme_rates_for for why.
+    scheme_rates = scheme_rates_for(batch) if fetch_type == "farmer" else None
+    priced_at = "purchase"
+    if scheme_rates:
+        priced_at = "scheme"
+        chick_at_scheme = (scheme_rates["chick"] * placed).quantize(Decimal("0.01"))
+        feed_at_scheme = (scheme_rates["feed"] * feed_kg).quantize(Decimal("0.01"))
+        total_cost = total_cost - chick_cost - feed_cost + chick_at_scheme + feed_at_scheme
+        chick_cost, feed_cost = chick_at_scheme, feed_at_scheme
+    elif fetch_type == "farmer":
+        priced_at = "no scheme"
+
     # Neither a growing charge nor an admin allocation has a master rate to be
     # measured against, so each stands at its actual value on the standard side
     # too. Otherwise every flock would show a variance the size of its
@@ -3876,8 +3906,10 @@ def _production_cost_row(batch, fetch_type="management"):
         # All five blocks, including the ones nobody has filled in: a breakup
         # that lists only what has a figure reads as a complete account of the
         # flock's cost, and Admin missing from it looks like Admin was nil.
+        "priced_at": priced_at,
         "cost_detail": _cost_detail(pl, growing_cost, gc_source,
-                                    admin_cost, admin_source, admin_heads),
+                                    admin_cost, admin_source, admin_heads,
+                                    scheme_rates, placed, feed_kg),
         "components": _cost_components(pl, growing_cost, gc_source,
                                        admin_cost, admin_source, admin_heads),
         # The P&L carries these as item ids, which is all its own page needs;

@@ -282,24 +282,25 @@ class AdminCostFromSchemeTests(TestCase):
         row.update(over)
         return GrowingChargeScheme.objects.create(**row)
 
-    def test_both_shares_are_billed_per_bird_placed(self):
-        """The management view bills farmer and management admin together —
-        the same rule the Batch History report has always followed."""
+    def test_one_share_applies_at_a_time_never_both(self):
+        """The two fields are the same overhead seen from two sides, so a
+        flock cannot carry each of them at once."""
         self.scheme()
-        self.assertEqual(admin_cost_for(self.batch, Decimal("12000")),
-                         {"Farmer Admin Cost": Decimal("36000.00"),
-                          "Management Admin Cost": Decimal("12000.00")})
+        self.assertEqual(admin_cost_for(self.batch, Decimal("12000"), "management"),
+                         {"Management Admin Cost": Decimal("12000.00")})
+        self.assertEqual(admin_cost_for(self.batch, Decimal("12000"), "farmer"),
+                         {"Farmer Admin Cost": Decimal("36000.00")})
 
-    def test_each_share_is_named_rather_than_lumped(self):
-        """A breakup showing one "Admin 48,000" is a figure nobody can question."""
+    def test_the_head_is_named_rather_than_lumped(self):
+        """A breakup showing one "Admin 12,000" is a figure nobody can question."""
         self.scheme()
-        self.assertEqual(sorted(admin_cost_for(self.batch, Decimal("1000"))),
-                         ["Farmer Admin Cost", "Management Admin Cost"])
+        self.assertEqual(list(admin_cost_for(self.batch, Decimal("1000"))),
+                         ["Management Admin Cost"])
 
     def test_a_share_set_to_nothing_does_not_take_a_row(self):
         self.scheme(management_admin_cost=Decimal("0"))
-        self.assertEqual(list(admin_cost_for(self.batch, Decimal("1000"))),
-                         ["Farmer Admin Cost"])
+        self.assertEqual(admin_cost_for(self.batch, Decimal("1000"),
+                                        "management"), {})
 
     def test_no_scheme_covering_the_placement_means_no_overhead(self):
         """Not zero overhead — no scheme to say. The page prints "no scheme"."""
@@ -321,11 +322,11 @@ class AdminCostFromSchemeTests(TestCase):
         self.assertEqual(admin_cost_for(self.batch, Decimal("1000"), "farmer"),
                          {"Farmer Admin Cost": Decimal("3000.00")})
 
-    def test_the_management_view_bills_both_shares(self):
+    def test_the_management_view_bills_only_the_company_s_share(self):
         self.scheme()
-        self.assertEqual(sorted(admin_cost_for(self.batch, Decimal("1000"),
-                                               "management")),
-                         ["Farmer Admin Cost", "Management Admin Cost"])
+        self.assertEqual(list(admin_cost_for(self.batch, Decimal("1000"),
+                                             "management")),
+                         ["Management Admin Cost"])
 
 
 class GrowingChargeSourceTests(TestCase):
@@ -445,3 +446,82 @@ class SourcedBlocksReachTheDrawerTests(TestCase):
             {"Farmer Admin Cost": Decimal("36000")})]
         self.assertIn("Growing Charges", heads)
         self.assertIn("Farmer Admin Cost", heads)
+
+
+class SchemePricingTests(TestCase):
+    """Farmer sees scheme rates; management sees what was actually paid."""
+
+    def setUp(self):
+        self.region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=self.region,
+                                       prefix="AKB")
+        sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=sup, farmer=farmer, region=self.region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1", start_date=date(2026, 7, 1))
+
+    def scheme(self, **over):
+        from broiler.models import GrowingChargeScheme
+        row = dict(region=self.region, schema_name="S1", is_active=True,
+                   from_date=date(2026, 1, 1), to_date=date(2026, 12, 31),
+                   chick_cost=Decimal("35"), feed_cost=Decimal("40"))
+        row.update(over)
+        return GrowingChargeScheme.objects.create(**row)
+
+    def test_the_farmer_view_reads_the_scheme_s_rates(self):
+        from broiler.services.production_cost import scheme_rates_for
+
+        self.scheme()
+        self.assertEqual(scheme_rates_for(self.batch),
+                         {"chick": Decimal("35"), "feed": Decimal("40")})
+
+    def test_no_scheme_means_no_rates_to_price_from(self):
+        """Not free — nothing to say, so the report falls back to actuals and
+        marks the column."""
+        from broiler.services.production_cost import scheme_rates_for
+
+        self.assertIsNone(scheme_rates_for(self.batch))
+
+    def test_a_scheme_outside_the_placement_date_does_not_apply(self):
+        from broiler.services.production_cost import scheme_rates_for
+
+        self.scheme(from_date=date(2027, 1, 1), to_date=date(2027, 12, 31))
+        self.assertIsNone(scheme_rates_for(self.batch))
+
+    def test_medicine_is_not_priced_from_the_scheme(self):
+        """Its medicine_cost only carries a figure on a "Fixed" basis, and in
+        practice every scheme runs Actual or Master — pricing from it would
+        read as free rather than as unpriced."""
+        from broiler.services.production_cost import scheme_rates_for
+
+        self.scheme()
+        self.assertEqual(set(scheme_rates_for(self.batch)), {"chick", "feed"})
+
+    def test_the_blocks_are_repriced_and_say_the_rate_used(self):
+        from broiler.views import _cost_detail
+
+        pl = {"cost_blocks": [
+            {"title": "Chick Cost", "total": Decimal("80115"),
+             "lines": [{"label": "DOC", "quantity": Decimal("2289"),
+                        "rate": Decimal("35"), "amount": Decimal("80115")}]},
+            {"title": "Feed Cost", "total": Decimal("1125"), "lines": []},
+        ]}
+        blocks = {b["title"]: b for b in _cost_detail(
+            pl, None, "unsettled", None, "no scheme", {},
+            {"chick": Decimal("30"), "feed": Decimal("40")},
+            Decimal("1000"), Decimal("50"))}
+        self.assertEqual(blocks["Chick Cost"]["total"], Decimal("30000.00"))
+        self.assertEqual(blocks["Chick Cost"]["lines"][0]["rate"], Decimal("30"))
+        self.assertEqual(blocks["Feed Cost"]["total"], Decimal("2000.00"))
+
+    def test_management_leaves_the_purchase_priced_blocks_alone(self):
+        from broiler.views import _cost_detail
+
+        pl = {"cost_blocks": [{"title": "Chick Cost", "total": Decimal("80115"),
+                               "lines": []}]}
+        blocks = {b["title"]: b for b in _cost_detail(
+            pl, None, "unsettled", None, "no scheme", {}, None, None, None)}
+        self.assertEqual(blocks["Chick Cost"]["total"], Decimal("80115"))
