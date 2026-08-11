@@ -3745,6 +3745,12 @@ def _production_cost_row(batch, fetch_type="management"):
     costing = report.get("batch_costing") or {}
     farm = batch.broiler_farm
 
+    # The day the chicks went in. Through _placement_date rather than read off
+    # the batch, for the reason that helper exists: a flock created from a
+    # chicks placement can carry no start date at all, and both the Growing
+    # Charge scheme match and the age below hang off this one value.
+    placed_on = costing.get("placement_date") or _placement_date(batch)
+
     consumption, _ids = _consumption_rows(report)
     std_consumed, no_standard = standard_consumption_cost(consumption)
     # Feed on its own as well as the whole, so the performance table can set
@@ -3786,7 +3792,7 @@ def _production_cost_row(batch, fetch_type="management"):
     admin_heads = {}
     if admin_cost is None:
         admin_heads = admin_cost_for(batch, _num(costing.get("chicks_placed")),
-                                     fetch_type)
+                                     fetch_type, placed_on)
         if admin_heads:
             admin_cost = sum(admin_heads.values(), Decimal("0")).quantize(Decimal("0.01"))
             admin_source = "schema"
@@ -3867,7 +3873,7 @@ def _production_cost_row(batch, fetch_type="management"):
     # quantities at what was actually paid, which is what the P&L already
     # priced from purchases. Medicine stays actual in both — see
     # scheme_rates_for for why.
-    scheme_rates = scheme_rates_for(batch) if fetch_type == "farmer" else None
+    scheme_rates = scheme_rates_for(batch, placed_on) if fetch_type == "farmer" else None
     priced_at = "purchase"
     if scheme_rates:
         priced_at = "scheme"
@@ -3891,7 +3897,6 @@ def _production_cost_row(batch, fetch_type="management"):
     # is still being recorded — the context a cost figure is argued in. Age
     # runs to the day the flock closed rather than to today, so a finished
     # batch does not keep ageing on the page.
-    placed_on = costing.get("placement_date") or batch.start_date
     as_of = batch.end_date or timezone.localdate()
     age_days = (as_of - placed_on).days if placed_on else None
     last_entry = (DailyEntry.objects.filter(batch=batch)

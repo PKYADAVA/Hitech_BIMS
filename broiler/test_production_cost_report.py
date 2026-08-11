@@ -521,6 +521,20 @@ class SchemePricingTests(TestCase):
         self.assertEqual(scheme_rates_for(self.batch),
                          {"chick": Decimal("35"), "feed": Decimal("40")})
 
+    def test_a_flock_with_no_start_date_still_matches_on_its_placement(self):
+        """A flock created from a chicks placement can carry no start date.
+        Matching on that field alone silently dropped those flocks back to
+        actual rates on the farmer view, which is the one thing that view
+        exists to not do."""
+        from broiler.services.production_cost import scheme_rates_for
+
+        self.scheme()
+        self.batch.start_date = None
+        self.batch.save()
+        self.assertIsNone(scheme_rates_for(self.batch))
+        self.assertEqual(scheme_rates_for(self.batch, date(2026, 7, 1)),
+                         {"chick": Decimal("35"), "feed": Decimal("40")})
+
     def test_no_scheme_means_no_rates_to_price_from(self):
         """Not free — nothing to say, so the report falls back to actuals and
         marks the column."""

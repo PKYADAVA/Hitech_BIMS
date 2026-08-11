@@ -86,7 +86,7 @@ def cost_rows_from_pl(pl):
     return out
 
 
-def admin_cost_for(batch, placed, fetch_type="management"):
+def admin_cost_for(batch, placed, fetch_type="management", on_date=None):
     """Administrative overhead for a flock, from its Growing Charge Scheme.
 
     The scheme already carries it — ``farmer_admin_cost`` and
@@ -103,7 +103,7 @@ def admin_cost_for(batch, placed, fetch_type="management"):
 
     if not placed:
         return {}
-    scheme = _match_growing_charge_scheme(batch, batch.start_date)
+    scheme = _match_growing_charge_scheme(batch, on_date or batch.start_date)
     if not scheme:
         return {}
     # One share or the other, never both: the two fields are the same overhead
@@ -124,7 +124,7 @@ def admin_cost_for(batch, placed, fetch_type="management"):
     return heads
 
 
-def scheme_rates_for(batch):
+def scheme_rates_for(batch, on_date=None):
     """The Growing Charge Scheme's own rates for a flock, or None.
 
     The farmer's view of what a flock cost is real quantities at the rates his
@@ -141,7 +141,12 @@ def scheme_rates_for(batch):
     """
     from broiler.views import _match_growing_charge_scheme
 
-    scheme = _match_growing_charge_scheme(batch, batch.start_date)
+    # Matched on the day the birds arrived, which the caller resolves through
+    # _placement_date. A flock created from a chicks placement can carry no
+    # start date, and every one of those was silently falling through to
+    # actual rates on the farmer view — the one thing that view exists to not
+    # do.
+    scheme = _match_growing_charge_scheme(batch, on_date or batch.start_date)
     if not scheme:
         return None
     return {"chick": _d(scheme.chick_cost), "feed": _d(scheme.feed_cost)}
