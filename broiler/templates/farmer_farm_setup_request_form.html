@@ -1,0 +1,586 @@
+{% extends "base.html" %}
+
+{% block title %}Farmer & Farm Setup Request - BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='broiler_transaction' active_tab='farmer_farm_setup_request' %}
+
+<div class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-title"><i class="fas fa-user-plus"></i> New Farmer &amp; Farm Setup</div>
+      <div class="page-header-subtitle" id="request-no-line">{% if next_request_no %}Next: {{ next_request_no }}{% endif %}</div>
+    </div>
+    <div class="page-header-right">
+      <a class="btn btn-outline-secondary" href="{% url 'farmer_farm_setup_request_list' %}"><i class="fas fa-list"></i> Register List</a>
+    </div>
+</div>
+
+<div id="status-banner" class="alert alert-warning d-none" role="alert"></div>
+
+<form id="setup-form">
+  {% csrf_token %}
+  <input type="hidden" id="request-id" value="{{ request_id|default:'' }}">
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card mb-3 h-100">
+        <div class="card-header"><i class="fas fa-map-marker-alt text-success"></i> 1. Farm Location &amp; GPS Tagging</div>
+        <div class="card-body">
+          <div class="d-flex gap-2 mb-3">
+            <button type="button" class="btn btn-outline-success flex-fill" id="capture-gps"><i class="fas fa-location-crosshairs"></i> Capture GPS Location</button>
+            <span class="badge bg-success align-self-center d-none" id="gps-locked"><i class="fas fa-check"></i> GPS Locked</span>
+          </div>
+          <div class="small text-muted mb-3" id="gps-note"></div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Latitude <span class="text-danger">*</span></label><input type="text" class="form-control" id="latitude" readonly></div>
+            <div class="col-6"><label class="form-label">Longitude <span class="text-danger">*</span></label><input type="text" class="form-control" id="longitude" readonly></div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label">Accuracy</label><input type="text" class="form-control" id="gps-accuracy" readonly></div>
+            <div class="col-6"><label class="form-label">Captured On</label><input type="text" class="form-control" id="gps-captured-at" readonly></div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">State <span class="text-danger">*</span></label>
+              <select class="form-select" id="state">
+                <option value="">Select</option>
+                {% for s in states_and_union_territories %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-6"><label class="form-label">District <span class="text-danger">*</span></label><input type="text" class="form-control" id="district"></div>
+          </div>
+          <div class="mb-2"><label class="form-label">Village / Area <span class="text-danger">*</span></label><input type="text" class="form-control" id="village_area"></div>
+          <label class="form-label">Full Farm Address <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="full_address" rows="2" placeholder="Village, Landmark, Pincode..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card mb-3 h-100">
+        <div class="card-header"><i class="fas fa-user text-primary"></i> 2. Farmer Profile &amp; Contact</div>
+        <div class="card-body">
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Farmer Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="farmer_name" placeholder="Enter Full Name"></div>
+            <div class="col-6"><label class="form-label">Father / Spouse Name</label><input type="text" class="form-control" id="father_spouse_name"></div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label">Primary Mobile <span class="text-danger">*</span></label><input type="text" class="form-control" id="primary_mobile" placeholder="+91 10-digit mobile number"></div>
+            <div class="col-6">
+              <div class="d-flex justify-content-between align-items-center">
+                <label class="form-label mb-0">WhatsApp Number</label>
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" id="whatsapp_same_as_primary">
+                  <label class="form-check-label small" for="whatsapp_same_as_primary">Same as Primary</label>
+                </div>
+              </div>
+              <input type="text" class="form-control" id="whatsapp_number" placeholder="Same as Primary (optional)">
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label">Alternate Mobile</label><input type="text" class="form-control" id="alternate_mobile"></div>
+            <div class="col-6"><label class="form-label">Email (Optional)</label><input type="email" class="form-control" id="email"></div>
+          </div>
+          <label class="form-label">Farmer Address</label>
+          <textarea class="form-control mb-3" id="farmer_address" rows="2"
+                    placeholder="Where the farmer lives — may differ from the farm's own address"></textarea>
+          <label class="form-label">Farmer Photo <span class="text-danger">*</span></label>
+          <div class="border rounded p-2 mb-1 d-flex align-items-center gap-2">
+            <input type="file" accept="image/*" class="form-control" id="farmer_photo">
+            <a href="#" target="_blank" class="small d-none" id="farmer_photo-link">current</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header"><i class="fas fa-house text-warning"></i> 3. Farm &amp; Shed Details</div>
+        <div class="card-body">
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Branch <span class="text-danger">*</span></label>
+              <select class="form-select" id="branch">
+                <option value="">Select Branch</option>
+                {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-6"><label class="form-label">Line / Route <span class="text-danger">*</span></label><input type="text" class="form-control" id="line" placeholder="e.g. Baskhari Line"></div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Supervisor <span class="text-danger">*</span></label>
+              <select class="form-select" id="supervisor" disabled>
+                <option value="" selected disabled>Select a branch first</option>
+              </select>
+            </div>
+            <div class="col-6"><label class="form-label">Farm Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="farm_name" placeholder="e.g. Ram Farm"></div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Farm Type <span class="text-danger">*</span></label>
+              <select class="form-select" id="farm_type">
+                {% for val, label in farm_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-6"><label class="form-label">Farmer Group</label>
+              <select class="form-select" id="farmer_group">
+                <option value="">Select Group</option>
+                {% for g in farmer_groups %}<option value="{{ g.id }}">{{ g.description }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Capacity (Birds) <span class="text-danger">*</span></label><input type="number" min="0" class="form-control" id="capacity_birds" placeholder="e.g. 5000"></div>
+            <div class="col-6"><label class="form-label">Shed Type <span class="text-danger">*</span></label>
+              <select class="form-select" id="shed_type">
+                {% for val, label in shed_types %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <label class="form-label mb-1">Sheds <span class="text-danger">*</span></label>
+          <div id="shed-rows"></div>
+          <template id="shed-row-template">
+            <div class="row g-2 shed-row align-items-end mb-1">
+              <div class="col-4"><label class="form-label small mb-0">Length (ft)</label><input type="number" step="0.01" min="0" class="form-control form-control-sm shed-length"></div>
+              <div class="col-4"><label class="form-label small mb-0">Width (ft)</label><input type="number" step="0.01" min="0" class="form-control form-control-sm shed-width"></div>
+              <div class="col-3"><label class="form-label small mb-0">Area (sq ft)</label><input type="text" class="form-control form-control-sm shed-area" readonly></div>
+              <div class="col-1"><button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 remove-shed-row"><i class="fas fa-times"></i></button></div>
+            </div>
+          </template>
+          <button type="button" class="btn btn-outline-success btn-sm mb-3" id="add-shed-row-btn"><i class="fas fa-plus"></i> Add Shed</button>
+          <div class="small text-muted mb-3" id="shed-total-note"></div>
+
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label mb-0">Farm Pictures</label>
+            <button type="button" class="btn btn-outline-success btn-sm" id="add-picture-btn"><i class="fas fa-plus"></i> Add Picture</button>
+          </div>
+          <input type="file" accept="image/*" multiple class="d-none" id="farm-pictures-input">
+          <div class="d-flex flex-wrap gap-2 mb-3" id="farm-pictures-grid"></div>
+
+          <label class="form-label">Remarks</label>
+          <textarea class="form-control" id="remarks" rows="2"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6 d-flex flex-column">
+      <div class="card mb-3">
+        <div class="card-header"><i class="fas fa-building-columns text-info"></i> 4. Bank Details <span class="small text-muted">(Optional)</span></div>
+        <div class="card-body">
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">Account Holder Name</label><input type="text" class="form-control" id="account_holder_name"></div>
+            <div class="col-6"><label class="form-label">Account Number</label><input type="text" class="form-control" id="acc_no"></div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label">IFSC Code</label><input type="text" class="form-control" id="ifsc_code" maxlength="11" placeholder="e.g. SBIN0001234"></div>
+            <div class="col-6"><label class="form-label">Bank Name</label><input type="text" class="form-control" id="bank_name"></div>
+          </div>
+          <label class="form-label">Bank Branch</label>
+          <input type="text" class="form-control" id="bank_branch">
+        </div>
+      </div>
+
+      <div class="card flex-grow-1">
+        <div class="card-header"><i class="fas fa-file-lines text-purple"></i> 5. KYC &amp; Documents <span class="small text-muted">(Optional where applicable)</span></div>
+        <div class="card-body">
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label">Aadhaar Number</label><input type="text" class="form-control" id="aadhaar_number" maxlength="12" placeholder="12-digit number"></div>
+            <div class="col-6"><label class="form-label">PAN Card</label><input type="text" class="form-control" id="pan_card" maxlength="10" placeholder="10-character PAN"></div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-4">
+              <label class="form-label">Aadhaar Front</label>
+              <div class="border rounded p-2 d-flex align-items-center gap-2">
+                <input type="file" class="form-control form-control-sm" id="aadhaar_front">
+                <a href="#" target="_blank" class="small d-none" id="aadhaar_front-link">current</a>
+              </div>
+            </div>
+            <div class="col-4">
+              <label class="form-label">Aadhaar Back</label>
+              <div class="border rounded p-2 d-flex align-items-center gap-2">
+                <input type="file" class="form-control form-control-sm" id="aadhaar_back">
+                <a href="#" target="_blank" class="small d-none" id="aadhaar_back-link">current</a>
+              </div>
+            </div>
+            <div class="col-4">
+              <label class="form-label">PAN Card Upload</label>
+              <div class="border rounded p-2 d-flex align-items-center gap-2">
+                <input type="file" class="form-control form-control-sm" id="pan_upload">
+                <a href="#" target="_blank" class="small d-none" id="pan_upload-link">current</a>
+              </div>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            {% for field, label in file_slots %}
+            <div class="col-6">
+              <label class="form-label">{{ label }}</label>
+              <div class="border rounded p-2 d-flex align-items-center gap-2">
+                <input type="file" class="form-control form-control-sm" id="{{ field }}">
+                <a href="#" target="_blank" class="small d-none" id="{{ field }}-link">current</a>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="physically_verified">
+            <label class="form-check-label" for="physically_verified">
+              I confirm that the farmer, farm location and basic farm details have been physically verified.
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-3" id="review-card" style="display:none;">
+        <div class="card-header"><i class="fas fa-clipboard-check"></i> Review</div>
+        <div class="card-body">
+          <p class="mb-2"><strong>Status:</strong> <span id="review-status"></span></p>
+          <p class="mb-2 d-none" id="review-note-line"><strong>Note:</strong> <span id="review-note"></span></p>
+          {% if can_review %}
+          <div class="d-flex gap-2" id="review-actions">
+            <button type="button" class="btn btn-success flex-fill" id="approve-btn"><i class="fas fa-check"></i> Approve</button>
+            <button type="button" class="btn btn-outline-danger flex-fill" id="reject-btn"><i class="fas fa-times"></i> Reject</button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4" id="form-actions">
+    <button type="button" class="btn btn-success" id="submit-btn"><i class="fas fa-check"></i> Submit for Approval</button>
+    <button type="button" class="btn btn-outline-primary" id="save-draft-btn"><i class="fas fa-floppy-disk"></i> Save Draft</button>
+    <a href="{% url 'farmer_farm_setup_request_list' %}" class="btn btn-outline-secondary"><i class="fas fa-xmark"></i> Cancel</a>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block js %}
+<script>
+$(function () {
+  const csrfToken = "{{ csrf_token }}";
+  const requestId = $("#request-id").val();
+  let captured = null;   // {lat, lng, accuracy, at}
+  let currentStatus = "draft";
+
+  // escapeHtml() provided globally by main.js
+  const FIELD_IDS = [
+    "state", "district", "line", "village_area", "full_address",
+    "farmer_name", "father_spouse_name", "primary_mobile", "whatsapp_number", "alternate_mobile", "email",
+    "farmer_address",
+    "farm_name", "branch", "supervisor", "farm_type", "farmer_group", "capacity_birds", "shed_type", "remarks",
+    "aadhaar_number", "pan_card",
+    "account_holder_name", "acc_no", "ifsc_code", "bank_name", "bank_branch",
+  ];
+  const FILE_IDS = ["farmer_photo", "aadhaar_front", "aadhaar_back", "pan_upload", "agreement_copy", "security_cheque"];
+
+  // Supervisor is reached through Branch, same cascade the Broiler Farm
+  // master's own form uses — a request belongs to whichever branch it was
+  // raised for, and that branch is what limits who may take it on.
+  function loadSupervisors(branchId, selected) {
+    if (!branchId) {
+      $("#supervisor").empty().prop("disabled", true).append(
+        '<option value="" selected disabled>Select a branch first</option>');
+      return;
+    }
+    $("#supervisor").prop("disabled", false);
+    window.loadOptions("#supervisor", "{% url 'get_supervisors' %}", { branch_id: branchId },
+      { list: "supervisors", label: "name", placeholder: "Select a supervisor", selected: selected || undefined });
+  }
+  $("#branch").on("change", function () { loadSupervisors($(this).val(), null); });
+
+  // WhatsApp defaults to the primary mobile when ticked, and tracks it live —
+  // a supervisor correcting the primary number mid-entry should not have to
+  // remember to re-copy it. Unticking hands the field back for a different
+  // WhatsApp number.
+  function syncWhatsapp() {
+    if ($("#whatsapp_same_as_primary").is(":checked")) $("#whatsapp_number").val($("#primary_mobile").val());
+  }
+  $("#whatsapp_same_as_primary").on("change", function () {
+    $("#whatsapp_number").prop("readonly", this.checked);
+    syncWhatsapp();
+  });
+  $("#primary_mobile").on("input", syncWhatsapp);
+
+  // --- Shed rows: one per shed, added/removed on demand, same pattern the
+  // Broiler Farm master's own Shed Information section already uses. ---
+  function addShedRow(shed) {
+    shed = shed || {};
+    const $row = $($("#shed-row-template").html());
+    $row.find(".shed-length").val(shed.length != null ? shed.length : "");
+    $row.find(".shed-width").val(shed.width != null ? shed.width : "");
+    if (shed.length != null && shed.width != null) {
+      $row.find(".shed-area").val((shed.length * shed.width).toFixed(2));
+    }
+    $("#shed-rows").append($row);
+    updateShedTotal();
+  }
+
+  $("#add-shed-row-btn").on("click", function () { addShedRow(); });
+  $(document).on("click", ".remove-shed-row", function () {
+    $(this).closest(".shed-row").remove();
+    updateShedTotal();
+  });
+
+  $(document).on("input", ".shed-length, .shed-width", function () {
+    const $r = $(this).closest(".shed-row");
+    const l = parseFloat($r.find(".shed-length").val()) || 0;
+    const w = parseFloat($r.find(".shed-width").val()) || 0;
+    const area = l * w;
+    $r.find(".shed-area").val(area ? area.toFixed(2) : "");
+    updateShedTotal();
+  });
+
+  function updateShedTotal() {
+    const rows = $("#shed-rows .shed-row");
+    let totalArea = 0;
+    rows.each(function () { totalArea += parseFloat($(this).find(".shed-area").val()) || 0; });
+    const capacity = parseFloat($("#capacity_birds").val()) || 0;
+    const perShed = rows.length ? Math.floor(capacity / rows.length) : 0;
+    $("#shed-total-note").text(rows.length
+      ? `${rows.length} shed(s) · total ${totalArea.toFixed(2)} sq ft · ~${perShed} birds/shed`
+      : "");
+  }
+  $("#capacity_birds").on("input", updateShedTotal);
+
+  function collectSheds() {
+    const sheds = [];
+    $("#shed-rows .shed-row").each(function () {
+      const length = $(this).find(".shed-length").val();
+      const width = $(this).find(".shed-width").val();
+      if (!length && !width) return;   // skip a blank row
+      sheds.push({ length: length || null, width: width || null });
+    });
+    return sheds;
+  }
+
+  // --- Farm pictures: any number, added or removed on demand. Newly-picked
+  // files stay client-side (pendingPhotos) until save; an existing photo is
+  // only marked for removal (removedPhotoIds), not actually deleted, until
+  // save confirms it. ---
+  let pendingPhotos = [];   // File objects picked this session, not yet saved
+  let existingPhotos = [];  // [{id, url}] already on the request
+  let removedPhotoIds = [];
+
+  function renderPhotoGrid() {
+    const $grid = $("#farm-pictures-grid").empty();
+    existingPhotos.forEach(function (p) {
+      $grid.append(`
+        <div class="border rounded p-1 text-center" style="width:104px" data-existing-id="${p.id}">
+          <a href="${p.url}" target="_blank" rel="noopener">
+            <img src="${p.url}" style="width:92px;height:64px;object-fit:cover;border-radius:.25rem"></a>
+          <button type="button" class="btn btn-sm btn-outline-danger mt-1 py-0 remove-existing-photo"
+                  data-id="${p.id}" title="Remove"><i class="fas fa-trash"></i></button>
+        </div>`);
+    });
+    pendingPhotos.forEach(function (file, i) {
+      const url = URL.createObjectURL(file);
+      $grid.append(`
+        <div class="border rounded p-1 text-center" style="width:104px" data-pending-index="${i}">
+          <img src="${url}" style="width:92px;height:64px;object-fit:cover;border-radius:.25rem">
+          <button type="button" class="btn btn-sm btn-outline-danger mt-1 py-0 remove-pending-photo"
+                  data-index="${i}" title="Remove"><i class="fas fa-trash"></i></button>
+        </div>`);
+    });
+  }
+
+  $("#add-picture-btn").on("click", function () { $("#farm-pictures-input").trigger("click"); });
+  $("#farm-pictures-input").on("change", function () {
+    pendingPhotos = pendingPhotos.concat(Array.from(this.files || []));
+    this.value = "";   // lets the same file be picked again if removed then re-added
+    renderPhotoGrid();
+  });
+  $(document).on("click", ".remove-pending-photo", function () {
+    pendingPhotos.splice($(this).data("index"), 1);
+    renderPhotoGrid();
+  });
+  $(document).on("click", ".remove-existing-photo", function () {
+    const id = $(this).data("id");
+    removedPhotoIds.push(id);
+    existingPhotos = existingPhotos.filter(function (p) { return p.id !== id; });
+    renderPhotoGrid();
+  });
+
+  document.getElementById("capture-gps").addEventListener("click", function () {
+    if (!navigator.geolocation) {
+      $("#gps-note").text("This browser cannot report a location.");
+      return;
+    }
+    $("#gps-note").text("Reading location…");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      captured = {
+        lat: pos.coords.latitude, lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy, at: new Date().toISOString(),
+      };
+      $("#latitude").val(captured.lat.toFixed(6));
+      $("#longitude").val(captured.lng.toFixed(6));
+      $("#gps-accuracy").val("± " + Math.round(captured.accuracy) + " m");
+      $("#gps-captured-at").val(new Date(captured.at).toLocaleString());
+      $("#gps-locked").removeClass("d-none");
+      $("#gps-note").text("");
+      fillAddressFrom(captured.lat, captured.lng);
+    }, function (err) {
+      $("#gps-note").text(err.code === err.PERMISSION_DENIED
+        ? "Location permission denied — allow location for this site, then press again."
+        : "Could not read the location — check the site is opened over HTTPS, then press again.");
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  });
+
+  // State/District/Village/Address, filled from the pin — same
+  // window.reverseGeocode() the Farm Location & Photos capture form already
+  // uses. Typed text is never overwritten, only offered: a supervisor who
+  // has already typed the real address knows it better than a lookup does.
+  function fillAddressFrom(latitude, longitude) {
+    if (!window.reverseGeocode) return;
+    $("#gps-note").text("Reading location… looking up the address…");
+    window.reverseGeocode(latitude, longitude).then(function (place) {
+      $("#gps-note").text("");
+      if (!place) return;
+      if (place.state && !$("#state").val()) $("#state").val(place.state);
+      if (place.district && !$("#district").val()) $("#district").val(place.district);
+      if (place.area && !$("#village_area").val()) $("#village_area").val(place.area);
+      if (place.display && !$("#full_address").val()) $("#full_address").val(place.display);
+    });
+  }
+
+  function setReadonly(readonly) {
+    $("#setup-form :input").not("#reject-note, #approve-btn, #reject-btn").prop("disabled", readonly);
+    $("#capture-gps").prop("disabled", readonly);
+    $("#form-actions").toggle(!readonly);
+  }
+
+  function applyStatus(status, reviewNote) {
+    currentStatus = status;
+    const banner = $("#status-banner");
+    if (status === "draft") {
+      banner.addClass("d-none");
+      setReadonly(false);
+    } else {
+      const text = {
+        pending: "This request has been submitted and is awaiting review.",
+        approved: "This request was approved — the Farmer and Farm have already been created.",
+        rejected: "This request was rejected." + (reviewNote ? " Reason: " + reviewNote : ""),
+      }[status] || "";
+      banner.removeClass("d-none alert-warning alert-success alert-danger")
+        .addClass(status === "approved" ? "alert-success" : status === "rejected" ? "alert-danger" : "alert-warning")
+        .text(text);
+      setReadonly(true);
+    }
+    if (status === "pending") {
+      $("#review-card").show();
+      $("#review-status").text("Pending");
+    } else if (status === "approved" || status === "rejected") {
+      $("#review-card").show();
+      $("#review-status").text(status === "approved" ? "Approved" : "Rejected");
+      if (reviewNote) { $("#review-note-line").removeClass("d-none"); $("#review-note").text(reviewNote); }
+    }
+  }
+
+  if (requestId) {
+    $.getJSON(`/farmer-farm-setup-request-api/${requestId}/`, function (r) {
+      $("#request-no-line").text(r.request_no);
+      FIELD_IDS.forEach(function (id) { if (r[id] !== undefined && r[id] !== null) $("#" + id).val(r[id]); });
+      loadSupervisors(r.branch, r.supervisor);
+      $("#physically_verified").prop("checked", !!r.physically_verified);
+      if (r.latitude && r.longitude) {
+        $("#latitude").val(Number(r.latitude).toFixed(6));
+        $("#longitude").val(Number(r.longitude).toFixed(6));
+        $("#gps-locked").removeClass("d-none");
+      }
+      if (r.gps_accuracy_m) $("#gps-accuracy").val("± " + Math.round(r.gps_accuracy_m) + " m");
+      if (r.gps_captured_at) $("#gps-captured-at").val(new Date(r.gps_captured_at).toLocaleString());
+      // Image slots get a thumbnail instead of a bare filename — same "master
+      // documents" preview convention farm_location_capture_form.html uses.
+      FILE_IDS.forEach(function (id) {
+        if (!r[id]) return;
+        const name = r[id + "_name"] || "current file";
+        const $link = $("#" + id + "-link").attr("href", r[id]).removeClass("d-none");
+        if (/\.(jpe?g|png|gif|webp)(\?|$)/i.test(r[id])) {
+          $link.html(`<img src="${r[id]}" style="width:40px;height:40px;object-fit:cover;`
+            + `border-radius:.25rem;vertical-align:middle;margin-right:6px">${escapeHtml(name)}`);
+        } else {
+          $link.html(`<i class="fas fa-file me-1"></i>${escapeHtml(name)}`);
+        }
+      });
+      (r.sheds || []).forEach(function (shed) { addShedRow(shed); });
+      if (!r.sheds || !r.sheds.length) addShedRow();
+      existingPhotos = r.photos || [];
+      renderPhotoGrid();
+      applyStatus(r.status, r.review_note);
+    });
+  } else {
+    addShedRow();   // a fresh request starts with one row to fill in
+  }
+
+  function buildFormData(action) {
+    const fd = new FormData();
+    FIELD_IDS.forEach(function (id) {
+      const v = $("#" + id).val();
+      if (v !== null && v !== undefined) fd.append(id, v);
+    });
+    fd.append("physically_verified", $("#physically_verified").is(":checked") ? "true" : "false");
+    if (captured) {
+      fd.append("latitude", captured.lat);
+      fd.append("longitude", captured.lng);
+      fd.append("gps_accuracy_m", captured.accuracy);
+      fd.append("gps_captured_at", captured.at);
+    }
+    FILE_IDS.forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el.files && el.files[0]) fd.append(id, el.files[0]);
+    });
+    fd.append("sheds", JSON.stringify(collectSheds()));
+    pendingPhotos.forEach(function (file) { fd.append("photos", file); });
+    fd.append("remove_photo_ids", JSON.stringify(removedPhotoIds));
+    fd.append("action", action);
+    return fd;
+  }
+
+  function save(action) {
+    if (action === "submit" && !$("#physically_verified").is(":checked")) {
+      window.showToast("danger", "Confirm physical verification before submitting.");
+      return;
+    }
+    const url = requestId
+      ? `/farmer-farm-setup-request-api/${requestId}/`
+      : '{% url "farmer_farm_setup_request_api" %}';
+    $.ajax({
+      url: url, type: "POST", data: buildFormData(action), processData: false, contentType: false,
+      headers: { "X-CSRFToken": csrfToken },
+      success: function (resp) {
+        window.showToast("success", action === "submit" ? "Submitted for approval." : "Draft saved.");
+        window.location.href = "{% url 'farmer_farm_setup_request_list' %}";
+      },
+      error: function (xhr) {
+        window.showToast("danger", xhr.responseJSON?.error || "Could not save the request.");
+      },
+    });
+  }
+
+  $("#save-draft-btn").on("click", function () { save("draft"); });
+  $("#submit-btn").on("click", async function () {
+    if (!(await window.bimsConfirm("Submit this request for approval? You will not be able to edit it afterwards."))) return;
+    save("submit");
+  });
+
+  $("#approve-btn").on("click", async function () {
+    if (!(await window.bimsConfirm("Approve this request? This creates the real Farmer and Farm records."))) return;
+    $.ajax({
+      url: `/farmer-farm-setup-request/${requestId}/approve/`, type: "POST",
+      headers: { "X-CSRFToken": csrfToken },
+      success: function () { window.showToast("success", "Approved."); window.location.reload(); },
+      error: function (xhr) { window.showToast("danger", xhr.responseJSON?.error || "Could not approve."); },
+    });
+  });
+  $("#reject-btn").on("click", async function () {
+    const note = prompt("Reason for rejection (optional):");
+    if (note === null) return;
+    $.ajax({
+      url: `/farmer-farm-setup-request/${requestId}/reject/`, type: "POST",
+      headers: { "X-CSRFToken": csrfToken }, data: { note: note },
+      success: function () { window.showToast("success", "Rejected."); window.location.reload(); },
+      error: function (xhr) { window.showToast("danger", xhr.responseJSON?.error || "Could not reject."); },
+    });
+  });
+});
+</script>
+{% endblock %}
