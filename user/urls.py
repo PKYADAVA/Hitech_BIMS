@@ -47,5 +47,6 @@ urlpatterns = [
     path('mobile-access/<int:group_id>/delete/', views.mobile_access_delete, name='mobile_access_delete'),
     path('user_analytics/', views.user_analytics, name='user_analytics'),
      path('analytics/data/', views.user_analytics_data, name='user_analytics_data'),
+    path('download/app-release/latest/', views.app_release_download, name='app_release_download'),
 
 ]

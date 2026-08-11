@@ -1625,3 +1625,24 @@ def offline_sync_monitor(request):
             "attention": sum(1 for r in rows if r["attention"]),
         },
     })
+
+
+def app_release_download(request):
+    """/download/app-release/latest/ — 302s to the current release's APK.
+
+    A stable link the app-version API hands out instead of the object
+    storage URL directly: what gets shown and shared is this domain, not
+    DigitalOcean's, and it always resolves to whichever release is current
+    at the moment it is followed rather than the one that was current when
+    a particular /app-version response was fetched. No auth — the same
+    reasoning as AppVersionView: the client asking is often the one behind,
+    and cannot be assumed to be able to log in first.
+    """
+    from django.http import Http404
+
+    from .models import AppRelease
+
+    latest = AppRelease.objects.first()
+    if latest is None or not latest.apk_file:
+        raise Http404("No release published yet.")
+    return redirect(latest.apk_file.url)

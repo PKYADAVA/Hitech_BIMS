@@ -31,10 +31,16 @@ export function useAppVersion() {
   return useQuery({
     queryKey: ["app-version"],
     queryFn: fetchAppVersion,
-    // Checked once a session is long enough to matter, not on every screen
-    // focus — a sideload release lands rarely, and the prompt is a poll away
-    // if this fires late.
-    staleTime: 60 * 60 * 1000,
+    // Always refetched, deliberately: this app persists its React Query
+    // cache to disk across restarts (see App.tsx), so a long staleTime here
+    // does not just skip a poll within one session — it can leave the app
+    // showing a stale "no update" answer for its whole maxAge, across
+    // restarts, exactly while a force_update release is waiting. A version
+    // check is cheap and rare enough that there is no cost to asking fresh
+    // every time the app is opened or returned to.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }

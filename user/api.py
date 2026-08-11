@@ -341,6 +341,8 @@ class AppVersionView(V1ViewMixin, APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        from django.urls import reverse
+
         from .models import AppRelease
 
         latest = AppRelease.objects.first()
@@ -350,7 +352,9 @@ class AppVersionView(V1ViewMixin, APIView):
         return Response({
             "latest_version": latest.version,
             "latest_version_code": latest.version_code,
-            "download_url": request.build_absolute_uri(latest.apk_file.url) if latest.apk_file else None,
+            # This domain, not the object storage's — see app_release_download.
+            "download_url": (request.build_absolute_uri(reverse("app_release_download"))
+                             if latest.apk_file else None),
             "force_update": latest.force_update,
             "notes": latest.release_notes,
         })

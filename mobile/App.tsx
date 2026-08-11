@@ -73,7 +73,22 @@ export default function App() {
       <ThemeProvider>
         <PersistQueryClientProvider
           client={queryClient}
-          persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}
+          persistOptions={{
+            persister,
+            maxAge: 1000 * 60 * 60 * 24,
+            dehydrateOptions: {
+              shouldDehydrateQuery: (query) =>
+                // Everything else is meant to survive a restart as read
+                // cache. The version check is the one query that must not:
+                // installing an update *over* an existing app (not
+                // uninstall-first) keeps local storage, so a persisted
+                // "force_update: true" answer would outlive the very
+                // update that was supposed to clear it — and the blocking
+                // modal it drives has no dismiss button, so a stale replay
+                // of it is a lockout, not a stale screen.
+                query.queryKey[0] !== "app-version",
+            },
+          }}
         >
           <StatusBar style="light" />
           <LockGate>
