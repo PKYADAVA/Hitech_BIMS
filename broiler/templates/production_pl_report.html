@@ -142,6 +142,7 @@ A statement missing its rows reads as complete, and somebody decides on it.
   .pl-fleet { font-size: .74rem; }
   .pl-fleet th, .pl-fleet td { white-space: nowrap; padding: .3rem .45rem; vertical-align: middle; }
   .pl-fleet thead th { background: #f1f3f5; }
+  .pl-fleet .pl-grp { background: #e7ebef; font-size: .7rem; letter-spacing: .02em; }
   .pl-fleet tfoot td { background: #f8f9fa; }
   .pl-neg { color: #d03b3b; font-weight: 700; }
 
@@ -575,10 +576,22 @@ A statement missing its rows reads as complete, and somebody decides on it.
       <table class="table table-sm table-bordered mb-0 pl-fleet">
         <thead>
           <tr>
-            <th>Farm</th><th>Batch</th><th>Branch</th><th>Supervisor</th>
+            <th rowspan="2">Farm</th><th rowspan="2">Batch</th>
+            <th rowspan="2">Branch</th><th rowspan="2">Supervisor</th>
+            <th colspan="3" class="text-center pl-grp">Flock</th>
+            <th colspan="3" class="text-center pl-grp">Revenue</th>
+            <th colspan="6" class="text-center pl-grp">Cost</th>
+            <th colspan="4" class="text-center pl-grp">Result</th>
+            <th colspan="2" class="text-center pl-grp">Performance</th>
+          </tr>
+          <tr>
             <th class="text-end">Placed</th><th class="text-end">Sold</th>
             <th class="text-end">Sold Wt (Kg)</th>
-            <th class="text-end">Revenue</th><th class="text-end">Cost</th>
+            <th class="text-end">Bird Sales</th><th class="text-end">Other</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">Chicks</th><th class="text-end">Feed</th>
+            <th class="text-end">Medicine</th><th class="text-end">Growing</th>
+            <th class="text-end">Admin</th><th class="text-end">Total</th>
             <th class="text-end">Profit</th><th class="text-end">Profit %</th>
             <th class="text-end">Per Bird</th><th class="text-end">Per Kg</th>
             <th class="text-end">FCR</th><th class="text-end">Mort %</th>
@@ -595,8 +608,20 @@ A statement missing its rows reads as complete, and somebody decides on it.
             <td class="text-end">{{ r.placed|floatformat:0 }}</td>
             <td class="text-end">{{ r.sold_birds|floatformat:0 }}</td>
             <td class="text-end">{{ r.sold_weight|floatformat:2 }}</td>
-            <td class="text-end">{{ r.revenue|floatformat:2 }}</td>
-            <td class="text-end">{{ r.cost|floatformat:2 }}</td>
+            <td class="text-end">{{ r.bird_sales|floatformat:2 }}</td>
+            <td class="text-end">{{ r.other_revenue|floatformat:2 }}</td>
+            <td class="text-end fw-bold">{{ r.revenue|floatformat:2 }}</td>
+            <td class="text-end">{{ r.chick_cost|floatformat:2 }}</td>
+            <td class="text-end">{{ r.feed_cost|floatformat:2 }}</td>
+            <td class="text-end">{{ r.medicine_cost|floatformat:2 }}</td>
+            {% comment %}
+              Growing and Admin have no transaction in this system — they are
+              typed against the batch. Blank means nobody has filled any head
+              in, which is not the same as nil, so it does not print as 0.00.
+            {% endcomment %}
+            <td class="text-end">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% else %}<span class="text-muted" title="Not entered for this flock">-</span>{% endif %}</td>
+            <td class="text-end">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% else %}<span class="text-muted" title="Not entered for this flock">-</span>{% endif %}</td>
+            <td class="text-end fw-bold">{{ r.cost|floatformat:2 }}</td>
             <td class="text-end {% if r.profit < 0 %}pl-neg{% endif %}">{{ r.profit|floatformat:2 }}</td>
             <td class="text-end {% if r.profit < 0 %}pl-neg{% endif %}">{% if r.profit_pct is not None %}{{ r.profit_pct|floatformat:2 }}{% else %}-{% endif %}</td>
             <td class="text-end">{% if r.per_bird is not None %}{{ r.per_bird|floatformat:2 }}{% else %}-{% endif %}</td>
@@ -612,7 +637,14 @@ A statement missing its rows reads as complete, and somebody decides on it.
             <td class="text-end">{{ overview_totals.placed|floatformat:0 }}</td>
             <td class="text-end">{{ overview_totals.sold_birds|floatformat:0 }}</td>
             <td class="text-end">{{ overview_totals.sold_weight|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.bird_sales|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.other_revenue|floatformat:2 }}</td>
             <td class="text-end">{{ overview_totals.revenue|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.chick_cost|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.feed_cost|floatformat:2 }}</td>
+            <td class="text-end">{{ overview_totals.medicine_cost|floatformat:2 }}</td>
+            <td class="text-end">{% if overview_totals.growing_cost is not None %}{{ overview_totals.growing_cost|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+            <td class="text-end">{% if overview_totals.admin_cost is not None %}{{ overview_totals.admin_cost|floatformat:2 }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
             <td class="text-end">{{ overview_totals.cost|floatformat:2 }}</td>
             <td class="text-end {% if overview_totals.profit < 0 %}pl-neg{% endif %}">{{ overview_totals.profit|floatformat:2 }}</td>
             <td class="text-end">{% if overview_totals.profit_pct is not None %}{{ overview_totals.profit_pct|floatformat:2 }}{% else %}-{% endif %}</td>

@@ -91,6 +91,30 @@ class ProductionPlPageTests(TestCase):
         self.assertIsNone(row["profit_pct"])
         self.assertIsNone(row["per_kg"])
 
+    def test_the_statement_s_own_heads_are_the_columns(self):
+        """A report of rows and columns, not a summary: the five cost blocks
+        and the revenue split are on the row, so the whole fleet can be read
+        without opening a single flock."""
+        row = self.page().context["overview"][0]
+        for key in ("bird_sales", "other_revenue", "chick_cost", "feed_cost",
+                    "medicine_cost", "growing_cost", "admin_cost"):
+            self.assertIn(key, row)
+
+    def test_the_cost_columns_add_up_to_the_total(self):
+        """Columns taken from the statement's blocks, so a block renamed there
+        cannot quietly drop out of the row and leave the total unexplained."""
+        row = self.page().context["overview"][0]
+        parts = sum(row[k] or 0 for k in
+                    ("chick_cost", "feed_cost", "medicine_cost",
+                     "growing_cost", "admin_cost"))
+        self.assertEqual(parts, row["cost"])
+
+    def test_a_head_nobody_filled_in_is_not_reported_as_nil(self):
+        """Growing and Admin are typed by hand; blank means nobody has said."""
+        row = self.page().context["overview"][0]
+        self.assertIsNone(row["growing_cost"])
+        self.assertIsNone(row["admin_cost"])
+
     def test_each_row_links_to_that_flock_s_own_statement(self):
         self.assertIn(f"?batch={self.batch.id}", self.page().content.decode())
 

@@ -3473,6 +3473,14 @@ def _production_pl_row(batch):
     pl = build_production_pl(report, batch)
     costing = report.get("batch_costing") or {}
     farm = batch.broiler_farm
+    # The statement's own five cost blocks, as columns. Keyed off the titles
+    # the service names them with, so a block renamed there stops appearing
+    # rather than silently reporting somebody else's money.
+    block = {b["title"]: b["total"] for b in pl["cost_blocks"]}
+    # Live Bird Sales is the only revenue with transactions behind it; the rest
+    # is whatever was typed against the batch by hand.
+    bird_sales = next((_num(r["amount"]) for r in pl["revenue_lines"]
+                       if r.get("tracked")), Decimal("0"))
     return {
         "batch": batch, "farm": farm,
         "branch": farm.branch.branch_name if farm.branch_id else "",
@@ -3481,7 +3489,16 @@ def _production_pl_row(batch):
         "placed": _num(costing.get("chicks_placed")),
         "sold_birds": _num(costing.get("sold_birds")),
         "sold_weight": _num(costing.get("sold_weight")),
+        "bird_sales": bird_sales,
+        "other_revenue": _num(pl["total_revenue"]) - bird_sales,
         "revenue": pl["total_revenue"],
+        "chick_cost": block.get("Chick Cost"),
+        "feed_cost": block.get("Feed Cost"),
+        "medicine_cost": block.get("Medicine & Health Cost"),
+        # These two are hand-entered heads. None means nobody has filled any of
+        # them in — which is not the same as nil, and the column says so.
+        "growing_cost": block.get("Growing Expenses"),
+        "admin_cost": block.get("Administrative Cost"),
         "cost": pl["total_cost"],
         "profit": pl["gross_profit"],
         # The service divides to zero rather than to None, which on a flock
@@ -3567,8 +3584,22 @@ def production_pl_report(request):
         t_cost = sum((r["cost"] for r in overview), z)
         t_weight = sum((r["sold_weight"] for r in overview), z)
         t_placed = sum((r["placed"] for r in overview), z)
+        def col(key):
+            """Sum a column, skipping the flocks that have nothing under it.
+            None across the board stays None — an untouched hand-entered head
+            reads as "nobody has said", not as nil."""
+            vals = [r[key] for r in overview if r[key] is not None]
+            return sum(vals, z) if vals else None
+
         totals = {
             "flocks": len(overview),
+            "bird_sales": col("bird_sales"),
+            "other_revenue": col("other_revenue"),
+            "chick_cost": col("chick_cost"),
+            "feed_cost": col("feed_cost"),
+            "medicine_cost": col("medicine_cost"),
+            "growing_cost": col("growing_cost"),
+            "admin_cost": col("admin_cost"),
             "placed": t_placed,
             "sold_birds": sum((r["sold_birds"] for r in overview), z),
             "sold_weight": t_weight,
