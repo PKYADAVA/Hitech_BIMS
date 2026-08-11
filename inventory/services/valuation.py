@@ -270,20 +270,44 @@ def _loc_name(location_type, warehouse, farm):
     return (getattr(obj, "farm_name", None) or getattr(obj, "name", None) or "") if obj else ""
 
 
-def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
-    """Full item ledger at a warehouse — opening balance, one row per dated
+def _loc_q(at_farm, farm_field, warehouse_field, location_id):
+    """One location filter for whichever kind of stock point is being read.
+
+    A dict rather than two near-identical querysets per movement: there are ten
+    of them, and a farm/warehouse pair that drifts apart is a ledger that
+    silently reports the wrong stock point.
+    """
+    return {(farm_field if at_farm else warehouse_field): location_id}
+
+
+def item_ledger(item_id, location_id, from_date=None, to_date=None,
+                location_type="warehouse"):
+    """Full item ledger at one stock point — opening balance, one row per dated
     movement inside [from_date, to_date], and a closing balance — with a
     *perpetual weighted-average* price and value carried through every move.
 
+    Works for a farm as well as a warehouse. A farm holds stock the same way a
+    store does, and it has two outflows a store never has: feed eaten, which
+    exists only as a Daily Entry, and medicine given, which exists only as a
+    Medicine & Vaccine Entry. Leaving those out would show a farm receiving
+    tonnes of feed and never using any — the movement set here is the one
+    ``inventory.services.item_summary`` already treats as the definition of
+    farm stock, so the ledger and the stock figures cannot disagree.
+
     Each movement is either IN (purchase received here, transfer in, stock
     received, 'Add' adjustment) or OUT (transfer out, stock issued, 'Deduct'
-    adjustment). Returns a dict: ``opening``/``closing`` ({qty, price, amount}),
-    ``rows`` (the window movements) and ``totals`` (window in/out sums).
+    adjustment, feed fed, medicine given). Returns a dict:
+    ``opening``/``closing`` ({qty, price, amount}), ``rows`` (the window
+    movements) and ``totals`` (window in/out sums).
     """
     from purchase.models import ChicksPurchaseItem, GeneralPurchaseItem
     from inventory.models import (StockReceiveItem, StockTransfer, StockIssueItem,
                                   InventoryAdjustmentItem, MedicineTransferItem)
+    from broiler.models import DailyEntry, MedicineVaccineEntry
     from hatchery.models import ChickSaleItem, EggPurchaseItem
+
+    at_farm = location_type == "farm"
+    warehouse_id = location_id
 
     moves = []
 
@@ -298,7 +322,7 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
         })
 
     # ---- inflows ----
-    for r in (GeneralPurchaseItem.objects.filter(item_id=item_id, farm_warehouse_id=warehouse_id)
+    for r in (GeneralPurchaseItem.objects.filter(item_id=item_id, **_loc_q(at_farm, "farm_id", "farm_warehouse_id", location_id))
               .select_related("purchase", "farm_warehouse")):
         qty = _q(r.effective_qty()) + _q(r.free_qty)
         cost = (_q(r.amount) / qty) if (qty > 0 and r.amount) else _q(r.rate)
@@ -306,31 +330,35 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
             r.purchase.purchase_no, r.farm_warehouse.name if r.farm_warehouse_id else "",
             getattr(r.purchase, "remarks", "") or "")
 
-    for r in (StockTransfer.objects.filter(item_id=item_id, to_location_type="warehouse", to_warehouse_id=warehouse_id)
+    for r in (StockTransfer.objects.filter(item_id=item_id, to_location_type=location_type, **_loc_q(at_farm, "to_farm_id", "to_warehouse_id", location_id))
               .select_related("from_warehouse", "from_farm")):
         add(r.date, "in", (0, 1, r.id), r.quantity, r.rate, "Transfer-In", "transfer-in",
             r.trnum, _loc_name(r.from_location_type, r.from_warehouse, r.from_farm), r.remarks)
 
-    for r in (StockReceiveItem.objects.filter(item_id=item_id, location_type="warehouse", warehouse_id=warehouse_id)
+    for r in (StockReceiveItem.objects.filter(item_id=item_id, location_type=location_type, **_loc_q(at_farm, "farm_id", "warehouse_id", location_id))
               .select_related("receive", "warehouse")):
         add(r.receive.date, "in", (0, 2, r.id), r.quantity, r.rate, "Stock Received", "receive",
             r.receive.trnum, r.warehouse.name if r.warehouse_id else "", r.remarks)
 
     for r in (InventoryAdjustmentItem.objects.filter(item_id=item_id, adjustment_type="Add",
-              adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id)
+              adjustment__location_type=location_type,
+              **_loc_q(at_farm, "adjustment__farm_id", "adjustment__warehouse_id", location_id))
               .select_related("adjustment", "adjustment__warehouse")):
         add(r.adjustment.date, "in", (0, 3, r.id), r.quantity, r.rate, "Adjustment +", "adjust-add",
             r.adjustment.trnum, r.adjustment.warehouse.name if r.adjustment.warehouse_id else "", r.remarks)
 
     for r in (MedicineTransferItem.objects.filter(
-            item_id=item_id, transfer__to_location_type="warehouse",
-            transfer__to_warehouse_id=warehouse_id).select_related("transfer")):
+            item_id=item_id, transfer__to_location_type=location_type,
+            **_loc_q(at_farm, "transfer__to_farm_id", "transfer__to_warehouse_id", location_id)).select_related("transfer")):
         t = r.transfer
         add(t.date, "in", (0, 4, r.id), r.quantity, r.rate, "Medicine-In", "medicine-in",
             t.trnum, _loc_name(t.from_location_type, t.from_warehouse, t.from_farm), r.remarks)
 
-    for r in (ChicksPurchaseItem.objects.filter(
-            purchase__item_id=item_id, farm_warehouse_id=warehouse_id)
+    # Chicks purchases, egg purchases and chick sales are booked to a store —
+    # none of the three models carries a farm at all — so they are skipped
+    # rather than filtered on a column that does not exist.
+    for r in ([] if at_farm else ChicksPurchaseItem.objects.filter(
+            purchase__item_id=item_id, farm_warehouse_id=location_id)
             .select_related("purchase", "farm_warehouse")):
         qty = _q(r.total_qty)
         cost = (_q(r.amount) / qty) if (qty > 0 and r.amount) else _q(r.rate)
@@ -339,7 +367,7 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
             r.farm_warehouse.name if r.farm_warehouse_id else "",
             getattr(r.purchase, "remarks", "") or "")
 
-    for r in (EggPurchaseItem.objects.filter(
+    for r in ([] if at_farm else EggPurchaseItem.objects.filter(
             item_id=item_id, egg_purchase__warehouse_id=warehouse_id)
             .select_related("egg_purchase", "egg_purchase__warehouse")):
         qty = (_q(r.rcv_qty) or _q(r.sent_qty)) + _q(r.free_qty)
@@ -350,23 +378,24 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
             getattr(r.egg_purchase, "remarks", "") or "")
 
     # ---- outflows ----
-    for r in (StockTransfer.objects.filter(item_id=item_id, from_location_type="warehouse", from_warehouse_id=warehouse_id)
+    for r in (StockTransfer.objects.filter(item_id=item_id, from_location_type=location_type, **_loc_q(at_farm, "from_farm_id", "from_warehouse_id", location_id))
               .select_related("to_warehouse", "to_farm")):
         add(r.date, "out", (1, 0, r.id), r.quantity, None, "Transfer-Out", "transfer-out",
             r.trnum, _loc_name(r.to_location_type, r.to_warehouse, r.to_farm), r.remarks)
 
-    for r in (StockIssueItem.objects.filter(item_id=item_id, location_type="warehouse", warehouse_id=warehouse_id)
+    for r in (StockIssueItem.objects.filter(item_id=item_id, location_type=location_type, **_loc_q(at_farm, "farm_id", "warehouse_id", location_id))
               .select_related("issue", "warehouse")):
         add(r.issue.date, "out", (1, 1, r.id), r.quantity, None, "Stock Issued", "issue",
             r.issue.trnum, r.warehouse.name if r.warehouse_id else "", r.remarks)
 
     for r in (InventoryAdjustmentItem.objects.filter(item_id=item_id, adjustment_type="Deduct",
-              adjustment__location_type="warehouse", adjustment__warehouse_id=warehouse_id)
+              adjustment__location_type=location_type,
+              **_loc_q(at_farm, "adjustment__farm_id", "adjustment__warehouse_id", location_id))
               .select_related("adjustment", "adjustment__warehouse")):
         add(r.adjustment.date, "out", (1, 2, r.id), r.quantity, None, "Adjustment -", "adjust-deduct",
             r.adjustment.trnum, r.adjustment.warehouse.name if r.adjustment.warehouse_id else "", r.remarks)
 
-    for r in (ChickSaleItem.objects.filter(
+    for r in ([] if at_farm else ChickSaleItem.objects.filter(
             item_id=item_id, sale__warehouse_id=warehouse_id)
             .select_related("sale", "sale__warehouse")):
         add(r.sale.date, "out", (1, 4, r.id), r.total_qty, None, "Chick Sale", "chick-sale",
@@ -375,11 +404,31 @@ def item_ledger(item_id, warehouse_id, from_date=None, to_date=None):
             getattr(r.sale, "remarks", "") or "")
 
     for r in (MedicineTransferItem.objects.filter(
-            item_id=item_id, transfer__from_location_type="warehouse",
-            transfer__from_warehouse_id=warehouse_id).select_related("transfer")):
+            item_id=item_id, transfer__from_location_type=location_type,
+            **_loc_q(at_farm, "transfer__from_farm_id", "transfer__from_warehouse_id", location_id)).select_related("transfer")):
         t = r.transfer
         add(t.date, "out", (1, 3, r.id), r.quantity, None, "Medicine-Out", "medicine-out",
             t.trnum, _loc_name(t.to_location_type, t.to_warehouse, t.to_farm), r.remarks)
+
+    # A farm's own consumption. Neither of these is a stock document — feed
+    # eaten is a Daily Entry and medicine given is a Medicine & Vaccine Entry —
+    # but both physically leave the farm, and a ledger that omitted them would
+    # show feed arriving and never being used.
+    if at_farm:
+        for r in DailyEntry.objects.filter(farm_id=location_id).select_related("batch"):
+            for slot, (item_pk, qty) in enumerate(
+                    ((r.feed_1_id, r.feed_1_qty), (r.feed_2_id, r.feed_2_qty))):
+                if str(item_pk or "") != str(item_id):
+                    continue
+                add(r.date, "out", (1, 5, r.id * 2 + slot), qty, None,
+                    "Feed Consumed", "daily-entry", r.entry_no or "",
+                    r.batch.batch_name if r.batch_id else "", r.remarks)
+
+        for r in (MedicineVaccineEntry.objects.filter(farm_id=location_id, item_id=item_id)
+                  .select_related("batch")):
+            add(r.date, "out", (1, 6, r.id), r.qty, None,
+                "Medicine Given", "medicine-entry", getattr(r, "entry_no", "") or "",
+                r.batch.batch_name if r.batch_id else "", getattr(r, "remarks", "") or "")
 
     moves.sort(key=lambda m: (m["date"], m["order"]))
 

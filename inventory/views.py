@@ -2459,10 +2459,22 @@ def stock_receive_farm_batches(request):
     ], safe=False)
 
 
+def _location_label(location):
+    """A warehouse has `name`, a farm has `farm_name`; the page wants one
+    label whichever it is looking at."""
+    if location is None:
+        return ""
+    return getattr(location, "farm_name", None) or getattr(location, "name", "")
+
+
 @login_required
 def item_ledger_report(request):
     """Inventory > Reports > Item Ledger — an item's full stock movement at one
-    warehouse over a date range: opening stock, every IN (purchase received,
+    stock point over a date range. A farm is one as much as a warehouse is:
+    feed and medicine sit there for weeks, and a farm was previously visible
+    only as the far side of somebody else's transfer.
+
+    Over the range: opening stock, every IN (purchase received,
     transfer in, stock received, 'Add' adjustment) and OUT (transfer out, stock
     issued, 'Deduct' adjustment) movement, and the running closing quantity /
     weighted-average price / value after each one."""
@@ -2472,33 +2484,64 @@ def item_ledger_report(request):
 
     item_id = (request.GET.get("item") or "").strip()
     warehouse_id = (request.GET.get("warehouse") or "").strip()
+    # One select, two kinds of stock point: the option carries its own type,
+    # as "farm:5" or "warehouse:12". A single control is what the label on the
+    # page has always promised ("Farm/Sector"), and it keeps the two lists from
+    # being separately settable into a contradiction.
+    #
+    # The bare ?warehouse= form still works — it is what every existing link,
+    # bookmark and Excel export on this page uses.
+    location_raw = (request.GET.get("location") or "").strip()
+    if ":" in location_raw:
+        location_type, _, loc_id = location_raw.partition(":")
+        location_type = location_type.strip().lower()
+    else:
+        location_type, loc_id = "warehouse", (location_raw or warehouse_id)
+    if location_type not in ("warehouse", "farm"):
+        location_type = "warehouse"
+    farm_id = loc_id if location_type == "farm" else ""
+    warehouse_id = loc_id if location_type == "warehouse" else ""
     from_date = (request.GET.get("from_date") or "").strip()
     to_date = (request.GET.get("to_date") or "").strip()
     export = (request.GET.get("export") or "").strip().lower()
 
     item = Item.objects.filter(id=item_id).first() if item_id.isdigit() else None
-    # Scoped: a querystring is not a permission, so a warehouse outside the
+    # Scoped: a querystring is not a permission, so a location outside the
     # user's scope resolves to None rather than being read.
     warehouse = (warehouses_for(request.user).filter(id=warehouse_id).first()
                  if warehouse_id.isdigit() else None)
+    # A farm holds stock the same way a store does — feed and medicine sit
+    # there for weeks — so it gets a ledger of its own rather than being
+    # visible only as the far side of somebody else's transfer.
+    farm = (farms_for(request.user, BroilerFarm.objects.all())
+            .filter(id=farm_id).first() if farm_id.isdigit() else None)
+    location = farm if location_type == "farm" else warehouse
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None
 
     ledger = None
-    if item and warehouse:
-        ledger = item_ledger(item.id, warehouse.id, from_date=fd, to_date=td)
+    if item and location:
+        ledger = item_ledger(item.id, location.id, from_date=fd, to_date=td,
+                             location_type=location_type)
 
     criteria = ""
-    if warehouse:
-        criteria = "From: %s   To: %s   Item: %s   Warehouse: %s" % (
+    if location:
+        criteria = "From: %s   To: %s   Item: %s   %s: %s" % (
             from_date or "Beginning", to_date or "Date",
-            item.description if item else "All", warehouse.name)
+            item.description if item else "All",
+            "Farm" if location_type == "farm" else "Warehouse",
+            _location_label(location))
 
     context = {
         "items": Item.objects.select_related("storage_uom").order_by("description"),
         "warehouses": warehouses_for(request.user, Warehouse.objects.order_by("name")),
-        "item": item, "warehouse": warehouse, "criteria": criteria,
-        "item_id": item_id, "warehouse_id": warehouse_id,
+        "farms": farms_for(request.user, BroilerFarm.objects.order_by("farm_name")),
+        "item": item, "warehouse": warehouse, "farm": farm,
+        "location": location, "location_type": location_type,
+        # What the select posts back, so the chosen option stays chosen.
+        "location_key": f"{location_type}:{loc_id}" if loc_id else "",
+        "location_name": _location_label(location), "criteria": criteria,
+        "item_id": item_id, "warehouse_id": warehouse_id, "farm_id": farm_id,
         "from_date": from_date, "to_date": to_date,
         "ledger": ledger,
         "uom": _uom_label(item.storage_uom) if item else "",
