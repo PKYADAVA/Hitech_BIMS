@@ -42,6 +42,9 @@ use, so a flock's feed cost is one number across the ERP.
   .pc-table { width:100%; font-size:.75rem; border-collapse:collapse; }
   .pc-table th, .pc-table td { padding:.35rem .5rem; border:1px solid #e6e8ea; white-space:nowrap; }
   .pc-table thead th { background:#f1f3f5; font-size:.7rem; letter-spacing:.02em; }
+  /* A spanning header belongs over the middle of its group, not shoved to the
+     right edge of whichever column happens to be last. */
+  .pc-table thead th.pc-grp { text-align:center; }
   .pc-table tfoot td { background:#f8f9fa; font-weight:700; }
   .pc-table td.num, .pc-table th.num { text-align:right; }
   .pc-table tbody tr:hover { background:#f6fbff; }
@@ -213,11 +216,11 @@ use, so a flock's feed cost is one number across the ERP.
             <th rowspan="2">#</th><th rowspan="2">Batch</th><th rowspan="2">Farm / Shed</th>
             <th rowspan="2">Bird Type</th>
             <th class="num" rowspan="2">Birds<br>Placed</th>
-            <th class="num" colspan="2">Mortality</th>
+            <th class="pc-grp" colspan="2">Mortality</th>
             <th class="num" rowspan="2">Live<br>Birds</th>
             <th class="num" rowspan="2">Live Weight<br>(Kg)</th>
             <th class="num" rowspan="2">Feed Cons.<br>(Kg)</th>
-            <th class="num" colspan="3">Cost</th>
+            <th class="pc-grp" colspan="6">Cost</th>
             <th class="num" rowspan="2">Cost / Kg</th>
             <th class="num" rowspan="2">Cost / Bird</th>
             <th class="num" rowspan="2">FCR</th><th class="num" rowspan="2">CFCR</th>
@@ -226,7 +229,9 @@ use, so a flock's feed cost is one number across the ERP.
           </tr>
           <tr>
             <th class="num">No.</th><th class="num">%</th>
-            <th class="num">Feed</th><th class="num">Other</th><th class="num">Total</th>
+            <th class="num">Chicks</th><th class="num">Feed</th>
+            <th class="num">Vaccine &amp;<br>Medicine</th>
+            <th class="num">Growing</th><th class="num">Admin</th><th class="num">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -242,8 +247,11 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.live_birds|floatformat:0 }}</td>
             <td class="num">{{ r.weight|floatformat:2 }}</td>
             <td class="num">{{ r.feed_kg|floatformat:2 }}</td>
+            <td class="num">{{ r.chick_cost|floatformat:2 }}</td>
             <td class="num">{{ r.feed_cost|floatformat:2 }}</td>
-            <td class="num">{{ r.other_cost|floatformat:2 }}</td>
+            <td class="num">{{ r.medicine_cost|floatformat:2 }}</td>
+            <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.admin_cost is not None %}{{ r.admin_cost|floatformat:2 }}{% else %}<span class="pc-muted" title="Not entered for this flock">&mdash;</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
             <td class="num">{% if r.cost_per_kg %}{{ r.cost_per_kg }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
@@ -267,8 +275,11 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ summary.live_birds|floatformat:0 }}</td>
             <td class="num">{{ summary.live_weight|floatformat:2 }}</td>
             <td class="num">{{ summary.feed_kg|floatformat:2 }}</td>
+            <td class="num">{% if summary.chick_cost is not None %}{{ summary.chick_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ summary.feed_cost|floatformat:2 }}</td>
-            <td class="num">{{ summary.other_cost|floatformat:2 }}</td>
+            <td class="num">{% if summary.medicine_cost is not None %}{{ summary.medicine_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if summary.growing_cost is not None %}{{ summary.growing_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+            <td class="num">{% if summary.admin_cost is not None %}{{ summary.admin_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ summary.total_cost|floatformat:2 }}</td>
             <td class="num">{% if summary.cost_per_kg %}{{ summary.cost_per_kg }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if summary.cost_per_bird %}{{ summary.cost_per_bird }}{% else %}&mdash;{% endif %}</td>

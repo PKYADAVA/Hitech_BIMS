@@ -3696,8 +3696,14 @@ def _production_cost_row(batch, pl_row_cache=None):
     entered = _num(pl["entered_cost"])
     std_cost = (std_consumed + chick_cost + entered).quantize(Decimal("0.01"))
 
-    feed_cost = next((_num(b["total"]) for b in pl["cost_blocks"]
-                      if b["title"] == "Feed Cost"), Decimal("0"))
+    # Every block on its own column, not "Feed and Other": the five are what
+    # the money was spent on, and they have to add up to the total rather than
+    # leave a remainder nobody can account for.
+    block = {b["title"]: b["total"] for b in pl["cost_blocks"]}
+    feed_cost = _num(block.get("Feed Cost"))
+    medicine_cost = _num(block.get("Medicine & Health Cost"))
+    growing_cost = block.get("Growing Expenses")
+    admin_cost = block.get("Administrative Cost")
     feed_kg = sum((_num(r["quantity"]) for r in consumption
                    if r.get("kind") == "feed"), Decimal("0"))
     total_cost = _num(pl["total_cost"])
@@ -3718,7 +3724,13 @@ def _production_cost_row(batch, pl_row_cache=None):
         "sold_birds": _num(costing.get("sold_birds")),
         "weight": weight,
         "feed_kg": feed_kg.quantize(Decimal("0.01")),
+        "chick_cost": chick_cost,
         "feed_cost": feed_cost,
+        "medicine_cost": medicine_cost,
+        # None where nobody has typed a single head: not the same as nil, and
+        # the column says so rather than printing 0.00.
+        "growing_cost": growing_cost,
+        "admin_cost": admin_cost,
         "other_cost": (total_cost - feed_cost).quantize(Decimal("0.01")),
         "total_cost": total_cost,
         "std_cost": std_cost,

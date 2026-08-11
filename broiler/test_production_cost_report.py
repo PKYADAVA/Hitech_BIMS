@@ -86,6 +86,8 @@ class SummaryTests(TestCase):
             "feed_kg": Decimal("3200"), "total_cost": Decimal("90000"),
             "std_cost": Decimal("100000"), "feed_cost": Decimal("60000"),
             "std_feed_cost": Decimal("70000"), "sale_value": Decimal("120000"),
+            "chick_cost": Decimal("30000"), "medicine_cost": Decimal("0"),
+            "growing_cost": None, "admin_cost": None,
             "sold_birds": Decimal("900"), "std_fcr": Decimal("1.60"),
             "components": [("Feed Cost", Decimal("60000")),
                            ("Chick Cost", Decimal("30000"))],
@@ -131,6 +133,20 @@ class SummaryTests(TestCase):
                                             no_standard={"Vitamin B"})])
         self.assertEqual(s["unpriced"], ["Starter"])
         self.assertEqual(s["no_standard"], ["Vitamin B"])
+
+    def test_the_block_columns_add_up_to_the_total(self):
+        """Five columns, not "Feed and Other": what the money went on has to
+        reconcile rather than leave a remainder nobody can account for."""
+        s = build_production_cost([self.row(
+            chick_cost=Decimal("25000"), medicine_cost=Decimal("5000"),
+            growing_cost=Decimal("0"), admin_cost=None)])
+        parts = sum(v for v in (s["chick_cost"], s["feed_cost"], s["medicine_cost"],
+                                s["growing_cost"], s["admin_cost"]) if v is not None)
+        self.assertEqual(parts, s["total_cost"])
+
+    def test_a_block_no_flock_has_filled_in_totals_to_none(self):
+        s = build_production_cost([self.row(admin_cost=None)])
+        self.assertIsNone(s["admin_cost"])
 
     def test_the_feed_side_is_split_out_of_the_standard_too(self):
         s = build_production_cost([self.row()])

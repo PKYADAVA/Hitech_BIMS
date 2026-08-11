@@ -120,7 +120,18 @@ def build_production_cost(rows):
     sale_value = sum((_d(r["sale_value"]) for r in rows), ZERO)
     sold_birds = sum((_d(r["sold_birds"]) for r in rows), ZERO)
     std_fcrs = [_d(r["std_fcr"]) for r in rows if r["std_fcr"]]
+
+    def col(key):
+        """Sum a block column, skipping flocks with nothing under it. None all
+        the way across stays None — a head nobody filled in is not nil."""
+        vals = [r[key] for r in rows if r.get(key) is not None]
+        return sum(vals, ZERO).quantize(Q2) if vals else None
+
     return {
+        "chick_cost": col("chick_cost"),
+        "medicine_cost": col("medicine_cost"),
+        "growing_cost": col("growing_cost"),
+        "admin_cost": col("admin_cost"),
         "std_feed_cost": std_feed.quantize(Q2),
         "std_other_cost": std_other.quantize(Q2),
         "feed_variance": (feed_cost - std_feed).quantize(Q2),
