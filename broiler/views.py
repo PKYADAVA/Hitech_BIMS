@@ -2565,50 +2565,48 @@ def _departed_feed_charge(batch, before_date, placed):
     bird. Birds sold count as departed for the same reason deaths do: they ate
     while they were here and they are not here now.
 
+    Deaths and sales are walked together in date order. A lifting does not
+    always fall on a day with a daily entry, and handling those separately at
+    the end charged them the flock's *final* per-bird figure rather than the
+    one standing when the birds actually left — and left every later feeding
+    day divided by a flock they had already gone from.
+
+    Within a day the feed is served before the departures are taken out: a
+    bird that dies on a day it was fed still ate that day.
+
     Returns ``{item_id: kg}``.
     """
     from broiler.models import BirdSale
 
-    entries = (DailyEntry.objects.filter(batch=batch, date__lt=before_date)
-               .order_by("date", "id")
-               .values("date", "mortality", "culls",
-                       "feed_1_id", "feed_1_qty", "feed_2_id", "feed_2_qty"))
-    sold_by_date = {}
-    for row in (BirdSale.objects.filter(batch=batch, date__lt=before_date)
-                .values("date", "birds")):
-        sold_by_date[row["date"]] = sold_by_date.get(row["date"], 0) + (row["birds"] or 0)
-
-    alive = _num(placed)
-    cum_per_bird = {}          # item_id -> kg eaten per bird so far
-    charge = {}                # item_id -> kg charged to departed birds
-    seen_dates = set()
-    for e in entries:
-        if alive <= 0:
-            break
-        # That day's feed, per bird alive to eat it.
+    fed_on, gone_on = {}, {}
+    for e in (DailyEntry.objects.filter(batch=batch, date__lt=before_date)
+              .values("date", "mortality", "culls",
+                      "feed_1_id", "feed_1_qty", "feed_2_id", "feed_2_qty")):
+        day = fed_on.setdefault(e["date"], {})
         for slot in ("feed_1", "feed_2"):
             item_id, qty = e[f"{slot}_id"], _num(e[f"{slot}_qty"])
-            if not item_id or qty <= 0:
-                continue
-            cum_per_bird[item_id] = cum_per_bird.get(item_id, Decimal("0")) + qty / alive
+            if item_id and qty > 0:
+                day[item_id] = day.get(item_id, Decimal("0")) + qty
+        gone_on[e["date"]] = (gone_on.get(e["date"], Decimal("0"))
+                              + _num(e["mortality"]) + _num(e["culls"]))
 
-        gone = _num(e["mortality"]) + _num(e["culls"])
-        if e["date"] not in seen_dates:
-            gone += _num(sold_by_date.pop(e["date"], 0))
-            seen_dates.add(e["date"])
+    for r in (BirdSale.objects.filter(batch=batch, date__lt=before_date)
+              .values("date", "birds")):
+        gone_on[r["date"]] = gone_on.get(r["date"], Decimal("0")) + _num(r["birds"])
+
+    alive = _num(placed)
+    cum_per_bird, charge = {}, {}
+    for day in sorted(set(fed_on) | set(gone_on)):
+        if alive <= 0:
+            break
+        for item_id, qty in fed_on.get(day, {}).items():
+            cum_per_bird[item_id] = (cum_per_bird.get(item_id, Decimal("0"))
+                                     + qty / alive)
+        gone = min(gone_on.get(day, Decimal("0")), alive)
         if gone > 0:
             for item_id, per_bird in cum_per_bird.items():
                 charge[item_id] = charge.get(item_id, Decimal("0")) + gone * per_bird
             alive -= gone
-
-    # Sales on days with no daily entry of their own still take birds away.
-    for _date, birds in sold_by_date.items():
-        gone = _num(birds)
-        if gone <= 0 or alive <= 0:
-            continue
-        for item_id, per_bird in cum_per_bird.items():
-            charge[item_id] = charge.get(item_id, Decimal("0")) + gone * per_bird
-        alive -= gone
 
     return {k: v.quantize(Decimal("0.01")) for k, v in charge.items()}
 
