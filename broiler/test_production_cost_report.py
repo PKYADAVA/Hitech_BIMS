@@ -654,3 +654,75 @@ class LiveWeightBeforeALiftingTests(TestCase):
         if r["avg_bwt"] and r["live_birds"]:
             self.assertEqual((r["avg_bwt"] * r["live_birds"]).quantize(Decimal("1")),
                              r["weight"].quantize(Decimal("1")))
+
+
+class ManagementBasisTests(TestCase):
+    """Management prices at what was really paid, not the recorded rate.
+
+    _build_batch_report reprices chick, feed and medicine rows in place through
+    the valuation engine when asked for the management basis — at each source
+    warehouse's own cost ledger, per the item's valuation method. This report
+    was not asking, so both views showed the Item Price Master rate a transfer
+    happened to be recorded at: chicks read 35.00 against a 41.18 purchase, and
+    "Management" was indistinguishable from "Farmer".
+    """
+
+    def setUp(self):
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region, prefix="AKB")
+        sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=timezone.localdate() - timedelta(days=20))
+
+    def test_the_basis_reaches_the_batch_report(self):
+        """The whole difference between the two views is this argument."""
+        import broiler.views as views
+
+        seen = []
+        original = views._build_batch_report
+        views._build_batch_report = lambda batch, **kw: (
+            seen.append(kw.get("fetch_type")) or original(batch, **kw))
+        try:
+            views._production_cost_row(self.batch, "management")
+            views._production_cost_row(self.batch, "farmer")
+        finally:
+            views._build_batch_report = original
+        self.assertEqual(seen, ["management", "farmer"])
+
+
+class ChickRateBasisTests(TestCase):
+    """Which rate priced the chicks, said out loud.
+
+    The valuation engine falls back to Item.standard_cost_per_unit when the
+    issuing warehouse has no cost-bearing inflow to price against, and it does
+    so silently. On this data the standard cost is 35.00 — the same figure a
+    transfer was recorded at — so a fallback and a real rate look identical on
+    screen, and somebody comparing against a 41.18 purchase cannot tell which
+    they are reading.
+    """
+
+    def test_a_placement_with_no_layer_reads_as_standard(self):
+        from broiler.services.production_cost import chick_rate_basis
+
+        report = {"chick_placement": [
+            {"item_id": 1, "warehouse_id": 999999, "date": date(2026, 7, 1)}]}
+        self.assertEqual(chick_rate_basis(report), "standard")
+
+    def test_a_placement_with_no_warehouse_reads_as_standard(self):
+        """No warehouse means no cost pool — the engine returns standard cost
+        without looking anything up."""
+        from broiler.services.production_cost import chick_rate_basis
+
+        report = {"chick_placement": [
+            {"item_id": 1, "warehouse_id": None, "date": date(2026, 7, 1)}]}
+        self.assertEqual(chick_rate_basis(report), "standard")
+
+    def test_a_flock_with_no_placement_says_nothing(self):
+        from broiler.services.production_cost import chick_rate_basis
+
+        self.assertEqual(chick_rate_basis({"chick_placement": []}), "")

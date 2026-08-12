@@ -124,6 +124,32 @@ def admin_cost_for(batch, placed, fetch_type="management", on_date=None):
     return heads
 
 
+def chick_rate_basis(report):
+    """Where each chick placement's rate actually came from.
+
+    Returns "purchase" when the issuing warehouse had a cost-bearing inflow to
+    price against on or before the placement, and "standard" when it did not.
+
+    The valuation engine falls back to ``Item.standard_cost_per_unit`` in that
+    case, silently — and on this data the standard cost is 35.00, which is also
+    what the transfer was recorded at, so a fallback and a real rate are the
+    same figure on screen. Somebody comparing it against a 42.00 purchase has
+    no way to tell which they are looking at, so the page says.
+    """
+    from inventory.services.valuation import warehouse_inflow_layers
+
+    rows = report.get("chick_placement") or []
+    if not rows:
+        return ""
+    for row in rows:
+        warehouse_id = row.get("warehouse_id")
+        if not warehouse_id:
+            return "standard"
+        if not warehouse_inflow_layers(row.get("item_id"), warehouse_id, row.get("date")):
+            return "standard"
+    return "purchase"
+
+
 def scheme_rates_for(batch, on_date=None):
     """The Growing Charge Scheme's own rates for a flock, or None.
 

@@ -3736,11 +3736,17 @@ def _production_cost_row(batch, fetch_type="management"):
     master's standard rate, which is the only standard the system holds.
     """
     from .services.production_pl import build_production_pl, _consumption_rows
-    from .services.production_cost import (admin_cost_for, cost_rows_from_pl,
-                                           growing_charge_for, scheme_rates_for,
+    from .services.production_cost import (admin_cost_for, chick_rate_basis,
+                                           cost_rows_from_pl, growing_charge_for,
+                                           scheme_rates_for,
                                            standard_consumption_cost)
 
-    report = _build_batch_report(batch)
+    # On the management basis this reprices chick, feed and medicine rows in
+    # place through the valuation engine, at each source warehouse's own cost
+    # ledger. Without the argument both views got the Item Price Master rate a
+    # transfer happened to be recorded at, so "Management" showed the same
+    # figures as "Farmer" and chicks read 35.00 against a 41.18 purchase.
+    report = _build_batch_report(batch, fetch_type=fetch_type)
     pl = build_production_pl(report, batch)
     costing = report.get("batch_costing") or {}
     farm = batch.broiler_farm
@@ -3969,6 +3975,9 @@ def _production_cost_row(batch, fetch_type="management"):
         # that lists only what has a figure reads as a complete account of the
         # flock's cost, and Admin missing from it looks like Admin was nil.
         "priced_at": priced_at,
+        # Whether the chick rate came off a real purchase layer at the issuing
+        # warehouse or fell back to the item master's standard cost.
+        "chick_basis": ("scheme" if scheme_rates else chick_rate_basis(report)),
         "cost_detail": _cost_detail(pl, growing_cost, gc_source,
                                     admin_cost, admin_source, admin_heads,
                                     scheme_rates, placed, feed_kg),
