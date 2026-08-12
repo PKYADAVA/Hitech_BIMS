@@ -1244,9 +1244,12 @@ class FarmerFarmSetupRequestFormTemplateView(View):
     def get(self, request, id: Optional[int] = None):
         from user.access import user_can
         instance = get_object_or_404(FarmerFarmSetupRequest, id=id) if id else None
-        # A submitter may reopen only their own; a reviewer (edit right) may
-        # open any — same split the API list uses.
-        if instance and instance.submitted_by_id != request.user.id \
+        # A draft belongs to no one in particular — any user with access to
+        # this tab may pick it up and finish it. Once it's past Draft it's
+        # locked read-only anyway, so only its owner or a reviewer (edit
+        # right) has a reason to still open it — same split the API list uses.
+        if instance and instance.status != FarmerFarmSetupRequest.Status.DRAFT \
+                and instance.submitted_by_id != request.user.id \
                 and not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
             raise Http404("Request not found")
         return render(request, "farmer_farm_setup_request_form.html", {
@@ -1315,10 +1318,13 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
                 return JsonResponse(data)
 
             qs = FarmerFarmSetupRequest.objects.select_related("branch", "farmer_group", "submitted_by")
-            if user_can(request.user, "farmer_farm_setup_request_list", "edit"):
-                qs = scope_multi(request.user, qs, branches="branch_id")
-            else:
-                qs = qs.filter(submitted_by=request.user)
+            qs = scope_multi(request.user, qs, branches="branch_id")
+            if not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+                # A non-reviewer sees every draft in their branch — any of
+                # them is up for grabs — plus their own past submissions, so
+                # they can still track what happened after they submitted.
+                qs = qs.filter(
+                    Q(status=FarmerFarmSetupRequest.Status.DRAFT) | Q(submitted_by=request.user))
             rows = [{
                 "id": r.id, "request_no": r.request_no, "status": r.status,
                 "farmer_name": r.farmer_name, "farm_name": r.farm_name,
@@ -1340,15 +1346,18 @@ class FarmerFarmSetupRequestAPI(BaseAPIView):
             with transaction.atomic():
                 if id:
                     instance = FarmerFarmSetupRequest.objects.get(id=id)
-                    # Same ownership split as the edit page's GET: a submitter
-                    # may only update their own; a reviewer (edit right) may
-                    # update any. Without this, the page's 404 was cosmetic —
-                    # the API underneath took anyone's edit for anyone's draft.
-                    if instance.submitted_by_id != request.user.id \
-                            and not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
-                        return JsonResponse({"error": "Not permitted."}, status=403)
                     if instance.status != FarmerFarmSetupRequest.Status.DRAFT:
+                        # Same ownership split as the edit page's GET — a
+                        # stranger gets "not permitted", not "not a draft",
+                        # so this never confirms a record's status to someone
+                        # who has no business knowing it.
+                        if instance.submitted_by_id != request.user.id \
+                                and not user_can(request.user, "farmer_farm_setup_request_list", "edit"):
+                            return JsonResponse({"error": "Not permitted."}, status=403)
                         return JsonResponse({"error": "Only a draft can be edited."}, status=400)
+                    # A draft belongs to no one in particular — any user with
+                    # access to this tab may pick it up, edit it, and save it
+                    # again, same as the edit page's GET now allows.
                 else:
                     instance = FarmerFarmSetupRequest(submitted_by=request.user)
                 for field in self.FORM_FIELDS:

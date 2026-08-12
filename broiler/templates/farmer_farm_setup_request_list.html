@@ -77,7 +77,11 @@ $(function () {
     const tbody = $("#request-table tbody");
     tbody.empty();
     rows.forEach(function (r) {
-      const canEdit = r.status === "draft" && CAN_REVIEW;
+      // Non-reviewers only ever see their own rows here (the API filters to
+      // submitted_by=request.user), and the form unlocks any draft for its
+      // owner regardless of edit rights — so CAN_REVIEW must not gate this,
+      // or a submitter's own draft shows as "View" and reads as read-only.
+      const canEdit = r.status === "draft";
       const canReview = r.status === "pending" && CAN_REVIEW;
       tbody.append(`<tr>
         <td>${escapeHtml(r.request_no)}</td>
