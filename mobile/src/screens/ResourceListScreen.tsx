@@ -91,7 +91,12 @@ export function ResourceListScreen({ route, navigation }: Props) {
       key: "view", label: "View", icon: "eye-outline",
       onPress: () => navigation.navigate("Detail", { resourceKey: config.key, row }),
     }];
-    if (canEdit && hasEditForm(config.key)) {
+    // A Farmer & Farm Setup Request draft belongs to no one in particular —
+    // same rule as the web list — so whoever may add one may also pick up
+    // and finish someone else's, without needing the module's edit right.
+    const rowEditable = canEdit
+      || (config.key === "broiler-farmer-farm-setup-request" && canAdd && row.status === "draft");
+    if (rowEditable && hasEditForm(config.key)) {
       actions.push({
         key: "edit", label: "Edit", icon: "pencil-outline",
         onPress: () => openRecordForm(navigation, config.key, "edit", row),
