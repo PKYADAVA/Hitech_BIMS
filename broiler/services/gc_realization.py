@@ -453,6 +453,15 @@ def _cost_column(*, chick_qty, chick_rate, feed_qty, feed_rate, med_qty, med_rat
     }
 
 
+def _available_birds(placed, mort_no, birds_sold):
+    """Birds still on the farm: placed, less those lost, less those lifted.
+
+    Never negative — a flock whose recorded sales exceed what its entries say
+    survived is a data problem to fix, not a negative head count to display.
+    """
+    return max(_d(placed) - _d(mort_no) - _d(birds_sold), ZERO)
+
+
 def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_scheme,
          placement_date, age, gap_days, actual_medicine_cost):
     """Flatten one column into the particular-keyed dict the template reads."""
@@ -475,6 +484,15 @@ def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_schem
         "breakeven_sale_rate": column["breakeven_sale_rate"],
         "base_gc_rate": column["base_gc_rate"],
         "birds_sold": column["birds_sold"],
+        # What went over a weighbridge, and what is still standing. Total Live
+        # Weight stays what it has always been — the weight this column is
+        # settled on — because every ratio below it and the whole
+        # breakeven/GC-payable chain divide by it. These two sit beside it as
+        # the split, not as a new basis.
+        "sold_weight": column["live_weight"],
+        "available_birds": _available_birds(placed, mort_no, column["birds_sold"]),
+        "available_weight": (_available_birds(placed, mort_no, column["birds_sold"])
+                             * _d(avg_weight)).quantize(Q2),
         "total_live_weight": column["live_weight"],
         "total_feed_required": column["feed_qty"],
         "feed_required_per_bird": column["feed_per_bird"],
@@ -527,6 +545,9 @@ PARTICULARS = [
     ("base_gc_rate", "Base GC Rate", "₹/kg", 2),
     ("std_prod_per_kg", "Standard Prod Cost", "₹/kg", 2),
     ("birds_sold", "Birds Sold", "", 0),
+    ("sold_weight", "Sold Weight", "kg", 2),
+    ("available_birds", "Available Birds", "", 0),
+    ("available_weight", "Available Weight", "kg", 2),
     ("total_live_weight", "Total Live Weight", "kg", 2),
     ("total_feed_required", "Total Feed Required", "kg", 2),
     ("feed_required_per_bird", "Feed Required/Bird", "kg", 4),
@@ -565,7 +586,8 @@ PARTICULARS = [
 #: "Chick Cost ₹/bird" describes nothing real).
 ADDITIVE = {
     "chicks_placed", "actual_medicine_cost", "actual_feed_consumption",
-    "mortality_no", "birds_sold", "total_live_weight", "total_feed_required",
+    "mortality_no", "birds_sold", "sold_weight", "available_birds",
+    "available_weight", "total_live_weight", "total_feed_required",
     "total_feed_cost", "total_chick_cost", "total_medicine_cost",
     "total_admin_cost", "total_production_cost", "farmer_gc_income_payable",
     "sales_incentive", "mortality_incentive", "fcr_incentive", "summer_incentive",

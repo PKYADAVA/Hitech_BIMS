@@ -156,3 +156,60 @@ class ActualMedicineCostTests(TestCase):
         """That column is hypothetical — placed x a flat rate is not an
         "actual" figure however the arithmetic reads."""
         self.assertIsNone(self.rows()["standard"]["actual_medicine_cost"])
+
+
+class SoldAndAvailableTests(TestCase):
+    """Birds Sold split into what left and what is still standing."""
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=self.today - timedelta(days=30))
+
+    def rows(self, **costing):
+        from broiler.services.gc_realization import build_gc_realization
+
+        bc = {"chicks_placed": Decimal("1000"), "sold_birds": Decimal("600"),
+              "sold_weight": Decimal("1200"), "avg_body_weight": Decimal("2.00"),
+              "feed_consumed": Decimal("3000"), "total_mort_pct": Decimal("5"),
+              "mortality": Decimal("50"), "med_cost": Decimal("0"),
+              "placement_date": self.today - timedelta(days=30)}
+        bc.update(costing)
+        report = {"batch_costing": bc}
+        return {r["key"]: r["values"]
+                for r in build_gc_realization(self.batch, report, report, None)["scenarios"]}
+
+    def test_placed_less_lost_less_lifted_is_what_is_still_standing(self):
+        f = self.rows()["farmer"]
+        self.assertEqual(f["available_birds"], Decimal("350"))     # 1000 - 50 - 600
+        self.assertEqual(f["available_weight"], Decimal("700.00"))  # at 2.00 kg
+
+    def test_sold_weight_is_what_went_over_the_weighbridge(self):
+        self.assertEqual(self.rows()["farmer"]["sold_weight"], Decimal("1200"))
+
+    def test_the_settlement_basis_is_left_alone(self):
+        """Every ratio and the whole breakeven / GC-payable chain divides by
+        Total Live Weight, so the split sits beside it rather than replacing
+        it."""
+        f = self.rows()["farmer"]
+        self.assertEqual(f["total_live_weight"], Decimal("1200"))
+
+    def test_a_flock_that_has_sold_nothing_is_all_available(self):
+        f = self.rows(sold_birds=Decimal("0"), sold_weight=Decimal("0"),
+                      avg_body_weight=Decimal("0"))["farmer"]
+        self.assertEqual(f["available_birds"], Decimal("950"))
+
+    def test_head_count_never_goes_negative(self):
+        """Sales beyond what the entries say survived is a data problem to
+        fix, not a negative head count to display."""
+        f = self.rows(sold_birds=Decimal("2000"))["farmer"]
+        self.assertEqual(f["available_birds"], Decimal("0"))
