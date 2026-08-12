@@ -105,3 +105,54 @@ class AvgLiveWeightFallbackTests(TestCase):
         self.weigh(2, 1800)
         rows = self.rows()
         self.assertNotEqual(self.weight_of(rows, "standard"), Decimal("1.8000"))
+
+
+class ActualMedicineCostTests(TestCase):
+    """A nil spend is a figure; an unknown one is not.
+
+    Actual Medicine Cost passed its own amount through ``or None``, so a real
+    zero became a blank cell. On this table blank means "no figure to give" —
+    which is why Standard, being hypothetical, is blank — and a flock that
+    genuinely bought no medicine was saying its spend was unknown.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=self.today - timedelta(days=30))
+
+    def rows(self, **costing):
+        from broiler.services.gc_realization import build_gc_realization
+
+        bc = {"chicks_placed": Decimal("1000"), "sold_birds": Decimal("900"),
+              "sold_weight": Decimal("1800"), "avg_body_weight": Decimal("2.00"),
+              "feed_consumed": Decimal("3000"), "total_mort_pct": Decimal("5"),
+              "mortality": Decimal("50"), "med_cost": Decimal("0"),
+              "placement_date": self.today - timedelta(days=30)}
+        bc.update(costing)
+        report = {"batch_costing": bc}
+        built = build_gc_realization(self.batch, report, report, None)
+        return {r["key"]: r["values"] for r in built["scenarios"]}
+
+    def test_a_flock_that_bought_no_medicine_reports_nil_not_unknown(self):
+        rows = self.rows()
+        self.assertEqual(rows["farmer"]["actual_medicine_cost"], Decimal("0.00"))
+        self.assertEqual(rows["management"]["actual_medicine_cost"], Decimal("0.00"))
+
+    def test_a_real_spend_still_reports_itself(self):
+        rows = self.rows(med_cost=Decimal("4500"))
+        self.assertEqual(rows["farmer"]["actual_medicine_cost"], Decimal("4500.00"))
+
+    def test_standard_stays_blank_because_it_has_no_actual_spend(self):
+        """That column is hypothetical — placed x a flat rate is not an
+        "actual" figure however the arithmetic reads."""
+        self.assertIsNone(self.rows()["standard"]["actual_medicine_cost"])

@@ -274,12 +274,12 @@ def build_gc_realization(batch, report, management_report, scheme):
     #  - Farmer shows the scheme's own master figure (std_cost_ref /
     #    bc["std_prod_per_kg"]) — the fixed promise the farmer is measured
     #    against, i.e. it genuinely comes "from the schema" here.
-    #  - Management shows the real production cost per kg the underlying
-    #    management-basis batch costing already computed
-    #    (mbc["production_cost_per_kg"]) — the true, original figure the
-    #    Batch History Report's own Management view would show, priced with
-    #    the full real admin cost rather than this module's std_admin_rate
-    #    stand-in on the `management` column above.
+    #  - Management shows nothing. It is set below, deliberately, along with
+    #    Diff from Std Cost and Penalty/Incentive: the farmer is settled once,
+    #    on the Farmer basis, so there is no management-basis promise for this
+    #    column to be measured against. (An earlier draft of this comment said
+    #    Management showed mbc["production_cost_per_kg"] here; it never did,
+    #    and the block that blanks it explains why.)
     if has_scheme:
         standard["std_prod_per_kg"] = standard["production_cost_per_kg"]
         farmer["std_prod_per_kg"] = std_cost_ref
@@ -395,7 +395,12 @@ def build_gc_realization(batch, report, management_report, scheme):
         # that column reports real spend, and Standard is fully hypothetical,
         # so placed x flat rate (what column["med_amount"] would otherwise
         # show here) is not an "actual" figure however the arithmetic reads.
-        actual_med = None if key == "standard" else (column["med_amount"] or None)
+        # Blank on Standard because that column is hypothetical and has no
+        # actual spend to report. Everywhere else the real figure stands, zero
+        # included: on this table a blank means "no figure to give" and 0.00
+        # means "nil", and a flock that genuinely bought no medicine was
+        # saying the spend was unknown.
+        actual_med = None if key == "standard" else column["med_amount"]
         values = _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed,
                      has_scheme, placement_date, current_age, gap_days, actual_med)
         return {"key": key, "label": label, "values": values, "cells": _format_cells(values)}
