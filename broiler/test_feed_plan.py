@@ -92,11 +92,17 @@ class FeedPlanTests(TestCase):
 
     # ---- the requirement ----------------------------------------------------
 
-    def test_required_is_the_phase_cap_times_the_live_flock(self):
+    def test_required_is_the_phase_cap_times_the_flock_that_was_placed(self):
+        """The allowance is bought for the birds put in, not for whatever is
+        left today. Feed is eaten by every bird that was ever on the farm —
+        those that died, those culled, those already lifted — so counting the
+        requirement on survivors alone puts one population on one side of
+        "required less fed" and the whole flock on the other."""
         row, payload = self.plan()
         self.assertEqual(payload["live_birds"], 1000)
-        # 0.400 kg/bird cap x 1,000 birds.
+        # 0.400 kg/bird cap x 1,000 placed.
         self.assertEqual(row["required_kg"], "400.00")
+
 
     def test_every_feed_in_the_program_is_reported_not_only_the_current_one(self):
         """A supervisor ordering next week's feed needs the phases after this
@@ -120,15 +126,25 @@ class FeedPlanTests(TestCase):
         self.assertEqual([r["name"] for r in payload["feed_plan"]],
                          ["Pre-Starter Feed", "Starter Feed", "Finisher Feed"])
 
-    def test_the_requirement_follows_the_flock_down(self):
-        """Birds that have died do not eat. The requirement is against what is
-        alive, so it falls as the flock does."""
+    def test_the_requirement_does_not_follow_the_flock_down(self):
+        """This reverses the rule the panel shipped with.
+
+        It used to read "birds that have died do not eat, so the requirement
+        falls as the flock does" — true of the feed still to come, but the
+        requirement is not only about what is still to come. A bird that died
+        on day twelve ate for twelve days, and that feed is counted in FED. A
+        requirement measured on the survivors put one population on one side
+        of "required less fed" and the whole flock on the other, and on a
+        batch mid-lift the two are nowhere near each other: one flock had its
+        requirement worked out on 692 birds while 2,429 were placed and fed
+        for weeks.
+        """
         DailyEntry.objects.create(farm=self.farm, batch=self.batch,
                                   supervisor=self.supervisor,
                                   date=self.today - timedelta(days=1), mortality=100)
         row, payload = self.plan()
         self.assertEqual(payload["live_birds"], 900)
-        self.assertEqual(row["required_kg"], "360.00")
+        self.assertEqual(row["required_kg"], "400.00")
 
     # ---- sent, fed, balance -------------------------------------------------
 

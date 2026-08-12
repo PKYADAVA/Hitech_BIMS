@@ -2689,6 +2689,19 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         from inventory.services.item_summary import farm_receipts_balance
 
         live = counts["live"] or 0
+        # The phase allowance is bought for the flock that was placed, not for
+        # whatever is left today. Feed was eaten by every bird that was ever on
+        # the farm — the ones that died, the ones culled, and the ones already
+        # lifted — so a requirement counted on the survivors alone sits on one
+        # side of "required less fed" while the whole flock's consumption sits
+        # on the other. On a batch mid-lift the gap is not small: one here had
+        # its requirement worked out on 692 birds while 2,429 were placed and
+        # fed for weeks.
+        #
+        # Slightly generous by construction: a bird that dies early never eats
+        # its full allowance. That errs towards having feed on the farm, which
+        # is the right direction for a figure people order against.
+        allowance_birds = counts["placed"] or live
         # Every feed item this phase master names for the flock's current age,
         # plus the changeover it is heading into — the two a supervisor is
         # deciding between when a phase is about to end.
@@ -2705,7 +2718,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
 
         for item_id, info in wanted.items():
             cap_per_bird = Decimal(str(info.get("max") or 0))
-            required = (cap_per_bird * Decimal(live)).quantize(Decimal("0.01"))
+            required = (cap_per_bird * Decimal(allowance_birds)).quantize(Decimal("0.01"))
             sent = _num(farm_receipts_balance(farm_id, item_id, entry_date)).quantize(Decimal("0.01"))
             fed = fed_by_item.get(item_id, Decimal("0")).quantize(Decimal("0.01"))
             feed_plan.append({
