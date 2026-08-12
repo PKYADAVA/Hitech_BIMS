@@ -224,3 +224,88 @@ class SoldAndAvailableTests(TestCase):
         fix, not a negative head count to display."""
         f = self.rows(sold_birds=Decimal("2000"))["farmer"]
         self.assertEqual(f["available_birds"], Decimal("0"))
+
+
+class GrowingChargeIsEarnedOnDeliveryTests(TestCase):
+    """Two weights, doing two different jobs.
+
+    Cost per kilo divides by every bird alive, because that is what the money
+    was spent on. The growing charge is paid for birds handed over: a bird
+    still in the shed has not been grown to completion and nothing is owed on
+    it yet. Running both off one figure made a flock mid-lift project a
+    payable it had not earned.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=self.today - timedelta(days=30))
+        from broiler.models import GrowingChargeScheme
+        self.scheme = GrowingChargeScheme.objects.create(
+            region=region, schema_name="S1", is_active=True,
+            from_date=self.today - timedelta(days=365),
+            to_date=self.today + timedelta(days=365),
+            standard_gc_cost=Decimal("7.50"), standard_mortality=Decimal("5"),
+            standard_fcr=Decimal("1.55"), standard_avg_weight=Decimal("2.00"),
+            chick_cost=Decimal("35"), feed_cost=Decimal("42"),
+            std_production_cost=Decimal("86.28"))
+
+    def rows(self, **costing):
+        from broiler.services.gc_realization import build_gc_realization
+
+        bc = {"chicks_placed": Decimal("1000"), "sold_birds": Decimal("600"),
+              "sold_weight": Decimal("1200"), "avg_body_weight": Decimal("2.00"),
+              "feed_consumed": Decimal("3000"), "total_mort_pct": Decimal("5"),
+              "mortality": Decimal("50"), "med_cost": Decimal("0"),
+              "placement_date": self.today - timedelta(days=30)}
+        bc.update(costing)
+        report = {"batch_costing": bc}
+        return {r["key"]: r["values"] for r in
+                build_gc_realization(self.batch, report, report, self.scheme)["scenarios"]}
+
+    def test_the_charge_is_paid_on_what_was_delivered(self):
+        f = self.rows()["farmer"]
+        expected = (f["actual_gc_rate"] * f["sold_weight"]).quantize(Decimal("0.01"))
+        self.assertEqual(f["farmer_gc_income_payable"], expected)
+
+    def test_standing_birds_are_outside_the_weight_that_earns(self):
+        """350 birds are still in the shed. The charge is computed on the
+        delivered weight, so whatever the rate resolves to, the standing part
+        is not in it — asserted as the relationship rather than a magnitude,
+        because the slab engine can legitimately return a rate of zero."""
+        f = self.rows()["farmer"]
+        self.assertEqual(f["available_birds"], Decimal("350"))
+        self.assertEqual(f["sold_weight"] + f["available_weight"],
+                         f["total_live_weight"])
+        self.assertEqual(
+            f["farmer_gc_income_payable"],
+            (f["actual_gc_rate"] * f["sold_weight"]).quantize(Decimal("0.01")))
+
+    def test_a_flock_that_has_sold_nothing_is_owed_nothing(self):
+        f = self.rows(sold_birds=Decimal("0"), sold_weight=Decimal("0"))["farmer"]
+        self.assertEqual(f["farmer_gc_income_payable"], Decimal("0.00"))
+
+    def test_cost_per_kilo_still_counts_every_bird_alive(self):
+        """It measures what was spent, and the money was spent on all of them."""
+        f = self.rows()["farmer"]
+        self.assertEqual(f["total_live_weight"], Decimal("1900.00"))
+        self.assertGreater(f["total_live_weight"], f["sold_weight"])
+
+    def test_a_fully_sold_flock_pays_on_its_whole_weight(self):
+        f = self.rows(sold_birds=Decimal("950"), sold_weight=Decimal("1900"))["farmer"]
+        self.assertEqual(f["sold_weight"], f["total_live_weight"])
+
+    def test_management_mirrors_the_one_settlement(self):
+        """The farmer is paid once, whichever lens the company reads through."""
+        rows = self.rows()
+        self.assertEqual(rows["management"]["farmer_gc_income_payable"],
+                         rows["farmer"]["farmer_gc_income_payable"])

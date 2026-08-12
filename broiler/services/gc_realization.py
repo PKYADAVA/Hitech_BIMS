@@ -201,6 +201,10 @@ def build_gc_realization(batch, report, management_report, scheme):
     actual_live_weight = (actual_sold_weight + actual_available_weight).quantize(Q2)
 
     # --- Standard column ---------------------------------------------------
+    # The weight a growing charge is actually earned on, per column.
+    standard_delivered = std_live_weight
+    actual_delivered = actual_sold_weight
+
     standard = _cost_column(
         chick_qty=std_survivors, chick_rate=std_chick_rate,
         feed_qty=(std_fcr * std_live_weight).quantize(Q2) if has_scheme else ZERO,
@@ -267,6 +271,12 @@ def build_gc_realization(batch, report, management_report, scheme):
         birds_sold=actual_survivors, live_weight=actual_live_weight,
     )
 
+    # The weight each column's growing charge is actually earned on. Set here,
+    # before the settlement loop below reads it.
+    standard["delivered_weight"] = standard_delivered
+    farmer["delivered_weight"] = actual_delivered
+    management["delivered_weight"] = actual_delivered
+
     # --- GC rate / penalty-incentive, reusing the settlement's own engine ---
     # std_cost is the scheme's own master figure (bc["std_prod_per_kg"]), the
     # exact baseline GrowingChargeSettlement itself uses — not this report's
@@ -313,7 +323,16 @@ def build_gc_realization(batch, report, management_report, scheme):
             if has_scheme else ZERO
         column["penalty_incentive"] = (gc_rate - base_gc_rate).quantize(Q4)
         column["actual_gc_rate"] = gc_rate.quantize(Q4)
-        column["farmer_gc_income_payable"] = (gc_rate * column["live_weight"]).quantize(Q2)
+        # Earned on delivered weight, not on the whole flock. The growing
+        # charge is paid for birds handed over; a bird still in the shed has
+        # not been grown to completion and nothing is owed on it yet. That is
+        # a different weight from the one the cost ratios divide by — those
+        # measure what has been *spent*, which covers every bird alive.
+        #
+        # Standard has no unsold remainder by construction (it rears exactly
+        # what it sells), so its two weights are the same figure.
+        column["farmer_gc_income_payable"] = (
+            gc_rate * column["delivered_weight"]).quantize(Q2)
 
     # Management has no growing charge settlement of its own to compute — the
     # farmer is paid once, on the Farmer basis, regardless of which costing
