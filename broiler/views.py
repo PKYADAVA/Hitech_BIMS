@@ -4026,11 +4026,12 @@ def production_cost_report(request):
     farm_id = (request.GET.get("farm") or "").strip()
     batch_id = (request.GET.get("batch") or "").strip()
     bird_type_id = (request.GET.get("bird_type") or "").strip()
-    # Farmer or Management, as the Batch History report asks it: the farmer's
-    # statement carries only his admin share, the management view carries both.
-    report_type = (request.GET.get("report_type") or "management").strip().lower()
+    # Farmer or Management, as the Batch History report asks it. Farmer is the
+    # default: it is the basis the flock is settled on, and the one most people
+    # open this page to read.
+    report_type = (request.GET.get("report_type") or "farmer").strip().lower()
     if report_type not in ("farmer", "management"):
-        report_type = "management"
+        report_type = "farmer"
     to_date = parse_date(request.GET.get("to_date") or "") or timezone.localdate()
     from_date = (parse_date(request.GET.get("from_date") or "")
                  or (to_date - timedelta(days=30)))

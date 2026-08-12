@@ -269,13 +269,14 @@ class PageTests(TestCase):
         """"No entry" and "recorded today" are different answers."""
         self.assertIsNone(self.page().context["rows"][0]["gap_days"])
 
-    def test_the_report_type_defaults_to_management_and_rejects_nonsense(self):
-        """It reaches the batch report builder, so it cannot be taken on trust."""
-        self.assertEqual(self.page().context["report_type"], "management")
-        self.assertEqual(self.page(report_type="farmer").context["report_type"],
-                         "farmer")
-        self.assertEqual(self.page(report_type="both").context["report_type"],
+    def test_the_report_type_defaults_to_farmer_and_rejects_nonsense(self):
+        """It reaches the batch report builder and decides which rates price
+        the flock, so it cannot be taken on trust."""
+        self.assertEqual(self.page().context["report_type"], "farmer")
+        self.assertEqual(self.page(report_type="management").context["report_type"],
                          "management")
+        self.assertEqual(self.page(report_type="both").context["report_type"],
+                         "farmer")
 
     def test_the_bird_type_filter_uses_the_breed_s_category(self):
         other, _ = BirdCategory.objects.get_or_create(name="Layer")
