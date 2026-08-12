@@ -196,12 +196,23 @@ class SoldAndAvailableTests(TestCase):
     def test_sold_weight_is_what_went_over_the_weighbridge(self):
         self.assertEqual(self.rows()["farmer"]["sold_weight"], Decimal("1200"))
 
-    def test_the_settlement_basis_is_left_alone(self):
-        """Every ratio and the whole breakeven / GC-payable chain divides by
-        Total Live Weight, so the split sits beside it rather than replacing
-        it."""
+    def test_the_total_is_the_two_parts_and_every_ratio_uses_it(self):
+        """Cost and feed were spent on the birds that left and the birds still
+        here alike, so the per-kilo figures divide by both. The three columns
+        have to reconcile or the page contradicts itself."""
         f = self.rows()["farmer"]
-        self.assertEqual(f["total_live_weight"], Decimal("1200"))
+        self.assertEqual(f["sold_weight"] + f["available_weight"],
+                         f["total_live_weight"])
+        self.assertEqual(f["total_live_weight"], Decimal("1900.00"))   # 1200 + 700
+        self.assertEqual(f["production_cost_per_kg"],
+                         (f["total_production_cost"] / f["total_live_weight"]).quantize(Decimal("0.0001")))
+
+    def test_a_fully_sold_flock_is_unaffected(self):
+        """Nothing standing means the total is the sold weight it always was,
+        so a settled flock's figures do not move."""
+        f = self.rows(sold_birds=Decimal("950"), sold_weight=Decimal("1900"))["farmer"]
+        self.assertEqual(f["available_birds"], Decimal("0"))
+        self.assertEqual(f["total_live_weight"], Decimal("1900"))
 
     def test_a_flock_that_has_sold_nothing_is_all_available(self):
         f = self.rows(sold_birds=Decimal("0"), sold_weight=Decimal("0"),

@@ -190,6 +190,16 @@ def build_gc_realization(batch, report, management_report, scheme):
 
     std_live_weight = (std_survivors * std_avg_weight).quantize(Q2)
 
+    # Birds still on the farm, and what they weigh at today's body weight.
+    # Cost and feed were spent on the birds that left and the birds still here
+    # alike, so every per-kilo figure divides by both — measuring against the
+    # sold weight alone overstates a flock mid-lift. A fully sold flock is
+    # unaffected: nothing is standing, so the total is the sold weight it
+    # always was.
+    actual_available_birds = _available_birds(placed, actual_mort_no, actual_survivors)
+    actual_available_weight = (actual_available_birds * actual_avg_weight).quantize(Q2)
+    actual_live_weight = (actual_sold_weight + actual_available_weight).quantize(Q2)
+
     # --- Standard column ---------------------------------------------------
     standard = _cost_column(
         chick_qty=std_survivors, chick_rate=std_chick_rate,
@@ -215,7 +225,7 @@ def build_gc_realization(batch, report, management_report, scheme):
         feed_qty=actual_feed_consumed, feed_rate=std_feed_rate,
         med_qty=placed, med_rate=farmer_med_rate, med_amount=real_med_cost_farmer,
         admin_qty=placed, admin_rate=std_admin_rate,
-        birds_sold=actual_survivors, live_weight=actual_sold_weight,
+        birds_sold=actual_survivors, live_weight=actual_live_weight,
     )
 
     # --- Management Realization: real performance, real cost ---------------
@@ -254,7 +264,7 @@ def build_gc_realization(batch, report, management_report, scheme):
         feed_amount=real_feed_cost if real_feed_cost else None,
         med_qty=placed, med_rate=real_med_rate, med_amount=real_med_cost,
         admin_qty=placed, admin_rate=std_admin_rate,
-        birds_sold=actual_survivors, live_weight=actual_sold_weight,
+        birds_sold=actual_survivors, live_weight=actual_live_weight,
     )
 
     # --- GC rate / penalty-incentive, reusing the settlement's own engine ---
@@ -465,6 +475,10 @@ def _available_birds(placed, mort_no, birds_sold):
 def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_scheme,
          placement_date, age, gap_days, actual_medicine_cost):
     """Flatten one column into the particular-keyed dict the template reads."""
+    # Standard sells everything it rears, so nothing is left standing there and
+    # its whole live weight is sold weight.
+    available_birds = _available_birds(placed, mort_no, column["birds_sold"])
+    available_weight = (available_birds * _d(avg_weight)).quantize(Q2)
     return {
         "placement_date": placement_date,
         "age": age,
@@ -484,15 +498,18 @@ def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_schem
         "breakeven_sale_rate": column["breakeven_sale_rate"],
         "base_gc_rate": column["base_gc_rate"],
         "birds_sold": column["birds_sold"],
-        # What went over a weighbridge, and what is still standing. Total Live
-        # Weight stays what it has always been — the weight this column is
-        # settled on — because every ratio below it and the whole
-        # breakeven/GC-payable chain divide by it. These two sit beside it as
-        # the split, not as a new basis.
-        "sold_weight": column["live_weight"],
-        "available_birds": _available_birds(placed, mort_no, column["birds_sold"]),
-        "available_weight": (_available_birds(placed, mort_no, column["birds_sold"])
-                             * _d(avg_weight)).quantize(Q2),
+        # What went over a weighbridge, what is still standing, and the two
+        # together — the live weight this flock has produced so far, which is
+        # what every ratio below and the whole breakeven / GC-payable chain
+        # now divide by.
+        #
+        # Cost and feed were spent on the birds that left and the birds still
+        # here alike, so measuring either against the sold weight alone
+        # overstates it on a flock mid-lift. A fully sold flock is unaffected:
+        # nothing is standing, so the total is the sold weight it always was.
+        "sold_weight": (column["live_weight"] - available_weight).quantize(Q2),
+        "available_birds": available_birds,
+        "available_weight": available_weight,
         "total_live_weight": column["live_weight"],
         "total_feed_required": column["feed_qty"],
         "feed_required_per_bird": column["feed_per_bird"],
