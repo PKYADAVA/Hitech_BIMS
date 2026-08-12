@@ -43,7 +43,7 @@ ADMIN_HEADS = ["Office Expense Allocation", "Accounting Charges", "Depreciation"
 UNTRACKED_COST = GROWING_HEADS + ADMIN_HEADS
 
 
-def build_production_pl(report, batch):
+def build_production_pl(report, batch, rates_override=None):
     """The P&L for a batch, from an already-built batch report.
 
     Takes the report rather than rebuilding it: the Growing Charge Statement
@@ -72,6 +72,15 @@ def build_production_pl(report, batch):
     # --- what the flock consumed, priced from purchases -------------------
     consumption, item_ids = _consumption_rows(report)
     rates = purchase_rates(item_ids, on_or_before=costing.get("sale_start_date"))
+    # A caller that knows what this batch actually paid — the Production Cost
+    # report on its management basis, reading transfers repriced through the
+    # valuation engine — overrides the company-wide purchase average per item.
+    # It is a better answer where it exists: the average is every purchase of
+    # that item anywhere, while these are the consignments this flock was
+    # really fed from. Items it has nothing for keep the average, so a flock
+    # with no transfer rows of its own does not fall to zero.
+    if rates_override:
+        rates = {**rates, **{k: v for k, v in rates_override.items() if v}}
 
     feed_rows = [r for r in consumption if r["kind"] == "feed"]
     med_rows = [r for r in consumption if r["kind"] == "medicine"]

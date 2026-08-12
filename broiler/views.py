@@ -3747,7 +3747,17 @@ def _production_cost_row(batch, fetch_type="management"):
     # transfer happened to be recorded at, so "Management" showed the same
     # figures as "Farmer" and chicks read 35.00 against a 41.18 purchase.
     report = _build_batch_report(batch, fetch_type=fetch_type)
-    pl = build_production_pl(report, batch)
+    # On the management basis, feed and medicine are priced at what this batch
+    # actually paid for them — the transfer rows the line above has already
+    # repriced through the valuation engine — rather than at a company-wide
+    # purchase average. The average also silently drops any item with no
+    # purchase behind it: Finisher Feed has none, so a flock that ate three
+    # tonnes of it was costed as though it ate none.
+    rate_override = None
+    if fetch_type != "farmer":
+        rate_override = {**_item_rate_map(report.get("feed_transfer_in") or []),
+                         **_item_rate_map(report.get("medicine_transfer_in") or [])}
+    pl = build_production_pl(report, batch, rates_override=rate_override)
     costing = report.get("batch_costing") or {}
     farm = batch.broiler_farm
 
@@ -3986,8 +3996,13 @@ def _production_cost_row(batch, fetch_type="management"):
         # The P&L carries these as item ids, which is all its own page needs;
         # here they are read as a sentence, and "No purchase to price: 15"
         # names nothing anybody can go and fix.
-        "unpriced": set(Item.objects.filter(id__in=pl["unpriced_items"])
-                        .values_list("description", flat=True)),
+        # Only what actually leaves a figure on this page short. On the farmer
+        # view feed is priced at the scheme's own rate across every kilo, so an
+        # item with no purchase behind it costs that view nothing — warning
+        # about it there would say the total is understated when it is not.
+        "unpriced": (set() if scheme_rates else
+                     set(Item.objects.filter(id__in=pl["unpriced_items"])
+                         .values_list("description", flat=True))),
         "no_standard": no_standard,
     }
 

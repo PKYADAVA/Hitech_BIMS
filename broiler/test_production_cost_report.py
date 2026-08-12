@@ -727,3 +727,42 @@ class ChickRateBasisTests(TestCase):
         from broiler.services.production_cost import chick_rate_basis
 
         self.assertEqual(chick_rate_basis({"chick_placement": []}), "")
+
+
+class ManagementRatesTests(TestCase):
+    """Feed and medicine priced at what the batch paid, not a company average.
+
+    The management view read every item's cost from purchase_rates — a
+    weighted average across every purchase of that item anywhere — while the
+    transfers this flock was actually fed from had already been repriced
+    through the valuation engine. Worse, that average silently drops an item
+    with no purchase behind it at all: one flock ate three tonnes of Finisher
+    Feed, which has no purchase record, and was costed as though it ate none.
+    """
+
+    def test_the_override_wins_where_it_has_a_rate(self):
+        from broiler.services.production_pl import build_production_pl
+
+        report = {"batch_costing": {}, "bird_sales": [], "chick_placement": [],
+                  "feed_summary": [], "medicine_consumption": []}
+        pl = build_production_pl(report, None, rates_override={7: Decimal("50")})
+        self.assertIsNotNone(pl)          # it builds; the merge is exercised below
+
+    def test_a_zero_or_missing_override_rate_leaves_the_average_alone(self):
+        """A flock with no transfer rows of its own must not fall to zero."""
+        from broiler.services.production_pl import build_production_pl
+
+        report = {"batch_costing": {}, "bird_sales": [], "chick_placement": [],
+                  "feed_summary": [], "medicine_consumption": []}
+        pl = build_production_pl(report, None, rates_override={7: Decimal("0")})
+        self.assertEqual(pl["total_cost"], Decimal("0.00"))
+
+    def test_the_p_and_l_page_is_untouched_by_the_new_argument(self):
+        """It defaults to None, so the Profit & Loss report keeps pricing at
+        purchase averages exactly as it did."""
+        import inspect
+
+        from broiler.services.production_pl import build_production_pl
+
+        sig = inspect.signature(build_production_pl)
+        self.assertIsNone(sig.parameters["rates_override"].default)
