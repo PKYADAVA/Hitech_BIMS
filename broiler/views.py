@@ -2550,6 +2550,69 @@ def _placement_date(batch):
             .order_by("date").values_list("date", flat=True).first())
 
 
+def _departed_feed_charge(batch, before_date, placed):
+    """Feed already eaten by birds that are no longer on the farm, per item.
+
+    A bird that dies on day twelve has eaten twelve days of feed, and that
+    feed is real: it is in the store's outflow whether or not the bird is
+    still counted. Charging it to the flock's requirement is what lets
+    "required less fed" resolve to what the survivors still need, instead of
+    subtracting the whole flock's consumption from an allowance sized for part
+    of it.
+
+    Each departure is charged at the flock's cumulative feed per bird on the
+    day it left — the best attribution available without tracking feed bird by
+    bird. Birds sold count as departed for the same reason deaths do: they ate
+    while they were here and they are not here now.
+
+    Returns ``{item_id: kg}``.
+    """
+    from broiler.models import BirdSale
+
+    entries = (DailyEntry.objects.filter(batch=batch, date__lt=before_date)
+               .order_by("date", "id")
+               .values("date", "mortality", "culls",
+                       "feed_1_id", "feed_1_qty", "feed_2_id", "feed_2_qty"))
+    sold_by_date = {}
+    for row in (BirdSale.objects.filter(batch=batch, date__lt=before_date)
+                .values("date", "birds")):
+        sold_by_date[row["date"]] = sold_by_date.get(row["date"], 0) + (row["birds"] or 0)
+
+    alive = _num(placed)
+    cum_per_bird = {}          # item_id -> kg eaten per bird so far
+    charge = {}                # item_id -> kg charged to departed birds
+    seen_dates = set()
+    for e in entries:
+        if alive <= 0:
+            break
+        # That day's feed, per bird alive to eat it.
+        for slot in ("feed_1", "feed_2"):
+            item_id, qty = e[f"{slot}_id"], _num(e[f"{slot}_qty"])
+            if not item_id or qty <= 0:
+                continue
+            cum_per_bird[item_id] = cum_per_bird.get(item_id, Decimal("0")) + qty / alive
+
+        gone = _num(e["mortality"]) + _num(e["culls"])
+        if e["date"] not in seen_dates:
+            gone += _num(sold_by_date.pop(e["date"], 0))
+            seen_dates.add(e["date"])
+        if gone > 0:
+            for item_id, per_bird in cum_per_bird.items():
+                charge[item_id] = charge.get(item_id, Decimal("0")) + gone * per_bird
+            alive -= gone
+
+    # Sales on days with no daily entry of their own still take birds away.
+    for _date, birds in sold_by_date.items():
+        gone = _num(birds)
+        if gone <= 0 or alive <= 0:
+            continue
+        for item_id, per_bird in cum_per_bird.items():
+            charge[item_id] = charge.get(item_id, Decimal("0")) + gone * per_bird
+        alive -= gone
+
+    return {k: v.quantize(Decimal("0.01")) for k, v in charge.items()}
+
+
 def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     """Returns the active batch/age for a farm, for the Add form's
     auto-filled Batch/Age fields as soon as a Farm is picked. ``next_date``
@@ -2689,19 +2752,17 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         from inventory.services.item_summary import farm_receipts_balance
 
         live = counts["live"] or 0
-        # The phase allowance is bought for the flock that was placed, not for
-        # whatever is left today. Feed was eaten by every bird that was ever on
-        # the farm — the ones that died, the ones culled, and the ones already
-        # lifted — so a requirement counted on the survivors alone sits on one
-        # side of "required less fed" while the whole flock's consumption sits
-        # on the other. On a batch mid-lift the gap is not small: one here had
-        # its requirement worked out on 692 birds while 2,429 were placed and
-        # fed for weeks.
+        # The phase allowance: every surviving bird's full cap, plus the feed
+        # birds that have gone actually ate. Counted on survivors alone it sat
+        # on one side of "required less fed" while the whole flock's
+        # consumption sat on the other; counted on birds placed it charged
+        # dead birds an allowance they never lived to eat. This charges each
+        # departure what it really consumed, so the subtraction resolves to
+        # exactly what the birds still here are owed.
         #
-        # Slightly generous by construction: a bird that dies early never eats
-        # its full allowance. That errs towards having feed on the farm, which
-        # is the right direction for a figure people order against.
-        allowance_birds = counts["placed"] or live
+        # Each departure is charged only what it actually ate, at the flock's
+        # cumulative feed per bird on the day it left.
+        departed_charge = _departed_feed_charge(batch, entry_date, counts["placed"])
         # Every feed item this phase master names for the flock's current age,
         # plus the changeover it is heading into — the two a supervisor is
         # deciding between when a phase is about to end.
@@ -2718,7 +2779,9 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
 
         for item_id, info in wanted.items():
             cap_per_bird = Decimal(str(info.get("max") or 0))
-            required = (cap_per_bird * Decimal(allowance_birds)).quantize(Decimal("0.01"))
+            required = ((cap_per_bird * Decimal(live))
+                        + departed_charge.get(item_id, Decimal("0"))
+                        ).quantize(Decimal("0.01"))
             sent = _num(farm_receipts_balance(farm_id, item_id, entry_date)).quantize(Decimal("0.01"))
             fed = fed_by_item.get(item_id, Decimal("0")).quantize(Decimal("0.01"))
             feed_plan.append({

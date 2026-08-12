@@ -126,25 +126,36 @@ class FeedPlanTests(TestCase):
         self.assertEqual([r["name"] for r in payload["feed_plan"]],
                          ["Pre-Starter Feed", "Starter Feed", "Finisher Feed"])
 
-    def test_the_requirement_does_not_follow_the_flock_down(self):
-        """This reverses the rule the panel shipped with.
+    def test_a_bird_that_ate_nothing_is_charged_nothing(self):
+        """The requirement is every surviving bird's full cap plus what the
+        departed actually ate. These hundred died before any feed was booked,
+        so they are owed nothing and the allowance drops to the survivors'.
 
-        It used to read "birds that have died do not eat, so the requirement
-        falls as the flock does" — true of the feed still to come, but the
-        requirement is not only about what is still to come. A bird that died
-        on day twelve ate for twelve days, and that feed is counted in FED. A
-        requirement measured on the survivors put one population on one side
-        of "required less fed" and the whole flock on the other, and on a
-        batch mid-lift the two are nowhere near each other: one flock had its
-        requirement worked out on 692 birds while 2,429 were placed and fed
-        for weeks.
+        This is the third rule this figure has had. It was cap x live, which
+        subtracted the whole flock's consumption from an allowance sized for
+        part of it; then cap x placed, which charged a bird that died on day
+        three an allowance it never lived to eat. Charging each departure its
+        own real consumption is what makes "required less fed" resolve to what
+        the birds still here are owed.
         """
         DailyEntry.objects.create(farm=self.farm, batch=self.batch,
                                   supervisor=self.supervisor,
                                   date=self.today - timedelta(days=1), mortality=100)
         row, payload = self.plan()
         self.assertEqual(payload["live_birds"], 900)
-        self.assertEqual(row["required_kg"], "400.00")
+        self.assertEqual(row["required_kg"], "360.00")
+
+    def test_a_bird_that_ate_before_it_died_is_charged_what_it_ate(self):
+        DailyEntry.objects.create(farm=self.farm, batch=self.batch,
+                                  supervisor=self.supervisor,
+                                  date=self.today - timedelta(days=2),
+                                  feed_1=self.pre, feed_1_qty=Decimal("100"),
+                                  mortality=100)
+        row, payload = self.plan()
+        self.assertEqual(payload["live_birds"], 900)
+        # 0.4 x 900 alive = 360.00, plus 100 birds x the 0.1 kg/bird they had
+        # eaten by the day they went = 10.00.
+        self.assertEqual(row["required_kg"], "370.00")
 
     # ---- sent, fed, balance -------------------------------------------------
 
