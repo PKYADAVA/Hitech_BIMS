@@ -21,8 +21,14 @@
 
       <!-- Home -->
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'home' %}active{% endif %}" href="{% url 'home' %}">
-          <i class="fas fa-home me-1"></i>Home
+        {% comment %}
+          Icon only. A house needs no caption, and the space it frees goes to
+          the module names, which do. The title and the aria-label keep it
+          named for anyone hovering or using a screen reader.
+        {% endcomment %}
+        <a class="nav-link {% if active_tab == 'home' %}active{% endif %}" href="{% url 'home' %}"
+           title="Home" aria-label="Home">
+          <i class="fas fa-home"></i>
         </a>
       </li>
 
