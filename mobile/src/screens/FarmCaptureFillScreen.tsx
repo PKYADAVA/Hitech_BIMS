@@ -175,7 +175,7 @@ export function FarmCaptureFillScreen({ navigation, route }: Props) {
           "No signal — this capture is stored on the device and will go to the "
           + "ERP by itself once you are back in range.");
       }
-      queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/location-captures/"] });
+      queryClient.invalidateQueries({ queryKey: ["list", "/broiler/location-captures/"] });
       navigation.goBack();
     } catch (e: unknown) {
       const err = e as { message?: string; fields?: Record<string, string[]> };

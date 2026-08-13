@@ -243,7 +243,7 @@ export function BirdSaleReceiptFormScreen({ navigation, route }: Props) {
       } else {
         await http.post("/broiler/bird-sale-receipts/save", { rows });
       }
-      queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/bird-sale-receipts/"] });
+      queryClient.invalidateQueries({ queryKey: ["list", "/broiler/bird-sale-receipts/"] });
       navigation.goBack();
     } catch (e: unknown) {
       const err = e as { message?: string; fields?: Record<string, string[]> };

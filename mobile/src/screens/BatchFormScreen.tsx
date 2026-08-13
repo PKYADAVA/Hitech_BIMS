@@ -178,7 +178,7 @@ export function BatchFormScreen({ navigation, route }: Props) {
       } else {
         await http.post("/broiler/batches/save", body);
       }
-      queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/batches/"] });
+      queryClient.invalidateQueries({ queryKey: ["list", "/broiler/batches/"] });
       navigation.goBack();
     } catch (e: unknown) {
       const err = e as { message?: string; fields?: Record<string, string[]> };

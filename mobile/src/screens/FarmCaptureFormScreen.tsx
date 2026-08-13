@@ -181,13 +181,24 @@ export function FarmCaptureFormScreen({ navigation, route }: Props) {
    * Never every farm in the company: the record is a visit to a farm the
    * branch actually runs, and a list of all of them is how a capture ends up
    * filed under someone else's.
+   *
+   * On Add, a farm already captured drops off the list too — same rule the
+   * web Add-Capture form applies — so this calls the filtered endpoint. On
+   * Edit the picker is locked to the farm the capture already holds (which
+   * IS already captured, being the very record open), so it keeps the plain,
+   * unfiltered farm list instead — otherwise that farm would filter itself
+   * out of its own field.
    */
   const loadFarms = async (branchId: string) => {
     if (!branchId) return setFarmOptions([]);
     try {
-      const { data } = await http.get<Envelope<Farm[]>>("/broiler/farms/", {
-        params: { branch: branchId, page_size: 500 },
-      });
+      const { data } = editing
+        ? await http.get<Envelope<Farm[]>>("/broiler/farms/", {
+            params: { branch: branchId, page_size: 500 },
+          })
+        : await http.get<Envelope<Farm[]>>("/broiler/farms-for-capture", {
+            params: { branch: branchId },
+          });
       setFarmOptions(data.data.map((f) => ({
         value: String(f.id), label: f.farm_name || f.farm_code || `#${f.id}`,
       })));
@@ -320,7 +331,7 @@ export function FarmCaptureFormScreen({ navigation, route }: Props) {
               longitude: Number(values.longitude), accuracy: null }
           : null,
       });
-      queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/location-captures/"] });
+      queryClient.invalidateQueries({ queryKey: ["list", "/broiler/location-captures/"] });
       if (written.queued) {
         await notify("Saved on this phone",
           "No signal — this capture is stored on the device and will go to the "

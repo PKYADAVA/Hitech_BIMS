@@ -30,7 +30,7 @@ from api.viewsets import V1ViewMixin
 from inventory.api_write import _delegate, _make_write_view, _s
 
 from . import views as web
-from .models import (BirdSaleReceipt, BroilerBatch, FarmLocationCapture,
+from .models import (BirdSaleReceipt, BroilerBatch, DailyEntry, FarmLocationCapture,
                      MedicineVaccineEntry)
 
 
@@ -156,15 +156,19 @@ class _CaptureRequest:
 class FarmLocationCaptureWriteView(V1ViewMixin, APIView):
     """POST /api/v1/broiler/location-captures/save[/<id>] — create or update.
 
-    Multipart, because a capture is the photos and scans as much as the pin:
-    farm pictures and other documents take any number of files, and each master
-    slot (PAN, Aadhar, cheques…) takes one. ``_save_capture`` places them and
-    mirrors them onto the farm and farmer masters; doing that here again is
-    exactly the copy that would drift.
+    Multipart-first, because a capture is the photos and scans as much as the
+    pin: farm pictures and other documents take any number of files, and each
+    master slot (PAN, Aadhar, cheques…) takes one. ``_save_capture`` places
+    them and mirrors them onto the farm and farmer masters; doing that here
+    again is exactly the copy that would drift. But nothing here is required
+    on a re-save that attaches no new file, so ``writeThrough`` sends plain
+    JSON (no ``Content-Type: multipart/form-data``) whenever it has nothing to
+    attach — JSON still has to parse then, or DRF answers 415 before the view
+    ever runs (same reasoning as ``FarmerFarmSetupRequestWriteView`` below).
     """
 
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     @transaction.atomic
     def post(self, request, pk=None):
@@ -251,10 +255,12 @@ class FarmCaptureFillView(V1ViewMixin, APIView):
     the rule that decides what may be written lives in one place: the phone
     locking what is already held is a courtesy, not the guard, and a hand-made
     request must not be able to replace a document or a GPS reading either.
+    Filling only text fields (no new file) sends plain JSON, same as the save
+    view above — JSON still has to parse then, or DRF answers 415.
     """
 
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, pk):
         return _web_result(
@@ -301,6 +307,36 @@ class FarmCaptureClearView(V1ViewMixin, APIView):
             "Location cleared.")
 
 
+class DailyEntryGroupDeleteView(V1ViewMixin, APIView):
+    """DELETE /api/v1/broiler/daily-entries/group?batch=<id> or ?farm=<id> —
+    the register's group-level Delete, wiping every Daily Entry for one batch
+    (or, with no active batch, one farm) at once. Mirrors the web
+    ``daily_entry_group_delete``: safe in one shot regardless of the
+    tail-only rule on individual deletes, since wiping the whole group at
+    once leaves no later row anywhere still chained to it.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        from user.access import user_can
+        if not user_can(request.user, "daily_entry_list", "delete"):
+            return Response({"error": "Not permitted."}, status=403)
+        batch_id = (request.query_params.get("batch") or "").strip()
+        farm_id = (request.query_params.get("farm") or "").strip()
+        if batch_id:
+            qs = DailyEntry.objects.filter(batch_id=batch_id)
+        elif farm_id:
+            qs = DailyEntry.objects.filter(farm_id=farm_id, batch__isnull=True)
+        else:
+            return Response({"error": "batch or farm is required"}, status=400)
+        count = qs.count()
+        if not count:
+            return Response({"error": "No entries found for this batch"}, status=404)
+        qs.delete()
+        return Response({"message": f"Deleted {count} entries"})
+
+
 def write_urls() -> list:
     """URL patterns for the broiler document write endpoints."""
     return [
@@ -316,6 +352,8 @@ def write_urls() -> list:
              FarmCaptureClearView.as_view(), name="broiler-captures-clear"),
         path("broiler/location-captures/save/<int:pk>",
              FarmLocationCaptureWriteView.as_view(), name="broiler-captures-save"),
+        path("broiler/daily-entries/group",
+             DailyEntryGroupDeleteView.as_view(), name="broiler-daily-entries-group-delete"),
         path("broiler/batches/save", BroilerBatchWriteView.as_view(),
              name="broiler-batches-save-new"),
         path("broiler/batches/save/<int:pk>", BroilerBatchWriteView.as_view(),

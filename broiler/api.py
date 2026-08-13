@@ -774,6 +774,32 @@ class DailyEntryLookupView(V1ViewMixin, APIView):
         ))
 
 
+class FarmsForCaptureView(V1ViewMixin, APIView):
+    """GET /api/v1/broiler/farms-for-capture?branch=<id> — a branch's farms
+    that have no Farm Location Capture on record yet.
+
+    Mirrors the web Add-Capture form's own farms queryset
+    (``_capture_form_context`` in ``broiler/views.py``): a farm already
+    captured drops off the "new capture" picker on both sides, since a
+    second visit belongs on Edit, not a second Add.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from user.services.scoping import farms_for
+
+        branch_id = request.query_params.get("branch")
+        qs = farms_for(request.user, BroilerFarm.objects.all())
+        if branch_id:
+            qs = qs.filter(branch_id=branch_id)
+        captured_ids = FarmLocationCapture.objects.values_list("farm_id", flat=True)
+        qs = qs.exclude(id__in=captured_ids).order_by("farm_name")
+        return Response([
+            {"id": f.id, "farm_name": f.farm_name, "farm_code": f.farm_code} for f in qs
+        ])
+
+
 class DailyEntryStockLookupView(V1ViewMixin, APIView):
     """GET /api/v1/broiler/daily-entry-stock?farm=<id>&item=<id>&date=<iso> —
     opening stock for a farm+feed item on that date, i.e. the closing balance

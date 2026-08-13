@@ -24,6 +24,7 @@ from broiler.api import (
     ChicksSourceListView,
     DailyEntryLookupView,
     DailyEntryStockLookupView,
+    FarmsForCaptureView,
     MedicineItemLookupView,
     ReceiptLookupView,
     MedicineStockLookupView,
@@ -175,6 +176,9 @@ urlpatterns = [
          name="broiler-daily-entry-lookup"),
     path("broiler/daily-entry-stock", DailyEntryStockLookupView.as_view(),
          name="broiler-daily-entry-stock"),
+    # Add Capture's farm picker: only farms with no capture on record yet.
+    path("broiler/farms-for-capture", FarmsForCaptureView.as_view(),
+         name="broiler-farms-for-capture"),
     # Stock Transfer row lookups — the UOM/price of an item, and what is
     # actually at the source location on the row's date.
     path("inventory/stock-transfer-item", StockTransferItemLookupView.as_view(),

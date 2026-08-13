@@ -8875,10 +8875,18 @@ def farm_location_capture_api(request):
 
 def _capture_form_context(user, instance=None):
     grouped = _capture_files_by_slot(instance)
+    # A farm already captured drops off the picker — a second visit belongs
+    # on Edit, not a second Add. Excluding every OTHER capture's farm (rather
+    # than every captured farm outright) keeps the farm this instance itself
+    # already holds selectable while editing it.
+    captured_elsewhere = FarmLocationCapture.objects.exclude(
+        pk=instance.pk if instance else None).values_list("farm_id", flat=True)
+    farms_qs = (farms_for(user, BroilerFarm.objects.select_related("farmer", "branch"))
+                .exclude(id__in=captured_elsewhere).order_by("farm_name"))
     return {
         "capture": instance,
         "next_no": FarmLocationCapture._next_no() if not instance else None,
-        "farms": farms_for(user, BroilerFarm.objects.select_related("farmer", "branch").order_by("farm_name")),
+        "farms": farms_qs,
         "branches": branches_for(user, Branch.objects.order_by("branch_name")),
         "today": timezone.localdate().isoformat(),
         # (code, label, files) per slot: carrying the files in the row lets the

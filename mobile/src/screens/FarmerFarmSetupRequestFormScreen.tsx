@@ -386,7 +386,7 @@ export function FarmerFarmSetupRequestFormScreen({ navigation, route }: Props) {
           ? { latitude: Number(values.latitude), longitude: Number(values.longitude), accuracy: null }
           : null,
       });
-      queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/farmer-farm-setup-requests/"] });
+      queryClient.invalidateQueries({ queryKey: ["list", "/broiler/farmer-farm-setup-requests/"] });
       if (written.queued) {
         await notify("Saved on this phone",
           "No signal — this request is stored on the device and will go to the "

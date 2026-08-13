@@ -86,7 +86,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
    * knowing the card was tappable and that Edit and Delete lived one screen
    * further in; on the web they are right there on the row.
    */
-  const actionsFor = (row: Row): RecordAction[] => {
+  const actionsFor = (row: Row, isLastInGroup = true): RecordAction[] => {
     const actions: RecordAction[] = [{
       key: "view", label: "View", icon: "eye-outline",
       onPress: () => navigation.navigate("Detail", { resourceKey: config.key, row }),
@@ -103,8 +103,15 @@ export function ResourceListScreen({ route, navigation }: Props) {
       });
     }
     if (canDelete) {
+      // Same tail-only rule the web register enforces on a grouped feed
+      // (Daily Entry): only the newest row in the group may be deleted on
+      // its own, since every earlier row is still chained into the running
+      // stock/cumulative figures the ones after it were built from. Grey it
+      // out rather than removing it — an absent button reads as "this
+      // record has no Delete", not "not right now."
       actions.push({
         key: "delete", label: "Delete", icon: "trash-can-outline", danger: true,
+        disabled: !isLastInGroup,
         onPress: () => confirmDelete(row),
       });
     }
@@ -137,7 +144,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
     }))) return;
     try {
       await http.post(`/broiler/location-captures/${row.id}/clear`);
-      queryClient.invalidateQueries({ queryKey: ["resource", config.path] });
+      queryClient.invalidateQueries({ queryKey: ["list", config.path] });
     } catch (e) {
       notify("Could not clear", (e as Error)?.message ?? "Please try again.");
     }
@@ -154,7 +161,35 @@ export function ResourceListScreen({ route, navigation }: Props) {
     }))) return;
     try {
       await deleteResource(config.path, row.id as number);
-      queryClient.invalidateQueries({ queryKey: ["resource", config.path] });
+      queryClient.invalidateQueries({ queryKey: ["list", config.path] });
+    } catch (e) {
+      notify("Could not delete", (e as Error)?.message ?? "Please try again.");
+    }
+  };
+
+  /**
+   * The group header's own Delete — wipes every row in the group at once,
+   * same as the web register's "Delete entire batch". Safe to do in one
+   * shot regardless of the tail-only rule on individual rows: nothing is
+   * left behind still chained to what's being removed.
+   */
+  const confirmGroupDelete = async (group: GroupItem) => {
+    const sample = group.rows[0];
+    const batchId = sample.batch;
+    const farmId = sample.farm;
+    if (!(await confirm({
+      title: "Delete all entries?",
+      message: `This will permanently delete ${group.rows.length} `
+             + `${group.rows.length === 1 ? "entry" : "entries"} for ${group.title}. `
+             + "This cannot be undone.",
+      confirmLabel: "Delete All",
+      destructive: true,
+    }))) return;
+    try {
+      await http.delete("/broiler/daily-entries/group", {
+        params: batchId ? { batch: String(batchId) } : { farm: String(farmId) },
+      });
+      queryClient.invalidateQueries({ queryKey: ["list", config.path] });
     } catch (e) {
       notify("Could not delete", (e as Error)?.message ?? "Please try again.");
     }
@@ -297,25 +332,41 @@ export function ResourceListScreen({ route, navigation }: Props) {
           const open = openKeys.has(item.key);
           return (
             <View>
-              <Pressable
-                style={[styles.groupHead, { borderLeftColor: config.accent }]}
-                onPress={() => toggleGroup(item.key)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: open }}
-                accessibilityLabel={`${item.title}, ${item.rows.length} entries`}
-              >
-                <View style={styles.groupText}>
-                  <Text style={styles.groupTitle} numberOfLines={1}>{item.title}</Text>
-                  {item.subtitle ? (
-                    <Text style={styles.groupSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-                  ) : null}
-                </View>
-                <AppIcon
-                  name={open ? "chevron-down" : "chevron-right"}
-                  size={20}
-                  color={colors.textFaint}
-                />
-              </Pressable>
+              <View style={[styles.groupHead, { borderLeftColor: config.accent }]}>
+                <Pressable
+                  style={styles.groupHeadMain}
+                  onPress={() => toggleGroup(item.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
+                  accessibilityLabel={`${item.title}, ${item.rows.length} entries`}
+                >
+                  <View style={styles.groupText}>
+                    <Text style={styles.groupTitle} numberOfLines={1}>{item.title}</Text>
+                    {item.subtitle ? (
+                      <Text style={styles.groupSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                    ) : null}
+                  </View>
+                  <AppIcon
+                    name={open ? "chevron-down" : "chevron-right"}
+                    size={20}
+                    color={colors.textFaint}
+                  />
+                </Pressable>
+                {/* Group-level Delete, same as the web register's "Delete
+                    entire batch" — wipes every row in one shot rather than
+                    the tail-only rule individual rows are held to. */}
+                {canDelete ? (
+                  <Pressable
+                    style={styles.groupDelete}
+                    onPress={() => confirmGroupDelete(item)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete all entries for ${item.title}`}
+                  >
+                    <AppIcon name="trash-can-outline" size={18} color={colors.danger} />
+                  </Pressable>
+                ) : null}
+              </View>
               {open
                 ? item.rows.map((row) => (
                     <View key={String(row.id)} style={styles.groupChild}>
@@ -323,6 +374,7 @@ export function ResourceListScreen({ route, navigation }: Props) {
                         view={config.card(row)}
                         icon={config.icon}
                         accent={config.accent}
+                        actions={actionsFor(row, row === item.rows[item.rows.length - 1])}
                         onPress={() =>
                           navigation.navigate("Detail", { resourceKey: config.key, row })
                         }
@@ -386,6 +438,8 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
   },
+  groupHeadMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  groupDelete: { padding: spacing.xs },
   groupText: { flex: 1 },
   groupTitle: { ...type.title, color: colors.text },
   groupSubtitle: { ...type.caption, color: colors.textMuted, marginTop: 2 },

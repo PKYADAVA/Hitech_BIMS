@@ -243,7 +243,7 @@ export function MedicineEntryFormScreen({ navigation }: Props) {
           remarks,
         })),
       });
-      queryClient.invalidateQueries({ queryKey: ["resource", "/broiler/medicine-vaccine-entries/"] });
+      queryClient.invalidateQueries({ queryKey: ["list", "/broiler/medicine-vaccine-entries/"] });
       navigation.goBack();
     } catch (e: unknown) {
       const message = (e as { message?: string })?.message;
