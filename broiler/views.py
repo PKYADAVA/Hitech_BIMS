@@ -5305,12 +5305,18 @@ def _live_flock_row(batch, today):
         sold_by_date[_bs["date"]] = _bs["t"] or 0
     _alive = int(placed)
     _cum_pb = Decimal("0")
+    _last_day_pb = None
     for _de in DailyEntry.objects.filter(batch=batch).order_by("date", "id"):
         _fd = _num(_de.feed_1_qty) + _num(_de.feed_2_qty)
-        if _alive > 0 and _fd:
-            _cum_pb += _fd / Decimal(_alive) * Decimal("1000")
+        _last_day_pb = (_fd / Decimal(_alive) * Decimal("1000")) if _alive > 0 and _fd else Decimal("0")
+        _cum_pb += _last_day_pb
         _alive -= (_de.mortality or 0) + (_de.culls or 0) + sold_by_date.get(_de.date, 0)
     act_feed_bird_live = _cum_pb.quantize(q2)
+    # The most recently recorded day's own feed/bird — the last loop
+    # iteration above, since entries are walked oldest to newest. None (not
+    # zero) when the batch has no daily entry yet, so the column reads "-"
+    # rather than claiming a day that was never recorded consumed nothing.
+    actual_current_day_feed_bird = _last_day_pb.quantize(q2) if _last_day_pb is not None else None
     std_feed_bird_daily = std.feed_intake if std else None
 
     return {
@@ -5342,7 +5348,6 @@ def _live_flock_row(batch, today):
         "feed_transferred": feed_sent, "transfer_in_farms": transfer_in_farms,
         "std_feed_con": std_feed_con, "std_feed_con_bird": std.cum_feed if std else None,
         "feed_con": feed_consumed,
-        "feed_con_bird": actual_feed_per_bird.quantize(q2) if actual_feed_per_bird is not None else None,
         "std_feed_at_bwt": std_feed_at_bwt.quantize(q2) if std_feed_at_bwt is not None else None,
         "std_feed_at_bwt_bird": std_feed_at_bwt_g.quantize(q2) if std_feed_at_bwt_g is not None else None,
         "transfer_out_farms": transfer_out_farms, "feed_balance": feed_balance,
@@ -5352,6 +5357,7 @@ def _live_flock_row(batch, today):
         "feed_phase": phase_name, "next_phase": next_phase,
         "phase_cap": phase_cap, "phase_cum_bird": phase_cum_bird,
         "act_feed_bird_live": act_feed_bird_live,
+        "actual_current_day_feed_bird": actual_current_day_feed_bird,
         "std_feed_bird_daily": std_feed_bird_daily,
         "remark": remark, "remark_verdict": remark.split(" — ")[0],
     }
