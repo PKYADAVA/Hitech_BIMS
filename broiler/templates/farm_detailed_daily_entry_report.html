@@ -132,9 +132,10 @@
           <td data-c="feed_2_con" class="num">{{ r.feed_2_con|floatformat:2 }}</td>
           <td data-c="feed_stock" class="num">{{ r.feed_stock|floatformat:2 }}</td>
           <td data-c="cum_feed" class="num">{{ r.cum_feed|floatformat:2 }}</td>
-          <td data-c="cum_feed_per_bird" class="num">{{ r.cum_feed_per_bird|floatformat:2 }}</td>
           <td data-c="std_feed_per_bird" class="num">{% if r.std_feed_per_bird is not None %}{{ r.std_feed_per_bird|floatformat:2 }}{% else %}-{% endif %}</td>
           <td data-c="act_feed_per_bird" class="num">{{ r.act_feed_per_bird|floatformat:2 }}</td>
+          <td data-c="std_cum_feed_per_bird" class="num">{% if r.std_cum_feed_per_bird is not None %}{{ r.std_cum_feed_per_bird|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td data-c="cum_feed_per_bird" class="num">{{ r.cum_feed_per_bird|floatformat:2 }}</td>
           <td data-c="diseases_name" class="txt">{% if r.diseases_name %}{{ r.diseases_name }}{% else %}<span class="drr-muted">—</span>{% endif %}</td>
           <td data-c="remarks" class="txt">{{ r.remarks|default:"-" }}</td>
           <td data-c="line" class="txt">{{ r.line|default:"-" }}</td>
@@ -146,7 +147,7 @@
           <td data-c="entry_location" class="txt">{% if r.entry_location %}<a href="https://maps.google.com/?q={{ r.entry_location|urlencode }}" target="_blank" rel="noopener">{{ r.entry_location }}</a>{% else %}<span class="drr-muted">—</span>{% endif %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="49" class="text-center text-muted py-4">No daily entries in {{ from_date|date:"d.m.Y" }} – {{ to_date|date:"d.m.Y" }} with these filters.</td></tr>
+        <tr><td colspan="50" class="text-center text-muted py-4">No daily entries in {{ from_date|date:"d.m.Y" }} – {{ to_date|date:"d.m.Y" }} with these filters.</td></tr>
         {% endfor %}
       </tbody>
       {% if rows %}
@@ -175,7 +176,8 @@
         <td data-c="feed_2_item"></td>
         <td data-c="feed_2_con" class="num">{{ totals.feed_2_con|floatformat:2 }}</td>
         <td data-c="feed_stock"></td><td data-c="cum_feed"></td>
-        <td data-c="cum_feed_per_bird"></td><td data-c="std_feed_per_bird"></td><td data-c="act_feed_per_bird"></td>
+        <td data-c="std_feed_per_bird"></td><td data-c="act_feed_per_bird"></td>
+        <td data-c="std_cum_feed_per_bird"></td><td data-c="cum_feed_per_bird"></td>
         <td data-c="diseases_name"></td><td data-c="remarks"></td><td data-c="line"></td><td data-c="branch"></td>
         <td data-c="farmer_contact"></td><td data-c="entry_time"></td><td data-c="entry_by"></td>
         <td data-c="farm_location"></td><td data-c="entry_location"></td>

@@ -5413,7 +5413,35 @@ def _haversine_km(lat1, lon1, lat2, lon2):
     return r * 2 * math.asin(math.sqrt(a))
 
 
-def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale):
+def _cum_act_feed_per_bird_map(batch, placed, BirdSale):
+    """Per batch: the running sum of each of its days' own Act Feed/Bird
+    (that day's feed intake over that day's opening bird count), keyed by
+    date — i.e. the cumulative of the daily actual, not total feed to date
+    over the original placed count. The two diverge as a flock shrinks: the
+    latter understates what the birds still standing were actually fed,
+    since it spreads every day's feed back over the day-one headcount."""
+    q2 = Decimal("0.01")
+    out = {}
+    if not batch:
+        return out
+    entries = list(DailyEntry.objects.filter(batch=batch).order_by("date", "id")
+                    .values("date", "mortality", "culls", "feed_1_qty", "feed_2_qty"))
+    from django.db.models import Sum as _Sum
+    sold_by_date = {
+        r["date"]: _num(r["b"]) for r in
+        BirdSale.objects.filter(batch=batch).values("date").annotate(b=_Sum("birds"))
+    }
+    opening = placed
+    cum = Decimal("0")
+    for row in entries:
+        feed_con = _num(row["feed_1_qty"]) + _num(row["feed_2_qty"])
+        cum += _div(feed_con * 1000, opening)
+        out[row["date"]] = cum.quantize(q2)
+        opening = opening - _num(row["mortality"]) - _num(row["culls"]) - sold_by_date.get(row["date"], Decimal("0"))
+    return out
+
+
+def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale, cum_act_cache=None):
     """One Day Record row for a single DailyEntry `e` recorded on `sel_date`.
     Everything on the day (mort/cull/sold/feed) plus the cumulative figures to
     that date and the breed-standard comparison. Image/disease/entry-geo columns
@@ -5427,6 +5455,9 @@ def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfe
         placed_cache[batch.id] = _num(StockTransfer.objects.filter(
             to_batch_id=batch.id, item_id__in=chick_ids).aggregate(t=_Sum("quantity"))["t"])
     placed = placed_cache.get(batch.id, Decimal("0")) if batch else Decimal("0")
+
+    if cum_act_cache is not None and batch and batch.id not in cum_act_cache:
+        cum_act_cache[batch.id] = _cum_act_feed_per_bird_map(batch, placed, BirdSale)
 
     def _de_agg(flt):
         r = DailyEntry.objects.filter(**flt).aggregate(
@@ -5524,9 +5555,15 @@ def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfe
         "feed_1_con": _num(e.feed_1_qty).quantize(q2),
         "feed_2_item": e.feed_2.description if e.feed_2_id else "",
         "feed_2_con": _num(e.feed_2_qty).quantize(q2),
-        "cum_feed_per_bird": _div(feed_upto * 1000, placed).quantize(q2),   # g/bird cumulative
+        # g/bird, cumulative: the running sum of each day's own Act Feed/Bird,
+        # not feed_upto/placed — that would spread every day's feed back over
+        # the day-one headcount, understating it once the flock has shrunk.
+        "cum_feed_per_bird": (cum_act_cache.get(batch.id, {}).get(sel_date, Decimal("0"))
+                               if cum_act_cache is not None and batch
+                               else _div(feed_upto * 1000, placed).quantize(q2)),
         "std_feed_per_bird": std.feed_intake if std else None,              # g/bird/day standard
         "act_feed_per_bird": _div(feed_con * 1000, opening).quantize(q2),   # g/bird today
+        "std_cum_feed_per_bird": std.cum_feed if std else None,             # g/bird cumulative, standard
         "line": farm.line if farm else "",
         "branch": farm.branch.branch_name if farm and farm.branch_id else "",
         "farmer_contact": (farmer.mobile_no or farmer.phone_no or "") if farmer else "",
@@ -5587,8 +5624,10 @@ def day_record_report(request):
     feed_ids = list(feed_items().values_list("id", flat=True))
     chick_ids = list(chick_items().values_list("id", flat=True))
     placed_cache = {}
+    cum_act_cache = {}
 
-    rows = [_day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale)
+    rows = [_day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale,
+                             cum_act_cache=cum_act_cache)
             for e in entries]
 
     # Total footer over the summable columns
@@ -5657,8 +5696,10 @@ def farm_detailed_daily_entry_report(request):
     feed_ids = list(feed_items().values_list("id", flat=True))
     chick_ids = list(chick_items().values_list("id", flat=True))
     placed_cache = {}
+    cum_act_cache = {}
 
-    rows = [_day_record_row(e, e.date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale)
+    rows = [_day_record_row(e, e.date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale,
+                             cum_act_cache=cum_act_cache)
             for e in entries]
 
     # Total footer over the daily flow columns only (stock/cumulative columns
@@ -5684,8 +5725,9 @@ def farm_detailed_daily_entry_report(request):
         ("feed_1_item", "Feed-1 Item"), ("feed_1_con", "Feed-1 Con"),
         ("feed_2_item", "Feed-2 Item"), ("feed_2_con", "Feed-2 Con"),
         ("feed_stock", "Feed Stock"), ("cum_feed", "Cum. Feed"),
-        ("cum_feed_per_bird", "Cum. Feed/Bird"), ("std_feed_per_bird", "Std Feed/Bird"),
-        ("act_feed_per_bird", "Act Feed/Bird"), ("diseases_name", "Diseases Names"),
+        ("std_feed_per_bird", "Std Feed/Bird"), ("act_feed_per_bird", "Act Feed/Bird"),
+        ("std_cum_feed_per_bird", "Std Cumulative Feed/Bird"), ("cum_feed_per_bird", "Act Cumulative Feed/Bird"),
+        ("diseases_name", "Diseases Names"),
         ("remarks", "Remarks"), ("line", "Line"), ("branch", "Branch"),
         ("farmer_contact", "Farmer Contact"), ("entry_time", "Entry Time"),
         ("entry_by", "Entry By"), ("farm_location", "Farm Location"),
