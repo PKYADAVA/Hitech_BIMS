@@ -33,9 +33,9 @@ class _ShimRequest:
     """Minimal stand-in for the Django request the web posting helpers expect:
     they only ever touch ``.POST.get(...)`` and ``.FILES.get(...)``."""
 
-    def __init__(self, post: dict, user):
+    def __init__(self, post: dict, user, files=None):
         self.POST = post
-        self.FILES = {}
+        self.FILES = files if files is not None else {}
         self.user = user
         self.method = "POST"
 
@@ -53,17 +53,43 @@ def _s(v) -> str:
 def _load_general_purchase(o) -> dict:
     return {
         "header": {
+            "purchase_no": o.purchase_no or "",
             "date": _s(o.date), "supplier": _s(o.supplier_id),
             "bill_no": o.bill_no or "", "dc_no": o.dc_no or "",
+            "vehicle_no": o.vehicle_no or "", "driver_name": o.driver_name or "",
+            "driver_mobile": o.driver_mobile or "",
             "calculation_based_on": o.calculation_based_on or "Sent Quantity",
-            "freight_type": o.freight_type or "Extra", "freight_amount": _s(o.freight_amount),
+            "payment_terms": o.payment_terms or "Cash",
+            # "Extra" was retired as a value; a header with none recorded is
+            # one where nobody said there was any carriage.
+            "freight_type": o.freight_type or "No Freight",
+            "freight_settlement": o.freight_settlement or "In Purchase Bill",
+            "freight_transporter": o.freight_transporter or "",
+            "freight_amount": _s(o.freight_amount),
+            "payment_mode": o.payment_mode or "pay_later",
+            "pay_account": _s(o.pay_account_id), "freight_account": _s(o.freight_account_id),
+            "bag_type": o.bag_type or "", "no_of_bags": _s(o.no_of_bags),
+            "batch_no": o.batch_no or "", "expiry_date": _s(o.expiry_date),
+            "tds_code": o.tds_code or "", "tds_applicable": bool(o.tds_applicable),
+            "tds_amount": _s(o.tds_amount),
+            "other_charges_account": _s(o.other_charges_account_id),
+            "other_charges_type": o.other_charges_type or "Add",
+            "other_charges_amount": _s(o.other_charges_amount),
+            "round_off_type": o.round_off_type or "Add", "round_off": _s(o.round_off),
+            "net_amount": _s(o.net_amount),
             "remarks": o.remarks or "",
+            "reference_document_1": o.reference_document_1.url if o.reference_document_1 else None,
+            "reference_document_2": o.reference_document_2.url if o.reference_document_2 else None,
+            "reference_document_3": o.reference_document_3.url if o.reference_document_3 else None,
         },
         "items": [{
-            "item": _s(i.item_id), "farm_warehouse": _s(i.farm_warehouse_id),
-            "unit": i.unit or "", "sent_qty": _s(i.sent_qty), "rcv_qty": _s(i.rcv_qty),
+            "item": _s(i.item_id), "unit": i.unit or "",
+            "destination": f"farm:{i.farm_id}" if i.farm_id else (f"warehouse:{i.farm_warehouse_id}" if i.farm_warehouse_id else ""),
+            "batch": _s(i.batch_id),
+            "sent_qty": _s(i.sent_qty), "rcv_qty": _s(i.rcv_qty),
             "free_qty": _s(i.free_qty), "rate": _s(i.rate),
-            "discount_percent": _s(i.discount_percent), "gst_percent": _s(i.gst_percent),
+            "discount_percent": _s(i.discount_percent), "discount_amount": _s(i.discount_amount),
+            "gst_percent": _s(i.gst_percent),
         } for i in o.items.all()],
     }
 
@@ -73,7 +99,12 @@ def _load_chicks_purchase(o) -> dict:
         "header": {
             "date": _s(o.date), "supplier": _s(o.supplier_id), "hatchery": _s(o.hatchery_id),
             "item": _s(o.item_id), "bill_no": o.bill_no or "", "dc_no": o.dc_no or "",
-            "freight_type": o.freight_type or "Extra", "freight_amount": _s(o.freight_amount),
+            # "Extra" was retired as a value; a header with none recorded is
+            # one where nobody said there was any carriage.
+            "freight_type": o.freight_type or "No Freight",
+            "freight_settlement": o.freight_settlement or "In Purchase Bill",
+            "freight_transporter": o.freight_transporter or "",
+            "freight_amount": _s(o.freight_amount),
             "remarks": o.remarks or "",
         },
         "items": [{
@@ -103,15 +134,27 @@ def _messages(exc: DjangoValidationError) -> str:
 def _write_document(spec, request, instance=None) -> Response:
     """Apply header + line items using the web helpers, inside one transaction."""
     model, apply_fn, save_lines_fn, lines_key, exclude, require_line = spec[:6]
-    data = dict(request.data)
+    # request.data is a QueryDict for a multipart body (file uploads); dict()
+    # on it copies the internal multi-value lists verbatim instead of the
+    # last-value-per-key a plain POST field is. QueryDict.dict() collapses it
+    # correctly. A JSON body is already a plain dict, unaffected either way.
+    data = request.data.dict() if hasattr(request.data, "dict") else dict(request.data)
     # The helpers read the lines as a JSON string under a specific POST key.
     lines = data.pop("items", None)
     if lines is None:
         lines = data.pop("lines", None)
+    # A multipart body (needed for reference document uploads) can only carry
+    # strings, so the mobile client sends the row array pre-stringified — a
+    # plain JSON body still hands over a real list, which passes through as-is.
+    if isinstance(lines, str):
+        try:
+            lines = json.loads(lines)
+        except json.JSONDecodeError:
+            lines = []
     post = {k: ("" if v is None else v) for k, v in data.items()}
     post[lines_key] = json.dumps(lines or [])
 
-    shim = _ShimRequest(post, request.user)
+    shim = _ShimRequest(post, request.user, request.FILES)
     inst = instance or model()
     try:
         apply_fn(inst, shim)

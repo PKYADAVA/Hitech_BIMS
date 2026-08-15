@@ -156,9 +156,27 @@ const fSupplier = (required = false): DocField => ({
 const fWarehouse = (name: string, label: string, required = false): DocField => ({
   name, label, type: "select", optionsPath: WAREHOUSE_PATH, optionLabelKeys: ["name", "code"], required,
 });
+// Three states now, so a toggle no longer covers it. The values are the ones
+// the server stores: "Extra" and "Included in Bill" were retired, and a form
+// still posting either is rejected rather than quietly filed under a freight
+// arrangement nobody chose.
 const fFreightType = (): DocField => ({
-  name: "freight_type", label: "Freight Type", type: "toggle",
-  options: [{ value: "Extra", label: "Extra" }, { value: "Included in Bill", label: "Included in Bill" }],
+  name: "freight_type", label: "Freight Type", type: "select",
+  options: [
+    { value: "No Freight", label: "No Freight" },
+    { value: "Freight Included", label: "Freight Included" },
+    { value: "Freight Extra", label: "Freight Extra" },
+  ],
+});
+// Which bill the carriage lands on. Only meaningful for freight charged on
+// top — the server forces it back for the other two, so a phone that sends
+// the default does no harm.
+const fFreightSettlement = (): DocField => ({
+  name: "freight_settlement", label: "Freight Settlement", type: "select",
+  options: [
+    { value: "In Purchase Bill", label: "Included in Purchase Bill" },
+    { value: "Separate Bill", label: "Separate Freight Bill" },
+  ],
 });
 const fText = (name: string, label: string): DocField => ({ name, label, type: "text" });
 const fDec = (name: string, label: string, required = false): DocField => ({ name, label, type: "decimal", required });
@@ -592,6 +610,8 @@ export const DOCUMENTS: Record<string, DocConfig> = {
         ],
       },
       fFreightType(),
+      fFreightSettlement(),
+      fText("freight_transporter", "Transporter"),
       fDec("freight_amount", "Freight Amount"),
       fText("remarks", "Remarks"),
     ],
@@ -612,7 +632,11 @@ export const DOCUMENTS: Record<string, DocConfig> = {
       bill_no: h.bill_no || "",
       dc_no: h.dc_no || "",
       calculation_based_on: h.calculation_based_on || "Sent Quantity",
-      freight_type: h.freight_type || "Extra",
+      // No Freight, not the old "Extra": a header that never had the field
+      // filled in is one where nobody said there was any carriage.
+      freight_type: h.freight_type || "No Freight",
+      freight_settlement: h.freight_settlement || "In Purchase Bill",
+      freight_transporter: h.freight_transporter || "",
       freight_amount: h.freight_amount || "0",
       remarks: h.remarks || "",
       items: items
@@ -646,6 +670,8 @@ export const DOCUMENTS: Record<string, DocConfig> = {
       fText("bill_no", "Bill No."),
       fText("dc_no", "DC No."),
       fFreightType(),
+      fFreightSettlement(),
+      fText("freight_transporter", "Transporter"),
       fDec("freight_amount", "Freight Amount"),
       fText("remarks", "Remarks"),
     ],
@@ -666,7 +692,11 @@ export const DOCUMENTS: Record<string, DocConfig> = {
       item: h.item || null,
       bill_no: h.bill_no || "",
       dc_no: h.dc_no || "",
-      freight_type: h.freight_type || "Extra",
+      // No Freight, not the old "Extra": a header that never had the field
+      // filled in is one where nobody said there was any carriage.
+      freight_type: h.freight_type || "No Freight",
+      freight_settlement: h.freight_settlement || "In Purchase Bill",
+      freight_transporter: h.freight_transporter || "",
       freight_amount: h.freight_amount || "0",
       remarks: h.remarks || "",
       items: items

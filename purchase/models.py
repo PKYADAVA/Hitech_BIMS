@@ -207,7 +207,8 @@ class GeneralPurchase(models.Model):
     calculation_based_on = models.CharField(max_length=20, choices=CALC_BASIS_CHOICES, default="Sent Quantity")
     payment_terms = models.CharField(max_length=20, choices=PAYMENT_TERMS_CHOICES, default="Cash")
 
-    freight_type = models.CharField(max_length=20, choices=FREIGHT_TYPE_CHOICES, default="Extra")
+    freight_type = models.CharField(max_length=20, choices=FREIGHT_TYPE_CHOICES,
+                                    default="No Freight")
     payment_mode = models.CharField(max_length=15, choices=PAYMENT_MODE_CHOICES, default="pay_later")
     pay_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name="general_purchase_pay_accounts")
@@ -478,7 +479,8 @@ class ChicksPurchase(models.Model):
     vehicle_no = models.CharField(max_length=50, blank=True)
     driver_name = models.CharField(max_length=100, blank=True)
 
-    freight_type = models.CharField(max_length=20, choices=FREIGHT_TYPE_CHOICES, default="Extra")
+    freight_type = models.CharField(max_length=20, choices=FREIGHT_TYPE_CHOICES,
+                                    default="No Freight")
     payment_mode = models.CharField(max_length=15, choices=PAYMENT_MODE_CHOICES, default="pay_later")
     pay_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name="chicks_purchase_pay_accounts")
