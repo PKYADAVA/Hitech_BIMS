@@ -22,6 +22,8 @@ export type ModuleStackParams = {
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
+  /** Add photo evidence to a lifting that is already filed — adds only. */
+  BirdSalePhotos: { row: Row };
   /** Bespoke Bird Receipt form (customer/farmer toggle). */
   BirdSaleReceiptForm: { mode: "create" | "edit"; row?: Row };
   /**

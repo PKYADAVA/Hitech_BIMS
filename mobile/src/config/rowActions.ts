@@ -15,7 +15,7 @@ import { RecordAction } from "@/components/RecordCard";
  * here would need a cast at every call site and would let a typo through.
  */
 export type RowActionNavigate = (
-  screen: "SupervisorTripForm" | "FarmCaptureFill",
+  screen: "SupervisorTripForm" | "FarmCaptureFill" | "BirdSalePhotos",
   params: { row: Row; ending?: boolean },
 ) => void;
 
@@ -88,6 +88,25 @@ function clearLocationAction(row: Row, onClear: () => void): RecordAction {
   };
 }
 
+/**
+ * Attach the photographs a lifting was raised without.
+ *
+ * The evidence is often later than the sale: the weighbridge slip is handed
+ * over after the truck has gone, and a sale raised at the desk from a slip
+ * brought back has no pictures at all. Editing the sale to add one means
+ * re-submitting a record that is already right — and re-submitting a lifting
+ * is how a quantity gets changed by accident — so the upload stands on its own
+ * and only ever adds.
+ */
+function uploadPhotosAction(row: Row, navigate: RowActionNavigate): RecordAction {
+  return {
+    key: "upload",
+    label: "Upload",
+    icon: "cloud-upload-outline",
+    onPress: () => navigate("BirdSalePhotos", { row }),
+  };
+}
+
 export function extraRowActions(
   resourceKey: string,
   row: Row,
@@ -97,6 +116,10 @@ export function extraRowActions(
 ): RecordAction[] {
   if (resourceKey === "hr-supervisor-trips") {
     return perms.edit ? [endTripAction(row, navigate)] : [];
+  }
+  if (resourceKey === "broiler-bird-sales") {
+    // Gated on edit, as amending the sale is: this adds to a filed record.
+    return perms.edit ? [uploadPhotosAction(row, navigate)] : [];
   }
   if (resourceKey === "broiler-farm-location-capture") {
     const out: RecordAction[] = [];

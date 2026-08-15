@@ -115,10 +115,11 @@ export function ResourceListScreen({ route, navigation }: Props) {
         onPress: () => confirmDelete(row),
       });
     }
-    // Resource-specific actions (ending a trip, filling a capture) sit after
-    // the standard three. Each gates itself: the ERP offers "+" to whoever may
-    // add and the eraser to whoever may edit, and one shared check here made
-    // both of them follow whichever right happened to be tested.
+    // Resource-specific actions (ending a trip, filling a capture, uploading
+    // a lifting's photographs) sit after the standard three. Each gates
+    // itself: the ERP offers "+" to whoever may add and the eraser to whoever
+    // may edit, and one shared check here made both of them follow whichever
+    // right happened to be tested.
     actions.push(...extraRowActions(
       config.key, row,
       (screen, params) => (navigation.navigate as (s: string, p: unknown) => void)(

@@ -16,6 +16,7 @@ import { MODULE_ICON, MODULE_PRIMARY } from "@/config/modulePrimary";
 import { openRecordForm } from "@/navigation/openForm";
 import { BatchFormScreen } from "@/screens/BatchFormScreen";
 import { BirdSaleFormScreen } from "@/screens/BirdSaleFormScreen";
+import { BirdSalePhotosScreen } from "@/screens/BirdSalePhotosScreen";
 import { BirdSaleReceiptFormScreen } from "@/screens/BirdSaleReceiptFormScreen";
 import { DailyEntryGridScreen } from "@/screens/DailyEntryGridScreen";
 import { DocumentFormScreen } from "@/screens/DocumentFormScreen";
@@ -204,6 +205,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="Form" component={FormScreen} />
       <ModuleStack.Screen name="BatchForm" component={BatchFormScreen} />
       <ModuleStack.Screen name="BirdSaleForm" component={BirdSaleFormScreen} />
+      <ModuleStack.Screen name="BirdSalePhotos" component={BirdSalePhotosScreen} />
       <ModuleStack.Screen name="BirdSaleReceiptForm" component={BirdSaleReceiptFormScreen} />
       <ModuleStack.Screen name="DailyEntryGrid" component={DailyEntryGridScreen} />
       <ModuleStack.Screen name="MedicineEntryForm" component={MedicineEntryFormScreen} />
