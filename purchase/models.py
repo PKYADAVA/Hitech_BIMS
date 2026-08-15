@@ -164,7 +164,20 @@ class GeneralPurchase(models.Model):
     CALC_BASIS_CHOICES = [
         ("Sent Quantity", "Sent Quantity"), ("Received Quantity", "Received Quantity"),
     ]
-    FREIGHT_TYPE_CHOICES = [("Included in Bill", "Included in Bill"), ("Extra", "Extra")]
+    #: Three states, and only one of them touches the bill.
+    #:
+    #:  No Freight        nothing was charged; the amount and the account are
+    #:                    dead, and no freight entry is generated.
+    #:  Freight Included  the carriage is already inside the supplier's price.
+    #:                    The amount is still captured, because landed cost
+    #:                    needs to know how much of the price was carriage —
+    #:                    but adding it to the invoice would charge it twice.
+    #:  Freight Extra     the supplier billed it on top. It is added.
+    FREIGHT_TYPE_CHOICES = [
+        ("No Freight", "No Freight"),
+        ("Freight Included", "Freight Included"),
+        ("Freight Extra", "Freight Extra"),
+    ]
     PAYMENT_MODE_CHOICES = [("pay_later", "Pay Later"), ("pay_in_bill", "Pay In Bill")]
     OTHER_CHARGES_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
     ROUND_OFF_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
@@ -223,6 +236,17 @@ class GeneralPurchase(models.Model):
         return self.purchase_no
 
     def save(self, *args, **kwargs):
+        # "No Freight" means there is nothing to carry: the amount is cleared
+        # and the account released, here rather than only in the browser. A
+        # disabled input is a courtesy to the person typing, not a rule — the
+        # save path takes whatever is posted to it, and a figure left behind
+        # under a type that says there is no freight is one that lands in a
+        # landed-cost or ledger read later with nothing on the page explaining
+        # where it came from.
+        if self.freight_type == "No Freight":
+            self.freight_amount = 0
+            self.freight_account = None
+
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new and not self.purchase_no:
@@ -254,8 +278,13 @@ class GeneralPurchase(models.Model):
         return round(self.gross_amount() / qty, 2) if qty else 0
 
     def freight_included_amount(self):
+        """Goods value plus freight, but only where freight is charged on top.
+
+        "Freight Included" means the carriage is already inside the price the
+        supplier quoted, so adding it here would bill it a second time.
+        """
         base = self.gross_amount()
-        return base + (self.freight_amount if self.freight_type == "Included in Bill" else 0)
+        return base + (self.freight_amount if self.freight_type == "Freight Extra" else 0)
 
     def other_charges_signed(self):
         return -self.other_charges_amount if self.other_charges_type == "Deduct" else self.other_charges_amount
@@ -365,7 +394,20 @@ class ChicksPurchase(models.Model):
     transaction, received in one or more batch rows with their own
     mortality/shortage/weak-chick reconciliation (Purchase > Transactions)."""
 
-    FREIGHT_TYPE_CHOICES = [("Included in Bill", "Included in Bill"), ("Extra", "Extra")]
+    #: Three states, and only one of them touches the bill.
+    #:
+    #:  No Freight        nothing was charged; the amount and the account are
+    #:                    dead, and no freight entry is generated.
+    #:  Freight Included  the carriage is already inside the supplier's price.
+    #:                    The amount is still captured, because landed cost
+    #:                    needs to know how much of the price was carriage —
+    #:                    but adding it to the invoice would charge it twice.
+    #:  Freight Extra     the supplier billed it on top. It is added.
+    FREIGHT_TYPE_CHOICES = [
+        ("No Freight", "No Freight"),
+        ("Freight Included", "Freight Included"),
+        ("Freight Extra", "Freight Extra"),
+    ]
     PAYMENT_MODE_CHOICES = [("pay_later", "Pay Later"), ("pay_in_bill", "Pay In Bill")]
     OTHER_CHARGES_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
     ROUND_OFF_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
@@ -424,6 +466,17 @@ class ChicksPurchase(models.Model):
         return self.purchase_no
 
     def save(self, *args, **kwargs):
+        # "No Freight" means there is nothing to carry: the amount is cleared
+        # and the account released, here rather than only in the browser. A
+        # disabled input is a courtesy to the person typing, not a rule — the
+        # save path takes whatever is posted to it, and a figure left behind
+        # under a type that says there is no freight is one that lands in a
+        # landed-cost or ledger read later with nothing on the page explaining
+        # where it came from.
+        if self.freight_type == "No Freight":
+            self.freight_amount = 0
+            self.freight_account = None
+
         is_new = self._state.adding
         super().save(*args, **kwargs)
         if is_new and not self.purchase_no:
@@ -454,8 +507,13 @@ class ChicksPurchase(models.Model):
         return round(self.gross_amount() / qty, 2) if qty else 0
 
     def freight_included_amount(self):
+        """Goods value plus freight, but only where freight is charged on top.
+
+        "Freight Included" means the carriage is already inside the price the
+        supplier quoted, so adding it here would bill it a second time.
+        """
         base = self.gross_amount()
-        return base + (self.freight_amount if self.freight_type == "Included in Bill" else 0)
+        return base + (self.freight_amount if self.freight_type == "Freight Extra" else 0)
 
     def other_charges_signed(self):
         return -self.other_charges_amount if self.other_charges_type == "Deduct" else self.other_charges_amount

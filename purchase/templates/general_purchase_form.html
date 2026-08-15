@@ -158,6 +158,7 @@
         <div class="col-md-2">
           <label class="form-label">Freight Amount</label>
           <input type="number" min="0" step=".01" class="form-control" name="freight_amount" id="freight_amount" value="{{ general_purchase.freight_amount|default:'0' }}">
+          <div class="form-text" id="freight_note"></div>
         </div>
       </div>
     </div>
@@ -407,7 +408,9 @@ function totals() {
   const gross = grossAmount();
   get('total_amount').textContent = gross.toFixed(2);
 
-  const freight = value('freight_type') === 'Included in Bill' ? (Number(value('freight_amount')) || 0) : 0;
+  // Only freight charged on top belongs in the bill; freight already
+  // inside the supplier's price would be counted twice.
+  const freight = value('freight_type') === 'Freight Extra' ? (Number(value('freight_amount')) || 0) : 0;
   const otherRaw = Number(value('other_charges_amount')) || 0;
   const other = value('other_charges_type') === 'Deduct' ? -otherRaw : otherRaw;
   const tds = get('tds_applicable').checked ? (Number(value('tds_amount')) || 0) : 0;
@@ -436,10 +439,53 @@ get('item-table').addEventListener('click', e => {
 document.querySelectorAll('input[name="calculation_based_on"]').forEach(el => el.addEventListener('change', () => {
   document.querySelectorAll('#item-table tbody tr').forEach(calcRow);
 }));
+// --- Freight type drives the two fields beside it -------------------------
+// No Freight: nothing was charged, so the amount is zeroed and both fields go
+// dead — a figure left in a disabled box still posts, and would land in the
+// ledger under a type that says there is no freight.
+// Freight Included: the carriage is inside the supplier's price. The amount is
+// still captured, because landed cost needs to know how much of that price was
+// carriage, but it is not added to the bill again.
+// Freight Extra: billed on top, and added.
+function applyFreightType() {
+  const type = value('freight_type');
+  const amount = document.getElementById('freight_amount');
+  const account = document.querySelector('[name="freight_account"]');
+  const none = type === 'No Freight';
+  if (amount) {
+    amount.disabled = none;
+    if (none) amount.value = '0';
+  }
+  if (account) {
+    account.disabled = none;
+    if (none) {
+      account.value = '';
+      if (window.jQuery && jQuery(account).data('select2')) {
+        jQuery(account).val('').trigger('change.select2');
+      }
+    }
+  }
+  const note = document.getElementById('freight_note');
+  if (note) {
+    note.textContent = none ? 'No freight on this bill.'
+      : type === 'Freight Included'
+        ? 'Already inside the supplier’s price — not added to the total.'
+        : 'Charged on top — added to the total.';
+  }
+}
+
 ['freight_type', 'freight_amount', 'other_charges_type', 'other_charges_amount', 'tds_amount', 'tds_applicable'].forEach(id => {
   get(id).addEventListener('input', totals);
   get(id).addEventListener('change', totals);
 });
+
+// Run on every change of type, and once on load so an existing bill opens in
+// the state its own freight type calls for rather than in the default one.
+get('freight_type').addEventListener('change', function () {
+  applyFreightType();
+  totals();
+});
+applyFreightType();
 
 get('general-purchase-form').addEventListener('submit', function (e) {
   const rows = [...document.querySelectorAll('#item-table tbody tr')].map(tr => ({
