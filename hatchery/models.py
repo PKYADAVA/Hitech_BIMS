@@ -253,9 +253,12 @@ class EggPurchase(models.Model):
         ('Include', _('Include')),
         ('Exclude', _('Exclude')),
     ]
+    #: Whether the bill has been settled, not when it is due. "Pay In Bill"
+    #: read as an instruction about timing, which is a different question.
+    #: The stored values are unchanged.
     PAYMENT_MODE_CHOICES = [
-        ('pay_later', _('Pay Later')),
-        ('pay_in_bill', _('Pay In Bill')),
+        ('pay_later', _('Credit / Pay Later')),
+        ('pay_in_bill', _('Paid')),
     ]
 
     transaction_no = models.CharField(
@@ -775,9 +778,12 @@ class ChickSale(models.Model):
         ('Paid by Customer', _('Paid by Customer')),
         ('Include in Bill', _('Include in Bill')),
     ]
+    #: Whether the bill has been settled, not when it is due. "Pay In Bill"
+    #: read as an instruction about timing, which is a different question.
+    #: The stored values are unchanged.
     PAYMENT_MODE_CHOICES = [
-        ('pay_later', _('Pay Later')),
-        ('pay_in_bill', _('Pay In Bill')),
+        ('pay_later', _('Credit / Pay Later')),
+        ('pay_in_bill', _('Paid')),
     ]
 
     bill_no = models.CharField(max_length=30, unique=True, editable=False, blank=True)

@@ -64,11 +64,11 @@
         <div class="col-md-3">
           <label class="form-label d-block">Calculation Based On</label>
           <div class="form-check form-check-inline mt-2">
-            <input class="form-check-input" type="radio" name="calculation_based_on" id="calc_sent" value="Sent Quantity" {% if general_purchase.calculation_based_on != "Received Quantity" %}checked{% endif %}>
+            <input class="form-check-input" type="radio" name="calculation_based_on" id="calc_sent" value="Sent Quantity" {% if general_purchase.calculation_based_on == "Sent Quantity" %}checked{% endif %}>
             <label class="form-check-label" for="calc_sent">Sent Qty</label>
           </div>
           <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" name="calculation_based_on" id="calc_rcv" value="Received Quantity" {% if general_purchase.calculation_based_on == "Received Quantity" %}checked{% endif %}>
+            <input class="form-check-input" type="radio" name="calculation_based_on" id="calc_rcv" value="Received Quantity" {% if general_purchase.calculation_based_on != "Sent Quantity" %}checked{% endif %}>
             <label class="form-check-label" for="calc_rcv">Received Qty</label>
           </div>
         </div>
@@ -333,7 +333,7 @@ const value = id => get(id).value;
 
 function calcBasis() {
   const el = document.querySelector('input[name="calculation_based_on"]:checked');
-  return el ? el.value : 'Sent Quantity';
+  return el ? el.value : 'Received Quantity';
 }
 
 // The Batch column belongs on screen only while some row delivers to a Farm —

@@ -58,7 +58,7 @@ def _load_general_purchase(o) -> dict:
             "bill_no": o.bill_no or "", "dc_no": o.dc_no or "",
             "vehicle_no": o.vehicle_no or "", "driver_name": o.driver_name or "",
             "driver_mobile": o.driver_mobile or "",
-            "calculation_based_on": o.calculation_based_on or "Sent Quantity",
+            "calculation_based_on": o.calculation_based_on or "Received Quantity",
             "payment_terms": o.payment_terms or "Cash",
             # "Extra" was retired as a value; a header with none recorded is
             # one where nobody said there was any carriage.

@@ -102,18 +102,18 @@
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label d-block">Payment Mode</label>
+          <label class="form-label d-block">Payment Status</label>
           <div class="form-check form-check-inline mt-2">
             <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" checked>
-            <label class="form-check-label" for="pay_later">Pay Later</label>
+            <label class="form-check-label" for="pay_later">Credit</label>
           </div>
           <div class="form-check form-check-inline mt-2">
             <input class="form-check-input" type="radio" name="payment_mode" id="pay_in_bill" value="pay_in_bill">
-            <label class="form-check-label" for="pay_in_bill">Pay In Bill</label>
+            <label class="form-check-label" for="pay_in_bill">Paid</label>
           </div>
         </div>
         <div class="col-md-3">
-          <label for="pay_account" class="form-label">Pay Account</label>
+          <label for="pay_account" class="form-label">Payment Account</label>
           <select class="form-select" id="pay_account" name="pay_account">
             <option value="">select</option>
             {% for a in bank_accounts %}

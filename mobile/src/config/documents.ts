@@ -631,7 +631,7 @@ export const DOCUMENTS: Record<string, DocConfig> = {
       supplier: h.supplier || null,
       bill_no: h.bill_no || "",
       dc_no: h.dc_no || "",
-      calculation_based_on: h.calculation_based_on || "Sent Quantity",
+      calculation_based_on: h.calculation_based_on || "Received Quantity",
       // No Freight, not the old "Extra": a header that never had the field
       // filled in is one where nobody said there was any carriage.
       freight_type: h.freight_type || "No Freight",

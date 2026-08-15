@@ -507,7 +507,7 @@ def _apply_posted_general_purchase_fields(instance, request):
     instance.vehicle_no = request.POST.get("vehicle_no", "").strip()
     instance.driver_name = request.POST.get("driver_name", "").strip()
     instance.driver_mobile = request.POST.get("driver_mobile", "").strip()
-    instance.calculation_based_on = request.POST.get("calculation_based_on") or "Sent Quantity"
+    instance.calculation_based_on = request.POST.get("calculation_based_on") or "Received Quantity"
     instance.payment_terms = request.POST.get("payment_terms") or "Cash"
     # "Extra" was the old default and no longer exists as a value. A missing
     # freight type means nobody chose one, which is No Freight.
@@ -1879,7 +1879,7 @@ def purchase_report(request):
         p = r.purchase
         # The stored amount already includes GST, so the pre-GST subtotal is
         # rebuilt exactly the way GeneralPurchaseItem.save() computes it.
-        basis = getattr(p, "calculation_based_on", "Sent Quantity")
+        basis = getattr(p, "calculation_based_on", "Received Quantity")
         qty = Decimal(str((r.rcv_qty if basis == "Received Quantity" else r.sent_qty) or 0))
         subtotal = ((qty * Decimal(str(r.rate or 0)))
                     * (1 - Decimal(str(r.discount_percent or 0)) / 100)

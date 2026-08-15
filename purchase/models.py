@@ -204,7 +204,11 @@ class GeneralPurchase(models.Model):
     vehicle_no = models.CharField(max_length=50, blank=True)
     driver_name = models.CharField(max_length=100, blank=True)
     driver_mobile = models.CharField(max_length=20, blank=True)
-    calculation_based_on = models.CharField(max_length=20, choices=CALC_BASIS_CHOICES, default="Sent Quantity")
+    #: Received, not sent. A bill is priced on what actually arrived — sent
+    #: quantity is what was ordered, and pricing on it pays for a short
+    #: delivery. Choosing Sent stays available for suppliers who bill that way.
+    calculation_based_on = models.CharField(max_length=20, choices=CALC_BASIS_CHOICES,
+                                            default="Received Quantity")
     payment_terms = models.CharField(max_length=20, choices=PAYMENT_TERMS_CHOICES, default="Cash")
 
     freight_type = models.CharField(max_length=20, choices=FREIGHT_TYPE_CHOICES,
@@ -418,7 +422,7 @@ class GeneralPurchaseItem(models.Model):
         return self.farm_warehouse.name if self.farm_warehouse_id else ""
 
     def effective_qty(self):
-        basis = self.purchase.calculation_based_on if self.purchase_id else "Sent Quantity"
+        basis = self.purchase.calculation_based_on if self.purchase_id else "Received Quantity"
         return self.rcv_qty if basis == "Received Quantity" else self.sent_qty
 
     def save(self, *args, **kwargs):

@@ -196,7 +196,7 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
     purchase_no: (editing as { purchase_no?: string })?.purchase_no ?? "",
     date: today(), supplier: "", bill_no: "", dc_no: "",
     vehicle_no: "", driver_name: "", driver_mobile: "",
-    calculation_based_on: "Sent Quantity", payment_terms: "Cash",
+    calculation_based_on: "Received Quantity", payment_terms: "Cash",
     freight_type: "No Freight", freight_settlement: "In Purchase Bill",
     freight_transporter: "", freight_amount: "", payment_mode: "pay_later",
     pay_account: "", freight_account: "",
@@ -231,7 +231,7 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
           purchase_no: h.purchase_no ?? "", date: h.date ?? today(), supplier: h.supplier ?? "",
           bill_no: h.bill_no ?? "", dc_no: h.dc_no ?? "",
           vehicle_no: h.vehicle_no ?? "", driver_name: h.driver_name ?? "", driver_mobile: h.driver_mobile ?? "",
-          calculation_based_on: h.calculation_based_on ?? "Sent Quantity",
+          calculation_based_on: h.calculation_based_on ?? "Received Quantity",
           payment_terms: h.payment_terms ?? "Cash",
           freight_type: h.freight_type ?? "No Freight",
           freight_settlement: h.freight_settlement ?? "In Purchase Bill",
@@ -530,7 +530,7 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
                 </View>
               </View>
             ) : null}
-            <Text style={styles.label}>Payment Mode</Text>
+            <Text style={styles.label}>Payment Status</Text>
             <View style={styles.radioRow}>
               {(["pay_later", "pay_in_bill"] as const).map((mode) => (
                 <Pressable
@@ -541,7 +541,7 @@ export function GeneralPurchaseFormScreen({ navigation, route }: Props) {
                   <View style={[styles.radioDot, head.payment_mode === mode && { borderColor: colors.warning }]}>
                     {head.payment_mode === mode ? <View style={[styles.radioDotFill, { backgroundColor: colors.warning }]} /> : null}
                   </View>
-                  <Text style={styles.radioLabel}>{mode === "pay_later" ? "Pay Later" : "Pay In Bill"}</Text>
+                  <Text style={styles.radioLabel}>{mode === "pay_later" ? "Credit" : "Paid"}</Text>
                 </Pressable>
               ))}
             </View>
