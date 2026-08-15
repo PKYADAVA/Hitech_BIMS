@@ -122,5 +122,32 @@
   <script src="{% static 'js/alerthub.js' %}?v=20260804"></script>
 
   {% block js %}{% endblock %}
+
+  {% comment %}
+  Whatever the page did not show itself.
+
+  Django clears a message only when a template iterates it. A save that
+  redirects to a page with no message block therefore leaves it sitting in
+  the session, and it surfaces on whichever page renders messages next —
+  which is how "General purchase updated successfully." came to greet
+  people on an empty Add form, one navigation later and nowhere near the
+  record it was about.
+
+  Iterating is also what sets `messages.used`, and this renders after the
+  page's own content, so by here that flag says whether the page showed
+  them. If it did not, they are toasted and consumed. A message is then
+  never seen anywhere but the page it belongs to, and no page has to
+  remember to carry a message block for messages it does not raise.
+  {% endcomment %}
+  {% if messages and not messages.used %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      {% for message in messages %}
+      window.showToast('{{ message.level_tag|default:"info"|escapejs }}',
+                       '{{ message|escapejs }}');
+      {% endfor %}
+    });
+  </script>
+  {% endif %}
 </body>
 </html>
