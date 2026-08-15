@@ -178,7 +178,19 @@ class GeneralPurchase(models.Model):
         ("Freight Included", "Freight Included"),
         ("Freight Extra", "Freight Extra"),
     ]
-    PAYMENT_MODE_CHOICES = [("pay_later", "Pay Later"), ("pay_in_bill", "Pay In Bill")]
+    #: Which bill the freight lands on — a different question from how it is
+    #: priced. The transporter is often not the supplier of the goods, and then
+    #: the carriage is a liability to somebody else entirely. Only meaningful
+    #: for "Freight Extra": carriage already inside the price arrives on the
+    #: supplier's own invoice by definition.
+    FREIGHT_SETTLEMENT_CHOICES = [
+        ("In Purchase Bill", "Included in Purchase Bill"),
+        ("Separate Bill", "Separate Freight Bill"),
+    ]
+    #: Whether the bill has been settled — not when it is due. "Pay In Bill"
+    #: read as an instruction about timing, which is a different question from
+    #: the one this field answers. The stored values are unchanged.
+    PAYMENT_MODE_CHOICES = [("pay_later", "Credit / Pay Later"), ("pay_in_bill", "Paid")]
     OTHER_CHARGES_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
     ROUND_OFF_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
     BAG_TYPE_CHOICES = [("Jute Bag", "Jute Bag"), ("HDPE Bag", "HDPE Bag"), ("Loose", "Loose")]
@@ -202,6 +214,11 @@ class GeneralPurchase(models.Model):
     freight_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True, blank=True,
                                         related_name="general_purchase_freight_accounts")
     freight_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    freight_settlement = models.CharField(max_length=20, choices=FREIGHT_SETTLEMENT_CHOICES,
+                                          default="In Purchase Bill")
+    freight_supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True,
+                                         related_name="general_purchase_freights",
+                                         help_text="The transporter, when freight is billed separately")
 
     bag_type = models.CharField(max_length=20, choices=BAG_TYPE_CHOICES, blank=True)
     no_of_bags = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -246,6 +263,14 @@ class GeneralPurchase(models.Model):
         if self.freight_type == "No Freight":
             self.freight_amount = 0
             self.freight_account = None
+        # A separate freight bill only exists where freight is charged on top.
+        # Carriage inside the quoted price arrives on the supplier's own
+        # invoice by definition, and there is no bill at all without freight,
+        # so neither can leave a transporter behind to be paid.
+        if self.freight_type != "Freight Extra":
+            self.freight_settlement = "In Purchase Bill"
+        if self.freight_settlement != "Separate Bill":
+            self.freight_supplier = None
 
         is_new = self._state.adding
         super().save(*args, **kwargs)
@@ -277,14 +302,28 @@ class GeneralPurchase(models.Model):
         qty = self.total_quantity()
         return round(self.gross_amount() / qty, 2) if qty else 0
 
-    def freight_included_amount(self):
-        """Goods value plus freight, but only where freight is charged on top.
+    def freight_on_this_bill(self):
+        """Whether the freight belongs on *this* supplier's invoice.
 
-        "Freight Included" means the carriage is already inside the price the
-        supplier quoted, so adding it here would bill it a second time.
+        Two conditions, and both have to hold. It must be charged on top —
+        carriage already inside the quoted price would otherwise be billed
+        twice — and it must be settled on this bill rather than by a
+        transporter who invoices separately, which is a liability to somebody
+        else and not this supplier's money.
         """
+        return (self.freight_type == "Freight Extra"
+                and self.freight_settlement == "In Purchase Bill")
+
+    def transporter_payable(self):
+        """Freight owed to a transporter who bills it separately, or zero."""
+        if self.freight_type == "Freight Extra" and self.freight_settlement == "Separate Bill":
+            return self.freight_amount
+        return 0
+
+    def freight_included_amount(self):
+        """Goods value plus whatever freight belongs on this bill."""
         base = self.gross_amount()
-        return base + (self.freight_amount if self.freight_type == "Freight Extra" else 0)
+        return base + (self.freight_amount if self.freight_on_this_bill() else 0)
 
     def other_charges_signed(self):
         return -self.other_charges_amount if self.other_charges_type == "Deduct" else self.other_charges_amount
@@ -408,7 +447,19 @@ class ChicksPurchase(models.Model):
         ("Freight Included", "Freight Included"),
         ("Freight Extra", "Freight Extra"),
     ]
-    PAYMENT_MODE_CHOICES = [("pay_later", "Pay Later"), ("pay_in_bill", "Pay In Bill")]
+    #: Which bill the freight lands on — a different question from how it is
+    #: priced. The transporter is often not the supplier of the goods, and then
+    #: the carriage is a liability to somebody else entirely. Only meaningful
+    #: for "Freight Extra": carriage already inside the price arrives on the
+    #: supplier's own invoice by definition.
+    FREIGHT_SETTLEMENT_CHOICES = [
+        ("In Purchase Bill", "Included in Purchase Bill"),
+        ("Separate Bill", "Separate Freight Bill"),
+    ]
+    #: Whether the bill has been settled — not when it is due. "Pay In Bill"
+    #: read as an instruction about timing, which is a different question from
+    #: the one this field answers. The stored values are unchanged.
+    PAYMENT_MODE_CHOICES = [("pay_later", "Credit / Pay Later"), ("pay_in_bill", "Paid")]
     OTHER_CHARGES_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
     ROUND_OFF_TYPE_CHOICES = [("Add", "Add"), ("Deduct", "Deduct")]
     BAG_TYPE_CHOICES = [("Jute Bag", "Jute Bag"), ("HDPE Bag", "HDPE Bag"), ("Loose", "Loose")]
@@ -432,6 +483,11 @@ class ChicksPurchase(models.Model):
     freight_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.SET_NULL, null=True, blank=True,
                                         related_name="chicks_purchase_freight_accounts")
     freight_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    freight_settlement = models.CharField(max_length=20, choices=FREIGHT_SETTLEMENT_CHOICES,
+                                          default="In Purchase Bill")
+    freight_supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True,
+                                         related_name="chicks_purchase_freights",
+                                         help_text="The transporter, when freight is billed separately")
 
     bag_type = models.CharField(max_length=20, choices=BAG_TYPE_CHOICES, blank=True)
     no_of_bags = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -476,6 +532,14 @@ class ChicksPurchase(models.Model):
         if self.freight_type == "No Freight":
             self.freight_amount = 0
             self.freight_account = None
+        # A separate freight bill only exists where freight is charged on top.
+        # Carriage inside the quoted price arrives on the supplier's own
+        # invoice by definition, and there is no bill at all without freight,
+        # so neither can leave a transporter behind to be paid.
+        if self.freight_type != "Freight Extra":
+            self.freight_settlement = "In Purchase Bill"
+        if self.freight_settlement != "Separate Bill":
+            self.freight_supplier = None
 
         is_new = self._state.adding
         super().save(*args, **kwargs)
@@ -506,14 +570,28 @@ class ChicksPurchase(models.Model):
         qty = self.total_quantity()
         return round(self.gross_amount() / qty, 2) if qty else 0
 
-    def freight_included_amount(self):
-        """Goods value plus freight, but only where freight is charged on top.
+    def freight_on_this_bill(self):
+        """Whether the freight belongs on *this* supplier's invoice.
 
-        "Freight Included" means the carriage is already inside the price the
-        supplier quoted, so adding it here would bill it a second time.
+        Two conditions, and both have to hold. It must be charged on top —
+        carriage already inside the quoted price would otherwise be billed
+        twice — and it must be settled on this bill rather than by a
+        transporter who invoices separately, which is a liability to somebody
+        else and not this supplier's money.
         """
+        return (self.freight_type == "Freight Extra"
+                and self.freight_settlement == "In Purchase Bill")
+
+    def transporter_payable(self):
+        """Freight owed to a transporter who bills it separately, or zero."""
+        if self.freight_type == "Freight Extra" and self.freight_settlement == "Separate Bill":
+            return self.freight_amount
+        return 0
+
+    def freight_included_amount(self):
+        """Goods value plus whatever freight belongs on this bill."""
         base = self.gross_amount()
-        return base + (self.freight_amount if self.freight_type == "Freight Extra" else 0)
+        return base + (self.freight_amount if self.freight_on_this_bill() else 0)
 
     def other_charges_signed(self):
         return -self.other_charges_amount if self.other_charges_type == "Deduct" else self.other_charges_amount

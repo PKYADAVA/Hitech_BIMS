@@ -144,6 +144,23 @@
           <input type="number" min="0" step=".01" class="form-control" name="freight_amount" id="freight_amount" value="{{ chicks_purchase.freight_amount|default:'0' }}">
           <div class="form-text" id="freight_note"></div>
         </div>
+        <div class="col-md-3" id="freight_settlement_wrap">
+          <label class="form-label">Freight Settlement</label>
+          <select class="form-select" name="freight_settlement" id="freight_settlement">
+            {% for value, label in freight_settlement_choices %}
+            <option value="{{ value }}" {% if chicks_purchase.freight_settlement == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Which bill the carriage lands on.</div>
+        </div>
+        <div class="col-md-3" id="freight_supplier_wrap">
+          <label class="form-label">Transporter</label>
+          <select class="form-select" name="freight_supplier" id="freight_supplier">
+            <option value="">select</option>
+            {% for sup in suppliers %}<option value="{{ sup.id }}" {% if chicks_purchase.freight_supplier_id == sup.id %}selected{% endif %}>{{ sup.name }}</option>{% endfor %}
+          </select>
+          <div class="form-text">Owed the freight separately from the goods.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -352,7 +369,11 @@ function totals() {
 
   // Only freight charged on top belongs in the bill; freight already
   // inside the supplier's price would be counted twice.
-  const freight = value('freight_type') === 'Freight Extra' ? (Number(value('freight_amount')) || 0) : 0;
+  // Only freight that lands on this supplier's own invoice: charged on top,
+  // and not left to a transporter who bills it separately.
+  const onThisBill = value('freight_type') === 'Freight Extra'
+    && value('freight_settlement') === 'In Purchase Bill';
+  const freight = onThisBill ? (Number(value('freight_amount')) || 0) : 0;
   const otherRaw = Number(value('other_charges_amount')) || 0;
   const other = value('other_charges_type') === 'Deduct' ? -otherRaw : otherRaw;
   const tds = get('tds_applicable').checked ? (Number(value('tds_amount')) || 0) : 0;
@@ -397,12 +418,35 @@ function applyFreightType() {
       }
     }
   }
+  // Settlement is only a question for freight charged on top, and a
+  // transporter only exists when that freight is billed separately. Hiding
+  // them keeps the form from asking about a bill that cannot exist.
+  const extra = type === 'Freight Extra';
+  const settle = document.getElementById('freight_settlement');
+  const settleWrap = document.getElementById('freight_settlement_wrap');
+  const supplierWrap = document.getElementById('freight_supplier_wrap');
+  if (settleWrap) settleWrap.style.display = extra ? '' : 'none';
+  if (settle && !extra) settle.value = 'In Purchase Bill';
+  const separate = extra && settle && settle.value === 'Separate Bill';
+  if (supplierWrap) supplierWrap.style.display = separate ? '' : 'none';
+  if (!separate) {
+    const sup = document.getElementById('freight_supplier');
+    if (sup) {
+      sup.value = '';
+      if (window.jQuery && jQuery(sup).data('select2')) {
+        jQuery(sup).val('').trigger('change.select2');
+      }
+    }
+  }
+
   const note = document.getElementById('freight_note');
   if (note) {
     note.textContent = none ? 'No freight on this bill.'
       : type === 'Freight Included'
         ? 'Already inside the supplier’s price — not added to the total.'
-        : 'Charged on top — added to the total.';
+        : separate
+          ? 'Billed separately by the transporter — not on this bill.'
+          : 'Charged on top — added to the total.';
   }
 }
 
@@ -413,9 +457,9 @@ function applyFreightType() {
 
 // Run on every change of type, and once on load so an existing bill opens in
 // the state its own freight type calls for rather than in the default one.
-get('freight_type').addEventListener('change', function () {
-  applyFreightType();
-  totals();
+['freight_type', 'freight_settlement'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', function () { applyFreightType(); totals(); });
 });
 applyFreightType();
 

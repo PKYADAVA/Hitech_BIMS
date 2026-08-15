@@ -491,6 +491,7 @@ def _general_purchase_form_context(user, gp=None):
         ) if gp else "[]",
         "payment_terms_choices": GeneralPurchase.PAYMENT_TERMS_CHOICES,
         "freight_type_choices": GeneralPurchase.FREIGHT_TYPE_CHOICES,
+        "freight_settlement_choices": GeneralPurchase.FREIGHT_SETTLEMENT_CHOICES,
         "bag_type_choices": GeneralPurchase.BAG_TYPE_CHOICES,
         "other_charges_type_choices": GeneralPurchase.OTHER_CHARGES_TYPE_CHOICES,
         "round_off_type_choices": GeneralPurchase.ROUND_OFF_TYPE_CHOICES,
@@ -508,11 +509,16 @@ def _apply_posted_general_purchase_fields(instance, request):
     instance.driver_mobile = request.POST.get("driver_mobile", "").strip()
     instance.calculation_based_on = request.POST.get("calculation_based_on") or "Sent Quantity"
     instance.payment_terms = request.POST.get("payment_terms") or "Cash"
-    instance.freight_type = request.POST.get("freight_type") or "Extra"
+    # "Extra" was the old default and no longer exists as a value. A missing
+    # freight type means nobody chose one, which is No Freight.
+    instance.freight_type = request.POST.get("freight_type") or "No Freight"
     instance.payment_mode = request.POST.get("payment_mode") or "pay_later"
     instance.pay_account_id = request.POST.get("pay_account") or None
     instance.freight_account_id = request.POST.get("freight_account") or None
     instance.freight_amount = request.POST.get("freight_amount") or 0
+    instance.freight_settlement = (request.POST.get("freight_settlement")
+                                   or "In Purchase Bill")
+    instance.freight_supplier_id = request.POST.get("freight_supplier") or None
     instance.bag_type = request.POST.get("bag_type", "").strip()
     instance.no_of_bags = request.POST.get("no_of_bags") or 0
     instance.batch_no = request.POST.get("batch_no", "").strip()
@@ -731,6 +737,7 @@ def _chicks_purchase_form_context(user, cp=None):
             [_chicks_purchase_to_item_dict(row) for row in cp.items.select_related("farm_warehouse")]
         ) if cp else "[]",
         "freight_type_choices": ChicksPurchase.FREIGHT_TYPE_CHOICES,
+        "freight_settlement_choices": ChicksPurchase.FREIGHT_SETTLEMENT_CHOICES,
         "bag_type_choices": ChicksPurchase.BAG_TYPE_CHOICES,
         "other_charges_type_choices": ChicksPurchase.OTHER_CHARGES_TYPE_CHOICES,
         "round_off_type_choices": ChicksPurchase.ROUND_OFF_TYPE_CHOICES,
@@ -748,11 +755,16 @@ def _apply_posted_chicks_purchase_fields(instance, request):
     # untouched here so historic values survive an edit.
     instance.vehicle_no = request.POST.get("vehicle_no", "").strip()
     instance.driver_name = request.POST.get("driver_name", "").strip()
-    instance.freight_type = request.POST.get("freight_type") or "Extra"
+    # "Extra" was the old default and no longer exists as a value. A missing
+    # freight type means nobody chose one, which is No Freight.
+    instance.freight_type = request.POST.get("freight_type") or "No Freight"
     instance.payment_mode = request.POST.get("payment_mode") or "pay_later"
     instance.pay_account_id = request.POST.get("pay_account") or None
     instance.freight_account_id = request.POST.get("freight_account") or None
     instance.freight_amount = request.POST.get("freight_amount") or 0
+    instance.freight_settlement = (request.POST.get("freight_settlement")
+                                   or "In Purchase Bill")
+    instance.freight_supplier_id = request.POST.get("freight_supplier") or None
     instance.bag_type = request.POST.get("bag_type", "").strip()
     instance.no_of_bags = request.POST.get("no_of_bags") or 0
     instance.batch_no = request.POST.get("batch_no", "").strip()

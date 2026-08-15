@@ -33,10 +33,10 @@ class FreightOnTheBillTests(TestCase):
             code="5001", description="Transport / Freight", type="Expense",
             status="Active")
 
-    def purchase(self, freight_type, freight=Decimal("8000")):
+    def purchase(self, freight_type, freight=Decimal("8000"), **over):
         p = GeneralPurchase.objects.create(
             supplier=self.supplier, freight_type=freight_type,
-            freight_amount=freight, freight_account=self.account)
+            freight_amount=freight, freight_account=self.account, **over)
         GeneralPurchaseItem.objects.create(
             purchase=p, item=self.item, farm_warehouse=self.warehouse,
             sent_qty=Decimal("8000"), rcv_qty=Decimal("8000"),
@@ -92,3 +92,59 @@ class FreightOnTheBillTests(TestCase):
         included = self.purchase("Freight Included")
         self.assertEqual(extra.compute_net_amount() - included.compute_net_amount(),
                          Decimal("8000"))
+
+
+class FreightSettlementTests(FreightOnTheBillTests):
+    """Which bill the carriage lands on — a different question from how it is
+    priced. The transporter is often not the supplier of the goods, and then
+    the freight is a liability to somebody else entirely.
+    """
+
+    def transporter(self):
+        return Supplier.objects.create(name="Yadav Transport")
+
+    def test_freight_on_the_supplier_s_own_bill_is_added(self):
+        """Material 1,00,000 plus 5,000 carriage is a bill of 1,05,000, and
+        the whole of it is owed to the one supplier."""
+        p = self.purchase("Freight Extra", Decimal("5000"),
+                          freight_settlement="In Purchase Bill")
+        self.assertTrue(p.freight_on_this_bill())
+        self.assertEqual(p.transporter_payable(), 0)
+        self.assertEqual(p.freight_included_amount() - p.gross_amount(),
+                         Decimal("5000"))
+
+    def test_a_separate_freight_bill_leaves_the_purchase_alone(self):
+        """Two liabilities: the supplier is owed the goods, the transporter
+        the carriage. Adding the carriage here would bill the supplier for
+        somebody else's invoice."""
+        t = self.transporter()
+        p = self.purchase("Freight Extra", Decimal("5000"),
+                          freight_settlement="Separate Bill", freight_supplier=t)
+        self.assertFalse(p.freight_on_this_bill())
+        self.assertEqual(p.freight_included_amount(), p.gross_amount())
+        self.assertEqual(p.transporter_payable(), Decimal("5000"))
+        self.assertEqual(p.freight_supplier, t)
+
+    def test_settlement_is_only_a_question_for_freight_charged_on_top(self):
+        """Carriage already inside the quoted price arrives on the supplier's
+        own invoice by definition; there is no bill at all without freight."""
+        for freight_type in ("No Freight", "Freight Included"):
+            p = self.purchase(freight_type, Decimal("5000"),
+                              freight_settlement="Separate Bill",
+                              freight_supplier=self.transporter())
+            self.assertEqual(p.freight_settlement, "In Purchase Bill", freight_type)
+            self.assertIsNone(p.freight_supplier, freight_type)
+            self.assertEqual(p.transporter_payable(), 0, freight_type)
+
+    def test_a_transporter_is_only_kept_where_one_can_be_owed(self):
+        p = self.purchase("Freight Extra", Decimal("5000"),
+                          freight_settlement="In Purchase Bill",
+                          freight_supplier=self.transporter())
+        self.assertIsNone(p.freight_supplier)
+
+    def test_payment_status_says_whether_not_when(self):
+        """"Pay In Bill" read as an instruction about timing. The stored
+        values are unchanged; only the question changed."""
+        labels = dict(GeneralPurchase.PAYMENT_MODE_CHOICES)
+        self.assertEqual(labels["pay_in_bill"], "Paid")
+        self.assertEqual(labels["pay_later"], "Credit / Pay Later")
