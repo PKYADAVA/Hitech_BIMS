@@ -216,9 +216,11 @@ class GeneralPurchase(models.Model):
     freight_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     freight_settlement = models.CharField(max_length=20, choices=FREIGHT_SETTLEMENT_CHOICES,
                                           default="In Purchase Bill")
-    freight_supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True,
-                                         related_name="general_purchase_freights",
-                                         help_text="The transporter, when freight is billed separately")
+    #: Free text, not a party. Whoever the supplier put on the lorry that day
+    #: — it is rarely the same firm twice and almost never one worth a master
+    #: record of its own. What matters is that the separate freight bill can
+    #: be told apart and attributed to a name somebody recognises.
+    freight_transporter = models.CharField(max_length=150, blank=True)
 
     bag_type = models.CharField(max_length=20, choices=BAG_TYPE_CHOICES, blank=True)
     no_of_bags = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -270,7 +272,7 @@ class GeneralPurchase(models.Model):
         if self.freight_type != "Freight Extra":
             self.freight_settlement = "In Purchase Bill"
         if self.freight_settlement != "Separate Bill":
-            self.freight_supplier = None
+            self.freight_transporter = ""
 
         is_new = self._state.adding
         super().save(*args, **kwargs)
@@ -485,9 +487,11 @@ class ChicksPurchase(models.Model):
     freight_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     freight_settlement = models.CharField(max_length=20, choices=FREIGHT_SETTLEMENT_CHOICES,
                                           default="In Purchase Bill")
-    freight_supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, null=True, blank=True,
-                                         related_name="chicks_purchase_freights",
-                                         help_text="The transporter, when freight is billed separately")
+    #: Free text, not a party. Whoever the supplier put on the lorry that day
+    #: — it is rarely the same firm twice and almost never one worth a master
+    #: record of its own. What matters is that the separate freight bill can
+    #: be told apart and attributed to a name somebody recognises.
+    freight_transporter = models.CharField(max_length=150, blank=True)
 
     bag_type = models.CharField(max_length=20, choices=BAG_TYPE_CHOICES, blank=True)
     no_of_bags = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -539,7 +543,7 @@ class ChicksPurchase(models.Model):
         if self.freight_type != "Freight Extra":
             self.freight_settlement = "In Purchase Bill"
         if self.freight_settlement != "Separate Bill":
-            self.freight_supplier = None
+            self.freight_transporter = ""
 
         is_new = self._state.adding
         super().save(*args, **kwargs)

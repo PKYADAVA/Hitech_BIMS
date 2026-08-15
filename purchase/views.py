@@ -518,7 +518,7 @@ def _apply_posted_general_purchase_fields(instance, request):
     instance.freight_amount = request.POST.get("freight_amount") or 0
     instance.freight_settlement = (request.POST.get("freight_settlement")
                                    or "In Purchase Bill")
-    instance.freight_supplier_id = request.POST.get("freight_supplier") or None
+    instance.freight_transporter = (request.POST.get("freight_transporter") or "").strip()
     instance.bag_type = request.POST.get("bag_type", "").strip()
     instance.no_of_bags = request.POST.get("no_of_bags") or 0
     instance.batch_no = request.POST.get("batch_no", "").strip()
@@ -764,7 +764,7 @@ def _apply_posted_chicks_purchase_fields(instance, request):
     instance.freight_amount = request.POST.get("freight_amount") or 0
     instance.freight_settlement = (request.POST.get("freight_settlement")
                                    or "In Purchase Bill")
-    instance.freight_supplier_id = request.POST.get("freight_supplier") or None
+    instance.freight_transporter = (request.POST.get("freight_transporter") or "").strip()
     instance.bag_type = request.POST.get("bag_type", "").strip()
     instance.no_of_bags = request.POST.get("no_of_bags") or 0
     instance.batch_no = request.POST.get("batch_no", "").strip()

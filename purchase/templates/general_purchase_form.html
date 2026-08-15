@@ -119,6 +119,18 @@
   </div>
 
   <div class="card mb-3">
+<style>
+  /* Freight & Payment on one line, shared out rather than wrapped. Each field
+     takes an equal share and is allowed to shrink — a select's intrinsic width
+     would otherwise hold the row wider than the screen. */
+  .freight-row > .freight-field { flex: 1 1 0; min-width: 0; }
+  .freight-row .form-select,
+  .freight-row .form-control { min-width: 0; width: 100%; }
+  .freight-row .form-text { font-size: .72rem; line-height: 1.2; }
+  @media (max-width: 1199.98px) {
+    .freight-row > .freight-field { flex: 1 1 180px; }
+  }
+</style>
     <div class="card-header">Freight &amp; Payment</div>
     <div class="card-body">
       {% comment %}
@@ -128,8 +140,8 @@
         Transporter is a seventh and only appears when freight is billed
         separately, which is the rare case.
       {% endcomment %}
-      <div class="row g-3">
-        <div class="col-md-2">
+      <div class="d-flex flex-wrap flex-xl-nowrap align-items-start gap-3 freight-row">
+        <div class="freight-field">
           <label class="form-label">Freight Type</label>
           <select class="form-select" name="freight_type" id="freight_type">
             {% for value, label in freight_type_choices %}
@@ -137,7 +149,7 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-2" id="freight_settlement_wrap">
+        <div class="freight-field" id="freight_settlement_wrap">
           <label class="form-label">Freight Settlement</label>
           <select class="form-select" name="freight_settlement" id="freight_settlement">
             {% for value, label in freight_settlement_choices %}
@@ -146,15 +158,15 @@
           </select>
           <div class="form-text">Which bill the carriage lands on.</div>
         </div>
-        <div class="col-md-2" id="freight_supplier_wrap">
+        <div class="freight-field" id="freight_supplier_wrap">
           <label class="form-label">Transporter</label>
-          <select class="form-select" name="freight_supplier" id="freight_supplier">
-            <option value="">select</option>
-            {% for sup in suppliers %}<option value="{{ sup.id }}" {% if general_purchase.freight_supplier_id == sup.id %}selected{% endif %}>{{ sup.name }}</option>{% endfor %}
-          </select>
-          <div class="form-text">Owed the freight separately from the goods.</div>
+          <input type="text" class="form-control" name="freight_transporter"
+                 id="freight_transporter" maxlength="150"
+                 placeholder="Name on the freight bill"
+                 value="{{ general_purchase.freight_transporter|default:'' }}">
+          <div class="form-text">Whoever the supplier sent — a name, not a master record.</div>
         </div>
-        <div class="col-md-2">
+        <div class="freight-field">
           <label class="form-label d-block">Payment Status</label>
           <div class="form-check form-check-inline mt-2">
             <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" {% if general_purchase.payment_mode != "pay_in_bill" %}checked{% endif %}>
@@ -165,21 +177,21 @@
             <label class="form-check-label" for="pay_in_bill">Paid</label>
           </div>
         </div>
-        <div class="col-md-2">
+        <div class="freight-field">
           <label class="form-label">Payment Account</label>
           <select class="form-select" name="pay_account">
             <option value="">select</option>
             {% for a in bank_accounts %}<option value="{{ a.id }}" {% if general_purchase.pay_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
+        <div class="freight-field">
           <label class="form-label">Freight Account</label>
           <select class="form-select" name="freight_account">
             <option value="">select</option>
             {% for a in accounts %}<option value="{{ a.id }}" {% if general_purchase.freight_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
+        <div class="freight-field">
           <label class="form-label">Freight Amount</label>
           <input type="number" min="0" step=".01" class="form-control" name="freight_amount" id="freight_amount" value="{{ general_purchase.freight_amount|default:'0' }}">
           <div class="form-text" id="freight_note"></div>
@@ -505,13 +517,8 @@ function applyFreightType() {
   const separate = extra && settle && settle.value === 'Separate Bill';
   if (supplierWrap) supplierWrap.style.display = separate ? '' : 'none';
   if (!separate) {
-    const sup = document.getElementById('freight_supplier');
-    if (sup) {
-      sup.value = '';
-      if (window.jQuery && jQuery(sup).data('select2')) {
-        jQuery(sup).val('').trigger('change.select2');
-      }
-    }
+    const who = document.getElementById('freight_transporter');
+    if (who) who.value = '';
   }
 
   const note = document.getElementById('freight_note');
