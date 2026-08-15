@@ -105,8 +105,15 @@
   <div class="card mb-3">
     <div class="card-header">Freight &amp; Payment</div>
     <div class="card-body">
+      {% comment %}
+        One row. The columns keep the order they had; Freight Settlement is
+        inserted after Freight Type, with the Transporter beside it because it
+        is the answer to that same question. Six fill the row — the
+        Transporter is a seventh and only appears when freight is billed
+        separately, which is the rare case.
+      {% endcomment %}
       <div class="row g-3">
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label class="form-label">Freight Type</label>
           <select class="form-select" name="freight_type" id="freight_type">
             {% for value, label in freight_type_choices %}
@@ -114,19 +121,36 @@
             {% endfor %}
           </select>
         </div>
+        <div class="col-md-2" id="freight_settlement_wrap">
+          <label class="form-label">Freight Settlement</label>
+          <select class="form-select" name="freight_settlement" id="freight_settlement">
+            {% for value, label in freight_settlement_choices %}
+            <option value="{{ value }}" {% if chicks_purchase.freight_settlement == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Which bill the carriage lands on.</div>
+        </div>
+        <div class="col-md-2" id="freight_supplier_wrap">
+          <label class="form-label">Transporter</label>
+          <select class="form-select" name="freight_supplier" id="freight_supplier">
+            <option value="">select</option>
+            {% for sup in suppliers %}<option value="{{ sup.id }}" {% if chicks_purchase.freight_supplier_id == sup.id %}selected{% endif %}>{{ sup.name }}</option>{% endfor %}
+          </select>
+          <div class="form-text">Owed the freight separately from the goods.</div>
+        </div>
         <div class="col-md-2">
-          <label class="form-label d-block">Payment</label>
+          <label class="form-label d-block">Payment Status</label>
           <div class="form-check form-check-inline mt-2">
             <input class="form-check-input" type="radio" name="payment_mode" id="pay_later" value="pay_later" {% if chicks_purchase.payment_mode != "pay_in_bill" %}checked{% endif %}>
-            <label class="form-check-label" for="pay_later">Pay Later</label>
+            <label class="form-check-label" for="pay_later">Credit</label>
           </div>
           <div class="form-check form-check-inline">
             <input class="form-check-input" type="radio" name="payment_mode" id="pay_in_bill" value="pay_in_bill" {% if chicks_purchase.payment_mode == "pay_in_bill" %}checked{% endif %}>
-            <label class="form-check-label" for="pay_in_bill">Pay In Bill</label>
+            <label class="form-check-label" for="pay_in_bill">Paid</label>
           </div>
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Pay Account</label>
+        <div class="col-md-2">
+          <label class="form-label">Payment Account</label>
           <select class="form-select" name="pay_account">
             <option value="">select</option>
             {% for a in bank_accounts %}<option value="{{ a.id }}" {% if chicks_purchase.pay_account_id == a.id %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
@@ -143,23 +167,6 @@
           <label class="form-label">Freight Amount</label>
           <input type="number" min="0" step=".01" class="form-control" name="freight_amount" id="freight_amount" value="{{ chicks_purchase.freight_amount|default:'0' }}">
           <div class="form-text" id="freight_note"></div>
-        </div>
-        <div class="col-md-3" id="freight_settlement_wrap">
-          <label class="form-label">Freight Settlement</label>
-          <select class="form-select" name="freight_settlement" id="freight_settlement">
-            {% for value, label in freight_settlement_choices %}
-            <option value="{{ value }}" {% if chicks_purchase.freight_settlement == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <div class="form-text">Which bill the carriage lands on.</div>
-        </div>
-        <div class="col-md-3" id="freight_supplier_wrap">
-          <label class="form-label">Transporter</label>
-          <select class="form-select" name="freight_supplier" id="freight_supplier">
-            <option value="">select</option>
-            {% for sup in suppliers %}<option value="{{ sup.id }}" {% if chicks_purchase.freight_supplier_id == sup.id %}selected{% endif %}>{{ sup.name }}</option>{% endfor %}
-          </select>
-          <div class="form-text">Owed the freight separately from the goods.</div>
         </div>
       </div>
     </div>
