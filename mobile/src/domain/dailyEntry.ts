@@ -607,21 +607,36 @@ export function adviseDailyEntry(
   // server reports for this farm+item, less what this entry consumes. Shown per
   // slot because the two feeds carry independent balances.
   if (opening) {
+    // By item, not by slot: a day that puts one feed through both boxes has
+    // taken the sum of the two out of one pile at the farm. Weighed apart,
+    // each box reported its own draw against the whole balance and a farm
+    // holding 100 kg could feed 60 twice — which DailyEntry.clean refuses on
+    // arrival, so the phone would have promised a save the server then threw
+    // back, or queued one that failed at sync.
+    const pile = new Map<string, { qty: number; opening: number; name: string }>();
     for (const [slot, qty] of [
       ["feed_1", qty1],
       ["feed_2", qty2],
     ] as const) {
       const itemId = values[slot];
       if (!itemId || opening[slot] == null) continue;
-      const closing = num(opening[slot]) - qty;
-      const name = phaseOf(lookup, itemId)?.name ?? "Feed";
+      const held = pile.get(itemId) ?? {
+        qty: 0,
+        opening: num(opening[slot]),
+        name: phaseOf(lookup, itemId)?.name ?? "Feed",
+      };
+      held.qty += qty;
+      pile.set(itemId, held);
+    }
+    for (const held of pile.values()) {
+      const closing = held.opening - held.qty;
       notes.push({
         tone: closing < 0 ? "bad" : "info",
-        text: `${name} stock after this entry: ${closing.toFixed(2)} kg`,
+        text: `${held.name} stock after this entry: ${closing.toFixed(2)} kg`,
       });
       if (closing < 0) {
         blockers.push(
-          `${name} is short by ${Math.abs(closing).toFixed(2)} kg — ` +
+          `${held.name} is short by ${Math.abs(closing).toFixed(2)} kg — ` +
           `book the delivery first, or reduce the quantity`
         );
       }
@@ -880,19 +895,23 @@ export interface FeedRow {
  * kgs — otherwise two rows feeding the same store would each claim the whole
  * opening balance, which is the web grid's running-stock behaviour.
  *
- * Both slots of every earlier row are counted: the same item can be picked in
- * Feed 1 on one row and Feed 2 on another and it is still one store.
+ * Both slots are counted, on the row itself as well as on the rows above: the
+ * same item can be picked in Feed 1 and Feed 2, and it is still one store. The
+ * row used to be charged for the slot being drawn only, so a farm holding 100
+ * kg could put 60 through each box and both boxes would report 40 left.
+ * DailyEntry.clean weighs them together and refuses that, which is the rule
+ * this has to show.
  */
 export function farmFeedBalance(
   opening: number,
   item: string,
   rowsAbove: FeedRow[],
-  ownQty: number
+  own: FeedRow
 ): number {
   let balance = opening;
-  for (const r of rowsAbove) {
+  for (const r of [...rowsAbove, own]) {
     if (r.feed_1 === item) balance -= Number(r.feed_1_qty) || 0;
     if (r.feed_2 === item) balance -= Number(r.feed_2_qty) || 0;
   }
-  return balance - ownQty;
+  return balance;
 }

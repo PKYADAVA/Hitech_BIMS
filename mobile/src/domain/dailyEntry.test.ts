@@ -66,19 +66,24 @@ describe("todayISO", () => {
 
 describe("farmFeedBalance", () => {
   const row = (over: Partial<FeedRow> = {}): FeedRow => ({ farm: "1", ...over });
+  /** The row being drawn, as the screen passes it: its own slots and kgs. */
+  const own = (qty1: string, qty2?: string, item = "7"): FeedRow =>
+    row({ feed_1: item, feed_1_qty: qty1,
+          ...(qty2 == null ? {} : { feed_2: item, feed_2_qty: qty2 }) });
+  const none = row();
 
   it("is the opening balance less this row's kgs", () => {
-    expect(farmFeedBalance(100, "7", [], 20)).toBe(80);
+    expect(farmFeedBalance(100, "7", [], own("20"))).toBe(80);
   });
 
   it("subtracts an earlier row feeding the same item", () => {
     const above = [row({ feed_1: "7", feed_1_qty: "30" })];
-    expect(farmFeedBalance(100, "7", above, 20)).toBe(50);
+    expect(farmFeedBalance(100, "7", above, own("20"))).toBe(50);
   });
 
   it("ignores earlier rows feeding a different item", () => {
     const above = [row({ feed_1: "9", feed_1_qty: "30" })];
-    expect(farmFeedBalance(100, "7", above, 20)).toBe(80);
+    expect(farmFeedBalance(100, "7", above, own("20"))).toBe(80);
   });
 
   it("counts the item in either slot — one store, two boxes", () => {
@@ -86,30 +91,36 @@ describe("farmFeedBalance", () => {
       row({ feed_1: "7", feed_1_qty: "10" }),
       row({ feed_2: "7", feed_2_qty: "15" }),
     ];
-    expect(farmFeedBalance(100, "7", above, 5)).toBe(70);
+    expect(farmFeedBalance(100, "7", above, own("5"))).toBe(70);
   });
 
   it("counts both slots of a single row using the same item twice", () => {
     const above = [row({ feed_1: "7", feed_1_qty: "10", feed_2: "7", feed_2_qty: "10" })];
-    expect(farmFeedBalance(100, "7", above, 0)).toBe(80);
+    expect(farmFeedBalance(100, "7", above, none)).toBe(80);
+  });
+
+  it("counts both slots of the row being drawn, not just the one asked about", () => {
+    // One pile, two boxes: 60 through each of a 100 kg store is 20 short, and
+    // charging the row for one box reported 40 left in both of them.
+    expect(farmFeedBalance(100, "7", [], own("60", "60"))).toBe(-20);
   });
 
   it("goes negative rather than clamping, so shortage is visible", () => {
-    expect(farmFeedBalance(10, "7", [], 25)).toBe(-15);
+    expect(farmFeedBalance(10, "7", [], own("25"))).toBe(-15);
   });
 
   it("treats a blank or missing quantity as nothing fed", () => {
     const above = [row({ feed_1: "7", feed_1_qty: "" }), row({ feed_1: "7" })];
-    expect(farmFeedBalance(100, "7", above, 0)).toBe(100);
+    expect(farmFeedBalance(100, "7", above, none)).toBe(100);
   });
 
   it("ignores a quantity that is not a number", () => {
     const above = [row({ feed_1: "7", feed_1_qty: "abc" })];
-    expect(farmFeedBalance(100, "7", above, 0)).toBe(100);
+    expect(farmFeedBalance(100, "7", above, none)).toBe(100);
   });
 
   it("handles fractional kgs", () => {
-    expect(farmFeedBalance(100, "7", [row({ feed_1: "7", feed_1_qty: "12.5" })], 7.25))
+    expect(farmFeedBalance(100, "7", [row({ feed_1: "7", feed_1_qty: "12.5" })], own("7.25")))
       .toBeCloseTo(80.25);
   });
 });
@@ -590,6 +601,23 @@ describe("negative stock is a blocker, not a warning", () => {
 
   it("allows feeding exactly what is there", () => {
     expect(advise("100", "100").blockers).toEqual([]);
+  });
+
+  it("weighs both slots together when they carry the same feed", () => {
+    // One pile at the farm. Weighed apart, 60 + 60 out of 100 kg looked like
+    // two comfortable rows, and DailyEntry.clean threw the save back.
+    const a = adviseDailyEntry(lookup, {
+      feed_1: "13", feed_1_qty: "60", feed_2: "13", feed_2_qty: "60",
+    } as any, { feed_1: "100", feed_2: "100" } as any);
+    expect(a.blockers).toHaveLength(1);
+    expect(a.blockers[0]).toContain("short by 20.00 kg");
+  });
+
+  it("keeps two different feeds on their own balances", () => {
+    const a = adviseDailyEntry(lookup, {
+      feed_1: "13", feed_1_qty: "80", feed_2: "14", feed_2_qty: "80",
+    } as any, { feed_1: "100", feed_2: "100" } as any);
+    expect(a.blockers).toEqual([]);
   });
 
   it("allows feeding less than is there", () => {

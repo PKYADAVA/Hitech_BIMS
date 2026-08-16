@@ -668,17 +668,49 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
    * row's own kgs. The web subtracts down the grid the same way, so two rows
    * feeding the same store do not each claim the whole opening balance.
    */
-  const balanceFor = (row: GridRow, slot: "feed_1" | "feed_2"): number | null => {
-    const item = row.values[slot];
-    if (!item || !row.values.farm || !row.date) return null;
-    const key = stockKey(row.values.farm, item, row.date);
-    if (!(key in opening)) return null;
+  /** Rows entered above this one for the same farm — they drew on the same
+   *  store first, so the balance this row starts from is what they left. */
+  const rowsAbove = (row: GridRow): FeedRow[] => {
     const above: FeedRow[] = [];
     for (const r of rows) {
       if (r.key === row.key) break;                    // rows above only
       if (r.values.farm === row.values.farm) above.push(r.values as unknown as FeedRow);
     }
-    return farmFeedBalance(opening[key], item, above, num(row.values[`${slot}_qty`]));
+    return above;
+  };
+
+  const balanceFor = (row: GridRow, slot: "feed_1" | "feed_2"): number | null => {
+    const item = row.values[slot];
+    if (!item || !row.values.farm || !row.date) return null;
+    const key = stockKey(row.values.farm, item, row.date);
+    if (!(key in opening)) return null;
+    return farmFeedBalance(opening[key], item, rowsAbove(row),
+                           row.values as unknown as FeedRow);
+  };
+
+  /**
+   * The same balances as the advice wants them: what this row starts from,
+   * before its own kgs, per slot.
+   *
+   * Without this the grid asked for advice with no opening stock at all, so
+   * the shortfall blocker — the one thing on this screen that refuses a save
+   * rather than asking about it — never fired here. The Stock boxes went red
+   * and Save went through, and the server threw the row back (or, offline, the
+   * queue did, hours later and out of sight).
+   */
+  const openingFor = (row: GridRow): Record<string, string> | undefined => {
+    const out: Record<string, string> = {};
+    for (const slot of ["feed_1", "feed_2"] as const) {
+      const item = row.values[slot];
+      if (!item || !row.values.farm || !row.date) continue;
+      const key = stockKey(row.values.farm, item, row.date);
+      if (!(key in opening)) continue;
+      // An empty own row: this row's own draw is what the advice subtracts,
+      // and taking it off here as well would call every full store short.
+      out[slot] = String(farmFeedBalance(opening[key], item, rowsAbove(row),
+                                         { farm: row.values.farm }));
+    }
+    return Object.keys(out).length ? out : undefined;
   };
 
   /** Rows the user has actually filled in — a farm is the minimum to save one. */
@@ -707,7 +739,7 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     () =>
       new Map(
         rows.map((r) =>
-          [r.key, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r), r.date || undefined)] as const
+          [r.key, adviseDailyEntry(r.lookup, r.values, openingFor(r), priorFor(r), r.date || undefined)] as const
         )
       ),
     [rows, priorFor]
@@ -835,7 +867,7 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
     }
 
     const advised = filled.map((r) =>
-      [r, adviseDailyEntry(r.lookup, r.values, undefined, priorFor(r), r.date || undefined)] as const);
+      [r, adviseDailyEntry(r.lookup, r.values, openingFor(r), priorFor(r), r.date || undefined)] as const);
 
     // Refused, not confirmed — see Advice.blockers for the two cases (feed
     // over stock, a weighing gone stale): both are missing/wrong data, not a
