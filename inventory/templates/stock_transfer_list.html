@@ -121,7 +121,7 @@
               <label class="form-label">Item</label>
               <select class="form-select" id="edit-item">
                 <option value="">select</option>
-                {% for i in items %}<option value="{{ i.id }}">{{ i.item_code|escapejs }} - {{ i.description|escapejs }}</option>{% endfor %}
+                {% for i in items %}<option value="{{ i.id }}">{{ i.item_code }} - {{ i.description }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-3">
@@ -136,8 +136,8 @@
               <label class="form-label">From Location</label>
               <select class="form-select" id="edit-from-location">
                 <option value="">select</option>
-                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
-                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name }}</option>{% endfor %}</optgroup>
+                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
               </select>
             </div>
             <div class="col-md-6">
@@ -150,8 +150,8 @@
               <label class="form-label">To Location</label>
               <select class="form-select" id="edit-to-location">
                 <option value="">select</option>
-                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
-                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name }}</option>{% endfor %}</optgroup>
+                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
               </select>
             </div>
             <div class="col-md-6">

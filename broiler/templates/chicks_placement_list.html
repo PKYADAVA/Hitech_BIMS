@@ -31,7 +31,7 @@
         <label class="form-label">Farm:</label>
         <select class="form-select" id="farm-filter">
           <option value="">All</option>
-          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
+          {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-md-2">
@@ -93,14 +93,14 @@
               <label class="form-label">From Warehouse</label>
               <select class="form-select" id="edit-warehouse" required>
                 <option value="">select</option>
-                {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}
+                {% for w in warehouses %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-3">
               <label class="form-label">To Farm</label>
               <select class="form-select" id="edit-farm" required>
                 <option value="">select</option>
-                {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}
+                {% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-3">
@@ -113,7 +113,7 @@
               <label class="form-label">Item</label>
               <select class="form-select" id="edit-item" required>
                 <option value="">select</option>
-                {% for item in chick_items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}
+                {% for item in chick_items %}<option value="{{ item.id }}">{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-2">

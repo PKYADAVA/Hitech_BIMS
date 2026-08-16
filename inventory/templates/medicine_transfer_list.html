@@ -78,8 +78,8 @@
               </div>
               <select class="form-select" id="bulk-from-location" disabled>
                 <option value="">select</option>
-                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
-                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name }}</option>{% endfor %}</optgroup>
+                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
               </select>
             </div>
             <div class="col-md-6">
@@ -89,8 +89,8 @@
               </div>
               <select class="form-select" id="bulk-to-location" disabled>
                 <option value="">select</option>
-                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
-                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+                <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name }}</option>{% endfor %}</optgroup>
+                <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
               </select>
             </div>
             <div class="col-md-6">

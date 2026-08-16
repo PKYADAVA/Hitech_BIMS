@@ -47,7 +47,7 @@
         <label class="form-label">Template <span class="text-danger">*</span></label>
         <select class="form-select" id="template">
           <option value="">select template</option>
-          {% for t in templates %}<option value="{{ t.id }}" data-body="{{ t.body|escapejs }}" data-transaction="{{ t.transaction }}">{{ t.name }} ({{ t.get_module_display }})</option>{% endfor %}
+          {% for t in templates %}<option value="{{ t.id }}" data-body="{{ t.body }}" data-transaction="{{ t.transaction }}">{{ t.name }} ({{ t.get_module_display }})</option>{% endfor %}
         </select>
       </div>
       <div class="col-md-4 d-flex gap-2">

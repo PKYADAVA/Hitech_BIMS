@@ -39,8 +39,8 @@
           <label class="form-label">From Location <span class="text-danger">*</span></label>
           <select class="form-select" id="from-location" required>
             <option value="">select</option>
-            <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
-            <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+            <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name }}</option>{% endfor %}</optgroup>
+            <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
           </select>
         </div>
         <div class="col-md-2 d-none" id="from-batch-wrap">
@@ -53,8 +53,8 @@
           <label class="form-label">To Location <span class="text-danger">*</span></label>
           <select class="form-select" id="to-location" required>
             <option value="">select</option>
-            <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}</optgroup>
-            <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>
+            <optgroup label="Warehouse">{% for w in warehouses %}<option value="warehouse:{{ w.id }}">{{ w.name }}</option>{% endfor %}</optgroup>
+            <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name }}</option>{% endfor %}</optgroup>
           </select>
         </div>
         <div class="col-md-2 d-none" id="to-batch-wrap">

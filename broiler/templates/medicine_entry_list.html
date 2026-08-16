@@ -80,7 +80,7 @@
               <label class="form-label">Medicine/Vaccine</label>
               <select class="form-select" id="edit-item">
                 <option value="">select</option>
-                {% for item in items %}<option value="{{ item.id }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}
+                {% for item in items %}<option value="{{ item.id }}">{{ item.item_code }} - {{ item.description }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-4">

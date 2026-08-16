@@ -58,7 +58,7 @@
           <label class="form-label">Customer <span class="text-danger">*</span></label>
           <select class="form-select" id="customer" required>
             <option value="">select</option>
-            {% for customer in customers %}<option value="{{ customer.id }}" data-name="{{ customer.name|escapejs }}" data-address="{{ customer.address|escapejs }}" data-mobile="{{ customer.mobile|escapejs }}" data-gstin="{{ customer.gstin|default:''|escapejs }}" data-email="{{ customer.email|default:''|escapejs }}">{{ customer.name }}</option>{% endfor %}
+            {% for customer in customers %}<option value="{{ customer.id }}" data-name="{{ customer.name }}" data-address="{{ customer.address }}" data-mobile="{{ customer.mobile }}" data-gstin="{{ customer.gstin|default:'' }}" data-email="{{ customer.email|default:'' }}">{{ customer.name }}</option>{% endfor %}
           </select>
         </div>
         <div class="col-md-2">
@@ -186,7 +186,7 @@
         <label class="form-label mb-0">Terms and Conditions</label>
         <select class="form-select form-select-sm" id="terms_template" style="max-width:260px">
           <option value="">Select from master...</option>
-          {% for tc in terms_conditions %}<option value="{{ forloop.counter0 }}" data-condition="{{ tc.condition|escapejs }}">{{ tc.type|default:"Unnamed" }}</option>{% endfor %}
+          {% for tc in terms_conditions %}<option value="{{ forloop.counter0 }}" data-condition="{{ tc.condition }}">{{ tc.type|default:"Unnamed" }}</option>{% endfor %}
         </select>
       </div>
       <textarea class="form-control" id="terms" rows="3"></textarea>

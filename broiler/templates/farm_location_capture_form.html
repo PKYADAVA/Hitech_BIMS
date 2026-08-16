@@ -44,7 +44,7 @@
           <select name="farm" id="farm" class="form-select" required>
             <option value="">Select farm</option>
             {% for f in farms %}
-            <option value="{{ f.id }}" data-farmer="{{ f.farmer.farmer_name|default:''|escapejs }}"
+            <option value="{{ f.id }}" data-farmer="{{ f.farmer.farmer_name|default:'' }}"
                     data-branch="{{ f.branch_id|default:'' }}"
                     {% if capture and capture.farm_id == f.id %}selected{% endif %}>
               {{ f.farm_code }} - {{ f.farm_name }}
