@@ -55,7 +55,8 @@
 
   /* hint pills */
   .dr-table .phase-hint .badge, .dr-table .phase-hint-2 .badge,
-  .dr-table .feed-warn .badge, .dr-table .wt-hint .badge {
+  .dr-table .feed-warn .badge, .dr-table .wt-hint .badge,
+  .dr-table .stock-warn .badge {
     font-weight:600; font-size:.68rem; border-radius:999px; padding:.28em .6em; }
 
   /* Feed vs standard gauge (under the Kgs cell) */
@@ -272,10 +273,10 @@ function row() {
     <td><input class="form-control bg-light closing-birds" readonly placeholder="auto"
                title="Opening less this row's mortality and culls"></td>
     <td class="fg1"><select class="form-select feed-1">${feedOptions}</select><div class="phase-hint small mt-1"></div></td>
-    <td class="fg1"><input class="form-control bg-light stock-1" readonly placeholder="auto"></td>
+    <td class="fg1"><input class="form-control bg-light stock-1" readonly placeholder="auto"><div class="stock-warn small mt-1"></div></td>
     <td class="fg1"><input class="form-control kgs-1" type="number" min="0" step=".01" value="0"><div class="feed-warn small mt-1"></div></td>
     <td class="fg2"><select class="form-select feed-2">${feedOptions}</select><div class="phase-hint-2 small mt-1"></div></td>
-    <td class="fg2"><input class="form-control bg-light stock-2" readonly placeholder="auto"></td>
+    <td class="fg2"><input class="form-control bg-light stock-2" readonly placeholder="auto"><div class="stock-warn small mt-1"></div></td>
     <td class="fg2"><input class="form-control kgs-2" type="number" min="0" step=".01" value="0"></td>
     <td><input class="form-control avg-wt" type="number" min="0" step=".01" value="0"><div class="wt-hint small mt-1"></div></td>
     <td><input class="form-control remarks"></td>
@@ -341,7 +342,7 @@ async function recomputeStockPreview() {
     for (const [selCls, stockCls, kgsCls] of [['.feed-1', '.stock-1', '.kgs-1'], ['.feed-2', '.stock-2', '.kgs-2']]) {
       const itemId = tr.querySelector(selCls).value;
       const stockInput = tr.querySelector(stockCls);
-      if (!farmId || !itemId) { stockInput.value = ''; continue; }
+      if (!farmId || !itemId) { stockInput.value = ''; flagShortfall(stockInput, 0, 0); continue; }
       const key = `${farmId}:${itemId}`;
       if (!(key in running)) {
         if (!(key in openingCache)) {
@@ -355,7 +356,35 @@ async function recomputeStockPreview() {
       const kgs = Number(tr.querySelector(kgsCls).value) || 0;
       running[key] -= kgs;
       stockInput.value = running[key].toFixed(2);
+      flagShortfall(stockInput, running[key], kgs);
     }
+  }
+}
+
+/**
+ * Say it in the row, as the quantity is typed.
+ *
+ * A shortfall was already visible — as a minus sign in a grey read-only box,
+ * which nobody reads as a refusal. The first thing that actually spoke up was
+ * the alert at Save, by which time the whole grid had been filled in and the
+ * supervisor had to work out which row was the wrong one.
+ *
+ * Marked on the Stock box rather than on Kgs: Kgs already carries the
+ * feed-versus-standard state, and a cell cannot say two things at once. The
+ * balance is the figure being contradicted anyway.
+ */
+function flagShortfall(stockInput, closing, kgs) {
+  const cell = stockInput.closest('td');
+  const warn = cell && cell.querySelector('.stock-warn');
+  // Only this row's own feeding is called a shortfall. A farm already in
+  // deficit shows the negative, but a row that feeds nothing did not cause it
+  // and must not be blocked by it.
+  const short = kgs > 0 && closing < 0;
+  stockInput.classList.toggle('field-bad', short);
+  if (warn) {
+    warn.innerHTML = short
+      ? badge(BAD, `⚠ short by ${Math.abs(closing).toFixed(2)} kg`)
+      : '';
   }
 }
 
@@ -563,17 +592,18 @@ function negativeStockRows() {
     const farmSel = tr.querySelector('.farm');
     const farm = farmSel && farmSel.value
       ? farmSel.options[farmSel.selectedIndex].text : `Row ${i + 1}`;
-    // The preview already chains earlier rows into each row's opening figure,
-    // so reading the closing box is enough.
+    // The Stock box is already the balance *after* this row has eaten — the
+    // preview chains earlier rows into it and subtracts this row's own Kgs.
+    // Subtracting them again here doubled the shortfall, so 5,000 kg fed from
+    // an empty store was reported as 10,000 kg short.
     [['.stock-1', '.kgs-1', '.feed-1'], ['.stock-2', '.kgs-2', '.feed-2']]
       .forEach(([sc, kc, fc]) => {
         const sel = tr.querySelector(fc);
         if (!sel || !sel.value) return;
         const kg = Number(tr.querySelector(kc).value) || 0;
         if (kg <= 0) return;
-        const opening = parseFloat(tr.querySelector(sc).value || '');
-        if (isNaN(opening)) return;
-        const closing = opening - kg;
+        const closing = parseFloat(tr.querySelector(sc).value || '');
+        if (isNaN(closing)) return;
         if (closing < 0) {
           bad.push(`${farm}: ${feedName(tr, fc)} is short by `
                    + `${Math.abs(closing).toFixed(2)} kg`);

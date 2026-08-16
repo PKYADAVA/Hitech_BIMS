@@ -142,6 +142,40 @@ class FeedStockGuardTests(TestCase):
         })
         self.assertTrue(ser.is_valid(), ser.errors)
 
+    # ---- the two entry pages (the endpoint they post to) --------------------
+
+    def _post(self, qty):
+        """What Daily Entry and Add Day Record both submit."""
+        from django.contrib.auth import get_user_model
+        import json
+
+        user = get_user_model().objects.create_superuser(
+            username="entry-clerk", email="clerk@test.local", password="pw")
+        self.client.force_login(user)
+        return self.client.post("/daily_entry_api/", data=json.dumps({
+            "supervisor": self.sup.id, "farm": self.farm.id,
+            "rows": [{"date": self.today.isoformat(), "batch": self.batch.id,
+                      "feed_1": self.pre.id, "feed_1_qty": qty}],
+        }), content_type="application/json")
+
+    def test_the_page_s_own_endpoint_refuses_it_and_saves_nothing(self):
+        """The grid checks as you type, but the page is not the guard.
+
+        Both entry pages post here, and so does anything else that learns the
+        url. A row refused in the browser must be refused again on arrival, or
+        the rule only holds for people using the form as intended.
+        """
+        self.deliver(self.pre, 100)
+        resp = self._post("150")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("only 100", resp.json()["error"])
+        self.assertEqual(DailyEntry.objects.count(), 0)
+
+    def test_the_page_s_own_endpoint_takes_what_fits(self):
+        self.deliver(self.pre, 100)
+        self.assertEqual(self._post("80").status_code, 201)
+        self.assertEqual(DailyEntry.objects.count(), 1)
+
 
 class TransferStockGuardTests(TestCase):
     """A transfer out of a farm could not go negative either.
