@@ -2875,14 +2875,25 @@ def daily_entry_stock_lookup(request):
     """Opening stock for a farm+feed item as of a given date — i.e. the
     closing balance of the most recent saved entry before that date (0 if
     none). Used to seed the Add form's live running-stock preview; the grid
-    itself then subtracts each row's own Kgs client-side as you type."""
+    itself then subtracts each row's own Kgs client-side as you type.
+
+    ``entry`` is the id of a row being *edited*, and leaves that row's own
+    consumption out of the balance — the same allowance ``clean()`` makes
+    through ``self.pk``. Without it the register's edit dialog would weigh a
+    saved row against a balance its own Kgs had already been taken out of, and
+    call every unchanged entry short.
+    """
     farm_id = request.GET.get("farm")
     item_id = request.GET.get("item")
     entry_date = request.GET.get("date")
     if not farm_id or not item_id or not entry_date:
         return JsonResponse({"stock": "0"})
+    try:
+        editing = int(request.GET.get("entry") or 0) or None
+    except ValueError:
+        editing = None
     d = timezone.datetime.fromisoformat(entry_date).date()
-    stock = DailyEntry.previous_stock(farm_id, int(item_id), d, None)
+    stock = DailyEntry.previous_stock(farm_id, int(item_id), d, editing)
     return JsonResponse({"stock": str(stock)})
 
 

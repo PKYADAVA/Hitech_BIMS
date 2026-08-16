@@ -176,6 +176,41 @@ class FeedStockGuardTests(TestCase):
         self.assertEqual(self._post("80").status_code, 201)
         self.assertEqual(DailyEntry.objects.count(), 1)
 
+    # ---- the balance the registers' edit dialog shows -----------------------
+
+    def _lookup(self, item, **extra):
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.filter(username="looker").first()
+        if not user:
+            user = get_user_model().objects.create_superuser(
+                username="looker", email="look@test.local", password="pw")
+        self.client.force_login(user)
+        params = {"farm": self.farm.id, "item": item.id,
+                  "date": self.today.isoformat(), **extra}
+        return Decimal(self.client.get("/daily-entry/stock-lookup/",
+                                       params).json()["stock"])
+
+    def test_the_dialog_leaves_the_row_being_edited_out_of_the_balance(self):
+        """Or every saved entry opens looking like a shortfall.
+
+        The row's own Kgs are already out of the farm's balance. Counted again
+        they would be subtracted twice, and a 90 kg entry against a 100 kg
+        delivery would open saying 10 kg left and refuse its own quantity.
+        """
+        self.deliver(self.pre, 100)
+        saved = DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.sup,
+            date=self.today, feed_1=self.pre, feed_1_qty=Decimal("90"))
+        self.assertEqual(self._lookup(self.pre, entry=saved.id), Decimal("100"))
+        # Without the id it is the balance for a *new* row on that day, which
+        # is what the Add pages ask for and correctly has the 90 taken out.
+        self.assertEqual(self._lookup(self.pre), Decimal("10"))
+
+    def test_a_junk_entry_id_is_ignored_rather_than_erroring(self):
+        self.deliver(self.pre, 100)
+        self.assertEqual(self._lookup(self.pre, entry="abc"), Decimal("100"))
+
 
 class TransferStockGuardTests(TestCase):
     """A transfer out of a farm could not go negative either.
