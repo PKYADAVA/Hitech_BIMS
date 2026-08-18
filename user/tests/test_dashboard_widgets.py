@@ -392,7 +392,8 @@ class DashboardWidgetTests(TestCase):
     def test_a_superuser_gets_them_all(self):
         self.assertEqual([w["key"] for w in dashboard_widgets(self.admin, use_cache=False)],
                          ["live_flock", "daily_entries", "flock_ages", "liftings",
-                          "receivables", "payables", "stock_alerts"])
+                          "sale_overview", "receivables", "payables",
+                          "stock_alerts"])
 
     # ---- the endpoint and the page ---------------------------------------
 

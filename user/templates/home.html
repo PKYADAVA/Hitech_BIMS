@@ -162,17 +162,21 @@
      what keeps its labels legible at this width. */
   .dw-col-flock_ages .dw-stats { grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); }
 
-  /* Lifting Details is the day in a strip — trucks, birds, weight, farms, then
-     the loads themselves — and read at a fifth of the row it wrapped every
-     figure onto three lines. It takes a row of its own. */
-  .dw-col-liftings { flex: 0 0 100%; max-width: 100%; }
-  .dw-col-liftings .dw-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  /* Its rows read as a list of loads across the width rather than a stack. */
-  @media (min-width: 992px) {
-    .dw-col-liftings .dw-rows { display: grid; grid-template-columns: repeat(3, 1fr);
-                                gap: 0 18px; }
-    .dw-col-liftings .dw-rows-title { grid-column: 1 / -1; }
+  /* The dashboard in three readings, each on its own line rather than eight
+     cards crammed onto one: the flocks (what is on the farms, whether it
+     reported, when it goes out), the day's trade (what went out, and what has
+     come back for it), then the money and the stock.
+
+     Widths are set here rather than left to `col-xl`, which spreads every card
+     across a single line and leaves none of them wide enough for a chart. From
+     xl up only — below that Bootstrap's own col-12 / col-md-6 still applies. */
+  @media (min-width: 1200px) {
+    .dw-col-live_flock, .dw-col-daily_entries,
+    .dw-col-flock_ages { flex:0 0 33.3333%; max-width:33.3333%; }
+    .dw-col-liftings, .dw-col-sale_overview { flex:0 0 50%; max-width:50%; }
   }
+  .dw-col-liftings .dw-stats,
+  .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
   .dw-stat .dw-label { display:block; font-size:.68rem; color:#6b7890; text-transform:uppercase;
                        letter-spacing:.04em; }

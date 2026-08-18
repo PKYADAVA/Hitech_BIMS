@@ -572,6 +572,90 @@ def _last_lifting_note(qs, day):
             f" — {_num(previous.birds)} birds, {gap} day{'' if gap == 1 else 's'} ago.")
 
 
+def _sale_overview(viewable, filters, user=None):
+    """Bird sales to date, and how much of the money has come back.
+
+    Everything up to the chosen day rather than the day itself: a receipt lands
+    days after the lifting it pays for, so "billed less received" only means
+    anything cumulatively. On a single day it would read as an unpaid bill
+    every time.
+
+    Date only, and deliberately unfiltered otherwise. A receipt is booked
+    against a customer and a location, never against a farm — so a farm or
+    branch filter would narrow the sales and leave the receipts whole, and the
+    difference between them would be an arithmetic accident. The card says as
+    much rather than showing the figure anyway.
+    """
+    from django.db.models import Sum
+    from broiler.models import BirdSale, BirdSaleReceipt
+    from user.services.scoping import is_unscoped
+
+    day = filters.get("date") or timezone.localdate()
+    # Whole-business figures, so only for people who may see the whole
+    # business. Scoping the sales alone and leaving the receipts — which carry
+    # no farm — would make the difference between them an arithmetic accident
+    # rather than a shortfall, and a branch manager would be handed the rest of
+    # the country's money either way.
+    if not is_unscoped(user):
+        return {"stats": [], "filters_used": ["date"],
+                "note": "This overview covers every branch, so it is shown only "
+                        "to users whose access is not limited to part of the "
+                        "business."}
+
+    sales = BirdSale.objects.filter(date__lte=day)
+    receipts = BirdSaleReceipt.objects.filter(date__lte=day)
+
+    totals = sales.aggregate(b=Sum("birds"), w=Sum("net_weight"), v=Sum("amount"))
+    birds = float(totals["b"] or 0)
+    weight = float(totals["w"] or 0)
+    value = float(totals["v"] or 0)
+
+    if not birds and not weight:
+        return {"stats": [{"label": "Sold birds", "value": "0"}],
+                "note": "No bird sales recorded up to this date.",
+                "filters_used": ["date"]}
+
+    # Cash is cash; everything else — transfer, cheque, UPI, card — reaches a
+    # bank, which is the split the overview asks for.
+    cash = float(receipts.filter(mode="Cash").aggregate(t=Sum("amount"))["t"] or 0)
+    banked = float(receipts.exclude(mode="Cash").aggregate(t=Sum("amount"))["t"] or 0)
+    received = cash + banked
+    outstanding = value - received
+
+    # Age at sale, weighted by the birds that went out on each lifting: a
+    # 12,000-bird lifting and a 200-bird one are not two equal opinions about
+    # the age a flock leaves at.
+    bird_days, head = 0.0, 0.0
+    for sale_date, start, count in sales.values_list("date", "batch__start_date", "birds"):
+        if not start:
+            continue                       # no placement recorded: no age to take
+        bird_days += max((sale_date - start).days, 0) * float(count or 0)
+        head += float(count or 0)
+    mean_age = (bird_days / head) if head else None
+
+    return {
+        "stats": [
+            {"label": "Sold birds", "value": _num(birds)},
+            {"label": "Sold weight", "value": f"{weight:,.2f} Kg"},
+            {"label": "Mean age", "value": ("—" if mean_age is None else f"{mean_age:.2f} d"),
+             "sub": "weighted by birds"},
+            {"label": "Mean body wt",
+             "value": (f"{weight / birds:.3f} Kg" if birds else "—"),
+             "sub": "sold weight per bird"},
+            {"label": "Avg sale rate",
+             "value": (f"₹{value / weight:,.2f}" if weight else "—"), "sub": "per kg"},
+            {"label": "Sale value", "value": "₹" + _inr(value)},
+            {"label": "Cash received", "value": "₹" + _inr(cash)},
+            {"label": "Bank received", "value": "₹" + _inr(banked),
+             "sub": "transfer, cheque, UPI, card"},
+            {"label": "Difference", "value": "₹" + _inr(outstanding),
+             "sub": "billed less received",
+             "tone": "bad" if outstanding > 0 else "good"},
+        ],
+        "filters_used": ["date"],
+    }
+
+
 def _receivables(viewable, filters, user=None):
     """Money owed to us, by customer.
 
@@ -706,6 +790,8 @@ WIDGETS = [
      "live_flock_summary_report", "fa-solid fa-chart-column", "gs-purple", _flock_ages),
     ("liftings", "Lifting Details", ("bird_sale_list",),
      "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
+    ("sale_overview", "Sale Overview", ("bird_sale_list",),
+     "bird_sale_list", "fa-solid fa-receipt", "gs-green", _sale_overview),
     # Two widgets, not one: each answers to its own permission, so a user who
     # may see customer balances and not supplier ones now gets the half they
     # are entitled to instead of a card mixing both.
@@ -752,7 +838,7 @@ DEFAULT_PANEL_ORDER = (
     # are the same question in three parts — what is on the farms, whether it
     # reported today, and when it goes out.
     "live_flock", "daily_entries", "flock_ages",
-    "liftings", "receivables", "payables", "stock_alerts",
+    "liftings", "sale_overview", "receivables", "payables", "stock_alerts",
     "field_team",
 )
 
@@ -1029,6 +1115,33 @@ def _scope_signature(user):
     return "|".join(parts)
 
 
+def _positions(prefs):
+    """Where each widget sits, saved ones and never-configured ones together.
+
+    A saved dashboard numbers its cards 0, 1, 2… A widget added to the registry
+    afterwards has no number, and taking one from the default order instead
+    mixes two numberings: the new card landed wherever that index happened to
+    fall among the saved ones, which is how Lifting Details ended up beside
+    Receivables and Sale Overview beside Payables.
+
+    So an undecided widget is placed immediately after whichever card precedes
+    it in the default order — the position it was designed to hold, expressed
+    in the numbering the configuration is actually using.
+    """
+    if not prefs:
+        return dict(prefs or {})
+    places, previous, nudge = dict(prefs), None, 0
+    for key in DEFAULT_PANEL_ORDER:
+        if key in prefs:
+            previous, nudge = prefs[key], 0
+        else:
+            nudge += 1
+            # Before everything if it leads the order and nothing above it is
+            # configured; otherwise a hair after the card it follows.
+            places[key] = (previous if previous is not None else -1) + nudge / 1000
+    return places
+
+
 def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
                       prefs_override=None):
     """Widget payloads for everything ``user`` is allowed to see.
@@ -1059,6 +1172,7 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
     use_cache = (use_cache and not _active(filters)
                  and as_group is None and prefs_override is None)
 
+    places = _positions(prefs)
     out = []
     for key, title, tabs, url_name, icon, colour, build in WIDGETS:
         if not any(t in viewable for t in tabs):
@@ -1094,13 +1208,7 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
                     cache.set(cache_key, body, CACHE_SECONDS)
         card.update(body)
         card["ignored"] = _ignored_note(filters, card.get("filters_used") or [])
-        # A widget the configuration never decided about takes its place in the
-        # default order rather than `len(out)`, which put every new card at the
-        # top of a configured dashboard — first position, ahead of whatever the
-        # administrator had deliberately put there.
-        default = (DEFAULT_PANEL_ORDER.index(key)
-                   if key in DEFAULT_PANEL_ORDER else len(out))
-        card["position"] = (prefs or {}).get(key, default)
+        card["position"] = places.get(key, len(out))
         out.append(card)
 
     if prefs is not None:
