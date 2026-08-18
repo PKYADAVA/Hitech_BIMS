@@ -487,14 +487,19 @@ def _liftings(viewable, filters, user=None):
     how many trucks, how many birds, what weight, and across how many farms.
     The register behind the card has the rest.
 
-    Yesterday is on the card too, as the sub line. A count on its own says
-    nothing — eighteen liftings is a busy day or a slow one depending on what
-    the day before did.
+    Birds go out a few times a week, so with no date chosen the card shows the
+    last day that had a lifting rather than today: a dashboard that is a row of
+    noughts six mornings out of seven is a dashboard nobody reads. Choosing a
+    date on the filter bar overrides that and answers for exactly that day,
+    however quiet it was.
+
+    The previous lifting day is on the card too, as the sub line. A count on
+    its own says nothing — eighteen liftings is a busy day or a slow one
+    depending on what the day before it did.
     """
     from django.db.models import Sum
     from broiler.models import BirdSale
 
-    day = filters.get("date") or timezone.localdate()
     used = list(FILTER_KEYS)          # every filter reaches a lifting's farm
 
     def scoped():
@@ -504,6 +509,14 @@ def _liftings(viewable, filters, user=None):
     def on(when):
         return scoped().filter(date=when)
 
+    def last_day_before(when):
+        row = scoped().filter(date__lt=when).order_by("-date").values("date").first()
+        return row["date"] if row else None
+
+    chosen = filters.get("date")
+    latest = scoped().order_by("-date").values("date").first()
+    day = chosen or (latest["date"] if latest else timezone.localdate())
+
     today = on(day)
     totals = today.aggregate(b=Sum("birds"), w=Sum("net_weight"))
     birds = float(totals["b"] or 0)
@@ -511,13 +524,20 @@ def _liftings(viewable, filters, user=None):
     count = today.count()
     farms = today.values("farm_id").distinct().count()
 
-    before = on(day - timedelta(days=1)).count()
-    if count and not before:
-        against = "none yesterday"
+    # Against the last day that had liftings rather than the calendar day
+    # before, which on this trade is almost always nought and says nothing.
+    previous = last_day_before(day)
+    before = on(previous).count() if previous else 0
+    if not count:
+        against = ""
+    elif not previous:
+        against = "the first lifting recorded"
     elif count == before:
-        against = "same as yesterday"
+        against = f"same as {previous.strftime('%d %b')}"
     else:
-        against = f"{_num(abs(count - before))} {'more' if count > before else 'fewer'} than yesterday"
+        against = (f"{_num(abs(count - before))} "
+                   f"{'more' if count > before else 'fewer'} than "
+                   f"{previous.strftime('%d %b')}")
 
     rows = [{
         "label": (r.farm.farm_name if r.farm_id else "") or "—",
@@ -549,12 +569,22 @@ def _liftings(viewable, filters, user=None):
         "chart": _bars(groups, series=("Birds", "Weight")) if groups else None,
         "rows": rows,
         "rows_title": "Latest liftings" if rows else None,
-        # A blank day is normal — birds go out a few times a week — so the card
-        # says when the last one was rather than only that today had none. A
-        # card that says nothing but nought reads as a card that is broken.
-        "note": None if count else _last_lifting_note(scoped(), day),
+        # Which day is on the card. Unasked-for dates have to say so, or a
+        # figure from last Tuesday reads as this morning's.
+        "note": (_showing_note(day, chosen) if count
+                 else _last_lifting_note(scoped(), day)),
         "filters_used": used,
     }
+
+
+def _showing_note(day, chosen):
+    """Name the day a card is answering for, when nobody asked for it."""
+    if chosen:
+        return None
+    if day == timezone.localdate():
+        return None
+    return (f"Showing {day.strftime('%d %b %Y')} — the last day with a lifting. "
+            "Pick a date to see another.")
 
 
 def _last_lifting_note(qs, day):
@@ -604,6 +634,7 @@ def _sale_overview(viewable, filters, user=None):
 
     sales = BirdSale.objects.filter(date__lte=day)
     receipts = BirdSaleReceipt.objects.filter(date__lte=day)
+    last_sale = sales.order_by("-date").values("date").first()
 
     totals = sales.aggregate(b=Sum("birds"), w=Sum("net_weight"), v=Sum("amount"))
     birds = float(totals["b"] or 0)
@@ -652,6 +683,11 @@ def _sale_overview(viewable, filters, user=None):
              "sub": "billed less received",
              "tone": "bad" if outstanding > 0 else "good"},
         ],
+        # Everything up to a day, so the card says which day and when the last
+        # sale in it was — an overview with no date on it is read as today's.
+        "note": (f"Everything up to {day.strftime('%d %b %Y')}"
+                 + (f". Last sale {last_sale['date'].strftime('%d %b')}."
+                    if last_sale else ".")),
         "filters_used": ["date"],
     }
 
