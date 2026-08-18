@@ -111,10 +111,26 @@ class LiftingWidgetTests(TestCase):
         self.assertEqual(rows[0]["value"], "2,000 birds")
         self.assertEqual(rows[0]["meta"], "40 kg")
 
-    def test_a_quiet_day_says_so_rather_than_showing_zeros_alone(self):
+    def test_a_quiet_day_says_when_the_last_lifting_was(self):
+        """Birds go out a few times a week. A card that says nothing but nought
+        reads as a card that is broken, so it says which it is."""
+        self.lift(226, "512.00", when=self.today - timedelta(days=14))
         card = self.card()
-        self.assertEqual(card["note"], "No liftings recorded on this day.")
+        self.assertIn("No liftings on this day", card["note"])
+        self.assertIn("226 birds, 14 days ago", card["note"])
         self.assertEqual(card["rows"], [])
+
+    def test_a_farm_that_has_never_lifted_says_that_instead(self):
+        self.assertEqual(self.card()["note"], "No liftings recorded here yet.")
+
+    def test_the_last_lifting_is_read_through_the_filter_too(self):
+        """Another branch's lifting is not this filter's last one."""
+        far = Branch.objects.create(branch_name="Bahraich", region=self.region,
+                                    prefix="BHR")
+        self.lift(500, "10.00", farm=self.make_farm("Far Farm", branch=far),
+                  when=self.today - timedelta(days=2))
+        card = self.card(filters={"branch": self.branch.id})
+        self.assertEqual(card["note"], "No liftings recorded here yet.")
 
     # ---- filters ------------------------------------------------------------
 

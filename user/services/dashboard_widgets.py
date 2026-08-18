@@ -497,12 +497,12 @@ def _liftings(viewable, filters, user=None):
     day = filters.get("date") or timezone.localdate()
     used = list(FILTER_KEYS)          # every filter reaches a lifting's farm
 
+    def scoped():
+        qs = _scope_farms(BirdSale.objects.all(), filters, "farm")
+        return qs if user is None else _scope_to_user(qs, user, "farm")
+
     def on(when):
-        qs = BirdSale.objects.filter(date=when)
-        qs = _scope_farms(qs, filters, "farm")
-        if user is not None:
-            qs = _scope_to_user(qs, user, "farm")
-        return qs
+        return scoped().filter(date=when)
 
     today = on(day)
     totals = today.aggregate(b=Sum("birds"), w=Sum("net_weight"))
@@ -549,9 +549,27 @@ def _liftings(viewable, filters, user=None):
         "chart": _bars(groups, series=("Birds", "Weight")) if groups else None,
         "rows": rows,
         "rows_title": "Latest liftings" if rows else None,
-        "note": "No liftings recorded on this day." if not count else None,
+        # A blank day is normal — birds go out a few times a week — so the card
+        # says when the last one was rather than only that today had none. A
+        # card that says nothing but nought reads as a card that is broken.
+        "note": None if count else _last_lifting_note(scoped(), day),
         "filters_used": used,
     }
+
+
+def _last_lifting_note(qs, day):
+    """"No liftings on this day", plus when there last was one.
+
+    Birds go out a few times a week, so a blank day is normal and a card that
+    says nothing but nought reads as a card that is broken. The last lifting
+    says which it is.
+    """
+    previous = qs.filter(date__lt=day).order_by("-date").first()
+    if previous is None:
+        return "No liftings recorded here yet."
+    gap = (day - previous.date).days
+    return (f"No liftings on this day. The last was {previous.date.strftime('%d %b')}"
+            f" — {_num(previous.birds)} birds, {gap} day{'' if gap == 1 else 's'} ago.")
 
 
 def _receivables(viewable, filters, user=None):
