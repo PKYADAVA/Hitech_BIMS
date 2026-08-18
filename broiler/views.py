@@ -4019,13 +4019,32 @@ def _production_cost_row(batch, fetch_type="management"):
                 ).quantize(Decimal("0.0001")) if last_weighed else None)
 
     # What the birds still on the farm are valued at is a third question, and
-    # the sale answers it better than the weighing wherever there is one. A
-    # weighing is a sample taken by hand and is not always kept up: one flock
-    # here last recorded 82 g while lifting birds at 1.90 kg, and valuing its
-    # standing birds by the sample would have priced them at a twenty-third of
-    # their weight. Same rule the GC Realization report follows.
-    valued_at = sold_avg_bwt or avg_bwt
-    weight_basis = "sold" if sold_avg_bwt else ("weighed" if avg_bwt else "none")
+    # the answer is simply the most recent reading of either kind.
+    #
+    # A lifting weighs birds on a weighbridge and a daily entry weighs a sample
+    # by hand, but neither is worth much once the other is newer: birds sold on
+    # the 17th at 1.70 kg say nothing about a flock weighed at 1.81 kg two days
+    # later, and a weighing from a fortnight ago says nothing about birds that
+    # went over a bridge this morning. Whichever happened last is what the
+    # standing birds weigh now.
+    #
+    # The lifting's own average, not the flock's running one: it is that day's
+    # reading that is being dated. A tie goes to the weighbridge, which is a
+    # whole lorry rather than a handful of birds.
+    last_sale = (BirdSale.objects
+                 .filter(batch=batch, birds__gt=0, net_weight__gt=0)
+                 .order_by("-date", "-id")
+                 .values("date", "birds", "net_weight").first())
+    readings = []
+    if last_sale:
+        readings.append((last_sale["date"], 1,
+                         _pc_div(_num(last_sale["net_weight"]),
+                                 _num(last_sale["birds"])), "sold"))
+    if last_weighed:
+        readings.append((last_weighed["date"], 0, avg_bwt, "weighed"))
+    latest = max(readings) if readings else None
+    valued_at = latest[2] if latest else None
+    weight_basis = latest[3] if latest else "none"
 
     # How long since anyone put birds on a scale. Separate from the entry gap:
     # a flock can be recorded daily and still not have been weighed for a

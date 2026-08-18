@@ -700,18 +700,53 @@ class LiveWeightBeforeALiftingTests(TestCase):
         self.assertEqual(r["avg_bwt"], Decimal("1.5000"))
         self.assertIsNone(r["sold_avg_bwt"])
 
-    def test_the_standing_birds_are_valued_off_the_weighbridge_where_there_is_one(self):
-        """A weighing is a hand-taken sample and is not always kept up — one
-        flock last recorded 82 g while lifting at 1.90 kg. Valuing what is
-        still standing by that sample would price it at a twenty-third of its
-        weight, so the sale wins wherever there is one."""
+    def test_the_standing_birds_take_the_more_recent_reading(self):
+        """A lifting on the 17th at 1.70 kg says nothing about a flock weighed
+        at 1.81 kg two days later."""
         self.place(1000)
-        self.weigh(2, 82)
-        self.sell(200, "380.00")
+        self.sell(200, "340.00", days_ago=4)       # 1.70 kg off the weighbridge
+        self.weigh(2, 1810)                        # and 1.81 kg two days after
+        r = self.row()
+        self.assertEqual(r["weight_basis"], "weighed")
+        self.assertEqual(r["available_weight"], Decimal("1448.00"))   # 800 x 1.81
+
+    def test_a_lifting_after_the_last_weighing_takes_over(self):
+        """And the other way round: a fortnight-old sample says nothing about
+        birds that went over a bridge this morning."""
+        self.place(1000)
+        self.weigh(14, 1500)
+        self.sell(200, "380.00", days_ago=1)       # 1.90 kg
         r = self.row()
         self.assertEqual(r["weight_basis"], "sold")
-        # 800 birds still standing, valued at the 1.90 kg the sale came out at.
-        self.assertEqual(r["available_weight"], Decimal("1520.00"))
+        self.assertEqual(r["available_weight"], Decimal("1520.00"))   # 800 x 1.90
+
+    def test_a_stale_sample_does_not_undercut_a_later_lifting(self):
+        """One flock here last recorded 82 g while lifting at 1.90 kg. Valuing
+        what is still standing by that sample would price it at a twenty-third
+        of its weight — but only the dates decide, not which kind it is."""
+        self.place(1000)
+        self.weigh(9, 82)
+        self.sell(200, "380.00", days_ago=1)
+        self.assertEqual(self.row()["available_weight"], Decimal("1520.00"))
+
+    def test_the_lifting_s_own_average_is_the_reading_being_dated(self):
+        """Not the flock's running average: it is that day's figure whose date
+        is being compared."""
+        self.place(1000)
+        self.sell(100, "150.00", days_ago=8)       # 1.50 kg, the older lifting
+        self.sell(100, "200.00", days_ago=1)       # 2.00 kg, the recent one
+        r = self.row()
+        # The column still reports the flock's running average over both.
+        self.assertEqual(r["sold_avg_bwt"], Decimal("1.7500"))
+        # The valuation takes the latest lifting alone.
+        self.assertEqual(r["available_weight"], Decimal("1600.00"))   # 800 x 2.00
+
+    def test_the_weighbridge_wins_a_day_they_share(self):
+        """A whole lorry against a handful of birds."""
+        self.place(1000)
+        self.weigh(1, 1500)
+        self.sell(200, "380.00", days_ago=1)
+        self.assertEqual(self.row()["weight_basis"], "sold")
 
     def test_without_a_sale_the_weighing_values_them(self):
         self.place(1000)
