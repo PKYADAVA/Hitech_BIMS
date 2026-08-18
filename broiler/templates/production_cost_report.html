@@ -291,13 +291,13 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num" rowspan="2">Birds<br>Placed</th>
             <th class="pc-grp" colspan="2">Mortality</th>
             <th class="num" rowspan="2">Avg Body<br>Weight (Kg)</th>
+            <th class="num" rowspan="2">Body Weight<br>Gap (days)</th>
             <th class="num" rowspan="2">Sold<br>Birds</th>
             <th class="num" rowspan="2">Sold Weight<br>(Kg)</th>
             <th class="num" rowspan="2">Sold Avg Body<br>Wt (Kg)</th>
             <th class="num" rowspan="2">Available Live<br>Birds</th>
             <th class="num" rowspan="2">Available Live<br>Weight (Kg)</th>
             <th class="num" rowspan="2">Total Weight<br>(Kg)</th>
-            <th class="num" rowspan="2">Body Weight<br>Gap (days)</th>
             <th class="num" rowspan="2">Feed Cons.<br>(Kg)</th>
             <th class="pc-grp" colspan="5">Cost</th>
             <th class="num" rowspan="2">Cost / Kg</th>
@@ -337,6 +337,12 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ r.mortality|floatformat:0 }}</td>
             <td class="num">{% if r.mortality_pct is not None %}{{ r.mortality_pct }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{% if r.avg_bwt %}{{ r.avg_bwt }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            {% comment %}
+              Banded the way the phone bands it: a day between weighings is
+              the normal rhythm, two is worth noticing, three and the figure
+              is too old to weigh a flock by.
+            {% endcomment %}
+            <td class="num {% if r.bwt_gap >= 3 %}pc-bad{% elif r.bwt_gap >= 2 %}pc-warn{% endif %}">{% if r.bwt_gap is not None %}{{ r.bwt_gap }}{% else %}<span class="pc-muted">never</span>{% endif %}</td>
             <td class="num">{{ r.sold_birds|floatformat:0 }}</td>
             <td class="num">{{ r.sold_weight|floatformat:2 }}</td>
             <td class="num">{% if r.sold_avg_bwt %}{{ r.sold_avg_bwt|floatformat:3 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
@@ -349,12 +355,6 @@ use, so a flock's feed cost is one number across the ERP.
               total they make was not.
             {% endcomment %}
             <td class="num fw-semibold">{{ r.weight|floatformat:2 }}</td>
-            {% comment %}
-              Banded the way the phone bands it: a day between weighings is
-              the normal rhythm, two is worth noticing, three and the figure
-              is too old to weigh a flock by.
-            {% endcomment %}
-            <td class="num {% if r.bwt_gap >= 3 %}pc-bad{% elif r.bwt_gap >= 2 %}pc-warn{% endif %}">{% if r.bwt_gap is not None %}{{ r.bwt_gap }}{% else %}<span class="pc-muted">never</span>{% endif %}</td>
             <td class="num">{{ r.feed_kg|floatformat:2 }}</td>
             <td class="num">{{ r.chick_cost|floatformat:2 }}{% if r.chick_basis == 'scheme' %}<sup class="pc-src" title="At the Growing Charge Scheme's chick rate">sch</sup>{% elif r.chick_basis == 'standard' %}<sup class="pc-src pc-warn" title="No purchase reached the issuing warehouse on or before this placement, so the valuation engine fell back to the Item Master's standard cost — this is not a purchase rate">std</sup>{% elif r.chick_basis == 'purchase' %}<sup class="pc-src" title="Priced from the issuing warehouse's own cost ledger">pur</sup>{% endif %}</td>
             <td class="num">{{ r.feed_cost|floatformat:2 }}{% if r.priced_at == 'scheme' %}<sup class="pc-src" title="At the Growing Charge Scheme's feed rate">sch</sup>{% elif r.priced_at == 'no scheme' %}<sup class="pc-src" title="No scheme covers this flock, so actual purchase rates are shown">act</sup>{% endif %}</td>
@@ -389,13 +389,13 @@ use, so a flock's feed cost is one number across the ERP.
               beside it is a real weighted mean and does total.
             {% endcomment %}
             <td class="num"><span class="pc-muted">&mdash;</span></td>
+            <td class="num"></td>
             <td class="num">{{ summary.sold_birds|floatformat:0 }}</td>
             <td class="num">{{ summary.sold_weight|floatformat:2 }}</td>
             <td class="num">{% if summary.sold_avg_weight %}{{ summary.sold_avg_weight|floatformat:3 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{{ summary.live_birds|floatformat:0 }}</td>
             <td class="num">{{ summary.available_weight|floatformat:2 }}</td>
             <td class="num fw-semibold">{{ summary.live_weight|floatformat:2 }}</td>
-            <td class="num"></td>
             <td class="num">{{ summary.feed_kg|floatformat:2 }}</td>
             <td class="num">{% if summary.chick_cost is not None %}{{ summary.chick_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
             <td class="num">{{ summary.feed_cost|floatformat:2 }}</td>
