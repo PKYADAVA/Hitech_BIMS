@@ -120,3 +120,53 @@ class BatchDrilldownTests(TestCase):
         row = next(r for r in res.context["rows"] if r["batch"] == "B-NEW")
         self.assertEqual(row["batch_id"], self.second.id)
         self.assertEqual(row["farm_id"], self.farm.id)
+
+
+class SummaryOrderTests(TestCase):
+    """The oldest flock leads the summary, as it leads the cost report.
+
+    It ran branch-alphabetical, which is an order about names rather than
+    birds: a flock placed last week sat above one going out on Friday because
+    its branch began with an earlier letter.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        self.zed = Branch.objects.create(branch_name="Zzz Branch", region=region,
+                                         prefix="ZZZ")
+        self.acme = Branch.objects.create(branch_name="Acme Branch", region=region,
+                                          prefix="ACM")
+        self.farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        User = get_user_model()
+        self.user = User.objects.create_superuser("lfs", "lfs@x.com", "Str0ngPass!")
+        self.client.force_login(self.user)
+
+    def flock(self, branch, name, age):
+        sup = Supervisor.objects.create(branch=branch, name=f"S {name}")
+        farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=sup, farmer=self.farmer,
+            region=branch.region, line="L1", farm_name=f"Farm {name}",
+            farm_capacity=5000)
+        return BroilerBatch.objects.create(
+            broiler_farm=farm, batch_name=name,
+            start_date=self.today - timedelta(days=age) if age is not None else None)
+
+    def rows(self):
+        return self.client.get(reverse("live_flock_summary_report")).context["rows"]
+
+    def test_the_oldest_flock_leads_whatever_its_branch_is_called(self):
+        self.flock(self.acme, "young", age=5)
+        self.flock(self.zed, "old", age=80)
+        self.assertEqual([r["batch"] for r in self.rows()], ["old", "young"])
+
+    def test_ages_read_down_the_page(self):
+        for name, age in (("a", 12), ("b", 40), ("c", 3)):
+            self.flock(self.acme, name, age)
+        ages = [r["actual_age"] for r in self.rows()]
+        self.assertEqual(ages, sorted(ages, reverse=True))
+
+    def test_a_flock_with_no_placement_goes_last(self):
+        self.flock(self.acme, "dated", age=10)
+        self.flock(self.acme, "undated", age=None)
+        self.assertEqual([r["batch"] for r in self.rows()][-1], "undated")

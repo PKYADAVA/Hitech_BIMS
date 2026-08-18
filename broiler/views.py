@@ -5513,6 +5513,14 @@ def live_flock_summary_report(request):
 
     today = timezone.localdate()
     rows = [_live_flock_row(b, today) for b in batches]
+    # Oldest flock first, as on the Production Cost report: the birds nearest
+    # to going out lead the page and the ones just placed sit at the bottom.
+    # Branch and batch only settle a tie now, and a flock whose placement was
+    # never recorded has no age to sort by, so it goes last rather than
+    # heading the report as a null would.
+    rows.sort(key=lambda r: (r["placement_date"] is None,
+                             r["placement_date"] or date.max,
+                             r["branch"], r["batch"]))
 
     return render(request, "live_flock_summary_report.html", {
         "rows": rows,
