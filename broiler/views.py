@@ -3999,24 +3999,33 @@ def _production_cost_row(batch, fetch_type="management"):
     sold_weight = _num(costing.get("sold_weight"))
     sold_birds = _num(costing.get("sold_birds"))
 
-    # What a bird weighs: the average the sale itself came out at once birds
-    # have gone over a weighbridge, and only otherwise the last weighing.
+    # Two body weights, because they answer two questions.
     #
-    # A weighing is a sample taken by hand and is not always kept up: one
-    # flock here last recorded 82 g while lifting birds at 1.90 kg, and
-    # preferring the sample would have valued its standing birds at a
-    # twenty-third of what they weigh. The sale wins wherever there is one,
-    # which is also the rule the GC Realization report follows.
+    #   Sold Avg Body Wt   what the birds that left actually weighed, off the
+    #                      weighbridge: sold weight over sold birds
+    #   Avg Body Weight    the last weighing entered on the flock — the birds
+    #                      still standing, as last put on a scale
+    #
+    # They were one column, which could only ever answer one of the two: a
+    # flock mid-lift showed its sale average and nothing about the birds left
+    # behind, and a flock not yet lifted showed its weighing and nothing about
+    # its sales.
     last_weighed = (DailyEntry.objects
                     .filter(batch=batch, avg_weight_gms__gt=0)
                     .order_by("-date", "-id")
                     .values("avg_weight_gms", "date").first())
-    avg_bwt = _pc_div(sold_weight, sold_birds)
-    weight_basis = "sold" if avg_bwt else "none"
-    if not avg_bwt and last_weighed:
-        avg_bwt = (_num(last_weighed["avg_weight_gms"]) / Decimal("1000")
-                   ).quantize(Decimal("0.0001"))
-        weight_basis = "weighed"
+    sold_avg_bwt = _pc_div(sold_weight, sold_birds)
+    avg_bwt = ((_num(last_weighed["avg_weight_gms"]) / Decimal("1000")
+                ).quantize(Decimal("0.0001")) if last_weighed else None)
+
+    # What the birds still on the farm are valued at is a third question, and
+    # the sale answers it better than the weighing wherever there is one. A
+    # weighing is a sample taken by hand and is not always kept up: one flock
+    # here last recorded 82 g while lifting birds at 1.90 kg, and valuing its
+    # standing birds by the sample would have priced them at a twenty-third of
+    # their weight. Same rule the GC Realization report follows.
+    valued_at = sold_avg_bwt or avg_bwt
+    weight_basis = "sold" if sold_avg_bwt else ("weighed" if avg_bwt else "none")
 
     # How long since anyone put birds on a scale. Separate from the entry gap:
     # a flock can be recorded daily and still not have been weighed for a
@@ -4024,8 +4033,8 @@ def _production_cost_row(batch, fetch_type="management"):
     bwt_gap = ((timezone.localdate() - last_weighed["date"]).days
                if last_weighed else None)
 
-    available_weight = ((avg_bwt * live_birds).quantize(Decimal("0.01"))
-                        if avg_bwt and live_birds > 0 else Decimal("0"))
+    available_weight = ((valued_at * live_birds).quantize(Decimal("0.01"))
+                        if valued_at and live_birds > 0 else Decimal("0"))
     weight = (sold_weight + available_weight).quantize(Decimal("0.01"))
 
     # The farmer is settled against his scheme's rates, so his view of what a
@@ -4077,6 +4086,7 @@ def _production_cost_row(batch, fetch_type="management"):
         "live_birds": live_birds,
         "sold_birds": sold_birds,
         "weight": weight, "weight_basis": weight_basis, "avg_bwt": avg_bwt,
+        "sold_avg_bwt": sold_avg_bwt,
         "bwt_gap": bwt_gap,
         "sold_weight": sold_weight, "available_weight": available_weight,
         "feed_kg": feed_kg.quantize(Decimal("0.01")),

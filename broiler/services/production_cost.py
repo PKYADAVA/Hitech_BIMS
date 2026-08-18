@@ -237,6 +237,7 @@ def build_production_cost(rows):
     std_other = (std_cost - std_feed)
     sale_value = sum((_d(r["sale_value"]) for r in rows), ZERO)
     sold_birds = sum((_d(r["sold_birds"]) for r in rows), ZERO)
+    sold_weight = sum((_d(r["sold_weight"]) for r in rows), ZERO)
     std_fcrs = [_d(r["std_fcr"]) for r in rows if r["std_fcr"]]
 
     def col(key):
@@ -246,7 +247,7 @@ def build_production_cost(rows):
         return sum(vals, ZERO).quantize(Q2) if vals else None
 
     return {
-        "sold_weight": sum((_d(r["sold_weight"]) for r in rows), ZERO).quantize(Q2),
+        "sold_weight": sold_weight.quantize(Q2),
         "available_weight": sum((_d(r["available_weight"]) for r in rows), ZERO).quantize(Q2),
         "sub_total": sum((_d(r["sub_total"]) for r in rows), ZERO).quantize(Q2),
         "chick_cost": col("chick_cost"),
@@ -274,6 +275,10 @@ def build_production_cost(rows):
         "mortality_pct": _div(mortality * 100, birds_placed),
         "live_weight": live_weight.quantize(Q2),
         "avg_weight": _div(live_weight, live_birds),
+        # The weighbridge average across every flock's sales — a real weighted
+        # mean, not a mean of the flocks' own averages, which would let a
+        # 200-bird lifting pull as hard as a 12,000-bird one.
+        "sold_avg_weight": _div(sold_weight, sold_birds),
         "feed_kg": feed_kg.quantize(Q2),
         "total_cost": total_cost.quantize(Q2),
         "feed_cost": feed_cost.quantize(Q2),

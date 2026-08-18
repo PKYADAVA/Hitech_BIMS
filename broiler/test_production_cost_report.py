@@ -616,6 +616,28 @@ class LiveWeightBeforeALiftingTests(TestCase):
             date=self.today - timedelta(days=days_ago),
             avg_weight_gms=Decimal(str(grams)))
 
+    def place(self, chicks):
+        """Chicks into the flock, which is what gives it birds to weigh."""
+        from inventory.models import Item, ItemCategory, StockTransfer, Warehouse
+
+        item, _ = Item.objects.get_or_create(
+            item_code="CHK-001",
+            defaults={"description": "Day Old Chick", "standard_cost_per_unit": 0,
+                      "category": ItemCategory.objects.get_or_create(
+                          name="Day Old Chicks")[0]})
+        store, _ = Warehouse.objects.get_or_create(name="Akbarpur Store")
+        return StockTransfer.objects.create(
+            date=self.today - timedelta(days=30), item=item, quantity=chicks,
+            from_location_type="warehouse", from_warehouse=store,
+            to_location_type="farm", to_farm=self.farm, to_batch=self.batch)
+
+    def sell(self, birds, weight, days_ago=1):
+        from broiler.models import BirdSale
+
+        return BirdSale.objects.create(
+            farm=self.farm, batch=self.batch, date=self.today - timedelta(days=days_ago),
+            birds=birds, net_weight=Decimal(weight))
+
     def row(self):
         from broiler.views import _production_cost_row
         return _production_cost_row(self.batch)
@@ -646,15 +668,57 @@ class LiveWeightBeforeALiftingTests(TestCase):
         r = self.row()
         self.assertEqual(r["sold_weight"] + r["available_weight"], r["weight"])
 
-    def test_avg_body_weight_reconciles_with_the_live_weight_beside_it(self):
-        """The two columns have to tell the same story: per-bird times birds
-        is the total, whichever basis produced it."""
-        from broiler.views import _production_cost_row
+    def test_avg_body_weight_is_the_last_weighing_entered(self):
+        """The column answers "what did the scale last say", so a later
+        weighing replaces an earlier one and nothing else overrides it."""
+        self.weigh(6, 1400)
+        self.weigh(2, 1800)
+        self.assertEqual(self.row()["avg_bwt"], Decimal("1.8000"))
 
-        r = _production_cost_row(self.batch)
-        if r["avg_bwt"] and r["live_birds"]:
-            self.assertEqual((r["avg_bwt"] * r["live_birds"]).quantize(Decimal("1")),
-                             r["weight"].quantize(Decimal("1")))
+    def test_the_sold_average_is_the_weighbridge_figure(self):
+        """Sold weight over sold birds — what the birds that left weighed."""
+        self.place(1000)
+        self.sell(200, "380.00")
+        r = self.row()
+        self.assertEqual(r["sold_avg_bwt"], Decimal("1.9000"))
+
+    def test_the_two_averages_are_kept_apart(self):
+        """One column could only ever answer one of the two questions: a flock
+        mid-lift showed its sale average and nothing about the birds left
+        behind, and an unlifted flock showed its weighing and nothing about
+        its sales."""
+        self.place(1000)
+        self.weigh(2, 1500)
+        self.sell(200, "380.00")
+        r = self.row()
+        self.assertEqual(r["avg_bwt"], Decimal("1.5000"))        # the scale
+        self.assertEqual(r["sold_avg_bwt"], Decimal("1.9000"))   # the weighbridge
+
+    def test_a_flock_with_no_sale_has_no_sold_average(self):
+        self.weigh(2, 1500)
+        r = self.row()
+        self.assertEqual(r["avg_bwt"], Decimal("1.5000"))
+        self.assertIsNone(r["sold_avg_bwt"])
+
+    def test_the_standing_birds_are_valued_off_the_weighbridge_where_there_is_one(self):
+        """A weighing is a hand-taken sample and is not always kept up — one
+        flock last recorded 82 g while lifting at 1.90 kg. Valuing what is
+        still standing by that sample would price it at a twenty-third of its
+        weight, so the sale wins wherever there is one."""
+        self.place(1000)
+        self.weigh(2, 82)
+        self.sell(200, "380.00")
+        r = self.row()
+        self.assertEqual(r["weight_basis"], "sold")
+        # 800 birds still standing, valued at the 1.90 kg the sale came out at.
+        self.assertEqual(r["available_weight"], Decimal("1520.00"))
+
+    def test_without_a_sale_the_weighing_values_them(self):
+        self.place(1000)
+        self.weigh(2, 1500)
+        r = self.row()
+        self.assertEqual(r["weight_basis"], "weighed")
+        self.assertEqual(r["available_weight"], Decimal("1500.00"))
 
 
 class ManagementBasisTests(TestCase):

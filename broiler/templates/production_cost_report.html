@@ -293,8 +293,10 @@ use, so a flock's feed cost is one number across the ERP.
             <th class="num" rowspan="2">Avg Body<br>Weight (Kg)</th>
             <th class="num" rowspan="2">Sold<br>Birds</th>
             <th class="num" rowspan="2">Sold Weight<br>(Kg)</th>
+            <th class="num" rowspan="2">Sold Avg Body<br>Wt (Kg)</th>
             <th class="num" rowspan="2">Available Live<br>Birds</th>
             <th class="num" rowspan="2">Available Live<br>Weight (Kg)</th>
+            <th class="num" rowspan="2">Total Weight<br>(Kg)</th>
             <th class="num" rowspan="2">Body Weight<br>Gap (days)</th>
             <th class="num" rowspan="2">Feed Cons.<br>(Kg)</th>
             <th class="pc-grp" colspan="5">Cost</th>
@@ -337,8 +339,16 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{% if r.avg_bwt %}{{ r.avg_bwt }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{{ r.sold_birds|floatformat:0 }}</td>
             <td class="num">{{ r.sold_weight|floatformat:2 }}</td>
+            <td class="num">{% if r.sold_avg_bwt %}{{ r.sold_avg_bwt|floatformat:3 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{{ r.live_birds|floatformat:0 }}</td>
             <td class="num">{{ r.available_weight|floatformat:2 }}{% if r.available_weight and r.weight_basis == 'weighed' %}<sup class="pc-src" title="The last weighing across the birds still on the farm — an estimate, not a weighbridge figure">est</sup>{% endif %}</td>
+            {% comment %}
+              Sold plus available: the live weight this flock has produced so
+              far, and the figure every ₹/kg on the page divides by. It was
+              only in the drawer, so the two parts were on the table and the
+              total they make was not.
+            {% endcomment %}
+            <td class="num fw-semibold">{{ r.weight|floatformat:2 }}</td>
             {% comment %}
               Banded the way the phone bands it: a day between weighings is
               the normal rhythm, two is worth noticing, three and the figure
@@ -372,11 +382,19 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{{ summary.birds_placed|floatformat:0 }}</td>
             <td class="num">{{ summary.mortality|floatformat:0 }}</td>
             <td class="num">{% if summary.mortality_pct is not None %}{{ summary.mortality_pct }}{% else %}&mdash;{% endif %}</td>
-            <td class="num">{% if summary.avg_weight %}{{ summary.avg_weight }}{% else %}&mdash;{% endif %}</td>
+            {% comment %}
+              No total under Avg Body Weight: the column is each flock's last
+              weighing, and a mean of samples taken on different days at
+              different ages is not a figure anybody can use. The sold average
+              beside it is a real weighted mean and does total.
+            {% endcomment %}
+            <td class="num"><span class="pc-muted">&mdash;</span></td>
             <td class="num">{{ summary.sold_birds|floatformat:0 }}</td>
             <td class="num">{{ summary.sold_weight|floatformat:2 }}</td>
+            <td class="num">{% if summary.sold_avg_weight %}{{ summary.sold_avg_weight|floatformat:3 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{{ summary.live_birds|floatformat:0 }}</td>
             <td class="num">{{ summary.available_weight|floatformat:2 }}</td>
+            <td class="num fw-semibold">{{ summary.live_weight|floatformat:2 }}</td>
             <td class="num"></td>
             <td class="num">{{ summary.feed_kg|floatformat:2 }}</td>
             <td class="num">{% if summary.chick_cost is not None %}{{ summary.chick_cost|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
