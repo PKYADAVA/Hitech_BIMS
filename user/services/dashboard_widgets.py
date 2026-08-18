@@ -611,12 +611,13 @@ def _last_sale_date():
 
 
 def _sale_overview(viewable, filters, user=None):
-    """Bird sales to date, and how much of the money has come back.
+    """One day's bird sales, and the money taken that day against them.
 
-    Everything up to the chosen day rather than the day itself: a receipt lands
-    days after the lifting it pays for, so "billed less received" only means
-    anything cumulatively. On a single day it would read as an unpaid bill
-    every time.
+    The day, not the running position: this is the sale sheet for a trading
+    day — what went out, at what weight and rate, and what was collected while
+    it went. The Difference is that day's billing less that day's receipts, so
+    it is what is still to be collected *on this lot* rather than the ledger's
+    outstanding balance, which is what Receivables is for.
 
     Date only, and deliberately unfiltered otherwise. A receipt is booked
     against a customer and a location, never against a farm — so a farm or
@@ -628,14 +629,10 @@ def _sale_overview(viewable, filters, user=None):
     from broiler.models import BirdSale, BirdSaleReceipt
     from user.services.scoping import is_unscoped
 
-    # With no date chosen the card stands at the last sale rather than today:
-    # the trade is a few days a week, and a card dated to a morning nothing
-    # happened on invites the reader to think nothing has happened at all.
-    #
-    # The receipts are cut off at the same day, which is the cost of it — money
-    # banked after the last lifting is not in these figures until a later date
-    # is picked. Cutting the two at different days would be worse: it would put
-    # a receipt against a sale the card is not showing.
+    # With no date chosen the card stands at the last day that had a sale
+    # rather than today: the trade is a few days a week, and a card dated to a
+    # morning nothing happened on invites the reader to think nothing has
+    # happened at all.
     chosen = filters.get("date")
     day = chosen or _last_sale_date() or timezone.localdate()
     # Whole-business figures, so only for people who may see the whole
@@ -649,8 +646,8 @@ def _sale_overview(viewable, filters, user=None):
                         "to users whose access is not limited to part of the "
                         "business."}
 
-    sales = BirdSale.objects.filter(date__lte=day)
-    receipts = BirdSaleReceipt.objects.filter(date__lte=day)
+    sales = BirdSale.objects.filter(date=day)
+    receipts = BirdSaleReceipt.objects.filter(date=day)
 
     totals = sales.aggregate(b=Sum("birds"), w=Sum("net_weight"), v=Sum("amount"))
     birds = float(totals["b"] or 0)
@@ -658,8 +655,11 @@ def _sale_overview(viewable, filters, user=None):
     value = float(totals["v"] or 0)
 
     if not birds and not weight:
+        last = _last_sale_date()
         return {"stats": [{"label": "Sold birds", "value": "0"}],
-                "note": "No bird sales recorded up to this date.",
+                "note": ("No bird sales on this day. The last was "
+                         f"{last.strftime('%d %b %Y')}."
+                         if last else "No bird sales recorded yet."),
                 "filters_used": ["date"]}
 
     # Cash is cash; everything else — transfer, cheque, UPI, card — reaches a
@@ -696,14 +696,13 @@ def _sale_overview(viewable, filters, user=None):
             {"label": "Bank received", "value": "₹" + _inr(banked),
              "sub": "transfer, cheque, UPI, card"},
             {"label": "Difference", "value": "₹" + _inr(outstanding),
-             "sub": "billed less received",
+             "sub": "billed less received, this day",
              "tone": "bad" if outstanding > 0 else "good"},
         ],
-        # Which day the card stands at, and whether anybody asked for it.
-        "note": (f"Everything up to {day.strftime('%d %b %Y')}."
-                 if chosen else
-                 f"As on {day.strftime('%d %b %Y')} — the last sale. "
-                 "Pick a date to see another."),
+        # Which day the card is showing, and whether anybody asked for it.
+        "note": (None if chosen else
+                 f"Showing {day.strftime('%d %b %Y')} — the last day with a "
+                 "sale. Pick a date to see another."),
         "filters_used": ["date"],
     }
 

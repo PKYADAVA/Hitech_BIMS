@@ -1,8 +1,13 @@
-"""Sale Overview: what has been sold, and how much of it has been paid for.
+"""Sale Overview: one day's sales, and the money taken that day against them.
 
-To date rather than for the day, because a receipt lands days after the lifting
-it pays for — on a single day "billed less received" would read as an unpaid
-bill every time.
+The sale sheet for a trading day — what went out, at what weight and rate, and
+what was collected while it went. The Difference is that day's billing less
+that day's receipts, so it is what is still to come in on this lot rather than
+the ledger's outstanding balance, which is what Receivables is for.
+
+With no date chosen it stands at the last day that had a sale: the trade is a
+few days a week, and a card dated to a morning nothing happened on invites the
+reader to think nothing has happened at all.
 
 Date only, and unfiltered otherwise: a receipt is booked against a customer and
 a location, never against a farm, so a farm filter would narrow the sales and
@@ -119,7 +124,7 @@ class SaleOverviewTests(TestCase):
         self.assertEqual(self.stat("Cash received")["value"], "₹5,000")
         self.assertEqual(self.stat("Bank received")["value"], "₹43,000")
 
-    def test_the_difference_is_what_is_still_owed(self):
+    def test_the_difference_is_what_is_still_to_come_in_on_the_day(self):
         self.sell(419, "775.50", "89")            # ₹69,020
         self.receipt("43000", mode="Bank Transfer")
         self.assertEqual(self.stat("Difference")["value"], "₹26,020")
@@ -130,44 +135,41 @@ class SaleOverviewTests(TestCase):
         self.receipt("20000", mode="Cash")
         self.assertEqual(self.stat("Difference")["tone"], "good")
 
-    # ---- the period ---------------------------------------------------------
+    # ---- the day the card is showing ----------------------------------------
 
-    def test_it_counts_everything_up_to_the_day_not_just_the_day(self):
-        """A receipt lands days after the lifting it pays for, and an older
-        sale is still part of the position."""
+    def test_it_shows_one_day_not_a_running_total(self):
+        """The sale sheet for a trading day: what went out, and what was
+        collected while it went."""
         self.sell(300, "600.00", "90", when=self.today - timedelta(days=20))
         self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
-        self.receipt("10000", mode="Cash", when=self.today - timedelta(days=15))
-        self.assertEqual(self.stat("Sold birds")["value"], "400")
-        self.assertEqual(self.stat("Cash received")["value"], "₹10,000")
+        self.assertEqual(self.stat("Sold birds")["value"], "100")
 
-    def test_with_no_date_chosen_it_stands_at_the_last_sale(self):
+    def test_with_no_date_chosen_it_stands_at_the_last_day_that_had_a_sale(self):
         self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
         note = self.card()["note"]
         self.assertIn((self.today - timedelta(days=9)).strftime("%d %b %Y"), note)
-        self.assertIn("the last sale", note)
+        self.assertIn("the last day with a sale", note)
 
-    def test_money_banked_after_the_last_sale_waits_for_a_date_to_be_picked(self):
-        """The cost of standing at the last sale: the two sides are cut at the
-        same day, so a receipt after it is not counted until it is asked for.
-        Cutting them at different days would put a receipt against a sale the
-        card is not showing."""
+    def test_the_receipts_are_that_day_s_too(self):
+        """Both sides of the difference are cut at the same day, or the card
+        would put money against a sale it is not showing."""
         self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
-        self.receipt("10000", mode="Cash", when=self.today - timedelta(days=2))
-        self.assertEqual(self.stat("Cash received")["value"], "₹0")
-        self.assertEqual(
-            self.stat("Cash received", filters={"date": self.today})["value"],
-            "₹10,000")
+        self.receipt("5000", mode="Cash", when=self.today - timedelta(days=9))
+        self.receipt("7000", mode="Cash", when=self.today - timedelta(days=2))
+        self.assertEqual(self.stat("Cash received")["value"], "₹5,000")
 
-    def test_a_chosen_date_is_named_plainly(self):
+    def test_a_chosen_day_with_no_sale_says_when_the_last_one_was(self):
+        self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
+        card = self.card(filters={"date": self.today})
+        self.assertIn("No bird sales on this day", card["note"])
+        self.assertIn((self.today - timedelta(days=9)).strftime("%d %b %Y"), card["note"])
+
+    def test_a_business_that_has_never_sold_says_that_instead(self):
+        self.assertEqual(self.card()["note"], "No bird sales recorded yet.")
+
+    def test_a_chosen_day_needs_no_explaining(self):
         self.sell(100, "200.00", "90")
-        self.assertEqual(self.card(filters={"date": self.today})["note"],
-                         f"Everything up to {self.today.strftime('%d %b %Y')}.")
-
-    def test_a_later_sale_is_not_counted_against_an_earlier_date(self):
-        self.sell(100, "200.00", "90", when=self.today)
-        card = self.card(filters={"date": self.today - timedelta(days=1)})
-        self.assertEqual(card["note"], "No bird sales recorded up to this date.")
+        self.assertIsNone(self.card(filters={"date": self.today})["note"])
 
     # ---- honesty about the filters -----------------------------------------
 
