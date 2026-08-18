@@ -370,8 +370,13 @@ use, so a flock's feed cost is one number across the ERP.
             <td class="num">{% if r.cost_per_bird %}{{ r.cost_per_bird }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num">{% if r.growing_cost is not None %}{{ r.growing_cost|floatformat:2 }}{% if r.gc_source == 'settlement' %}<sup class="pc-src" title="From this flock's Growing Charge settlement">gc</sup>{% endif %}{% else %}<span class="pc-muted" title="This flock has no Growing Charge settlement yet">not settled</span>{% endif %}</td>
             <td class="num fw-bold">{{ r.total_cost|floatformat:2 }}</td>
-            <td class="num">{% if r.fcr %}{{ r.fcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
-            <td class="num">{% if r.cfcr %}{{ r.cfcr|floatformat:2 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            {% comment %}
+              Three places: 1.68 and 1.684 are not the same flock to anybody
+              reading a feed conversion, and the whole point of the column is
+              comparing one against another.
+            {% endcomment %}
+            <td class="num">{% if r.fcr %}{{ r.fcr|floatformat:3 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
+            <td class="num">{% if r.cfcr %}{{ r.cfcr|floatformat:3 }}{% else %}<span class="pc-muted">&mdash;</span>{% endif %}</td>
             <td class="num {% if r.variance > 0 %}pc-bad{% elif r.variance < 0 %}pc-good{% endif %}">{{ r.variance|floatformat:2 }}</td>
             <td class="no-print text-center">
               <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 pc-view"

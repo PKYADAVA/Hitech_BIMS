@@ -120,7 +120,7 @@ class SummaryTests(TestCase):
         small = self.row(feed_kg=Decimal("400"), weight=Decimal("200"))
         big = self.row(feed_kg=Decimal("32000"), weight=Decimal("20000"))
         s = build_production_cost([small, big])
-        self.assertEqual(s["fcr"], Decimal("1.60"))      # 32400 / 20200
+        self.assertEqual(s["fcr"], Decimal("1.604"))     # 32400 / 20200
         self.assertNotEqual(s["fcr"], Decimal("1.80"))   # the mean of 2.00 and 1.60
 
     def test_a_ratio_with_no_denominator_is_none_not_zero(self):
@@ -234,6 +234,50 @@ class PageTests(TestCase):
         self.assertEqual(row["supervisor"], self.farm.supervisor.name)
         self.assertEqual(row["placed_on"], self.batch.start_date)
         self.assertEqual(row["age_days"], 20)
+
+    def test_the_feed_ratios_divide_by_the_weight_the_page_divides_by(self):
+        """FCR came off the batch costing, which measures feed against *sold*
+        weight — right for the Growing Charge statement it belongs to, wrong
+        beside a Cost/Kg and a total FCR that both divide by sold plus
+        standing."""
+        from broiler.views import _production_cost_row
+
+        row = _production_cost_row(self.batch)
+        if row["weight"]:
+            self.assertEqual(row["fcr"],
+                             (row["feed_kg"] / row["weight"]).quantize(Decimal("0.001")))
+
+    def test_a_flock_that_has_sold_nothing_gets_a_ratio_it_can_have(self):
+        """It used to report FCR 0.00 beside CFCR 125.00 — feed over a
+        mortality weight of two hundred grammes."""
+        from broiler.views import _production_cost_row
+        from inventory.models import Item, ItemCategory, StockTransfer, Warehouse
+
+        feed = Item.objects.create(
+            item_code="FD-001", description="Pre-Starter Feed",
+            category=ItemCategory.objects.create(name="Broiler Feed"),
+            standard_cost_per_unit=Decimal("40"))
+        store = Warehouse.objects.create(name="Store")
+        chick = Item.objects.create(
+            item_code="CHK-9", description="Day Old Chick",
+            category=ItemCategory.objects.create(name="Day Old Chicks"),
+            standard_cost_per_unit=Decimal("35"))
+        StockTransfer.objects.create(
+            date=self.batch.start_date, item=chick, quantity=1000,
+            from_location_type="warehouse", from_warehouse=store,
+            to_location_type="farm", to_farm=self.farm, to_batch=self.batch)
+        DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.farm.supervisor,
+            date=self.today - timedelta(days=1), mortality=20,
+            avg_weight_gms=Decimal("500"), feed_1=feed, feed_1_qty=Decimal("100"))
+
+        row = _production_cost_row(self.batch)
+        self.assertEqual(row["sold_weight"], Decimal("0"))
+        # 980 birds at half a kilo apiece is the weight it has grown.
+        self.assertEqual(row["weight"], Decimal("490.00"))
+        self.assertEqual(row["fcr"], Decimal("0.204"))
+        # Corrected for the ten kilos the birds that died were carrying.
+        self.assertEqual(row["cfcr"], Decimal("0.200"))
 
     def test_the_oldest_flock_leads_the_report(self):
         """Oldest placement first, which is the same as oldest flock first:

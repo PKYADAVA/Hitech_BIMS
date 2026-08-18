@@ -4068,6 +4068,24 @@ def _production_cost_row(batch, fetch_type="management"):
                         if valued_at and live_birds > 0 else Decimal("0"))
     weight = (sold_weight + available_weight).quantize(Decimal("0.01"))
 
+    # FCR and CFCR against the weight this page divides everything else by.
+    #
+    # They used to come straight off the batch costing, which measures feed
+    # against *sold* weight — a settlement figure, right for the Growing Charge
+    # statement it belongs to and wrong here, where the row's Cost/Kg and the
+    # report's own total FCR both divide by sold plus standing. So a flock
+    # mid-grow reported an FCR against a third of the weight it had grown, and
+    # one that had sold nothing at all reported FCR 0.00 beside CFCR 125.00 —
+    # feed over a mortality weight of 200 grammes.
+    #
+    # CFCR is the corrected ratio: it charges the flock for the feed the birds
+    # that died ate, by adding what they weighed back into the denominator.
+    # Each day's deaths are valued at that day's own body weight, so an early
+    # loss weighs almost nothing.
+    mortality_weight = _num(costing.get("mortality_weight"))
+    fcr = _pc_div(feed_kg, weight, places="0.001")
+    cfcr = _pc_div(feed_kg, weight + mortality_weight, places="0.001")
+
     # The farmer is settled against his scheme's rates, so his view of what a
     # flock cost is real quantities at those rates. Management's is real
     # quantities at what was actually paid, which is what the P&L already
@@ -4143,8 +4161,7 @@ def _production_cost_row(batch, fetch_type="management"):
         "cost_per_bird": _pc_div(total_cost, placed),
         "feed_per_bird": _pc_div(feed_kg, live_birds),
         "mortality_pct": _pc_div(mortality * 100, placed),
-        "fcr": costing.get("fcr"),
-        "cfcr": costing.get("cfcr"),
+        "fcr": fcr, "cfcr": cfcr,
         "std_fcr": _std_fcr(batch, costing),
         "avg_weight": costing.get("avg_body_weight"),
         # Feed broken down by type, so the consumption figure in the table can
@@ -4192,12 +4209,16 @@ def _production_cost_row(batch, fetch_type="management"):
     }
 
 
-def _pc_div(numerator, denominator):
+def _pc_div(numerator, denominator, places="0.01"):
     """None rather than zero when the denominator is nothing — see the note in
     services/production_cost.py. Kept beside the row builder so the view and
-    the service round the same way."""
+    the service round the same way.
+
+    ``places`` is for the ratios that need a third decimal: two flocks at 1.68
+    and 1.684 are not the same flock to anybody reading a feed conversion.
+    """
     n, d = _num(numerator), _num(denominator)
-    return (n / d).quantize(Decimal("0.01")) if d else None
+    return (n / d).quantize(Decimal(places)) if d else None
 
 
 @login_required

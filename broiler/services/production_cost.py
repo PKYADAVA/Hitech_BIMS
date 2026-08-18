@@ -22,6 +22,7 @@ from django.db import models
 
 ZERO = Decimal("0")
 Q2 = Decimal("0.01")
+Q3 = Decimal("0.001")
 
 
 def _d(value):
@@ -30,14 +31,17 @@ def _d(value):
     return value if isinstance(value, Decimal) else Decimal(str(value))
 
 
-def _div(numerator, denominator):
+def _div(numerator, denominator, places=Q2):
     """None, not zero, when there is nothing to divide by.
 
     A cost per kilo on a flock that has sold no birds is not ₹0.00 — it is not
     yet knowable, and printing zero invites somebody to average it in.
+
+    ``places`` is for the feed ratios, which are read to three: 1.68 and 1.684
+    are not the same flock to anybody comparing them.
     """
     n, d = _d(numerator), _d(denominator)
-    return (n / d).quantize(Q2) if d else None
+    return (n / d).quantize(places) if d else None
 
 
 def standard_consumption_cost(rows):
@@ -289,7 +293,7 @@ def build_production_cost(rows):
         # Weighted, never a mean of the rows: FCR is feed over weight, and
         # averaging four flocks' ratios lets a 200 kg flock pull as hard as a
         # 23,000 kg one.
-        "fcr": _div(feed_kg, live_weight),
+        "fcr": _div(feed_kg, live_weight, Q3),
         "components": component_rows,
         "std_cost": std_cost.quantize(Q2),
         "std_cost_per_kg": _div(std_cost, live_weight),
