@@ -71,10 +71,12 @@ use, so a flock's feed cost is one number across the ERP.
      metrics — at the page's size the Amount column was clipping. */
   .pc-drawer .pc-table { table-layout:fixed; width:100%; }
   .pc-drawer .pc-table th, .pc-drawer .pc-table td {
-    padding:.25rem .35rem; font-size:.7rem; white-space:normal; overflow-wrap:break-word;
+    padding:.22rem .28rem; font-size:.68rem; white-space:normal; overflow-wrap:break-word;
   }
-  .pc-drawer .pc-table th:first-child, .pc-drawer .pc-table td:first-child { width:32%; }
-  .pc-drawer .pc-table th { white-space:nowrap; }
+  .pc-drawer .pc-table th:first-child, .pc-drawer .pc-table td:first-child { width:38%; }
+  /* Headers wrap like the cells: "Standard (Kg)" held on one line was wider
+     than its own column once the drawer narrowed. */
+  .pc-drawer .pc-table th { white-space:normal; }
   .pc-drawer .pc-blk td { background:#f4f6f8; font-weight:700; }
   .pc-drawer .pc-sub { padding-left:1rem !important; color:#52514e; }
 
@@ -109,8 +111,11 @@ use, so a flock's feed cost is one number across the ERP.
     opacity:0; pointer-events:none; transition:opacity .18s ease;
   }
   .pc-scrim.open { opacity:1; pointer-events:auto; }
+  /* Narrow on purpose: at 540px the drawer covered the cost columns of the
+     row it was opened from, which is the half of the table a reader is
+     checking it against. 400 leaves them visible. */
   .pc-drawer {
-    position:fixed; top:0; right:0; height:100%; width:540px; max-width:96vw;
+    position:fixed; top:0; right:0; height:100%; width:400px; max-width:96vw;
     background:#fff; z-index:1050; box-shadow:-8px 0 24px rgba(0,0,0,.12);
     transform:translateX(100%); transition:transform .22s ease;
     display:flex; flex-direction:column;
@@ -120,7 +125,7 @@ use, so a flock's feed cost is one number across the ERP.
     display:flex; align-items:center; justify-content:space-between;
     padding:.75rem .9rem; border-bottom:1px solid #eee; font-weight:700; font-size:.9rem;
   }
-  .pc-drawer .body { overflow:auto; padding:.85rem .9rem; flex:1 1 auto; }
+  .pc-drawer .body { overflow:auto; padding:.8rem .75rem; flex:1 1 auto; }
   .pc-drawer footer { padding:.7rem .9rem; border-top:1px solid #eee; }
   .pc-sec { font-size:.68rem; font-weight:700; letter-spacing:.05em; color:#6b7280;
             margin:.9rem 0 .35rem; }
