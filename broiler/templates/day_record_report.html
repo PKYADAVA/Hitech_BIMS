@@ -110,7 +110,7 @@
           <td class="num">{{ r.avg_bwt|floatformat:2 }}</td>
           <td class="num">{% if r.std_fcr is not None %}{{ r.std_fcr|floatformat:3 }}{% else %}-{% endif %}</td>
           <td class="num">{{ r.fcr|floatformat:3 }}</td>
-          <td class="num">{{ r.cfcr|floatformat:2 }}</td>
+          <td class="num">{{ r.cfcr|floatformat:3 }}</td>
           <td class="num">{{ r.feed_ob|floatformat:2 }}</td>
           <td class="num">{{ r.feed_in|floatformat:2 }}</td>
           <td class="num">{{ r.feed_out|floatformat:2 }}</td>

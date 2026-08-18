@@ -5623,7 +5623,78 @@ def _cum_act_feed_per_bird_map(batch, placed, BirdSale):
     return out
 
 
-def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale, cum_act_cache=None):
+def _reading_on(readings, on_date):
+    """The last value in a ``[(date, value)]`` list at or before ``on_date``."""
+    found = Decimal("0")
+    for when, value in readings:
+        if when > on_date:
+            break
+        found = value
+    return found
+
+
+def _flock_weight_readings(batch, cache=None):
+    """``(per-bird kg by date, cumulative mortality weight by date)`` for a flock.
+
+    Both are running lists in date order, so a row can ask for its own day
+    without a query of its own — a register prints a hundred rows and would
+    otherwise walk the flock a hundred times.
+
+    The per-bird figure takes whichever reading is the more recent on each day:
+    a weighing, or the average a lifting came out at. The mortality weight
+    charges each day's losses at the weight standing on that day, which is the
+    definition ``_build_batch_costing`` uses — an early loss weighs almost
+    nothing, and pricing it at a finished bird's weight is what made this
+    report's CFCR disagree with every other page in the ERP.
+    """
+    if cache is not None and batch and batch.id in cache:
+        return cache[batch.id]
+    if not batch:
+        return [], []
+
+    from broiler.models import BirdSale as _BS
+
+    weighings = list(DailyEntry.objects
+                     .filter(batch=batch, avg_weight_gms__gt=0)
+                     .order_by("date", "id")
+                     .values_list("date", "avg_weight_gms"))
+    liftings = list(_BS.objects.filter(batch=batch, birds__gt=0, net_weight__gt=0)
+                    .order_by("date", "id")
+                    .values_list("date", "birds", "net_weight"))
+    readings = [(d, _num(g) / Decimal("1000")) for d, g in weighings]
+    readings += [(d, (_num(w) / _num(b)).quantize(Decimal("0.0001")))
+                 for d, b, w in liftings]
+    # Sorted by date, and a lifting settles a day it shares with a weighing:
+    # a whole lorry against a handful of birds.
+    readings.sort(key=lambda r: r[0])
+
+    per_bird, running = [], Decimal("0")
+    for when, value in readings:
+        running = value
+        if per_bird and per_bird[-1][0] == when:
+            per_bird[-1] = (when, running)
+        else:
+            per_bird.append((when, running))
+
+    mort_by_date, carried = [], Decimal("0")
+    for when, dead, grams in (DailyEntry.objects.filter(batch=batch)
+                              .order_by("date", "id")
+                              .values_list("date", "mortality", "avg_weight_gms")):
+        weight = _num(grams) / Decimal("1000") or _reading_on(per_bird, when)
+        carried += _num(dead) * weight
+        if mort_by_date and mort_by_date[-1][0] == when:
+            mort_by_date[-1] = (when, carried)
+        else:
+            mort_by_date.append((when, carried))
+
+    out = (per_bird, mort_by_date)
+    if cache is not None and batch:
+        cache[batch.id] = out
+    return out
+
+
+def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer,
+                    BirdSale, cum_act_cache=None, bwt_cache=None):
     """One Day Record row for a single DailyEntry `e` recorded on `sel_date`.
     Everything on the day (mort/cull/sold/feed) plus the cumulative figures to
     that date and the breed-standard comparison. Image/disease/entry-geo columns
@@ -5682,12 +5753,30 @@ def _day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfe
     feed_out = _num(StockTransfer.objects.filter(
         from_batch=batch, item_id__in=feed_ids, date=sel_date).aggregate(t=_Sum("quantity"))["t"])
 
-    # FCR / CFCR on weight produced to date (live + sold), like the live report
-    live_weight = balance * avg_bwt / Decimal("1000")
+    # FCR / CFCR on the weight produced to date — live plus sold — as the Live
+    # Flock Summary and the Production Cost report measure it.
+    #
+    # Two readings feed this, both taken as at *this row's* date, because the
+    # row is a position on a day and not a summary of the flock:
+    #
+    #   per_bird_kg   what a standing bird weighs — the last weighing on or
+    #                 before the day, or the last lifting's own average if that
+    #                 came later. Read off this row alone, a day with no
+    #                 weighing valued the whole flock at nothing, and every
+    #                 ratio on the row with it.
+    #   mort_weight   what the birds that died weighed, each day's losses at
+    #                 that day's own weight. Valuing them all at today's weight
+    #                 charged a chick lost in week one with a finished bird's
+    #                 carcass: this flock's 151 deaths came to 320 kg against
+    #                 the 55 kg the costing engine has, and its CFCR read 1.55
+    #                 where every other report says 1.66.
+    per_bird_kg, mort_by_date = _flock_weight_readings(batch, bwt_cache)
+    per_bird = _reading_on(per_bird_kg, sel_date)
+    live_weight = balance * per_bird
     total_weight = live_weight + soldw_upto
-    mort_weight = cum_mort * avg_bwt / Decimal("1000")          # approx (birds ~current wt)
+    mort_weight = _reading_on(mort_by_date, sel_date)
     fcr = _div(feed_upto, total_weight).quantize(Decimal("0.001")) if total_weight > 0 else Decimal("0")
-    cfcr = (_div(feed_upto, total_weight + mort_weight).quantize(q2)
+    cfcr = (_div(feed_upto, total_weight + mort_weight).quantize(Decimal("0.001"))
             if (total_weight + mort_weight) > 0 else Decimal("0"))
 
     farmer = farm.farmer if farm and farm.farmer_id else None
@@ -5807,9 +5896,12 @@ def day_record_report(request):
     chick_ids = list(chick_items().values_list("id", flat=True))
     placed_cache = {}
     cum_act_cache = {}
+    # One walk of each flock's weighings and liftings for the whole register,
+    # rather than one per printed row.
+    bwt_cache = {}
 
     rows = [_day_record_row(e, sel_date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale,
-                             cum_act_cache=cum_act_cache)
+                             cum_act_cache=cum_act_cache, bwt_cache=bwt_cache)
             for e in entries]
 
     # Total footer over the summable columns
@@ -5879,9 +5971,12 @@ def farm_detailed_daily_entry_report(request):
     chick_ids = list(chick_items().values_list("id", flat=True))
     placed_cache = {}
     cum_act_cache = {}
+    # One walk of each flock's weighings and liftings for the whole register,
+    # rather than one per printed row.
+    bwt_cache = {}
 
     rows = [_day_record_row(e, e.date, feed_ids, chick_ids, placed_cache, StockTransfer, BirdSale,
-                             cum_act_cache=cum_act_cache)
+                             cum_act_cache=cum_act_cache, bwt_cache=bwt_cache)
             for e in entries]
 
     # Total footer over the daily flow columns only (stock/cumulative columns
