@@ -133,11 +133,36 @@ class SaleOverviewTests(TestCase):
     # ---- the period ---------------------------------------------------------
 
     def test_it_counts_everything_up_to_the_day_not_just_the_day(self):
-        """A receipt lands days after the lifting it pays for."""
+        """A receipt lands days after the lifting it pays for, and an older
+        sale is still part of the position."""
+        self.sell(300, "600.00", "90", when=self.today - timedelta(days=20))
+        self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
+        self.receipt("10000", mode="Cash", when=self.today - timedelta(days=15))
+        self.assertEqual(self.stat("Sold birds")["value"], "400")
+        self.assertEqual(self.stat("Cash received")["value"], "₹10,000")
+
+    def test_with_no_date_chosen_it_stands_at_the_last_sale(self):
+        self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
+        note = self.card()["note"]
+        self.assertIn((self.today - timedelta(days=9)).strftime("%d %b %Y"), note)
+        self.assertIn("the last sale", note)
+
+    def test_money_banked_after_the_last_sale_waits_for_a_date_to_be_picked(self):
+        """The cost of standing at the last sale: the two sides are cut at the
+        same day, so a receipt after it is not counted until it is asked for.
+        Cutting them at different days would put a receipt against a sale the
+        card is not showing."""
         self.sell(100, "200.00", "90", when=self.today - timedelta(days=9))
         self.receipt("10000", mode="Cash", when=self.today - timedelta(days=2))
-        self.assertEqual(self.stat("Sold birds")["value"], "100")
-        self.assertEqual(self.stat("Cash received")["value"], "₹10,000")
+        self.assertEqual(self.stat("Cash received")["value"], "₹0")
+        self.assertEqual(
+            self.stat("Cash received", filters={"date": self.today})["value"],
+            "₹10,000")
+
+    def test_a_chosen_date_is_named_plainly(self):
+        self.sell(100, "200.00", "90")
+        self.assertEqual(self.card(filters={"date": self.today})["note"],
+                         f"Everything up to {self.today.strftime('%d %b %Y')}.")
 
     def test_a_later_sale_is_not_counted_against_an_earlier_date(self):
         self.sell(100, "200.00", "90", when=self.today)

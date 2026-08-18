@@ -602,6 +602,14 @@ def _last_lifting_note(qs, day):
             f" — {_num(previous.birds)} birds, {gap} day{'' if gap == 1 else 's'} ago.")
 
 
+def _last_sale_date():
+    """The day of the most recent bird sale, or None if there has never been one."""
+    from broiler.models import BirdSale
+
+    row = BirdSale.objects.order_by("-date").values("date").first()
+    return row["date"] if row else None
+
+
 def _sale_overview(viewable, filters, user=None):
     """Bird sales to date, and how much of the money has come back.
 
@@ -620,7 +628,16 @@ def _sale_overview(viewable, filters, user=None):
     from broiler.models import BirdSale, BirdSaleReceipt
     from user.services.scoping import is_unscoped
 
-    day = filters.get("date") or timezone.localdate()
+    # With no date chosen the card stands at the last sale rather than today:
+    # the trade is a few days a week, and a card dated to a morning nothing
+    # happened on invites the reader to think nothing has happened at all.
+    #
+    # The receipts are cut off at the same day, which is the cost of it — money
+    # banked after the last lifting is not in these figures until a later date
+    # is picked. Cutting the two at different days would be worse: it would put
+    # a receipt against a sale the card is not showing.
+    chosen = filters.get("date")
+    day = chosen or _last_sale_date() or timezone.localdate()
     # Whole-business figures, so only for people who may see the whole
     # business. Scoping the sales alone and leaving the receipts — which carry
     # no farm — would make the difference between them an arithmetic accident
@@ -634,7 +651,6 @@ def _sale_overview(viewable, filters, user=None):
 
     sales = BirdSale.objects.filter(date__lte=day)
     receipts = BirdSaleReceipt.objects.filter(date__lte=day)
-    last_sale = sales.order_by("-date").values("date").first()
 
     totals = sales.aggregate(b=Sum("birds"), w=Sum("net_weight"), v=Sum("amount"))
     birds = float(totals["b"] or 0)
@@ -683,11 +699,11 @@ def _sale_overview(viewable, filters, user=None):
              "sub": "billed less received",
              "tone": "bad" if outstanding > 0 else "good"},
         ],
-        # Everything up to a day, so the card says which day and when the last
-        # sale in it was — an overview with no date on it is read as today's.
-        "note": (f"Everything up to {day.strftime('%d %b %Y')}"
-                 + (f". Last sale {last_sale['date'].strftime('%d %b')}."
-                    if last_sale else ".")),
+        # Which day the card stands at, and whether anybody asked for it.
+        "note": (f"Everything up to {day.strftime('%d %b %Y')}."
+                 if chosen else
+                 f"As on {day.strftime('%d %b %Y')} — the last sale. "
+                 "Pick a date to see another."),
         "filters_used": ["date"],
     }
 
