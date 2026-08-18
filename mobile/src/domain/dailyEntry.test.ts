@@ -465,21 +465,31 @@ describe("adviseDailyEntry — the web grid's notification strip", () => {
 });
 
 describe("feedPlanLines", () => {
+  // 2,284 birds on a 0.4 kg/bird cap, having eaten 0.05 kg/bird so far, with
+  // 975 kg standing in the farm's store.
   const row = (over: Record<string, string | number> = {}) => ({
     item: 13, name: "Pre-Starter Feed", cap_per_bird_kg: "0.4",
+    per_bird_fed_kg: "0.05",
     required_kg: "913.60", sent_kg: "1000.00", fed_kg: "25.00",
     balance_kg: "975.00", remaining_kg: "888.60", excess_kg: "86.40",
     ...over,
   }) as any;
 
-  const one = (over = {}, typed = {}, birds = 2284) =>
-    feedPlanLines([row(over)], typed, birds).lines[0];
+  const one = (over = {}, typed = {}, lost = 0) =>
+    feedPlanLines([row(over)], typed, lost).lines[0];
 
-  it("measures the requirement against the flock, not a stored figure", () => {
-    // 0.4 kg/bird cap x 2,284 birds.
+  it("takes the requirement from the server, departed birds and all", () => {
     expect(one().required).toBeCloseTo(913.6, 1);
-    // Birds booked as lost today do not eat, so it falls with them.
-    expect(one({}, {}, 2084).required).toBeCloseTo(833.6, 1);
+  });
+
+  it("keeps a sold-out flock's requirement instead of zeroing it", () => {
+    // cap x live is nought here; what the flock ate is not.
+    expect(one({ required_kg: "563.30" }).required).toBeCloseTo(563.3, 1);
+  });
+
+  it("gives back only the allowance a bird lost today had not eaten", () => {
+    // 100 birds x (0.4 cap - 0.05 already eaten) = 35 kg back, not 40.
+    expect(one({}, {}, 100).required).toBeCloseTo(878.6, 1);
   });
 
   it("counts what is being typed, so the balance is the one after this entry", () => {
@@ -489,13 +499,16 @@ describe("feedPlanLines", () => {
     expect(r.remaining).toBeCloseTo(848.6, 1);
   });
 
-  it("flags feed sent beyond what the phase can use", () => {
-    expect(one().flag).toBe("86 extra sent");
-    expect(one().warn).toBe(false);
+  it("reads the balance as the farm's store, not this flock's share of it", () => {
+    // A farm whose other flock has eaten the store into deficit: the figure
+    // comes from the server as it stands, and is not re-derived from sent.
+    const r = one({ balance_kg: "-60.00", sent_kg: "2237.81" });
+    expect(r.balance).toBeCloseTo(-60, 1);
+    expect(r.flag).toBe("60 unreceived");
   });
 
   it("flags feed fed but never received, ahead of anything else", () => {
-    const r = one({ sent_kg: "0.00" });
+    const r = one({ balance_kg: "0.00" }, { "13": 25 });
     expect(r.flag).toBe("25 unreceived");
     expect(r.warn).toBe(true);
   });
@@ -506,21 +519,28 @@ describe("feedPlanLines", () => {
     expect(r.warn).toBe(true);
   });
 
+  it("flags feed standing on the farm beyond what this flock still needs", () => {
+    // 975 in the store against 888.6 still to feed.
+    expect(one().flag).toBe("86 spare");
+    expect(one().warn).toBe(false);
+  });
+
   it("says nothing when the position is sound", () => {
-    expect(one({ sent_kg: "913.60" }).flag).toBe("");
+    expect(one({ balance_kg: "888.60" }).flag).toBe("");
   });
 
   it("totals every feed, which is what an order is placed against", () => {
     const { total } = feedPlanLines(
       [row(), row({ item: 14, name: "Starter Feed", cap_per_bird_kg: "1.2",
-                    sent_kg: "0.00", fed_kg: "0.00" })],
-      {}, 1000);
-    expect(total.required).toBeCloseTo(400 + 1200, 1);
+                    required_kg: "1200.00", sent_kg: "0.00", fed_kg: "0.00",
+                    balance_kg: "0.00" })],
+      {}, 0);
+    expect(total.required).toBeCloseTo(913.6 + 1200, 1);
     expect(total.fed).toBeCloseTo(25, 1);
   });
 
   it("returns nothing for an empty plan rather than failing", () => {
-    const { lines, total } = feedPlanLines([], {}, 1000);
+    const { lines, total } = feedPlanLines([], {}, 0);
     expect(lines).toEqual([]);
     expect(total.required).toBe(0);
   });
@@ -553,31 +573,31 @@ describe("typedFeed", () => {
 describe("feedPlanLines flag placement", () => {
   const row = (over: Record<string, string | number> = {}) => ({
     item: 13, name: "Pre-Starter Feed", cap_per_bird_kg: "0.4",
+    per_bird_fed_kg: "0.025",
     required_kg: "400.00", sent_kg: "1000.00", fed_kg: "25.00",
     balance_kg: "975.00", remaining_kg: "375.00", excess_kg: null,
     ...over,
   }) as any;
-  const one = (over = {}) => feedPlanLines([row(over)], {}, 1000).lines[0];
+  const one = (over = {}) => feedPlanLines([row(over)], {}, 0).lines[0];
 
   it("puts an unreceived flag against the balance", () => {
     // The marker has to sit on the figure it explains, or the reader has to
     // guess which of five numbers is the problem.
-    expect(one({ sent_kg: "0.00" }).flagOn).toBe("balance");
+    expect(one({ balance_kg: "-5.00" }).flagOn).toBe("balance");
   });
 
   it("puts an over-cap flag against what is left to feed", () => {
-    expect(one({ fed_kg: "500.00", sent_kg: "500.00" }).flagOn).toBe("remaining");
+    expect(one({ fed_kg: "500.00" }).flagOn).toBe("remaining");
   });
 
-  it("puts an extra-sent flag against what was sent", () => {
-    expect(one().flagOn).toBe("sent");
+  it("puts a spare-feed flag against the balance it is about", () => {
+    expect(one().flagOn).toBe("balance");
   });
 
   it("marks nothing when the position is sound", () => {
-    expect(one({ sent_kg: "400.00" }).flagOn).toBeNull();
+    expect(one({ balance_kg: "375.00" }).flagOn).toBeNull();
   });
 });
-
 describe("negative stock is a blocker, not a warning", () => {
   const lookup = {
     batch: 1, batch_name: "B1", age_days: 5, start_date: "2026-07-18",

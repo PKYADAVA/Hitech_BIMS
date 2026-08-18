@@ -1198,7 +1198,7 @@ export function DailyEntryGridScreen({ navigation, route }: Props) {
                 plan={r.lookup?.feed_plan ?? []}
                 stock={r.lookup?.farm_feed_stock ?? []}
                 typed={typedFeed(r.values)}
-                birds={birds}
+                lost={num(r.values.mortality) + num(r.values.culls)}
               />
 
               <Text style={styles.slotHead}>Optional Feed</Text>
@@ -1542,20 +1542,21 @@ function SectionHead({
  * to a flock.
  */
 function FeedPlanTable({
-  plan, stock, typed, birds,
+  plan, stock, typed, lost,
 }: {
   plan: FeedPlanRow[];
   stock: { item: number; name: string; kg: string }[];
   /** kg being entered on this row, per item id. */
   typed: Record<string, number>;
-  /** The flock this entry leaves behind — what the requirement is measured on. */
-  birds: number;
+  /** Birds booked as dead or culled on this row — the only part of the
+   *  requirement the server has not already accounted for. */
+  lost: number;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
   if (!plan.length && !stock.length) return null;
 
-  const { lines: rows, total: sum } = feedPlanLines(plan, typed, birds);
+  const { lines: rows, total: sum } = feedPlanLines(plan, typed, lost);
 
   // `signed` colours a figure by which side of zero it falls, the same way the
   // Stock box does — the balance columns are the ones read for that.

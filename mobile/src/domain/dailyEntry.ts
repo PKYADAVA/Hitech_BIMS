@@ -109,6 +109,8 @@ export interface FeedPlanRow {
   item: number;
   name: string;
   cap_per_bird_kg: string;
+  /** Cumulative kg per bird of this feed at the start of the day. */
+  per_bird_fed_kg?: string;
   required_kg: string;
   sent_kg: string;
   fed_kg: string;
@@ -139,12 +141,12 @@ export function typedFeed(values: Record<string, string>): Record<string, number
 export interface FeedPlanLine {
   item: number;
   name: string;
-  /** Phase cap times the flock this entry leaves behind. */
+  /** The surviving flock's remaining allowance plus what the departed ate. */
   required: number;
   sent: number;
   /** Fed to date plus what is being typed on this row. */
   fed: number;
-  /** Sent less fed — what is in the farm's store. */
+  /** What is in the farm's store, less what this row feeds. */
   balance: number;
   /** Required less fed — what is still owed to the phase. */
   remaining: number;
@@ -163,23 +165,36 @@ export interface FeedPlanLine {
  * a rendering harness — it is the part that decides what a supervisor orders,
  * and it is recomputed on every keystroke.
  *
- * `typed` is the kilos being entered on this row, keyed by item id; `birds` is
- * the flock after this row's losses, because birds booked as dead do not eat.
+ * `typed` is the kilos being entered on this row, keyed by item id; `lost` is
+ * the birds booked as dead or culled on it.
+ *
+ * The requirement is the server's — every surviving bird's full cap plus what
+ * the birds that have gone actually ate. It used to be recomputed here as
+ * cap × live, which threw the second half away: a flock that had sold out
+ * showed a requirement of nought against the tonnes it had really eaten. Only
+ * this row's own losses are applied here, because they are the part the server
+ * has not seen yet.
  */
 export function feedPlanLines(
   plan: FeedPlanRow[],
   typed: Record<string, number>,
-  birds: number
+  lost: number
 ): { lines: FeedPlanLine[];
      total: Omit<FeedPlanLine, "item" | "name" | "flag" | "flagOn" | "warn"> } {
   const total = { required: 0, sent: 0, fed: 0, balance: 0, remaining: 0 };
   const lines = plan.map((p) => {
-    const fed = num(p.fed_kg) + (typed[String(p.item)] ?? 0);
-    const required = num(p.cap_per_bird_kg) * birds;
+    const now = typed[String(p.item)] ?? 0;
+    const fed = num(p.fed_kg) + now;
+    // A bird lost on this row gives back the allowance it had not eaten yet,
+    // and keeps what it had.
+    const unspent = num(p.cap_per_bird_kg) - num(p.per_bird_fed_kg);
+    const required = num(p.required_kg) - lost * unspent;
     const sent = num(p.sent_kg);
-    const balance = sent - fed;
+    // The farm's store — every flock on it eats from the same pile — less what
+    // this row is about to take out.
+    const balance = num(p.balance_kg) - now;
     const remaining = required - fed;
-    const over = sent - required;
+    const spare = balance - Math.max(remaining, 0);
 
     let flag = "";
     let flagOn: FeedPlanLine["flagOn"] = null;
@@ -189,9 +204,9 @@ export function feedPlanLines(
     } else if (remaining < 0) {
       flag = `${Math.abs(remaining).toFixed(0)} over cap`;
       flagOn = "remaining";
-    } else if (over > 0) {
-      flag = `${over.toFixed(0)} extra sent`;
-      flagOn = "sent";
+    } else if (spare > 0) {
+      flag = `${spare.toFixed(0)} spare`;
+      flagOn = "balance";
     }
 
     total.required += required; total.sent += sent; total.fed += fed;

@@ -2465,7 +2465,7 @@ def resolve_feed_phase(batch, on_date, age_days):
     return None
 
 
-def _flock_counts(batch, as_of=None):
+def _flock_counts(batch, as_of=None, losses_to=None):
     """Head count for a batch as of `as_of` (default: all-time), broken into
     the parts rather than just the total: chicks placed, mortality, culls,
     birds sold, and what is left alive.
@@ -2474,6 +2474,13 @@ def _flock_counts(batch, as_of=None):
     also shows each loss against the birds placed ("0.42% of opening"), and
     deriving those from a single number is not possible. Same one pass over the
     same records, so the parts and the total cannot disagree.
+
+    ``losses_to`` moves the cutoff for the losses alone, leaving the placement
+    where it is. The Daily Entry lookup wants the flock at the *start* of the
+    day it is about to record — birds placed that morning are in the shed, but
+    the deaths booked on that day are the very thing the entry is recording, so
+    counting them here had the form take them off twice: once in the count it
+    was handed, and again as they were typed.
     """
     from inventory.models import Item, StockTransfer
     from django.db.models import Sum
@@ -2486,8 +2493,9 @@ def _flock_counts(batch, as_of=None):
     sold_q = BirdSale.objects.filter(batch_id=batch.id)
     if as_of:
         placed_q = placed_q.filter(date__lte=as_of)
-        de_q = de_q.filter(date__lte=as_of)
-        sold_q = sold_q.filter(date__lte=as_of)
+        loss_cutoff = as_of if losses_to is None else losses_to
+        de_q = de_q.filter(date__lte=loss_cutoff)
+        sold_q = sold_q.filter(date__lte=loss_cutoff)
     placed = int(placed_q.aggregate(t=Sum("quantity"))["t"] or 0)
     de = de_q.aggregate(m=Sum("mortality"), c=Sum("culls"))
     mortality, culls = int(de["m"] or 0), int(de["c"] or 0)
@@ -2550,7 +2558,7 @@ def _placement_date(batch):
             .order_by("date").values_list("date", flat=True).first())
 
 
-def _departed_feed_charge(batch, before_date, placed):
+def _departed_feed_charge(batch, before_date, placed, with_per_bird=False):
     """Feed already eaten by birds that are no longer on the farm, per item.
 
     A bird that dies on day twelve has eaten twelve days of feed, and that
@@ -2574,7 +2582,11 @@ def _departed_feed_charge(batch, before_date, placed):
     Within a day the feed is served before the departures are taken out: a
     bird that dies on a day it was fed still ate that day.
 
-    Returns ``{item_id: kg}``.
+    Returns ``{item_id: kg}``, or with ``with_per_bird`` the pair
+    ``({item_id: kg}, {item_id: kg per bird})`` — the cumulative feed per bird
+    standing at ``before_date``, which is what a bird booked as lost on the day
+    being entered has already eaten. The form needs it to give back that bird's
+    unused allowance without giving back the feed it did eat.
     """
     from broiler.models import BirdSale
 
@@ -2608,7 +2620,10 @@ def _departed_feed_charge(batch, before_date, placed):
                 charge[item_id] = charge.get(item_id, Decimal("0")) + gone * per_bird
             alive -= gone
 
-    return {k: v.quantize(Decimal("0.01")) for k, v in charge.items()}
+    charged = {k: v.quantize(Decimal("0.01")) for k, v in charge.items()}
+    if not with_per_bird:
+        return charged
+    return charged, {k: v for k, v in cum_per_bird.items()}
 
 
 def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
@@ -2723,7 +2738,16 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
     # the web form has the same facts on screen in its Batch panel.
     shed = batch.shed if batch and batch.shed_id else None
     breed = batch.breed if batch and batch.breed_id else None
-    counts = _flock_counts(batch, as_of=entry_date) if batch else _flock_counts(None)
+    # The flock at the *start* of the day being entered. Everything else on
+    # this payload — the feed already fed, the departures already charged — is
+    # read up to but not including the entry date, and the head count was the
+    # one figure read through it. On a day that already has an entry (an edit,
+    # or a backfill over a saved row) that made the count end-of-day: the form
+    # showed an opening already net of that day's mortality and then took the
+    # typed mortality off it again.
+    counts = (_flock_counts(batch, as_of=entry_date,
+                            losses_to=entry_date - timedelta(days=1))
+              if batch else _flock_counts(None))
 
     # The last weighing on this flock, so the box asks for today's figure
     # against something. A weight is taken every few days rather than daily,
@@ -2760,7 +2784,8 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         #
         # Each departure is charged only what it actually ate, at the flock's
         # cumulative feed per bird on the day it left.
-        departed_charge = _departed_feed_charge(batch, entry_date, counts["placed"])
+        departed_charge, per_bird_fed = _departed_feed_charge(
+            batch, entry_date, counts["placed"], with_per_bird=True)
         # Every feed item this phase master names for the flock's current age,
         # plus the changeover it is heading into — the two a supervisor is
         # deciding between when a phase is about to end.
@@ -2774,6 +2799,33 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
                 fed_by_item[de.feed_1_id] = fed_by_item.get(de.feed_1_id, Decimal("0")) + _num(de.feed_1_qty)
             if de.feed_2_id:
                 fed_by_item[de.feed_2_id] = fed_by_item.get(de.feed_2_id, Decimal("0")) + _num(de.feed_2_qty)
+
+        # What the FARM holds of each feed at the start of this day, whichever
+        # flock is going to eat it.
+        #
+        # The balance column used to be this farm's receipts less *this batch's*
+        # consumption, which on a farm that has had more than one flock is not a
+        # balance of anything: Test Farm DE showed 2,237 kg of Starter in the
+        # store while the store was 60 kg in deficit, because the previous
+        # flock's 2,297 kg was nowhere in the sum. Every flock eats out of one
+        # store, so every flock's feeding comes off it.
+        #
+        # Read up to but not including the entry date, and ignoring this batch's
+        # own row on that date, because the form adds the kilos being typed. A
+        # sister flock's entry on the same day is counted — it is not the row
+        # being written.
+        farm_used = {}
+        for de in DailyEntry.objects.filter(farm_id=farm_id, date__lte=entry_date):
+            if de.date == entry_date and de.batch_id == batch.id:
+                continue
+            for item_id, qty in ((de.feed_1_id, de.feed_1_qty),
+                                 (de.feed_2_id, de.feed_2_qty)):
+                if item_id:
+                    farm_used[item_id] = farm_used.get(item_id, Decimal("0")) + _num(qty)
+
+        def on_hand_of(item_id):
+            return (_num(farm_receipts_balance(farm_id, item_id, entry_date))
+                    - farm_used.get(item_id, Decimal("0"))).quantize(Decimal("0.01"))
 
         for item_id, info in wanted.items():
             cap_per_bird = Decimal(str(info.get("max") or 0))
@@ -2789,11 +2841,16 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
                 "from_age": info.get("from_age"),
                 "priority": info.get("priority"),
                 "cap_per_bird_kg": str(cap_per_bird),
+                # Cumulative kg per bird of this feed at the start of the day.
+                # A bird booked as lost on this row gives back the allowance it
+                # had not eaten yet — cap less this — and keeps what it ate.
+                "per_bird_fed_kg": str(per_bird_fed.get(item_id, Decimal("0"))
+                                       .quantize(Decimal("0.0001"))),
                 "required_kg": str(required),
                 "sent_kg": str(sent),
                 "fed_kg": str(fed),
-                # What is left at the farm of this feed: delivered less eaten.
-                "balance_kg": str((sent - fed).quantize(Decimal("0.01"))),
+                # What is on the farm, not what this flock has left of it.
+                "balance_kg": str(on_hand_of(item_id)),
                 # Still to feed against the phase's cap. Negative means the cap
                 # has already been passed, which the panel says outright.
                 "remaining_kg": str((required - fed).quantize(Decimal("0.01"))),
@@ -2811,14 +2868,7 @@ def daily_entry_lookup_payload(farm_id, date_str=None, batch_id=None):
         # Everything else with feed on hand at this farm, so the panel can say
         # what is actually in the store rather than only the phase's own items.
         for item in feed_items():
-            bal = _num(farm_receipts_balance(farm_id, item.id, entry_date))
-            used = Decimal("0")
-            for de in DailyEntry.objects.filter(farm_id=farm_id, date__lte=entry_date):
-                if de.feed_1_id == item.id:
-                    used += _num(de.feed_1_qty)
-                if de.feed_2_id == item.id:
-                    used += _num(de.feed_2_qty)
-            on_hand = (bal - used).quantize(Decimal("0.01"))
+            on_hand = on_hand_of(item.id)
             if on_hand:
                 farm_feed_stock.append({"item": item.id, "name": item.description,
                                         "kg": str(on_hand)})

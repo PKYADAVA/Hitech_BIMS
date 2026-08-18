@@ -105,9 +105,6 @@ function feedPlanTable(tr) {
   // the server last saw.
   const lostNow = (Number(tr.querySelector('.mortality')?.value) || 0)
                 + (Number(tr.querySelector('.culls')?.value) || 0);
-  const open = openingBirds(tr);
-  const birdsNow = Math.max((isNaN(open) ? 0 : open) - lostNow, 0);
-
   const cell = (v, cls) => `<div class="fp-num ${cls || ''}">${v.toFixed(1)}</div>`;
   // Summed as the rows are built: the whole flock's feed, which is the figure
   // an order is actually placed against.
@@ -115,19 +112,27 @@ function feedPlanTable(tr) {
   const body = plan.map(p => {
     const now = typing[String(p.item)] || 0;
     const fed = Number(p.fed_kg) + now;
-    // Recomputed from the cap rather than taken as sent, so it tracks the
-    // flock as the row is filled in.
-    const required = Number(p.cap_per_bird_kg) * birdsNow;
-    const balance = Number(p.sent_kg) - fed;
+    // The server's figure: every surviving bird's full cap, plus what the
+    // birds that have gone actually ate. Recomputing it here as cap × live
+    // threw the second half away — a flock that had sold out showed a
+    // requirement of nought against two and a half tonnes it had really eaten.
+    //
+    // Only this row's own losses are applied here, because they are the part
+    // the server has not seen: a bird booked as lost now gives back the
+    // allowance it had not eaten yet, and keeps what it had.
+    const unspent = Number(p.cap_per_bird_kg) - Number(p.per_bird_fed_kg || 0);
+    const required = Number(p.required_kg) - lostNow * unspent;
+    // The farm's store, less what this row is about to take out of it.
+    const balance = Number(p.balance_kg) - now;
     const remaining = required - fed;
-    const over = Number(p.sent_kg) - required;
+    const spare = balance - Math.max(remaining, 0);
 
     // One flag per row, worst first: fed feed that never arrived, fed past the
-    // phase cap, or more delivered than the phase can use.
+    // phase cap, or more in the store than this flock still needs.
     let flag = '';
     if (balance < 0) flag = `<span class="text-danger" title="Fed but never received">${Math.abs(balance).toFixed(0)} unreceived</span>`;
     else if (remaining < 0) flag = `<span class="text-danger" title="Past the phase cap">${Math.abs(remaining).toFixed(0)} over cap</span>`;
-    else if (over > 0) flag = `<span class="text-warning-emphasis" title="Sent beyond this phase's requirement">${over.toFixed(0)} extra sent</span>`;
+    else if (spare > 0) flag = `<span class="text-warning-emphasis" title="On the farm beyond what this flock still needs">${spare.toFixed(0)} spare</span>`;
 
     sum.required += required; sum.sent += Number(p.sent_kg); sum.fed += fed;
     sum.balance += balance; sum.remaining += remaining;
@@ -170,9 +175,10 @@ function feedPlanTable(tr) {
 }
 
 
-// The two derived bird columns. Opening is the flock the server counted as of
-// this entry's date; closing is that less the losses this row books, so the
-// pair reads as the day's movement rather than leaving it to be worked out.
+// The two derived bird columns. Opening is the flock the server counted at the
+// start of this entry's date; closing is that less the losses this row books,
+// so the pair reads as the day's movement rather than leaving it to be worked
+// out.
 //
 // Both are display-only — the server derives the flock from the placements and
 // the entries themselves, and nothing here is submitted.
