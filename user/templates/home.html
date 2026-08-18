@@ -144,7 +144,7 @@
 
   /* Charts. Inline SVG, so the styling is the card's rather than a library's. */
   .dw-chart { margin-top:13px; }
-  .dw-chart svg { width:100%; height:auto; display:block; max-height:270px;
+  .dw-chart svg { width:100%; height:auto; display:block; max-height:210px;
                   margin:0 auto; }
   .dw-legend { display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
                font-size:.72rem; color:#475569; margin-bottom:2px; }
@@ -689,7 +689,11 @@
       if (!groups.length) return '';
       var series = c.series && c.series.length ? c.series : [{ label: '' }];
       var W = Math.max(360, 74 * groups.length * (series.length > 1 ? 1.6 : 1) + 74);
-      var H = 300, padL = 62, padR = 12, padT = 22, padB = 62;
+      // Shorter than it was: a card carrying a chart stood 140px taller than
+      // its neighbour and dragged the whole row down with it. The plot loses
+      // the height, not the labels — those are read, the empty air above the
+      // tallest bar is not.
+      var H = 216, padL = 62, padR = 12, padT = 16, padB = 54;
       var plotW = W - padL - padR, plotH = H - padT - padB;
 
       var max = 0;
