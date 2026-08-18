@@ -175,3 +175,34 @@ class LiftingWidgetTests(TestCase):
         self.lift(1000, "20.00")
         self.lift(8000, "160.00", farm=self.make_farm("Far Farm", branch=far))
         self.assertEqual(self.stat("Birds lifted", user=clerk)["value"], "1,000")
+
+    # ---- the chart ----------------------------------------------------------
+
+    def test_the_chart_is_the_day_s_birds_and_weight_by_branch(self):
+        far = Branch.objects.create(branch_name="Bahraich", region=self.region,
+                                    prefix="BHR")
+        self.lift(1000, "2000.00")
+        self.lift(400, "900.00", farm=self.make_farm("Far Farm", branch=far))
+
+        chart = self.card()["chart"]
+        self.assertEqual([s["label"] for s in chart["series"]], ["Birds", "Weight"])
+        self.assertEqual([(g["label"], g["values"]) for g in chart["groups"]],
+                         [("Akbarpur", [1000, 2000.0]), ("Bahraich", [400, 900.0])])
+
+    def test_a_branch_that_lifted_nothing_is_left_off_the_chart(self):
+        """A bar of nought says a branch had a bad day; it had no lifting at all."""
+        Branch.objects.create(branch_name="Bahraich", region=self.region, prefix="BHR")
+        self.lift(1000, "2000.00")
+        self.assertEqual([g["label"] for g in self.card()["chart"]["groups"]],
+                         ["Akbarpur"])
+
+    def test_a_day_with_no_liftings_has_no_chart_to_draw(self):
+        self.assertIsNone(self.card()["chart"])
+
+    def test_the_average_weight_is_the_figure_a_lifting_is_judged_on(self):
+        self.lift(1000, "2100.00")
+        self.assertEqual(self.stat("Avg wt")["value"], "2.10 Kg")
+
+    def test_the_average_is_not_divided_by_a_flock_of_none(self):
+        self.lift(0, "0.00")
+        self.assertEqual(self.stat("Avg wt")["value"], "—")

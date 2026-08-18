@@ -130,7 +130,9 @@
      first figure is the total the other two break down — the total spans the
      card and the two parts sit side by side under it, which is the shape the
      numbers actually have. */
-  .dw-stats:has(> :nth-child(3):last-child) > :first-child { grid-column: 1 / -1; }
+  .dw-col-receivables .dw-stats:has(> :nth-child(3):last-child) > :first-child,
+  .dw-col-payables .dw-stats:has(> :nth-child(3):last-child) > :first-child {
+    grid-column: 1 / -1; }
   /* Four — Receivables: the total owed with its three overdue windows. Two to
      a row, so the total sits beside the month it is most often read against,
      and the week and the two days line up underneath. Fixed rather than
@@ -139,6 +141,26 @@
      row two columns would strand them in a corner. */
   .dw-col-receivables .dw-stats:has(> :nth-child(4):last-child) {
     grid-template-columns: repeat(2, 1fr); }
+
+  /* Charts. Inline SVG, so the styling is the card's rather than a library's. */
+  .dw-chart { margin-top:13px; }
+  .dw-chart svg { width:100%; height:auto; display:block; max-height:270px;
+                  margin:0 auto; }
+  .dw-legend { display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
+               font-size:.72rem; color:#475569; margin-bottom:2px; }
+  .dw-legend span { display:inline-flex; align-items:center; gap:6px; }
+  .dw-legend i { width:13px; height:13px; border-radius:3px; display:inline-block; }
+  .fpc-grid { stroke:#eef2f7; stroke-width:1; }
+  .fpc-axis { font-size:12px; fill:#8494ab; }
+  .fpc-val  { font-size:13px; font-weight:700; }
+  .fpc-cat  { font-size:12px; fill:#475569; font-weight:600; }
+  .fpc-meta { font-size:11px; fill:#8494ab; }
+
+  /* Age wise Available Birds sits beside Live Flock and Daily Entries — the
+     three read together — so it takes a third of the row rather than one of
+     its own. The chart's viewBox is sized from the number of bars, which is
+     what keeps its labels legible at this width. */
+  .dw-col-flock_ages .dw-stats { grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); }
 
   /* Lifting Details is the day in a strip — trucks, birds, weight, farms, then
      the loads themselves — and read at a fifth of the row it wrapped every
@@ -647,11 +669,88 @@
            + '</div>';
     }
 
+    /**
+     * A bar chart as inline SVG — no charting library on the dashboard.
+     *
+     * Two of these cards are charts and both are the same shape: a handful of
+     * clusters, one to four bars each, every bar labelled with its own figure.
+     * A library for that is a few hundred kilobytes on the slowest connection
+     * in the business, and the value labels are what people actually read.
+     *
+     * A viewBox rather than pixels, so it scales with the card instead of
+     * being redrawn on resize.
+     */
+    function barChart(c) {
+      var groups = c.groups || [];
+      if (!groups.length) return '';
+      var series = c.series && c.series.length ? c.series : [{ label: '' }];
+      var W = Math.max(360, 74 * groups.length * (series.length > 1 ? 1.6 : 1) + 74);
+      var H = 300, padL = 62, padR = 12, padT = 22, padB = 62;
+      var plotW = W - padL - padR, plotH = H - padT - padB;
+
+      var max = 0;
+      groups.forEach(function (g) {
+        (g.values || []).forEach(function (v) { if (v > max) max = v; });
+      });
+      // Round the top up to something a person would choose, so the gridlines
+      // land on readable numbers instead of 8,287.
+      var step = Math.pow(10, Math.floor(Math.log10(max || 1)));
+      var top = Math.ceil((max || 1) / step) * step;
+      if (top / step < 3) { step /= 2; top = Math.ceil((max || 1) / step) * step; }
+      var y = function (v) { return padT + plotH - (v / top) * plotH; };
+
+      var svg = '';
+      for (var t = 0; t <= top + 1e-9; t += step) {
+        svg += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(t)
+             + '" y2="' + y(t) + '" class="fpc-grid"/>'
+             + '<text x="' + (padL - 8) + '" y="' + (y(t) + 4)
+             + '" class="fpc-axis" text-anchor="end">' + t.toLocaleString() + '</text>';
+      }
+
+      var slot = plotW / groups.length;
+      // Bars fill three quarters of a cluster's slot, whatever the count, so a
+      // one-series chart is not a row of threads and a four-series one does
+      // not touch its neighbour.
+      var barW = Math.min((slot * 0.75) / series.length, 54);
+      groups.forEach(function (g, gi) {
+        var vals = g.values || [];
+        var startX = padL + slot * gi + (slot - barW * vals.length) / 2;
+        vals.forEach(function (v, si) {
+          var x = startX + barW * si;
+          var colour = series.length > 1
+            ? (series[si].colour || '#2f9ef5')
+            : (g.colour || series[0].colour || '#2f9ef5');
+          var h = Math.max(plotH - (y(v) - padT), v > 0 ? 2 : 0);
+          svg += '<rect x="' + x + '" y="' + (padT + plotH - h) + '" width="'
+               + (barW - 6) + '" height="' + h + '" rx="3" fill="' + colour + '"/>'
+               + '<text x="' + (x + (barW - 6) / 2) + '" y="' + (padT + plotH - h - 6)
+               + '" class="fpc-val" text-anchor="middle" fill="' + colour + '">'
+               + esc(String(v.toLocaleString())) + '</text>';
+        });
+        svg += '<text x="' + (padL + slot * gi + slot / 2) + '" y="' + (H - padB + 18)
+             + '" class="fpc-cat" text-anchor="middle">' + esc(g.label) + '</text>';
+        if (g.meta) {
+          svg += '<text x="' + (padL + slot * gi + slot / 2) + '" y="' + (H - padB + 34)
+               + '" class="fpc-meta" text-anchor="middle">' + esc(g.meta) + '</text>';
+        }
+      });
+
+      var legend = series.length > 1 || series[0].label
+        ? '<div class="dw-legend">' + series.map(function (s) {
+            return '<span><i style="background:' + s.colour + '"></i>'
+                 + esc(s.label) + '</span>'; }).join('') + '</div>'
+        : '';
+      return '<div class="dw-chart">' + legend
+           + '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet"'
+           + ' role="img" aria-label="Bar chart">' + svg + '</svg></div>';
+    }
+
     function card(w) {
       var body = '';
       if (w.stats && w.stats.length) {
         body += '<div class="dw-stats">' + w.stats.map(stat).join('') + '</div>';
       }
+      if (w.chart) body += barChart(w.chart);
       if (w.rows && w.rows.length) {
         body += '<div class="dw-rows">'
               + (w.rows_title ? '<div class="dw-rows-title">' + esc(w.rows_title) + '</div>' : '')

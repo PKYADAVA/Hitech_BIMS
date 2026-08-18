@@ -351,6 +351,133 @@ def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
     return out
 
 
+#: Bar colours, in the order a chart's series or bands take them. Picked to
+#: stay apart for a reader who cannot separate red from green.
+CHART_COLOURS = ("#2bb3a3", "#2f9ef5", "#f5a524", "#8b5cf6", "#f97316", "#1f2937")
+
+
+def _bars(groups, series=("",), colours=CHART_COLOURS):
+    """A bar chart the card can draw: what the bars are, and what they measure.
+
+    ``groups`` is ``[{"label": …, "values": [n, …], "meta": …}]`` — one cluster
+    per branch, age band or whatever the widget counts. ``series`` names the
+    bars inside a cluster; one unnamed series draws a plain bar per group and
+    no legend.
+
+    Deliberately data, not markup: the card renders it as inline SVG, so a
+    dashboard costs no charting library on a connection that is already the
+    slowest part of a supervisor's day.
+    """
+    return {
+        "series": [{"label": name,
+                    "colour": colours[i % len(colours)]}
+                   for i, name in enumerate(series)],
+        # A colour per group as well, for a single-series chart where the bands
+        # are the subject and one flat colour says nothing.
+        "groups": [{**g, "colour": colours[i % len(colours)]}
+                   for i, g in enumerate(groups)],
+    }
+
+
+#: How the flock ages are banded: weeks up to five, then the two the birds
+#: actually go out in. Broilers lift somewhere past five weeks, so the last band
+#: is what is ready now and the one before it is what is ready next week.
+#:
+#: The bands cannot overlap, so "42+" starts at 42 and the band before it ends
+#: at 41 — a flock on its forty-second day belongs to the band the label says
+#: it does.
+AGE_BANDS = ((0, 7), (8, 14), (15, 21), (22, 28), (29, 35), (36, 41), (42, None))
+
+
+def _flock_ages(viewable, filters, user=None):
+    """Birds alive by age band — what is ready to lift and what is behind it.
+
+    A single total says how many birds are on the farms; it does not say
+    whether they are a week old or going out on Friday, which is the question
+    behind every lifting plan. Banded by week, with the farms in each band, so
+    a band reads as "four farms, 8,287 birds, ready in a fortnight".
+
+    Same definition of alive as the Live Flock card and report — placed less
+    mortality, culls and birds already lifted — so the bands add up to the
+    figure beside them.
+    """
+    from django.db.models import Min, Sum
+    from broiler.models import BirdSale, DailyEntry
+    from inventory.models import Item, StockTransfer
+
+    day = filters.get("date") or timezone.localdate()
+    used = list(FILTER_KEYS)
+
+    batches = list(_batches_live_on(day, filters, user)
+                   .values_list("id", "start_date", "broiler_farm_id"))
+    if not batches:
+        return {"stats": [{"label": "Available birds", "value": "0"}],
+                "note": "No live flocks match this filter.", "filters_used": used}
+
+    ids = [b[0] for b in batches]
+    chick_ids = list(Item.objects.filter(category__name__icontains="chick")
+                     .values_list("id", flat=True))
+
+    # Three aggregates for the whole set rather than three per flock.
+    placed, first_in = {}, {}
+    for row in (StockTransfer.objects
+                .filter(to_batch_id__in=ids, item_id__in=chick_ids, date__lte=day)
+                .values("to_batch_id").annotate(q=Sum("quantity"), first=Min("date"))):
+        placed[row["to_batch_id"]] = float(row["q"] or 0)
+        first_in[row["to_batch_id"]] = row["first"]
+    lost = {r["batch_id"]: float(r["m"] or 0) + float(r["c"] or 0)
+            for r in (DailyEntry.objects.filter(batch_id__in=ids, date__lte=day)
+                      .values("batch_id").annotate(m=Sum("mortality"), c=Sum("culls")))}
+    sold = {r["batch_id"]: float(r["b"] or 0)
+            for r in (BirdSale.objects.filter(batch_id__in=ids, date__lte=day)
+                      .values("batch_id").annotate(b=Sum("birds")))}
+
+    bands = [{"birds": 0.0, "farms": set()} for _ in AGE_BANDS]
+    undated = 0.0
+    for batch_id, start, farm_id in batches:
+        alive = placed.get(batch_id, 0.0) - lost.get(batch_id, 0.0) - sold.get(batch_id, 0.0)
+        if alive <= 0:
+            continue
+        # A flock created from a chicks placement carries no start_date; the
+        # placement itself is the date it began, which is what the Daily Entry
+        # lookup falls back to as well.
+        placed_on = start or first_in.get(batch_id)
+        if not placed_on:
+            undated += alive
+            continue
+        age = max((day - placed_on).days, 0)
+        for i, (low, high) in enumerate(AGE_BANDS):
+            if age >= low and (high is None or age <= high):
+                bands[i]["birds"] += alive
+                bands[i]["farms"].add(farm_id)
+                break
+
+    total = sum(b["birds"] for b in bands) + undated
+    groups = []
+    for (low, high), band in zip(AGE_BANDS, bands):
+        farms = len(band["farms"])
+        groups.append({
+            "label": f"{low} - {high}" if high else f"{low}+ Days",
+            "meta": f"{farms} farm{'' if farms == 1 else 's'} · {_num(band['birds'])}",
+            "values": [round(band["birds"])],
+        })
+
+    ready = bands[-1]["birds"]
+    return {
+        "stats": [
+            {"label": "Available birds", "value": _num(total)},
+            {"label": "Ready to lift", "value": _num(ready),
+             "sub": f"{AGE_BANDS[-1][0]} days and over"},
+            {"label": "Farms", "value": _num(len({b[2] for b in batches}))},
+        ],
+        "chart": _bars(groups, series=("Birds",)),
+        "note": (f"{_num(undated)} birds are on flocks with no placement date, "
+                 "so they are counted in the total but sit in no band."
+                 if undated else None),
+        "filters_used": used,
+    }
+
+
 def _liftings(viewable, filters, user=None):
     """The day's liftings: how many went out, how many birds, and what weight.
 
@@ -398,13 +525,28 @@ def _liftings(viewable, filters, user=None):
         "meta": f"{float(r.net_weight or 0):,.0f} kg",
     } for r in today.select_related("farm").order_by("-id")[:3]]
 
+    # Where the day's birds went out from. A branch that lifted nothing is left
+    # off rather than drawn as a nought — the chart is about what moved.
+    by_branch = (today.values("farm__branch__branch_name")
+                 .annotate(b=Sum("birds"), w=Sum("net_weight"))
+                 .order_by("-b"))
+    groups = [{
+        "label": (r["farm__branch__branch_name"] or "No branch"),
+        "meta": f"{_num(r['b'] or 0)} birds · {float(r['w'] or 0):,.0f} kg",
+        "values": [round(float(r["b"] or 0)), round(float(r["w"] or 0), 1)],
+    } for r in by_branch]
+
     return {
         "stats": [
             {"label": "Liftings", "value": _num(count), "sub": against},
             {"label": "Birds lifted", "value": _num(birds)},
             {"label": "Net weight", "value": f"{weight:,.0f} Kg"},
+            # The one figure a lifting is judged on: the birds are sold by
+            # weight and bought by the head, so the average is the margin.
+            {"label": "Avg wt", "value": (f"{weight / birds:.2f} Kg" if birds else "—")},
             {"label": "Farms covered", "value": _num(farms)},
         ],
+        "chart": _bars(groups, series=("Birds", "Weight")) if groups else None,
         "rows": rows,
         "rows_title": "Latest liftings" if rows else None,
         "note": "No liftings recorded on this day." if not count else None,
@@ -542,6 +684,8 @@ WIDGETS = [
      "live_flock_summary_report", "fa-solid fa-egg", "gs-blue", _live_flock),
     ("daily_entries", "Daily Entries", ("daily_entry_list",),
      "daily_entry_list", "fa-solid fa-clipboard-check", "gs-green", _daily_entries),
+    ("flock_ages", "Age wise Available Birds", ("live_flock_summary_report",),
+     "live_flock_summary_report", "fa-solid fa-chart-column", "gs-purple", _flock_ages),
     ("liftings", "Lifting Details", ("bird_sale_list",),
      "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
     # Two widgets, not one: each answers to its own permission, so a user who
@@ -586,8 +730,11 @@ DEFAULT_PANEL_ORDER = (
     # what needs doing before what happened, and an unread critical alert
     # outranks every figure below it.
     "alerts_widget",
-    "live_flock", "daily_entries", "liftings", "receivables", "payables",
-    "stock_alerts",
+    # Live Flock, Daily Entries and Age wise Available Birds share a row: they
+    # are the same question in three parts — what is on the farms, whether it
+    # reported today, and when it goes out.
+    "live_flock", "daily_entries", "flock_ages",
+    "liftings", "receivables", "payables", "stock_alerts",
     "field_team",
 )
 

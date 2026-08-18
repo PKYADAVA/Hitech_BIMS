@@ -368,8 +368,9 @@ class DashboardPreviewRenderTests(TestCase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("dashboard_widgets_api"),
                                    {"preview_group": self.group.id})
+        # Age wise Available Birds rides on the same report permission.
         self.assertEqual([w["key"] for w in response.json()["widgets"]],
-                         ["live_flock"])
+                         ["live_flock", "flock_ages"])
 
     def test_a_user_without_dashboard_access_cannot_preview_a_group(self):
         """Otherwise preview would be a way around the matrix."""
@@ -414,7 +415,9 @@ class UnsavedPreviewTests(TestCase):
         return [w["key"] for w in response.json()["widgets"]]
 
     def test_without_an_override_the_saved_state_is_used(self):
-        self.assertEqual(self.widgets(), ["live_flock"])
+        # live_flock is saved on and stock_alerts saved off; flock_ages has no
+        # row at all, so it is undecided rather than off and rides along.
+        self.assertEqual(self.widgets(), ["live_flock", "flock_ages"])
 
     def test_an_override_wins_over_the_saved_rows(self):
         self.assertEqual(self.widgets(panels="stock_alerts:0"), ["stock_alerts"])
@@ -527,7 +530,8 @@ class GroupTabResolutionTests(TestCase):
         GroupTabPermission.objects.create(
             group=self.group, tab_code="live_flock_summary_report", can_view=True)
         self.assertEqual(self.tabs(), {"live_flock_summary_report"})
-        self.assertEqual(self.shown(), ["alerts_widget", "live_flock"])
+        self.assertEqual(self.shown(),
+                         ["alerts_widget", "live_flock", "flock_ages"])
 
     def test_the_preview_names_what_it_withholds(self):
         from user.services.dashboard_widgets import withheld_panels
