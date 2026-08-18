@@ -309,6 +309,47 @@ def _ageing(parties, amount_key, credit_days):
     )
 
 
+#: How Receivables breaks its overdue money up, longest window first.
+#:
+#: Nested, not exclusive: money two days late is inside the week and the month
+#: as well. Read down the card it is a funnel — everything owed, then the part
+#: that has gone late this month, this week, and in the last two days — so the
+#: last figure is the one a collection call can still be early for.
+OVERDUE_WINDOWS = (
+    (30, "Overdue ≤ 1 month"),
+    (7, "Overdue ≤ 1 week"),
+    (2, "Overdue ≤ 2 days"),
+)
+
+
+def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
+    """What is late, by how recently it went late.
+
+    A party's ``gap`` is how many days its balance has been standing; past the
+    credit period agreed with them, the excess is how late the money is. The
+    whole of a party's balance ages by that one figure, exactly as the Customer
+    Balance report reads it — this is a party-level ageing, not a document-level
+    one, so a customer sits in one window rather than being split across
+    several by invoice.
+
+    A window counts everything up to it, so the totals nest rather than
+    partition: ``≤ 1 week`` includes the two-day money.
+    """
+    late = [((p.get("gap") or 0) - credit_days(p), p) for p in parties]
+    late = [(days, p) for days, p in late if days > 0]
+    out = []
+    for span, label in windows:
+        inside = [p for days, p in late if days <= span]
+        total = sum((p[amount_key] for p in inside), 0)
+        out.append({
+            "label": label,
+            "value": "₹" + _inr(total),
+            "sub": f"{len(inside)} customer{'' if len(inside) == 1 else 's'}",
+            "tone": "bad" if total else None,
+        })
+    return out
+
+
 def _receivables(viewable, filters, user=None):
     """Money owed to us, by customer.
 
@@ -338,7 +379,7 @@ def _receivables(viewable, filters, user=None):
         "stats": [{"label": "Total receivable", "value": "₹" + _inr(total),
                    "sub": f"from {len(owed)} customer{'' if len(owed) == 1 else 's'}",
                    "tone": "warn" if total else None},
-                  *_ageing(owed, "debit", lambda p: terms.get(p["id"], 0))],
+                  *_overdue_windows(owed, "debit", lambda p: terms.get(p["id"], 0))],
         "rows": [{"label": p["name"], "value": "₹" + _inr(p["debit"]),
                   "meta": f"{p['gap']}d"}
                  for p in sorted(owed, key=lambda p: -p["debit"])[:3]],

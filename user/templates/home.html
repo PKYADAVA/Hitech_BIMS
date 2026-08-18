@@ -131,6 +131,11 @@
      card and the two parts sit side by side under it, which is the shape the
      numbers actually have. */
   .dw-stats:has(> :nth-child(3):last-child) > :first-child { grid-column: 1 / -1; }
+  /* Four — Receivables: the total owed with its three overdue windows. Two to
+     a row, so the total sits beside the month it is most often read against,
+     and the week and the two days line up underneath. Fixed rather than
+     auto-fit, which would drop to one long column at the card's narrowest. */
+  .dw-stats:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, 1fr); }
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
   .dw-stat .dw-label { display:block; font-size:.68rem; color:#6b7890; text-transform:uppercase;
                        letter-spacing:.04em; }
