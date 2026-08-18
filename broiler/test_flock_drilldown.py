@@ -11,6 +11,7 @@ The batch name is now the way in, and the report can be read down to a single
 flock.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -170,3 +171,81 @@ class SummaryOrderTests(TestCase):
         self.flock(self.acme, "dated", age=10)
         self.flock(self.acme, "undated", age=None)
         self.assertEqual([r["batch"] for r in self.rows()][-1], "undated")
+
+
+class StandingBirdValuationTests(TestCase):
+    """What the birds still on the farm are worth, on the summary.
+
+    A weighing is a hand-taken sample and is not always kept up: one flock on
+    this data last recorded 82 g while lifting birds at 2.27 kg, and valuing
+    what was still standing by that sample priced it at a twenty-seventh of its
+    weight — which then ran through the FCR, the CFCR and the cost per kilo
+    beside it.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=9000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=self.today - timedelta(days=40))
+        self.place(1000)
+
+    def place(self, chicks):
+        from inventory.models import Item, ItemCategory, StockTransfer, Warehouse
+
+        item, _ = Item.objects.get_or_create(
+            item_code="CHK-001",
+            defaults={"description": "Day Old Chick", "standard_cost_per_unit": 0,
+                      "category": ItemCategory.objects.get_or_create(
+                          name="Day Old Chicks")[0]})
+        store, _ = Warehouse.objects.get_or_create(name="Store")
+        StockTransfer.objects.create(
+            date=self.batch.start_date, item=item, quantity=chicks,
+            from_location_type="warehouse", from_warehouse=store,
+            to_location_type="farm", to_farm=self.farm, to_batch=self.batch)
+
+    def weigh(self, days_ago, grams):
+        DailyEntry.objects.create(
+            farm=self.farm, batch=self.batch, supervisor=self.sup,
+            date=self.today - timedelta(days=days_ago),
+            avg_weight_gms=Decimal(str(grams)))
+
+    def sell(self, birds, weight, days_ago):
+        from broiler.models import BirdSale
+
+        BirdSale.objects.create(farm=self.farm, batch=self.batch,
+                                date=self.today - timedelta(days=days_ago),
+                                birds=birds, net_weight=Decimal(weight))
+
+    def row(self):
+        from broiler.views import _live_flock_row
+        return _live_flock_row(self.batch, self.today)
+
+    def test_a_lifting_since_the_last_weighing_values_them(self):
+        self.weigh(9, 82)
+        self.sell(200, "454.00", days_ago=1)          # 2.27 kg a bird
+        r = self.row()
+        self.assertEqual(r["available"], Decimal("800"))
+        self.assertEqual(r["available_weight"], Decimal("1816.00"))
+        # The column still reports the weighing itself.
+        self.assertEqual(r["avg_bwt"], Decimal("82.00"))
+
+    def test_a_weighing_since_the_last_lifting_values_them(self):
+        self.sell(200, "340.00", days_ago=4)          # 1.70 kg a bird
+        self.weigh(2, 1810)                           # then 1.81 kg on a scale
+        self.assertEqual(self.row()["available_weight"], Decimal("1448.00"))
+
+    def test_without_a_lifting_the_weighing_stands(self):
+        self.weigh(2, 1500)
+        self.assertEqual(self.row()["available_weight"], Decimal("1500.00"))
+
+    def test_a_flock_with_neither_reading_is_not_given_a_weight(self):
+        self.assertEqual(self.row()["available_weight"], Decimal("0.00"))

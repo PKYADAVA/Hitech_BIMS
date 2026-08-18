@@ -4051,7 +4051,8 @@ def _production_cost_row(batch, fetch_type="management"):
     if last_sale:
         readings.append((last_sale["date"], 1,
                          _pc_div(_num(last_sale["net_weight"]),
-                                 _num(last_sale["birds"])), "sold"))
+                                 _num(last_sale["birds"]), places="0.0001"),
+                         "sold"))
     if last_weighed:
         readings.append((last_weighed["date"], 0, avg_bwt, "weighed"))
     latest = max(readings) if readings else None
@@ -5393,7 +5394,31 @@ def _live_flock_row(batch, today):
     # (no sales) or a blown-up CFCR (feed / tiny mortality weight). For a sold-
     # out flock live_weight is 0, so this reduces to the sale-based figures.
     available = placed - mort - culls - sold
-    live_weight_kg = available * (avg_bwt / Decimal("1000"))
+    # What the birds still on the farm are worth per head: whichever reading
+    # came last, the scale or the weighbridge.
+    #
+    # A weighing is a hand-taken sample and is not always kept up — one flock
+    # here last recorded 82 g while lifting birds at 2.27 kg, and valuing what
+    # is still standing by that sample priced it at a twenty-seventh of its
+    # weight, which then ran through the FCR, the CFCR and the cost per kilo
+    # beside it. The lifting's own average, dated against the weighing's, is
+    # the same rule the Production Cost report follows; a day they share goes
+    # to the weighbridge, which is a whole lorry rather than a handful of
+    # birds. The Avg B.Wt column still reports the weighing itself.
+    last_sale_row = (BirdSale.objects
+                     .filter(batch=batch, birds__gt=0, net_weight__gt=0)
+                     .order_by("-date", "-id")
+                     .values("date", "birds", "net_weight").first())
+    readings = []
+    if last_sale_row:
+        readings.append((last_sale_row["date"], 1,
+                         _div(_num(last_sale_row["net_weight"]),
+                              _num(last_sale_row["birds"])
+                              ).quantize(Decimal("0.0001"))))
+    if last_bwt_date:
+        readings.append((last_bwt_date, 0, avg_bwt / Decimal("1000")))
+    per_bird_kg = max(readings)[2] if readings else Decimal("0")
+    live_weight_kg = available * per_bird_kg
     sold_weight = _num(bc.get("sold_weight"))
     mortality_weight = _num(bc.get("mortality_weight"))
     total_weight_now = sold_weight + live_weight_kg
@@ -5402,7 +5427,7 @@ def _live_flock_row(batch, today):
     m_pc_kg = (_div(total_prod_cost, total_weight_now) if total_weight_now > 0
                else _num(bc.get("production_cost_per_kg"))).quantize(Decimal("0.01"))
     fcr_val = _div(feed_consumed, total_weight_now).quantize(Decimal("0.001")) if total_weight_now > 0 else Decimal("0")
-    cfcr_val = (_div(feed_consumed, total_weight_now + mortality_weight).quantize(Decimal("0.01"))
+    cfcr_val = (_div(feed_consumed, total_weight_now + mortality_weight).quantize(Decimal("0.001"))
                 if (total_weight_now + mortality_weight) > 0 else Decimal("0"))
 
     # EEF: keep the engine's sale-based value once the flock has sales (uses
