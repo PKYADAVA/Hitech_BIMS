@@ -37,7 +37,7 @@ from inventory.models import Item, Warehouse
 from sales.models import Customer
 from hatchery_master.models import Hatchery
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from datetime import timedelta
+from datetime import date, timedelta
 from django.utils import timezone
 import json
 import logging
@@ -4260,6 +4260,16 @@ def production_cost_report(request):
 
     rows = [_production_cost_row(b, report_type) for b in
             flocks.order_by("broiler_farm__farm_name", "batch_name")]
+    # Oldest placement first, which is the same as oldest flock first: the
+    # birds nearest to going out lead the report, and the ones just placed sit
+    # at the bottom. Sorted here rather than in the query because a flock
+    # created from a chicks placement carries no start_date at all — its
+    # placement is the transfer that filled it, which only _production_cost_row
+    # has resolved by this point. A flock with no placement date has no age to
+    # sort by and goes last, name-ordered, rather than jumping the queue as a
+    # null would.
+    rows.sort(key=lambda r: (r["placed_on"] is None, r["placed_on"] or date.max,
+                             r["farm"].farm_name, r["batch"].batch_name))
     summary = build_production_cost(rows) if rows else None
 
     # The drawer reads these rather than fetching again, so what it shows and

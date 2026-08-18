@@ -235,6 +235,29 @@ class PageTests(TestCase):
         self.assertEqual(row["placed_on"], self.batch.start_date)
         self.assertEqual(row["age_days"], 20)
 
+    def test_the_oldest_flock_leads_the_report(self):
+        """Oldest placement first, which is the same as oldest flock first:
+        the birds nearest to going out are the ones being read about."""
+        younger = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="A-NEW", breed=self.breed,
+            start_date=self.today - timedelta(days=5))
+        older = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="Z-OLD", breed=self.breed,
+            start_date=self.today - timedelta(days=90))
+        rows = self.page().context["rows"]
+        self.assertEqual([r["batch"].id for r in rows],
+                         [older.id, self.batch.id, younger.id])
+        # Which is ages descending, read down the page.
+        ages = [r["age_days"] for r in rows]
+        self.assertEqual(ages, sorted(ages, reverse=True))
+
+    def test_a_flock_with_no_placement_date_goes_last(self):
+        """It has no age to sort by; a null would otherwise lead the report."""
+        undated = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-NODATE", breed=self.breed)
+        rows = self.page().context["rows"]
+        self.assertEqual(rows[-1]["batch"].id, undated.id)
+
     def test_a_closed_flock_stops_ageing_on_the_page(self):
         """Age runs to the day it closed, not to today."""
         self.batch.is_closed = True
