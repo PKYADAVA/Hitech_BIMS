@@ -4412,8 +4412,18 @@ def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", me
             exclude_transfer_id=row.get(transfer_key) if med_key is None else None,
             exclude_medicine_transfer_item_id=row.get(med_key) if med_key else None,
         )
-        row["rate"] = real_rate
-        row["amount"] = Decimal(str(row.get("quantity") or 0)) * real_rate
+        # Rounded to paise, and the amount worked out from the rounded rate.
+        #
+        # compute_issue_rate divides a warehouse's value by its quantity and
+        # hands back whatever that division gives — 41.17988165680473372781065089
+        # for these chicks — which the reports printed verbatim. Rounding only
+        # the display would have left rate x quantity disagreeing with the
+        # amount beside it by a rupee, which is the first thing anybody checks;
+        # rounding here keeps the row's own arithmetic true, at a cost of under
+        # half a paisa a bird.
+        row["rate"] = real_rate.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        row["amount"] = (Decimal(str(row.get("quantity") or 0)) * row["rate"]
+                         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _item_rate_map(rows):

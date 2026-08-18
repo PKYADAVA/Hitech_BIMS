@@ -853,6 +853,37 @@ class ManagementBasisTests(TestCase):
             broiler_farm=self.farm, batch_name="B-1",
             start_date=timezone.localdate() - timedelta(days=20))
 
+    def test_a_repriced_rate_is_rounded_to_paise(self):
+        """compute_issue_rate hands back whatever the division gives —
+        41.17988165680473372781065089 for one placement on this data — and the
+        report printed it verbatim."""
+        from decimal import Decimal as D
+        from broiler.views import _price_rows_for_management
+
+        class FakeItem:
+            id = 1
+            valuation_method = "Weighted Average"
+
+        rows = [{"item_id": 1, "warehouse_id": 1, "date": timezone.localdate(),
+                 "quantity": D("2429"), "rate": D("0"), "amount": D("0"),
+                 "transfer_id": None}]
+
+        import broiler.views as vi
+        import inventory.services.valuation as val
+        original = val.compute_issue_rate
+        val.compute_issue_rate = (
+            lambda *a, **k: D("41.17988165680473372781065089"))
+        try:
+            _price_rows_for_management(rows, {1: FakeItem()})
+        finally:
+            val.compute_issue_rate = original
+
+        self.assertEqual(rows[0]["rate"], D("41.18"))
+        # And the amount follows the rate, so the row's own arithmetic holds:
+        # rate x quantity is what is printed beside it, to the paisa.
+        self.assertEqual(rows[0]["amount"], D("100026.22"))
+        self.assertEqual(rows[0]["quantity"] * rows[0]["rate"], rows[0]["amount"])
+
     def test_the_basis_reaches_the_batch_report(self):
         """The whole difference between the two views is this argument."""
         import broiler.views as views
