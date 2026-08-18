@@ -318,6 +318,22 @@ class AdminCostFromSchemeTests(TestCase):
         self.batch = BroilerBatch.objects.create(
             broiler_farm=self.farm, batch_name="B-1", start_date=self.placed_on)
 
+    def place(self, chicks):
+        """Chicks placed — the admin rate is per bird placed, so without them
+        there is nothing to charge."""
+        from inventory.models import Item, ItemCategory, StockTransfer, Warehouse
+
+        item, _ = Item.objects.get_or_create(
+            item_code="CHK-001",
+            defaults={"description": "Day Old Chick", "standard_cost_per_unit": 0,
+                      "category": ItemCategory.objects.get_or_create(
+                          name="Day Old Chicks")[0]})
+        store, _ = Warehouse.objects.get_or_create(name="Akbarpur Store")
+        return StockTransfer.objects.create(
+            date=self.placed_on, item=item, quantity=chicks,
+            from_location_type="warehouse", from_warehouse=store,
+            to_location_type="farm", to_farm=self.farm, to_batch=self.batch)
+
     def scheme(self, **over):
         from broiler.models import GrowingChargeScheme
         row = dict(region=self.region, schema_name="S1", is_active=True,
@@ -334,6 +350,41 @@ class AdminCostFromSchemeTests(TestCase):
                          {"Management Admin Cost": Decimal("12000.00")})
         self.assertEqual(admin_cost_for(self.batch, Decimal("12000"), "farmer"),
                          {"Farmer Admin Cost": Decimal("36000.00")})
+
+    def test_a_zero_in_an_admin_head_does_not_hide_the_scheme(self):
+        """The reported bug: the scheme carried the management share and the
+        report showed nothing.
+
+        A batch's Other Entries hold a row per head whether or not anybody
+        filled it in, so one "Office Expense Allocation 0.00" made the whole
+        Administrative Cost block count as entered — and a figure typed against
+        the batch beats the scheme. Nought is not a figure typed; it is an
+        empty box saved.
+        """
+        from broiler.models import BatchOtherEntry
+        from broiler.views import _production_cost_row
+
+        self.scheme()
+        BatchOtherEntry.objects.create(batch=self.batch, kind="cost",
+                                       head="Office Expense Allocation",
+                                       amount=Decimal("0"))
+        self.place(1000)
+        r = _production_cost_row(self.batch, "management")
+        self.assertEqual(r["admin_source"], "schema")
+        self.assertEqual(r["admin_cost"], Decimal("1000.00"))     # 1/bird x 1,000
+
+    def test_a_real_figure_typed_against_the_batch_still_wins(self):
+        from broiler.models import BatchOtherEntry
+        from broiler.views import _production_cost_row
+
+        self.scheme()
+        BatchOtherEntry.objects.create(batch=self.batch, kind="cost",
+                                       head="Office Expense Allocation",
+                                       amount=Decimal("2500"))
+        self.place(1000)
+        r = _production_cost_row(self.batch, "management")
+        self.assertEqual(r["admin_source"], "entered")
+        self.assertEqual(r["admin_cost"], Decimal("2500.00"))
 
     def test_the_head_is_named_rather_than_lumped(self):
         """A breakup showing one "Admin 12,000" is a figure nobody can question."""

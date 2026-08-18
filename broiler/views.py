@@ -3938,26 +3938,38 @@ def _production_cost_row(batch, fetch_type="management"):
     # incentives and the deductions have already been worked out. A figure
     # typed against the batch still wins — somebody entering a real number
     # knows more than a settlement that may not be final.
+    #
+    # Nought is not a figure typed, it is an empty box saved. The Batch's Other
+    # Entries carry a row per head whether or not anybody filled it in, so one
+    # "Supervisor Salary 0.00" made the whole block "entered" and hid a real
+    # settlement behind it — which is how a flock with a settled growing charge
+    # showed nothing at all.
     gc_source = "entered"
-    if growing_cost is None:
+    if not growing_cost:
         settled = growing_charge_for(batch)
         if settled is not None:
             growing_cost, gc_source = settled, "settlement"
         else:
-            gc_source = "unsettled"
+            # No settlement and nothing really typed: the column says "not
+            # settled" rather than a nought that reads as a flock costing
+            # nothing to grow.
+            growing_cost, gc_source = None, "unsettled"
 
     # Administrative overhead from the flock's Growing Charge Scheme, per bird
     # placed, unless somebody has typed it against this batch.
+    # Same rule as the growing charge above: a zero in an admin head is a box
+    # nobody filled in, not a flock that carries no overhead, and letting it
+    # stand meant the scheme's rupees per bird never reached the report.
     admin_source = "entered"
     admin_heads = {}
-    if admin_cost is None:
+    if not admin_cost:
         admin_heads = admin_cost_for(batch, _num(costing.get("chicks_placed")),
                                      fetch_type, placed_on)
         if admin_heads:
             admin_cost = sum(admin_heads.values(), Decimal("0")).quantize(Decimal("0.01"))
             admin_source = "schema"
         else:
-            admin_source = "no scheme"
+            admin_cost, admin_source = None, "no scheme"
     feed_kg = sum((_num(r["quantity"]) for r in consumption
                    if r.get("kind") == "feed"), Decimal("0"))
 
