@@ -134,8 +134,23 @@
   /* Four — Receivables: the total owed with its three overdue windows. Two to
      a row, so the total sits beside the month it is most often read against,
      and the week and the two days line up underneath. Fixed rather than
-     auto-fit, which would drop to one long column at the card's narrowest. */
-  .dw-stats:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, 1fr); }
+     auto-fit, which would drop to one long column at the card's narrowest.
+     Scoped to that card: Lifting Details also has four, and across a full-width
+     row two columns would strand them in a corner. */
+  .dw-col-receivables .dw-stats:has(> :nth-child(4):last-child) {
+    grid-template-columns: repeat(2, 1fr); }
+
+  /* Lifting Details is the day in a strip — trucks, birds, weight, farms, then
+     the loads themselves — and read at a fifth of the row it wrapped every
+     figure onto three lines. It takes a row of its own. */
+  .dw-col-liftings { flex: 0 0 100%; max-width: 100%; }
+  .dw-col-liftings .dw-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  /* Its rows read as a list of loads across the width rather than a stack. */
+  @media (min-width: 992px) {
+    .dw-col-liftings .dw-rows { display: grid; grid-template-columns: repeat(3, 1fr);
+                                gap: 0 18px; }
+    .dw-col-liftings .dw-rows-title { grid-column: 1 / -1; }
+  }
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
   .dw-stat .dw-label { display:block; font-size:.68rem; color:#6b7890; text-transform:uppercase;
                        letter-spacing:.04em; }
@@ -650,7 +665,9 @@
       if (w.ignored) body += '<span class="dw-ignored"><i class="fa-solid fa-circle-info"></i> '
                            + esc(w.ignored) + '</span>';
 
-      return '<div class="col-12 col-md-6 col-xl">'
+      // The key rides on the column so a card can be given a width of its own
+      // without the renderer growing a special case per widget.
+      return '<div class="col-12 col-md-6 col-xl dw-col dw-col-' + esc(w.key) + '">'
            + '<div class="dw-card' + (w.error ? ' is-error' : '') + '">'
            + '<div class="dw-head">'
            + '<span class="dw-head-icon ' + esc(w.colour) + '"><i class="' + esc(w.icon) + '"></i></span>'

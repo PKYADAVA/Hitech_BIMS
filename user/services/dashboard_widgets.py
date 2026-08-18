@@ -28,6 +28,7 @@ and the card says so — a number that quietly ignored your filter is a wrong
 number.
 """
 import logging
+from datetime import timedelta
 
 from django.core.cache import cache
 from django.db.models import Q
@@ -350,6 +351,67 @@ def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
     return out
 
 
+def _liftings(viewable, filters, user=None):
+    """The day's liftings: how many went out, how many birds, and what weight.
+
+    A lifting is the one broiler transaction nobody at the desk witnesses — the
+    birds leave the farm and the branch is billed for whatever the slip says —
+    so the dashboard's job here is the shape of the day rather than the detail:
+    how many trucks, how many birds, what weight, and across how many farms.
+    The register behind the card has the rest.
+
+    Yesterday is on the card too, as the sub line. A count on its own says
+    nothing — eighteen liftings is a busy day or a slow one depending on what
+    the day before did.
+    """
+    from django.db.models import Sum
+    from broiler.models import BirdSale
+
+    day = filters.get("date") or timezone.localdate()
+    used = list(FILTER_KEYS)          # every filter reaches a lifting's farm
+
+    def on(when):
+        qs = BirdSale.objects.filter(date=when)
+        qs = _scope_farms(qs, filters, "farm")
+        if user is not None:
+            qs = _scope_to_user(qs, user, "farm")
+        return qs
+
+    today = on(day)
+    totals = today.aggregate(b=Sum("birds"), w=Sum("net_weight"))
+    birds = float(totals["b"] or 0)
+    weight = float(totals["w"] or 0)
+    count = today.count()
+    farms = today.values("farm_id").distinct().count()
+
+    before = on(day - timedelta(days=1)).count()
+    if count and not before:
+        against = "none yesterday"
+    elif count == before:
+        against = "same as yesterday"
+    else:
+        against = f"{_num(abs(count - before))} {'more' if count > before else 'fewer'} than yesterday"
+
+    rows = [{
+        "label": (r.farm.farm_name if r.farm_id else "") or "—",
+        "value": f"{_num(r.birds)} birds",
+        "meta": f"{float(r.net_weight or 0):,.0f} kg",
+    } for r in today.select_related("farm").order_by("-id")[:3]]
+
+    return {
+        "stats": [
+            {"label": "Liftings", "value": _num(count), "sub": against},
+            {"label": "Birds lifted", "value": _num(birds)},
+            {"label": "Net weight", "value": f"{weight:,.0f} Kg"},
+            {"label": "Farms covered", "value": _num(farms)},
+        ],
+        "rows": rows,
+        "rows_title": "Latest liftings" if rows else None,
+        "note": "No liftings recorded on this day." if not count else None,
+        "filters_used": used,
+    }
+
+
 def _receivables(viewable, filters, user=None):
     """Money owed to us, by customer.
 
@@ -480,6 +542,8 @@ WIDGETS = [
      "live_flock_summary_report", "fa-solid fa-egg", "gs-blue", _live_flock),
     ("daily_entries", "Daily Entries", ("daily_entry_list",),
      "daily_entry_list", "fa-solid fa-clipboard-check", "gs-green", _daily_entries),
+    ("liftings", "Lifting Details", ("bird_sale_list",),
+     "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
     # Two widgets, not one: each answers to its own permission, so a user who
     # may see customer balances and not supplier ones now gets the half they
     # are entitled to instead of a card mixing both.
@@ -522,7 +586,8 @@ DEFAULT_PANEL_ORDER = (
     # what needs doing before what happened, and an unread critical alert
     # outranks every figure below it.
     "alerts_widget",
-    "live_flock", "daily_entries", "receivables", "payables", "stock_alerts",
+    "live_flock", "daily_entries", "liftings", "receivables", "payables",
+    "stock_alerts",
     "field_team",
 )
 
@@ -812,14 +877,18 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
     # get it instead of the viewer's own.
     if as_group is not None:
         viewable, prefs = group_viewable_tabs(as_group), group_preferences(as_group)
+        decided = saved_keys(group=as_group)
     else:
         viewable = allowed_view_tabs(user)
         # A second, narrower switch on top of the tab gate: it can hide a widget
         # the matrix allows, never reveal one it withholds.
         prefs = widget_preferences(user)
+        decided = saved_keys(user=user)
     if prefs_override is not None:
-        # The editor previewing its own unsaved switches.
+        # The editor previewing its own unsaved switches. It posts every widget,
+        # so it has an opinion about all of them.
         prefs = prefs_override
+        decided = {k for k, *_ in WIDGETS}
     # A filtered view is a deliberate question with an unbounded key space;
     # only the default dashboard is worth caching.
     use_cache = (use_cache and not _active(filters)
@@ -829,7 +898,15 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
     for key, title, tabs, url_name, icon, colour, build in WIDGETS:
         if not any(t in viewable for t in tabs):
             continue
-        if prefs is not None and key not in prefs:
+        # Switched off only counts when the configuration actually says so — the
+        # same rule dashboard_panels applies to the server-rendered blocks. A
+        # widget the registry gained since the group was last saved was never
+        # offered to the administrator, and treating its missing row as "off"
+        # hid it from every configured group, silently and for good. That is how
+        # Alerts & Notifications went missing; the panels were fixed and the
+        # data cards were left reading the old way, so a new card appeared for
+        # unconfigured groups only.
+        if prefs is not None and key in decided and key not in prefs:
             continue
         card = {"key": key, "title": title, "icon": icon, "colour": colour,
                 "url": _link(url_name, viewable, filters)}
@@ -852,7 +929,13 @@ def dashboard_widgets(user, filters=None, use_cache=True, as_group=None,
                     cache.set(cache_key, body, CACHE_SECONDS)
         card.update(body)
         card["ignored"] = _ignored_note(filters, card.get("filters_used") or [])
-        card["position"] = (prefs or {}).get(key, len(out))
+        # A widget the configuration never decided about takes its place in the
+        # default order rather than `len(out)`, which put every new card at the
+        # top of a configured dashboard — first position, ahead of whatever the
+        # administrator had deliberately put there.
+        default = (DEFAULT_PANEL_ORDER.index(key)
+                   if key in DEFAULT_PANEL_ORDER else len(out))
+        card["position"] = (prefs or {}).get(key, default)
         out.append(card)
 
     if prefs is not None:
