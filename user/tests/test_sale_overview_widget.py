@@ -9,9 +9,11 @@ With no date chosen it stands at the last day that had a sale: the trade is a
 few days a week, and a card dated to a morning nothing happened on invites the
 reader to think nothing has happened at all.
 
-Date only, and unfiltered otherwise: a receipt is booked against a customer and
-a location, never against a farm, so a farm filter would narrow the sales and
-leave the receipts whole. The card says so rather than showing the figure.
+Date and Branch. A receipt is booked at an *office*, and the Office → Branch
+master (inventory.Mapping, type sector_branch) says which branch an office
+belongs to — so both halves narrow to the same branch and the difference
+between them still means something. Line, Supervisor and Farm have no such
+bridge, and the card says it could not apply them.
 """
 from datetime import timedelta
 from decimal import Decimal
@@ -175,11 +177,12 @@ class SaleOverviewTests(TestCase):
 
     def test_it_says_the_farm_filter_does_not_apply(self):
         """A receipt carries no farm, so narrowing the sales alone would make
-        the difference between them an arithmetic accident."""
+        the difference between them an arithmetic accident. Branch is the one
+        that does apply — an office knows its branch, see the branch tests."""
         self.sell(100, "200.00", "90")
         card = self.card(filters={"farm": self.farm.id, "branch": self.branch.id})
         self.assertIn("Farm", card["ignored"])
-        self.assertIn("Branch", card["ignored"])
+        self.assertNotIn("Branch", card["ignored"])
 
     # ---- who may see it -----------------------------------------------------
 
@@ -206,3 +209,121 @@ class SaleOverviewTests(TestCase):
         GroupTabPermission.objects.create(group=group, tab_code="negative_stock_report",
                                           can_view=True)
         self.assertIsNone(self.card(user=blind))
+
+
+class SaleOverviewBranchTests(SaleOverviewTests):
+    """Branch-wise, through the Office → Branch master.
+
+    The card used to answer "Branch does not apply here", because a receipt
+    carries an office and no farm. The office knows its branch — it is a row in
+    inventory.Mapping, edited from the Office → Branch master — so both halves
+    can be narrowed to the same branch after all.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from inventory.models import Mapping
+
+        self.far = Branch.objects.create(branch_name="Bahraich",
+                                         region=self.region, prefix="BHR")
+        self.far_farm = BroilerFarm.objects.create(
+            branch=self.far, supervisor=self.sup, farmer=self.farmer,
+            region=self.region, line="Line B", farm_name="Far Farm",
+            farm_capacity=9000)
+        self.far_counter = Warehouse.objects.create(name="Bahraich Store")
+        self.orphan = Warehouse.objects.create(name="Main Warehouse")
+        # The mapping the master writes: this office belongs to that branch.
+        Mapping.objects.create(type=Mapping.TYPE_SECTOR_BRANCH,
+                               from_id=self.counter.id, to_id=self.branch.id)
+        Mapping.objects.create(type=Mapping.TYPE_SECTOR_BRANCH,
+                               from_id=self.far_counter.id, to_id=self.far.id)
+        # self.orphan is deliberately left unmapped.
+
+    def sell_at(self, farm, birds, weight, rate, when=None):
+        when = when or self.today
+        batch = BroilerBatch.objects.create(
+            broiler_farm=farm, batch_name=f"F-{BroilerBatch.objects.count() + 1}",
+            start_date=when - timedelta(days=38))
+        return BirdSale.objects.create(farm=farm, batch=batch, date=when,
+                                       birds=birds, net_weight=Decimal(weight),
+                                       rate=Decimal(rate))
+
+    def receipt_at(self, office, amount, when=None):
+        return BirdSaleReceipt.objects.create(
+            date=when or self.today, mode="Cash", amount=Decimal(amount),
+            location=office, receipt_account=self.till)
+
+    def test_the_sales_narrow_to_the_branch(self):
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.sell_at(self.far_farm, 900, "1800.00", "90")
+        self.assertEqual(self.stat("Sold birds", filters={"branch": self.branch.id})["value"],
+                         "100")
+        self.assertEqual(self.stat("Sold birds", filters={"branch": self.far.id})["value"],
+                         "900")
+
+    def test_the_money_follows_the_office_it_was_taken_at(self):
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.sell_at(self.far_farm, 100, "200.00", "90")
+        self.receipt_at(self.counter, "5000")
+        self.receipt_at(self.far_counter, "7000")
+        self.assertEqual(self.stat("Cash received", filters={"branch": self.branch.id})["value"],
+                         "₹5,000")
+        self.assertEqual(self.stat("Cash received", filters={"branch": self.far.id})["value"],
+                         "₹7,000")
+
+    def test_branch_is_no_longer_reported_as_inapplicable(self):
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.assertIsNone(self.card(filters={"branch": self.branch.id})["ignored"])
+
+    def test_the_farm_side_filters_still_say_they_do_not_apply(self):
+        """Line, Supervisor and Farm have no bridge to a receipt."""
+        self.sell_at(self.farm, 100, "200.00", "90")
+        card = self.card(filters={"branch": self.branch.id, "line": "Line A"})
+        self.assertIn("Line", card["ignored"])
+
+    def test_money_at_an_unmapped_office_is_named_not_dropped(self):
+        """A total that silently loses a receipt is worse than one that admits
+        what it left out."""
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.receipt_at(self.orphan, "9000")
+        note = self.card(filters={"branch": self.branch.id})["note"]
+        self.assertIn("9,000", note)
+        self.assertIn("no branch mapped", note)
+
+    def test_nothing_is_said_about_orphans_when_there_are_none(self):
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.receipt_at(self.counter, "5000")
+        self.assertNotIn("no branch mapped",
+                         self.card(filters={"branch": self.branch.id})["note"] or "")
+
+    def test_a_branch_lands_on_its_own_last_selling_day(self):
+        """Picking Akbarpur and landing on the day Bahraich last sold is a card
+        full of noughts about the wrong place."""
+        self.sell_at(self.far_farm, 500, "1000.00", "90")                     # today
+        self.sell_at(self.farm, 100, "200.00", "90",
+                     when=self.today - timedelta(days=6))
+        card = self.card(filters={"branch": self.branch.id})
+        self.assertEqual(next(s for s in card["stats"]
+                              if s["label"] == "Sold birds")["value"], "100")
+        self.assertIn((self.today - timedelta(days=6)).strftime("%d %b %Y"), card["note"])
+
+    def test_money_on_a_day_with_no_lifting_is_still_shown(self):
+        """A payment against an earlier lifting is not an empty day — hiding it
+        was how a 2,00,000 receipt showed up nowhere at all."""
+        self.receipt_at(self.counter, "200000")
+        card = self.card(filters={"date": self.today})
+        vals = {s["label"]: s["value"] for s in card["stats"]}
+        self.assertEqual(vals["Cash received"], "₹2,00,000")
+        self.assertEqual(vals["Difference"], "₹-2,00,000")
+
+    def test_a_branch_with_no_office_mapped_receives_nothing(self):
+        """Varanasi has no office of its own, so no receipt can be its."""
+        lone = Branch.objects.create(branch_name="Varanasi", region=self.region,
+                                     prefix="VNS")
+        farm = BroilerFarm.objects.create(
+            branch=lone, supervisor=self.sup, farmer=self.farmer,
+            region=self.region, line="L", farm_name="Lone Farm", farm_capacity=100)
+        self.sell_at(farm, 50, "100.00", "90")
+        self.receipt_at(self.counter, "5000")
+        self.assertEqual(self.stat("Cash received", filters={"branch": lone.id})["value"],
+                         "₹0")

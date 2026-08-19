@@ -602,12 +602,37 @@ def _last_lifting_note(qs, day):
             f" — {_num(previous.birds)} birds, {gap} day{'' if gap == 1 else 's'} ago.")
 
 
-def _last_sale_date():
-    """The day of the most recent bird sale, or None if there has never been one."""
+def _last_sale_date(branch_id=None):
+    """The day of the most recent bird sale, or None if there has never been one.
+
+    Narrowed to a branch when one is chosen: picking Akbarpur and landing on
+    the day Bahraich last sold is a card full of noughts about the wrong place.
+    """
     from broiler.models import BirdSale
 
-    row = BirdSale.objects.order_by("-date").values("date").first()
+    qs = BirdSale.objects.all()
+    if branch_id:
+        qs = qs.filter(farm__branch_id=branch_id)
+    row = qs.order_by("-date").values("date").first()
     return row["date"] if row else None
+
+
+def _sale_note(day, chosen, orphan_money):
+    """The line under the card: which day, and what it could not place.
+
+    Money taken at an office with no branch mapped to it belongs to no branch,
+    so a branch view leaves it out — and says so. A total that silently loses a
+    receipt is worse than one that admits what it left out, and the fix is a
+    minute in the Office → Branch master rather than anything here.
+    """
+    parts = []
+    if not chosen:
+        parts.append(f"Showing {day.strftime('%d %b %Y')} — the last day with "
+                     "a sale. Pick a date to see another.")
+    if orphan_money:
+        parts.append(f"₹{_inr(orphan_money)} was received at offices with no "
+                     "branch mapped, so it is in no branch's figures.")
+    return " ".join(parts) or None
 
 
 def _sale_overview(viewable, filters, user=None):
@@ -619,11 +644,17 @@ def _sale_overview(viewable, filters, user=None):
     it is what is still to be collected *on this lot* rather than the ledger's
     outstanding balance, which is what Receivables is for.
 
-    Date only, and deliberately unfiltered otherwise. A receipt is booked
-    against a customer and a location, never against a farm — so a farm or
-    branch filter would narrow the sales and leave the receipts whole, and the
-    difference between them would be an arithmetic accident. The card says as
-    much rather than showing the figure anyway.
+    Date and Branch. A receipt is booked at an *office*, never at a farm, and
+    the Office → Branch master (inventory.Mapping, type sector_branch) says
+    which branch an office belongs to — so both halves can be narrowed to the
+    same branch and the difference between them still means something. The
+    farm-side filters below branch — Line, Supervisor, Farm — have no such
+    bridge, so the card says it could not apply them rather than showing a
+    figure that quietly ignored them.
+
+    Money taken at an office mapped to no branch is nobody's on a branch view.
+    It is named on the card rather than dropped, because a total that silently
+    loses a receipt is worse than one that admits what it left out.
     """
     from django.db.models import Sum
     from broiler.models import BirdSale, BirdSaleReceipt
@@ -634,7 +665,8 @@ def _sale_overview(viewable, filters, user=None):
     # morning nothing happened on invites the reader to think nothing has
     # happened at all.
     chosen = filters.get("date")
-    day = chosen or _last_sale_date() or timezone.localdate()
+    branch_id = filters.get("branch")
+    day = chosen or _last_sale_date(branch_id) or timezone.localdate()
     # Whole-business figures, so only for people who may see the whole
     # business. Scoping the sales alone and leaving the receipts — which carry
     # no farm — would make the difference between them an arithmetic accident
@@ -648,19 +680,39 @@ def _sale_overview(viewable, filters, user=None):
 
     sales = BirdSale.objects.filter(date=day)
     receipts = BirdSaleReceipt.objects.filter(date=day)
+    used = ["date"]
+    orphan_money = 0.0
+    if branch_id:
+        from inventory.services.offices import mapped_office_ids, offices_for_branch
+
+        sales = sales.filter(farm__branch_id=branch_id)
+        # Whatever was taken at this branch's own offices. An office with no
+        # branch mapped to it is nobody's, so it is left out here and counted
+        # up for the note below rather than folded into whichever branch is
+        # being looked at.
+        receipts = receipts.filter(location_id__in=offices_for_branch(branch_id))
+        orphan_money = float(BirdSaleReceipt.objects.filter(date=day)
+                             .exclude(location_id__in=mapped_office_ids())
+                             .aggregate(t=Sum("amount"))["t"] or 0)
+        used.append("branch")
 
     totals = sales.aggregate(b=Sum("birds"), w=Sum("net_weight"), v=Sum("amount"))
     birds = float(totals["b"] or 0)
     weight = float(totals["w"] or 0)
     value = float(totals["v"] or 0)
 
-    if not birds and not weight:
-        last = _last_sale_date()
+    # Nothing sold *and* nothing received is an empty day. Money on a day with
+    # no lifting is not empty — it is a payment against an earlier one, and
+    # hiding it was how a ₹2,00,000 receipt showed up nowhere at all.
+    money_in = float(receipts.aggregate(t=Sum("amount"))["t"] or 0)
+    if not birds and not weight and not money_in:
+        last = _last_sale_date(branch_id)
+        where = " here" if branch_id else ""
         return {"stats": [{"label": "Sold birds", "value": "0"}],
                 "note": ("No bird sales on this day. The last was "
                          f"{last.strftime('%d %b %Y')}."
-                         if last else "No bird sales recorded yet."),
-                "filters_used": ["date"]}
+                         if last else f"No bird sales recorded{where} yet."),
+                "filters_used": used}
 
     # Cash is cash; everything else — transfer, cheque, UPI, card — reaches a
     # bank, which is the split the overview asks for.
@@ -699,11 +751,10 @@ def _sale_overview(viewable, filters, user=None):
              "sub": "billed less received, this day",
              "tone": "bad" if outstanding > 0 else "good"},
         ],
-        # Which day the card is showing, and whether anybody asked for it.
-        "note": (None if chosen else
-                 f"Showing {day.strftime('%d %b %Y')} — the last day with a "
-                 "sale. Pick a date to see another."),
-        "filters_used": ["date"],
+        # Which day the card is showing, and what a branch view could not
+        # account for.
+        "note": _sale_note(day, chosen, orphan_money),
+        "filters_used": used,
     }
 
 
