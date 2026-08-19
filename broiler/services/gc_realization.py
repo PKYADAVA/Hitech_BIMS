@@ -138,15 +138,26 @@ def build_gc_realization(batch, report, management_report, scheme):
     actual_mort_no = _d(bc.get("mortality"))
     # Weight per bird, from the sale when there has been one.
     #
-    # bc["avg_body_weight"] is sold_weight / sold_birds, so it reads 0.000 for
-    # every flock that has not lifted yet — and this report opens on live
-    # flocks. Until a real sale happens the honest figure is the last weighing
-    # taken on the flock, which is what a supervisor would quote if asked what
-    # the birds weigh. It is superseded the moment birds are actually sold:
-    # a sale is measured on a weighbridge, a weighing is a sample.
-    actual_avg_weight = _d(bc.get("avg_body_weight"))
-    weighed_from_sale = bool(actual_avg_weight)
-    if not weighed_from_sale:
+    # What a bird on this farm weighs today: the most recent reading of either
+    # kind, a weighing or what the last lifting averaged over the weighbridge.
+    # The costing engine already resolves that (bc["valued_at"]) for the same
+    # standing birds, so this reads its answer rather than working out a
+    # second one — which is what it used to do, and it disagreed. It took
+    # sold_weight / sold_birds, the blended average of every lifting a flock
+    # has ever had, so a flock that sold 1,500 birds at 1.85 kg and then 226
+    # at 2.27 valued the 692 still on the farm at 1.90: a figure the flock had
+    # not weighed for a fortnight, and one no other report agreed with.
+    #
+    # A later weighing supersedes a lifting and a later lifting supersedes a
+    # weighing — a sale is a weighbridge and a weighing is a sample, but the
+    # sample taken today beats the weighbridge of a fortnight ago.
+    # bc["avg_body_weight"] stands behind it: the blended sold average, which
+    # is what this used to read on its own. A costing dict always carries
+    # valued_at now, so the fallback is for a caller that builds one by hand —
+    # losing the valuation altogether because a key was absent is a worse
+    # failure than valuing at the older figure.
+    actual_avg_weight = _d(bc.get("valued_at")) or _d(bc.get("avg_body_weight"))
+    if not actual_avg_weight:
         last_weight_g = (DailyEntry.objects
                          .filter(batch=batch, avg_weight_gms__gt=0)
                          .order_by("-date", "-id")

@@ -4490,7 +4490,7 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
 
     ``fetch_type`` chooses the statement perspective: 'farmer' bills only the
     farmer's admin share, 'management' bills the full admin cost."""
-    q2, q3 = Decimal("0.01"), Decimal("0.001")
+    q2, q3, q4 = Decimal("0.01"), Decimal("0.001"), Decimal("0.0001")
 
     # --- dates ---
     placement_date = min((r["date"] for r in chick_rows), default=None) or batch.start_date
@@ -4583,9 +4583,12 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
     last_sale = max((r for r in bird_sale_rows if r.get("birds")),
                     key=lambda r: r["date"], default=None)
     if last_sale:
+        # Four places, the same precision the Production Cost report carries a
+        # per-bird weight at. Left raw it arrives as a 27-digit repeating
+        # division and travels into every report that reads it.
         readings.append((last_sale["date"], 1,
                          _div(Decimal(str(last_sale["net_weight"] or 0)),
-                              Decimal(str(last_sale["birds"])))))
+                              Decimal(str(last_sale["birds"]))).quantize(q4)))
     weighed = [r for r in mortality_rows if Decimal(str(r["avg_weight_kg"] or 0)) > 0]
     if weighed:
         last_weighed = max(weighed, key=lambda r: r["date"])
@@ -4729,6 +4732,13 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         # rather than having to reconstruct it from sold weight and a headcount.
         "live_weight": live_weight,
         "standing_weight": standing_weight,
+        # What one standing bird is reckoned to weigh, and where that came
+        # from. Published rather than kept private so the reports that value
+        # standing birds read this instead of each working out its own answer
+        # — which is how the GC Realization report came to value them at the
+        # blended average of every lifting while this and the Production Cost
+        # report used the latest reading.
+        "valued_at": valued_at,
         "eef": eef.quantize(q2),
         "sold_birds": sold_birds,
         "sold_weight": Decimal(str(sold_weight)).quantize(q2),
