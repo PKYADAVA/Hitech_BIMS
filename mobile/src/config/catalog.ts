@@ -109,6 +109,13 @@ export interface ReportLink {
    * a native-only report ever needs adding back.
    */
   webReportName?: string;
+  /**
+   * A native screen to open instead of a report. Used by Map & Route, which
+   * is not a report at all: it is the round a supervisor is driving, and it
+   * needs the phone's GPS for its check-ins, which a web page in the in-app
+   * browser cannot reach.
+   */
+  nativeScreen?: string;
 }
 
 /** A tool the module exposes — a hub tile that opens a bespoke screen route. */
@@ -1947,7 +1954,12 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       // The Farm Map & Route Planner, opened in the in-app browser. It is not
       // a report, but this is the list a supervisor opens things from, and the
       // planner is the first thing they want on the road.
-      { key: "farm-map-planner", title: "Map & Route Planner", icon: "map-marker-path",
+      // Two doors, on purpose. "My Route Today" is the native screen a
+      // supervisor drives from — it checks in with the phone's own GPS. The
+      // planner is the web page, for laying a round out or changing one.
+      { key: "farm-my-route", title: "My Route Today", icon: "map-marker-path",
+        nativeScreen: "FarmRoute" },
+      { key: "farm-map-planner", title: "Map & Route Planner", icon: "map-search-outline",
         webReportName: "farm_map_planner" },
       { key: "farm-route-history", title: "Route History", icon: "history",
         webReportName: "route_history" },

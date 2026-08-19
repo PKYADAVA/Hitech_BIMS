@@ -33,6 +33,7 @@ import { ModuleHubScreen } from "@/screens/ModuleHubScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
+import { FarmRouteScreen } from "@/screens/FarmRouteScreen";
 import { NotificationsScreen } from "@/screens/NotificationsScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
 import { ReportWebViewScreen } from "@/screens/ReportWebViewScreen";
@@ -383,6 +384,20 @@ export function RootNavigator() {
                 filled out of range. */}
             {/* Alerts, reachable from wherever the bell is tapped — Home is a
                 tab and the module hubs are their own stacks. */}
+            {/* Map & Route: today's round, and the buttons pressed at each
+                farm on it. Reached from the Broiler hub and the reports list. */}
+            <Root.Screen
+              name="FarmRoute"
+              component={FarmRouteScreen}
+              options={{
+                headerShown: true,
+                title: "Map & Route",
+                headerStyle: { backgroundColor: colors.tint },
+                headerTintColor: colors.onDark,
+                headerTitleStyle: { fontWeight: "800" },
+                headerShadowVisible: false,
+              }}
+            />
             <Root.Screen
               name="Notifications"
               component={NotificationsScreen}

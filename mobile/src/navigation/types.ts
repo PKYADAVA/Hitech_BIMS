@@ -21,6 +21,12 @@ export type ModuleStackParams = {
   Report: { title: string; path: string };
   /** The same report's full web page, opened in-app — see ReportWebViewScreen. */
   ReportWebView: { title: string; webReportName: string };
+  /**
+   * The supervisor's own round for today: the visit order, and the check-in
+   * and check-out at each farm. Planning stays on the web — this is the
+   * driving half. See FarmRouteScreen.
+   */
+  FarmRoute: undefined;
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };

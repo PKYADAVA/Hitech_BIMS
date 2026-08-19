@@ -14,7 +14,11 @@ export function openReport(
   navigate: (screen: string, params: unknown) => void,
   rep: ReportLink,
 ): void {
-  if (rep.webReportName) {
+  // A native screen wins over both: it is there because the web page cannot do
+  // what it does — reach the phone's GPS for a check-in.
+  if (rep.nativeScreen) {
+    navigate(rep.nativeScreen, undefined);
+  } else if (rep.webReportName) {
     navigate("ReportWebView", { title: rep.title, webReportName: rep.webReportName });
   } else if (rep.path) {
     navigate("Report", { title: rep.title, path: rep.path });
