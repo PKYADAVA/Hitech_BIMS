@@ -11,7 +11,7 @@ from __future__ import annotations
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import views
+from . import trigger, views
 from .api import NotificationViewSet, PreferenceView
 
 app_name = "alerthub"
@@ -48,6 +48,11 @@ urlpatterns = [
     path("alert-config/<int:pk>/delete/", views.alert_rule_delete,
          name="alert_rule_delete"),
     path("alert-catalog/", views.alert_catalog, name="alert_catalog"),
+
+    # The scan's way in from an outside scheduler. Not under /api/, which is
+    # JWT territory for the phone; this is a machine with a shared secret and
+    # no user behind it. See alerthub/trigger.py.
+    path("tasks/alert-scan/", trigger.run_scan, name="run_alert_scan"),
 
     # API
     path("api/alerthub/", include(router.urls)),

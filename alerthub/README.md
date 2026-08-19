@@ -117,6 +117,46 @@ python manage.py seed_alert_rules --activate --group "Farm Supervisors"
 python manage.py run_alert_scan
 python manage.py run_alert_scan --rule-key production.high_mortality
 python manage.py run_alert_scan --dry-run     # what would run, not what would fire
+
+## What actually runs the scan
+
+Nothing did, for a long time: the README said "run it on a schedule" and no
+schedule was ever created, so every part of the chain worked and the chain was
+never started. Two things fixed that, and both need setting up once.
+
+**The clock** is `.github/workflows/alert-scan.yml` — a scheduled GitHub
+Actions run every 15 minutes that POSTs to `/tasks/alert-scan/`. It is not a
+cron on the server because App Platform has no cron of its own (its jobs run on
+deploy, not on a clock), and not a worker component because one would exist
+only to sleep between fifteen-second bursts of work. Actions minutes are free
+on a public repository.
+
+**The door** is `alerthub/trigger.py`. The URL is in a public repository, so
+the token is the only thing protecting it: no `ALERT_SCAN_TOKEN` in the
+environment and the endpoint 404s, a wrong token gets the same 404 a wrong URL
+gets, the comparison is constant-time, and a GET never scans.
+
+Setup, once:
+
+1. Pick a long random token.
+2. App Platform → Settings → App-Level Environment Variables → `ALERT_SCAN_TOKEN`, Encrypted.
+3. GitHub → Settings → Secrets and variables → Actions → `ALERT_SCAN_TOKEN`, the same value.
+4. Run the workflow by hand once (Actions → Alert scan → Run workflow) and watch what it raises.
+
+### Before switching it on
+
+A rule with no `notify_groups` goes to **every active user** — the fail-open
+that lets rules be configured before anyone has decided who should hear from
+them. Harmless while nothing runs the scan, loud the moment something does:
+
+```
+python manage.py set_alert_audience --group "Managers" --dry-run
+python manage.py set_alert_audience --group "Managers"
+```
+
+It only fills in rules that name nobody; a rule someone has already aimed at a
+group is left alone unless you pass `--replace`.
+
 ```
 
 There is no lock: overlapping runs both do the work (duplicates are still

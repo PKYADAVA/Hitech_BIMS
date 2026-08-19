@@ -371,6 +371,12 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 
 # SMS / Notification configuration.
+# Shared secret an outside scheduler presents to run the business-alert scan
+# (alerthub/trigger.py). Empty means the endpoint does not exist at all, which
+# is the right default: a deployment that has not been given a token has not
+# asked to be scanned. Set it in the environment, never here.
+ALERT_SCAN_TOKEN = os.getenv("ALERT_SCAN_TOKEN", "")
+
 # All values are read here (see notification/conf.py) so the notification app
 # never touches settings directly. SMS is opt-in: it stays disabled until
 # SMS_ENABLED is set, and runs in mock mode automatically during local

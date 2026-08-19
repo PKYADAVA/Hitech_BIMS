@@ -1,0 +1,65 @@
+# The clock behind the business alerts.
+#
+# Most of what alerthub watches is not an event — "a flock reached harvest age"
+# and "an invoice went overdue" happen because a date passed, with no row being
+# saved — so something has to come along and look. Nothing did: no cron, no
+# scheduled task, no worker. Every part of the chain worked and the chain was
+# never started.
+#
+# This is the something, and it lives here rather than on the server because
+# App Platform has no cron of its own (its jobs run on deploy, not on a clock)
+# and a worker component would exist only to sleep between fifteen-second
+# bursts of work. Actions minutes are free on a public repository, so this
+# costs nothing and adds nothing to watch.
+#
+# Setup, once:
+#   1. Pick a long random token.
+#   2. Put it in the app's environment as ALERT_SCAN_TOKEN (App Platform →
+#      Settings → App-Level Environment Variables, type Encrypted).
+#   3. Put the same value in this repository as the ALERT_SCAN_TOKEN secret
+#      (Settings → Secrets and variables → Actions).
+# Until both are set the endpoint 404s and this workflow reports it plainly.
+name: Alert scan
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub runs scheduled jobs late under load, sometimes
+    # by several minutes; that is fine here, because the rules measure the
+    # state of the business rather than the instant it changed, and the
+    # per-rule cooldown absorbs a run that arrives twice in quick succession.
+    - cron: "*/15 * * * *"
+  # So the first run can be watched deliberately rather than arriving on its
+  # own at whatever o'clock — and so a scan can be forced after a fix.
+  workflow_dispatch:
+
+# A slow scan must not pile up behind itself.
+concurrency:
+  group: alert-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the scan
+        env:
+          TOKEN: ${{ secrets.ALERT_SCAN_TOKEN }}
+          URL: https://hitechfarms.co.in/tasks/alert-scan/
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::ALERT_SCAN_TOKEN is not set in this repository — nothing to send. See the header of this file."
+            exit 0
+          fi
+          # --fail-with-body so a 404 (wrong or unset token on the server) is a
+          # red run rather than a green one that quietly did nothing. Silence
+          # here is the failure this whole file exists to prevent.
+          code=$(curl -sS -o body.txt -w '%{http_code}' \
+                   --max-time 300 --retry 2 --retry-delay 30 \
+                   -X POST "$URL" -H "X-Alert-Scan-Token: $TOKEN")
+          echo "HTTP $code"
+          cat body.txt; echo
+          if [ "$code" = "404" ]; then
+            echo "::error::404 — the server has no ALERT_SCAN_TOKEN set, or it does not match this repository's secret."
+            exit 1
+          fi
+          [ "$code" = "200" ] || { echo "::error::scan endpoint returned $code"; exit 1; }

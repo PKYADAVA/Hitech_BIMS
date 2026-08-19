@@ -80,3 +80,14 @@ services:
         value: <YOUR_SECRET_KEY>
       - key: DB_SSLMODE
         value: require
+      # Lets an outside scheduler run the business-alert scan. App Platform
+      # has no cron of its own, so the clock is a GitHub Actions workflow
+      # (.github/workflows/alert-scan.yml) POSTing to /tasks/alert-scan/ with
+      # this value; the repository needs the same string as its
+      # ALERT_SCAN_TOKEN secret. Leave it unset and the endpoint 404s, which
+      # is the right default — an app that was never given a token never
+      # asked to be scanned.
+      - key: ALERT_SCAN_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: <A_LONG_RANDOM_STRING>
