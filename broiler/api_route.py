@@ -60,7 +60,21 @@ def _visible_routes(user):
     return routes.filter(branch_id__in=allowed)
 
 
-def _stop_payload(stop):
+def _checked_out_farm_ids(route):
+    """Farms this round has already been checked out of.
+
+    One query for the whole round rather than one per stop: the phone polls
+    this payload, so a dozen farms was a dozen extra queries every time a
+    supervisor's screen refreshed.
+    """
+    if not route.trip_id:
+        return set()
+    return set(route.trip.visits
+               .filter(checked_out_at__isnull=False)
+               .values_list("farm_id", flat=True))
+
+
+def _stop_payload(stop, left_ids):
     farm = stop.farm
     return {
         "sequence": stop.sequence,
@@ -77,22 +91,14 @@ def _stop_payload(stop):
         "visited_at": stop.visited_at.isoformat() if stop.visited_at else None,
         # What the phone puts on the button. Worked out here rather than in the
         # app so the two cannot disagree about whether a call is still open.
-        "state": ("done" if stop.visited_at and _left(stop)
+        "state": ("done" if stop.visited_at and stop.farm_id in left_ids
                   else "here" if stop.visited_at else "pending"),
     }
 
 
-def _left(stop):
-    """True once the visit behind this stop has been checked out of."""
-    route = stop.route
-    if not route.trip_id or not stop.farm_id:
-        return False
-    visit = route.trip.visits.filter(farm_id=stop.farm_id).order_by("id").first()
-    return bool(visit and visit.checked_out_at)
-
-
 def _route_payload(route):
     stops = list(route.stops.all())
+    left_ids = _checked_out_farm_ids(route)
     return {
         "id": route.id,
         "route_no": route.route_no,
@@ -112,7 +118,7 @@ def _route_payload(route):
         "estimated": route.distance_basis == FarmRoute.BASIS_STRAIGHT,
         "trip_id": route.trip_id,
         "trip_no": route.trip.trip_no if route.trip_id else "",
-        "stops": [_stop_payload(s) for s in stops],
+        "stops": [_stop_payload(s, left_ids) for s in stops],
     }
 
 

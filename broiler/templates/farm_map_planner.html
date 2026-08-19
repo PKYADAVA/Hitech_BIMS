@@ -19,7 +19,9 @@
 
   /* Filter chips: a labelled card each, so the current selection reads at a
      glance instead of having to be inferred from a row of bare selects. */
-  .fmp-chip { border:1px solid #e5e7eb; border-radius:.6rem; background:#fff;
+  .fmp-cell { flex:1 1 140px; min-width:140px; }
+  @media (max-width: 575.98px) { .fmp-cell { flex:1 1 45%; min-width:0; } }
+  .fmp-chip { height:100%; border:1px solid #e5e7eb; border-radius:.6rem; background:#fff;
               padding:.4rem .7rem; display:flex; align-items:center; gap:.6rem; }
   .fmp-chip .ic { width:1.9rem; height:1.9rem; border-radius:.5rem; flex:0 0 auto;
                   display:flex; align-items:center; justify-content:center;
@@ -99,8 +101,8 @@ overridden by d-lg-block and the row is simply always there.
   <i class="fas fa-sliders"></i> Filters
 </button>
 <div class="collapse d-lg-block" id="fmp-filters">
-<div class="row g-2 mb-2 align-items-stretch">
-  <div class="col-6 col-lg-2">
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-stretch">
+  <div class="fmp-cell">
     <div class="fmp-chip"><span class="ic"><i class="fas fa-code-branch"></i></span>
       <span class="bd"><label>Branch</label>
         <select class="form-select form-select-sm" id="f-branch">
@@ -108,7 +110,7 @@ overridden by d-lg-block and the row is simply always there.
           {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
         </select></span></div>
   </div>
-  <div class="col-6 col-lg-2">
+  <div class="fmp-cell">
     <div class="fmp-chip"><span class="ic"><i class="fas fa-user-tie"></i></span>
       <span class="bd"><label>Supervisor</label>
         <select class="form-select form-select-sm" id="f-supervisor">
@@ -116,7 +118,7 @@ overridden by d-lg-block and the row is simply always there.
           {% for s in supervisors %}<option value="{{ s.id }}" data-branch="{{ s.branch_id }}">{{ s.name }}</option>{% endfor %}
         </select></span></div>
   </div>
-  <div class="col-6 col-lg-2">
+  <div class="fmp-cell">
     <div class="fmp-chip"><span class="ic"><i class="fas fa-tractor"></i></span>
       <span class="bd"><label>Farm Status</label>
         <select class="form-select form-select-sm" id="f-status">
@@ -124,7 +126,7 @@ overridden by d-lg-block and the row is simply always there.
           <option value="inactive">Inactive</option><option value="closed">Closed</option>
         </select></span></div>
   </div>
-  <div class="col-6 col-lg-2">
+  <div class="fmp-cell">
     <div class="fmp-chip"><span class="ic"><i class="fa-solid fa-kiwi-bird"></i></span>
       <span class="bd"><label>Batch Status</label>
         <select class="form-select form-select-sm" id="f-batch">
@@ -132,7 +134,7 @@ overridden by d-lg-block and the row is simply always there.
           <option value="empty">No Active Batch</option>
         </select></span></div>
   </div>
-  <div class="col-6 col-lg-2">
+  <div class="fmp-cell">
     <div class="fmp-chip"><span class="ic"><i class="fas fa-flag"></i></span>
       <span class="bd"><label>Priority</label>
         <select class="form-select form-select-sm" id="f-priority">
@@ -140,25 +142,26 @@ overridden by d-lg-block and the row is simply always there.
           {% for value, label in priorities %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
         </select></span></div>
   </div>
-  <div class="col-6 col-lg-2">
+  <div class="fmp-cell">
     <div class="fmp-chip"><span class="ic"><i class="fas fa-route"></i></span>
       <span class="bd"><label>Route Mode</label>
         <select class="form-select form-select-sm" id="f-mode">
           {% for value, label in route_modes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
         </select></span></div>
   </div>
-</div>
 
+  {% comment %}
+  Calculate sits in the filter row, not under it: it is the verb for the six
+  nouns beside it, and a button on its own line reads as belonging to whatever
+  comes next instead.
+  {% endcomment %}
+  <div class="d-flex gap-2 align-items-center">
+    <button class="btn btn-primary text-nowrap" id="fmp-calculate">
+      <i class="fas fa-route"></i> Calculate Route</button>
+    <button class="btn btn-outline-secondary" id="fmp-refresh" title="Reload farms">
+      <i class="fas fa-rotate"></i></button>
+  </div>
 </div>
-
-<div class="d-flex gap-2 flex-wrap align-items-center mb-3">
-  <button class="btn btn-primary" id="fmp-calculate"><i class="fas fa-route"></i> Calculate Route</button>
-  <button class="btn btn-outline-secondary" id="fmp-refresh" title="Reload farms"><i class="fas fa-rotate"></i></button>
-  <span class="text-muted small ms-2">Start point:</span>
-  <span class="badge bg-dark" id="fmp-start-label">not set</span>
-  <button class="btn btn-sm btn-outline-secondary" id="fmp-set-start">
-    <i class="fas fa-crosshairs"></i> Set on map</button>
-  <span class="small text-muted" id="fmp-start-hint"></span>
 </div>
 
 <div class="d-flex flex-column">
@@ -204,6 +207,18 @@ overridden by d-lg-block and the row is simply always there.
           <button class="btn btn-outline-secondary" id="fmp-none">None</button>
         </div>
       </div>
+      {% comment %}
+      A search over the picker only. It narrows what you are choosing from, not
+      what the map shows: hiding pins as somebody types would make the route
+      they just calculated appear to lose farms.
+      {% endcomment %}
+      <div class="px-2 pt-2">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="fas fa-magnifying-glass"></i></span>
+          <input type="search" class="form-control" id="fmp-search"
+                 placeholder="Farm name, code or supervisor" autocomplete="off">
+        </div>
+      </div>
       <div class="card-body fmp-side p-2" id="fmp-picker">
         <div class="text-muted small p-2">Loading farms&hellip;</div>
       </div>
@@ -211,7 +226,7 @@ overridden by d-lg-block and the row is simply always there.
   </div>
 
   <div class="col-lg-6 order-1 order-lg-2">
-    <div class="d-flex gap-2 align-items-center mb-2">
+    <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
       <div class="btn-group btn-group-sm">
         <button class="btn btn-primary" id="fmp-base-map">Map</button>
         <button class="btn btn-outline-secondary" id="fmp-base-sat">Satellite</button>
@@ -220,8 +235,24 @@ overridden by d-lg-block and the row is simply always there.
         <input class="form-check-input" type="checkbox" id="fmp-show-labels" checked>
         <label class="form-check-label small" for="fmp-show-labels">Show Labels</label>
       </div>
+      {% comment %}
+      The start point sits with the map controls rather than the action bar:
+      it is set by clicking the map, so it belongs beside the things that
+      change what the map is showing.
+      {% endcomment %}
+      <span class="text-muted small">Start point:</span>
+      <span class="badge bg-dark" id="fmp-start-label">not set</span>
+      <button class="btn btn-sm btn-outline-secondary" id="fmp-set-start">
+        <i class="fas fa-crosshairs"></i> Set on map</button>
       <button class="btn btn-sm btn-outline-secondary ms-auto" id="fmp-fullscreen"
               title="Fullscreen"><i class="fas fa-expand"></i></button>
+      {% comment %}
+      The hint takes a line of its own (order-last + w-100) rather than sitting
+      in the row: it is a whole sentence, and letting it grow inside the row
+      pushed the fullscreen button onto a second line whenever it had anything
+      to say.
+      {% endcomment %}
+      <span class="small text-muted order-last w-100" id="fmp-start-hint"></span>
     </div>
     <div id="fmp-map" class="fmp-map"></div>
     <div class="fmp-legend mt-2 d-flex flex-wrap gap-3">

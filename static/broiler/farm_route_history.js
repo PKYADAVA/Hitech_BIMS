@@ -194,13 +194,64 @@ window.RouteHistory = (function () {
     });
   }
 
+  /** Copy a round onto today, leaving the original's journey alone. */
+  function duplicate(routeId, button) {
+    button.disabled = true;
+    post(url(window.RH_URLS.duplicate, routeId), {}, function (data) {
+      window.alert("Copied as " + data.route_no + " on " + data.date + ".");
+      window.location.reload();
+    }, button);
+  }
+
+  /** Measure the same farms again — for when a pin or a road has moved. */
+  function recalculate(routeId, button) {
+    button.disabled = true;
+    var was = button.textContent;
+    button.textContent = "Measuring…";
+    post(url(window.RH_URLS.recalculate, routeId), {}, function (data) {
+      var moved = data.changed_km;
+      window.alert(
+        "Re-measured " + data.route_no + ": " + data.distance_km + " km" +
+        (moved ? " (" + (moved > 0 ? "+" : "") + moved + " km against the " +
+                 data.was_km + " km it held before)" : ", unchanged") +
+        (data.estimated
+          ? " — the routing service could not be reached, so these are estimates."
+          : ""));
+      window.location.reload();
+    }, button, was);
+  }
+
+  function post(target, body, done, button, restore) {
+    fetch(target, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify(body || {})
+    }).then(readJson).then(function (result) {
+      if (!result.ok) {
+        window.alert(result.data.error || "That could not be done.");
+        button.disabled = false;
+        if (restore) button.textContent = restore;
+        return;
+      }
+      done(result.data);
+    }).catch(function () {
+      window.alert("That could not be done.");
+      button.disabled = false;
+      if (restore) button.textContent = restore;
+    });
+  }
+
   function init() {
     modal = new bootstrap.Modal(document.getElementById("rhModal"));
     document.addEventListener("click", function (event) {
       var view = event.target.closest(".rh-view");
       if (view) { show(view.dataset.route); return; }
       var start = event.target.closest(".rh-start");
-      if (start) { startTrip(start.dataset.route, start); }
+      if (start) { startTrip(start.dataset.route, start); return; }
+      var copy = event.target.closest(".rh-duplicate");
+      if (copy) { duplicate(copy.dataset.route, copy); return; }
+      var again = event.target.closest(".rh-recalc");
+      if (again) { recalculate(again.dataset.route, again); }
     });
   }
 

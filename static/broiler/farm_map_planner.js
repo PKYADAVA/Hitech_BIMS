@@ -267,13 +267,32 @@ window.FarmMapPlanner = (function () {
 
   // ---- panels -------------------------------------------------------------
 
+  /* What the search box leaves standing. Name, code and supervisor, because
+     those are the three things somebody knows about a farm when they are
+     looking for it — and a selected farm is never hidden, or unticking it
+     would mean clearing the search first. */
+  function pickerRows() {
+    var term = (el("fmp-search").value || "").trim().toLowerCase();
+    if (!term) return farms;
+    return farms.filter(function (f) {
+      if (selected.has(f.id)) return true;
+      return (f.name + " " + f.code + " " + (f.supervisor || ""))
+        .toLowerCase().indexOf(term) !== -1;
+    });
+  }
+
   function renderPicker() {
     var box = el("fmp-picker");
+    var rows = pickerRows();
     if (!farms.length) {
       box.innerHTML = '<div class="text-muted small p-2">No farms match these filters.</div>';
       return;
     }
-    box.innerHTML = farms.map(function (f) {
+    if (!rows.length) {
+      box.innerHTML = '<div class="text-muted small p-2">No farm matches that search.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(function (f) {
       return '<label class="d-flex align-items-start gap-2 py-1 px-1">' +
         '<input type="checkbox" class="form-check-input fmp-check" value="' + f.id + '"' +
         (selected.has(f.id) ? " checked" : "") + ">" +
@@ -665,9 +684,13 @@ window.FarmMapPlanner = (function () {
     el("fmp-refresh").addEventListener("click", load);
     el("fmp-calculate").addEventListener("click", calculate);
     el("fmp-save").addEventListener("click", save);
+    el("fmp-search").addEventListener("input", renderPicker);
+    // "All" means all of what the search has left showing, which is what a
+    // filtered list implies — otherwise searching would be a lie the moment
+    // somebody pressed it.
     el("fmp-all").addEventListener("click", function () {
-      farms.forEach(function (f) { selected.add(f.id); });
-      plan = null; renderAll();
+      pickerRows().forEach(function (f) { selected.add(f.id); });
+      plan = null; page = 1; renderAll();
     });
     el("fmp-none").addEventListener("click", function () {
       selected.clear(); plan = null; renderAll();

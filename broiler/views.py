@@ -1868,6 +1868,11 @@ class BroilerFarmAPI(BaseAPIView):
         "farm_type", "state", "district", "area", "farm_address", "farm_latitude",
         "farm_longitude", "agreement_start_date", "agreement_end_date", "agreement_months",
         "farm_sqft", "cheque_1_no", "cheque_2_no", "cheque_3_no", "cheque_4_no", "remarks",
+        # How urgently the farm needs visiting. The Route Planner's Priority
+        # Route promotes a critical or high farm up the day's order; without a
+        # way to set it here, that mode had nothing to act on and every farm
+        # stayed Normal for ever.
+        "visit_priority",
     ]
 
     def get(self, request, id: Optional[int] = None) -> JsonResponse:

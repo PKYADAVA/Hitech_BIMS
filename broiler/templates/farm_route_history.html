@@ -112,7 +112,16 @@
             <td class="ds-mid text-center">
               <div class="btn-group btn-group-sm">
                 <button class="btn btn-outline-secondary rh-view" data-route="{{ route.id }}">View</button>
+                <button class="btn btn-outline-secondary rh-duplicate" data-route="{{ route.id }}"
+                        title="Copy this round onto today">Duplicate</button>
+                {% comment %}
+                Recalculate only before the round is driven: once a trip is
+                attached, these distances are what it is measured against, and
+                re-measuring them would change a deviation report after the fact.
+                {% endcomment %}
                 {% if not route.trip_id %}
+                <button class="btn btn-outline-secondary rh-recalc" data-route="{{ route.id }}"
+                        title="Measure the same farms again">Recalculate</button>
                 <button class="btn btn-outline-primary rh-start" data-route="{{ route.id }}">Start Trip</button>
                 {% endif %}
               </div>
@@ -156,7 +165,9 @@
 <script>
   window.RH_URLS = {
     detail: "{% url 'route_detail' 0 %}",
-    startTrip: "{% url 'route_start_trip' 0 %}"
+    startTrip: "{% url 'route_start_trip' 0 %}",
+    duplicate: "{% url 'route_duplicate' 0 %}",
+    recalculate: "{% url 'route_recalculate' 0 %}"
   };
   document.addEventListener('DOMContentLoaded', function () { RouteHistory.init(); });
 </script>

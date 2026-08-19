@@ -28,6 +28,15 @@ PRIORITY_DETOUR_ALLOWANCE = 0.35
 #: of a kilometre. Higher pulls a farm earlier.
 PRIORITY_WEIGHT = {"critical": 0.55, "high": 0.30, "normal": 0.0}
 
+#: A farm unvisited for this long is treated as urgent by the Supervisor Daily
+#: Route, whatever its priority flag says. Ten days is roughly a third of a
+#: crop: long enough that nobody has looked at the birds through the part of
+#: the cycle where looking matters most.
+OVERDUE_DAYS = 10
+
+#: And this long is treated the way a critical farm is.
+BADLY_OVERDUE_DAYS = 21
+
 
 class PlannerError(Exception):
     """Something about the *farms* prevents a route. Message fit to show."""
@@ -62,7 +71,48 @@ def split_by_gps(farms):
     return routable, missing
 
 
-def order_by_priority(farms, order, matrix, allowance=PRIORITY_DETOUR_ALLOWANCE):
+
+def overdue_weights(farms, as_of=None):
+    """How urgent each farm is from how long nobody has been to it.
+
+    The Supervisor Daily Route's own idea of priority. The manual flag on a
+    farm says what somebody decided once; this says what the visit register
+    actually shows, which is the thing a supervisor's day is really shaped by —
+    the farms nobody has looked at.
+
+    Returns the same shape PRIORITY_WEIGHT holds, so the ordering below cannot
+    tell the two apart and there is one promotion algorithm rather than two.
+    """
+    from django.utils import timezone
+    from hr.models import SupervisorTripVisit
+
+    as_of = as_of or timezone.localdate()
+    ids = [f.id for f in farms]
+    last = {}
+    for farm_id, when in (SupervisorTripVisit.objects
+                          .filter(farm_id__in=ids, checked_in_at__isnull=False)
+                          .values_list("farm_id", "checked_in_at")):
+        seen = timezone.localtime(when).date()
+        if farm_id not in last or seen > last[farm_id]:
+            last[farm_id] = seen
+
+    weights = {}
+    for farm in farms:
+        seen = last.get(farm.id)
+        # Never visited is the most overdue there is, not the least: a farm
+        # with no visit on record is exactly the one nobody has been to.
+        days = (as_of - seen).days if seen else BADLY_OVERDUE_DAYS + 1
+        if days > BADLY_OVERDUE_DAYS:
+            weights[farm.id] = PRIORITY_WEIGHT["critical"]
+        elif days > OVERDUE_DAYS:
+            weights[farm.id] = PRIORITY_WEIGHT["high"]
+        else:
+            weights[farm.id] = 0.0
+    return weights, last
+
+
+def order_by_priority(farms, order, matrix, allowance=PRIORITY_DETOUR_ALLOWANCE,
+                      weights=None, reason=None):
     """Pull urgent farms earlier in an already-optimised order.
 
     Works on the shortest order rather than instead of it, so a priority route
@@ -86,13 +136,21 @@ def order_by_priority(farms, order, matrix, allowance=PRIORITY_DETOUR_ALLOWANCE)
 
     # Most urgent first, so a critical farm outranks a high one for the same
     # slot rather than whichever happened to be considered first.
-    ranked = sorted(
-        ((i, farms[i - 1]) for i in current if i != 0),
-        key=lambda pair: -PRIORITY_WEIGHT.get(
-            getattr(pair[1], "visit_priority", "normal"), 0.0))
+    def weight_of(farm):
+        if weights is not None:
+            return weights.get(farm.id, 0.0)
+        return PRIORITY_WEIGHT.get(getattr(farm, "visit_priority", "normal"), 0.0)
+
+    def label_of(farm):
+        if reason is not None:
+            return reason(farm)
+        return farm.get_visit_priority_display().lower() + " priority"
+
+    ranked = sorted(((i, farms[i - 1]) for i in current if i != 0),
+                    key=lambda pair: -weight_of(pair[1]))
 
     for index, farm in ranked:
-        weight = PRIORITY_WEIGHT.get(getattr(farm, "visit_priority", "normal"), 0.0)
+        weight = weight_of(farm)
         if not weight:
             continue
         position = current.index(index)
@@ -108,15 +166,13 @@ def order_by_priority(farms, order, matrix, allowance=PRIORITY_DETOUR_ALLOWANCE)
         cost = tour_length(trial)
         if ceiling and cost > ceiling:
             notes.append(
-                f"{farm.farm_name} is {farm.get_visit_priority_display().lower()} "
-                f"priority but moving it earlier would add "
-                f"{cost - base:.1f} km, beyond the "
+                f"{farm.farm_name} is {label_of(farm)} but moving it earlier "
+                f"would add {cost - base:.1f} km, beyond the "
                 f"{int(allowance * 100)}% this route allows.")
             continue
         notes.append(
             f"{farm.farm_name} moved from stop {position} to stop {target} "
-            f"({farm.get_visit_priority_display().lower()} priority), "
-            f"adding {max(cost - base, 0):.1f} km.")
+            f"({label_of(farm)}), adding {max(cost - base, 0):.1f} km.")
         current = trial
         base = cost
     return current, notes
@@ -152,13 +208,31 @@ def plan_route(*, start, farms, mode="distance", roundtrip=True, end=None,
 
     order = [i for i in result.order] or list(range(len(points)))
     notes = []
-    if mode == "priority":
+    if mode in ("priority", "supervisor"):
+        # Two ways of being urgent, one promotion algorithm. "Priority" reads
+        # the flag somebody set on the farm; "Supervisor Daily Route" reads the
+        # visit register instead — how long it has actually been since anybody
+        # went — because that is what shapes a supervisor's real day, and a
+        # flag nobody has maintained shapes nothing.
+        weights, last_seen = (None, {})
+        reason = None
+        if mode == "supervisor":
+            weights, last_seen = overdue_weights(farms)
+
+            def reason(farm, _seen=last_seen):
+                when = _seen.get(farm.id)
+                if when is None:
+                    return "never visited"
+                from django.utils import timezone
+                return f"last visited {(timezone.localdate() - when).days} days ago"
+
         matrix = service.provider.matrix(points, routing_mode)
         # Strip a trailing return-to-start before reordering, then put it back:
         # the office at the end is not a stop to be promoted.
         closing = order[-1] if roundtrip and order and order[-1] == 0 else None
         body = order[:-1] if closing is not None else order[:]
-        body, notes = order_by_priority(farms, body, matrix)
+        body, notes = order_by_priority(farms, body, matrix,
+                                        weights=weights, reason=reason)
         order = body + ([closing] if closing is not None else [])
         ordered_points = [points[i] for i in order]
         result = service.calculate(ordered_points, mode=routing_mode, optimise=False)

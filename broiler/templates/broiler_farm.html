@@ -393,6 +393,21 @@
                         <label for="farm_sqft" class="form-label">Farm Sq.ft</label>
                         <input type="text" id="farm_sqft" class="form-control" />
                     </div>
+                    {% comment %}
+                    Visit priority. The Route Planner's Priority Route mode
+                    promotes a critical or high farm up the day's order, at a
+                    bounded cost in kilometres; with nowhere to set it, that
+                    mode had nothing to act on.
+                    {% endcomment %}
+                    <div class="col-md-4">
+                        <label for="visit_priority" class="form-label">Visit Priority</label>
+                        <select id="visit_priority" class="form-select">
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <div class="form-text">Used by the Map &amp; Route Planner to order a day's visits.</div>
+                    </div>
 
                     <div class="col-md-12">
                         <label for="farm_pictures" class="form-label">Farm Pictures (multiple)</label>
@@ -952,6 +967,7 @@ $(document).ready(function () {
         formData.append("agreement_end_date", $("#agreement_end_date").val());
         formData.append("agreement_months", $("#agreement_months").val());
         formData.append("farm_sqft", $("#farm_sqft").val());
+        formData.append("visit_priority", $("#visit_priority").val() || "normal");
         formData.append("cheque_1_no", $("#cheque_1_no").val());
         formData.append("cheque_2_no", $("#cheque_2_no").val());
         formData.append("cheque_3_no", $("#cheque_3_no").val());
@@ -1060,6 +1076,7 @@ $(document).ready(function () {
                 $("#agreement_end_date").val(farm.agreement_end_date);
                 $("#agreement_months").val(farm.agreement_months);
                 $("#farm_sqft").val(farm.farm_sqft);
+                $("#visit_priority").val(farm.visit_priority || "normal");
                 $("#cheque_1_no").val(farm.cheque_1_no);
                 $("#cheque_2_no").val(farm.cheque_2_no);
                 $("#cheque_3_no").val(farm.cheque_3_no);

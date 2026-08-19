@@ -154,6 +154,10 @@ urlpatterns = [
          name='route_check_in'),
     path('farm-routes/<int:route_id>/check-out/', route_planner.route_check_out,
          name='route_check_out'),
+    path('farm-routes/<int:route_id>/duplicate/', route_planner.route_duplicate,
+         name='route_duplicate'),
+    path('farm-routes/<int:route_id>/recalculate/', route_planner.route_recalculate,
+         name='route_recalculate'),
     path('gc-realization-report/scheme/<int:scheme_id>/medicine-cost/',
          views.gc_realization_medicine_cost_save, name='gc_realization_medicine_cost_save'),
 

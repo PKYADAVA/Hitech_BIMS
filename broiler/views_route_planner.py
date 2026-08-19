@@ -22,8 +22,10 @@ filter would fill the table with rounds nobody drove.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Count, Max, OuterRef, Q, Subquery
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -31,7 +33,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from broiler.models import (BirdSale, Branch, BroilerBatch, BroilerFarm,
-                            DailyEntry, FarmRoute, Supervisor)
+                            DailyEntry, FarmRoute, FarmRouteStop, Supervisor)
 from broiler.services.route_planner import (PlannerError, farm_point, plan_route,
                                             save_route, split_by_gps)
 from broiler.services.routing import RoutingError
@@ -605,3 +607,137 @@ def _route_report_excel(key, columns, rows):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = f'attachment; filename="{key}.xlsx"'
     return response
+
+
+@login_required
+@require_POST
+def route_duplicate(request, route_id):
+    """Copy a round onto another day, unstarted.
+
+    The most common way a route is made is that last week's worked. Copying
+    leaves the original's journey alone — the trip, the check-ins and the
+    deviation all stay attached to the round that was actually driven — and the
+    copy comes back as a draft nobody has started.
+
+    The stored geometry and distances come with it: the roads have not moved,
+    and re-measuring would spend a provider call to be told the same thing.
+    Recalculate is there for when they have.
+    """
+    from broiler.models import FarmRouteStop
+
+    route = _route_for(request.user, route_id)
+    if route is None:
+        return JsonResponse({"error": "Route not found, or not one you may see."},
+                            status=404)
+    try:
+        payload = json.loads(request.body or "{}")
+    except ValueError:
+        payload = {}
+    stops = list(route.stops.all().order_by("sequence"))
+
+    copy = FarmRoute.objects.create(
+        name=route.name, date=payload.get("date") or timezone.localdate(),
+        branch=route.branch, supervisor=route.supervisor,
+        start_label=route.start_label, start_latitude=route.start_latitude,
+        start_longitude=route.start_longitude,
+        end_label=route.end_label, end_latitude=route.end_latitude,
+        end_longitude=route.end_longitude,
+        returns_to_start=route.returns_to_start, mode=route.mode,
+        status=FarmRoute.STATUS_PLANNED,
+        distance_basis=route.distance_basis, provider=route.provider,
+        planned_distance_km=route.planned_distance_km,
+        planned_minutes=route.planned_minutes, geometry=route.geometry,
+        created_by=request.user,
+    )
+    FarmRouteStop.objects.bulk_create([
+        FarmRouteStop(
+            route=copy, sequence=s.sequence, kind=s.kind, farm_id=s.farm_id,
+            label=s.label, latitude=s.latitude, longitude=s.longitude,
+            leg_distance_km=s.leg_distance_km, leg_minutes=s.leg_minutes,
+            cumulative_distance_km=s.cumulative_distance_km,
+            cumulative_minutes=s.cumulative_minutes, priority=s.priority,
+        ) for s in stops
+    ])
+    return JsonResponse({"id": copy.id, "route_no": copy.route_no,
+                         "date": copy.date.isoformat()})
+
+
+@login_required
+@require_POST
+def route_recalculate(request, route_id):
+    """Measure the same farms again, in case the roads or the pins have moved.
+
+    The same stops in the same order are re-measured rather than re-optimised,
+    unless the round has not been driven yet — a plan somebody has started
+    following must not have its order changed underneath them, and one that has
+    not can be improved.
+
+    A round that has already been driven is refused outright: its distances are
+    what its trip was compared against, and quietly re-measuring them would
+    change a deviation report after the fact.
+    """
+    from broiler.services.route_planner import PlannerError, plan_route, split_by_gps
+    from broiler.services.routing import RoutingError
+
+    route = _route_for(request.user, route_id)
+    if route is None:
+        return JsonResponse({"error": "Route not found, or not one you may see."},
+                            status=404)
+    if route.trip_id:
+        return JsonResponse(
+            {"error": f"Route {route.route_no} has already been driven as trip "
+                      f"{route.trip.trip_no}. Its distances are what that trip is "
+                      f"measured against. Duplicate it instead."}, status=400)
+
+    stops = list(route.stops.filter(farm__isnull=False).order_by("sequence")
+                 .select_related("farm"))
+    farms = [s.farm for s in stops]
+    routable, missing = split_by_gps(farms)
+    if missing:
+        return JsonResponse(
+            {"error": f"{len(missing)} farm(s) on this round no longer have GPS "
+                      f"coordinates: {', '.join(f.farm_name for f in missing)}."},
+            status=422)
+    if route.start_latitude is None or route.start_longitude is None:
+        return JsonResponse({"error": "This round has no starting point to "
+                                      "measure from."}, status=400)
+
+    try:
+        plan = plan_route(
+            start=(route.start_label or "Start", route.start_latitude,
+                   route.start_longitude),
+            farms=routable, mode=route.mode, roundtrip=route.returns_to_start)
+    except PlannerError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except RoutingError as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
+
+    before = float(route.planned_distance_km or 0)
+    with transaction.atomic():
+        route.stops.all().delete()
+        route.planned_distance_km = Decimal(str(plan["distance_km"]))
+        route.planned_minutes = int(plan["minutes"])
+        route.geometry = plan["geometry"]
+        route.provider = plan["provider"] or ""
+        route.distance_basis = (FarmRoute.BASIS_ROAD if plan["basis"] == "road"
+                                else FarmRoute.BASIS_STRAIGHT)
+        route.save()
+        FarmRouteStop.objects.bulk_create([
+            FarmRouteStop(
+                route=route, sequence=s["sequence"], kind=s["kind"],
+                farm_id=s["farm_id"], label=s["label"],
+                latitude=s["latitude"], longitude=s["longitude"],
+                leg_distance_km=Decimal(str(s["leg_distance_km"])),
+                leg_minutes=s["leg_minutes"],
+                cumulative_distance_km=Decimal(str(s["cumulative_distance_km"])),
+                cumulative_minutes=s["cumulative_minutes"],
+                priority=s.get("priority") or "",
+            ) for s in plan["stops"]
+        ])
+    return JsonResponse({
+        "id": route.id, "route_no": route.route_no,
+        "distance_km": plan["distance_km"], "minutes": plan["minutes"],
+        "was_km": round(before, 2),
+        "changed_km": round(plan["distance_km"] - before, 2),
+        "estimated": plan["estimated"],
+    })
