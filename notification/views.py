@@ -19,7 +19,6 @@ from .constants import SMS_MODULE_CHOICES, SMS_MODULE_TRANSACTIONS, transaction_
 from .models import SmsMessage, SmsTemplate, SmsTemplateCategory
 from .services import get_sms_service
 from .services.template_service import extract_placeholders
-from user.services.scoping import customers_for, suppliers_for
 
 logger = logging.getLogger("notification.sms")
 
@@ -245,11 +244,15 @@ _RESULT_STATUS_MAP = {
 @method_decorator(login_required, name="dispatch")
 class SmsTransactionPageView(View):
     def get(self, request):
-        from sales.models import Customer
-        from purchase.models import Supplier
         from account.models import CompanyProfile
 
+        from .comm_sources import PARTY_TYPES, party_choices
+
         templates_qs = SmsTemplate.objects.filter(is_active=True).order_by("name")
+        # One party list per type rather than the two the page was built with:
+        # a farmer takes delivery of chicks and feed, and a member of staff is
+        # paid, and neither is a customer or a supplier.
+        choices = party_choices(request.user)
         return render(request, "sms_transaction.html", {
             "doc_sources": [(k, v["label"], v["party_type"], v.get("transaction", ""),
                              v.get("module", ""))
@@ -261,8 +264,8 @@ class SmsTransactionPageView(View):
                  "module_display": t.get_module_display()}
                 for t in templates_qs
             ]),
-            "customers": customers_for(request.user, Customer.objects.order_by("name")),
-            "suppliers": suppliers_for(request.user, Supplier.objects.order_by("name")),
+            "party_lists": [(key, label, choices.get(key, []))
+                            for key, label in PARTY_TYPES.items()],
             "company_name": CompanyProfile.get_solo().name,
         })
 

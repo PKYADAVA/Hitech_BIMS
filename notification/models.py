@@ -125,7 +125,13 @@ class SmsMessage(models.Model):
         ("mocked", "Mocked"),
         ("unknown", "Unknown"),
     ]
-    PARTY_TYPE_CHOICES = [("customer", "Customer"), ("supplier", "Supplier")]
+    # Who the message went to. Customers and suppliers were the only parties
+    # when the log was written, because only hatchery documents fed the sender;
+    # a farmer takes delivery of chicks and feed and a member of staff is paid,
+    # and the log has to be able to say so. Kept in step with
+    # notification.comm_sources.PARTY_TYPES.
+    PARTY_TYPE_CHOICES = [("customer", "Customer"), ("supplier", "Supplier"),
+                          ("farmer", "Farmer"), ("employee", "Employee")]
 
     party_type = models.CharField(max_length=10, choices=PARTY_TYPE_CHOICES, blank=True)
     party_id = models.PositiveIntegerField(null=True, blank=True)

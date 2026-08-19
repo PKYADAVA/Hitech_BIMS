@@ -7,7 +7,7 @@
 <div class="page-header">
     <div class="page-header-main">
       <div class="page-header-title"><i class="fas fa-paper-plane"></i> SMS Transaction</div>
-      <div class="page-header-subtitle">Send templated SMS to customers/suppliers from ERP documents</div>
+      <div class="page-header-subtitle">Send templated SMS to customers, suppliers, farmers and staff from ERP documents</div>
     </div>
 </div>
 
@@ -34,14 +34,13 @@
       </div>
       <div class="col-md-3">
         <label class="form-label" id="party-label">Customer</label>
-        <select class="form-select" id="party-customer">
+        {% for key, label, rows in party_lists %}
+        <select class="form-select party-select {% if not forloop.first %}d-none{% endif %}"
+                id="party-{{ key }}" data-party-type="{{ key }}">
           <option value="">-All-</option>
-          {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+          {% for id, name in rows %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
         </select>
-        <select class="form-select d-none" id="party-supplier">
-          <option value="">-All-</option>
-          {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-        </select>
+        {% endfor %}
       </div>
       <div class="col-md-3">
         <label class="form-label">Template <span class="text-danger">*</span></label>
@@ -132,6 +131,10 @@ $(function () {
 
   // escapeHtml() provided globally by main.js
 
+  const PARTY_LABELS = {
+    {% for key, label, rows in party_lists %}"{{ key }}": "{{ label|escapejs }}",{% endfor %}
+  };
+
   function isAllModules() {
     return $("#module").val() === "";
   }
@@ -145,7 +148,7 @@ $(function () {
   // for "All" and no party filter is sent.
   function partyValue() {
     if (isAllModules()) return "";
-    return partyType() === "supplier" ? $("#party-supplier").val() : $("#party-customer").val();
+    return $("#party-" + partyType()).val() || "";
   }
 
   // Rebuild the Template <select>'s actual <option> elements for the chosen
@@ -175,18 +178,16 @@ $(function () {
 
   $("#module").on("change", function () {
     const all = isAllModules();
-    if (all) {
-      // Keep the customer <select> visible (disabled, forced to "-All-") so
-      // the filter row doesn't leave a blank gap where the dropdown was.
-      $("#party-label").text("Party");
-      $("#party-customer").removeClass("d-none").prop("disabled", true).val("");
-      $("#party-supplier").addClass("d-none").prop("disabled", false);
-    } else {
-      const supplier = partyType() === "supplier";
-      $("#party-label").text(supplier ? "Supplier" : "Customer");
-      $("#party-customer").prop("disabled", false).toggleClass("d-none", supplier);
-      $("#party-supplier").prop("disabled", false).toggleClass("d-none", !supplier);
-    }
+    // One <select> per party type, only ever one of them on screen. "All"
+    // spans several party tables at once, so it shows the first, disabled and
+    // forced to "-All-", rather than leaving a blank gap in the filter row.
+    const shown = all ? "customer" : partyType();
+    $(".party-select").each(function () {
+      const mine = $(this).data("party-type") === shown;
+      $(this).toggleClass("d-none", !mine).prop("disabled", all && mine);
+      if (!mine || all) $(this).val("");
+    });
+    $("#party-label").text(all ? "Party" : (PARTY_LABELS[shown] || "Party"));
     refreshTemplateOptions();
   });
 
