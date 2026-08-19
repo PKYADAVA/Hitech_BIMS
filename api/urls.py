@@ -42,9 +42,9 @@ from hr.api_write import write_urls as hr_write_urls
 from purchase.api import register as register_purchase
 from purchase.api_write import write_urls as purchase_write_urls
 from sales.api import CustomerBalanceView
-from user.api import (AppVersionView, DashboardWidgetsView, RoleMobileModuleView,
-                      RoleModuleView, RolesAccessView, RoleView, UserCreateView,
-                      UserRolesView)
+from user.api import (AppVersionView, DashboardWidgetsView, MobileReportLinkView,
+                      RoleMobileModuleView, RoleModuleView, RolesAccessView, RoleView,
+                      UserCreateView, UserRolesView)
 from user.api import register as register_user
 from sales.api import register as register_sales
 from sales.api_write import write_urls as sales_write_urls
@@ -151,6 +151,7 @@ urlpatterns = [
     path("dashboard-widgets", DashboardWidgetsView.as_view(), name="dashboard-widgets"),
     # Sideload update check — deliberately open (see AppVersionView).
     path("app-version", AppVersionView.as_view(), name="app-version"),
+    path("mobile-report-link", MobileReportLinkView.as_view(), name="mobile-report-link"),
     # The phone reporting what it is still holding, for the admin monitor.
     path("sync/heartbeat", SyncHeartbeatView.as_view(), name="sync-heartbeat"),
     # What a customer owes, for a form raising a document against them.

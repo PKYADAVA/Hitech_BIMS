@@ -19,6 +19,7 @@ import { REPORT_TABS } from "@/api/permissions";
 import { AppIcon } from "@/components/AppIcon";
 import { Card, SectionHeader } from "@/components/ui";
 import { MODULES, ModuleKey } from "@/config/catalog";
+import { openReport } from "@/navigation/openReport";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, spacing, type, withAlpha } from "@/theme";
 
@@ -27,6 +28,7 @@ import { makeStyles, radius, spacing, type, withAlpha } from "@/theme";
 export type ReportsStackParams = {
   ReportsHub: undefined;
   Report: { title: string; path: string };
+  ReportWebView: { title: string; webReportName: string };
 };
 
 type Props = NativeStackScreenProps<ReportsStackParams, "ReportsHub">;
@@ -71,9 +73,7 @@ export function ReportsHubScreen({ navigation }: Props) {
               <Pressable
                 key={rep.key}
                 style={[styles.row, i > 0 && styles.rowDivider]}
-                onPress={() =>
-                  navigation.navigate("Report", { title: rep.title, path: rep.path })
-                }
+                onPress={() => openReport(navigation.navigate as (s: string, p: unknown) => void, rep)}
                 accessibilityRole="button"
               >
                 <View style={[styles.icon, { backgroundColor: withAlpha(mod.color, 0.14) }]}>

@@ -22,6 +22,8 @@ import { DailyEntryGridScreen } from "@/screens/DailyEntryGridScreen";
 import { DocumentFormScreen } from "@/screens/DocumentFormScreen";
 import { FarmCaptureFillScreen } from "@/screens/FarmCaptureFillScreen";
 import { FarmCaptureFormScreen } from "@/screens/FarmCaptureFormScreen";
+import { EggPurchaseFormScreen } from "@/screens/EggPurchaseFormScreen";
+import { GeneralPurchaseFormScreen } from "@/screens/GeneralPurchaseFormScreen";
 import { FarmerFarmSetupRequestFormScreen } from "@/screens/FarmerFarmSetupRequestFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
@@ -33,6 +35,7 @@ import { RecordDetailScreen } from "@/screens/RecordDetailScreen";
 import { ManageAccessScreen } from "@/screens/ManageAccessScreen";
 import { NotificationsScreen } from "@/screens/NotificationsScreen";
 import { ReportScreen } from "@/screens/ReportScreen";
+import { ReportWebViewScreen } from "@/screens/ReportWebViewScreen";
 import { SyncStatusChip } from "@/components/SyncStatusChip";
 import { SyncCenterScreen } from "@/screens/SyncCenterScreen";
 import { ReportsHubScreen, ReportsStackParams } from "@/screens/ReportsHubScreen";
@@ -212,10 +215,14 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="FarmCaptureForm" component={FarmCaptureFormScreen} />
       <ModuleStack.Screen name="FarmCaptureFill" component={FarmCaptureFillScreen} />
       <ModuleStack.Screen name="FarmerFarmSetupRequestForm" component={FarmerFarmSetupRequestFormScreen} />
+      <ModuleStack.Screen name="EggPurchaseForm" component={EggPurchaseFormScreen} />
+      <ModuleStack.Screen name="GeneralPurchaseForm" component={GeneralPurchaseFormScreen} />
       <ModuleStack.Screen name="SupervisorTripForm" component={SupervisorTripFormScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />
+      <ModuleStack.Screen name="ReportWebView" component={ReportWebViewScreen}
+        options={{ headerShown: false }} />
       <ModuleStack.Screen name="ManageAccess" component={ManageAccessScreen} />
     </ModuleStack.Navigator>
     {/* One bar for the whole module, so pushing a list or a form keeps it. */}
@@ -264,6 +271,11 @@ function ReportsStack() {
         name="Report"
         component={ReportScreen}
         options={({ route }) => ({ title: (route.params as any)?.title ?? "Report" })}
+      />
+      <ReportsStackNav.Screen
+        name="ReportWebView"
+        component={ReportWebViewScreen}
+        options={{ headerShown: false }}
       />
     </ReportsStackNav.Navigator>
   );

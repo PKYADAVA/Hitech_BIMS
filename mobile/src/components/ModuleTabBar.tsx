@@ -38,12 +38,27 @@ export function ModuleTabBar({ moduleKey }: { moduleKey: ModuleKey }) {
     return (route?.state?.index ?? 0) === 0;
   });
 
+  // A report opened full-screen (see ReportWebViewScreen) is a wide desktop
+  // table fighting for phone width already — this bar and the header both
+  // cost it real estate for no reason a report screen needs, so it hides
+  // itself the same way the header does rather than the report screen
+  // having to know this bar exists to ask.
+  const onReportWebView = useNavigationState((state) => {
+    const route = state?.routes?.[state.index ?? 0];
+    const nested = route?.state as { index?: number; routes?: { name: string }[] } | undefined;
+    return nested?.routes?.[nested.index ?? 0]?.name === "ReportWebView";
+  });
+
   const shortcut = MODULE_SHORTCUT[moduleKey];
   const canTab = usePermissionsStore((s) => s.canTab);
   // Same rule the hub tiles use: no tab mapping means the module gate is the
   // only gate, otherwise the screen needs its own tab.
   const shortcutTab = shortcut ? RESOURCE_TABS[shortcut.resourceKey] : undefined;
   const showShortcut = !!shortcut && (!shortcutTab || canTab(shortcutTab));
+
+  // All hooks above must run every render regardless of this — only the JSX
+  // is skipped.
+  if (onReportWebView) return null;
 
   const items: { key: string; label: string; icon: IconName; on: boolean; go: () => void }[] = [
     {

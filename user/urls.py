@@ -48,5 +48,6 @@ urlpatterns = [
     path('user_analytics/', views.user_analytics, name='user_analytics'),
      path('analytics/data/', views.user_analytics_data, name='user_analytics_data'),
     path('download/app-release/latest/', views.app_release_download, name='app_release_download'),
+    path('mobile-login/', views.mobile_login_link, name='mobile_login_link'),
 
 ]

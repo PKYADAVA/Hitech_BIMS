@@ -358,3 +358,38 @@ class AppVersionView(V1ViewMixin, APIView):
             "force_update": latest.force_update,
             "notes": latest.release_notes,
         })
+
+
+class MobileReportLinkView(V1ViewMixin, APIView):
+    """GET /api/v1/mobile-report-link?report=<url name> — a ~60-second magic
+    link that logs the calling (JWT-authenticated) user into a normal
+    session-cookie one and lands them on that report, for the in-app
+    browser. See user.views.mobile_login_link, which redeems it.
+
+    ``report`` is a Django URL name, not a path — the allowlist in
+    user.views.MOBILE_REPORT_URL_NAMES is the single source of truth for
+    what the in-app browser may ever open, and reverse() raising on
+    anything else means there is no path to guess or forge into.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from urllib.parse import urlencode
+
+        from django.core import signing
+        from django.urls import NoReverseMatch, reverse
+
+        from .views import MOBILE_LOGIN_SALT, MOBILE_REPORT_URL_NAMES
+
+        name = request.query_params.get("report") or ""
+        if name not in MOBILE_REPORT_URL_NAMES:
+            return Response({"error": "Unknown report."}, status=400)
+        try:
+            path = reverse(name)
+        except NoReverseMatch:
+            return Response({"error": "Unknown report."}, status=400)
+        signer = signing.TimestampSigner(salt=MOBILE_LOGIN_SALT)
+        token = signer.sign(str(request.user.pk))
+        login_path = reverse("mobile_login_link") + "?" + urlencode({"token": token, "next": path})
+        return Response({"url": request.build_absolute_uri(login_path)})

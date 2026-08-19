@@ -21,7 +21,8 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
  */
 const ROW_FORM_SCREEN: Record<string,
   "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"
-  | "SupervisorTripForm" | "BatchForm" | "FarmerFarmSetupRequestForm"> = {
+  | "SupervisorTripForm" | "BatchForm" | "FarmerFarmSetupRequestForm" | "EggPurchaseForm"
+  | "GeneralPurchaseForm"> = {
   // The shed picker has to know which units are free, and the batch number is
   // minted server-side — neither fits the generic form.
   "broiler-batches": "BatchForm",
@@ -35,6 +36,14 @@ const ROW_FORM_SCREEN: Record<string,
   // GPS pin, shed rows and KYC scans staged for office approval — none of
   // which the generic form has a shape for.
   "broiler-farmer-farm-setup-request": "FarmerFarmSetupRequestForm",
+  // One supplier delivery over several egg-item lines plus freight/TCS, saved
+  // in one call — the same document shape as Medicine, with a running Bill
+  // Summary the generic form has no layout for.
+  "hatchery-egg-purchases": "EggPurchaseForm",
+  // One supplier bill over several item lines, each landing on a warehouse or
+  // straight onto a farm's flock, plus TDS/bag tracking and reference-document
+  // scans — none of which the generic document form has a shape for.
+  "purchase-general-purchases": "GeneralPurchaseForm",
 };
 
 /**

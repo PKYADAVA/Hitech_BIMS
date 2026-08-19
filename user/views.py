@@ -1646,3 +1646,81 @@ def app_release_download(request):
     if latest is None or not latest.apk_file:
         raise Http404("No release published yet.")
     return redirect(latest.apk_file.url)
+
+
+# The app's JWT login and the web reports' session-cookie one are two
+# different systems; this is the bridge between them — see
+# user.api.MobileReportLinkView, which mints the token this view redeems.
+MOBILE_LOGIN_SALT = "mobile-report-link"
+# Long enough to cover the phone's own request + the in-app browser opening
+# the link; short enough that a link leaked out of the app (a screenshot, a
+# forwarded message) is useless within a minute of being minted.
+MOBILE_LOGIN_MAX_AGE = 60
+
+# Every report the in-app browser is allowed to land on. Checked against
+# reverse(name), not against the raw path a caller sent, so this can never
+# become an open redirect no matter what `next` contains.
+MOBILE_REPORT_URL_NAMES = [
+    # Broiler
+    "live_flock_summary_report", "day_record_report", "broiler_batch_report",
+    "chicks_placement_report", "feed_dispatch_stock_report", "lifting_report",
+    "farm_detailed_daily_entry_report", "production_pl_report", "production_cost_report",
+    "farmer_farm_report", "batch_wise_feed_scheduling_report", "gc_realization_report",
+    # Hatchery
+    "hatchery_report", "egg_purchase_report", "incubation_report",
+    "delivery_challan_report", "chick_sale_report",
+    # Account
+    "ledger_report", "profit_loss_report", "balance_sheet_report",
+    "cost_center_report", "branch_summary_report", "journal_voucher_report",
+    # Inventory
+    "item_ledger_report", "stock_transfer_report", "stock_report",
+    "item_summary_report", "negative_stock_report", "inventory_adjustment_report",
+    "inventory_received_report", "inventory_issued_report",
+    # Sales
+    "customer_ledger", "customer_balance",
+    # Purchase
+    "purchase_report", "supplier_ledger", "supplier_balance",
+    # HR
+    "supervisor_trip_report",
+]
+
+
+def _is_allowed_report_path(path):
+    for name in MOBILE_REPORT_URL_NAMES:
+        try:
+            if path == reverse(name):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def mobile_login_link(request):
+    """GET /mobile-login/?token=<signed>&next=<report path> — redeems a
+    magic link minted for the phone's already-authenticated user (see
+    user.api.MobileReportLinkView) and lands them on the report itself.
+
+    No password crosses from the app to the browser: the token only proves
+    "the app already knows who this is," logging that same user into this
+    browser's own session same as a normal login would. Anything wrong with
+    the token (missing, expired, forged, tampered) or the target (not on the
+    report allowlist) just bounces to the ordinary login page rather than
+    erroring — the token is single-purpose, so there is nothing to retry
+    except asking the app for a fresh one.
+    """
+    from django.core import signing
+    from django.http import Http404
+
+    next_url = request.GET.get("next") or ""
+    if not _is_allowed_report_path(next_url):
+        raise Http404("Unknown report.")
+    signer = signing.TimestampSigner(salt=MOBILE_LOGIN_SALT)
+    try:
+        user_id = signer.unsign(request.GET.get("token") or "", max_age=MOBILE_LOGIN_MAX_AGE)
+    except signing.BadSignature:
+        return redirect("login")
+    user = User.objects.filter(pk=user_id, is_active=True).first()
+    if user is None:
+        return redirect("login")
+    auth_login(request, user)
+    return redirect(next_url)

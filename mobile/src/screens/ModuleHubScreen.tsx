@@ -5,6 +5,7 @@ import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { REPORT_TABS, RESOURCE_TABS } from "@/api/permissions";
 import { Card, IconCircle, SectionHeader } from "@/components/ui";
 import { MODULES, ModuleKey, RESOURCES } from "@/config/catalog";
+import { openReport } from "@/navigation/openReport";
 import { ModuleStackParams } from "@/navigation/types";
 import { Overview, useOverview } from "@/api/stats";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -142,7 +143,7 @@ export function ModuleHubScreen({ navigation, moduleKey }: Props) {
                 key={rep.key}
                 padded={false}
                 style={{ ...styles.tile, width: tileW }}
-                onPress={() => navigation.navigate("Report", { title: rep.title, path: rep.path })}
+                onPress={() => openReport(navigation.navigate as (s: string, p: unknown) => void, rep)}
               >
                 <IconCircle icon={rep.icon} color={mod.color} size={40} />
                 <Text style={styles.tileTitle} numberOfLines={2}>

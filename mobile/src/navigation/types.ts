@@ -19,6 +19,8 @@ export type ModuleStackParams = {
   };
   SmsSend: { row: Row };
   Report: { title: string; path: string };
+  /** The same report's full web page, opened in-app — see ReportWebViewScreen. */
+  ReportWebView: { title: string; webReportName: string };
   ManageAccess: undefined;
   /** Bespoke Bird Sale form (sale-type toggle, farm-derived batch/farmer). */
   BirdSaleForm: { mode: "create" | "edit"; row?: Row };
@@ -44,6 +46,13 @@ export type ModuleStackParams = {
   FarmerFarmSetupRequestForm: { row?: Row } | undefined;
   /** `ending` opens the trip at the closing evidence it still needs. */
   SupervisorTripForm: { row?: Row; ending?: boolean } | undefined;
+  /** `row` corrects a saved egg purchase, loaded fresh (its list row is only
+   *  a summary — item_names, not the full item rows this form edits). */
+  EggPurchaseForm: { row?: Row } | undefined;
+  /** `row` corrects a saved general purchase, loaded fresh — same reason as
+   *  EggPurchaseForm, plus the destination toggle and TDS/bag fields the
+   *  list's summary row doesn't carry. */
+  GeneralPurchaseForm: { row?: Row } | undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */
   DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row };
 };

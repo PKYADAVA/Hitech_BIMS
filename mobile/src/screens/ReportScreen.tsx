@@ -18,7 +18,13 @@ interface ReportData {
   rows?: Record<string, unknown>[];
 }
 
-/** Generic report renderer: totals as stat tiles + one card per row. */
+/**
+ * Generic report renderer: totals as stat tiles + one card per row.
+ *
+ * Reached only by reports with no web page of their own (openReport() sends
+ * anything with a webReportName straight to ReportWebView instead) — so this
+ * is the report itself for those, not a summary in front of a fuller one.
+ */
 export function ReportScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = useStyles();

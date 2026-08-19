@@ -91,7 +91,24 @@ export interface ReportLink {
   key: string;
   title: string;
   icon: string;
-  path: string;
+  /**
+   * The mobile JSON API path (/reports/...), for the native card-summary
+   * screen — ReportScreen. A handful of reports still carry this, kept from
+   * before every report got a web page to link to instead, but it's unused
+   * dead weight now: openReport() always prefers `webReportName` when both
+   * are set. Only matters for a report with no web page of its own at all —
+   * none currently exist (the one that was, Mortality Trend, was removed
+   * from this list rather than left stuck on the native summary).
+   */
+  path?: string;
+  /**
+   * The Django URL name of this report's full web page — what opening this
+   * report sends to /api/v1/mobile-report-link (see openReport()). Matches
+   * user.views.MOBILE_REPORT_URL_NAMES exactly. Every report in this list
+   * has one; this is only optional to keep `path`-only entries type-valid if
+   * a native-only report ever needs adding back.
+   */
+  webReportName?: string;
 }
 
 /** A tool the module exposes — a hub tile that opens a bespoke screen route. */
@@ -1927,13 +1944,30 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       },
     ],
     reports: [
-      { key: "live-flock", title: "Live Flock Summary", icon: "bird", path: "/reports/live-flock" },
-      { key: "batch-summary", title: "Batch History", icon: "file-document-outline", path: "/reports/batch-summary" },
-      { key: "chicks-placement", title: "Chicks Placement Report", icon: "bird", path: "/reports/chicks-placement" },
-      { key: "day-record", title: "Day Record", icon: "calendar-today", path: "/reports/day-record" },
-      { key: "feed-dispatch", title: "Feed Dispatch & Stock", icon: "sprout", path: "/reports/feed-dispatch" },
-      { key: "lifting", title: "Lifting", icon: "truck-delivery", path: "/reports/lifting" },
-      { key: "mortality-trend", title: "Mortality Trend", icon: "📉", path: "/reports/mortality-trend" },
+      { key: "live-flock", title: "Live Flock Summary", icon: "bird", path: "/reports/live-flock",
+        webReportName: "live_flock_summary_report" },
+      { key: "batch-summary", title: "Batch History", icon: "file-document-outline", path: "/reports/batch-summary",
+        webReportName: "broiler_batch_report" },
+      { key: "chicks-placement", title: "Chicks Placement Report", icon: "bird", path: "/reports/chicks-placement",
+        webReportName: "chicks_placement_report" },
+      { key: "day-record", title: "Day Record", icon: "calendar-today", path: "/reports/day-record",
+        webReportName: "day_record_report" },
+      { key: "feed-dispatch", title: "Feed Dispatch & Stock", icon: "sprout", path: "/reports/feed-dispatch",
+        webReportName: "feed_dispatch_stock_report" },
+      { key: "lifting", title: "Lifting", icon: "truck-delivery", path: "/reports/lifting",
+        webReportName: "lifting_report" },
+      { key: "farm-detailed-daily-entry", title: "Farm Detailed Daily Entry Report", icon: "table-large",
+        webReportName: "farm_detailed_daily_entry_report" },
+      { key: "production-pl", title: "Production P&L Report", icon: "chart-line",
+        webReportName: "production_pl_report" },
+      { key: "production-cost", title: "Production Cost Report", icon: "cash",
+        webReportName: "production_cost_report" },
+      { key: "farmer-farm", title: "Farmer & Farm Report", icon: "account-group",
+        webReportName: "farmer_farm_report" },
+      { key: "batch-wise-feed-scheduling", title: "Batch Wise Feed Scheduling", icon: "calendar-clock",
+        webReportName: "batch_wise_feed_scheduling_report" },
+      { key: "gc-realization", title: "GC Realization Report", icon: "chart-donut",
+        webReportName: "gc_realization_report" },
     ],
   },
   hatchery: {
@@ -1968,11 +2002,16 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       },
     ],
     reports: [
-      { key: "hatch-performance", title: "Hatch Performance", icon: "chart-bar", path: "/reports/hatch-performance" },
-      { key: "egg-intake", title: "Egg Purchase", icon: "basket", path: "/reports/egg-intake" },
-      { key: "incubation", title: "Incubation", icon: "egg", path: "/reports/incubation" },
-      { key: "delivery-challan", title: "Delivery Challan", icon: "truck", path: "/reports/delivery-challan" },
-      { key: "chick-sale", title: "Chick Sale", icon: "cash-register", path: "/reports/chick-sale" },
+      { key: "hatch-performance", title: "Hatch Register Report", icon: "chart-bar", path: "/reports/hatch-performance",
+        webReportName: "hatchery_report" },
+      { key: "egg-intake", title: "Egg Purchase Report", icon: "basket", path: "/reports/egg-intake",
+        webReportName: "egg_purchase_report" },
+      { key: "incubation", title: "Incubation Report", icon: "egg", path: "/reports/incubation",
+        webReportName: "incubation_report" },
+      { key: "delivery-challan", title: "Delivery Challan Report", icon: "truck", path: "/reports/delivery-challan",
+        webReportName: "delivery_challan_report" },
+      { key: "chick-sale", title: "Chick Sale Report", icon: "cash-register", path: "/reports/chick-sale",
+        webReportName: "chick_sale_report" },
     ],
   },
   sms: {
@@ -2024,6 +2063,14 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         ],
       },
     ],
+    reports: [
+      { key: "ledger", title: "Ledger Report", icon: "book-open-variant", webReportName: "ledger_report" },
+      { key: "profit-loss", title: "Profit & Loss Report", icon: "chart-line", webReportName: "profit_loss_report" },
+      { key: "balance-sheet", title: "Balance Sheet", icon: "scale-balance", webReportName: "balance_sheet_report" },
+      { key: "cost-center", title: "Cost Center Report", icon: "sitemap", webReportName: "cost_center_report" },
+      { key: "branch-summary", title: "Branch Summary Report", icon: "office-building", webReportName: "branch_summary_report" },
+      { key: "journal-voucher", title: "Journal Voucher Report", icon: "file-document-multiple", webReportName: "journal_voucher_report" },
+    ],
   },
   inventory: {
     key: "inventory",
@@ -2055,6 +2102,16 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
         ],
       },
     ],
+    reports: [
+      { key: "item-ledger", title: "Item Ledger Report", icon: "book-open-variant", webReportName: "item_ledger_report" },
+      { key: "stock-transfer", title: "Stock Transfer Report", icon: "swap-horizontal", webReportName: "stock_transfer_report" },
+      { key: "stock", title: "Stock Report", icon: "warehouse", webReportName: "stock_report" },
+      { key: "item-summary", title: "Item Summary Report", icon: "format-list-bulleted", webReportName: "item_summary_report" },
+      { key: "negative-stock", title: "Negative Stock Report", icon: "alert-circle-outline", webReportName: "negative_stock_report" },
+      { key: "inventory-adjustment", title: "Inventory Adjustment Report", icon: "tune", webReportName: "inventory_adjustment_report" },
+      { key: "inventory-received", title: "Inventory Received Report", icon: "tray-arrow-down", webReportName: "inventory_received_report" },
+      { key: "inventory-issued", title: "Inventory Issued Report", icon: "tray-arrow-up", webReportName: "inventory_issued_report" },
+    ],
   },
   sales: {
     key: "sales",
@@ -2085,6 +2142,10 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "sales-shipping-addresses",
         ],
       },
+    ],
+    reports: [
+      { key: "customer-ledger", title: "Customer Ledger", icon: "book-open-variant", webReportName: "customer_ledger" },
+      { key: "customer-balance", title: "Customer Balance", icon: "cash-multiple", webReportName: "customer_balance" },
     ],
   },
   purchase: {
@@ -2120,6 +2181,11 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "purchase-shipping-addresses",
         ],
       },
+    ],
+    reports: [
+      { key: "purchase", title: "Purchase Report", icon: "cart-outline", webReportName: "purchase_report" },
+      { key: "supplier-ledger", title: "Supplier Ledger", icon: "book-open-variant", webReportName: "supplier_ledger" },
+      { key: "supplier-balance", title: "Supplier Balance", icon: "cash-multiple", webReportName: "supplier_balance" },
     ],
   },
   hr: {
@@ -2164,6 +2230,9 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "hr-shifts",
         ],
       },
+    ],
+    reports: [
+      { key: "supervisor-trip", title: "Supervisor Trip Report", icon: "map-marker-path", webReportName: "supervisor_trip_report" },
     ],
   },
   change_requests: {
