@@ -381,3 +381,96 @@ class OneValuationForOneFlockTests(TestCase):
         self.assertEqual(f["available_birds"], Decimal("0"))
         self.assertEqual(f["available_weight"], Decimal("0.00"))
         self.assertEqual(f["total_live_weight"], Decimal("2090.00"))
+
+
+class PerBirdCountsTheBirdsStillStandingTests(TestCase):
+    """The head count the Farmer and Management rows divide by.
+
+    Each row contradicted itself. Cost per *kilo* divided by sold plus
+    standing weight — the money was spent on the birds that left and the birds
+    still here alike — while cost per *bird* divided by the sold head count
+    alone, so one row spread one total over two different flocks. Before the
+    first lifting that count is nought and the column read 0.00: a flock that
+    had eaten a lakh of feed, reported as costing nothing a bird.
+
+    The Standard row is untouched by all of this. It rears and sells the same
+    birds, nothing ever stands, and its two counts are one number.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        region = Region.objects.create(description="East")
+        branch = Branch.objects.create(branch_name="Akbarpur", region=region,
+                                       prefix="AKB")
+        self.sup = Supervisor.objects.create(branch=branch, name="R. Verma")
+        farmer = Farmer.objects.create(farmer_name="S. Yadav")
+        self.farm = BroilerFarm.objects.create(
+            branch=branch, supervisor=self.sup, farmer=farmer, region=region,
+            line="L1", farm_name="Yadav Farm", farm_capacity=5000)
+        self.batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-1",
+            start_date=self.today - timedelta(days=30))
+
+    def rows(self, **costing):
+        from broiler.services.gc_realization import build_gc_realization
+
+        bc = {"chicks_placed": Decimal("1000"), "sold_birds": Decimal("600"),
+              "sold_weight": Decimal("1200"), "avg_body_weight": Decimal("2.00"),
+              "feed_consumed": Decimal("3000"), "total_mort_pct": Decimal("5"),
+              "mortality": Decimal("50"), "med_cost": Decimal("0"),
+              "placement_date": self.today - timedelta(days=30)}
+        bc.update(costing)
+        report = {"batch_costing": bc}
+        return {r["key"]: r["values"]
+                for r in build_gc_realization(self.batch, report, report, None)["scenarios"]}
+
+    def test_the_count_is_what_left_plus_what_is_still_standing(self):
+        f = self.rows()["farmer"]
+        self.assertEqual(f["birds_sold"], Decimal("600"))
+        self.assertEqual(f["available_birds"], Decimal("350"))
+        self.assertEqual(f["cost_birds"], Decimal("950"))
+
+    def test_per_bird_and_per_kilo_now_describe_the_same_flock(self):
+        """The test that would have caught it: one row, one total, two
+        denominators that have to be the same set of birds."""
+        f = self.rows()["farmer"]
+        self.assertEqual(f["production_cost_per_bird"],
+                         (f["total_production_cost"] / f["cost_birds"])
+                         .quantize(Decimal("0.0001")))
+        self.assertEqual(f["production_cost_per_kg"],
+                         (f["total_production_cost"] / f["total_live_weight"])
+                         .quantize(Decimal("0.0001")))
+
+    def test_a_flock_that_has_sold_nothing_still_costs_something_a_bird(self):
+        """It read 0.00 — division by a head count of nought. The medicine
+        gives the flock a cost without needing a scheme, so what is being
+        measured here is the denominator and not the rates."""
+        f = self.rows(sold_birds=Decimal("0"), sold_weight=Decimal("0"),
+                      med_cost=Decimal("9500"), valued_at=Decimal("1.40"))["farmer"]
+        self.assertEqual(f["birds_sold"], Decimal("0"))
+        self.assertEqual(f["cost_birds"], Decimal("950"))
+        self.assertEqual(f["total_production_cost"], Decimal("9500.00"))
+        self.assertEqual(f["production_cost_per_bird"], Decimal("10.0000"))
+
+    def test_feed_per_bird_counts_them_too(self):
+        """Feed went into the standing birds as much as the lifted ones."""
+        f = self.rows()["farmer"]
+        self.assertEqual(f["feed_required_per_bird"],
+                         (f["total_feed_required"] / f["cost_birds"])
+                         .quantize(Decimal("0.0001")))
+
+    def test_the_standard_row_divides_by_the_birds_it_reared(self):
+        """Standard rears and sells the same flock, so its two counts are one
+        number and the change cannot move it. (Its available_birds is only
+        meaningful once a scheme gives it a survivor count to work from —
+        without one every standard figure is zero.)"""
+        std = self.rows()["standard"]
+        self.assertEqual(std["cost_birds"], std["birds_sold"])
+
+    def test_a_fully_lifted_flock_is_unmoved(self):
+        """Nothing standing, so the two counts coincide and every per-bird
+        figure is what it always was — which is what keeps a settled batch
+        exactly where it was."""
+        f = self.rows(sold_birds=Decimal("950"), sold_weight=Decimal("2090"))["farmer"]
+        self.assertEqual(f["available_birds"], Decimal("0"))
+        self.assertEqual(f["cost_birds"], f["birds_sold"])

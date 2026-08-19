@@ -223,6 +223,9 @@ def build_gc_realization(batch, report, management_report, scheme):
         med_qty=placed, med_rate=std_med_rate,
         admin_qty=placed, admin_rate=std_admin_rate,
         birds_sold=std_survivors, live_weight=std_live_weight,
+        # Standard rears and sells the same birds — nothing stands — so what
+        # left and what the money was spent on are one number here.
+        cost_birds=std_survivors,
     )
 
     # --- Farmer Realization: real performance, standard rates --------------
@@ -241,6 +244,7 @@ def build_gc_realization(batch, report, management_report, scheme):
         med_qty=placed, med_rate=farmer_med_rate, med_amount=real_med_cost_farmer,
         admin_qty=placed, admin_rate=std_admin_rate,
         birds_sold=actual_survivors, live_weight=actual_live_weight,
+        cost_birds=actual_survivors + actual_available_birds,
     )
 
     # --- Management Realization: real performance, real cost ---------------
@@ -280,6 +284,7 @@ def build_gc_realization(batch, report, management_report, scheme):
         med_qty=placed, med_rate=real_med_rate, med_amount=real_med_cost,
         admin_qty=placed, admin_rate=std_admin_rate,
         birds_sold=actual_survivors, live_weight=actual_live_weight,
+        cost_birds=actual_survivors + actual_available_birds,
     )
 
     # The weight each column's growing charge is actually earned on. Set here,
@@ -418,7 +423,8 @@ def build_gc_realization(batch, report, management_report, scheme):
         column["market_sale_profit"] = (column["total_market_revenue"]
                                         - column["total_production_cost"]).quantize(Q2)
         column["profit_per_kg"] = _div(column["market_sale_profit"], column["live_weight"])
-        column["profit_per_bird"] = _div(column["market_sale_profit"], column["birds_sold"])
+        column["profit_per_bird"] = _div(column["market_sale_profit"],
+                                         column["cost_birds"])
 
     for column in (standard, farmer, management):
         # What the company actually keeps: the market sale profit after
@@ -470,7 +476,19 @@ def std_mort_no(placed, std_mort_pct):
 
 def _cost_column(*, chick_qty, chick_rate, feed_qty, feed_rate, med_qty, med_rate,
                   admin_qty, admin_rate, birds_sold, live_weight,
+                  cost_birds=None,
                   chick_amount=None, feed_amount=None, med_amount=None):
+    """One costing lens on a flock.
+
+    ``birds_sold`` is what left; ``cost_birds`` is what the money was spent on,
+    which is what left *plus* what is still standing. They are the same number
+    for a flock that has been cleared out, and only then. Splitting them fixes
+    a row that contradicted itself: cost per kilo already divided by sold plus
+    standing weight, while cost per bird divided by the sold head count alone,
+    so the same row spread the same total over two different flocks. Before
+    the first lifting the head count was nought and the column read 0.00 — a
+    flock that had eaten a lakh of feed reported as costing nothing a bird.
+    """
     chick_amount = (chick_amount if chick_amount is not None
                     else (chick_qty * chick_rate).quantize(Q2))
     feed_amount = (feed_amount if feed_amount is not None
@@ -479,7 +497,8 @@ def _cost_column(*, chick_qty, chick_rate, feed_qty, feed_rate, med_qty, med_rat
                   else (med_qty * med_rate).quantize(Q2))
     admin_amount = (admin_qty * admin_rate).quantize(Q2)
     total_cost = (chick_amount + feed_amount + med_amount + admin_amount).quantize(Q2)
-    feed_per_bird = _div(feed_qty, birds_sold, Q4)
+    cost_birds = birds_sold if cost_birds is None else cost_birds
+    feed_per_bird = _div(feed_qty, cost_birds, Q4)
     return {
         "chick_qty": chick_qty, "chick_rate": chick_rate, "chick_amount": chick_amount,
         "feed_qty": feed_qty, "feed_rate": feed_rate, "feed_amount": feed_amount,
@@ -487,9 +506,10 @@ def _cost_column(*, chick_qty, chick_rate, feed_qty, feed_rate, med_qty, med_rat
         "med_qty": med_qty, "med_rate": med_rate, "med_amount": med_amount,
         "admin_rate": admin_rate, "admin_amount": admin_amount,
         "birds_sold": birds_sold, "live_weight": live_weight,
+        "cost_birds": cost_birds,
         "total_production_cost": total_cost,
         "production_cost_per_kg": _div(total_cost, live_weight),
-        "production_cost_per_bird": _div(total_cost, birds_sold),
+        "production_cost_per_bird": _div(total_cost, cost_birds),
     }
 
 
@@ -528,6 +548,9 @@ def _row(column, placed, mort_pct, mort_no, avg_weight, feed_consumed, has_schem
         "breakeven_sale_rate": column["breakeven_sale_rate"],
         "base_gc_rate": column["base_gc_rate"],
         "birds_sold": column["birds_sold"],
+        # The head count the per-bird figures divide by: sold plus standing,
+        # so they spread the cost over the same flock the per-kilo figures do.
+        "cost_birds": column["cost_birds"],
         # What went over a weighbridge, what is still standing, and the two
         # together — the live weight this flock has produced so far, which is
         # what every ratio below and the whole breakeven / GC-payable chain
@@ -633,7 +656,7 @@ PARTICULARS = [
 #: "Chick Cost ₹/bird" describes nothing real).
 ADDITIVE = {
     "chicks_placed", "actual_medicine_cost", "actual_feed_consumption",
-    "mortality_no", "birds_sold", "sold_weight", "available_birds",
+    "mortality_no", "birds_sold", "cost_birds", "sold_weight", "available_birds",
     "available_weight", "total_live_weight", "total_feed_required",
     "total_feed_cost", "total_chick_cost", "total_medicine_cost",
     "total_admin_cost", "total_production_cost", "farmer_gc_income_payable",
@@ -647,12 +670,12 @@ ADDITIVE = {
 #: ``(numerator field, denominator field, decimal places)``.
 DERIVED_TOTALS = {
     "standard_fcr": ("total_feed_required", "total_live_weight", Decimal("0.0001")),
-    "feed_required_per_bird": ("total_feed_required", "birds_sold", Decimal("0.0001")),
+    "feed_required_per_bird": ("total_feed_required", "cost_birds", Decimal("0.0001")),
     "production_cost_per_kg": ("total_production_cost", "total_live_weight", Q4),
-    "production_cost_per_bird": ("total_production_cost", "birds_sold", Q4),
+    "production_cost_per_bird": ("total_production_cost", "cost_birds", Q4),
     "market_price": ("total_market_revenue", "total_live_weight", Decimal("0.0001")),
     "profit_per_kg": ("market_sale_profit", "total_live_weight", Q4),
-    "profit_per_bird": ("market_sale_profit", "birds_sold", Q4),
+    "profit_per_bird": ("market_sale_profit", "cost_birds", Q4),
 }
 
 
