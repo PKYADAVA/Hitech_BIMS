@@ -10,6 +10,14 @@
     <div class="page-header-subtitle">Capture a farm's location and pictures; the farm master keeps the latest</div>
   </div>
   <div class="page-header-right">
+    {% comment %}
+    Straight through to the map: a capture's whole purpose is to put a farm on
+    it, and the person who has just recorded one is the person who wants to see
+    where it landed.
+    {% endcomment %}
+    {% if 'farm_map_planner' in allowed_tabs %}<a class="btn btn-outline-secondary"
+       href="{% url 'farm_map_planner' %}">
+      <i class="fas fa-map-location-dot"></i> Map &amp; Route Planner</a>{% endif %}
     {% if page_perms.add %}<a class="btn btn-primary" href="{% url 'farm_location_capture_add' %}">
       <i class="fas fa-plus"></i> Add</a>{% endif %}
   </div>

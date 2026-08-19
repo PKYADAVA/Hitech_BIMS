@@ -670,6 +670,11 @@ def _branch_to_dict(branch: Branch) -> dict:
         "prefix": branch.prefix,
         "is_active": branch.is_active,
         "is_locked": branch.is_locked,
+        # The head office pin. The Farm Map & Route Planner starts a
+        # supervisor's round here, so a branch nobody has pinned cannot be a
+        # starting point and the planner asks for one instead of guessing.
+        "latitude": branch.latitude,
+        "longitude": branch.longitude,
     }
 
 
@@ -744,6 +749,13 @@ class BranchAPI(BaseAPIView):
                 branch.region = region
                 branch.branch_name = data["branch_name"]
                 branch.prefix = data["prefix"]
+                # Blank clears the pin rather than writing a nought: (0, 0) is
+                # in the Atlantic, and a branch there would route every round
+                # through it.
+                for field in ("latitude", "longitude"):
+                    if field in data:
+                        raw = str(data.get(field) or "").strip()
+                        setattr(branch, field, float(raw) if raw else None)
                 branch.save()
                 cache.delete("branch_list")
             return JsonResponse({"message": "Branch updated"})

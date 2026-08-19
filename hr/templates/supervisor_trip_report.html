@@ -48,6 +48,14 @@
       <button class="btn btn-primary btn-sm" type="submit"><i class="fas fa-filter"></i> Apply</button>
       <a href="{% url 'supervisor_trip_report' %}" class="btn btn-outline-secondary btn-sm">Reset</a>
       <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+      {% comment %}
+      This report says what was driven. The planner is where the next day is
+      laid out, and the two are read together often enough to be one click
+      apart.
+      {% endcomment %}
+      {% if 'farm_map_planner' in allowed_tabs %}
+      <a href="{% url 'farm_map_planner' %}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-map-location-dot"></i> Plan a Route</a>{% endif %}
     </div>
   </form>
 </div>

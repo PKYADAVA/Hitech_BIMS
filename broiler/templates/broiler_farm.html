@@ -11,6 +11,16 @@
       <div class="page-header-title">Manage Broiler Farm</div>
       <div class="page-header-subtitle">Add farmers and manage broiler farms</div>
     </div>
+    {% comment %}
+    The farm master is where a farm's location is kept; the planner is where it
+    is used. One click between them, so somebody correcting a pin can see what
+    it does to a route.
+    {% endcomment %}
+    {% if 'farm_map_planner' in allowed_tabs %}
+    <div class="page-header-right">
+      <a class="btn btn-outline-secondary" href="{% url 'farm_map_planner' %}">
+        <i class="fas fa-map-location-dot"></i> Map &amp; Route Planner</a>
+    </div>{% endif %}
 </div>
 
 <div class="card">

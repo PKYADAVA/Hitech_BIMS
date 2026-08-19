@@ -918,6 +918,85 @@ def _stock_alerts(viewable, filters, user=None):
 # ---------------------------------------------------------------------------
 
 #: key, title, the tab codes that gate it, the page it links to, and its look.
+def _duration(minutes):
+    """"6h 42m" — the way this module writes a travel time."""
+    minutes = int(minutes or 0)
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins:02d}m"
+    return f"{hours}h" if hours else f"{mins}m"
+
+
+def _farm_route(viewable, filters, user=None):
+    """Today's planned round: how far, how long, and what is next.
+
+    The planner's own summary, small enough to read on the way out of the
+    door. It shows a *saved* round rather than calculating one — a dashboard
+    that called a routing provider on every page load would cost money to look
+    at, and the figures here have to match the ones on the route itself
+    anyway.
+
+    "Next visit" is the first stop nobody has checked into yet, which is the
+    only question a supervisor halfway through a day is actually asking.
+    """
+    from broiler.models import Branch, FarmRoute
+    from user.services.scoping import branches_for
+
+    day = filters.get("date") or timezone.localdate()
+    routes = (FarmRoute.objects.filter(date=day)
+              .exclude(status=FarmRoute.STATUS_CANCELLED)
+              .select_related("branch", "supervisor", "trip")
+              .prefetch_related("stops__farm"))
+    allowed = set(branches_for(user, Branch.objects.all())
+                  .values_list("id", flat=True))
+    routes = [r for r in routes
+              if not r.branch_id or r.branch_id in allowed]
+    if filters.get("branch"):
+        routes = [r for r in routes if r.branch_id == filters["branch"]]
+    if filters.get("supervisor"):
+        routes = [r for r in routes if r.supervisor_id == filters["supervisor"]]
+
+    if not routes:
+        return {"stats": [{"label": "Routes today", "value": "0"}],
+                "note": "No round has been planned for this day.",
+                "filters_used": ["date", "branch", "supervisor"]}
+
+    farms = sum(r.farm_count for r in routes)
+    distance = sum(float(r.planned_distance_km or 0) for r in routes)
+    minutes = sum(int(r.planned_minutes or 0) for r in routes)
+    # An estimate anywhere in the day makes the total an estimate, and the
+    # card says so rather than letting a straight-line figure read as a
+    # measured one.
+    estimated = any(r.distance_basis == FarmRoute.BASIS_STRAIGHT for r in routes)
+
+    nxt, nxt_km = None, None
+    for route in sorted(routes, key=lambda r: r.id):
+        for stop in route.stops.all():
+            if stop.kind == "farm" and not stop.visited_at:
+                nxt = stop.label or (stop.farm.farm_name if stop.farm_id else "")
+                nxt_km = float(stop.leg_distance_km or 0)
+                break
+        if nxt:
+            break
+
+    stats = [
+        {"label": "Farms", "value": _num(farms)},
+        {"label": "Distance", "value": f"{distance:,.1f} km",
+         "sub": "straight-line estimate" if estimated else "by road"},
+        {"label": "Estimated time", "value": _duration(minutes)},
+    ]
+    if nxt:
+        stats.append({"label": "Next visit", "value": nxt,
+                      "sub": f"{nxt_km:,.1f} km from the last stop"})
+    else:
+        stats.append({"label": "Next visit", "value": "—",
+                      "sub": "every farm on the round has been reached"})
+    return {"stats": stats,
+            "note": (f"{len(routes)} round{'' if len(routes) == 1 else 's'} planned "
+                     f"for {day.strftime('%d %b %Y')}."),
+            "filters_used": ["date", "branch", "supervisor"]}
+
+
 WIDGETS = [
     ("live_flock", "Live Flock", ("live_flock_summary_report",),
      "live_flock_summary_report", "fa-solid fa-egg", "gs-blue", _live_flock),
@@ -929,6 +1008,12 @@ WIDGETS = [
      "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
     ("sale_overview", "Sale Overview", ("bird_sale_list",),
      "bird_sale_list", "fa-solid fa-receipt", "gs-green", _sale_overview),
+    # Gated on Route History and linking to it, not to the planner: the gate is
+    # an "any of these" test, so a widget that links outside it would show a
+    # card to somebody who cannot open what it points at. What this reads is
+    # saved rounds, which is what Route History shows.
+    ("farm_route", "Farm Route Today", ("route_history",),
+     "route_history", "fa-solid fa-route", "gs-cyan", _farm_route),
     # Two widgets, not one: each answers to its own permission, so a user who
     # may see customer balances and not supplier ones now gets the half they
     # are entitled to instead of a card mixing both.
@@ -975,7 +1060,12 @@ DEFAULT_PANEL_ORDER = (
     # are the same question in three parts — what is on the farms, whether it
     # reported today, and when it goes out.
     "live_flock", "daily_entries", "flock_ages",
-    "liftings", "sale_overview", "receivables", "payables", "stock_alerts",
+    "liftings", "sale_overview",
+    # The day's round sits with the field widgets rather than the money ones:
+    # it is about who is going where, which is the same question Field Team
+    # answers from the other end.
+    "farm_route",
+    "receivables", "payables", "stock_alerts",
     "field_team",
 )
 

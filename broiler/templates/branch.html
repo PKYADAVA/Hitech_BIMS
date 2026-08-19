@@ -126,6 +126,30 @@
                             <label class="form-label">Prefix</label>
                             <input type="text" class="form-control" name="prefix" required>
                         </div>
+                        {% comment %}
+                        The head office pin. Optional, because most of the ERP
+                        does not care where a branch is — but the Farm Map &
+                        Route Planner starts a supervisor's round here, and a
+                        branch without one cannot be a starting point.
+                        {% endcomment %}
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Office Latitude</label>
+                                <input type="number" step="any" class="form-control"
+                                       name="latitude" placeholder="e.g. 26.4300">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Office Longitude</label>
+                                <input type="number" step="any" class="form-control"
+                                       name="longitude" placeholder="e.g. 82.5300">
+                            </div>
+                            <div class="col-12">
+                                <div class="form-text">
+                                    Used as the start and end of a planned farm route.
+                                    Leave blank if the office has not been pinned.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times"></i>Cancel</button>
@@ -189,7 +213,9 @@ $(document).ready(function () {
                                     data-id="${branch.id}"
                                     data-region-id="${branch.region_id}"
                                     data-branch-name="${escapeHtml(branch.branch_name)}"
-                                    data-prefix="${escapeHtml(branch.prefix)}" title="Edit">
+                                    data-prefix="${escapeHtml(branch.prefix)}"
+                                    data-latitude="${branch.latitude === null ? '' : branch.latitude}"
+                                    data-longitude="${branch.longitude === null ? '' : branch.longitude}" title="Edit">
                                     <i class="fas fa-pen"></i>
                                 </button>{% endif %}
                                 `}
@@ -295,6 +321,8 @@ $(document).ready(function () {
         $(`#edit-branch-form-${id} [name="region"]`).val(regionId);
         $(`#edit-branch-form-${id} [name="branch_name"]`).val(branchName);
         $(`#edit-branch-form-${id} [name="prefix"]`).val(prefix);
+        $(`#edit-branch-form-${id} [name="latitude"]`).val($(this).data("latitude"));
+        $(`#edit-branch-form-${id} [name="longitude"]`).val($(this).data("longitude"));
     });
 
     // Update Branch
@@ -305,6 +333,8 @@ $(document).ready(function () {
             region: $(this).find('[name="region"]').val(),
             branch_name: $(this).find('[name="branch_name"]').val(),
             prefix: $(this).find('[name="prefix"]').val(),
+            latitude: $(this).find('[name="latitude"]').val(),
+            longitude: $(this).find('[name="longitude"]').val(),
         };
 
         $.ajax({
