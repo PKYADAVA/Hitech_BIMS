@@ -143,6 +143,16 @@ urlpatterns = [
          name='farm_route_calculate'),
     path('farm-map-planner/save/', route_planner.farm_route_save,
          name='farm_route_save'),
+    # Saved rounds, and the journeys they were driven as.
+    path('farm-routes/', route_planner.route_history, name='route_history'),
+    path('farm-routes/<int:route_id>/', route_planner.route_detail,
+         name='route_detail'),
+    path('farm-routes/<int:route_id>/start-trip/', route_planner.route_start_trip,
+         name='route_start_trip'),
+    path('farm-routes/<int:route_id>/check-in/', route_planner.route_check_in,
+         name='route_check_in'),
+    path('farm-routes/<int:route_id>/check-out/', route_planner.route_check_out,
+         name='route_check_out'),
     path('gc-realization-report/scheme/<int:scheme_id>/medicine-cost/',
          views.gc_realization_medicine_cost_save, name='gc_realization_medicine_cost_save'),
 

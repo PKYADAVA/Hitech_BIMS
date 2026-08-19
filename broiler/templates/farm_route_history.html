@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Route History{% endblock %}
+
+{% block css %}
+<link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">
+<style>
+  .rh-map { height: 380px; border-radius: .5rem; }
+  .rh-seq { display:flex; gap:.6rem; padding:.4rem .25rem; border-bottom:1px dashed #e5e7eb; }
+  .rh-seq .no { flex:0 0 1.5rem; height:1.5rem; border-radius:50%; background:#1d4ed8;
+                color:#fff; font-size:.72rem; display:flex; align-items:center;
+                justify-content:center; }
+  .rh-seq.off .no { background:#ea580c; }
+  .rh-seq .mt { font-size:.74rem; color:#64748b; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='broiler_report' active_tab='route_history' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-clock-rotate-left"></i> Route History</div>
+    <div class="page-header-subtitle">Saved rounds, the trips they were driven as, and how far the day drifted from the plan</div>
+  </div>
+  <div class="page-header-right">
+    <a class="btn btn-primary" href="{% url 'farm_map_planner' %}">
+      <i class="fas fa-map-location-dot"></i> Plan a Route
+    </a>
+  </div>
+</div>
+
+{% csrf_token %}
+
+<form class="card mb-3" method="get">
+  <div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" class="form-control" name="from_date" value="{{ from_date }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" class="form-control" name="to_date" value="{{ to_date }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" name="branch">
+          <option value="">All</option>
+          {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Supervisor</label>
+        <select class="form-select" name="supervisor">
+          <option value="">All</option>
+          {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+          <option value="">All</option>
+          {% for value, label in statuses %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100"><i class="fas fa-search"></i> Search</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-table"></i> Routes</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered mb-0 ds-grid">
+        <thead>
+          <tr>
+            <th>Route ID</th><th class="ds-mid">Date</th><th>Branch</th><th>Supervisor</th>
+            <th class="ds-num text-end">Farms</th>
+            <th class="ds-num text-end">Distance</th>
+            <th class="ds-num text-end">Time</th>
+            <th>Mode</th><th class="ds-mid">Status</th><th>Trip</th><th>Created By</th>
+            <th class="ds-mid text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for route in routes %}
+          <tr>
+            <td class="fw-semibold">{{ route.route_no }}</td>
+            <td class="ds-mid">{{ route.date|date:'d-m-Y' }}</td>
+            <td>{{ route.branch.branch_name|default:'—' }}</td>
+            <td>{{ route.supervisor.name|default:'—' }}</td>
+            <td class="ds-num text-end">{{ route.farm_count }}</td>
+            <td class="ds-num text-end">
+              {{ route.planned_distance_km }} km
+              {% if route.distance_basis == 'straight' %}
+                <span class="badge bg-warning text-dark" title="Straight-line estimate, not a road distance">est</span>
+              {% endif %}
+            </td>
+            <td class="ds-num text-end">{{ route.duration_label }}</td>
+            <td>{{ route.get_mode_display }}</td>
+            <td class="ds-mid">
+              <span class="badge bg-{% if route.status == 'completed' %}success{% elif route.status == 'started' %}primary{% elif route.status == 'cancelled' %}secondary{% else %}dark{% endif %}">
+                {{ route.get_status_display }}
+              </span>
+            </td>
+            <td>{{ route.trip.trip_no|default:'—' }}</td>
+            <td>{{ route.created_by.username|default:'—' }}</td>
+            <td class="ds-mid text-center">
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary rh-view" data-route="{{ route.id }}">View</button>
+                {% if not route.trip_id %}
+                <button class="btn btn-outline-primary rh-start" data-route="{{ route.id }}">Start Trip</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="12" class="text-center text-muted py-4">No routes match these filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="rhModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="rh-title">Route</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="rh-alert" class="alert d-none"></div>
+        <div class="row g-3">
+          <div class="col-lg-7"><div id="rh-map" class="rh-map"></div></div>
+          <div class="col-lg-5">
+            <div id="rh-deviation" class="mb-2"></div>
+            <div class="fw-semibold small mb-1">Visit order</div>
+            <div id="rh-stops"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
+<script src="{% static 'broiler/farm_route_history.js' %}"></script>
+<script>
+  window.RH_URLS = {
+    detail: "{% url 'route_detail' 0 %}",
+    startTrip: "{% url 'route_start_trip' 0 %}"
+  };
+  document.addEventListener('DOMContentLoaded', function () { RouteHistory.init(); });
+</script>
+{% endblock %}

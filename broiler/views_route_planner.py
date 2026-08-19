@@ -323,3 +323,166 @@ def farm_route_save(request):
     )
     return JsonResponse({"id": route.id, "route_no": route.route_no,
                          "status": route.status})
+
+
+# --- the round as it is actually driven -----------------------------------
+
+
+def _route_for(user, route_id):
+    """A saved route this login may act on.
+
+    Scoped through the branch and the supervisor rather than by who created
+    it: a round is the branch's work, and a manager standing in for somebody
+    on leave has to be able to open it.
+    """
+    routes = FarmRoute.objects.select_related("supervisor", "branch", "trip")
+    route = routes.filter(id=route_id).first()
+    if route is None:
+        return None
+    allowed_branches = branches_for(user, Branch.objects.all()).values_list("id", flat=True)
+    if route.branch_id and route.branch_id not in set(allowed_branches):
+        return None
+    return route
+
+
+@login_required
+def route_history(request):
+    """Broiler > Utilities > Route History — the rounds that have been saved."""
+    routes = (FarmRoute.objects.select_related("branch", "supervisor", "trip",
+                                               "created_by")
+              .prefetch_related("stops"))
+    allowed = set(branches_for(request.user, Branch.objects.all())
+                  .values_list("id", flat=True))
+    routes = routes.filter(Q(branch__isnull=True) | Q(branch_id__in=allowed))
+
+    branch_id = _int(request.GET.get("branch"))
+    supervisor_id = _int(request.GET.get("supervisor"))
+    status = (request.GET.get("status") or "").strip()
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    if branch_id:
+        routes = routes.filter(branch_id=branch_id)
+    if supervisor_id:
+        routes = routes.filter(supervisor_id=supervisor_id)
+    if status:
+        routes = routes.filter(status=status)
+    if from_date:
+        routes = routes.filter(date__gte=from_date)
+    if to_date:
+        routes = routes.filter(date__lte=to_date)
+
+    return render(request, "farm_route_history.html", {
+        "active_tab": "route_history",
+        "routes": routes[:300],
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "statuses": FarmRoute.STATUS_CHOICES,
+        "branch_id": branch_id or "",
+        "supervisor_id": supervisor_id or "",
+        "status": status,
+        "from_date": from_date,
+        "to_date": to_date,
+    })
+
+
+@login_required
+def route_detail(request, route_id):
+    """One round: what was planned, what was driven, and the gap."""
+    from broiler.services.route_trip import deviation
+
+    route = _route_for(request.user, route_id)
+    if route is None:
+        return JsonResponse({"error": "Route not found, or not one you may see."},
+                            status=404)
+    stops = route.stops.select_related("farm").order_by("sequence")
+    return JsonResponse({
+        "route": {
+            "id": route.id, "route_no": route.route_no, "name": route.name,
+            "date": route.date.isoformat(), "status": route.status,
+            "mode": route.get_mode_display(),
+            "branch": route.branch.branch_name if route.branch_id else "",
+            "supervisor": route.supervisor.name if route.supervisor_id else "",
+            "distance_km": float(route.planned_distance_km),
+            "minutes": route.planned_minutes,
+            "duration_label": route.duration_label,
+            "basis": route.distance_basis, "provider": route.provider,
+            "trip_no": route.trip.trip_no if route.trip_id else "",
+            "geometry": route.geometry,
+        },
+        "stops": [{
+            "sequence": s.sequence, "kind": s.kind,
+            "farm_id": s.farm_id,
+            "label": s.label or (s.farm.farm_name if s.farm_id else ""),
+            "latitude": s.latitude, "longitude": s.longitude,
+            "leg_distance_km": float(s.leg_distance_km),
+            "leg_minutes": s.leg_minutes,
+            "cumulative_distance_km": float(s.cumulative_distance_km),
+            "cumulative_minutes": s.cumulative_minutes,
+            "priority": s.priority,
+            "visited_at": s.visited_at.isoformat() if s.visited_at else None,
+            "actual_sequence": s.actual_sequence,
+        } for s in stops],
+        "deviation": deviation(route),
+    })
+
+
+@login_required
+@require_POST
+def route_start_trip(request, route_id):
+    """Create the Supervisor Daily Trip this round is driven as."""
+    from broiler.services.route_trip import TripError, create_trip
+
+    route = _route_for(request.user, route_id)
+    if route is None:
+        return JsonResponse({"error": "Route not found, or not one you may see."},
+                            status=404)
+    try:
+        trip = create_trip(route, created_by=request.user)
+    except TripError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse({"trip_id": trip.id, "trip_no": trip.trip_no,
+                         "route_status": route.status})
+
+
+@login_required
+@require_POST
+def route_check_in(request, route_id):
+    """GPS check-in at a farm on the round."""
+    from broiler.services.route_trip import TripError, check_in
+
+    return _check(request, route_id, check_in, TripError)
+
+
+@login_required
+@require_POST
+def route_check_out(request, route_id):
+    """GPS check-out, which is what makes the visit a duration."""
+    from broiler.services.route_trip import TripError, check_out
+
+    return _check(request, route_id, check_out, TripError)
+
+
+def _check(request, route_id, action, error_class):
+    route = _route_for(request.user, route_id)
+    if route is None:
+        return JsonResponse({"error": "Route not found, or not one you may see."},
+                            status=404)
+    try:
+        payload = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "Could not read the request."}, status=400)
+    farm_id = _int(payload.get("farm_id"))
+    if not farm_id:
+        return JsonResponse({"error": "Which farm?"}, status=400)
+    try:
+        visit = action(route, farm_id,
+                       latitude=payload.get("latitude"),
+                       longitude=payload.get("longitude"))
+    except error_class as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse({
+        "farm_id": visit.farm_id,
+        "checked_in_at": visit.checked_in_at.isoformat() if visit.checked_in_at else None,
+        "checked_out_at": visit.checked_out_at.isoformat() if visit.checked_out_at else None,
+        "duration_minutes": visit.duration_minutes,
+    })

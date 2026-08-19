@@ -2878,8 +2878,19 @@ class FarmRoute(models.Model):
         super().save(*args, **kwargs)
 
     def _next_route_no(self):
-        """RT-YYYYMMDD-NNNN, dated so a day's routes sort together."""
-        stamp = (self.date or _route_today()).strftime("%Y%m%d")
+        """RT-YYYYMMDD-NNNN, dated so a day's routes sort together.
+
+        Tolerates a string date, as SupervisorTrip._next_no already does and
+        for the same reason: Django only coerces a field on full_clean or on
+        the way to the database, so anything assigning a date from JSON — an
+        endpoint, an importer, a shell — reaches here with a str and would
+        otherwise fail asking it for strftime.
+        """
+        on_date = self.date or _route_today()
+        if isinstance(on_date, str):
+            from django.utils.dateparse import parse_date
+            on_date = parse_date(on_date) or _route_today()
+        stamp = on_date.strftime("%Y%m%d")
         prefix = f"RT-{stamp}-"
         last = (FarmRoute.objects.filter(route_no__startswith=prefix)
                 .order_by("-route_no").values_list("route_no", flat=True).first())
