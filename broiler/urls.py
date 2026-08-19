@@ -145,6 +145,7 @@ urlpatterns = [
          name='farm_route_save'),
     # Saved rounds, and the journeys they were driven as.
     path('farm-routes/', route_planner.route_history, name='route_history'),
+    path('farm-route-reports/', route_planner.route_reports, name='route_reports'),
     path('farm-routes/<int:route_id>/', route_planner.route_detail,
          name='route_detail'),
     path('farm-routes/<int:route_id>/start-trip/', route_planner.route_start_trip,

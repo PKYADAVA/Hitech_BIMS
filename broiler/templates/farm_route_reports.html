@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}Route &amp; Visit Reports{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='broiler_report' active_tab='route_reports' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-clipboard-list"></i> Route &amp; Visit Reports</div>
+    <div class="page-header-subtitle">Where the farms are, what was planned, and what was driven</div>
+  </div>
+  <div class="page-header-right">
+    <a class="btn btn-outline-secondary" href="{% url 'farm_map_planner' %}">
+      <i class="fas fa-map-location-dot"></i> Map &amp; Route Planner</a>
+  </div>
+</div>
+
+<form class="card mb-3" method="get">
+  <div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Report</label>
+        <select class="form-select" name="report">
+          {% for value, label in reports %}
+          <option value="{{ value }}" {% if report_key == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" class="form-control" name="from_date" value="{{ from_date }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" class="form-control" name="to_date" value="{{ to_date }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Branch</label>
+        <select class="form-select" name="branch">
+          <option value="">All</option>
+          {% for b in branches %}<option value="{{ b.id }}" {% if branch_id == b.id %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Supervisor</label>
+        <select class="form-select" name="supervisor">
+          <option value="">All</option>
+          {% for s in supervisors %}<option value="{{ s.id }}" {% if supervisor_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1 d-grid">
+        <button class="btn btn-primary" name="submit" value="1"><i class="fas fa-filter"></i></button>
+      </div>
+    </div>
+  </div>
+</form>
+
+{% if submitted %}
+  {% if summary %}
+  <div class="row g-2 mb-3">
+    {% for label, value in summary.items %}
+    <div class="col-6 col-lg-3">
+      <div style="border:1px solid #e5e7eb;border-radius:.5rem;padding:.6rem .8rem;background:#f8fafc;">
+        <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:#64748b;">{{ label }}</div>
+        <div style="font-size:1.3rem;font-weight:600;">{% if value is None %}&mdash;{% else %}{{ value }}{% endif %}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-table"></i> {{ report_label }}</span>
+      <a class="btn btn-sm btn-outline-secondary"
+         href="?report={{ report_key }}&from_date={{ from_date }}&to_date={{ to_date }}&branch={{ branch_id }}&supervisor={{ supervisor_id }}&export=excel">
+        <i class="fas fa-file-excel"></i> Excel
+      </a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered mb-0 ds-grid">
+          <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>{% for cell in row %}
+              <td>{% if cell is None %}<span class="text-muted">&mdash;</span>{% else %}{{ cell }}{% endif %}</td>
+            {% endfor %}</tr>
+            {% empty %}
+            <tr><td colspan="{{ columns|length }}" class="text-center text-muted py-4">
+              Nothing matches these filters.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="card"><div class="card-body text-muted">
+    Choose a report and a date range, then apply.
+  </div></div>
+{% endif %}
+{% endblock %}

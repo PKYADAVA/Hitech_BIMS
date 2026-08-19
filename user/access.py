@@ -135,6 +135,7 @@ MODULE_REGISTRY = [
                     ("route_history", "Route History",
                      ("route_detail", "route_start_trip",
                       "route_check_in", "route_check_out")),
+                    ("route_reports", "Route & Visit Reports"),
                 ],
             },
         ],

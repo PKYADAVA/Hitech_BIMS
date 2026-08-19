@@ -486,3 +486,72 @@ def _check(request, route_id, action, error_class):
         "checked_out_at": visit.checked_out_at.isoformat() if visit.checked_out_at else None,
         "duration_minutes": visit.duration_minutes,
     })
+
+
+# --- reports ---------------------------------------------------------------
+
+
+@login_required
+def route_reports(request):
+    """Broiler > Utilities > Route & Visit Reports.
+
+    One page and one permission for the nine reports, because they are nine
+    questions about the same three tables. Nine pages would be nine filter
+    bars and nine places for the scoping to be got wrong.
+    """
+    from broiler.services import route_reports as reports
+
+    key = (request.GET.get("report") or reports.REPORTS[0][0]).strip()
+    if key not in reports.BUILDERS:
+        key = reports.REPORTS[0][0]
+    filters = {
+        "branch": _int(request.GET.get("branch")),
+        "supervisor": _int(request.GET.get("supervisor")),
+        "from_date": (request.GET.get("from_date") or "").strip() or None,
+        "to_date": (request.GET.get("to_date") or "").strip() or None,
+    }
+    submitted = any(request.GET.get(k) for k in
+                    ("report", "branch", "supervisor", "from_date", "to_date"))
+
+    columns, rows, summary = ([], [], {})
+    if submitted:
+        columns, rows, summary = reports.build(key, request.user, filters)
+        if (request.GET.get("export") or "").strip().lower() == "excel":
+            return _route_report_excel(key, columns, rows)
+
+    return render(request, "farm_route_reports.html", {
+        "active_tab": "route_reports",
+        "reports": reports.REPORTS,
+        "report_key": key,
+        "report_label": dict(reports.REPORTS)[key],
+        "columns": columns, "rows": rows, "summary": summary,
+        "submitted": submitted,
+        "branches": branches_for(request.user, Branch.objects.order_by("branch_name")),
+        "supervisors": supervisors_for(request.user, Supervisor.objects.order_by("name")),
+        "branch_id": filters["branch"] or "",
+        "supervisor_id": filters["supervisor"] or "",
+        "from_date": filters["from_date"] or "",
+        "to_date": filters["to_date"] or "",
+    })
+
+
+def _route_report_excel(key, columns, rows):
+    """The same columns the screen shows, so the two cannot disagree."""
+    import io as _io
+
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = key[:31]
+    sheet.append(columns)
+    for row in rows:
+        sheet.append(["" if cell is None else cell for cell in row])
+    buffer = _io.BytesIO()
+    book.save(buffer)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f'attachment; filename="{key}.xlsx"'
+    return response

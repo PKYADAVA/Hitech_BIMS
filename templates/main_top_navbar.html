@@ -209,6 +209,9 @@
               {% if 'route_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_history' %}">
                 <i class="fas fa-clock-rotate-left"></i>Route History
               </a></li>{% endif %}
+              {% if 'route_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_reports' %}">
+                <i class="fas fa-clipboard-list"></i>Route &amp; Visit Reports
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
