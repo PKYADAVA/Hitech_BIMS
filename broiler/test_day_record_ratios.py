@@ -153,3 +153,76 @@ class DayRecordRatioTests(TestCase):
                          Decimal(str(bc["cfcr"])))
         self.assertEqual(row["fcr"].quantize(Decimal("0.01")),
                          Decimal(str(bc["fcr"])))
+
+
+class CostingEngineLiveWeightTests(DayRecordRatioTests):
+    """The engine's own FCR and CFCR, on a flock that has not all left.
+
+    It divided feed by *sold* weight. Birds still on the farm ate that feed,
+    so a flock mid-lift was charged against a fraction of the weight it had
+    grown, and one that had sold nothing divided by the mortality weight alone
+    — 25 kg of feed over 200 grammes of dead chick, printed on the Batch
+    History Report as CFCR 125.00 next to FCR 0.00, graded "Good".
+
+    Nothing moves for a closed batch, which is why it stayed hidden: once
+    nothing is standing, live weight is sold weight. That is also what makes
+    the change safe for the settlement slabs that read cfcr.
+    """
+
+    def costing(self):
+        from broiler.views import _build_batch_report
+
+        return (_build_batch_report(self.batch) or {}).get("batch_costing") or {}
+
+    def test_a_flock_that_has_sold_nothing_is_measured_against_what_it_grew(self):
+        self.day(20, feed=25, mortality=2, grams=1400)
+        bc = self.costing()
+        # 998 birds standing at 1.4 kg; feed 25 kg. Not a ratio over the dead.
+        self.assertEqual(bc["live_weight"], Decimal("1397.20"))
+        self.assertEqual(bc["fcr"], Decimal("0.02"))
+        self.assertLess(bc["cfcr"], bc["fcr"] + Decimal("0.01"))
+
+    def test_the_old_denominator_would_have_been_the_mortality_weight_alone(self):
+        """The exact shape of the bug: nothing sold, so sold + mortality is
+        just mortality, and the ratio explodes."""
+        self.day(20, feed=25, mortality=2, grams=1400)
+        bc = self.costing()
+        self.assertEqual(bc["sold_weight"], Decimal("0.00"))
+        self.assertGreater(bc["mortality_weight"], 0)
+        exploded = bc["feed_consumed"] / bc["mortality_weight"]
+        self.assertGreater(exploded, 5)              # what it used to print
+        self.assertLess(bc["cfcr"], 1)               # what it prints now
+
+    def test_a_part_sold_flock_counts_the_birds_still_standing(self):
+        self.day(20, feed=1000, grams=1500)
+        self.sell(2, 200, "440.00")                  # 2.20 kg a bird
+        bc = self.costing()
+        self.assertEqual(bc["sold_weight"], Decimal("440.00"))
+        self.assertGreater(bc["standing_weight"], 0)
+        self.assertEqual(bc["live_weight"],
+                         bc["sold_weight"] + bc["standing_weight"])
+        self.assertLess(bc["fcr"], Decimal("1000") / Decimal("440"))
+
+    def test_standing_birds_are_valued_at_the_latest_reading(self):
+        """A weighing taken after the last lifting supersedes it, and a lifting
+        after the last weighing supersedes that — the rule the Production Cost
+        report and the Live Flock Summary already follow."""
+        self.day(20, feed=1000, grams=1500)
+        self.sell(5, 200, "440.00")                  # 2.20 kg a bird
+        self.day(1, feed=0, grams=2400)              # later, and heavier
+        bc = self.costing()
+        standing = 1000 - 200
+        self.assertEqual(bc["standing_weight"],
+                         (Decimal("2.4") * standing).quantize(Decimal("0.01")))
+
+    def test_a_closed_flock_is_exactly_what_it_always_was(self):
+        """Everything sold, nothing standing: the change must not move a
+        settled batch by a paisa, which is what makes it safe for the
+        incentive slabs."""
+        self.day(20, feed=1000, grams=1500)
+        self.sell(1, 1000, "2200.00")
+        bc = self.costing()
+        self.assertEqual(bc["standing_weight"], Decimal("0"))
+        self.assertEqual(bc["live_weight"], bc["sold_weight"])
+        self.assertEqual(bc["fcr"], (Decimal("1000") / Decimal("2200"))
+                         .quantize(Decimal("0.01")))

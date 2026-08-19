@@ -4560,8 +4560,45 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         (Decimal(str(r["mortality"])) * Decimal(str(r["avg_weight_kg"])) for r in mortality_rows),
         Decimal("0"),
     )
-    fcr = _div(feed_consumed, sold_weight)                              # Feed / Live Weight
-    cfcr = _div(feed_consumed, sold_weight + mortality_weight)          # Feed / (Live Wt + Mortality Wt)
+    # Live weight is what the flock has grown, not what has left it. Birds
+    # still on the farm ate the feed too, so measuring against sold weight
+    # alone charged a flock mid-lift for feed it had converted into birds the
+    # denominator refused to count: a part-sold flock read 38% worse than it
+    # was, and one that had sold nothing at all reported FCR 0.00 beside CFCR
+    # 125.00 — 25 kg of feed over 200 grammes of mortality weight, because the
+    # birds that died were the whole of the denominator. It was graded "Good".
+    #
+    # Nothing changes for a closed batch, which is why this hid for so long:
+    # once nothing is standing, live weight *is* sold weight and every figure
+    # here is what it always was. That also makes it safe for the settlement
+    # slabs that read cfcr — a batch settled at close picks the same slab it
+    # picks today, and one settled mid-lift stops picking off a nonsense.
+    #
+    # Standing birds are valued at the most recent reading of either kind: a
+    # weighing, or what the last lifting averaged over the weighbridge. The
+    # same rule the Production Cost report and the Live Flock Summary use, so
+    # the three cannot hold three opinions about one flock.
+    standing_birds = max(excess_birds, 0)
+    readings = []
+    last_sale = max((r for r in bird_sale_rows if r.get("birds")),
+                    key=lambda r: r["date"], default=None)
+    if last_sale:
+        readings.append((last_sale["date"], 1,
+                         _div(Decimal(str(last_sale["net_weight"] or 0)),
+                              Decimal(str(last_sale["birds"])))))
+    weighed = [r for r in mortality_rows if Decimal(str(r["avg_weight_kg"] or 0)) > 0]
+    if weighed:
+        last_weighed = max(weighed, key=lambda r: r["date"])
+        readings.append((last_weighed["date"], 0,
+                         Decimal(str(last_weighed["avg_weight_kg"]))))
+    # A tie goes to the sale: a weighbridge beats a sample taken the same day.
+    valued_at = max(readings)[2] if readings else Decimal("0")
+    standing_weight = ((valued_at * standing_birds).quantize(q2)
+                       if standing_birds > 0 else Decimal("0"))
+    live_weight = (Decimal(str(sold_weight)) + standing_weight).quantize(q2)
+
+    fcr = _div(feed_consumed, live_weight)                              # Feed / Live Weight
+    cfcr = _div(feed_consumed, live_weight + mortality_weight)          # Feed / (Live Wt + Mortality Wt)
     livability_pct = _div(sold_birds * 100, placement_total)           # (Birds Sold / Chicks Placed) x 100
     eef = _div(livability_pct * avg_body_weight * 100, mean_age * fcr)  # (Livability x Avg Wt x 100) / (Age x FCR)
 
@@ -4688,6 +4725,10 @@ def _build_batch_costing(batch, placement_total, cum_mortality, cum_culls, morta
         "cfcr": cfcr.quantize(q2),
         "livability_pct": livability_pct.quantize(q2),
         "mortality_weight": mortality_weight.quantize(q2),
+        # What the ratios above divide by, so a reader can see the denominator
+        # rather than having to reconstruct it from sold weight and a headcount.
+        "live_weight": live_weight,
+        "standing_weight": standing_weight,
         "eef": eef.quantize(q2),
         "sold_birds": sold_birds,
         "sold_weight": Decimal(str(sold_weight)).quantize(q2),
