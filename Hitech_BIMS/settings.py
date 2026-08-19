@@ -371,6 +371,34 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 
 # SMS / Notification configuration.
+# --- Farm Map & Route Planner -------------------------------------------
+# Road distances and travel times for broiler.services.routing. Everything is
+# read here so no view or template ever touches a provider or a key.
+#
+# PROVIDER  osrm | openrouteservice | google | straight
+#   osrm    needs no key. The default BASE_URL is the OSRM project's public
+#           demo server, which is rate limited and explicitly not for
+#           production traffic — for real use, self-host OSRM and point
+#           ROUTING_BASE_URL at it.
+#   openrouteservice / google  need ROUTING_API_KEY. The key is used
+#           server-side only and must never be rendered into a page.
+#   straight  no network at all: pins joined by ruler, every answer labelled
+#           an estimate on screen. For development, not for a travel claim.
+ROUTING = {
+    "PROVIDER": os.getenv("ROUTING_PROVIDER", "osrm"),
+    "API_KEY": os.getenv("ROUTING_API_KEY", ""),
+    "BASE_URL": os.getenv("ROUTING_BASE_URL", ""),
+    "TIMEOUT": int(os.getenv("ROUTING_TIMEOUT", "20")),
+    # Providers price per call and refuse very long rounds; a day's farm visits
+    # is a dozen stops, so this is a guard against a mis-click selecting every
+    # farm in the region rather than a business rule.
+    "MAX_WAYPOINTS": int(os.getenv("ROUTING_MAX_WAYPOINTS", "25")),
+    # With the provider unreachable, answer by ruler and say so, rather than
+    # showing the planner as broken. Turn it off where a wrong number is worse
+    # than no number.
+    "ALLOW_STRAIGHT_LINE_FALLBACK": env_bool("ROUTING_ALLOW_STRAIGHT_FALLBACK", True),
+}
+
 # Shared secret an outside scheduler presents to run the business-alert scan
 # (alerthub/trigger.py). Empty means the endpoint does not exist at all, which
 # is the right default: a deployment that has not been given a token has not

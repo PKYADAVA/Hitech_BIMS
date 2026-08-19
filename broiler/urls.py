@@ -1,6 +1,7 @@
 # broiler/urls.py
 from django.urls import path
 from . import views
+from . import views_route_planner as route_planner
 
 from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmShedAPI, BroilerFarmShedTemplateView, BroilerFarmTemplateView, BroilerLineAPI, BroilerLineTemplateView, FarmerAPI, FarmerGroupAPI, FarmerGroupTemplateView, RegionAPI, RegionTemplateView, SupervisorAPI, SupervisorTemplateView
 
@@ -127,6 +128,21 @@ urlpatterns = [
          name='farmer_farm_report'),
     path('batch-wise-feed-scheduling-report/', views.batch_wise_feed_scheduling_report, name='batch_wise_feed_scheduling_report'),
     path('gc-realization-report/', views.gc_realization_report, name='gc_realization_report'),
+
+    # --- Farm Map & Route Planner -------------------------------------------
+    # The page, then the endpoints it talks to. Kept together and named for
+    # what they answer rather than for their verbs, matching the rest of this
+    # file.
+    path('farm-map-planner/', route_planner.farm_map_planner,
+         name='farm_map_planner'),
+    path('farm-map-planner/data/', route_planner.farm_map_data,
+         name='farm_map_data'),
+    path('farm-map-planner/farm/<int:farm_id>/batch/', route_planner.farm_map_batch,
+         name='farm_map_batch'),
+    path('farm-map-planner/calculate/', route_planner.farm_route_calculate,
+         name='farm_route_calculate'),
+    path('farm-map-planner/save/', route_planner.farm_route_save,
+         name='farm_route_save'),
     path('gc-realization-report/scheme/<int:scheme_id>/medicine-cost/',
          views.gc_realization_medicine_cost_save, name='gc_realization_medicine_cost_save'),
 

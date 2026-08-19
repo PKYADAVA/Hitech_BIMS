@@ -235,6 +235,18 @@ class Branch(models.Model):
         max_length=10,
         help_text=_("Short prefix code for this branch")
     )
+    #: Where the branch office is. The Farm Map & Route Planner starts a
+    #: supervisor's day here — "Head Office" on the route — so a branch with
+    #: no pin cannot be a starting point and the planner says so rather than
+    #: routing from (0, 0), which is in the Atlantic.
+    latitude = models.FloatField(
+        blank=True, null=True,
+        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+        help_text=_("Latitude of the branch office"))
+    longitude = models.FloatField(
+        blank=True, null=True,
+        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+        help_text=_("Longitude of the branch office"))
     is_active = models.BooleanField(
         default=True,
         help_text=_("Inactive branches are hidden from selection elsewhere")
@@ -618,6 +630,36 @@ class BroilerFarm(models.Model):
         validators=[MinValueValidator(-180), MaxValueValidator(180)],
         help_text=_("Longitude coordinate of the farm")
     )
+    #: How good the reading was, in metres, and when it was taken. A pin is
+    #: only as trustworthy as its accuracy: a fix good to 2 km will route a
+    #: supervisor to the wrong village, and one taken two years ago may point
+    #: at a shed that has since moved. Both are filled from the latest Farm
+    #: Location Capture (see FarmLocationCapture.sync_farm_from_latest) rather
+    #: than typed, so there is one place a coordinate comes from.
+    gps_accuracy = models.FloatField(
+        blank=True, null=True,
+        validators=[MinValueValidator(0)],
+        help_text=_("Accuracy of the GPS reading, in metres"))
+    location_captured_at = models.DateField(
+        blank=True, null=True,
+        help_text=_("Date of the location capture this pin came from"))
+    location_verified = models.BooleanField(
+        default=False,
+        help_text=_("Somebody has confirmed this pin is where the farm is"))
+    #: What the Route Planner does with the farm when the route is being
+    #: ordered by priority rather than by distance alone. Normal is the
+    #: default and the ordinary case; the other two pull a farm earlier in the
+    #: day at some cost in kilometres.
+    PRIORITY_NORMAL, PRIORITY_HIGH, PRIORITY_CRITICAL = "normal", "high", "critical"
+    VISIT_PRIORITY_CHOICES = [
+        (PRIORITY_NORMAL, _("Normal")),
+        (PRIORITY_HIGH, _("High")),
+        (PRIORITY_CRITICAL, _("Critical")),
+    ]
+    visit_priority = models.CharField(
+        max_length=10, choices=VISIT_PRIORITY_CHOICES, default=PRIORITY_NORMAL,
+        db_index=True,
+        help_text=_("How urgently this farm needs to be visited"))
     agreement_start_date = models.DateField(
         blank=True,
         null=True,
@@ -2085,6 +2127,10 @@ class FarmLocationCapture(models.Model):
     longitude = models.FloatField(
         null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)],
         help_text=_("Decimal degrees, -180 to 180"))
+    gps_accuracy = models.FloatField(
+        blank=True, null=True,
+        validators=[MinValueValidator(0)],
+        help_text=_("Accuracy of the reading in metres, as the phone reported it"))
     state = models.CharField(max_length=100, blank=True)
     district = models.CharField(max_length=100, blank=True)
     area = models.CharField(max_length=100, blank=True)
@@ -2176,6 +2222,16 @@ class FarmLocationCapture(models.Model):
         if farm.farm_longitude != latest.longitude:
             farm.farm_longitude = latest.longitude
             fields.append("farm_longitude")
+        # How good the reading was and when it was taken travel with it. The
+        # Route Planner shows both against the pin, because a fix good to two
+        # kilometres routes somebody to the wrong village and a two-year-old
+        # one may point at a shed that has moved.
+        if farm.gps_accuracy != latest.gps_accuracy:
+            farm.gps_accuracy = latest.gps_accuracy
+            fields.append("gps_accuracy")
+        if farm.location_captured_at != latest.date:
+            farm.location_captured_at = latest.date
+            fields.append("location_captured_at")
         # The written parts only overwrite when the capture actually has them —
         # a visit that recorded a pin but no address must not wipe the master's.
         for capture_field, farm_field in (("address", "farm_address"),
@@ -2697,3 +2753,198 @@ class BatchOtherEntry(models.Model):
 
     def __str__(self):
         return f"{self.batch} / {self.head}: {self.amount}"
+
+
+def _route_today():
+    """A callable default, so the date is the day a route is made rather than
+    the day the process booted."""
+    from django.utils.timezone import localdate
+    return localdate()
+
+
+def format_minutes(minutes):
+    """Minutes as "6h 42m" — the one way a duration is written in this module,
+    on the summary card, the visit list and the saved-route table alike."""
+    minutes = int(minutes or 0)
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins:02d}m"
+    return f"{hours}h" if hours else f"{mins}m"
+
+
+class FarmRoute(models.Model):
+    """A planned round of farm visits: where it starts, which farms, in what
+    order, and how far the road between them actually runs.
+
+    The plan, not the journey. What actually happened is recorded on
+    ``hr.SupervisorTrip`` and its visits, which already carry the odometer,
+    the photographs and the GPS stamps — this is what those get compared
+    against, and creating a trip from a route is what joins the two. A route
+    with no trip is a plan nobody drove; a trip with no route is a day's work
+    nobody planned. Both are legitimate, so neither side is mandatory.
+
+    Distances and times are the road network's, from
+    ``broiler.services.routing`` — never a straight line between two pins,
+    which understates a hill road by half. Where the provider could not be
+    reached the row says so in ``distance_basis`` rather than passing an
+    estimate off as a measurement.
+    """
+
+    STATUS_DRAFT, STATUS_PLANNED, STATUS_STARTED = "draft", "planned", "started"
+    STATUS_COMPLETED, STATUS_CANCELLED = "completed", "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, _("Draft")),
+        (STATUS_PLANNED, _("Planned")),
+        (STATUS_STARTED, _("Started")),
+        (STATUS_COMPLETED, _("Completed")),
+        (STATUS_CANCELLED, _("Cancelled")),
+    ]
+
+    MODE_DISTANCE, MODE_TIME = "distance", "time"
+    MODE_PRIORITY, MODE_SUPERVISOR = "priority", "supervisor"
+    MODE_CHOICES = [
+        (MODE_DISTANCE, _("Shortest Distance")),
+        (MODE_TIME, _("Shortest Travel Time")),
+        (MODE_PRIORITY, _("Priority Route")),
+        (MODE_SUPERVISOR, _("Supervisor Daily Route")),
+    ]
+
+    #: How the kilometres were arrived at. "road" is a routing provider's
+    #: answer and the only one anybody should settle a travel claim against;
+    #: "straight" is the great-circle fallback used when no provider could be
+    #: reached, kept visible so a screen can label it an estimate rather than
+    #: quietly present it as a measurement.
+    BASIS_ROAD, BASIS_STRAIGHT = "road", "straight"
+    BASIS_CHOICES = [(BASIS_ROAD, _("Road network")),
+                     (BASIS_STRAIGHT, _("Straight line (estimate)"))]
+
+    route_no = models.CharField(max_length=40, unique=True, editable=False, blank=True)
+    name = models.CharField(max_length=150, blank=True)
+    date = models.DateField(default=_route_today)
+    branch = models.ForeignKey("broiler.Branch", on_delete=models.PROTECT,
+                               null=True, blank=True, related_name="farm_routes")
+    supervisor = models.ForeignKey("broiler.Supervisor", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="farm_routes")
+
+    #: Where the day begins and ends. Held as a label and a pin rather than a
+    #: foreign key because a start point is not always a row in this ERP — it
+    #: is a branch office, a warehouse, or wherever the supervisor slept.
+    start_label = models.CharField(max_length=150, blank=True)
+    start_latitude = models.FloatField(null=True, blank=True)
+    start_longitude = models.FloatField(null=True, blank=True)
+    end_label = models.CharField(max_length=150, blank=True)
+    end_latitude = models.FloatField(null=True, blank=True)
+    end_longitude = models.FloatField(null=True, blank=True)
+    #: Most rounds come back to where they started, which is the difference
+    #: between a 280 km day and a 140 km one.
+    returns_to_start = models.BooleanField(default=True)
+
+    mode = models.CharField(max_length=12, choices=MODE_CHOICES, default=MODE_DISTANCE)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES,
+                              default=STATUS_DRAFT, db_index=True)
+    distance_basis = models.CharField(max_length=10, choices=BASIS_CHOICES,
+                                      default=BASIS_ROAD)
+    provider = models.CharField(max_length=40, blank=True,
+                                help_text=_("Routing provider that answered"))
+
+    planned_distance_km = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    planned_minutes = models.PositiveIntegerField(default=0)
+    #: The drawn line, as an encoded polyline or a list of points, exactly as
+    #: the provider returned it. Stored so a saved route redraws without
+    #: paying for the call again — see the caching note in the service.
+    geometry = models.JSONField(null=True, blank=True)
+
+    #: The trip this route was driven as, once somebody starts it. One route,
+    #: one trip: re-planning a day makes a new route rather than rewriting the
+    #: one whose journey is already recorded against it.
+    trip = models.OneToOneField("hr.SupervisorTrip", on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name="planned_route")
+
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name="farm_routes")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        indexes = [models.Index(fields=["date", "supervisor"])]
+
+    def __str__(self):
+        return self.route_no or f"Route {self.pk}"
+
+    def save(self, *args, **kwargs):
+        if not self.route_no:
+            self.route_no = self._next_route_no()
+        super().save(*args, **kwargs)
+
+    def _next_route_no(self):
+        """RT-YYYYMMDD-NNNN, dated so a day's routes sort together."""
+        stamp = (self.date or _route_today()).strftime("%Y%m%d")
+        prefix = f"RT-{stamp}-"
+        last = (FarmRoute.objects.filter(route_no__startswith=prefix)
+                .order_by("-route_no").values_list("route_no", flat=True).first())
+        nxt = int(last.rsplit("-", 1)[1]) + 1 if last else 1
+        return f"{prefix}{nxt:04d}"
+
+    @property
+    def farm_count(self):
+        return self.stops.filter(farm__isnull=False).count()
+
+    @property
+    def duration_label(self):
+        """"6h 42m" — the way every screen in this module shows a duration."""
+        return format_minutes(self.planned_minutes)
+
+
+class FarmRouteStop(models.Model):
+    """One call on a route, in the order the optimiser put it.
+
+    ``farm`` is null for the start and the end, which are places rather than
+    farms. The leg figures are *from the previous stop*, so the first row
+    carries nothing and the cumulative columns are running totals — the shape
+    the visit-sequence panel and the farm list both read straight off.
+    """
+
+    KIND_START, KIND_FARM, KIND_END = "start", "farm", "end"
+    KIND_CHOICES = [(KIND_START, _("Start")), (KIND_FARM, _("Farm")),
+                    (KIND_END, _("End"))]
+
+    route = models.ForeignKey(FarmRoute, on_delete=models.CASCADE, related_name="stops")
+    sequence = models.PositiveIntegerField()
+    kind = models.CharField(max_length=6, choices=KIND_CHOICES, default=KIND_FARM)
+    farm = models.ForeignKey("broiler.BroilerFarm", on_delete=models.PROTECT,
+                             null=True, blank=True, related_name="route_stops")
+    label = models.CharField(max_length=150, blank=True)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+
+    leg_distance_km = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    leg_minutes = models.PositiveIntegerField(default=0)
+    cumulative_distance_km = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    cumulative_minutes = models.PositiveIntegerField(default=0)
+    #: Why this stop sits where it does when the route was ordered by priority
+    #: — the explanation section 14 asks for, so a route that is not the
+    #: shortest can say what it traded the kilometres for.
+    priority = models.CharField(max_length=10, blank=True)
+
+    #: Filled when the round is actually driven, from the trip's own visit
+    #: row. Kept here as well so planned and actual sit side by side without a
+    #: join for every comparison the deviation report makes.
+    visited_at = models.DateTimeField(null=True, blank=True)
+    actual_sequence = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["route_id", "sequence"]
+        constraints = [
+            models.UniqueConstraint(fields=["route", "sequence"],
+                                    name="uniq_route_stop_sequence"),
+        ]
+
+    def __str__(self):
+        return f"{self.route_id}#{self.sequence} {self.label or self.farm_id}"
+
+    @property
+    def is_deviation(self):
+        """True when the round reached this stop out of its planned turn."""
+        return (self.actual_sequence is not None
+                and self.actual_sequence != self.sequence)

@@ -122,6 +122,18 @@ MODULE_REGISTRY = [
                      ("gc_realization_medicine_cost_save",)),
                 ],
             },
+            {
+                # Tools that work across the module's own masters rather than
+                # maintaining one of them. The Map & Route Planner reads farms,
+                # supervisors and batches and writes routes, so it belongs
+                # beside the reports rather than among the masters.
+                "label": "Utilities",
+                "tabs": [
+                    ("farm_map_planner", "Map & Route Planner",
+                     ("farm_map_data", "farm_map_batch",
+                      "farm_route_calculate", "farm_route_save")),
+                ],
+            },
         ],
     },
     {
