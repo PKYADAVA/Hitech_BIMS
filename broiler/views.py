@@ -7324,7 +7324,20 @@ def gc_realization_report(request):
             batches = batches.filter(broiler_farm__branch_id=branch_id)
         if farm_id.isdigit():
             batches = batches.filter(broiler_farm_id=farm_id)
-        grid = build_gc_realization_grid(batches, scheme_override_id=selected_schema_id)
+        # Oldest placement first, which is also oldest flock first — the order
+        # the Production Cost and Live Flock reports read in, so a farm sits in
+        # the same place whichever of the three you have open. Sorted here
+        # rather than in the query because the placement is not always
+        # start_date: a batch created from a chicks placement can have it
+        # blank, and _placement_date falls back to the transfer that filled it.
+        # A flock with no placement at all has no age to sort by and goes last,
+        # name-ordered, rather than jumping the queue as a null would.
+        placed = [(_placement_date(b), b) for b in batches]
+        placed.sort(key=lambda pair: (pair[0] is None, pair[0] or date.max,
+                                      pair[1].broiler_farm.farm_name,
+                                      pair[1].batch_name))
+        grid = build_gc_realization_grid([b for _, b in placed],
+                                         scheme_override_id=selected_schema_id)
 
         if export == "excel":
             return _gc_realization_excel(grid)
