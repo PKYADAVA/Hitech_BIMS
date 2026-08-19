@@ -9,6 +9,13 @@
      within their own column rather than pushing it off the screen. */
   .fmp-map { height: 520px; border-radius: .6rem; z-index: 0; }
   .fmp-side { max-height: 520px; overflow-y: auto; }
+  @media (max-width: 991.98px) {
+    /* A phone screen is mostly map, and the panels below it scroll with the
+       page rather than inside themselves — a scroll area inside a scroll area
+       is the thing that makes a mobile page feel broken. */
+    .fmp-map { height: 62vh; }
+    .fmp-side { max-height: none; }
+  }
 
   /* Filter chips: a labelled card each, so the current selection reads at a
      glance instead of having to be inferred from a row of bare selects. */
@@ -82,6 +89,16 @@ tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
 {% csrf_token %}
 
 <!-- Filters --------------------------------------------------------------->
+{% comment %}
+On a phone the filters are one tap away rather than a screen to scroll past:
+the map is what the planner is opened for. From large up the collapse is
+overridden by d-lg-block and the row is simply always there.
+{% endcomment %}
+<button class="btn btn-outline-secondary w-100 mb-2 d-lg-none" type="button"
+        data-bs-toggle="collapse" data-bs-target="#fmp-filters">
+  <i class="fas fa-sliders"></i> Filters
+</button>
+<div class="collapse d-lg-block" id="fmp-filters">
 <div class="row g-2 mb-2 align-items-stretch">
   <div class="col-6 col-lg-2">
     <div class="fmp-chip"><span class="ic"><i class="fas fa-code-branch"></i></span>
@@ -132,6 +149,8 @@ tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
   </div>
 </div>
 
+</div>
+
 <div class="d-flex gap-2 flex-wrap align-items-center mb-3">
   <button class="btn btn-primary" id="fmp-calculate"><i class="fas fa-route"></i> Calculate Route</button>
   <button class="btn btn-outline-secondary" id="fmp-refresh" title="Reload farms"><i class="fas fa-rotate"></i></button>
@@ -142,8 +161,10 @@ tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
   <span class="small text-muted" id="fmp-start-hint"></span>
 </div>
 
+<div class="d-flex flex-column">
+
 <!-- Summary --------------------------------------------------------------->
-<div class="row g-2 mb-3">
+<div class="row g-2 mb-3 order-2 order-lg-1">
   <div class="col-6 col-lg-2"><div class="fmp-stat">
     <span class="ic" style="background:#eef2ff;color:#4338ca;"><i class="fas fa-tractor"></i></span>
     <span><span class="lbl">Total Farms</span><span class="val" id="s-total">{{ total_farms }}</span>
@@ -170,10 +191,10 @@ tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
     <span class="sub">Per stop</span></span></div></div>
 </div>
 
-<div id="fmp-alert" class="alert d-none" role="alert"></div>
+<div id="fmp-alert" class="alert d-none order-1" role="alert"></div>
 
 <!-- Map + panels ---------------------------------------------------------->
-<div class="row g-3">
+<div class="row g-3 order-1 order-lg-2">
   <div class="col-lg-3 order-2 order-lg-1">
     <div class="card h-100">
       <div class="card-header d-flex justify-content-between align-items-center py-2">
@@ -208,8 +229,17 @@ tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
       <span><i class="fas fa-location-dot text-primary"></i> Farm / Stop</span>
       <span><span style="display:inline-block;width:1.4rem;border-top:3px solid #2563eb;
                    vertical-align:middle;"></span> Planned Route</span>
-      <span><span style="display:inline-block;width:1.4rem;border-top:3px dotted #dc2626;
-                   vertical-align:middle;"></span> GPS Missing</span>
+      {% comment %}
+      Not a line on the map: a farm with no coordinates cannot be drawn at all,
+      which is the whole problem with it. So this is a live count that scrolls
+      to the list of them instead of a legend key for a line that can never
+      appear.
+      {% endcomment %}
+      <a href="#fmp-missing-card" class="ms-auto text-decoration-none d-none"
+         id="fmp-missing-chip">
+        <span class="badge bg-danger"><i class="fas fa-location-crosshairs"></i>
+          <span id="fmp-missing-count">0</span> farm(s) with no GPS</span>
+      </a>
     </div>
   </div>
 
@@ -227,6 +257,8 @@ tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
       </div>
     </div>
   </div>
+</div>
+
 </div>
 
 <!-- GPS missing ----------------------------------------------------------->

@@ -1944,6 +1944,15 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
       },
     ],
     reports: [
+      // The Farm Map & Route Planner, opened in the in-app browser. It is not
+      // a report, but this is the list a supervisor opens things from, and the
+      // planner is the first thing they want on the road.
+      { key: "farm-map-planner", title: "Map & Route Planner", icon: "map-marker-path",
+        webReportName: "farm_map_planner" },
+      { key: "farm-route-history", title: "Route History", icon: "history",
+        webReportName: "route_history" },
+      { key: "farm-route-reports", title: "Route & Visit Reports", icon: "clipboard-list-outline",
+        webReportName: "route_reports" },
       { key: "live-flock", title: "Live Flock Summary", icon: "bird", path: "/reports/live-flock",
         webReportName: "live_flock_summary_report" },
       { key: "batch-summary", title: "Batch History", icon: "file-document-outline", path: "/reports/batch-summary",

@@ -419,6 +419,14 @@ window.FarmMapPlanner = (function () {
     // farms without a pin are an exception to deal with, not a statistic to
     // watch, and the card only appears when there are any.
     var header = card.querySelector(".card-header");
+    // A count beside the map as well as the card below it. The card sits under
+    // the farm list, which on a phone is a long way from the thing the reader
+    // is looking at when they wonder why a farm is not on it.
+    var chip = el("fmp-missing-chip");
+    var chipCount = el("fmp-missing-count");
+    if (chip) chip.classList.toggle("d-none", !missing.length);
+    if (chipCount) chipCount.textContent = missing.length;
+
     if (!missing.length) { card.classList.add("d-none"); return; }
     card.classList.remove("d-none");
     if (header) {

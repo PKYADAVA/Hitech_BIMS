@@ -1666,6 +1666,12 @@ MOBILE_REPORT_URL_NAMES = [
     "chicks_placement_report", "feed_dispatch_stock_report", "lifting_report",
     "farm_detailed_daily_entry_report", "production_pl_report", "production_cost_report",
     "farmer_farm_report", "batch_wise_feed_scheduling_report", "gc_realization_report",
+    # Farm Map & Route Planner. The phone gets the whole planner through the
+    # in-app browser rather than a second, thinner one built natively: the page
+    # already lays itself out for a phone, and a native map would mean a new
+    # dependency and a new APK on every handset for a screen that is mostly a
+    # map and a list.
+    "farm_map_planner", "route_history", "route_reports",
     # Hatchery
     "hatchery_report", "egg_purchase_report", "incubation_report",
     "delivery_challan_report", "chick_sale_report",
