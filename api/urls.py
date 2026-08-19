@@ -32,6 +32,7 @@ from broiler.api import (
 )
 from broiler.api import register as register_broiler
 from broiler.api_write import write_urls as broiler_write_urls
+from broiler.api_route import route_urls as broiler_route_urls
 from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
 from inventory.api import register as register_inventory
@@ -224,6 +225,9 @@ urlpatterns = [
     # Inventory + Purchase transaction writes — reuse the web posting logic
     # (declared before the router so they win over the read-only resource routes).
     *broiler_write_urls(),
+    # The supervisor's own round: today's route and the check-in and
+    # check-out at each farm on it.
+    *broiler_route_urls(),
     *hr_write_urls(),
     *inventory_write_urls(),
     *purchase_write_urls(),
