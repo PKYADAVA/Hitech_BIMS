@@ -24,13 +24,14 @@ from __future__ import annotations
 import json
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Q
+from django.db.models import Count, Max, OuterRef, Q, Subquery
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from broiler.models import Branch, BroilerBatch, BroilerFarm, FarmRoute, Supervisor
+from broiler.models import (BirdSale, Branch, BroilerBatch, BroilerFarm,
+                            DailyEntry, FarmRoute, Supervisor)
 from broiler.services.route_planner import (PlannerError, farm_point, plan_route,
                                             save_route, split_by_gps)
 from broiler.services.routing import RoutingError
@@ -130,14 +131,52 @@ def farm_map_data(request):
     if priority:
         farms = farms.filter(visit_priority=priority)
 
-    # Live flocks per farm, for the marker and the popup. Annotated rather
-    # than counted per row: this is the query that would otherwise make a
-    # 300-farm map 300 queries.
+    # Live flocks per farm, plus the flock's own name and the last time anybody
+    # called there. All annotated rather than fetched per row: this is the
+    # query that would otherwise make a 300-farm map 900 queries, and the farm
+    # list wants every one of these columns.
+    from django.db.models import IntegerField, Sum, Value
+    from django.db.models.functions import Coalesce
+    from hr.models import SupervisorTripVisit
+    from inventory.models import StockTransfer
+
+    from broiler.views import chick_items
+
+    # Birds standing on the farm: placed, less lost, less lifted. Three
+    # aggregates, all as subqueries against the farm's live flock, so the map
+    # stays one query however many farms it draws. It is the same arithmetic
+    # the Live Flock Summary does, at the resolution a map marker needs.
+    chick_ids = list(chick_items().values_list("id", flat=True))
+    placed = (StockTransfer.objects
+              .filter(to_farm=OuterRef("pk"), item_id__in=chick_ids,
+                      to_batch__end_date__isnull=True, to_batch__is_closed=False)
+              .values("to_farm").annotate(n=Sum("quantity")).values("n")[:1])
+    lost = (DailyEntry.objects
+            .filter(farm=OuterRef("pk"), batch__end_date__isnull=True,
+                    batch__is_closed=False)
+            .values("farm").annotate(n=Sum("mortality") + Sum("culls")).values("n")[:1])
+    lifted = (BirdSale.objects
+              .filter(farm=OuterRef("pk"), batch__end_date__isnull=True,
+                      batch__is_closed=False)
+              .values("farm").annotate(n=Sum("birds")).values("n")[:1])
+
+    live = BroilerBatch.objects.filter(
+        broiler_farm=OuterRef("pk"), end_date__isnull=True, is_closed=False)
     farms = farms.annotate(
         active_batches=Count("broiler_batches",
                              filter=Q(broiler_batches__end_date__isnull=True,
                                       broiler_batches__is_closed=False),
-                             distinct=True))
+                             distinct=True),
+        batch_code=Subquery(live.order_by("start_date").values("batch_name")[:1]),
+        batch_started=Subquery(live.order_by("start_date").values("start_date")[:1]),
+        last_visit=Subquery(
+            SupervisorTripVisit.objects
+            .filter(farm=OuterRef("pk"), checked_in_at__isnull=False)
+            .order_by("-checked_in_at").values("checked_in_at")[:1]),
+        placed_birds=Coalesce(Subquery(placed, output_field=IntegerField()), Value(0)),
+        lost_birds=Coalesce(Subquery(lost, output_field=IntegerField()), Value(0)),
+        lifted_birds=Coalesce(Subquery(lifted, output_field=IntegerField()), Value(0)),
+    )
     if batch_status == "active":
         farms = farms.filter(active_batches__gt=0)
     elif batch_status == "empty":
@@ -158,6 +197,17 @@ def farm_map_data(request):
             "status": farm.farm_status or "",
             "priority": farm.visit_priority,
             "active_batches": farm.active_batches,
+            "batch_code": farm.batch_code or "",
+            "batch_age": ((timezone.localdate() - farm.batch_started).days
+                          if farm.batch_started else None),
+            # Never negative: a farm whose recorded sales exceed what its
+            # entries say survived is a data problem to fix, not a negative
+            # head count to print on a map.
+            "live_birds": (max(int(farm.placed_birds - farm.lost_birds
+                                   - farm.lifted_birds), 0)
+                           if farm.active_batches else 0),
+            "last_visit": (timezone.localtime(farm.last_visit).date().isoformat()
+                           if farm.last_visit else None),
             "location": ", ".join(p for p in (farm.area, farm.district, farm.state) if p),
         }
         if point:

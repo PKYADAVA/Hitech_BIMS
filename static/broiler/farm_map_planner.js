@@ -25,6 +25,10 @@ window.FarmMapPlanner = (function () {
   var startPoint = null;   // {label, latitude, longitude} — where the day begins
   var pickingStart = false;
   var startMarker = null;
+  var labelLayer = null;   // farm names and leg distances, toggled together
+  var baseLayers = {};     // street and satellite
+  var page = 1;
+  var PAGE_SIZE = 12;
 
   var PRIORITY_COLOUR = { critical: "#dc2626", high: "#ea580c", normal: "#2563eb" };
   var INACTIVE_COLOUR = "#94a3b8";
@@ -110,6 +114,7 @@ window.FarmMapPlanner = (function () {
 
   function drawMarkers() {
     markerLayer.clearLayers();
+    labelLayer.clearLayers();
     var bounds = [];
     farms.forEach(function (farm) {
       var stop = plan ? planStopFor(farm.id) : null;
@@ -120,6 +125,15 @@ window.FarmMapPlanner = (function () {
       marker.bindPopup(popupShell(farm), { minWidth: 250 });
       marker.on("popupopen", function () { fillPopup(farm, marker); });
       marker.addTo(markerLayer);
+      // The name sits beside the pin permanently rather than on hover: a
+      // planner is read to decide which farm to send somebody to, and a map of
+      // anonymous dots cannot answer that.
+      L.marker([farm.latitude, farm.longitude], {
+        icon: L.divIcon({ className: "", html: '<span class="fmp-label">' +
+                          esc(farm.name) + "</span>",
+                          iconSize: [0, 0], iconAnchor: [-12, 8] }),
+        interactive: false
+      }).addTo(labelLayer);
       bounds.push([farm.latitude, farm.longitude]);
     });
     if (bounds.length && !plan) map.fitBounds(bounds, { padding: [30, 30] });
@@ -198,12 +212,25 @@ window.FarmMapPlanner = (function () {
     }
     // A numbered pin per stop, and the leg distance written on the leg — the
     // "distance labels between stops" the summary panel repeats in words.
+    var previous = null;
     plan.stops.forEach(function (stop) {
       if (stop.latitude === null || stop.longitude === null) return;
       L.marker([stop.latitude, stop.longitude], {
-        icon: pin(stop.kind === "farm" ? "#1d4ed8" : "#0f172a", stop.sequence)
-      }).bindTooltip(stop.label + (stop.leg_distance_km ? " · " + km(stop.leg_distance_km) : ""),
-                     { direction: "top" }).addTo(routeLayer);
+        icon: pin(stop.kind === "farm" ? "#2563eb" : "#16a34a", stop.sequence)
+      }).bindTooltip(stop.label, { direction: "top" }).addTo(routeLayer);
+      // The leg distance written on the leg, halfway along it. The panel says
+      // the same numbers, but a distance beside the road it belongs to is the
+      // thing somebody actually reads off a map.
+      if (previous && stop.leg_distance_km) {
+        L.marker([(previous[0] + stop.latitude) / 2,
+                  (previous[1] + stop.longitude) / 2], {
+          icon: L.divIcon({ className: "", html: '<span class="fmp-leg">' +
+                            km(stop.leg_distance_km) + "</span>",
+                            iconSize: [0, 0], iconAnchor: [18, 7] }),
+          interactive: false
+        }).addTo(labelLayer);
+      }
+      previous = [stop.latitude, stop.longitude];
     });
   }
 
@@ -277,73 +304,127 @@ window.FarmMapPlanner = (function () {
         plan.priority_notes.map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("") +
         "</ul></div>"
       : "";
+    var last = plan.stops[plan.stops.length - 1];
     var head = '<div class="small mb-2">' +
-      "<div class='d-flex justify-content-between'><span class='text-muted'>Total farms</span><b>" + plan.farm_count + "</b></div>" +
-      "<div class='d-flex justify-content-between'><span class='text-muted'>Total distance</span><b>" + km(plan.distance_km) + "</b></div>" +
-      "<div class='d-flex justify-content-between'><span class='text-muted'>Estimated time</span><b>" + hhmm(plan.minutes) + "</b></div>" +
-      "<div class='d-flex justify-content-between'><span class='text-muted'>Start</span><b>" + esc(plan.stops[0].label) + "</b></div>" +
-      "<div class='d-flex justify-content-between'><span class='text-muted'>End</span><b>" +
-        esc(plan.stops[plan.stops.length - 1].label) + "</b></div>" +
-      "<div class='d-flex justify-content-between'><span class='text-muted'>Measured by</span><b>" +
-        esc(plan.basis === "road" ? plan.provider + " (road)" : "straight line") + "</b></div>" +
+      line("fa-flag", "Start Point", esc(plan.stops[0].label), "text-success") +
+      line("fa-flag-checkered", "End Point", esc(last.label), "text-danger") +
+      line("fa-tractor", "Total Farms", plan.farm_count) +
+      line("fa-road", "Total Distance", km(plan.distance_km)) +
+      line("fa-clock", "Estimated Time", hhmm(plan.minutes)) +
+      line("fa-route", "Route Mode", esc(modeLabel())) +
+      line("fa-satellite-dish", "Measured By",
+           esc(plan.basis === "road" ? plan.provider + " (road)" : "straight line")) +
       "</div>";
-    var order = plan.stops.map(function (s) {
-      return '<div class="fmp-seq ' + (s.kind === "farm" ? "" : "is-" + s.kind) + '">' +
-        '<span class="no">' + s.sequence + "</span>" +
-        '<span><span class="nm">' + esc(s.label) + "</span>" +
-        '<span class="mt d-block">' +
-          (s.leg_distance_km ? km(s.leg_distance_km) + " · " + hhmm(s.leg_minutes) : "start") +
-          " &nbsp;|&nbsp; cum " + km(s.cumulative_distance_km) +
-        "</span></span></div>";
-    }).join("");
-    box.innerHTML = estimate + notes + head +
-      '<div class="fw-semibold small mb-1">Visit order</div>' + order;
+    var order = '<div class="fw-semibold small mt-2 mb-1">Visit Order (Best Sequence)</div>' +
+      plan.stops.map(function (s) {
+        return '<div class="fmp-seq ' + (s.kind === "farm" ? "" : "is-" + s.kind) + '">' +
+          '<span class="no">' + s.sequence + "</span>" +
+          '<span class="nm">' + esc(s.label) +
+          (s.kind === "start" ? " (Start)" : s.kind === "end" ? " (End)" : "") + "</span>" +
+          '<span class="km">' + (s.leg_distance_km ? km(s.leg_distance_km) : "—") + "</span>" +
+          "</div>";
+      }).join("");
+    box.innerHTML = estimate + notes + head + order;
+  }
+
+  function line(icon, label, value, tone) {
+    return '<div class="d-flex justify-content-between align-items-center py-1">' +
+      '<span class="text-muted"><i class="fas ' + icon + ' me-2"></i>' + label + "</span>" +
+      '<b class="' + (tone || "") + '">' + value + "</b></div>";
+  }
+
+  function modeLabel() {
+    var select = el("f-mode");
+    return select.options[select.selectedIndex].textContent.trim();
   }
 
   function renderTable() {
     var body = el("fmp-body");
     var rows = farms.concat([]);
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">' +
+      body.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-4">' +
         "No farms match these filters.</td></tr>";
+      el("fmp-count").textContent = "";
+      el("fmp-pager").innerHTML = "";
       return;
     }
     // With a route in hand the list reads in visiting order, because that is
     // the order the day happens in.
+    var seq = {};
     if (plan) {
-      var seq = {};
       plan.stops.forEach(function (s) { if (s.farm_id) seq[s.farm_id] = s.sequence; });
       rows.sort(function (a, b) {
         return (seq[a.id] || 9999) - (seq[b.id] || 9999) || a.name.localeCompare(b.name);
       });
     }
-    body.innerHTML = rows.map(function (f) {
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (page > pages) page = pages;
+    var slice = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+    body.innerHTML = slice.map(function (f) {
       var stop = planStopFor(f.id);
       return "<tr>" +
-        '<td class="text-center">' + (stop ? '<span class="badge bg-primary">' + stop.sequence + "</span>" : "") + "</td>" +
+        '<td class="text-center">' +
+          (stop ? '<span class="badge bg-primary">' + stop.sequence + "</span>"
+                : '<i class="fas fa-house text-muted"></i>') + "</td>" +
         "<td>" + esc(f.code) + "</td><td>" + esc(f.name) + "</td>" +
         "<td>" + esc(f.branch || "—") + "</td><td>" + esc(f.supervisor || "—") + "</td>" +
-        "<td>" + esc(f.location || "—") + "</td>" +
-        '<td class="ds-mid"><span class="badge fmp-badge-' + esc(f.priority) + '">' + esc(f.priority) + "</span></td>" +
-        '<td class="ds-num text-end">' + esc(f.active_batches) + "</td>" +
+        "<td>" + esc(f.batch_code || "—") +
+          (f.batch_age !== null && f.batch_age !== undefined
+            ? '<span class="d-block text-muted small">' + f.batch_age + " days</span>" : "") +
+        "</td>" +
+        '<td class="ds-num text-end">' + (f.live_birds ? Number(f.live_birds).toLocaleString("en-IN") : "—") + "</td>" +
+        '<td class="ds-mid"><span class="badge badge-priority-' + esc(f.priority) + '">' +
+          esc(f.priority.charAt(0).toUpperCase() + f.priority.slice(1)) + "</span></td>" +
         '<td class="ds-num text-end">' + (stop ? km(stop.leg_distance_km) : "—") + "</td>" +
         '<td class="ds-num text-end">' + (stop ? km(stop.cumulative_distance_km) : "—") + "</td>" +
-        '<td class="ds-num text-end">' + (stop ? hhmm(stop.cumulative_minutes) : "—") + "</td>" +
+        '<td class="ds-num text-end">' + (stop ? hhmm(stop.leg_minutes) : "—") + "</td>" +
+        '<td class="ds-mid">' + (f.last_visit
+            ? esc(new Date(f.last_visit).toLocaleDateString("en-GB")) : "—") + "</td>" +
         '<td class="ds-mid text-center"><div class="btn-group btn-group-sm">' +
-          '<button class="btn btn-outline-secondary fmp-focus" data-farm="' + f.id + '">Map</button>' +
-          '<a class="btn btn-outline-secondary" target="_blank" rel="noopener" href="' +
+          '<button class="btn btn-outline-secondary fmp-focus" data-farm="' + f.id +
+            '" title="Show on map"><i class="fas fa-eye"></i></button>' +
+          '<a class="btn btn-outline-secondary" target="_blank" rel="noopener" title="Navigate" href="' +
             "https://www.google.com/maps/dir/?api=1&destination=" + f.latitude + "," + f.longitude +
-          '">Navigate</a>' +
+          '"><i class="fas fa-paper-plane"></i></a>' +
         "</div></td></tr>";
     }).join("");
+
+    var from = (page - 1) * PAGE_SIZE + 1;
+    var to = Math.min(page * PAGE_SIZE, rows.length);
+    el("fmp-count").textContent = "Showing " + from + " to " + to + " of " +
+      rows.length + " farms";
+    renderPager(pages);
+  }
+
+  function renderPager(pages) {
+    var list = el("fmp-pager");
+    if (pages < 2) { list.innerHTML = ""; return; }
+    var html = '<li class="page-item ' + (page === 1 ? "disabled" : "") +
+      '"><a class="page-link fmp-page" data-page="' + (page - 1) + '" href="#">&lsaquo;</a></li>';
+    for (var i = 1; i <= pages; i++) {
+      html += '<li class="page-item ' + (i === page ? "active" : "") +
+        '"><a class="page-link fmp-page" data-page="' + i + '" href="#">' + i + "</a></li>";
+    }
+    html += '<li class="page-item ' + (page === pages ? "disabled" : "") +
+      '"><a class="page-link fmp-page" data-page="' + (page + 1) + '" href="#">&rsaquo;</a></li>';
+    list.innerHTML = html;
   }
 
   function renderMissing() {
     var card = el("fmp-missing-card");
     var body = el("fmp-missing-body");
-    el("s-missing").textContent = missing.length;
+    // The count rides on the card's own header rather than a summary tile:
+    // farms without a pin are an exception to deal with, not a statistic to
+    // watch, and the card only appears when there are any.
+    var header = card.querySelector(".card-header");
     if (!missing.length) { card.classList.add("d-none"); return; }
     card.classList.remove("d-none");
+    if (header) {
+      header.innerHTML = '<i class="fas fa-location-crosshairs"></i> GPS Missing ' +
+        '<span class="badge bg-danger ms-1">' + missing.length + "</span>";
+    }
     body.innerHTML = missing.map(function (f) {
       return "<tr><td>" + esc(f.code) + "</td><td>" + esc(f.name) + "</td>" +
         "<td>" + esc(f.branch || "—") + "</td><td>" + esc(f.supervisor || "—") + "</td>" +
@@ -354,8 +435,16 @@ window.FarmMapPlanner = (function () {
 
   function renderCounts() {
     el("s-selected").textContent = selected.size;
+    el("s-visits").textContent = plan ? plan.farm_count : selected.size;
     el("s-distance").textContent = plan ? km(plan.distance_km) : "—";
     el("s-time").textContent = plan ? hhmm(plan.minutes) : "—";
+    el("s-distance-sub").textContent = plan
+      ? (plan.estimated ? "straight-line estimate" : "by road")
+      : "Planned distance";
+    // Distance per stop, which is the figure that says whether a round is a
+    // tight morning or a day of driving between three farms.
+    el("s-avg").textContent = (plan && plan.farm_count)
+      ? km(plan.distance_km / plan.farm_count) : "—";
   }
 
   function renderAll() {
@@ -422,6 +511,7 @@ window.FarmMapPlanner = (function () {
         var visible = new Set(farms.map(function (f) { return f.id; }));
         selected = new Set(Array.from(selected).filter(function (id) { return visible.has(id); }));
         plan = null;
+        page = 1;
         el("fmp-save").disabled = true;
         renderAll();
       })
@@ -493,14 +583,29 @@ window.FarmMapPlanner = (function () {
 
   // ---- wiring -------------------------------------------------------------
 
+  function setBase(which) {
+    Object.keys(baseLayers).forEach(function (name) {
+      if (name === which) { baseLayers[name].addTo(map); }
+      else if (map.hasLayer(baseLayers[name])) { map.removeLayer(baseLayers[name]); }
+    });
+    el("fmp-base-map").className = "btn " + (which === "street" ? "btn-primary" : "btn-outline-secondary");
+    el("fmp-base-sat").className = "btn " + (which === "satellite" ? "btn-primary" : "btn-outline-secondary");
+  }
+
   function init() {
     map = L.map("fmp-map").setView([26.43, 82.53], 9);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    baseLayers.street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
+    // Imagery, for judging whether a pin is on the sheds or in the field next
+    // to them — which a street map cannot show and a supervisor can.
+    baseLayers.satellite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "Imagery &copy; Esri" });
     markerLayer = L.layerGroup().addTo(map);
     routeLayer = L.layerGroup().addTo(map);
+    labelLayer = L.layerGroup().addTo(map);
 
     ["f-branch", "f-supervisor", "f-status", "f-batch", "f-priority"].forEach(function (id) {
       el(id).addEventListener("change", function () {
@@ -532,6 +637,23 @@ window.FarmMapPlanner = (function () {
       renderStart(); renderSummary(); renderTable(); drawRoute();
     });
 
+    el("fmp-base-map").addEventListener("click", function () { setBase("street"); });
+    el("fmp-base-sat").addEventListener("click", function () { setBase("satellite"); });
+    el("fmp-show-labels").addEventListener("change", function () {
+      if (this.checked) { labelLayer.addTo(map); } else { map.removeLayer(labelLayer); }
+    });
+    el("fmp-fullscreen").addEventListener("click", function () {
+      var node = el("fmp-map");
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (node.requestFullscreen) {
+        node.requestFullscreen();
+      }
+      // Leaflet sizes itself to its container, and the container has just
+      // changed size under it.
+      window.setTimeout(function () { map.invalidateSize(); }, 300);
+    });
+
     el("fmp-refresh").addEventListener("click", load);
     el("fmp-calculate").addEventListener("click", calculate);
     el("fmp-save").addEventListener("click", save);
@@ -558,6 +680,13 @@ window.FarmMapPlanner = (function () {
         var id = Number(pick.dataset.farm);
         if (selected.has(id)) selected.delete(id); else selected.add(id);
         plan = null; renderAll();
+        return;
+      }
+      var pager = event.target.closest(".fmp-page");
+      if (pager) {
+        event.preventDefault();
+        var wanted = Number(pager.dataset.page);
+        if (wanted >= 1) { page = wanted; renderTable(); }
         return;
       }
       var focus = event.target.closest(".fmp-focus");

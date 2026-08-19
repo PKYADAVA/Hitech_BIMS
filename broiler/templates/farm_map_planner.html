@@ -5,29 +5,58 @@
 {% block css %}
 <link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">
 <style>
-  /* The map is the page, so it gets the height. Everything beside it scrolls
-     within its own column rather than pushing the map off the screen. */
-  .fmp-map { height: 560px; border-radius: .5rem; z-index: 0; }
-  .fmp-side { max-height: 560px; overflow-y: auto; }
-  .fmp-stat { border:1px solid var(--bs-border-color,#e5e7eb); border-radius:.5rem;
-              padding:.6rem .8rem; background:#f8fafc; }
-  .fmp-stat .lbl { font-size:.7rem; letter-spacing:.04em; text-transform:uppercase;
-                   color:#64748b; }
-  .fmp-stat .val { font-size:1.35rem; font-weight:600; line-height:1.2; }
-  .fmp-seq { display:flex; gap:.6rem; padding:.5rem .25rem;
-             border-bottom:1px dashed #e5e7eb; }
-  .fmp-seq:last-child { border-bottom:0; }
-  .fmp-seq .no { flex:0 0 1.6rem; height:1.6rem; border-radius:50%;
-                 background:#1d4ed8; color:#fff; font-size:.78rem;
+  /* The map is the page, so it gets the height. The panels beside it scroll
+     within their own column rather than pushing it off the screen. */
+  .fmp-map { height: 520px; border-radius: .6rem; z-index: 0; }
+  .fmp-side { max-height: 520px; overflow-y: auto; }
+
+  /* Filter chips: a labelled card each, so the current selection reads at a
+     glance instead of having to be inferred from a row of bare selects. */
+  .fmp-chip { border:1px solid #e5e7eb; border-radius:.6rem; background:#fff;
+              padding:.4rem .7rem; display:flex; align-items:center; gap:.6rem; }
+  .fmp-chip .ic { width:1.9rem; height:1.9rem; border-radius:.5rem; flex:0 0 auto;
+                  display:flex; align-items:center; justify-content:center;
+                  background:#eef2ff; color:#4338ca; font-size:.8rem; }
+  .fmp-chip .bd { min-width:0; flex:1 1 auto; }
+  .fmp-chip label { font-size:.68rem; color:#64748b; margin:0; display:block; }
+  .fmp-chip select { border:0; padding:0 1.1rem 0 0; height:auto; font-weight:600;
+                     font-size:.85rem; background-position:right .1rem center;
+                     box-shadow:none !important; }
+
+  .fmp-stat { border:1px solid #e5e7eb; border-radius:.6rem; background:#fff;
+              padding:.6rem .8rem; display:flex; gap:.7rem; align-items:center;
+              height:100%; }
+  .fmp-stat .ic { width:2.3rem; height:2.3rem; border-radius:.6rem; flex:0 0 auto;
+                  display:flex; align-items:center; justify-content:center;
+                  font-size:.95rem; }
+  .fmp-stat .lbl { font-size:.72rem; color:#64748b; display:block; }
+  .fmp-stat .val { font-size:1.3rem; font-weight:700; line-height:1.15; display:block; }
+  .fmp-stat .sub { font-size:.68rem; color:#94a3b8; display:block; }
+
+  .fmp-seq { display:flex; gap:.6rem; padding:.42rem .25rem; align-items:flex-start; }
+  .fmp-seq + .fmp-seq { border-top:1px dashed #eef2f7; }
+  .fmp-seq .no { flex:0 0 1.45rem; height:1.45rem; border-radius:50%;
+                 background:#2563eb; color:#fff; font-size:.72rem; font-weight:600;
                  display:flex; align-items:center; justify-content:center; }
-  .fmp-seq.is-start .no, .fmp-seq.is-end .no { background:#0f172a; }
-  .fmp-seq .nm { font-weight:500; }
-  .fmp-seq .mt { font-size:.75rem; color:#64748b; }
+  .fmp-seq.is-start .no, .fmp-seq.is-end .no { background:#16a34a; }
+  .fmp-seq .nm { font-size:.85rem; }
+  .fmp-seq .km { margin-left:auto; font-size:.8rem; color:#475569; font-weight:600;
+                 white-space:nowrap; }
+
+  /* A farm's name always beside its pin, and the leg distance written on the
+     leg — the two things a route is actually read for. */
+  .fmp-label { background:#fff; border:1px solid #cbd5e1; border-radius:.35rem;
+               padding:.05rem .35rem; font-size:.72rem; font-weight:600;
+               white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,.12); }
+  .fmp-leg { background:#2563eb; color:#fff; border-radius:.35rem;
+             padding:.02rem .3rem; font-size:.68rem; font-weight:600;
+             white-space:nowrap; }
+  .fmp-legend { background:#fff; border:1px solid #e5e7eb; border-radius:.5rem;
+                padding:.45rem .7rem; font-size:.75rem; }
   .fmp-pin { border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.25); }
-  .fmp-missing { font-size:.82rem; }
-  .fmp-badge-critical { background:#dc2626; }
-  .fmp-badge-high { background:#ea580c; }
-  .fmp-badge-normal { background:#64748b; }
+  .badge-priority-critical { background:#dc2626; color:#fff; }
+  .badge-priority-high { background:#fed7aa; color:#9a3412; }
+  .badge-priority-normal { background:#e2e8f0; color:#475569; }
   .leaflet-container { font: inherit; }
 </style>
 {% endblock %}
@@ -38,103 +67,117 @@
 <div class="page-header">
   <div class="page-header-main">
     <div class="page-header-title"><i class="fas fa-map-location-dot"></i> Farm Map &amp; Route Planner</div>
-    <div class="page-header-subtitle">Plan a supervisor's round from the farms' own GPS locations</div>
+    <div class="page-header-subtitle">Plan the shortest road route to visit farms</div>
   </div>
   <div class="page-header-right">
-    <div class="d-flex gap-2 flex-wrap">
-      <button class="btn btn-outline-secondary" id="fmp-refresh"><i class="fas fa-rotate"></i> Refresh</button>
-      <button class="btn btn-primary" id="fmp-calculate"><i class="fas fa-route"></i> Calculate Route</button>
-      <button class="btn btn-success" id="fmp-save" disabled><i class="fas fa-floppy-disk"></i> Save Route</button>
-    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'route_history' %}">
+      <i class="fas fa-clock-rotate-left"></i> Route History</a>
   </div>
-</div>
-
-<!-- Filters -------------------------------------------------------------->
-<div class="card mb-3">
-  <div class="card-body py-3">
-    <div class="row g-2">
-      <div class="col-md-2">
-        <label class="form-label">Branch</label>
-        <select class="form-select" id="f-branch">
-          <option value="">All Branches</option>
-          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Supervisor</label>
-        <select class="form-select" id="f-supervisor">
-          <option value="">All Supervisors</option>
-          {% for s in supervisors %}<option value="{{ s.id }}" data-branch="{{ s.branch_id }}">{{ s.name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Farm Status</label>
-        <select class="form-select" id="f-status">
-          <option value="">All</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="closed">Closed</option>
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Batch Status</label>
-        <select class="form-select" id="f-batch">
-          <option value="">All</option>
-          <option value="active">With Active Batch</option>
-          <option value="empty">No Active Batch</option>
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Priority</label>
-        <select class="form-select" id="f-priority">
-          <option value="">All</option>
-          {% for value, label in priorities %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label">Route Mode</label>
-        <select class="form-select" id="f-mode">
-          {% for value, label in route_modes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-        </select>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Summary cards -------------------------------------------------------->
-<div class="row g-2 mb-3" id="fmp-stats">
-  <div class="col-6 col-lg"><div class="fmp-stat"><div class="lbl">Total Farms</div><div class="val" id="s-total">{{ total_farms }}</div></div></div>
-  <div class="col-6 col-lg"><div class="fmp-stat"><div class="lbl">Selected Farms</div><div class="val" id="s-selected">0</div></div></div>
-  <div class="col-6 col-lg"><div class="fmp-stat"><div class="lbl">Total Distance</div><div class="val" id="s-distance">&mdash;</div></div></div>
-  <div class="col-6 col-lg"><div class="fmp-stat"><div class="lbl">Estimated Time</div><div class="val" id="s-time">&mdash;</div></div></div>
-  <div class="col-6 col-lg"><div class="fmp-stat"><div class="lbl">GPS Missing</div><div class="val text-danger" id="s-missing">{{ missing_farms }}</div></div></div>
 </div>
 
 {% comment %}
 The page posts with fetch, so it needs the CSRF cookie issued. Without a token
-tag anywhere Django never sets it, every calculate came back a 403 of HTML and
-the script reported it as a network problem. Multi-line {# #} is not a comment
-in Django — only single-line is — so this block uses the tag that is.
+tag anywhere Django never sets it and every calculate comes back a 403 of HTML.
 {% endcomment %}
 {% csrf_token %}
 
-<div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-  <span class="small text-muted">Start point:</span>
+<!-- Filters --------------------------------------------------------------->
+<div class="row g-2 mb-2 align-items-stretch">
+  <div class="col-6 col-lg-2">
+    <div class="fmp-chip"><span class="ic"><i class="fas fa-code-branch"></i></span>
+      <span class="bd"><label>Branch</label>
+        <select class="form-select form-select-sm" id="f-branch">
+          <option value="">All Branches</option>
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.branch_name }}</option>{% endfor %}
+        </select></span></div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="fmp-chip"><span class="ic"><i class="fas fa-user-tie"></i></span>
+      <span class="bd"><label>Supervisor</label>
+        <select class="form-select form-select-sm" id="f-supervisor">
+          <option value="">All Supervisors</option>
+          {% for s in supervisors %}<option value="{{ s.id }}" data-branch="{{ s.branch_id }}">{{ s.name }}</option>{% endfor %}
+        </select></span></div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="fmp-chip"><span class="ic"><i class="fas fa-tractor"></i></span>
+      <span class="bd"><label>Farm Status</label>
+        <select class="form-select form-select-sm" id="f-status">
+          <option value="">All</option><option value="active">Active</option>
+          <option value="inactive">Inactive</option><option value="closed">Closed</option>
+        </select></span></div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="fmp-chip"><span class="ic"><i class="fa-solid fa-kiwi-bird"></i></span>
+      <span class="bd"><label>Batch Status</label>
+        <select class="form-select form-select-sm" id="f-batch">
+          <option value="">All</option><option value="active">Active</option>
+          <option value="empty">No Active Batch</option>
+        </select></span></div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="fmp-chip"><span class="ic"><i class="fas fa-flag"></i></span>
+      <span class="bd"><label>Priority</label>
+        <select class="form-select form-select-sm" id="f-priority">
+          <option value="">All</option>
+          {% for value, label in priorities %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select></span></div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="fmp-chip"><span class="ic"><i class="fas fa-route"></i></span>
+      <span class="bd"><label>Route Mode</label>
+        <select class="form-select form-select-sm" id="f-mode">
+          {% for value, label in route_modes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select></span></div>
+  </div>
+</div>
+
+<div class="d-flex gap-2 flex-wrap align-items-center mb-3">
+  <button class="btn btn-primary" id="fmp-calculate"><i class="fas fa-route"></i> Calculate Route</button>
+  <button class="btn btn-outline-secondary" id="fmp-refresh" title="Reload farms"><i class="fas fa-rotate"></i></button>
+  <span class="text-muted small ms-2">Start point:</span>
   <span class="badge bg-dark" id="fmp-start-label">not set</span>
   <button class="btn btn-sm btn-outline-secondary" id="fmp-set-start">
-    <i class="fas fa-crosshairs"></i> Set on map
-  </button>
+    <i class="fas fa-crosshairs"></i> Set on map</button>
   <span class="small text-muted" id="fmp-start-hint"></span>
+</div>
+
+<!-- Summary --------------------------------------------------------------->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-lg-2"><div class="fmp-stat">
+    <span class="ic" style="background:#eef2ff;color:#4338ca;"><i class="fas fa-tractor"></i></span>
+    <span><span class="lbl">Total Farms</span><span class="val" id="s-total">{{ total_farms }}</span>
+    <span class="sub">On this map</span></span></div></div>
+  <div class="col-6 col-lg-2"><div class="fmp-stat">
+    <span class="ic" style="background:#ecfdf5;color:#047857;"><i class="fas fa-list-check"></i></span>
+    <span><span class="lbl">Selected Farms</span><span class="val" id="s-selected">0</span>
+    <span class="sub">Farms in route</span></span></div></div>
+  <div class="col-6 col-lg-2"><div class="fmp-stat">
+    <span class="ic" style="background:#eff6ff;color:#1d4ed8;"><i class="fas fa-road"></i></span>
+    <span><span class="lbl">Total Distance</span><span class="val" id="s-distance">&mdash;</span>
+    <span class="sub" id="s-distance-sub">Planned distance</span></span></div></div>
+  <div class="col-6 col-lg-2"><div class="fmp-stat">
+    <span class="ic" style="background:#fff7ed;color:#c2410c;"><i class="fas fa-clock"></i></span>
+    <span><span class="lbl">Estimated Time</span><span class="val" id="s-time">&mdash;</span>
+    <span class="sub">Travel time</span></span></div></div>
+  <div class="col-6 col-lg-2"><div class="fmp-stat">
+    <span class="ic" style="background:#f5f3ff;color:#6d28d9;"><i class="fas fa-location-dot"></i></span>
+    <span><span class="lbl">Total Visits</span><span class="val" id="s-visits">0</span>
+    <span class="sub">Visit points</span></span></div></div>
+  <div class="col-6 col-lg-2"><div class="fmp-stat">
+    <span class="ic" style="background:#fef2f2;color:#b91c1c;"><i class="fas fa-map-pin"></i></span>
+    <span><span class="lbl">Avg. Distance / Visit</span><span class="val" id="s-avg">&mdash;</span>
+    <span class="sub">Per stop</span></span></div></div>
 </div>
 
 <div id="fmp-alert" class="alert d-none" role="alert"></div>
 
-<!-- Map + panels --------------------------------------------------------->
+<!-- Map + panels ---------------------------------------------------------->
 <div class="row g-3">
   <div class="col-lg-3 order-2 order-lg-1">
     <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fas fa-list-check"></i> Farms</span>
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <span class="small"><i class="fas fa-list-check"></i> Farms</span>
         <div class="btn-group btn-group-sm">
           <button class="btn btn-outline-secondary" id="fmp-all">All</button>
           <button class="btn btn-outline-secondary" id="fmp-none">None</button>
@@ -147,24 +190,49 @@ in Django — only single-line is — so this block uses the tag that is.
   </div>
 
   <div class="col-lg-6 order-1 order-lg-2">
+    <div class="d-flex gap-2 align-items-center mb-2">
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-primary" id="fmp-base-map">Map</button>
+        <button class="btn btn-outline-secondary" id="fmp-base-sat">Satellite</button>
+      </div>
+      <div class="form-check form-check-inline mb-0 ms-1">
+        <input class="form-check-input" type="checkbox" id="fmp-show-labels" checked>
+        <label class="form-check-label small" for="fmp-show-labels">Show Labels</label>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary ms-auto" id="fmp-fullscreen"
+              title="Fullscreen"><i class="fas fa-expand"></i></button>
+    </div>
     <div id="fmp-map" class="fmp-map"></div>
+    <div class="fmp-legend mt-2 d-flex flex-wrap gap-3">
+      <span><i class="fas fa-location-dot text-success"></i> Start / End Point</span>
+      <span><i class="fas fa-location-dot text-primary"></i> Farm / Stop</span>
+      <span><span style="display:inline-block;width:1.4rem;border-top:3px solid #2563eb;
+                   vertical-align:middle;"></span> Planned Route</span>
+      <span><span style="display:inline-block;width:1.4rem;border-top:3px dotted #dc2626;
+                   vertical-align:middle;"></span> GPS Missing</span>
+    </div>
   </div>
 
   <div class="col-lg-3 order-3">
     <div class="card h-100">
-      <div class="card-header"><i class="fas fa-route"></i> Route Summary</div>
+      <div class="card-header py-2 small"><i class="fas fa-route"></i> Route Summary</div>
       <div class="card-body fmp-side p-2" id="fmp-summary">
         <div class="text-muted small p-2">
           Select farms and choose <strong>Calculate Route</strong>.
         </div>
       </div>
+      <div class="card-footer p-2">
+        <button class="btn btn-success w-100" id="fmp-save" disabled>
+          <i class="fas fa-floppy-disk"></i> Save Route</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- GPS missing ---------------------------------------------------------->
+<!-- GPS missing ----------------------------------------------------------->
 <div class="card mt-3 d-none" id="fmp-missing-card">
-  <div class="card-header text-danger"><i class="fas fa-location-crosshairs"></i> GPS Missing</div>
+  <div class="card-header text-danger py-2 small">
+    <i class="fas fa-location-crosshairs"></i> GPS Missing</div>
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-sm mb-0 ds-grid">
@@ -175,29 +243,34 @@ in Django — only single-line is — so this block uses the tag that is.
   </div>
 </div>
 
-<!-- Farm list ------------------------------------------------------------>
+<!-- Farms in route sequence ----------------------------------------------->
 <div class="card mt-3">
-  <div class="card-header"><i class="fas fa-table"></i> Farm List</div>
+  <div class="card-header py-2 small"><i class="fas fa-table"></i> Farms in Route Sequence</div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover table-bordered mb-0 ds-grid" id="fmp-table">
+      <table class="table table-hover table-bordered mb-0 ds-grid">
         <thead>
           <tr>
-            <th style="width:2.2rem"></th>
+            <th style="width:3.6rem">Seq.</th>
             <th>Farm Code</th><th>Farm Name</th><th>Branch</th><th>Supervisor</th>
-            <th>Location</th><th class="ds-mid">Priority</th>
-            <th class="ds-num text-end">Active Batch</th>
-            <th class="ds-num text-end">From Previous</th>
-            <th class="ds-num text-end">Cumulative</th>
-            <th class="ds-num text-end">Est. Time</th>
+            <th>Active Batch</th><th class="ds-num text-end">Live Birds</th>
+            <th class="ds-mid">Priority</th>
+            <th class="ds-num text-end">Distance from Prev.</th>
+            <th class="ds-num text-end">Cumulative Dist.</th>
+            <th class="ds-num text-end">Est. Time to Next</th>
+            <th class="ds-mid">Last Visit</th>
             <th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
         <tbody id="fmp-body">
-          <tr><td colspan="12" class="text-center text-muted py-4">Loading&hellip;</td></tr>
+          <tr><td colspan="13" class="text-center text-muted py-4">Loading&hellip;</td></tr>
         </tbody>
       </table>
     </div>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center py-2">
+    <span class="small text-muted" id="fmp-count">&nbsp;</span>
+    <nav><ul class="pagination pagination-sm mb-0" id="fmp-pager"></ul></nav>
   </div>
 </div>
 {% endblock %}
@@ -213,7 +286,7 @@ in Django — only single-line is — so this block uses the tag that is.
     save: "{% url 'farm_route_save' %}",
     capture: "{% url 'farm_location_capture_add' %}",
     farm: "{% url 'branch_farm' %}",
-    markers: "{% static 'vendor/leaflet/images/' %}"
+    history: "{% url 'route_history' %}"
   };
   window.FMP_TODAY = "{{ today|date:'Y-m-d' }}";
   window.FMP_BRANCH_POINTS = {{ branch_points_json|safe }};
