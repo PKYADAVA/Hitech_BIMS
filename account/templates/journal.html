@@ -40,9 +40,15 @@
         <option value="">All sectors</option>
         {% for s in sectors %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
       </select>
-      <input type="search" id="filter-q" class="form-control form-control-sm" style="min-width:200px"
-             placeholder="Voucher no / narration..." />
-      <button class="btn btn-sm btn-outline-secondary" id="filter-apply"><i class="fas fa-search"></i></button>
+      <!-- Bounded, and grouped with its own button. .form-control is width:100%,
+           which min-width cannot hold back: the box grew to the full width of
+           the header, took a line to itself and pushed the search button onto
+           a third one. -->
+      <div class="input-group input-group-sm" style="width:260px">
+        <input type="search" id="filter-q" class="form-control"
+               placeholder="Voucher no / narration..." />
+        <button class="btn btn-outline-secondary" id="filter-apply"><i class="fas fa-search"></i></button>
+      </div>
     </div>
   </div>
   <div class="card-body p-0">
