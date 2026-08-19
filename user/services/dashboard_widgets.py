@@ -602,19 +602,43 @@ def _last_lifting_note(qs, day):
             f" — {_num(previous.birds)} birds, {gap} day{'' if gap == 1 else 's'} ago.")
 
 
-def _last_sale_date(branch_id=None):
+def _last_sale_date(branch_ids=None):
     """The day of the most recent bird sale, or None if there has never been one.
 
-    Narrowed to a branch when one is chosen: picking Akbarpur and landing on
-    the day Bahraich last sold is a card full of noughts about the wrong place.
+    Narrowed to the branches the card is answering for: landing on the day
+    another branch last sold is a card full of noughts about the wrong place,
+    whether that branch was picked from the filter bar or is simply the only
+    one this user may see.
     """
     from broiler.models import BirdSale
 
     qs = BirdSale.objects.all()
-    if branch_id:
-        qs = qs.filter(farm__branch_id=branch_id)
+    if branch_ids is not None:
+        qs = qs.filter(farm__branch_id__in=branch_ids)
     row = qs.order_by("-date").values("date").first()
     return row["date"] if row else None
+
+
+def _sale_branches(filters, user):
+    """Which branches this card answers for.
+
+    ``None`` means every branch — nobody narrowed it and nothing limits the
+    reader. A list means these and no others, and an empty list is a real
+    answer rather than a missing one: a user permitted no branch at all, or one
+    who asked for a branch outside their own access, sees nothing rather than
+    everything. Collapsing that into "no limit" is the exact failure the
+    scoping module exists to prevent.
+    """
+    from user.services.scoping import allowed_ids
+
+    allowed = allowed_ids(user, "branches")          # None = no limit
+    chosen = filters.get("branch")
+    if chosen:
+        chosen = int(chosen)
+        if allowed is not None and chosen not in allowed:
+            return []
+        return [chosen]
+    return None if allowed is None else sorted(allowed)
 
 
 def _sale_note(day, chosen, orphan_money):
@@ -652,49 +676,51 @@ def _sale_overview(viewable, filters, user=None):
     bridge, so the card says it could not apply them rather than showing a
     figure that quietly ignored them.
 
+    That same bridge is what lets a scoped reader see the card at all. It used
+    to refuse them outright, on the grounds that scoping the sales and leaving
+    the receipts whole would have handed a branch manager the rest of the
+    country's money; with the offices mapped, both halves narrow together and
+    a branch manager gets their own branch's sheet.
+
     Money taken at an office mapped to no branch is nobody's on a branch view.
-    It is named on the card rather than dropped, because a total that silently
-    loses a receipt is worse than one that admits what it left out.
+    For a reader who can see the whole business it is named on the card rather
+    than dropped — a total that silently loses a receipt is worse than one that
+    admits what it left out — and for a scoped reader it is not mentioned,
+    being outside their access as much as it is outside any branch.
     """
     from django.db.models import Sum
     from broiler.models import BirdSale, BirdSaleReceipt
+    from inventory.services.offices import mapped_office_ids, offices_for_branches
     from user.services.scoping import is_unscoped
 
+    # Which branches this card answers for, before the day is picked: a reader
+    # limited to one branch should land on the day *that* branch last sold.
+    branch_ids = _sale_branches(filters, user)
     # With no date chosen the card stands at the last day that had a sale
     # rather than today: the trade is a few days a week, and a card dated to a
     # morning nothing happened on invites the reader to think nothing has
     # happened at all.
     chosen = filters.get("date")
-    branch_id = filters.get("branch")
-    day = chosen or _last_sale_date(branch_id) or timezone.localdate()
-    # Whole-business figures, so only for people who may see the whole
-    # business. Scoping the sales alone and leaving the receipts — which carry
-    # no farm — would make the difference between them an arithmetic accident
-    # rather than a shortfall, and a branch manager would be handed the rest of
-    # the country's money either way.
-    if not is_unscoped(user):
-        return {"stats": [], "filters_used": ["date"],
-                "note": "This overview covers every branch, so it is shown only "
-                        "to users whose access is not limited to part of the "
-                        "business."}
+    day = chosen or _last_sale_date(branch_ids) or timezone.localdate()
 
     sales = BirdSale.objects.filter(date=day)
     receipts = BirdSaleReceipt.objects.filter(date=day)
-    used = ["date"]
+    used = ["date"] + (["branch"] if filters.get("branch") else [])
     orphan_money = 0.0
-    if branch_id:
-        from inventory.services.offices import mapped_office_ids, offices_for_branch
-
-        sales = sales.filter(farm__branch_id=branch_id)
-        # Whatever was taken at this branch's own offices. An office with no
-        # branch mapped to it is nobody's, so it is left out here and counted
-        # up for the note below rather than folded into whichever branch is
-        # being looked at.
-        receipts = receipts.filter(location_id__in=offices_for_branch(branch_id))
-        orphan_money = float(BirdSaleReceipt.objects.filter(date=day)
-                             .exclude(location_id__in=mapped_office_ids())
-                             .aggregate(t=Sum("amount"))["t"] or 0)
-        used.append("branch")
+    if branch_ids is not None:
+        sales = sales.filter(farm__branch_id__in=branch_ids)
+        # Whatever was taken at these branches' own offices. An office with no
+        # branch mapped to it is nobody's, so it is left out here rather than
+        # folded into whichever branch is being looked at.
+        receipts = receipts.filter(location_id__in=offices_for_branches(branch_ids))
+        # What that leaves unaccounted for is worth saying to somebody who can
+        # see the whole business and act on it. To a reader scoped to part of
+        # it, money outside every branch is outside their access too, and a
+        # total of it is not theirs to be shown.
+        if is_unscoped(user):
+            orphan_money = float(BirdSaleReceipt.objects.filter(date=day)
+                                 .exclude(location_id__in=mapped_office_ids())
+                                 .aggregate(t=Sum("amount"))["t"] or 0)
 
     totals = sales.aggregate(b=Sum("birds"), w=Sum("net_weight"), v=Sum("amount"))
     birds = float(totals["b"] or 0)
@@ -706,8 +732,17 @@ def _sale_overview(viewable, filters, user=None):
     # hiding it was how a ₹2,00,000 receipt showed up nowhere at all.
     money_in = float(receipts.aggregate(t=Sum("amount"))["t"] or 0)
     if not birds and not weight and not money_in:
-        last = _last_sale_date(branch_id)
-        where = " here" if branch_id else ""
+        if branch_ids == []:
+            # Two different empties, and telling them apart is the difference
+            # between "ask an administrator" and "pick another branch".
+            return {"stats": [{"label": "Sold birds", "value": "0"}],
+                    "note": ("That branch is outside your access."
+                             if filters.get("branch") else
+                             "Your access does not include a branch to show "
+                             "sales for."),
+                    "filters_used": used}
+        last = _last_sale_date(branch_ids)
+        where = " here" if branch_ids is not None else ""
         return {"stats": [{"label": "Sold birds", "value": "0"}],
                 "note": ("No bird sales on this day. The last was "
                          f"{last.strftime('%d %b %Y')}."

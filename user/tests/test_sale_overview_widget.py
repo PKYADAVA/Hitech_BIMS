@@ -186,20 +186,37 @@ class SaleOverviewTests(TestCase):
 
     # ---- who may see it -----------------------------------------------------
 
-    def test_a_user_limited_to_part_of_the_business_is_told_why_it_is_empty(self):
+    def scoped_user(self, *branches, name="soclerk"):
+        """A login that may see the bird sale register and only these branches."""
         User = get_user_model()
-        clerk = User.objects.create_user("soclerk", "c@x.com", "Str0ngPass!")
-        group = Group.objects.create(name="Akbarpur Only")
+        clerk = User.objects.create_user(name, f"{name}@x.com", "Str0ngPass!")
+        group = Group.objects.create(name=f"{name} scope")
         clerk.groups.add(group)
         GroupTabPermission.objects.create(group=group, tab_code="bird_sale_list",
                                           can_view=True)
         access = GroupAccessProfile.objects.create(group=group, all_branches=False)
-        access.branches.add(self.branch)
+        for branch in branches:
+            access.branches.add(branch)
+        return clerk
 
+    def test_a_user_limited_to_one_branch_sees_that_branch_s_sheet(self):
+        """It used to refuse them the card outright, because scoping the sales
+        and leaving the receipts whole would have handed a branch manager the
+        rest of the country's money. The offices are mapped now, so both halves
+        narrow together and they get their own branch's sheet."""
         self.sell(419, "775.50", "89")
-        card = self.card(user=clerk)
-        self.assertEqual(card["stats"], [])
-        self.assertIn("every branch", card["note"])
+        card = self.card(user=self.scoped_user(self.branch))
+        self.assertEqual(next(s for s in card["stats"]
+                              if s["label"] == "Sold birds")["value"], "419")
+        self.assertIsNone(card["ignored"])
+
+    def test_a_user_permitted_no_branch_at_all_sees_nothing(self):
+        """An empty scope is a real limit that permits nothing, and must not be
+        collapsed into "no limit"."""
+        self.sell(419, "775.50", "89")
+        card = self.card(user=self.scoped_user())
+        self.assertEqual([s["value"] for s in card["stats"]], ["0"])
+        self.assertIn("does not include a branch", card["note"])
 
     def test_it_is_gated_on_the_bird_sale_register(self):
         User = get_user_model()
@@ -327,3 +344,54 @@ class SaleOverviewBranchTests(SaleOverviewTests):
         self.receipt_at(self.counter, "5000")
         self.assertEqual(self.stat("Cash received", filters={"branch": lone.id})["value"],
                          "₹0")
+
+    def test_a_scoped_user_sees_only_their_own_branch_s_sales(self):
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.sell_at(self.far_farm, 900, "1800.00", "90")
+        card = self.card(user=self.scoped_user(self.branch))
+        self.assertEqual(next(s for s in card["stats"]
+                              if s["label"] == "Sold birds")["value"], "100")
+
+    def test_a_scoped_user_sees_only_the_money_taken_at_their_own_offices(self):
+        """The half the old gate could not narrow, and the reason it refused
+        them the card at all."""
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.receipt_at(self.counter, "5000")
+        self.receipt_at(self.far_counter, "7000")
+        self.assertEqual(self.stat("Cash received", user=self.scoped_user(self.branch))
+                         ["value"], "₹5,000")
+
+    def test_asking_for_a_branch_outside_the_scope_yields_nothing(self):
+        """Not that branch's figures, and not everything either — the filter is
+        a request, and their access is what answers it."""
+        self.sell_at(self.far_farm, 900, "1800.00", "90")
+        card = self.card(user=self.scoped_user(self.branch),
+                         filters={"branch": self.far.id})
+        self.assertEqual([s["value"] for s in card["stats"]], ["0"])
+        # Not the same empty as having no branch at all — that one says to ask
+        # an administrator, this one says to pick another branch.
+        self.assertIn("outside your access", card["note"])
+
+    def test_money_at_an_unmapped_office_is_not_named_to_a_scoped_user(self):
+        """Money outside every branch is outside their access too."""
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.receipt_at(self.orphan, "9000")
+        note = self.card(user=self.scoped_user(self.branch))["note"] or ""
+        self.assertNotIn("9,000", note)
+
+    def test_a_scoped_user_lands_on_their_own_branch_s_last_selling_day(self):
+        self.sell_at(self.far_farm, 500, "1000.00", "90")
+        self.sell_at(self.farm, 100, "200.00", "90",
+                     when=self.today - timedelta(days=6))
+        card = self.card(user=self.scoped_user(self.branch))
+        self.assertEqual(next(s for s in card["stats"]
+                              if s["label"] == "Sold birds")["value"], "100")
+
+    def test_two_branches_in_scope_are_added_together(self):
+        self.sell_at(self.farm, 100, "200.00", "90")
+        self.sell_at(self.far_farm, 900, "1800.00", "90")
+        self.receipt_at(self.counter, "5000")
+        self.receipt_at(self.far_counter, "7000")
+        user = self.scoped_user(self.branch, self.far)
+        self.assertEqual(self.stat("Sold birds", user=user)["value"], "1,000")
+        self.assertEqual(self.stat("Cash received", user=user)["value"], "₹12,000")

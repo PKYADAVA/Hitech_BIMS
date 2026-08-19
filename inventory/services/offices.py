@@ -17,10 +17,18 @@ from inventory.models import Mapping
 def offices_for_branch(branch_id):
     """Ids of the offices mapped to this branch — the locations its money is
     taken at. Empty when the branch has no office mapped to it at all."""
-    if not branch_id:
+    return offices_for_branches([branch_id] if branch_id else [])
+
+
+def offices_for_branches(branch_ids):
+    """The same for several branches at once — what a user scoped to a handful
+    of them may see the money of. Empty for an empty list, which is a real
+    answer: a branch with no office of its own takes no money of its own."""
+    ids = [b for b in (branch_ids or []) if b]
+    if not ids:
         return []
     return list(Mapping.objects.filter(type=Mapping.TYPE_SECTOR_BRANCH,
-                                       to_id=branch_id)
+                                       to_id__in=ids)
                 .exclude(to_id=None).values_list("from_id", flat=True))
 
 
