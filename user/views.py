@@ -561,7 +561,7 @@ def master_import(request, tab_code):
     from django.http import HttpResponse
 
     from .access import user_can
-    from .services.bulk_import import IMPORTABLE, run_import, template_columns
+    from .services.bulk_import import IMPORTABLE, build_template_workbook, run_import, template_columns
 
     if tab_code not in IMPORTABLE:
         return JsonResponse({"error": "This page does not support import."}, status=404)
@@ -573,11 +573,24 @@ def master_import(request, tab_code):
     columns = template_columns(tab_code)
 
     if request.method == "GET":
-        if request.GET.get("template") == "csv":
+        template = request.GET.get("template")
+        if template == "csv":
             header = ",".join(columns) + "\r\n"
             response = HttpResponse(header, content_type="text/csv")
             response["Content-Disposition"] = (
                 f'attachment; filename="{tab_code}_import_template.csv"')
+            return response
+        if template == "xlsx":
+            # A real spreadsheet rather than a header row, so a "list" column
+            # (a picklist-bound choice, a plain choices= field, or a
+            # foreign-key looked up by code) is an actual Excel drop-down —
+            # a pick instead of a guess at the exact spelling it needs.
+            workbook = build_template_workbook(tab_code)
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            response["Content-Disposition"] = (
+                f'attachment; filename="{tab_code}_import_template.xlsx"')
+            workbook.save(response)
             return response
         return JsonResponse({"columns": columns})
 

@@ -44,7 +44,10 @@ Manage Customers
       <div class="page-header-subtitle">Add and manage customer records</div>
     </div>
     <div class="page-header-right">
-      {% if page_perms.add %}<a href="{% url 'customer_add' %}" class="btn btn-primary">
+      {% if page_perms.add %}<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#bulkUploadModal">
+        <i class="fas fa-file-import"></i> Bulk Upload
+      </button>
+      <a href="{% url 'customer_add' %}" class="btn btn-primary">
         <i class="fas fa-plus"></i> Add New Customer
       </a>{% endif %}
     </div>
@@ -107,6 +110,56 @@ Manage Customers
         </div>
     </div>
 </div>
+
+{% if page_perms.add %}
+<!-- Bulk Upload Customers -->
+<div class="modal fade" id="bulkUploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-file-import me-2"></i>Bulk Upload Customers</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Add many customers at once from a CSV or Excel file. Download the sample template first so
+          your columns match exactly, then Validate before Import — nothing is saved until you confirm.
+        </p>
+        <div class="mb-3">
+          <a href="{% url 'master_import' 'customer' %}?template=xlsx" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-download me-1"></i>Download Sample Template
+          </a>
+          <span class="text-muted small ms-1">List columns (Party Type, Party Category, Customer Group…) come with a drop-down already set up.</span>
+        </div>
+        <div class="mb-3">
+          <label for="bulk-upload-file" class="form-label">File (.csv or .xlsx)</label>
+          <input type="file" class="form-control" id="bulk-upload-file" accept=".csv,.xlsx,.xls">
+        </div>
+        <div id="bulk-upload-result" class="d-none">
+          <div class="alert" id="bulk-upload-summary"></div>
+          <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+            <table class="table table-sm table-bordered mb-0">
+              <thead><tr><th style="width:80px;">Row</th><th>Issue</th></tr></thead>
+              <tbody id="bulk-upload-errors-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-times me-1"></i>Close
+        </button>
+        <button type="button" class="btn btn-outline-primary" id="bulk-upload-validate">
+          <i class="fas fa-check-double me-1"></i>Validate
+        </button>
+        <button type="button" class="btn btn-primary d-none" id="bulk-upload-commit">
+          <i class="fas fa-upload me-1"></i>Import Now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if 'tracking_visits' in allowed_tabs %}
 <!-- Field-visit history (Employee Tracking module) -->
@@ -190,6 +243,92 @@ Manage Customers
     {% endif %}
   });
 </script>
+{% if page_perms.add %}
+<script>
+  function csrf(){return document.cookie.split('; ').find(v=>v.startsWith('csrftoken='))?.split('=')[1]||'{{ csrf_token }}'}
+  (function(){
+    const fileInput = document.getElementById('bulk-upload-file');
+    const validateBtn = document.getElementById('bulk-upload-validate');
+    const commitBtn = document.getElementById('bulk-upload-commit');
+    const resultBox = document.getElementById('bulk-upload-result');
+    const summaryBox = document.getElementById('bulk-upload-summary');
+    const errorsBody = document.getElementById('bulk-upload-errors-body');
+    const modalEl = document.getElementById('bulkUploadModal');
+    const esc = t => $('<span>').text(t == null ? '' : t).html();
+
+    function resetUploadUI(){
+      resultBox.classList.add('d-none');
+      summaryBox.className = 'alert';
+      summaryBox.textContent = '';
+      errorsBody.innerHTML = '';
+      commitBtn.classList.add('d-none');
+      validateBtn.classList.remove('d-none');
+      validateBtn.disabled = false;
+      fileInput.value = '';
+    }
+    modalEl.addEventListener('hidden.bs.modal', resetUploadUI);
+
+    function renderErrors(rows, moreCount){
+      errorsBody.innerHTML = (rows || [])
+        .map(e => `<tr><td>${esc(e.row || '—')}</td><td>${esc(e.message)}</td></tr>`).join('');
+      if (moreCount) {
+        errorsBody.insertAdjacentHTML('beforeend',
+          `<tr><td colspan="2" class="text-muted">…and ${moreCount} more.</td></tr>`);
+      }
+    }
+
+    async function runImport(commit){
+      const file = fileInput.files[0];
+      if (!file) { window.showToast('danger', 'Choose a file first.'); return; }
+      const form = new FormData();
+      form.append('file', file);
+      form.append('commit', commit ? '1' : '0');
+      const btn = commit ? commitBtn : validateBtn;
+      btn.disabled = true;
+      try {
+        const resp = await fetch("{% url 'master_import' 'customer' %}",
+          { method: 'POST', headers: { 'X-CSRFToken': csrf() }, body: form });
+        const data = await resp.json();
+        resultBox.classList.remove('d-none');
+
+        if (!resp.ok) {
+          summaryBox.className = 'alert alert-danger';
+          summaryBox.textContent = data.error
+            || (data.errors && data.errors[0] && data.errors[0].message)
+            || 'Could not read that file.';
+          renderErrors(data.errors, 0);
+          return;
+        }
+
+        const clean = data.invalid === 0;
+        summaryBox.className = 'alert ' + (clean ? 'alert-success' : 'alert-warning');
+        summaryBox.textContent = data.committed
+          ? `Imported: ${data.new} new, ${data.updated} updated, ${data.skipped} skipped, ${data.invalid} invalid.`
+          : `Preview of ${data.rows} row(s): ${data.new} new, ${data.updated} updated, `
+            + `${data.skipped} skipped, ${data.invalid} invalid. Nothing has been saved yet.`;
+        renderErrors(data.errors, data.more_errors);
+
+        if (data.committed) {
+          window.showToast('success', `Imported ${data.new} new customer(s).`);
+          commitBtn.classList.add('d-none');
+          validateBtn.classList.add('d-none');
+          setTimeout(() => window.location.reload(), 1200);
+        } else if (data.new > 0 || data.updated > 0) {
+          commitBtn.classList.remove('d-none');
+          validateBtn.classList.add('d-none');
+        }
+      } catch (e) {
+        window.showToast('danger', 'Could not reach the server.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    validateBtn.addEventListener('click', () => runImport(false));
+    commitBtn.addEventListener('click', () => runImport(true));
+  })();
+</script>
+{% endif %}
 <script>
 {% for message in messages %}
   {% if message.tags == "error" %}
