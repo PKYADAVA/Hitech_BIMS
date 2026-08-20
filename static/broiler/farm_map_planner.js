@@ -492,6 +492,59 @@ window.FarmMapPlanner = (function () {
 
   function currentStart() { return startPoint || branchStart(); }
 
+  /* The other way to set the start point — this device's own GPS fix, for a
+     supervisor whose day genuinely starts wherever they are standing rather
+     than at the branch office or a point picked by eye on the map. */
+  function useMyLocation() {
+    var button = el("fmp-my-location");
+    if (!navigator.geolocation) {
+      notify("This browser cannot provide a GPS location. Use “Set on map” instead.", "warning");
+      return;
+    }
+    // Browsers refuse the GPS prompt entirely on a plain http:// origin that
+    // is not localhost — e.g. this page opened by IP over the office Wi-Fi
+    // (http://192.168.x.x:8000). That refusal looks identical to "permission
+    // denied" from getCurrentPosition, so it is caught here first, where it
+    // can be named for what it actually is rather than blamed on the user.
+    if (!window.isSecureContext) {
+      notify("Your device's location can only be shared over a secure (https://) "
+        + "connection — this page is open over plain http. Use “Set on map” instead, "
+        + "or open this page over https.", "warning");
+      return;
+    }
+    if (pickingStart) { el("fmp-set-start").click(); }
+    clearNotice();
+    button.disabled = true;
+    var original = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Locating…';
+    navigator.geolocation.getCurrentPosition(function (position) {
+      startPoint = { label: "My Location", source: "gps",
+                     latitude: Number(position.coords.latitude.toFixed(6)),
+                     longitude: Number(position.coords.longitude.toFixed(6)) };
+      plan = null;
+      el("fmp-save").disabled = true;
+      map.setView([startPoint.latitude, startPoint.longitude], Math.max(map.getZoom(), 12));
+      renderStart(); renderSummary(); renderTable(); drawRoute();
+      button.disabled = false;
+      button.innerHTML = original;
+    }, function (error) {
+      // POSITION_UNAVAILABLE is what a desktop browser reports when the OS
+      // itself has location turned off (Windows Settings > Privacy >
+      // Location) — the site permission can be "Allow" and this still fires,
+      // so it needs its own message rather than folding into a generic one.
+      var message = error.code === error.PERMISSION_DENIED
+        ? "Location permission was denied — allow it for this site, or use “Set on map” instead."
+        : error.code === error.POSITION_UNAVAILABLE
+        ? "This device could not get a location — check that Location is turned on "
+          + "in your computer's system settings (Windows: Settings > Privacy & security "
+          + "> Location), then try again. Or use “Set on map” instead."
+        : "Timed out waiting for a location. Try again, or use “Set on map” instead.";
+      notify(message, "warning");
+      button.disabled = false;
+      button.innerHTML = original;
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+
   function renderStart() {
     var point = currentStart();
     var label = el("fmp-start-label");
@@ -499,7 +552,8 @@ window.FarmMapPlanner = (function () {
     if (point) {
       label.textContent = point.label;
       label.className = "badge bg-dark";
-      hint.textContent = startPoint ? "(set on the map)" : "(branch office)";
+      hint.textContent = !startPoint ? "(branch office)"
+        : startPoint.source === "gps" ? "(this device's location)" : "(set on the map)";
     } else {
       label.textContent = "not set";
       label.className = "badge bg-danger";
@@ -641,6 +695,7 @@ window.FarmMapPlanner = (function () {
         load();
       });
     });
+    el("fmp-my-location").addEventListener("click", useMyLocation);
     el("fmp-set-start").addEventListener("click", function () {
       pickingStart = !pickingStart;
       this.classList.toggle("btn-primary", pickingStart);
@@ -652,7 +707,7 @@ window.FarmMapPlanner = (function () {
     });
     map.on("click", function (event) {
       if (!pickingStart) return;
-      startPoint = { label: "Start point",
+      startPoint = { label: "Start point", source: "map",
                      latitude: Number(event.latlng.lat.toFixed(6)),
                      longitude: Number(event.latlng.lng.toFixed(6)) };
       pickingStart = false;
