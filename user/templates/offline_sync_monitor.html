@@ -3,8 +3,13 @@
 
 {% block title %}Offline Sync Monitor{% endblock %}
 
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='user' %}
+{% endblock %}
+
 {% block content %}
-{% include '_subnav.html' with active_tab='offline_sync_monitor' %}
+
+{% include '_user_management_subnavbar.html' with active_tab='offline_sync_monitor' %}
 
 <div class="container-fluid px-3 py-3">
   <div class="d-flex align-items-center mb-3">
