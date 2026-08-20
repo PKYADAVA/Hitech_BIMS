@@ -206,13 +206,13 @@
                   <i class="fas fa-route"></i>Farm Route Planner
                 </a>
                 <ul class="dropdown-menu">
-                  {% if 'farm_map_planner' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_map_planner' %}">
+                  {% if 'farm_map_planner' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_map_planner' %}" target="_blank" rel="noopener">
                     <i class="fas fa-map-location-dot"></i>Map &amp; Route Planner
                   </a></li>{% endif %}
-                  {% if 'route_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_history' %}">
+                  {% if 'route_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_history' %}" target="_blank" rel="noopener">
                     <i class="fas fa-clock-rotate-left"></i>Route History
                   </a></li>{% endif %}
-                  {% if 'route_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_reports' %}">
+                  {% if 'route_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_reports' %}" target="_blank" rel="noopener">
                     <i class="fas fa-clipboard-list"></i>Route &amp; Visit Reports
                   </a></li>{% endif %}
                 </ul>
