@@ -86,7 +86,7 @@
 .ds .ds-breadcrumb {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   font-size: var(--ds-caption); color: var(--ds-muted);
-  margin: 0 0 12px;
+  margin: 0 0 8px;
 }
 .ds .ds-breadcrumb a { color: var(--ds-muted); text-decoration: none; }
 .ds .ds-breadcrumb a:hover { color: var(--ds-primary); }
