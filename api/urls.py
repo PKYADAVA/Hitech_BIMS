@@ -35,6 +35,7 @@ from broiler.api_write import write_urls as broiler_write_urls
 from broiler.api_route import route_urls as broiler_route_urls
 from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
+from hatchery.api_write import write_urls as hatchery_write_urls
 from inventory.api import register as register_inventory
 from inventory.api_write import write_urls as inventory_write_urls
 from inventory.models import Item, Warehouse
@@ -228,6 +229,7 @@ urlpatterns = [
     # The supervisor's own round: today's route and the check-in and
     # check-out at each farm on it.
     *broiler_route_urls(),
+    *hatchery_write_urls(),
     *hr_write_urls(),
     *inventory_write_urls(),
     *purchase_write_urls(),
