@@ -199,19 +199,25 @@
               {% if 'gc_realization_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'gc_realization_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-scale-balanced"></i>GC Realization Report
               </a></li>{% endif %}
-              {% if 'farm_map_planner' in allowed_tabs or 'route_history' in allowed_tabs %}
+              {% if 'farm_map_planner' in allowed_tabs or 'route_history' in allowed_tabs or 'route_reports' in allowed_tabs %}
               <li><hr class="dropdown-divider"></li>
-              <li><h6 class="dropdown-header">Utilities</h6></li>
+              <li class="dropdown-submenu">
+                <a class="dropdown-item dropdown-toggle" href="#" id="broilerFarmRoutePlannerDd">
+                  <i class="fas fa-route"></i>Farm Route Planner
+                </a>
+                <ul class="dropdown-menu">
+                  {% if 'farm_map_planner' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_map_planner' %}">
+                    <i class="fas fa-map-location-dot"></i>Map &amp; Route Planner
+                  </a></li>{% endif %}
+                  {% if 'route_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_history' %}">
+                    <i class="fas fa-clock-rotate-left"></i>Route History
+                  </a></li>{% endif %}
+                  {% if 'route_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_reports' %}">
+                    <i class="fas fa-clipboard-list"></i>Route &amp; Visit Reports
+                  </a></li>{% endif %}
+                </ul>
+              </li>
               {% endif %}
-              {% if 'farm_map_planner' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farm_map_planner' %}">
-                <i class="fas fa-map-location-dot"></i>Map &amp; Route Planner
-              </a></li>{% endif %}
-              {% if 'route_history' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_history' %}">
-                <i class="fas fa-clock-rotate-left"></i>Route History
-              </a></li>{% endif %}
-              {% if 'route_reports' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'route_reports' %}">
-                <i class="fas fa-clipboard-list"></i>Route &amp; Visit Reports
-              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
