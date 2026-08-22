@@ -316,10 +316,25 @@ def _ageing(parties, amount_key, credit_days):
 #: as well. Read down the card it is a funnel — everything owed, then the part
 #: that has gone late this month, this week, and in the last two days — so the
 #: last figure is the one a collection call can still be early for.
+#: Ageing bands, read the way a collections list is read: how long the money
+#: has been late, not how recently it went late.
+#:
+#: They nest *upward* — "1 month+" is a subset of "1 week+", which is a subset
+#: of the total — so every rupee that is late at all appears in at least the
+#: first band and the oldest debt appears in all of them.
+#:
+#: Both ends of that had to be got right, and the first attempt got only one.
+#: Read as "≤ N" the widest band was a month, so a customer forty-five days
+#: late fell outside all three and the money most worth chasing was the money
+#: the card did not show. Inverting it to "≥ N" with two days as the narrowest
+#: band moved the hole rather than closing it: a customer one day late — which
+#: is what the live data actually held — then showed in none of them. So the
+#: first band is every overdue rupee there is, and the other two are the
+#: ageing above it.
 OVERDUE_WINDOWS = (
-    (30, "Overdue ≤ 1 month"),
-    (7, "Overdue ≤ 1 week"),
-    (2, "Overdue ≤ 2 days"),
+    (1, "Total overdue"),
+    (7, "Overdue 1 week+"),
+    (30, "Overdue 1 month+"),
 )
 
 
@@ -333,14 +348,17 @@ def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
     one, so a customer sits in one window rather than being split across
     several by invoice.
 
-    A window counts everything up to it, so the totals nest rather than
-    partition: ``≤ 1 week`` includes the two-day money.
+    A band counts everything at least that late, so the totals nest rather than
+    partition: the total includes the money that is a month late, because that
+    money is also overdue. Nothing that is late falls outside all of them,
+    which is the property both earlier readings lacked — one lost the oldest
+    debt, the other the newest.
     """
     late = [((p.get("gap") or 0) - credit_days(p), p) for p in parties]
     late = [(days, p) for days, p in late if days > 0]
     out = []
     for span, label in windows:
-        inside = [p for days, p in late if days <= span]
+        inside = [p for days, p in late if days >= span]
         total = sum((p[amount_key] for p in inside), 0)
         out.append({
             "label": label,
