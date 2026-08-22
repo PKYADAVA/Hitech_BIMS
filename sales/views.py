@@ -508,6 +508,13 @@ def _save_invoice_items(instance, request):
         rows = json.loads(request.POST.get("items_json") or "[]")
     except json.JSONDecodeError:
         rows = []
+    _apply_invoice_items(instance, rows)
+
+
+def _apply_invoice_items(instance, rows):
+    """Same item application as _save_invoice_items, but rows-in rather than
+    request-in — shared with the change-request replay, which has no request
+    to read items_json from."""
     instance.items.all().delete()
     for r in rows:
         if not r.get("item"):
@@ -574,10 +581,35 @@ def create_sales_invoice(request):
 
 
 @login_required(login_url="login")
-def edit_sales_invoice(request, id):
+def edit_sales_invoice(request, id, request_mode=False):
     instance = get_object_or_404(SalesInvoice, id=id)
     if request.method == "POST":
         try:
+            if request_mode:
+                # No edit right on this tab — propose the values rather than
+                # saving them.
+                from hatchery.models import ChangeRequest
+
+                try:
+                    items = json.loads(request.POST.get("items_json") or "[]")
+                except json.JSONDecodeError:
+                    items = []
+                if not items:
+                    raise ValidationError("Add at least one item.")
+                payload = request.POST.dict()
+                payload.pop("csrfmiddlewaretoken", None)
+                payload.pop("items_json", None)
+                payload.pop("request_note", None)
+                payload["items"] = items
+                ChangeRequest.objects.create(
+                    module="sales_invoice", object_id=instance.id,
+                    object_label=instance.invoice_no,
+                    action="edit", payload=payload,
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect("sales_invoice_list")
             _apply_posted_invoice(instance, request)
             if not instance.customer_id:
                 raise ValidationError("Select a customer.")
@@ -591,7 +623,8 @@ def edit_sales_invoice(request, id):
             return redirect("sales_invoice_list")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, "sales_invoice_form.html", _sales_invoice_form_context(request.user, instance))
+    return render(request, "sales_invoice_form.html",
+                 dict(_sales_invoice_form_context(request.user, instance), request_mode=request_mode))
 
 
 @login_required(login_url="login")
@@ -1164,7 +1197,7 @@ def sales_receipt_list(request):
 
 
 @login_required(login_url="login")
-def sales_receipt_form(request, id=None):
+def sales_receipt_form(request, id=None, request_mode=False):
     from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
     import json as _json
     return render(request, "sales_receipt_form.html", {
@@ -1175,6 +1208,7 @@ def sales_receipt_form(request, id=None):
         "payment_modes": active_payment_modes("receipt"),
         "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
         "today": timezone.localdate().isoformat(),
+        "request_mode": request_mode,
     })
 
 
@@ -1241,6 +1275,13 @@ class SalesReceiptAPI(View):
             raise Http404("Receipt not found")
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
+
+    def _save(self, data, receipt_id=None):
+        instance = get_object_or_404(SalesReceipt, id=receipt_id) if receipt_id else SalesReceipt()
+        _apply_sales_receipt(instance, data)
+        instance.full_clean(exclude=["receipt_no"])
+        instance.save()
+        return instance
 
 
 def _customer_current_balance(customer_id, exclude_sales_receipt_id=None,
@@ -1350,7 +1391,7 @@ def _customer_note_row_dict(n):
     }
 
 
-def _customer_note_form_context(user, model, instance=None):
+def _customer_note_form_context(user, model, instance=None, request_mode=False):
     from account.models import ChartOfAccount
     from inventory.models import Warehouse
     return {
@@ -1364,6 +1405,7 @@ def _customer_note_form_context(user, model, instance=None):
         "today": timezone.localdate().isoformat(),
         "existing_rows_json": json.dumps(
             [_customer_note_row_dict(instance)] if instance else []),
+        "request_mode": request_mode,
     }
 
 
@@ -1385,7 +1427,7 @@ def _apply_customer_note_row(instance, row):
         raise ValidationError("Enter an amount greater than zero on every row.")
 
 
-def _save_customer_notes(request, model, kind, template, redirect_name, instance=None):
+def _save_customer_notes(request, model, kind, template, redirect_name, instance=None, request_mode=False):
     """Grid entry: one note per row, all saved together or not at all.
 
     The Add screen takes as many rows as wanted; the Edit screen reopens the one
@@ -1400,6 +1442,23 @@ def _save_customer_notes(request, model, kind, template, redirect_name, instance
         try:
             if not rows:
                 raise ValidationError("Add at least one row.")
+            if request_mode:
+                if not instance:
+                    raise ValidationError(
+                        "Adding a new record needs the add right — only a "
+                        "change to an existing one can be requested.")
+                from hatchery.models import ChangeRequest
+
+                module = ("customer_debit_note" if model is CustomerDebitNote
+                          else "customer_credit_note")
+                ChangeRequest.objects.create(
+                    module=module, object_id=instance.id, object_label=instance.note_no,
+                    action="edit", payload=rows[0],
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect(redirect_name)
             with transaction.atomic():
                 saved = 0
                 for row in rows:
@@ -1417,7 +1476,8 @@ def _save_customer_notes(request, model, kind, template, redirect_name, instance
             return redirect(redirect_name)
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, template, _customer_note_form_context(request.user, model, instance))
+    return render(request, template,
+                 _customer_note_form_context(request.user, model, instance, request_mode=request_mode))
 
 
 def _customer_note_api(request, model):
@@ -1451,10 +1511,10 @@ def create_customer_debit_note(request):
 
 
 @login_required(login_url="login")
-def edit_customer_debit_note(request, id):
+def edit_customer_debit_note(request, id, request_mode=False):
     return _save_customer_notes(request, CustomerDebitNote,
                                 "Customer Debit Note", "customer_debit_note_form.html", "customer_debit_note_list",
-                                instance=get_object_or_404(CustomerDebitNote, id=id))
+                                instance=get_object_or_404(CustomerDebitNote, id=id), request_mode=request_mode)
 
 
 @login_required(login_url="login")
@@ -1484,10 +1544,10 @@ def create_customer_credit_note(request):
 
 
 @login_required(login_url="login")
-def edit_customer_credit_note(request, id):
+def edit_customer_credit_note(request, id, request_mode=False):
     return _save_customer_notes(request, CustomerCreditNote,
                                 "Customer Credit Note", "customer_credit_note_form.html", "customer_credit_note_list",
-                                instance=get_object_or_404(CustomerCreditNote, id=id))
+                                instance=get_object_or_404(CustomerCreditNote, id=id), request_mode=request_mode)
 
 
 @login_required(login_url="login")
@@ -1501,3 +1561,93 @@ def delete_customer_credit_note(request, id):
 @login_required
 def customer_credit_note_api_list(request):
     return _customer_note_api(request, CustomerCreditNote)
+
+
+# --------------------------------------------------------------------------
+# Change requests: this app's own entries into the ERP-wide registry (see
+# hatchery/change_requests.py).
+# --------------------------------------------------------------------------
+from hatchery.change_requests import CHANGE_REQUEST_HANDLERS as _CR_HANDLERS  # noqa: E402
+
+def _save_customer_debit_note(data, oid):
+    note = get_object_or_404(CustomerDebitNote, id=oid) if oid else CustomerDebitNote()
+    _apply_customer_note_row(note, data)
+    note.full_clean(exclude=["note_no"])
+    note.save()
+    return note
+
+
+def _save_customer_credit_note(data, oid):
+    note = get_object_or_404(CustomerCreditNote, id=oid) if oid else CustomerCreditNote()
+    _apply_customer_note_row(note, data)
+    note.full_clean(exclude=["note_no"])
+    note.save()
+    return note
+
+
+def _save_sales_invoice(data, oid):
+    """What an approved Sales Invoice change request replays — same field
+    application as edit_sales_invoice()'s own save, dict-in rather than
+    request-in."""
+    instance = get_object_or_404(SalesInvoice, id=oid) if oid else SalesInvoice()
+    instance.transaction_type = data.get("transaction_type") or "Sales Invoice"
+    instance.date = data.get("date") or timezone.localdate()
+    instance.customer_id = data.get("customer") or None
+    instance.billing_address = data.get("billing_address") or ""
+    instance.shipping_address = data.get("shipping_address") or ""
+    instance.gstin = data.get("gstin") or ""
+    instance.reference_no = data.get("reference_no") or ""
+    instance.reference_date = data.get("reference_date") or None
+    instance.transportation = data.get("transportation") or ""
+    instance.vehicle_no = data.get("vehicle_no") or ""
+    instance.place_of_supply = data.get("place_of_supply") or ""
+    instance.eway_bill_no = data.get("eway_bill_no") or ""
+    instance.branch_id = data.get("branch") or None
+    instance.organization_centre_id = data.get("organization_centre") or None
+    instance.sales_person = data.get("sales_person") or ""
+    instance.payment_terms = data.get("payment_terms") or ""
+    instance.due_date = data.get("due_date") or None
+    instance.remarks = data.get("remarks") or ""
+    instance.terms_conditions_id = data.get("terms_conditions") or None
+    instance.bank_account_id = data.get("bank_account") or None
+    instance.print_bank_details = bool(data.get("print_bank_details"))
+    instance.other_charges_amount = _si_num(data.get("other_charges_amount"))
+    instance.round_off = _si_num(data.get("round_off"))
+    if not instance.customer_id:
+        raise ValidationError("Select a customer.")
+    instance.full_clean(exclude=["invoice_no"])
+    instance.save()
+    _apply_invoice_items(instance, data.get("items") or [])
+    if not instance.items.exists():
+        raise ValidationError("Add at least one item.")
+    return instance
+
+
+_CR_HANDLERS.update({
+    "sales_receipt": {
+        "api": "/sales_receipt_api/",
+        "label": "Sales Receipt", "tab": "sales_receipt_list", "model": SalesReceipt,
+        "save": lambda data, oid: SalesReceiptAPI()._save(data, oid),
+        "number": lambda obj: obj.receipt_no,
+    },
+    "sales_invoice": {
+        "api": "",
+        "label": "Sales Invoice", "tab": "sales_invoice_list", "model": SalesInvoice,
+        "save": _save_sales_invoice,
+        "number": lambda obj: obj.invoice_no,
+    },
+    # No per-id detail endpoint exists for these (only the list feed) — the
+    # review screen falls back to showing the proposed values on their own.
+    "customer_debit_note": {
+        "api": "",
+        "label": "Customer Debit Note", "tab": "customer_debit_note_list", "model": CustomerDebitNote,
+        "save": _save_customer_debit_note,
+        "number": lambda obj: obj.note_no,
+    },
+    "customer_credit_note": {
+        "api": "",
+        "label": "Customer Credit Note", "tab": "customer_credit_note_list", "model": CustomerCreditNote,
+        "save": _save_customer_credit_note,
+        "number": lambda obj: obj.note_no,
+    },
+})

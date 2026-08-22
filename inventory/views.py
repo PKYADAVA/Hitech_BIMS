@@ -6,7 +6,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 
 # Data scoping: user-facing option lists are narrowed to the branches,
 # farms and warehouses the signed-in user is scoped to.
@@ -1191,6 +1191,37 @@ class StockTransferAPI(View):
         _recompute_stock_transfer_chain(location_type, location_id, item_id)
         return JsonResponse({"message": "Stock transfer deleted"})
 
+    def _save(self, data, oid=None):
+        """Same field application as put(), but dict-in rather than
+        request-in — what an approved change request replays.
+
+        Unlike put(), this recomputes the *old* item's chain too when an
+        edit changes the item, not only the new one — a row moved onto a
+        different item still leaves the old item's later rows one entry
+        short, and nothing else would ever notice.
+        """
+        instance = get_object_or_404(StockTransfer, id=oid) if oid else StockTransfer()
+        old_key = (instance.from_location_type, instance.from_warehouse_id or instance.from_farm_id)
+        old_item_id = instance.item_id
+        _apply_stock_transfer_row(instance, data, instance.created_by if oid else None)
+        instance.full_clean(exclude=["trnum"])
+        instance.save()
+        new_key = (instance.from_location_type, instance.from_warehouse_id or instance.from_farm_id)
+        for location_type, location_id in {old_key, new_key}:
+            for item_id in {old_item_id, instance.item_id}:
+                _recompute_stock_transfer_chain(location_type, location_id, item_id)
+        return instance
+
+    @staticmethod
+    def _delete(instance):
+        """What delete() does, but taking the instance directly — the change
+        request review path already has it in hand rather than an id."""
+        location_type = instance.from_location_type
+        location_id = instance.from_warehouse_id or instance.from_farm_id
+        item_id = instance.item_id
+        instance.delete()
+        _recompute_stock_transfer_chain(location_type, location_id, item_id)
+
 
 @login_required
 def stock_transfer_item_lookup(request):
@@ -1527,6 +1558,34 @@ class MedicineTransferAPI(View):
         for item_id in item_ids:
             _recompute_medicine_stock_chain(location_type, location_id, item_id)
         return JsonResponse({"message": "Medicine transfer deleted"})
+
+    def _save(self, data, oid=None):
+        """Same field application as put()/post(), but dict-in rather than
+        request-in — what an approved change request replays."""
+        instance = get_object_or_404(MedicineTransfer, id=oid) if oid else MedicineTransfer()
+        old_key = (instance.from_location_type, instance.from_warehouse_id or instance.from_farm_id)
+        old_item_ids = set(instance.items.values_list('item_id', flat=True)) if oid else set()
+        items_data = data.get("items") or []
+        if not items_data:
+            raise ValidationError("Add at least one item line")
+        _apply_medicine_transfer_header(instance, data, instance.created_by if oid else None)
+        instance.full_clean(exclude=["trnum"])
+        instance.save()
+        touched = _save_medicine_transfer_items(instance, items_data)
+        new_key = (instance.from_location_type, instance.from_warehouse_id or instance.from_farm_id)
+        for item_id in old_item_ids | touched:
+            _recompute_medicine_stock_chain(old_key[0], old_key[1], item_id)
+            _recompute_medicine_stock_chain(new_key[0], new_key[1], item_id)
+        return instance
+
+    @staticmethod
+    def _delete(instance):
+        location_type = instance.from_location_type
+        location_id = instance.from_warehouse_id or instance.from_farm_id
+        item_ids = list(instance.items.values_list('item_id', flat=True))
+        instance.delete()
+        for item_id in item_ids:
+            _recompute_medicine_stock_chain(location_type, location_id, item_id)
 
 
 @login_required
@@ -1915,6 +1974,34 @@ class InventoryAdjustmentAPI(View):
             _recompute_inventory_adjustment_chain(location_type, location_id, item_id)
         return JsonResponse({"message": "Inventory adjustment deleted"})
 
+    def _save(self, data, oid=None):
+        """Same field application as put()/post(), but dict-in rather than
+        request-in — what an approved change request replays."""
+        instance = get_object_or_404(InventoryAdjustment, id=oid) if oid else InventoryAdjustment()
+        old_key = (instance.location_type, instance.warehouse_id or instance.farm_id)
+        old_item_ids = set(instance.items.values_list('item_id', flat=True)) if oid else set()
+        items_data = data.get("items") or []
+        if not items_data:
+            raise ValidationError("Add at least one item line")
+        _apply_inventory_adjustment_header(instance, data, instance.created_by if oid else None)
+        instance.full_clean(exclude=["trnum"])
+        instance.save()
+        touched = _save_inventory_adjustment_items(instance, items_data)
+        new_key = (instance.location_type, instance.warehouse_id or instance.farm_id)
+        for item_id in old_item_ids | touched:
+            _recompute_inventory_adjustment_chain(old_key[0], old_key[1], item_id)
+            _recompute_inventory_adjustment_chain(new_key[0], new_key[1], item_id)
+        return instance
+
+    @staticmethod
+    def _delete(instance):
+        location_type = instance.location_type
+        location_id = instance.warehouse_id or instance.farm_id
+        item_ids = list(instance.items.values_list('item_id', flat=True))
+        instance.delete()
+        for item_id in item_ids:
+            _recompute_inventory_adjustment_chain(location_type, location_id, item_id)
+
 
 @login_required
 def inventory_adjustment_item_lookup(request):
@@ -2188,6 +2275,25 @@ class StockIssueAPI(View):
         instance.delete()
         return JsonResponse({"message": "Stock issue deleted"})
 
+    def _save(self, data, oid=None):
+        """Same field application as put()/post(), but dict-in rather than
+        request-in. No recompute chain to re-run afterward — unlike Stock
+        Transfer/Medicine Transfer/Inventory Adjustment, availability here is
+        checked live against other transactions at save time rather than
+        cached in a stored running-balance column, so a plain delete (the
+        registry's default when no "delete" handler is given) is safe."""
+        instance = get_object_or_404(StockIssue, id=oid) if oid else StockIssue()
+        items_data = data.get("items") or []
+        if not items_data:
+            raise ValidationError("Add at least one item line")
+        _apply_stock_issue_header(instance, data, instance.created_by if oid else None)
+        instance.full_clean(exclude=["trnum"])
+        instance.save()
+        created = _save_stock_issue_items(instance, items_data)
+        if not created:
+            raise ValidationError("Add at least one item line with an Item and Location selected")
+        return instance
+
 
 @login_required
 def stock_issue_item_lookup(request):
@@ -2431,6 +2537,22 @@ class StockReceiveAPI(View):
             raise Http404("Stock receive not found")
         instance.delete()
         return JsonResponse({"message": "Stock receive deleted"})
+
+    def _save(self, data, oid=None):
+        """Same field application as put()/post(), but dict-in rather than
+        request-in. No running-balance column here either (see StockIssue's
+        _save) — a plain delete is safe."""
+        instance = get_object_or_404(StockReceive, id=oid) if oid else StockReceive()
+        items_data = data.get("items") or []
+        if not items_data:
+            raise ValidationError("Add at least one item line")
+        _apply_stock_receive_header(instance, data, instance.created_by if oid else None)
+        instance.full_clean(exclude=["trnum"])
+        instance.save()
+        created = _save_stock_receive_items(instance, items_data)
+        if not created:
+            raise ValidationError("Add at least one item line with an Item and Location selected")
+        return instance
 
 
 @login_required
@@ -3385,3 +3507,66 @@ def inventory_issued_report(request):
     in a date range with its item, quantity, price, value, location and
     remarks."""
     return _inventory_line_report(request, "issue")
+
+
+# --------------------------------------------------------------------------
+# Change requests: this app's own entries into the ERP-wide registry (see
+# hatchery/change_requests.py). The three with a stored running-balance
+# column (Stock Transfer, Medicine Transfer, Inventory Adjustment) carry a
+# "delete" handler too, not just "save" — a bare model .delete() would leave
+# every later row's balance stale, since none of these has a post_delete
+# signal. Stock Issue and Stock Received check availability live at save
+# time instead, so the registry's plain-delete default is fine for them.
+# --------------------------------------------------------------------------
+from hatchery.change_requests import CHANGE_REQUEST_HANDLERS as _CR_HANDLERS  # noqa: E402
+
+_CR_HANDLERS.update({
+    "stock_transfer": {
+        "api": "/stock_transfer_api/",
+        "label": "Stock Transfer", "tab": "stock_transfer_list", "model": StockTransfer,
+        "save": lambda data, oid: StockTransferAPI()._save(data, oid),
+        "delete": StockTransferAPI._delete,
+        "number": lambda obj: obj.trnum,
+    },
+    "medicine_transfer": {
+        "api": "/medicine_transfer_api/",
+        "label": "Medicine Vaccine Transfer", "tab": "medicine_transfer_list", "model": MedicineTransfer,
+        "save": lambda data, oid: MedicineTransferAPI()._save(data, oid),
+        "delete": MedicineTransferAPI._delete,
+        "number": lambda obj: obj.trnum,
+    },
+    "inventory_adjustment": {
+        "api": "/inventory_adjustment_api/",
+        "label": "Inventory Adjustment", "tab": "inventory_adjustment_list", "model": InventoryAdjustment,
+        "save": lambda data, oid: InventoryAdjustmentAPI()._save(data, oid),
+        "delete": InventoryAdjustmentAPI._delete,
+        "number": lambda obj: obj.trnum,
+    },
+    # No "delete" handler for these two — neither carries a stored running
+    # balance (availability is checked live at save time), so the registry's
+    # plain-delete default is correct as-is.
+    "stock_issue": {
+        "api": "/stock_issue_api/",
+        "label": "Stock Issued", "tab": "stock_issue_list", "model": StockIssue,
+        "save": lambda data, oid: StockIssueAPI()._save(data, oid),
+        "number": lambda obj: obj.trnum,
+    },
+    "stock_receive": {
+        "api": "/stock_receive_api/",
+        "label": "Stock Received", "tab": "stock_receive_list", "model": StockReceive,
+        "save": lambda data, oid: StockReceiveAPI()._save(data, oid),
+        "number": lambda obj: obj.trnum,
+    },
+    # Chicks Placement (Broiler > Transactions) is a facade over this same
+    # StockTransfer model/API — its own page, its own tab/reviewers, but the
+    # identical save/delete logic as "stock_transfer" above. A separate module
+    # key (rather than reusing "stock_transfer") is what lets its own tab gate
+    # its own reviewers, matching how its permissions already work today.
+    "chicks_placement": {
+        "api": "/stock_transfer_api/",
+        "label": "Chicks Placement", "tab": "chicks_placement_list", "model": StockTransfer,
+        "save": lambda data, oid: StockTransferAPI()._save(data, oid),
+        "delete": StockTransferAPI._delete,
+        "number": lambda obj: obj.trnum,
+    },
+})

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Inventory Adjustment - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='inventory' %}{% endblock %}
@@ -92,6 +93,7 @@
 
 {% endblock %}
 {% block js %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 $(function () {
   const csrfToken = "{{ csrf_token }}";
@@ -127,7 +129,9 @@ $(function () {
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="{% url 'inventory_adjustment_add' %}?id=${row.id}" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="{% url 'inventory_adjustment_add' %}?id=${row.id}&request=1" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+            {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>
         </td>
       </tr>`);
@@ -156,6 +160,10 @@ $(function () {
   $(document).on("click", ".delete-button", function () {
     pendingDeleteId = $(this).data("id");
     $("#deleteConfirmationModal").modal("show");
+  });
+
+  $(document).on("click", ".request-delete-button", function () {
+    submitDeleteChangeRequest("inventory_adjustment", $(this).data("id"), loadRows);
   });
 
   $("#confirm-delete-btn").on("click", function () {

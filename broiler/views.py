@@ -3319,7 +3319,7 @@ class BirdSaleListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class BirdSaleFormTemplateView(View):
-    def get(self, request, id=None):
+    def get(self, request, id=None, request_mode: bool = False):
         from hr.models import Employee
         return render(request, "bird_sale_form.html", {
             "instance": BirdSale.objects.filter(id=id).first() if id else None,
@@ -3329,6 +3329,7 @@ class BirdSaleFormTemplateView(View):
             # Lifting supervisor can be any active employee.
             "supervisors": Employee.objects.filter(relieve=False).order_by("full_name"),
             "today": timezone.localdate().isoformat(),
+            "request_mode": request_mode,
         })
 
 
@@ -3405,6 +3406,15 @@ class BirdSaleAPI(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
+    def _save(self, data, sale_id=None):
+        """Same field application as put(), but dict-in rather than
+        request-in — what an approved change request replays."""
+        instance = get_object_or_404(BirdSale, id=sale_id) if sale_id else BirdSale()
+        _apply_bird_sale(instance, data)
+        instance.full_clean(exclude=["sale_no", "batch"])
+        instance.save()
+        return instance
+
 
 @login_required
 def bird_sale_farm_lookup(request):
@@ -3474,7 +3484,7 @@ class BirdSaleReceiptListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class BirdSaleReceiptFormTemplateView(View):
-    def get(self, request, id=None):
+    def get(self, request, id=None, request_mode: bool = False):
         from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
         import json as _json
         return render(request, "bird_sale_receipt_form.html", {
@@ -3486,6 +3496,7 @@ class BirdSaleReceiptFormTemplateView(View):
             "payment_modes": active_payment_modes("receipt"),
             "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
             "today": timezone.localdate().isoformat(),
+            "request_mode": request_mode,
         })
 
 
@@ -3556,6 +3567,13 @@ class BirdSaleReceiptAPI(BaseAPIView):
             raise Http404("Receipt not found")
         except Exception as e:
             return self.handle_exception(e)
+
+    def _save(self, data, receipt_id=None):
+        instance = get_object_or_404(BirdSaleReceipt, id=receipt_id) if receipt_id else BirdSaleReceipt()
+        _apply_bird_sale_receipt(instance, data)
+        instance.full_clean(exclude=["receipt_no"])
+        instance.save()
+        return instance
 
 
 @login_required
@@ -9321,18 +9339,78 @@ def farm_location_capture_add(request):
     return render(request, "farm_location_capture_form.html", _capture_form_context(request.user))
 
 
+def _stage_capture_files(request):
+    """A JSONField payload can't carry file bytes, so any newly-posted photo/
+    document/slot upload is written to its own storage right now (against an
+    unsaved scratch FarmCaptureFile, purely to get the right upload_to/
+    storage), and the resulting paths ride in the payload as a plain list.
+    Approval later just creates the real FarmCaptureFile rows from that list —
+    no re-upload, no new endpoint shape. Unlike the purchase modules' one
+    field per slot, uploads here are additive, so a list is natural instead of
+    named fields.
+
+    A rejected/never-reviewed request leaves those files orphaned on disk; a
+    low risk accepted here, consistent with how uploaded reference docs
+    already behave elsewhere in this codebase."""
+    staged = []
+    for upload in request.FILES.getlist("photos"):
+        scratch = FarmCaptureFile(kind=FarmCaptureFile.KIND_PHOTO)
+        scratch.file.save(upload.name, upload, save=False)
+        staged.append({"kind": FarmCaptureFile.KIND_PHOTO, "path": scratch.file.name})
+    for upload in request.FILES.getlist("documents"):
+        scratch = FarmCaptureFile(kind=FarmCaptureFile.KIND_DOCUMENT)
+        scratch.file.save(upload.name, upload, save=False)
+        staged.append({"kind": FarmCaptureFile.KIND_DOCUMENT, "path": scratch.file.name})
+    for kind in FarmCaptureFile.SLOT_TARGETS:
+        if kind == FarmCaptureFile.KIND_DOCUMENT:
+            continue
+        upload = request.FILES.get("slot_%s" % kind)
+        if upload:
+            scratch = FarmCaptureFile(kind=kind)
+            scratch.file.save(upload.name, upload, save=False)
+            staged.append({"kind": kind, "path": scratch.file.name})
+    return staged
+
+
 @login_required(login_url="login")
-def farm_location_capture_edit(request, id):
+def farm_location_capture_edit(request, id, request_mode=False):
     instance = get_object_or_404(FarmLocationCapture, id=id)
     if request.method == "POST":
         try:
+            if request_mode:
+                # No edit right on this tab — propose the values rather than
+                # saving them.
+                from hatchery.models import ChangeRequest
+
+                payload = {
+                    "date": request.POST.get("date") or "",
+                    "farm": request.POST.get("farm") or "",
+                    "latitude": request.POST.get("latitude") or "",
+                    "longitude": request.POST.get("longitude") or "",
+                    "state": request.POST.get("state") or "",
+                    "district": request.POST.get("district") or "",
+                    "area": request.POST.get("area") or "",
+                    "address": request.POST.get("address") or "",
+                    "remarks": request.POST.get("remarks") or "",
+                    "files": _stage_capture_files(request),
+                }
+                ChangeRequest.objects.create(
+                    module="farm_location_capture", object_id=instance.id,
+                    object_label=instance.capture_no,
+                    action="edit", payload=payload,
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect("farm_location_capture_list")
             with transaction.atomic():
                 _save_capture(request, instance)
             messages.success(request, "Farm location capture updated successfully.")
             return redirect("farm_location_capture_list")
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, "farm_location_capture_form.html", _capture_form_context(request.user, instance))
+    return render(request, "farm_location_capture_form.html",
+                 dict(_capture_form_context(request.user, instance), request_mode=request_mode))
 
 
 @login_required(login_url="login")
@@ -9526,3 +9604,159 @@ def farmer_farm_report(request):
         "lines": (BroilerFarm.objects.exclude(line="")
                   .values_list("line", flat=True).distinct().order_by("line")),
     })
+
+
+# --------------------------------------------------------------------------
+# Change requests: this app's own entries into the ERP-wide registry (see
+# hatchery/change_requests.py) — a user without edit/delete on one of these
+# tabs proposes a change, one who holds the right reviews it.
+# --------------------------------------------------------------------------
+from hatchery.change_requests import CHANGE_REQUEST_HANDLERS as _CR_HANDLERS  # noqa: E402
+
+
+def _save_farm_location_capture(data, oid):
+    """What an approved Farm Location Capture change request replays — same
+    field application as _save_capture(), dict-in rather than request-in.
+    Files arrive pre-staged as a list of {kind, path} (see
+    _stage_capture_files) rather than as uploads."""
+    instance = get_object_or_404(FarmLocationCapture, id=oid) if oid else FarmLocationCapture()
+
+    def blank_to_none(value):
+        value = (value or "").strip()
+        return value or None
+
+    instance.date = data.get("date") or timezone.localdate()
+    instance.farm_id = data.get("farm") or None
+    instance.latitude = blank_to_none(data.get("latitude"))
+    instance.longitude = blank_to_none(data.get("longitude"))
+    instance.state = (data.get("state") or "").strip()
+    instance.district = (data.get("district") or "").strip()
+    instance.area = (data.get("area") or "").strip()
+    instance.address = (data.get("address") or "").strip()
+    instance.remarks = (data.get("remarks") or "").strip()
+    if not instance.farm_id:
+        raise ValidationError("Select a farm.")
+    instance.full_clean(exclude=["capture_no", "captured_by"])
+    instance.save()
+    for entry in data.get("files") or []:
+        FarmCaptureFile.objects.create(
+            capture=instance, kind=entry["kind"], file=entry["path"])
+    return instance
+
+
+def _save_daily_entry(data, oid):
+    """What an approved Daily Entry (or Single Batch Daily Entry — same model,
+    a different tab) change request replays — same field application as
+    DailyEntryAPI.put(), dict-in rather than request-in. Add is never
+    requested through this path (a user needs the add right for that), so oid
+    is always given in practice."""
+    instance = get_object_or_404(DailyEntry, id=oid) if oid else DailyEntry()
+    old_feed_ids = {instance.feed_1_id, instance.feed_2_id}
+    if data.get("supervisor"):
+        instance.supervisor_id = data["supervisor"]
+    entry_date = instance.date if instance.pk else timezone.localdate()
+    if data.get("date"):
+        entry_date = timezone.datetime.fromisoformat(data["date"]).date()
+    # Farm isn't editable from the edit modal (it's the grouping key), so fall
+    # back to the row's existing farm rather than letting a payload without
+    # "farm" wipe it out.
+    _apply_daily_entry_row(instance, data, entry_date, None, default_farm_id=instance.farm_id)
+    instance.full_clean(exclude=["entry_no", "batch"])
+    instance.save()
+    for item_id in old_feed_ids | {instance.feed_1_id, instance.feed_2_id}:
+        _recompute_stock_chain(instance.farm_id, item_id)
+    return instance
+
+
+def _delete_daily_entry(instance):
+    """Re-checks the tail-only invariant at approval time rather than trusting
+    it was still true when the request was submitted — a newer entry may have
+    landed in the meantime, which a bare delete would leave chained off a
+    balance that no longer exists. Raising here (rather than deleting) leaves
+    the request pending for a reviewer to reject or revisit, instead of
+    silently corrupting a later row's stored stock."""
+    group_filter = ({"batch_id": instance.batch_id} if instance.batch_id
+                     else {"farm_id": instance.farm_id, "batch_id": None})
+    newer_exists = (DailyEntry.objects.filter(**group_filter).exclude(id=instance.id)
+                     .filter(Q(date__gt=instance.date) | (Q(date=instance.date) & Q(id__gt=instance.id)))
+                     .exists())
+    if newer_exists:
+        raise ValidationError(
+            "Only the most recent entry in this batch can be deleted. Delete newer entries first.")
+    instance.delete()
+
+
+def _save_medicine_entry(data, oid):
+    """What an approved Medicine Entry change request replays — same field
+    application as MedicineEntryAPI.put(), dict-in rather than request-in."""
+    instance = get_object_or_404(MedicineVaccineEntry, id=oid) if oid else MedicineVaccineEntry()
+    old_item_id = instance.item_id
+    if data.get("supervisor"):
+        instance.supervisor_id = data["supervisor"]
+    entry_date = instance.date if instance.pk else timezone.localdate()
+    if data.get("date"):
+        entry_date = timezone.datetime.fromisoformat(data["date"]).date()
+    _apply_medicine_entry_row(instance, data, entry_date, None)
+    instance.full_clean(exclude=["entry_no", "batch"])
+    instance.save()
+    for item_id in {old_item_id, instance.item_id}:
+        _recompute_medicine_stock_chain(instance.farm_id, item_id)
+    return instance
+
+
+def _delete_medicine_entry(instance):
+    """Same tail-only re-check as Daily Entry — see _delete_daily_entry."""
+    group_filter = ({"batch_id": instance.batch_id} if instance.batch_id
+                     else {"farm_id": instance.farm_id, "batch_id": None})
+    newer_exists = (MedicineVaccineEntry.objects.filter(**group_filter).exclude(id=instance.id)
+                     .filter(Q(date__gt=instance.date) | (Q(date=instance.date) & Q(id__gt=instance.id)))
+                     .exists())
+    if newer_exists:
+        raise ValidationError(
+            "Only the most recent entry in this batch can be deleted. Delete newer entries first.")
+    instance.delete()
+
+
+_CR_HANDLERS.update({
+    "bird_sale": {
+        "api": "/bird_sale_api/",
+        "label": "Bird Sale", "tab": "bird_sale_list", "model": BirdSale,
+        "save": lambda data, oid: BirdSaleAPI()._save(data, oid),
+        "number": lambda obj: obj.sale_no,
+    },
+    "bird_sale_receipt": {
+        "api": "/bird_sale_receipt_api/",
+        "label": "Bird Receipt", "tab": "bird_sale_receipt_list", "model": BirdSaleReceipt,
+        "save": lambda data, oid: BirdSaleReceiptAPI()._save(data, oid),
+        "number": lambda obj: obj.receipt_no,
+    },
+    "farm_location_capture": {
+        "api": "",
+        "label": "Farm Location & Photos", "tab": "farm_location_capture_list",
+        "model": FarmLocationCapture,
+        "save": _save_farm_location_capture,
+        "number": lambda obj: obj.capture_no,
+    },
+    "daily_entry": {
+        "api": "/daily_entry_api/",
+        "label": "Daily Entry", "tab": "daily_entry_list", "model": DailyEntry,
+        "save": _save_daily_entry, "delete": _delete_daily_entry,
+        "number": lambda obj: obj.entry_no,
+    },
+    # Single Batch Daily Entry is the same DailyEntry model and API, shown
+    # under its own tab for a different set of users — same facade
+    # relationship as Chicks Placement is to Stock Transfer (see
+    # inventory/views.py's own "chicks_placement" entry).
+    "daily_entry_single": {
+        "api": "/daily_entry_api/",
+        "label": "Single Batch Daily Entry", "tab": "daily_entry_single_list", "model": DailyEntry,
+        "save": _save_daily_entry, "delete": _delete_daily_entry,
+        "number": lambda obj: obj.entry_no,
+    },
+    "medicine_entry": {
+        "api": "/medicine_entry_api/",
+        "label": "Medicine/Vaccine Entry", "tab": "medicine_entry_list", "model": MedicineVaccineEntry,
+        "save": _save_medicine_entry, "delete": _delete_medicine_entry,
+        "number": lambda obj: obj.entry_no,
+    },
+})

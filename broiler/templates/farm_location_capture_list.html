@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Farm Location &amp; Photos - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
 {% block content %}
@@ -124,6 +125,7 @@
 {% endblock %}
 
 {% block js %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 $(function () {
   let table = null;
@@ -185,8 +187,10 @@ $(function () {
              title="Fill in what is still pending"><i class="fas fa-plus"></i></button>{% endif %}
           <button class="btn btn-outline-info btn-sm act-view" data-id="${r.id}" title="View"><i class="fas fa-eye"></i></button>
           {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/farm-location-capture/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+          {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/farm-location-capture/${r.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
           {% if page_perms.edit %}<button class="btn btn-outline-secondary btn-sm act-clear" data-id="${r.id}" title="Clear the location"><i class="fas fa-eraser"></i></button>{% endif %}
           {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm act-delete" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          {% if not page_perms.delete %}<button class="btn btn-outline-danger btn-sm request-delete-button" data-id="${r.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
         </div></td>
       </tr>`);
     });
@@ -386,6 +390,9 @@ $(function () {
 
   $(document).on("click", ".act-clear", function () { confirmAction($(this).data("id"), "clear"); });
   $(document).on("click", ".act-delete", function () { confirmAction($(this).data("id"), "delete"); });
+  $(document).on("click", ".request-delete-button", function () {
+    submitDeleteChangeRequest("farm_location_capture", $(this).data("id"), load);
+  });
 
   load();
 });

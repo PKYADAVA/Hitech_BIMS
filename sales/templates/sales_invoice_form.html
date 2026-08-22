@@ -222,9 +222,19 @@
     <div class="si-bottom-card"><div class="d-flex justify-content-between align-items-center mb-1"><div class="si-bottom-title mb-0">BANK DETAILS</div><div class="form-check form-switch mb-0" title="Print bank details on the invoice"><input class="form-check-input" type="checkbox" name="print_bank_details" id="print_bank" {% if not invoice or invoice.print_bank_details %}checked{% endif %}><label class="form-check-label" for="print_bank" style="font-size:.6rem;color:#6a7d97;">Print</label></div></div><div class="si-bank-row"><span>Bank Name</span><span>{{ company.bank_name|default:"&mdash;" }}</span></div><div class="si-bank-row"><span>A/C No.</span><span>{{ company.bank_account_no|default:"&mdash;" }}</span></div><div class="si-bank-row"><span>IFSC Code</span><span>{{ company.ifsc_code|default:"&mdash;" }}</span></div><div class="si-bank-row"><span>Branch</span><span>{{ company.bank_branch|default:"&mdash;" }}</span></div></div>
     <div class="si-bottom-card"><div class="si-bottom-title">ITEM SUMMARY</div><div class="si-bank-row"><span>No. of Items</span><span id="t-items">0</span></div><div class="si-bank-row"><span>Total Quantity</span><span id="t-qty">0.000</span></div></div>
     <div class="si-bottom-card"><div class="si-bottom-title">PRICE SUMMARY</div><div class="si-bank-row"><span>Total Before Tax</span><span>&#8377; <span id="p-before">0.00</span></span></div><div class="si-bank-row"><span>Add : Other Charges</span><input type="number" step="0.01" name="other_charges_amount" id="t-other" class="form-control form-control-sm text-end" style="width:120px" value="{% if invoice %}{{ invoice.other_charges_amount }}{% else %}0{% endif %}"></div><div class="si-bank-row"><span>Taxable Amount</span><span>&#8377; <span id="p-taxable">0.00</span></span></div><div class="si-bank-row"><span>Total GST</span><span>&#8377; <span id="p-gst">0.00</span></span></div><div class="si-bank-row"><span>Round Off</span><input type="number" step="0.01" name="round_off" id="t-round" class="form-control form-control-sm text-end bg-light" style="width:120px" readonly value="{% if invoice %}{{ invoice.round_off }}{% else %}0{% endif %}"></div><div class="si-bank-row" style="font-weight:800;color:#2563eb;border-top:1px solid #cfe0f5;margin-top:2px;padding-top:5px;"><span>Grand Total</span><span>&#8377; <span id="p-grand">0.00</span></span></div></div>
+  {% if request_mode %}
+  <div class="alert alert-warning no-print">
+    <i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your
+    changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.
+  </div>
+  <div class="mb-3 no-print">
+    <label class="form-label">Reason for this change (optional)</label>
+    <input type="text" class="form-control" name="request_note">
+  </div>
+  {% endif %}
   <div class="d-flex gap-2 justify-content-center my-4 no-print">
     <button type="button" class="btn btn-outline-primary si-action-btn" id="preview-btn"><i class="fas fa-eye me-1"></i>Preview</button>
-    <button type="submit" class="btn btn-primary si-action-primary si-action-btn px-4"><i class="fas fa-save me-1"></i>Save</button>
+    <button type="submit" class="btn btn-primary si-action-primary si-action-btn px-4"><i class="fas fa-save me-1"></i>{% if request_mode %}Submit for Approval{% else %}Save{% endif %}</button>
     <a class="btn btn-outline-danger si-action-btn" href="{% url 'sales_invoice_list' %}"><i class="fas fa-times me-1"></i>Cancel</a>
   </div>
 </form>

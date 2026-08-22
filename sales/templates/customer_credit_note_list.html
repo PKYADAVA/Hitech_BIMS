@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Customer Credit Note - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock %}
 {% block content %}
@@ -40,6 +41,7 @@
 </div></div></div>
 {% endblock %}
 {% block js %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 $(function () {
   let table = null;
@@ -55,7 +57,9 @@ $(function () {
         <td>${esc(r.sector_name)||"-"}</td><td>${esc(r.remarks)||"-"}</td>
         <td class="text-center"><div class="d-flex gap-1 justify-content-center">
           {% if page_perms.edit %}<a class="btn btn-outline-warning btn-sm" href="/customer-credit-note/${r.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+          {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/customer-credit-note/${r.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
           {% if page_perms.delete %}<button class="btn btn-outline-danger btn-sm delete-button" data-id="${r.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+          {% if not page_perms.delete %}<button class="btn btn-outline-danger btn-sm request-delete-button" data-id="${r.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
         </div></td>
       </tr>`);
     });
@@ -66,6 +70,7 @@ $(function () {
   function loadRows(){ $.getJSON("{% url 'customer_credit_note_api_list' %}", { from_date:$("#from-date").val(), to_date:$("#to-date").val() }, renderRows).fail(function(){ alert("Failed to load customer credit notes."); }); }
   $("#filter-submit").on("click", loadRows);
   $(document).on("click", ".delete-button", function(){ $("#confirmDeleteForm").attr("action", `/customer-credit-note/${$(this).data("id")}/delete/`); $("#deleteConfirmationModal").modal("show"); });
+  $(document).on("click", ".request-delete-button", function(){ submitDeleteChangeRequest("customer_credit_note", $(this).data("id"), loadRows); });
   loadRows();
 });
 </script>

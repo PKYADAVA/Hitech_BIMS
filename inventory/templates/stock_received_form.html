@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Add Stock Receive — BIMS{% endblock %}
 
@@ -67,6 +68,10 @@
     </div>
   </div>
 
+  <div class="alert alert-warning d-none" id="request-mode-banner">
+    <i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your
+    changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.
+  </div>
   <div class="d-flex gap-2 mb-4 justify-content-center">
     <button class="btn btn-primary" type="submit" id="submit-btn">Submit</button>
     <a href="{% url 'stock_receive_list' %}" class="btn btn-danger">Cancel</a>
@@ -75,6 +80,7 @@
 {% endblock %}
 
 {% block js %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 const itemOptions = `<option value="">select</option>{% for item in items %}<option value="{{ item.id }}" data-uom="{% if item.storage_uom %}{{ item.storage_uom.symbol|default:item.storage_uom.name|escapejs }}{% endif %}" data-rate="{{ item.standard_cost_per_unit }}">{{ item.item_code|escapejs }} - {{ item.description|escapejs }}</option>{% endfor %}`;
 const locationOptions = `<option value="">select</option>
@@ -82,6 +88,7 @@ const locationOptions = `<option value="">select</option>
   <optgroup label="Farm">{% for f in farms %}<option value="farm:{{ f.id }}">{{ f.farm_name|escapejs }}</option>{% endfor %}</optgroup>`;
 const get = id => document.getElementById(id);
 const editId = new URLSearchParams(window.location.search).get('id');
+const requestMode = new URLSearchParams(window.location.search).get('request') === '1';
 
 function parseLocation(value) {
   if (!value) return null;
@@ -208,6 +215,9 @@ get('stock-receive-form').addEventListener('submit', function (e) {
     items: items,
   };
 
+  if (requestMode && editId) {
+    return submitChangeRequest('stock_receive', editId, payload, "{% url 'stock_receive_list' %}");
+  }
   const url = editId ? `/stock_receive_api/${editId}/` : "{% url 'stock_receive_api_list' %}";
   fetch(url, {
     method: editId ? 'PUT' : 'POST',
@@ -224,7 +234,8 @@ async function loadForEdit() {
   if (!resp.ok) { alert('Failed to load stock receive.'); return; }
   const data = await resp.json();
   get('page-title-text').textContent = 'Edit Stock Received';
-  get('submit-btn').textContent = 'Update';
+  get('submit-btn').textContent = requestMode ? 'Submit for Approval' : 'Update';
+  if (requestMode) { get('request-mode-banner').classList.remove('d-none'); }
   get('date').value = data.date;
   get('chart-of-account').value = data.chart_of_account || '';
   get('row-table').tBodies[0].innerHTML = '';

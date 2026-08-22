@@ -113,4 +113,5 @@ urlpatterns = [
     path('hatch-entry/<int:id>/request-edit/', HatchEntryFormTemplateView.as_view(), {'request_mode': True}, name='hatch_entry_request_change'),
     path('delivery-challan/<int:id>/request-edit/', DeliveryChallanFormTemplateView.as_view(), {'request_mode': True}, name='delivery_challan_request_change'),
     path('chick-sale/<int:id>/request-edit/', ChickSaleFormTemplateView.as_view(), {'request_mode': True}, name='chick_sale_request_change'),
+    path('chick-sale-receipt/<int:id>/request-edit/', ChickSaleReceiptFormTemplateView.as_view(), {'request_mode': True}, name='chick_sale_receipt_request_change'),
 ]

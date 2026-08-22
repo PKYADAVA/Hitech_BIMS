@@ -55,8 +55,20 @@
     </div>
   </div>
 
+  {% if request_mode %}
+  <div class="alert alert-warning">
+    <i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your
+    changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Reason for this change (optional)</label>
+    <input type="text" class="form-control" name="request_note">
+  </div>
+  {% endif %}
   <div class="d-flex gap-2 mb-4">
-    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-save me-1"></i>{% if request_mode %}Submit for Approval{% else %}Save{% endif %}
+    </button>
     <a class="btn btn-secondary" href="{% url 'credit_note_list' %}">Cancel</a>
   </div>
 </form>

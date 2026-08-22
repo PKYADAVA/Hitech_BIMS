@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Stock Transfer - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='inventory' %}{% endblock %}
@@ -108,6 +109,10 @@
         </div>
         <div class="modal-body">
           <input type="hidden" id="edit-id">
+          <div class="alert alert-warning d-none" id="edit-request-mode-banner">
+            <i class="fas fa-clipboard-check me-1"></i>You do not have edit permission on this page — your
+            changes will be submitted as a <b>change request</b> and applied only after review by a permitted user.
+          </div>
           <div class="row g-3">
             <div class="col-md-3">
               <label class="form-label">Date</label>
@@ -176,7 +181,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="submit" class="btn btn-primary" id="edit-submit-btn">Save</button>
         </div>
       </form>
     </div>
@@ -204,6 +209,7 @@
 
 {% endblock %}
 {% block js %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 $(function () {
   const csrfToken = "{{ csrf_token }}";
@@ -245,7 +251,9 @@ $(function () {
         <td class="ds-mid">
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<button type="button" class="btn btn-outline-primary btn-sm edit-button" data-id="${row.id}" title="Edit"><i class="fas fa-pen"></i></button>{% endif %}
+            {% if not page_perms.edit %}<button type="button" class="btn btn-outline-info btn-sm request-edit-button" data-id="${row.id}" title="Request modification"><i class="fas fa-pen-to-square"></i></button>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+            {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>
         </td>
       </tr>`);
@@ -307,8 +315,15 @@ $(function () {
     refreshEditBatchBox("to", loc.type === "farm" ? loc.id : null);
   });
 
-  $(document).on("click", ".edit-button", function () {
-    const id = $(this).data("id");
+  // Request modification opens the identical modal populated the same way —
+  // only the Save button's own behaviour differs, tracked by this flag
+  // rather than a second copy of the modal.
+  let editRequestMode = false;
+
+  function openEditModal(id, requestMode) {
+    editRequestMode = requestMode;
+    $("#edit-submit-btn").text(requestMode ? "Submit for Approval" : "Save");
+    $("#edit-request-mode-banner").toggleClass("d-none", !requestMode);
     $.getJSON(`/stock_transfer_api/${id}/`, function (r) {
       $("#edit-id").val(r.id);
       $("#edit-date").val(r.date);
@@ -335,34 +350,43 @@ $(function () {
     }).fail(function () {
       alert("Failed to load stock transfer.");
     });
-  });
+  }
+
+  $(document).on("click", ".edit-button", function () { openEditModal($(this).data("id"), false); });
+  $(document).on("click", ".request-edit-button", function () { openEditModal($(this).data("id"), true); });
 
   $("#edit-form").on("submit", function (e) {
     e.preventDefault();
     const id = $("#edit-id").val();
     const from = splitLocation($("#edit-from-location").val());
     const to = splitLocation($("#edit-to-location").val());
+    const payload = {
+      date: $("#edit-date").val(),
+      dc_no: $("#edit-dc-no").val(),
+      item: $("#edit-item").val(),
+      quantity: $("#edit-quantity").val(),
+      rate: $("#edit-rate").val(),
+      from_location_type: from.type,
+      from_location_id: from.id,
+      from_batch: from.type === "farm" ? $("#edit-from-batch").val() : "",
+      to_location_type: to.type,
+      to_location_id: to.id,
+      to_batch: to.type === "farm" ? $("#edit-to-batch").val() : "",
+      vehicle_no: $("#edit-vehicle-no").val(),
+      driver_name: $("#edit-driver-name").val(),
+      remarks: $("#edit-remarks").val(),
+    };
+    if (editRequestMode) {
+      $("#editModal").modal("hide");
+      submitChangeRequest("stock_transfer", id, payload, "{% url 'stock_transfer_list' %}");
+      return;
+    }
     $.ajax({
       url: `/stock_transfer_api/${id}/`,
       type: "PUT",
       contentType: "application/json",
       headers: { "X-CSRFToken": csrfToken },
-      data: JSON.stringify({
-        date: $("#edit-date").val(),
-        dc_no: $("#edit-dc-no").val(),
-        item: $("#edit-item").val(),
-        quantity: $("#edit-quantity").val(),
-        rate: $("#edit-rate").val(),
-        from_location_type: from.type,
-        from_location_id: from.id,
-        from_batch: from.type === "farm" ? $("#edit-from-batch").val() : "",
-        to_location_type: to.type,
-        to_location_id: to.id,
-        to_batch: to.type === "farm" ? $("#edit-to-batch").val() : "",
-        vehicle_no: $("#edit-vehicle-no").val(),
-        driver_name: $("#edit-driver-name").val(),
-        remarks: $("#edit-remarks").val(),
-      }),
+      data: JSON.stringify(payload),
       success: function () {
         $("#editModal").modal("hide");
         loadRows();
@@ -374,6 +398,10 @@ $(function () {
   $(document).on("click", ".delete-button", function () {
     pendingDeleteId = $(this).data("id");
     $("#deleteConfirmationModal").modal("show");
+  });
+
+  $(document).on("click", ".request-delete-button", function () {
+    submitDeleteChangeRequest("stock_transfer", $(this).data("id"), loadRows);
   });
 
   $("#confirm-delete-btn").on("click", function () {

@@ -1891,7 +1891,7 @@ class ChickSaleReceiptListTemplateView(View):
 
 @method_decorator(login_required, name="dispatch")
 class ChickSaleReceiptFormTemplateView(View):
-    def get(self, request, id=None):
+    def get(self, request, id=None, request_mode: bool = False):
         from account.services.bank_cash import bank_cash_accounts, active_payment_modes, payment_mode_map
         import json as _json
         return render(request, "chick_sale_receipt_form.html", {
@@ -1902,6 +1902,7 @@ class ChickSaleReceiptFormTemplateView(View):
             "payment_modes": active_payment_modes("receipt"),
             "payment_mode_map_json": _json.dumps(payment_mode_map("receipt")),
             "today": date.today().isoformat(),
+            "request_mode": request_mode,
         })
 
 
@@ -1971,6 +1972,15 @@ class ChickSaleReceiptAPI(BaseAPIView):
         except Exception as e:
             return self.handle_exception(e)
 
+    def _save(self, data, receipt_id=None):
+        """Same field application as put(), but dict-in rather than
+        request-in — what an approved change request replays."""
+        instance = get_object_or_404(ChickSaleReceipt, id=receipt_id) if receipt_id else ChickSaleReceipt()
+        _apply_chick_sale_receipt(instance, data)
+        instance.full_clean(exclude=["receipt_no"])
+        instance.save()
+        return instance
+
 
 @login_required
 def chick_sale_receipt_balance_lookup(request):
@@ -2035,11 +2045,22 @@ class ChickSaleReportView(View):
 # --------------------------------------------------------------------------
 # Change requests: users without edit/delete rights submit proposed changes;
 # users holding the right review and apply them.
+#
+# The registry and the three views are shared, ERP-wide infrastructure — see
+# hatchery/change_requests.py. Hatchery's own seven modules register into it
+# here, right beside the API classes their "save" lambdas call; every other
+# app registers into the same CHANGE_REQUEST_HANDLERS dict from its own
+# views.py. The three view classes are re-exported under their old names so
+# hatchery/urls.py and hatchery/api.py don't need to change.
 # --------------------------------------------------------------------------
-from django.utils import timezone as _tz
-from user.access import user_can
+from .change_requests import (  # noqa: E402,F401
+    CHANGE_REQUEST_HANDLERS,
+    ChangeRequestAPI,
+    ChangeRequestListTemplateView,
+    ChangeRequestReviewAPI,
+)
 
-CHANGE_REQUEST_HANDLERS = {
+CHANGE_REQUEST_HANDLERS.update({
     "egg_purchase": {
         "api": "/egg_purchase_api/",
         "label": "Egg Purchase", "tab": "egg_purchase_list", "model": EggPurchase,
@@ -2082,132 +2103,10 @@ CHANGE_REQUEST_HANDLERS = {
         "save": lambda data, oid: ChickSaleAPI()._save(data, oid),
         "number": lambda obj: obj.bill_no,
     },
-}
-
-
-@method_decorator(login_required, name="dispatch")
-class ChangeRequestListTemplateView(View):
-    def get(self, request):
-        return render(request, "change_request_list.html")
-
-
-def _change_request_to_dict(cr, user):
-    handler = CHANGE_REQUEST_HANDLERS.get(cr.module, {})
-    return {
-        "id": cr.id, "module": cr.module, "module_label": handler.get("label", cr.module),
-        "object_id": cr.object_id, "object_label": cr.object_label,
-        "action": cr.action, "action_label": cr.get_action_display(),
-        "status": cr.status, "note": cr.note,
-        "payload": cr.payload,
-        "requested_by": cr.requested_by.username,
-        "requested_at": _tz.localtime(cr.requested_at).strftime("%Y-%m-%d %H:%M"),
-        "reviewed_by": cr.reviewed_by.username if cr.reviewed_by else "",
-        "reviewed_at": _tz.localtime(cr.reviewed_at).strftime("%Y-%m-%d %H:%M") if cr.reviewed_at else "",
-        "review_note": cr.review_note,
-        "can_review": user_can(user, handler.get("tab", ""), cr.action) if handler else False,
-        "detail_api": handler.get("api", ""),
-    }
-
-
-@method_decorator(login_required, name="dispatch")
-class ChangeRequestAPI(BaseAPIView):
-    @staticmethod
-    def _fk_labels():
-        """id -> human label per payload field name, so the diff viewer can show
-        names instead of raw foreign-key ids (both current and proposed sides)."""
-        items = {str(i.id): f"{i.item_code} - {i.description}" for i in Item.objects.all()}
-        warehouses = {str(w.id): w.name for w in Warehouse.objects.all()}
-        accounts = {str(a.id): f"{a.code} - {a.description}" for a in ChartOfAccount.objects.all()}
-        return {
-            "supplier": {str(s.id): s.name for s in Supplier.objects.all()},
-            "customer": {str(c.id): c.name for c in Customer.objects.all()},
-            "warehouse": warehouses,
-            "storage_location": warehouses,
-            "item": items,
-            "hatch_item": items,
-            "pay_account": accounts,
-            "freight_account": accounts,
-            "hatchery": {str(h.id): h.hatchery_name for h in Hatchery.objects.all()},
-            "setter": {str(s.id): s.setter_no for s in Setter.objects.all()},
-            "grading": {str(g.id): g.transaction_no for g in EggGrading.objects.all()},
-            "purchase_invoice": {str(p.id): p.transaction_no for p in EggPurchase.objects.all()},
-            "tray_setting": {str(t.id): t.setting_no for t in TraySetting.objects.all()},
-            "delivery_challan": {str(d.id): d.challan_no for d in DeliveryChallan.objects.all()},
-        }
-
-    def get(self, request):
-        try:
-            requests_qs = ChangeRequest.objects.select_related("requested_by", "reviewed_by").all()[:300]
-            return JsonResponse({
-                "requests": [_change_request_to_dict(cr, request.user) for cr in requests_qs],
-                "labels": self._fk_labels(),
-            })
-        except Exception as e:
-            return self.handle_exception(e)
-
-    def post(self, request):
-        """Create a change request: {module, object_id, action, payload?, note?}."""
-        try:
-            data = json.loads(request.body)
-            handler = CHANGE_REQUEST_HANDLERS.get(data.get("module"))
-            if not handler:
-                raise ValidationError("Unknown module for change request.")
-            if not user_can(request.user, handler["tab"], "view"):
-                raise ValidationError("You do not have access to this module.")
-            action = data.get("action")
-            if action not in ("edit", "delete"):
-                raise ValidationError("Invalid action.")
-            obj = get_object_or_404(handler["model"], id=data.get("object_id"))
-            if action == "edit" and not data.get("payload"):
-                raise ValidationError("No proposed changes supplied.")
-            cr = ChangeRequest.objects.create(
-                module=data["module"], object_id=obj.id,
-                object_label=handler["number"](obj),
-                action=action,
-                payload=data.get("payload") if action == "edit" else None,
-                note=data.get("note") or "",
-                requested_by=request.user,
-            )
-            return JsonResponse({"id": cr.id, "message": "Change request submitted for approval."}, status=201)
-        except Exception as e:
-            return self.handle_exception(e)
-
-
-@method_decorator(login_required, name="dispatch")
-class ChangeRequestReviewAPI(BaseAPIView):
-    """POST /change_request_api/<id>/approve|reject/ — reviewer must hold the
-    matching edit/delete right on the target module's tab."""
-
-    @transaction.atomic
-    def post(self, request, id, decision):
-        try:
-            cr = get_object_or_404(ChangeRequest, id=id)
-            if cr.status != "pending":
-                raise ValidationError("This request has already been reviewed.")
-            handler = CHANGE_REQUEST_HANDLERS.get(cr.module)
-            if not handler:
-                raise ValidationError("Unknown module for change request.")
-            if not user_can(request.user, handler["tab"], cr.action):
-                return JsonResponse(
-                    {"error": "You do not have permission to review this request."}, status=403)
-            data = json.loads(request.body) if request.body else {}
-            if decision == "approve":
-                obj = handler["model"].objects.filter(id=cr.object_id).first()
-                if obj is None:
-                    raise ValidationError("The record no longer exists.")
-                if cr.action == "delete":
-                    obj.delete()
-                else:
-                    handler["save"](cr.payload, cr.object_id)
-                cr.status = "approved"
-            elif decision == "reject":
-                cr.status = "rejected"
-            else:
-                raise ValidationError("Invalid decision.")
-            cr.reviewed_by = request.user
-            cr.reviewed_at = _tz.now()
-            cr.review_note = data.get("review_note") or ""
-            cr.save()
-            return JsonResponse({"message": f"Request {cr.status}."})
-        except Exception as e:
-            return self.handle_exception(e)
+    "chick_sale_receipt": {
+        "api": "/chick_sale_receipt_api/",
+        "label": "Chick Receipt", "tab": "chick_sale_receipt_list", "model": ChickSaleReceipt,
+        "save": lambda data, oid: ChickSaleReceiptAPI()._save(data, oid),
+        "number": lambda obj: obj.receipt_no,
+    },
+})

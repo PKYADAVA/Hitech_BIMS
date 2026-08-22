@@ -33,7 +33,7 @@ from broiler.api import (
 from broiler.api import register as register_broiler
 from broiler.api_write import write_urls as broiler_write_urls
 from broiler.api_route import route_urls as broiler_route_urls
-from hatchery.api import ChangeRequestReviewView, TraySettingLookupView
+from hatchery.api import ChangeRequestCreateView, ChangeRequestReviewView, TraySettingLookupView
 from hatchery.api import register as register_hatchery
 from hatchery.api_write import write_urls as hatchery_write_urls
 from inventory.api import register as register_inventory
@@ -215,6 +215,8 @@ urlpatterns = [
     path("devices/test", DeviceTestView.as_view(), name="device-test"),
     path("hatchery/change-requests/<int:pk>/<str:decision>",
          ChangeRequestReviewView.as_view(), name="change-request-review"),
+    path("hatchery/change-requests/create",
+         ChangeRequestCreateView.as_view(), name="change-request-create"),
     # Access management (admin): role module toggles + user role assignment.
     path("user/users/create", UserCreateView.as_view(), name="user-create"),
     path("user/access/roles", RolesAccessView.as_view(), name="access-roles"),

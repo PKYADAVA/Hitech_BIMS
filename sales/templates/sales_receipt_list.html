@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Sales Receipt - BIMS{% endblock %}
 {% block nav %}{% include 'main_top_navbar.html' with active_tab='sales' %}{% endblock %}
@@ -69,6 +70,7 @@
 
 {% endblock %}
 {% block js %}
+<script src="{% static 'js/change_requests.js' %}"></script>
 <script>
 $(function () {
   const csrfToken = "{{ csrf_token }}";
@@ -94,7 +96,9 @@ $(function () {
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/sales-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
+            {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/sales-receipt/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
+            {% if not page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm request-delete-button" data-id="${row.id}" title="Request deletion"><i class="fas fa-trash-arrow-up"></i></button>{% endif %}
           </div>
         </td>
       </tr>`);
@@ -116,6 +120,10 @@ $(function () {
   }
 
   $("#filter-submit").on("click", loadRows);
+
+  $(document).on("click", ".request-delete-button", function () {
+    submitDeleteChangeRequest("sales_receipt", $(this).data("id"), loadRows);
+  });
 
   $(document).on("click", ".delete-button", function () {
     pendingDeleteId = $(this).data("id");

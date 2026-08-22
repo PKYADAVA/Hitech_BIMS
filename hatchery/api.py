@@ -143,7 +143,14 @@ class ChangeRequestReviewView(V1ViewMixin, APIView):
             if obj is None:
                 raise ValidationError("The record no longer exists.")
             if cr.action == "delete":
-                obj.delete()
+                # See hatchery/change_requests.py's ChangeRequestReviewAPI for
+                # why this isn't a plain obj.delete() — a stock-bearing
+                # document needs its recompute chain re-run afterward.
+                delete_fn = handler.get("delete")
+                if delete_fn:
+                    delete_fn(obj)
+                else:
+                    obj.delete()
             else:
                 handler["save"](cr.payload, cr.object_id)
             cr.status = "approved"
@@ -157,3 +164,42 @@ class ChangeRequestReviewView(V1ViewMixin, APIView):
         cr.review_note = str(request.data.get("review_note") or "")
         cr.save()
         return Response({"status": cr.status, "id": cr.id})
+
+
+class ChangeRequestCreateView(V1ViewMixin, APIView):
+    """POST /hatchery/change-requests/create — a phone's way in to the same
+    workflow the web's /change_request_api/ offers: {module, object_id,
+    action, payload?, note?}. Kept separate from the read-only
+    hatchery/change-requests list (register_model) and from the web's own
+    endpoint (session + CSRF, not JWT) rather than trying to share either."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from user.access import user_can
+
+        from .change_requests import CHANGE_REQUEST_HANDLERS
+
+        data = request.data
+        handler = CHANGE_REQUEST_HANDLERS.get(data.get("module"))
+        if not handler:
+            raise ValidationError("Unknown module for change request.")
+        if not user_can(request.user, handler["tab"], "view"):
+            raise PermissionDenied("You do not have access to this module.")
+        action = data.get("action")
+        if action not in ("edit", "delete"):
+            raise ValidationError("Invalid action.")
+        obj = handler["model"].objects.filter(id=data.get("object_id")).first()
+        if obj is None:
+            raise NotFound("Record not found.")
+        if action == "edit" and not data.get("payload"):
+            raise ValidationError("No proposed changes supplied.")
+        cr = ChangeRequest.objects.create(
+            module=data["module"], object_id=obj.id,
+            object_label=handler["number"](obj),
+            action=action,
+            payload=data.get("payload") if action == "edit" else None,
+            note=str(data.get("note") or ""),
+            requested_by=request.user,
+        )
+        return Response({"id": cr.id, "message": "Change request submitted for approval."}, status=201)

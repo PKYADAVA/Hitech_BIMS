@@ -563,6 +563,13 @@ def _save_general_purchase_items(instance, request):
         rows = json.loads(request.POST.get("items_json") or "[]")
     except json.JSONDecodeError:
         rows = []
+    _apply_general_purchase_items(instance, rows)
+
+
+def _apply_general_purchase_items(instance, rows):
+    """Same item application as _save_general_purchase_items, but rows-in
+    rather than request-in — shared with the change-request replay, which has
+    no request to read items_json from."""
     instance.items.all().delete()
     for row in rows:
         # The destination arrives as one field carrying its own kind, e.g.
@@ -625,13 +632,59 @@ def create_general_purchase(request):
     return render(request, "general_purchase_form.html", _general_purchase_form_context(request.user))
 
 
+def _stage_request_mode_files(model, request, payload, field_names):
+    """A JSONField payload can't carry file bytes, so any newly-posted file is
+    written to its field's own storage right now (against an unsaved scratch
+    instance, purely to get the right upload_to/storage), and the resulting
+    path goes into the payload in its place. Approval later just assigns that
+    path back onto the real field — no re-upload, no new endpoint shape.
+
+    A rejected/never-reviewed request leaves that file orphaned on disk; a low
+    risk accepted here, consistent with how uploaded reference docs already
+    behave elsewhere in this codebase (nothing garbage-collects unused
+    uploads today)."""
+    staging = model()
+    for field_name in field_names:
+        f = request.FILES.get(field_name)
+        if f:
+            field_file = getattr(staging, field_name)
+            field_file.save(f.name, f, save=False)
+            payload[field_name] = field_file.name
+
+
 @login_required(login_url="login")
-def edit_general_purchase(request, id):
+def edit_general_purchase(request, id, request_mode=False):
     """Edit an existing General Purchase transaction."""
     instance = get_object_or_404(GeneralPurchase, id=id)
 
     if request.method == "POST":
         try:
+            if request_mode:
+                # No edit right on this tab — propose the values rather than
+                # saving them.
+                from hatchery.models import ChangeRequest
+
+                try:
+                    items = json.loads(request.POST.get("items_json") or "[]")
+                except json.JSONDecodeError:
+                    items = []
+                payload = request.POST.dict()
+                payload.pop("csrfmiddlewaretoken", None)
+                payload.pop("items_json", None)
+                payload.pop("request_note", None)
+                payload["items"] = items
+                _stage_request_mode_files(
+                    GeneralPurchase, request, payload,
+                    ["reference_document_1", "reference_document_2", "reference_document_3"])
+                ChangeRequest.objects.create(
+                    module="general_purchase", object_id=instance.id,
+                    object_label=instance.purchase_no,
+                    action="edit", payload=payload,
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect("general_purchase_list")
             _apply_posted_general_purchase_fields(instance, request)
             instance.full_clean(exclude=["purchase_no"])
             with transaction.atomic():
@@ -642,7 +695,8 @@ def edit_general_purchase(request, id):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "general_purchase_form.html", _general_purchase_form_context(request.user, instance))
+    return render(request, "general_purchase_form.html",
+                 dict(_general_purchase_form_context(request.user, instance), request_mode=request_mode))
 
 
 @login_required(login_url="login")
@@ -791,6 +845,13 @@ def _save_chicks_purchase_items(instance, request):
         rows = json.loads(request.POST.get("items_json") or "[]")
     except json.JSONDecodeError:
         rows = []
+    _apply_chicks_purchase_items(instance, rows)
+
+
+def _apply_chicks_purchase_items(instance, rows):
+    """Same item application as _save_chicks_purchase_items, but rows-in
+    rather than request-in — shared with the change-request replay, which has
+    no request to read items_json from."""
     instance.items.all().delete()
     for row in rows:
         if not row.get("farm_warehouse"):
@@ -840,12 +901,38 @@ def create_chicks_purchase(request):
 
 
 @login_required(login_url="login")
-def edit_chicks_purchase(request, id):
+def edit_chicks_purchase(request, id, request_mode=False):
     """Edit an existing Chicks Purchase transaction."""
     instance = get_object_or_404(ChicksPurchase, id=id)
 
     if request.method == "POST":
         try:
+            if request_mode:
+                # No edit right on this tab — propose the values rather than
+                # saving them.
+                from hatchery.models import ChangeRequest
+
+                try:
+                    items = json.loads(request.POST.get("items_json") or "[]")
+                except json.JSONDecodeError:
+                    items = []
+                payload = request.POST.dict()
+                payload.pop("csrfmiddlewaretoken", None)
+                payload.pop("items_json", None)
+                payload.pop("request_note", None)
+                payload["items"] = items
+                _stage_request_mode_files(
+                    ChicksPurchase, request, payload,
+                    ["reference_document_1", "reference_document_2", "reference_document_3"])
+                ChangeRequest.objects.create(
+                    module="chicks_purchase", object_id=instance.id,
+                    object_label=instance.purchase_no,
+                    action="edit", payload=payload,
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect("chicks_purchase_list")
             _apply_posted_chicks_purchase_fields(instance, request)
             instance.full_clean(exclude=["purchase_no"])
             with transaction.atomic():
@@ -856,7 +943,8 @@ def edit_chicks_purchase(request, id):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "chicks_purchase_form.html", _chicks_purchase_form_context(request.user, instance))
+    return render(request, "chicks_purchase_form.html",
+                 dict(_chicks_purchase_form_context(request.user, instance), request_mode=request_mode))
 
 
 @login_required(login_url="login")
@@ -921,9 +1009,10 @@ def _bank_cash_accounts():
             .order_by("code"))
 
 
-def _payment_form_context(user, p=None):
+def _payment_form_context(user, p=None, request_mode=False):
     return {
         "payment": p,
+        "request_mode": request_mode,
         "next_payment_no": SupplierPayment._next_payment_no() if not p else None,
         "suppliers": suppliers_for(user, Supplier.objects.order_by("name")),
         "locations": Warehouse.objects.order_by("name"),
@@ -989,12 +1078,38 @@ def create_payment(request):
 
 
 @login_required(login_url="login")
-def edit_payment(request, id):
+def edit_payment(request, id, request_mode=False):
     """Edit an existing Supplier Payment voucher."""
     instance = get_object_or_404(SupplierPayment, id=id)
 
     if request.method == "POST":
         try:
+            if request_mode:
+                # No edit right on this tab — propose the values rather than
+                # saving them.
+                from hatchery.models import ChangeRequest
+
+                lines_raw = request.POST.get("lines_json") or "[]"
+                try:
+                    lines = json.loads(lines_raw)
+                except json.JSONDecodeError:
+                    lines = []
+                if not lines:
+                    raise ValidationError("Add at least one payment line.")
+                payload = {
+                    "date": request.POST.get("date") or "",
+                    "location": request.POST.get("location") or "",
+                    "lines": lines,
+                }
+                ChangeRequest.objects.create(
+                    module="supplier_payment", object_id=instance.id,
+                    object_label=instance.payment_no,
+                    action="edit", payload=payload,
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect("payment_list")
             _apply_posted_payment_fields(instance, request)
             instance.full_clean(exclude=["payment_no"])
             with transaction.atomic():
@@ -1007,7 +1122,8 @@ def edit_payment(request, id):
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
 
-    return render(request, "payment_form.html", _payment_form_context(request.user, instance))
+    return render(request, "payment_form.html",
+                 _payment_form_context(request.user, instance, request_mode=request_mode))
 
 
 @login_required(login_url="login")
@@ -1065,7 +1181,7 @@ def _note_row_dict(n):
     }
 
 
-def _note_form_context(user, model, instance=None):
+def _note_form_context(user, model, instance=None, request_mode=False):
     from inventory.models import Warehouse
     return {
         "note": instance,
@@ -1077,6 +1193,7 @@ def _note_form_context(user, model, instance=None):
         "today": timezone.localdate().isoformat(),
         "existing_rows_json": json.dumps(
             [_note_row_dict(instance)] if instance else []),
+        "request_mode": request_mode,
     }
 
 
@@ -1098,7 +1215,7 @@ def _apply_note_row(instance, row):
         raise ValidationError("Enter an amount greater than zero on every row.")
 
 
-def _save_notes(request, model, kind, template, redirect_name, instance=None):
+def _save_notes(request, model, kind, template, redirect_name, instance=None, request_mode=False):
     """Grid entry: one note per row, all saved together or not at all.
 
     The Add screen takes as many rows as wanted; the Edit screen reopens the one
@@ -1113,6 +1230,25 @@ def _save_notes(request, model, kind, template, redirect_name, instance=None):
         try:
             if not rows:
                 raise ValidationError("Add at least one row.")
+            if request_mode:
+                # No edit right on this tab — propose the row's values rather
+                # than saving them. Only meaningful against an existing note;
+                # a brand-new one has nothing yet to hold a request against.
+                if not instance:
+                    raise ValidationError(
+                        "Adding a new record needs the add right — only a "
+                        "change to an existing one can be requested.")
+                from hatchery.models import ChangeRequest
+
+                module = "purchase_debit_note" if model is DebitNote else "purchase_credit_note"
+                ChangeRequest.objects.create(
+                    module=module, object_id=instance.id, object_label=instance.note_no,
+                    action="edit", payload=rows[0],
+                    note=(request.POST.get("request_note") or "").strip(),
+                    requested_by=request.user,
+                )
+                messages.success(request, "Change request submitted for approval.")
+                return redirect(redirect_name)
             with transaction.atomic():
                 saved = 0
                 for row in rows:
@@ -1130,7 +1266,8 @@ def _save_notes(request, model, kind, template, redirect_name, instance=None):
             return redirect(redirect_name)
         except ValidationError as e:
             messages.error(request, " ".join(e.messages) if hasattr(e, "messages") else str(e))
-    return render(request, template, _note_form_context(request.user, model, instance))
+    return render(request, template,
+                 _note_form_context(request.user, model, instance, request_mode=request_mode))
 
 
 def _note_api(request, model):
@@ -1166,9 +1303,9 @@ def create_debit_note(request):
 
 
 @login_required(login_url="login")
-def edit_debit_note(request, id):
+def edit_debit_note(request, id, request_mode=False):
     return _save_notes(request, DebitNote, "Debit Note", "debit_note_form.html", "debit_note_list",
-                       instance=get_object_or_404(DebitNote, id=id))
+                       instance=get_object_or_404(DebitNote, id=id), request_mode=request_mode)
 
 
 @login_required(login_url="login")
@@ -1196,9 +1333,9 @@ def create_credit_note(request):
 
 
 @login_required(login_url="login")
-def edit_credit_note(request, id):
+def edit_credit_note(request, id, request_mode=False):
     return _save_notes(request, CreditNote, "Credit Note", "credit_note_form.html", "credit_note_list",
-                       instance=get_object_or_404(CreditNote, id=id))
+                       instance=get_object_or_404(CreditNote, id=id), request_mode=request_mode)
 
 
 @login_required(login_url="login")
@@ -2017,3 +2154,168 @@ def _purchase_report_excel(ctx):
     response["Content-Disposition"] = 'attachment; filename="purchase_report.xlsx"'
     wb.save(response)
     return response
+
+
+# --------------------------------------------------------------------------
+# Change requests: this app's own entries into the ERP-wide registry (see
+# hatchery/change_requests.py).
+# --------------------------------------------------------------------------
+def _save_debit_note(data, oid):
+    note = get_object_or_404(DebitNote, id=oid) if oid else DebitNote()
+    _apply_note_row(note, data)
+    note.full_clean(exclude=["note_no"])
+    note.save()
+    return note
+
+
+def _save_credit_note(data, oid):
+    note = get_object_or_404(CreditNote, id=oid) if oid else CreditNote()
+    _apply_note_row(note, data)
+    note.full_clean(exclude=["note_no"])
+    note.save()
+    return note
+
+
+def _save_general_purchase(data, oid):
+    """What an approved General Purchase change request replays — same field
+    application as edit_general_purchase()'s own save, dict-in rather than
+    request-in. File fields arrive as an already-staged storage path (see
+    _stage_request_mode_files) rather than an upload."""
+    instance = get_object_or_404(GeneralPurchase, id=oid) if oid else GeneralPurchase()
+    instance.date = data.get("date") or timezone.localdate()
+    instance.supplier_id = data.get("supplier") or None
+    instance.bill_no = (data.get("bill_no") or "").strip()
+    instance.vehicle_no = (data.get("vehicle_no") or "").strip()
+    instance.driver_name = (data.get("driver_name") or "").strip()
+    instance.driver_mobile = (data.get("driver_mobile") or "").strip()
+    instance.calculation_based_on = data.get("calculation_based_on") or "Received Quantity"
+    instance.payment_terms = data.get("payment_terms") or "Cash"
+    instance.freight_type = data.get("freight_type") or "No Freight"
+    instance.payment_mode = data.get("payment_mode") or "pay_later"
+    instance.pay_account_id = data.get("pay_account") or None
+    instance.freight_account_id = data.get("freight_account") or None
+    instance.freight_amount = data.get("freight_amount") or 0
+    instance.freight_settlement = data.get("freight_settlement") or "In Purchase Bill"
+    instance.freight_transporter = (data.get("freight_transporter") or "").strip()
+    instance.bag_type = (data.get("bag_type") or "").strip()
+    instance.no_of_bags = data.get("no_of_bags") or 0
+    instance.batch_no = (data.get("batch_no") or "").strip()
+    instance.expiry_date = data.get("expiry_date") or None
+    instance.tds_code = (data.get("tds_code") or "").strip()
+    instance.tds_applicable = data.get("tds_applicable") == "on"
+    instance.tds_amount = data.get("tds_amount") or 0
+    instance.other_charges_account_id = data.get("other_charges_account") or None
+    instance.other_charges_type = data.get("other_charges_type") or "Add"
+    instance.other_charges_amount = data.get("other_charges_amount") or 0
+    instance.remarks = (data.get("remarks") or "").strip()
+    for field_name in ("reference_document_1", "reference_document_2", "reference_document_3"):
+        if data.get(field_name):
+            setattr(instance, field_name, data[field_name])
+    validate_value("purchase", "GeneralPurchase", "calculation_based_on", instance.calculation_based_on)
+    instance.full_clean(exclude=["purchase_no"])
+    instance.save()
+    _apply_general_purchase_items(instance, data.get("items") or [])
+    return instance
+
+
+def _save_chicks_purchase(data, oid):
+    """What an approved Chicks Purchase change request replays — same field
+    application as edit_chicks_purchase()'s own save, dict-in rather than
+    request-in."""
+    instance = get_object_or_404(ChicksPurchase, id=oid) if oid else ChicksPurchase()
+    instance.date = data.get("date") or timezone.localdate()
+    instance.supplier_id = data.get("supplier") or None
+    instance.item_id = data.get("item") or None
+    instance.bill_no = (data.get("bill_no") or "").strip()
+    instance.vehicle_no = (data.get("vehicle_no") or "").strip()
+    instance.driver_name = (data.get("driver_name") or "").strip()
+    instance.freight_type = data.get("freight_type") or "No Freight"
+    instance.payment_mode = data.get("payment_mode") or "pay_later"
+    instance.pay_account_id = data.get("pay_account") or None
+    instance.freight_account_id = data.get("freight_account") or None
+    instance.freight_amount = data.get("freight_amount") or 0
+    instance.freight_settlement = data.get("freight_settlement") or "In Purchase Bill"
+    instance.freight_transporter = (data.get("freight_transporter") or "").strip()
+    instance.bag_type = (data.get("bag_type") or "").strip()
+    instance.no_of_bags = data.get("no_of_bags") or 0
+    instance.batch_no = (data.get("batch_no") or "").strip()
+    instance.expiry_date = data.get("expiry_date") or None
+    instance.tds_code = (data.get("tds_code") or "").strip()
+    instance.tds_applicable = data.get("tds_applicable") == "on"
+    instance.tds_amount = data.get("tds_amount") or 0
+    instance.other_charges_account_id = data.get("other_charges_account") or None
+    instance.other_charges_type = data.get("other_charges_type") or "Add"
+    instance.other_charges_amount = data.get("other_charges_amount") or 0
+    instance.remarks = (data.get("remarks") or "").strip()
+    for field_name in ("reference_document_1", "reference_document_2", "reference_document_3"):
+        if data.get(field_name):
+            setattr(instance, field_name, data[field_name])
+    instance.full_clean(exclude=["purchase_no"])
+    instance.save()
+    _apply_chicks_purchase_items(instance, data.get("items") or [])
+    return instance
+
+
+def _save_payment(data, oid):
+    """What an approved Supplier Payment change request replays — same field
+    application as edit_payment()'s own save, dict-in rather than request-in."""
+    instance = get_object_or_404(SupplierPayment, id=oid) if oid else SupplierPayment()
+    instance.date = data.get("date") or timezone.localdate()
+    instance.location_id = data.get("location") or None
+    instance.full_clean(exclude=["payment_no"])
+    instance.save()
+    instance.lines.all().delete()
+    for row in data.get("lines") or []:
+        if not row.get("supplier") or not row.get("pay_account") or not row.get("amount"):
+            continue
+        SupplierPaymentLine.objects.create(
+            payment=instance, supplier_id=row["supplier"], mode=row.get("mode") or "Cash",
+            pay_account_id=row["pay_account"],
+            amount=Decimal(str(row.get("amount") or 0)),
+            bank_charges=Decimal(str(row.get("bank_charges") or 0)),
+            reference_no=row.get("reference_no") or "",
+            remarks=row.get("remarks") or "",
+        )
+    if not instance.lines.exists():
+        raise ValidationError("Add at least one payment line.")
+    return instance
+
+
+from hatchery.change_requests import CHANGE_REQUEST_HANDLERS as _CR_HANDLERS  # noqa: E402
+
+_CR_HANDLERS.update({
+    # No per-id detail endpoint exists for these (only the list feed) — the
+    # review screen falls back to showing the proposed values on their own,
+    # without a live "current" comparison, exactly as it does for any
+    # handler with no "api" (see change_request_list.html's detail_api check).
+    "purchase_debit_note": {
+        "api": "",
+        "label": "Debit Note", "tab": "debit_note_list", "model": DebitNote,
+        "save": _save_debit_note,
+        "number": lambda obj: obj.note_no,
+    },
+    "purchase_credit_note": {
+        "api": "",
+        "label": "Credit Note", "tab": "credit_note_list", "model": CreditNote,
+        "save": _save_credit_note,
+        "number": lambda obj: obj.note_no,
+    },
+    "supplier_payment": {
+        "api": "",
+        "label": "Supplier Payment", "tab": "payment_list", "model": SupplierPayment,
+        "save": _save_payment,
+        "number": lambda obj: obj.payment_no,
+    },
+    "general_purchase": {
+        "api": "",
+        "label": "General Purchase", "tab": "general_purchase_list", "model": GeneralPurchase,
+        "save": _save_general_purchase,
+        "number": lambda obj: obj.purchase_no,
+    },
+    "chicks_purchase": {
+        "api": "",
+        "label": "Chicks Purchase", "tab": "chicks_purchase_list", "model": ChicksPurchase,
+        "save": _save_chicks_purchase,
+        "number": lambda obj: obj.purchase_no,
+    },
+})

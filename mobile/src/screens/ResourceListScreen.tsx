@@ -3,9 +3,11 @@ import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from "react-native";
 
 import { http } from "@/api/client";
+import { createChangeRequest } from "@/api/changeRequests";
 import { deleteResource } from "@/api/resources";
 import { Row } from "@/api/types";
 import { useOverview } from "@/api/stats";
+import { CHANGE_REQUEST_MODULE } from "@/config/changeRequestModules";
 import { LIST_KPIS } from "@/config/modulePrimary";
 import { buildGroups, GroupItem } from "@/domain/grouping";
 import { AppIcon } from "@/components/AppIcon";
@@ -114,6 +116,15 @@ export function ResourceListScreen({ route, navigation }: Props) {
         disabled: !isLastInGroup,
         onPress: () => confirmDelete(row),
       });
+    } else if (CHANGE_REQUEST_MODULE[config.key]) {
+      // No delete right, but the module has an approval-queue handler on
+      // the web (see hatchery/change_requests.py) — the same fallback the
+      // web register offers instead of Delete.
+      actions.push({
+        key: "request-delete", label: "Request Deletion", icon: "delete-clock-outline",
+        danger: true, disabled: !isLastInGroup,
+        onPress: () => confirmRequestDelete(row),
+      });
     }
     // Resource-specific actions (ending a trip, filling a capture, uploading
     // a lifting's photographs) sit after the standard three. Each gates
@@ -165,6 +176,26 @@ export function ResourceListScreen({ route, navigation }: Props) {
       queryClient.invalidateQueries({ queryKey: ["list", config.path] });
     } catch (e) {
       notify("Could not delete", (e as Error)?.message ?? "Please try again.");
+    }
+  };
+
+  /** No delete right on this module — propose it instead. Stays queued until
+   *  someone who holds the right reviews it, the same as the web register's
+   *  own Request Deletion button. */
+  const confirmRequestDelete = async (row: Row) => {
+    const module = CHANGE_REQUEST_MODULE[config.key];
+    const label = config.card(row).title;
+    if (!(await confirm({
+      title: "Request deletion?",
+      message: `${label} will stay on file until a reviewer approves the request.`,
+      confirmLabel: "Request Deletion",
+      destructive: true,
+    }))) return;
+    try {
+      await createChangeRequest(module, row.id as number, "delete");
+      notify("Requested", "Deletion request submitted for approval.");
+    } catch (e) {
+      notify("Could not submit", (e as Error)?.message ?? "Please try again.");
     }
   };
 
