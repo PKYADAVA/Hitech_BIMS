@@ -118,8 +118,11 @@ export function extraRowActions(
     return perms.edit ? [endTripAction(row, navigate)] : [];
   }
   if (resourceKey === "broiler-bird-sales") {
-    // Gated on edit, as amending the sale is: this adds to a filed record.
-    return perms.edit ? [uploadPhotosAction(row, navigate)] : [];
+    // Gated on add, not edit — see uploadPhotosAction above: this only ever
+    // adds evidence to a filed sale, the same "filling a blank is adding"
+    // rule fillCaptureAction uses below. A user with no edit right on Bird
+    // Sale can still have add, and could not see this action at all before.
+    return perms.add ? [uploadPhotosAction(row, navigate)] : [];
   }
   if (resourceKey === "broiler-farm-location-capture") {
     const out: RecordAction[] = [];

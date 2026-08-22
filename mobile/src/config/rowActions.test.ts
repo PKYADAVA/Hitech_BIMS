@@ -28,6 +28,12 @@ describe("extraRowActions", () => {
     expect(extraRowActions("broiler-bird-sales", sale, nav, readOnly)).toEqual([]);
   });
 
+  it("offers Upload to someone who may add but not edit", () => {
+    const addOnly = { add: true, edit: false, delete: false };
+    const actions = extraRowActions("broiler-bird-sales", sale, nav, addOnly);
+    expect(actions.map((a) => a.key)).toEqual(["upload"]);
+  });
+
   it("opens the photo screen with the sale it was pressed on", () => {
     const seen: { screen: string; row: Row }[] = [];
     const spy: RowActionNavigate = (screen, params) =>
