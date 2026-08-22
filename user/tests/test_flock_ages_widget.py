@@ -133,11 +133,19 @@ class FlockAgeWidgetTests(TestCase):
         self.assertEqual(self.stat("Available birds")["value"], "6,000")
         self.assertEqual(sum(self.bands().values()), 6000)
 
-    def test_ready_to_lift_is_the_oldest_band(self):
+    def test_ready_to_lift_is_36_days_and_over(self):
         self.flock("Growing", 2000, age=20)
         self.flock("Ready", 3000, age=45)
         self.assertEqual(self.stat("Ready to lift")["value"], "3,000")
-        self.assertEqual(self.stat("Ready to lift")["sub"], "42 days and over")
+        self.assertEqual(self.stat("Ready to lift")["sub"], "36 days and over")
+
+    def test_a_flock_in_its_thirty_sixth_day_already_counts_as_ready(self):
+        """36-41 is its own weekly band on the chart, but it is old enough to
+        lift — the stat is not the oldest band alone."""
+        self.flock("Growing", 2000, age=20)
+        self.flock("Almost There", 1500, age=38)
+        self.flock("Ready", 3000, age=45)
+        self.assertEqual(self.stat("Ready to lift")["value"], "4,500")
 
     # ---- flocks without a placement date ------------------------------------
 

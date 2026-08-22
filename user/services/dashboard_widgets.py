@@ -388,6 +388,10 @@ def _bars(groups, series=("",), colours=CHART_COLOURS):
 #: it does.
 AGE_BANDS = ((0, 7), (8, 14), (15, 21), (22, 28), (29, 35), (36, 41), (42, None))
 
+#: A flock counts as "ready to lift" once it clears this age — the band
+#: breakdown stays weekly regardless.
+READY_TO_LIFT_DAYS = 36
+
 
 def _flock_ages(viewable, filters, user=None):
     """Birds alive by age band — what is ready to lift and what is behind it.
@@ -462,12 +466,13 @@ def _flock_ages(viewable, filters, user=None):
             "values": [round(band["birds"])],
         })
 
-    ready = bands[-1]["birds"]
+    ready = sum(band["birds"] for (low, _high), band in zip(AGE_BANDS, bands)
+                if low >= READY_TO_LIFT_DAYS)
     return {
         "stats": [
             {"label": "Available birds", "value": _num(total)},
             {"label": "Ready to lift", "value": _num(ready),
-             "sub": f"{AGE_BANDS[-1][0]} days and over"},
+             "sub": f"{READY_TO_LIFT_DAYS} days and over"},
             {"label": "Farms", "value": _num(len({b[2] for b in batches}))},
         ],
         "chart": _bars(groups, series=("Birds",)),
@@ -689,7 +694,8 @@ def _sale_overview(viewable, filters, user=None):
     being outside their access as much as it is outside any branch.
     """
     from django.db.models import Sum
-    from broiler.models import BirdSale, BirdSaleReceipt
+    from broiler.models import BirdSale, BirdSaleReceipt, BroilerBatch
+    from broiler.views import _placement_date
     from inventory.services.offices import mapped_office_ids, offices_for_branches
     from user.services.scoping import is_unscoped
 
@@ -759,8 +765,17 @@ def _sale_overview(viewable, filters, user=None):
     # Age at sale, weighted by the birds that went out on each lifting: a
     # 12,000-bird lifting and a 200-bird one are not two equal opinions about
     # the age a flock leaves at.
+    #
+    # batch.start_date alone understates this: a batch created straight from a
+    # chicks placement carries no start_date at all, so a card with even one
+    # such lifting on the day would show no age at all rather than the age of
+    # the liftings it *does* know. _placement_date falls back to that
+    # placement's own date — the same rule the age reports already use.
+    rows = list(sales.values_list("date", "batch_id", "birds"))
+    batches = BroilerBatch.objects.in_bulk({b for _d, b, _c in rows if b})
     bird_days, head = 0.0, 0.0
-    for sale_date, start, count in sales.values_list("date", "batch__start_date", "birds"):
+    for sale_date, batch_id, count in rows:
+        start = _placement_date(batches.get(batch_id))
         if not start:
             continue                       # no placement recorded: no age to take
         bird_days += max((sale_date - start).days, 0) * float(count or 0)

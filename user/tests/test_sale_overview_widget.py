@@ -27,7 +27,7 @@ from django.utils import timezone
 from broiler.models import (BirdSale, BirdSaleReceipt, Branch, BroilerBatch,
                             BroilerFarm, Farmer, Region, Supervisor)
 from account.models import AccountType, ChartOfAccount, CompanyProfile
-from inventory.models import Warehouse
+from inventory.models import Item, ItemCategory, StockTransfer, Warehouse
 from user.models import GroupAccessProfile, GroupTabPermission
 from user.services.dashboard_widgets import dashboard_widgets
 
@@ -114,6 +114,26 @@ class SaleOverviewTests(TestCase):
         self.assertEqual(self.stat("Mean age")["value"], "35.00 d")
         self.assertEqual(self.stat("Sold birds")["value"], "1,500")   # still counted
         self.assertTrue(sale.batch_id)
+
+    def test_a_batch_with_no_start_date_still_ages_off_its_placement(self):
+        """A batch created straight from a chicks placement carries no
+        start_date at all (see broiler.views._placement_date) — one such
+        lifting used to blank the whole card's Mean age rather than falling
+        back to the placement that actually dates it."""
+        chick_cat = ItemCategory.objects.create(name="Day Old Chicks")
+        chick = Item.objects.create(item_code="CHK-1", description="Day Old Chick",
+                                    category=chick_cat, standard_cost_per_unit=35)
+        placed = self.today - timedelta(days=40)
+        batch = BroilerBatch.objects.create(
+            broiler_farm=self.farm, batch_name="B-UNDATED", start_date=None)
+        StockTransfer.objects.create(
+            date=placed, item=chick, quantity=4000,
+            purchase_rate=Decimal("35"), rate=Decimal("35"),
+            from_location_type="warehouse", from_warehouse=self.counter,
+            to_location_type="farm", to_farm=self.farm, to_batch=batch)
+        BirdSale.objects.create(farm=self.farm, batch=batch, date=self.today,
+                                birds=4000, net_weight=Decimal("8000"), rate=Decimal("90"))
+        self.assertEqual(self.stat("Mean age")["value"], "40.00 d")
 
     # ---- what came back -----------------------------------------------------
 
