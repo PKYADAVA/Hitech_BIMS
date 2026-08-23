@@ -10,6 +10,7 @@ import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
+import { localDay } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "EggPurchaseForm">;
 
@@ -86,7 +87,7 @@ const itemTotal = (row: ItemRow): number => {
   return amount - pctOff - (Number(row.discount_amount) || 0);
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 const rupees = (n: number) =>
   `₹ ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

@@ -10,6 +10,7 @@ import { FormField } from "@/config/forms";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
+import { localDay } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "BirdSaleReceiptForm">;
 
@@ -57,7 +58,7 @@ const codeField = (options: Option[], modeChosen: boolean): FormField => ({
 });
 
 const REMARKS_MAX = 200;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 
 /** One payment on the receipt. */
 interface Entry {

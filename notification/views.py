@@ -44,8 +44,8 @@ def _template_to_dict(template: SmsTemplate) -> dict:
         "is_active": template.is_active,
         "created_by": template.created_by.username if template.created_by else "",
         "modified_by": template.modified_by.username if template.modified_by else "",
-        "created_at": template.created_at.strftime("%Y-%m-%d %H:%M"),
-        "updated_at": template.updated_at.strftime("%Y-%m-%d %H:%M"),
+        "created_at": timezone.localtime(template.created_at).strftime("%Y-%m-%d %H:%M"),
+        "updated_at": timezone.localtime(template.updated_at).strftime("%Y-%m-%d %H:%M"),
     }
 
 

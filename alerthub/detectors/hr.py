@@ -92,7 +92,7 @@ def leave_approval_pending(rule):
     )
 
     for leave in rows:
-        waiting = Decimal((today - leave.created_date.date()).days)
+        waiting = Decimal((today - timezone.localdate(leave.created_date)).days)
         if not compare(waiting, rule.operator, rule.threshold):
             continue
         if not rule_applies_to(rule):
@@ -105,7 +105,7 @@ def leave_approval_pending(rule):
             message=(
                 f"{who}'s {leave.leave_type} leave request has been pending for "
                 f"{int(waiting)} day(s) — raised "
-                f"{leave.created_date.date():%d %b %Y}."
+                f"{timezone.localdate(leave.created_date):%d %b %Y}."
             ),
             dedupe_key=f"{rule.pk}:leave_pending:{leave.pk}",
             measured_value=waiting,

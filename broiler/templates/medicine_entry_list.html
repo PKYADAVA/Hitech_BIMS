@@ -150,7 +150,7 @@ $(function () {
   const CAN_EDIT = {% if page_perms.edit %}true{% else %}false{% endif %};
   let pendingDeleteId = null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   $("#from-date").val(today);
   $("#to-date").val(today);
 

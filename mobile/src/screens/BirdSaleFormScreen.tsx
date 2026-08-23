@@ -19,7 +19,7 @@ import { reverseGeocode } from "@/domain/reverseGeocode";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
-import { isEmpty } from "@/utils/format";
+import { isEmpty, localDay } from "@/utils/format";
 import { writeThrough } from "@/net/writeThrough";
 import { confirm } from "@/ui/confirm";
 
@@ -134,7 +134,7 @@ interface SaleBlock {
 
 const num = (v: string) => Number(v) || 0;
 const str = (v: unknown) => (isEmpty(v) ? "" : String(v));
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 const noPhotos = (): Record<PhotoKind, string[]> =>
   ({ truck: [], birds: [], weighbridge: [], other: [] });
 

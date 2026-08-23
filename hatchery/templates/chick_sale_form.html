@@ -497,7 +497,7 @@ get('chick-sale-form').onsubmit=async e=>{
 };
 
 (async()=>{
-  get('date').value=new Date().toISOString().slice(0,10);
+  get('date').value=localDay();
   if(editId){
     const data=await fetch(`/chick_sale_api/${editId}/`).then(r=>r.json());
     get('bill_no').value=data.bill_no;

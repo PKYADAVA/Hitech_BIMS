@@ -254,7 +254,7 @@ get('tray-set-form').onsubmit = async e => {
 };
 
 (async () => {
-  get('setting_date').value = new Date().toISOString().slice(0, 10);
+  get('setting_date').value = localDay();
   get('setting_date').dispatchEvent(new Event('change'));
   if (editId) {
     const data = await fetch(`/tray_set_api/${editId}/`).then(r => r.json());

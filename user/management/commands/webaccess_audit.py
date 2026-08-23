@@ -12,6 +12,7 @@ to see the surface that is currently open, grouped so the decisions are obvious:
 from collections import defaultdict
 
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from user.access import ALL_TAB_CODES
 from user.models import WebAccessAudit
@@ -95,7 +96,7 @@ class Command(BaseCommand):
         for r in sorted(rows, key=lambda r: (r.url_name, r.username)):
             self.stdout.write("  %-38s %-6s %-9s %-16s %6d  %s" % (
                 r.url_name[:38], r.method, r.verdict, r.username[:16], r.hits,
-                r.last_seen.strftime("%d %b %H:%M")))
+                timezone.localtime(r.last_seen).strftime("%d %b %H:%M")))
 
     @staticmethod
     def _guess_tab(url_name):

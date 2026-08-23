@@ -17,6 +17,25 @@ export function humanizeKey(key: string): string {
     .trim();
 }
 
+/**
+ * The device's own calendar day as YYYY-MM-DD.
+ *
+ * `toISOString().slice(0, 10)` is the UTC day, and India runs 5:30 ahead of
+ * UTC, so between local midnight and 05:30 it still names yesterday: an early
+ * morning entry was dated a day back, and the offline numbering series rolled
+ * over at the wrong hour. Shifting by the device's offset before formatting
+ * keeps the day the person is actually working in.
+ *
+ * Date-only arithmetic (see `addDays`) is a different problem and is right to
+ * stay in UTC — there is no clock time in a bare date to be shifted.
+ */
+export function localDay(on: Date = new Date()): string {
+  if (isNaN(on.getTime())) return "";
+  return new Date(on.getTime() - on.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 /** Parse a YYYY-MM-DD (or ISO) into a friendly "12 Jul 2026". */
 export function formatDate(value: unknown): string {
   if (isEmpty(value)) return "";

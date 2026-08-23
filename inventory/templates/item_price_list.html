@@ -92,7 +92,7 @@
 <script>
 $(document).ready(function () {
     const csrfToken = "{{ csrf_token }}";
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDay();
     $("#pl-date").val(today);
 
     // escapeHtml() provided globally by main.js

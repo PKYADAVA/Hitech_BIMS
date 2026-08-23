@@ -134,7 +134,7 @@ $(document).ready(function () {
     });
 
     // Default: financial-year-to-date-ish convenience - just leave blank/today.
-    $('#pl-to').val(new Date().toISOString().slice(0, 10));
+    $('#pl-to').val(localDay());
 });
 </script>
 {% endblock %}

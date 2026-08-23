@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { database } from "./db";
+import { localDay } from "@/utils/format";
 
 /**
  * The two identities an offline entry carries, and the one the device does.
@@ -38,7 +39,7 @@ export async function newLocalId(): Promise<string> {
  * person can quote.
  */
 export async function nextOfflineNumber(on = new Date()): Promise<string> {
-  const day = on.toISOString().slice(0, 10).replace(/-/g, "");
+  const day = localDay(on).replace(/-/g, "");
   const db = await database();
   const key = `offline_no_${day}`;
   const row = await db.first<{ value: string }>(

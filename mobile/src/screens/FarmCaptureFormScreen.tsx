@@ -16,6 +16,7 @@ import { writeThrough } from "@/net/writeThrough";
 import { notify } from "@/ui/confirm";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, shadow, spacing, type, useTheme } from "@/theme";
+import { localDay } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "FarmCaptureForm">;
 
@@ -110,7 +111,7 @@ const MASTER_SLOTS: { key: string; label: string; cameraOnly?: boolean }[] = [
 interface Farm { id: number; farm_name: string; farm_code: string }
 interface Branch { id: number; branch_name: string }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 
 export function FarmCaptureFormScreen({ navigation, route }: Props) {
   /** The saved capture being corrected, or null when recording a new visit. */

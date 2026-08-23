@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, Http404
 from django.views import View
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 import json
 import openpyxl
@@ -368,9 +369,9 @@ def _organization_centre_dict(cc):
         "company_name": cc.company.name if cc.company_id else "",
         "children_count": cc.children.count(),
         "created_by": cc.created_by.get_username() if cc.created_by_id else "",
-        "created_at": cc.created_at.strftime("%d-%b-%Y %H:%M"),
+        "created_at": timezone.localtime(cc.created_at).strftime("%d-%b-%Y %H:%M"),
         "updated_by": cc.updated_by.get_username() if cc.updated_by_id else "",
-        "updated_at": cc.updated_at.strftime("%d-%b-%Y %H:%M"),
+        "updated_at": timezone.localtime(cc.updated_at).strftime("%d-%b-%Y %H:%M"),
     }
 
 
@@ -834,7 +835,7 @@ class ChartOfAccountsAPI(View):
                         "status": coa.status,
                         "schedule": coa.schedule_id,
                         "schedule__name": coa.schedule.name,
-                        "created_at": coa.created_at.strftime("%d-%b-%Y %H:%M"),  # Format the datetime
+                        "created_at": timezone.localtime(coa.created_at).strftime("%d-%b-%Y %H:%M"),
                     }
                 )
             except ChartOfAccount.DoesNotExist:
@@ -846,7 +847,7 @@ class ChartOfAccountsAPI(View):
             formatted_coas = [
                 {
                     **coa,
-                    "created_at": coa["created_at"].strftime("%d-%b-%Y %H:%M"),  # Format the datetime
+                    "created_at": timezone.localtime(coa["created_at"]).strftime("%d-%b-%Y %H:%M"),
                 }
                 for coa in coas
             ]
@@ -1218,7 +1219,8 @@ def _journal_voucher_excel(ctx):
             row["from_account"], row["to_account"], row["reference"],
             row["debit"], row["credit"], row["narration"], row["status"],
             row["created_by"],
-            row["created_time"].strftime("%d.%m.%Y %H:%M") if row["created_time"] else "",
+            timezone.localtime(row["created_time"]).strftime("%d.%m.%Y %H:%M")
+            if row["created_time"] else "",
         ])
         for line in row["lines"]:
             detail = ws.max_row + 1

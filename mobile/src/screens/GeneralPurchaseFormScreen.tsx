@@ -13,6 +13,7 @@ import { ModuleStackParams } from "@/navigation/types";
 import { writeThrough } from "@/net/writeThrough";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme, withAlpha } from "@/theme";
+import { localDay } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "GeneralPurchaseForm">;
 
@@ -166,7 +167,7 @@ const itemTotal = (row: ItemRow, calcBasis: string): number => {
   return subtotal * (1 + (Number(row.gst_percent) || 0) / 100);
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 const rupees = (n: number) =>
   `₹ ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const isLocalUri = (uri: string) => !!uri && !/^https?:\/\//i.test(uri);

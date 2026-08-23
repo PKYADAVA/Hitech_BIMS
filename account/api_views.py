@@ -26,6 +26,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 
@@ -110,7 +111,8 @@ def _serialize(account, children_count=None):
         "is_locked": account.is_locked,
         "status": account.status,
         "children_count": children_count,
-        "created_at": account.created_at.strftime("%d-%b-%Y %H:%M") if account.created_at else None,
+        "created_at": (timezone.localtime(account.created_at).strftime("%d-%b-%Y %H:%M")
+                       if account.created_at else None),
     }
 
 
@@ -797,7 +799,7 @@ class CoAAuditLogAPI(View):
                     "reason": log.reason,
                     "user": log.user and log.user.get_username(),
                     "ip_address": log.ip_address,
-                    "timestamp": log.timestamp.strftime("%d-%b-%Y %H:%M:%S"),
+                    "timestamp": timezone.localtime(log.timestamp).strftime("%d-%b-%Y %H:%M:%S"),
                 }
                 for log in qs[offset:offset + page_size]
             ],

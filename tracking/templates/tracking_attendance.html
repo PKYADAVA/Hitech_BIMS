@@ -237,7 +237,7 @@
       });
   }
 
-  document.getElementById("att-date").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("att-date").value = localDay();
   document.getElementById("att-date").addEventListener("change", () => { load(); });
   document.getElementById("att-q").addEventListener("input", () => {
     clearTimeout(window.__attDebounce);

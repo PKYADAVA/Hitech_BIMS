@@ -19,6 +19,7 @@ import { notify } from "@/ui/confirm";
 import { queryClient } from "@/query/queryClient";
 import { usePermissionsStore } from "@/store/permissionsStore";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
+import { localDay } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "SupervisorTripForm">;
 
@@ -113,7 +114,7 @@ const farmField = (options: Option[]): FormField => ({
 const PURPOSE: FormField = { name: "purpose", label: "Purpose", type: "text" };
 
 const REMARKS_MAX = 200;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 
 /** A visit being built on screen. Times are ISO; the server derives duration. */
 interface Visit {

@@ -539,7 +539,10 @@ class EmployeeLeaveDashboard(View):
 
     def get(self, request):
         """Handle GET requests to display employee leave dashboard."""
-        current_date = datetime.now()  # Get the current date
+        # The local calendar day: this is only ever read for its year and
+        # month, and a UTC clock does not reach them until 05:30 local — so a
+        # leave raised at 01:00 IST on 1 January was counted into December.
+        current_date = timezone.localdate()
 
         employee_id = request.GET.get(
             "employee_id"
@@ -783,7 +786,7 @@ class EmployeeAttendance(View):
 
     def get(self, request, id=None):
         """Handle GET requests to display employee attendance or get specific attendance."""
-        current_date = timezone.now()
+        current_date = timezone.localdate()  # local day, see above
         to_date = request.GET.get("to_date")
         from_date = request.GET.get("from_date")
         if id:

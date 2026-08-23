@@ -375,7 +375,7 @@ def visit_compliance(user, filters):
     actual, last_seen = {}, {}
     for visit in _visits(user, filters).filter(checked_in_at__isnull=False):
         actual[visit.farm_id] = actual.get(visit.farm_id, 0) + 1
-        when = visit.checked_in_at.date()
+        when = timezone.localdate(visit.checked_in_at)
         if visit.farm_id not in last_seen or when > last_seen[visit.farm_id]:
             last_seen[visit.farm_id] = when
 

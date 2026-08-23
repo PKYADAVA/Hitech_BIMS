@@ -1,3 +1,22 @@
+// ---------------------------------------------------------------------------
+// The local calendar day as YYYY-MM-DD.
+//
+// Formatting straight from toISOString gives the UTC day. India runs 5:30
+// ahead, so the UTC date does not turn over until 05:30 local: between
+// midnight and 05:30 it still names yesterday, and a form opened at 5am on a
+// farm prefilled the previous date. Shifting by the zone's own offset first
+// keeps the browser's date, which is the one the person is working in.
+//
+// Exposed globally because ~50 pages need it; `date` is optional and defaults
+// to now.
+// ---------------------------------------------------------------------------
+window.localDay = function (date) {
+  const d = date ? new Date(date) : new Date();
+  if (isNaN(d.getTime())) return "";
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 10);
+};
+
 // Applied to every DataTable on the site as soon as this script runs (i.e.
 // before any page's own $(document).ready() handler calls .DataTable()),
 // since defaults must be set before initialization, not inside a ready
@@ -189,11 +208,7 @@ $.extend(true, $.fn.dataTable.defaults, {
 // opt out with data-allow-future.
 // ---------------------------------------------------------------------------
 (function () {
-  function today() {
-    const d = new Date();
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-      .toISOString().slice(0, 10);
-  }
+  const today = window.localDay;
 
   function isTransactionDate(el) {
     if (el.type !== 'date' || el.hasAttribute('data-allow-future')) return false;

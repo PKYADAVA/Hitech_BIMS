@@ -10,6 +10,7 @@ import { ageAt } from "@/domain/flockAge";
 import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
+import { localDay } from "@/utils/format";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "MedicineEntryForm">;
 
@@ -68,7 +69,7 @@ interface Line {
 
 const emptyLine = (): Line => ({ item: "", unit: "", qty: "", stock: "" });
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 
 interface Farm { id: number; farm_name: string; farm_code: string }
 

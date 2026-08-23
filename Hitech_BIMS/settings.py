@@ -252,7 +252,12 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.getenv("TIME_ZONE", "UTC")
+# Every reading of this system is an Indian working day, so that is the
+# default rather than UTC. It was UTC, which is only ever right here by
+# accident: on a host that does not set TIME_ZONE every timestamp in the ERP
+# read 5:30 behind the clock on the wall, and anything entered before 05:30 -
+# when the UTC date finally catches up - was filed under the previous day.
+TIME_ZONE = os.getenv("TIME_ZONE", "Asia/Kolkata")
 USE_I18N = True
 USE_TZ = True
 

@@ -262,6 +262,6 @@ function fillPrint(){
   get('p_discount_row').style.display=(get('print_price_details').checked && discount)?'':'none';
 }
 get('print').onclick=()=>{fillPrint();window.print();};
-(async()=>{get('date').value=new Date().toISOString().slice(0,10); if(editId){const data=await fetch(`/delivery_challan_api/${editId}/`).then(r=>r.json()); Object.entries(data).forEach(([key,val])=>{const el=get(key);if(el&&key!=='items'){if(el.type==='checkbox')el.checked=val;else el.value=val||''}});get('challan_no').value=data.challan_no;renderBilling(get('customer').selectedOptions[0]);refreshCustomerLedgerBalance();get('shipping_address').value=data.shipping_address;await loadShippingAddresses();data.items.forEach(itemRow);} else itemRow();})();
+(async()=>{get('date').value=localDay(); if(editId){const data=await fetch(`/delivery_challan_api/${editId}/`).then(r=>r.json()); Object.entries(data).forEach(([key,val])=>{const el=get(key);if(el&&key!=='items'){if(el.type==='checkbox')el.checked=val;else el.value=val||''}});get('challan_no').value=data.challan_no;renderBilling(get('customer').selectedOptions[0]);refreshCustomerLedgerBalance();get('shipping_address').value=data.shipping_address;await loadShippingAddresses();data.items.forEach(itemRow);} else itemRow();})();
 </script>
 {% endblock %}

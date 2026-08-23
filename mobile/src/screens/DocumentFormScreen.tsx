@@ -25,7 +25,7 @@ import { ModuleStackParams } from "@/navigation/types";
 import { queryClient } from "@/query/queryClient";
 import { usePickerOptions } from "@/query/usePickerOptions";
 import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
-import { isEmpty } from "@/utils/format";
+import { isEmpty, localDay } from "@/utils/format";
 import { confirm, notify } from "@/ui/confirm";
 
 type Props = NativeStackScreenProps<ModuleStackParams, "DocumentForm">;
@@ -350,7 +350,7 @@ const initValues = (fields: DocField[], extra: Dict = {}): Dict => {
     // A row carrying its own date starts on today, as the web grid's rows do —
     // a document whose date lives on the header has this seeded there instead.
     if (f.type === "date" && v[f.name] === undefined) {
-      v[f.name] = new Date().toISOString().slice(0, 10);
+      v[f.name] = localDay();
     }
   }
   return v;
@@ -372,7 +372,7 @@ export function DocumentFormScreen({ route, navigation }: Props) {
   const editId = mode === "edit" ? (row?.id as number | undefined) : undefined;
 
   const [header, setHeader] = useState<Dict>(() =>
-    initValues(doc.header, { date: new Date().toISOString().slice(0, 10) })
+    initValues(doc.header, { date: localDay() })
   );
   const [items, setItems] = useState<Dict[]>(() => [initValues(itemFieldsOf(doc))]);
   const [loading, setLoading] = useState(editId != null);

@@ -275,8 +275,8 @@
   // Default range: last 30 days.
   const today = new Date();
   const monthAgo = new Date(today.getTime() - 29 * 86400000);
-  document.getElementById("vis-to").value = today.toISOString().slice(0, 10);
-  document.getElementById("vis-from").value = monthAgo.toISOString().slice(0, 10);
+  document.getElementById("vis-to").value = localDay(today);
+  document.getElementById("vis-from").value = localDay(monthAgo);
 
   ["vis-from","vis-to","vis-employee","vis-status","vis-unmatched"].forEach(id =>
     document.getElementById(id).addEventListener("change", () => { page = 1; load(); }));

@@ -139,7 +139,7 @@ $(document).ready(function () {
         win.print();
     });
 
-    $('#cc-to').val(new Date().toISOString().slice(0, 10));
+    $('#cc-to').val(localDay());
 });
 </script>
 {% endblock %}

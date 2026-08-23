@@ -14,6 +14,7 @@ Routes (account/urls.py):
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import Http404, JsonResponse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 
@@ -32,7 +33,8 @@ def _serialize_voucher(voucher, with_lines=False):
         "narration": voucher.narration,
         "auto_narration": voucher.auto_narration,
         "narration_source": voucher.narration_source,
-        "narration_edited_at": voucher.narration_edited_at and voucher.narration_edited_at.strftime("%d-%b-%Y %H:%M"),
+        "narration_edited_at": (voucher.narration_edited_at
+                                and timezone.localtime(voucher.narration_edited_at).strftime("%d-%b-%Y %H:%M")),
         "reference": voucher.reference,
         "sector": voucher.sector_id,
         "sector_name": voucher.sector.name if voucher.sector_id else None,
@@ -41,8 +43,10 @@ def _serialize_voucher(voucher, with_lines=False):
         "total_debit": str(voucher.total_debit),
         "total_credit": str(voucher.total_credit),
         "created_by": voucher.created_by and voucher.created_by.get_username(),
-        "posted_at": voucher.posted_at and voucher.posted_at.strftime("%d-%b-%Y %H:%M"),
-        "cancelled_at": voucher.cancelled_at and voucher.cancelled_at.strftime("%d-%b-%Y %H:%M"),
+        "posted_at": (voucher.posted_at
+                      and timezone.localtime(voucher.posted_at).strftime("%d-%b-%Y %H:%M")),
+        "cancelled_at": (voucher.cancelled_at
+                         and timezone.localtime(voucher.cancelled_at).strftime("%d-%b-%Y %H:%M")),
         "cancel_reason": voucher.cancel_reason,
     }
     if with_lines:

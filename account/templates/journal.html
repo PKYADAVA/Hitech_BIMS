@@ -720,7 +720,7 @@ $(document).ready(function () {
         $('#voucherFormTitle').text(
             revise ? `Revise ${voucher.voucher_no} — corrected copy`
                    : (voucher ? `Edit ${voucher.voucher_no}` : 'New Voucher'));
-        $('#voucher-date').val(voucher ? voucher.date : new Date().toISOString().slice(0, 10));
+        $('#voucher-date').val(voucher ? voucher.date : localDay());
         $('#voucher-type').val(voucher ? voucher.voucher_type : 'Payment');
         $('#voucher-reference').val(voucher ? voucher.reference : '');
         $('#voucher-narration').val(voucher ? voucher.narration : '');

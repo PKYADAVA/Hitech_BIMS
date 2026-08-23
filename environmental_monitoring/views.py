@@ -89,7 +89,8 @@ def _sensor_to_dict(sensor: Sensor) -> dict:
         "humidity_pct": float(sensor.humidity_pct) if sensor.humidity_pct is not None else None,
         "battery_pct": sensor.battery_pct,
         "status": sensor.status,
-        "last_update": sensor.last_update.strftime("%Y-%m-%d %H:%M:%S") if sensor.last_update else None,
+        "last_update": (timezone.localtime(sensor.last_update).strftime("%Y-%m-%d %H:%M:%S")
+                        if sensor.last_update else None),
         "temp_out_of_range": sensor.is_temperature_out_of_range,
         "humidity_out_of_range": sensor.is_humidity_out_of_range,
         "battery_low": sensor.is_battery_low,

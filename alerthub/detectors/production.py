@@ -347,7 +347,7 @@ def placement_pending(rule):
     for batch in batches:
         if placed.get(batch.pk):
             continue
-        reference = batch.start_date or batch.created_at.date()
+        reference = batch.start_date or timezone.localdate(batch.created_at)
         waiting = (today - reference).days
         if not compare(Decimal(waiting), rule.operator, rule.threshold):
             continue

@@ -103,7 +103,7 @@ $(document).ready(function(){
                                             <div class="mb-3">
                                                 <label for="date" class="form-label required">Date</label>
                                                 <input type="date" class="form-control" id="editdate" name="date" 
-                                                    value="${new Date(response.date).toISOString().split('T')[0]}" required>
+                                                    value="${localDay(response.date)}" required>
                                             </div>
                                         </div>
                                     </div>
@@ -155,7 +155,7 @@ $(document).ready(function(){
             
                 $('#editattendance_id').val(response.id);
                 $('#editemployee').val(response.employee_id);
-                $('#editdate').val(new Date(response.date).toISOString().split('T')[0]);
+                $('#editdate').val(localDay(response.date));
                 $('#editcheck_in').val(response.check_in_time || '');
                 $('#editcheck_out').val(response.check_out_time || '');
                 $('#editstatus').val(response.status);

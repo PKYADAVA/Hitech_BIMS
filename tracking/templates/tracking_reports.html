@@ -151,8 +151,8 @@
 
   const today = new Date();
   const weekAgo = new Date(today.getTime() - 6 * 86400000);
-  document.getElementById("rep-to").value = today.toISOString().slice(0, 10);
-  document.getElementById("rep-from").value = weekAgo.toISOString().slice(0, 10);
+  document.getElementById("rep-to").value = localDay(today);
+  document.getElementById("rep-from").value = localDay(weekAgo);
   document.getElementById("rep-load").addEventListener("click", load);
   document.getElementById("rep-report").addEventListener("change", load);
   load();
