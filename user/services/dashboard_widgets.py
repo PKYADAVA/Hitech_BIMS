@@ -310,31 +310,23 @@ def _ageing(parties, amount_key, credit_days):
     )
 
 
-#: How Receivables breaks its overdue money up, longest window first.
+#: How Receivables breaks its overdue money up, widest window first — the
+#: order the tile row itself reads in, left to right.
 #:
 #: Nested, not exclusive: money two days late is inside the week and the month
-#: as well. Read down the card it is a funnel — everything owed, then the part
-#: that has gone late this month, this week, and in the last two days — so the
-#: last figure is the one a collection call can still be early for.
-#: Ageing bands, read the way a collections list is read: how long the money
-#: has been late, not how recently it went late.
+#: as well. Each band runs from the day the money went late up to its own
+#: limit, so 0-2 days is a subset of 0-7, which is a subset of 0-1 month.
 #:
-#: Each band runs from the day the money went late up to its own limit, so they
-#: nest: 0-2 days is inside 0-7, which is inside 0-1 month, which is inside the
-#: total. ``None`` is the total — everything overdue, with no upper limit.
-#:
-#: That last band is the point. Without it the widest was a month, and a
-#: customer forty-five days late fell outside every tile: the money most worth
-#: chasing was the money the card did not show, and the old test said so out
-#: loud. Inverting the bands to "N or more" moved the hole instead of closing
-#: it — a customer one day late, which is what the live data held, then showed
-#: in none of them. A closed set needs both: bands from nought, and a total
-#: with no ceiling.
+#: Deliberately has no "everything overdue, no ceiling" band any more — that
+#: band existed for exactly one reason (a customer overdue more than a month
+#: fell outside every other tile), and dropping it brings that gap back on
+#: purpose: a balance overdue more than a month now shows in none of these
+#: three. Accepted tradeoff, not an oversight — see
+#: test_the_oldest_debt_is_no_longer_caught_by_any_band.
 OVERDUE_WINDOWS = (
-    (2, "Overdue 0-2 days"),
-    (7, "Overdue 0-7 days"),
     (30, "Overdue 0-1 month"),
-    (None, "Total overdue"),
+    (7, "Overdue 0-7 days"),
+    (2, "Overdue 0-2 days"),
 )
 
 

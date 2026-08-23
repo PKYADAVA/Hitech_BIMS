@@ -63,10 +63,22 @@ class ReceivableWindowTests(TestCase):
         self.customer("Half a year", 8000, days_standing=180)
         self.assertEqual(self.money("Overdue 0-2 days"), "₹1,000")
         self.assertEqual(self.money("Overdue 0-7 days"), "₹3,000")
+        # The half-year-old balance is past the widest band's own 30-day
+        # ceiling, so — unlike Total receivable — it does not reach this figure.
         self.assertEqual(self.money("Overdue 0-1 month"), "₹7,000")
-        # And the one with no ceiling, which is what holds the rest.
-        self.assertEqual(self.money("Total overdue"), "₹15,000")
         self.assertEqual(self.money("Total receivable"), "₹15,000")
+
+    def test_the_oldest_debt_is_no_longer_caught_by_any_band(self):
+        """Accepted, on-purpose regression: the card used to carry a fourth,
+        no-ceiling "Total overdue" tile precisely so a balance older than the
+        widest band still showed somewhere. That tile was dropped so the row
+        reads Total receivable / 0-1 Month / 0-7 Day / 0-2 Day, descending —
+        which means a debt over a month old is, once again, outside every
+        overdue tile. Total receivable still counts it; no overdue band does."""
+        self.customer("Half a year", 8000, days_standing=180)
+        self.assertEqual(self.money("Total receivable"), "₹8,000")
+        for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
+            self.assertEqual(self.money(label), "₹0", label)
 
     def test_a_balance_one_day_late_is_not_lost_off_the_near_end(self):
         """The second failure these bands were rewritten for. A narrowest band
@@ -75,34 +87,23 @@ class ReceivableWindowTests(TestCase):
         while the money was plainly overdue."""
         self.customer("Not yet late", 24159, days_standing=0)
         self.customer("One day late", 2386, days_standing=1)
-        for label in ("Overdue 0-2 days", "Overdue 0-7 days",
-                      "Overdue 0-1 month", "Total overdue"):
-            self.assertEqual(self.money(label), "₹2,386", label)
-        self.assertEqual(self.stats()["Total overdue"]["sub"], "1 customer")
-        self.assertEqual(self.money("Total receivable"), "₹26,545")
-
-    def test_the_oldest_debt_is_held_by_the_band_with_no_ceiling(self):
-        """The failure this card was rewritten for. With a month as the widest
-        band, a balance older than a month fell outside every tile, and the
-        money most worth chasing was the money the card did not show."""
-        self.customer("Half a year", 8000, days_standing=180)
-        self.assertEqual(self.money("Total overdue"), "₹8,000")
         for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
-            self.assertEqual(self.money(label), "₹0", label)
+            self.assertEqual(self.money(label), "₹2,386", label)
+        self.assertEqual(self.stats()["Overdue 0-2 days"]["sub"], "1 customer")
+        self.assertEqual(self.money("Total receivable"), "₹26,545")
 
     def test_the_bands_nest_rather_than_partition(self):
         """One balance two days late is inside every band, because every band
         starts at nought."""
         self.customer("Just late", 5000, days_standing=2)
-        for label in ("Overdue 0-2 days", "Overdue 0-7 days",
-                      "Overdue 0-1 month", "Total overdue"):
+        for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
             self.assertEqual(self.money(label), "₹5,000", label)
 
     def test_the_credit_period_is_what_lateness_is_measured_from(self):
         """Thirty days standing on thirty days' credit is not late at all."""
         self.customer("On terms", 9000, days_standing=30, credit_period=30)
         self.assertEqual(self.money("Total receivable"), "₹9,000")
-        for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month", "Total overdue"):
+        for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
             self.assertEqual(self.money(label), "₹0", label)
 
     def test_a_day_past_the_credit_period_is_a_day_late_not_a_month(self):
@@ -125,8 +126,8 @@ class ReceivableWindowTests(TestCase):
         self.assertEqual(self.money("Overdue 0-2 days"), "₹0")
 
     def test_a_band_with_money_in_it_is_flagged(self):
-        self.customer("Ancient", 1000, days_standing=365)
-        self.assertEqual(self.stats()["Total overdue"]["tone"], "bad")
+        self.customer("Ancient", 1000, days_standing=10)
+        self.assertEqual(self.stats()["Overdue 0-1 month"]["tone"], "bad")
 
     def test_a_customer_in_credit_is_not_receivable_at_all(self):
         """An advance is money we hold, not money we are owed."""
@@ -135,4 +136,4 @@ class ReceivableWindowTests(TestCase):
         SalesInvoice.objects.create(customer=c, date=self.today - timedelta(days=10),
                                     net_amount=Decimal("-4000"), is_active=True)
         self.assertEqual(self.money("Total receivable"), "₹0")
-        self.assertEqual(self.money("Total overdue"), "₹0")
+        self.assertEqual(self.money("Overdue 0-1 month"), "₹0")
