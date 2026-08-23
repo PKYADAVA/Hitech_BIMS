@@ -12,7 +12,7 @@ Two registries keep the module future-proof without redesign:
 from django.utils import timezone
 
 from account.models import CompanyProfile
-from hatchery.models import ChickSale, DeliveryChallan, EggPurchase
+from hatchery.models import ChickSale, ChickSaleReceipt, DeliveryChallan, EggGrading, EggPurchase, TraySettingLine
 
 
 # Placeholder -> short description shown in the template editor's picker.
@@ -132,6 +132,33 @@ def _chick_sale_rows(from_date, to_date, party_id):
     return rows
 
 
+def _chick_sale_receipt_rows(from_date, to_date, party_id):
+    """Money received against a chick sale — the hatchery counterpart of
+    Bird Receipt. "Receipt" here is the payment, not the chicks; the chicks
+    leaving is the Chick Sale row itself."""
+    qs = ChickSaleReceipt.objects.select_related("customer")
+    qs = _between(qs, from_date, to_date)
+    if party_id:
+        qs = qs.filter(customer_id=party_id)
+    rows = []
+    for r in qs.order_by("-date", "-id"):
+        amount = r.amount or 0
+        rows.append(_base_row(
+            doc_id=r.id, date=r.date, party_type="customer",
+            party_id=r.customer_id, party_name=r.customer.name,
+            mobile=_mobile(r.customer.mobile, r.customer.mobile_2),
+            doc_no=r.receipt_no, amount=amount,
+            context={
+                "CustomerName": r.customer.name, "InvoiceNo": r.receipt_no,
+                "ReceiptNo": r.receipt_no,
+                "InvoiceDate": r.date.strftime("%d-%m-%Y"),
+                "Amount": f"{amount:,.2f}", "PaidAmount": f"{amount:,.2f}",
+                "PaymentMode": r.mode or "",
+            },
+        ))
+    return rows
+
+
 def _delivery_challan_rows(from_date, to_date, party_id):
     qs = DeliveryChallan.objects.select_related("customer").prefetch_related("items")
     if from_date:
@@ -184,6 +211,56 @@ def _egg_purchase_rows(from_date, to_date, party_id):
                 "Balance": "", "VehicleNo": ep.vehicle or "", "DriverName": ep.driver or "",
                 "LRNo": ep.dc_no or "", "Warehouse": ep.warehouse.name, "EmployeeName": "",
                 "Quantity": '%g' % ep.net_quantity(), "Rate": f"{ep.net_rate():,.2f}",
+            },
+        ))
+    return rows
+
+
+def _egg_grading_rows(from_date, to_date, party_id):
+    qs = EggGrading.objects.select_related("supplier", "storage_location", "item")
+    qs = _between(qs, from_date, to_date)
+    if party_id:
+        qs = qs.filter(supplier_id=party_id)
+    rows = []
+    for eg in qs.order_by("-date", "-id"):
+        rows.append(_base_row(
+            doc_id=eg.id, date=eg.date, party_type="supplier",
+            party_id=eg.supplier_id, party_name=eg.supplier.name,
+            mobile=_mobile(eg.supplier.mobile, eg.supplier.mobile_2),
+            doc_no=eg.transaction_no, amount=0,
+            context={
+                "SupplierName": eg.supplier.name, "InvoiceNo": eg.transaction_no,
+                "InvoiceDate": eg.date.strftime("%d-%m-%Y"),
+                "Quantity": '%g' % eg.eggs_to_stock(),
+                "Warehouse": eg.storage_location.name,
+            },
+        ))
+    return rows
+
+
+def _tray_setting_rows(from_date, to_date, party_id):
+    """One row per setter-machine load, addressed to the supplier whose eggs
+    went into it — a tray setting header can span several suppliers (each
+    line picks its own, and the field is optional), so the line and not the
+    header is what carries one party's own message, the same shape
+    ``_supplier_payment_rows`` already uses for a multi-party voucher."""
+    qs = (TraySettingLine.objects.filter(supplier__isnull=False)
+          .select_related("tray_setting", "supplier"))
+    qs = _between(qs, from_date, to_date, field="tray_setting__setting_date")
+    if party_id:
+        qs = qs.filter(supplier_id=party_id)
+    rows = []
+    for line in qs.order_by("-tray_setting__setting_date", "-id"):
+        ts = line.tray_setting
+        rows.append(_base_row(
+            doc_id=line.id, date=ts.setting_date, party_type="supplier",
+            party_id=line.supplier_id, party_name=line.supplier.name,
+            mobile=_mobile(line.supplier.mobile, line.supplier.mobile_2),
+            doc_no=ts.setting_no, amount=0,
+            context={
+                "SupplierName": line.supplier.name, "InvoiceNo": ts.setting_no,
+                "InvoiceDate": ts.setting_date.strftime("%d-%m-%Y"),
+                "Quantity": '%g' % (line.eggs_set or 0),
             },
         ))
     return rows
@@ -655,6 +732,11 @@ DOC_SOURCES = {
               "module": "hatchery", "transaction": "chick_sale",
               "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
                             "Quantity", "Rate", "VehicleNo", "DriverName", "Warehouse")},
+    "chick_receipt": {"label": "Chick Receipt", "party_type": "customer",
+                      "model": ChickSaleReceipt, "rows": _chick_sale_receipt_rows,
+                      "module": "hatchery", "transaction": "chick_receipt",
+                      "variables": ("CustomerName", "InvoiceNo", "InvoiceDate", "Amount",
+                                    "PaidAmount", "ReceiptNo", "PaymentMode")},
     "dispatch": {"label": "Delivery Challan", "party_type": "customer",
                  "model": DeliveryChallan, "rows": _delivery_challan_rows,
                  "module": "hatchery", "transaction": "delivery_challan",
@@ -667,6 +749,15 @@ DOC_SOURCES = {
                  "variables": ("SupplierName", "InvoiceNo", "InvoiceDate", "Amount",
                                "Quantity", "Rate", "VehicleNo", "DriverName", "LRNo",
                                "Warehouse")},
+    "egg_grading": {"label": "Egg Grading", "party_type": "supplier",
+                    "model": EggGrading, "rows": _egg_grading_rows,
+                    "module": "hatchery", "transaction": "egg_grading",
+                    "variables": ("SupplierName", "InvoiceNo", "InvoiceDate",
+                                  "Quantity", "Warehouse")},
+    "tray_set": {"label": "Tray Set", "party_type": "supplier",
+                "model": TraySettingLine, "rows": _tray_setting_rows,
+                "module": "hatchery", "transaction": "tray_set",
+                "variables": ("SupplierName", "InvoiceNo", "InvoiceDate", "Quantity")},
     # --- broiler ---
     "bird_sale": {"label": "Bird Sale", "party_type": "customer",
                   "model": None, "rows": _bird_sale_rows,

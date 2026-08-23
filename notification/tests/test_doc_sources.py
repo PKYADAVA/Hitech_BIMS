@@ -285,13 +285,24 @@ class UnregisteredTransactionTests(TestCase):
       the thing happens, to one person, with no document to pick off a grid.
     * ``purchase`` / purchase_order — there is no purchase order model in this
       ERP; purchasing begins at the invoice.
-    * ``hatchery`` / egg_grading, tray_set, hatch_entry, hatch_register — real
-      records, but internal ones. Nobody outside the company is party to a
-      tray being set, so there is no number to send them to. Give one of these
-      an outside party and it belongs in the registry.
+    * ``hatchery`` / hatch_entry, hatch_register — real records, but internal
+      ones with no outside party reachable from them. HatchEntry has no party
+      of its own — reaching one means walking through its tray setting to
+      lines that may name several different suppliers, which is not "the"
+      party for the record. HatchSetting's ``supplier_name`` is a bare
+      CharField with no phone number behind it at all, not even a link to
+      the Supplier master.
+
+    Egg Grading and Tray Set used to be listed here too, on the reasoning
+    that nobody outside the company is party to eggs being graded or a tray
+    being set — true of the header, but not of ``EggGrading.supplier`` or
+    ``TraySettingLine.supplier``, both real links to the Supplier master with
+    a real mobile number. Registered once that was noticed; this is the "give
+    one of these an outside party and it belongs in the registry" case the
+    docstring used to warn about.
     """
 
-    def test_the_only_transactions_without_a_source_are_the_known_two(self):
+    def test_the_only_transactions_without_a_source_are_the_known_ones(self):
         covered = {(s["module"], s["transaction"]) for s in DOC_SOURCES.values()}
         missing = {(mod, code)
                    for mod, codes in SMS_MODULE_TRANSACTIONS.items()
@@ -300,6 +311,5 @@ class UnregisteredTransactionTests(TestCase):
         self.assertEqual(missing, {
             ("user", "registration"), ("user", "login_otp"),
             ("purchase", "purchase_order"),
-            ("hatchery", "egg_grading"), ("hatchery", "tray_set"),
             ("hatchery", "hatch_entry"), ("hatchery", "hatch_register"),
         })

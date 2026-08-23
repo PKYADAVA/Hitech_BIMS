@@ -63,6 +63,7 @@ SMS_MODULE_TRANSACTIONS = {
         ("hatch_register", "Hatch Register"),
         ("delivery_challan", "Delivery Challan"),
         ("chick_sale", "Chick Sale"),
+        ("chick_receipt", "Chick Receipt"),
     ),
     SmsModule.HR: (
         ("attendance", "Attendance"),
