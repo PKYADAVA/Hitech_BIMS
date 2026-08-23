@@ -12,6 +12,12 @@
   "use strict";
 
   function csrf() {
+    /* The hidden field first, and the cookie only as a fallback. This project
+       sets CSRF_COOKIE_HTTPONLY, so document.cookie never contains csrftoken
+       and reading it alone sent an empty header — which Django rejects as
+       "incorrect length", and every change request failed with it. */
+    const field = document.querySelector("input[name=csrfmiddlewaretoken]");
+    if (field && field.value) return field.value;
     return document.cookie.split("; ").find((v) => v.startsWith("csrftoken="))
       ?.split("=")[1] || "";
   }
