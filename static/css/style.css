@@ -87,12 +87,12 @@ html, body { height: 100%; }
 /* The whole rem-based half of the ERP scales from here.
    Everything outside the design system sizes itself in rem against the root,
    not against body, so lowering `body` alone would have moved one number and
-   left the other few hundred where they were. 16px -> 14px takes the lot down
-   by an eighth in one place: body lands at 13px, a 0.84rem label at 11.8px.
+   left the other few hundred where they were. 16px -> 15px takes the lot down
+   in one place: body lands at 14px, a 0.84rem label at 12.6px.
    Bootstrap's rem spacing comes down with it, which is the intent - the
    density complaint was about pages, not only about letters.
    To undo the change, put this back to 16px. */
-html { font-size: 14px; }
+html { font-size: 15px; }
 
 body {
   font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

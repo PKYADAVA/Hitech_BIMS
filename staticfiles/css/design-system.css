@@ -15,26 +15,26 @@
   /* -- type ------------------------------------------------------------- */
   --ds-font: "Inter", "Segoe UI", "IBM Plex Sans", Roboto, system-ui, sans-serif;
 
-  /* Two steps down from the scale this started with (32/26/22/18/16/15/14/13/12).
-     The pages read as oversized at those sizes, and a working day here is spent
-     in grids: the point of the reduction is rows on screen, so the text sizes
-     come down while the control heights below do not, which is what keeps a
-     12px button still comfortable to hit.
+  /* Down from the scale this started with (32/26/22/18/16/15/14/13/12), which
+     read as oversized. A working day here is spent in grids, so the point of
+     the reduction is rows on screen: the text sizes come down while the control
+     heights below do not, which is what keeps a 13px button comfortable to hit.
 
-     11px grid data and 10px captions are deliberately small. If they turn out
-     to be too small on the older monitors in the branches, move this block up
-     one step (12/11) rather than reaching into individual rules - every size
-     in the system is consumed from here, so the scale is one edit. */
-  --ds-kpi-number: 26px;      --ds-kpi-title: 11px;
-  --ds-page-heading: 20px;    --ds-module-heading: 18px;
-  --ds-card-heading: 15px;    --ds-section-heading: 14px;
-  --ds-group-heading: 13px;
-  --ds-label: 11px;           --ds-input: 12px;
-  --ds-button: 12px;
-  --ds-grid-header: 11px;     --ds-grid-data: 11px;
-  --ds-footer-total: 12px;
-  --ds-caption: 10px;         --ds-badge: 10px;
-  --ds-nav: 12px;             --ds-tooltip: 10px;
+     Two steps down was tried first and was a step too far - 11px grid data and
+     10px captions - so this is one pixel back up from that. If it still wants
+     adjusting, move this block rather than reaching into individual rules:
+     every size in the system is consumed from here, so the scale is one edit,
+     and the rem half of the ERP moves with the root in style.css. */
+  --ds-kpi-number: 27px;      --ds-kpi-title: 12px;
+  --ds-page-heading: 21px;    --ds-module-heading: 19px;
+  --ds-card-heading: 16px;    --ds-section-heading: 15px;
+  --ds-group-heading: 14px;
+  --ds-label: 12px;           --ds-input: 13px;
+  --ds-button: 13px;
+  --ds-grid-header: 12px;     --ds-grid-data: 12px;
+  --ds-footer-total: 13px;
+  --ds-caption: 11px;         --ds-badge: 11px;
+  --ds-nav: 13px;             --ds-tooltip: 11px;
 
   --ds-lh-heading: 1.3;       --ds-lh-text: 1.5;      --ds-lh-table: 1.45;
 
