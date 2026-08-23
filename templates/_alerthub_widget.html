@@ -56,7 +56,13 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
 </div>
 
 <script>
-(function () {
+document.addEventListener("DOMContentLoaded", function () {
+  // This partial is included well above base.html's own alerthub.js
+  // <script> tag near the bottom of <body> — so at the moment this inline
+  // script would normally run, window.AlertHub does not exist yet, and the
+  // (necessary) guard below silently no-ops, leaving the widget stuck on
+  // "Loading…" forever. Waiting for DOMContentLoaded defers this until
+  // every blocking <script> tag, alerthub.js included, has already executed.
   var root = document.getElementById("ahWidget");
   if (!root || !window.AlertHub) return;
 
@@ -98,5 +104,5 @@ Included by home.html. Needs alerthub.css / alerthub.js, which base.html loads.
     list.innerHTML = AlertHub.emptyHTML("Could not load alerts",
                                         "fa-solid fa-triangle-exclamation");
   });
-})();
+});
 </script>
