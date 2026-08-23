@@ -1018,7 +1018,10 @@ def delete_group(request):
             group.delete()
             return JsonResponse({"message": "Group deleted successfully."})
 
-        except Group.DoesNotExist:
+        except (Group.DoesNotExist, ValueError):
+            # ValueError as well: an empty or non-numeric group_id raises on
+            # the lookup itself, which is the same "not found" to the caller
+            # and used to escape this handler as a 500.
             return JsonResponse({"error": "Group not found."}, status=400)
 
 

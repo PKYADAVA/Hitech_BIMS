@@ -148,8 +148,14 @@ def create_new_employee(request):
                 return render(
                     request, "new_employee.html", {"error_message": error_message}
                 )
-            warehouse = Warehouse.objects.filter(id=warehouse_id).first()
-            group = Group.objects.filter(id=group_id).first() if group_id else None
+            # Both guarded the same way: an unchosen dropdown posts "", which
+            # reached the integer lookup and raised before anything could say
+            # which field was at fault — the log only ever showed "Field 'id'
+            # expected a number but got ''".
+            warehouse = (Warehouse.objects.filter(id=warehouse_id).first()
+                         if str(warehouse_id or "").isdigit() else None)
+            group = (Group.objects.filter(id=group_id).first()
+                     if str(group_id or "").isdigit() else None)
 
             employee = Employee(
                 full_name=full_name,

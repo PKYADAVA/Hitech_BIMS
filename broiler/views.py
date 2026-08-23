@@ -1149,7 +1149,12 @@ def get_branches_by_region(request) -> JsonResponse:
 def get_lines_by_branch(request) -> JsonResponse:
     """Get broiler lines for a specific branch."""
     try:
-        branch_id = request.GET.get('branch_id')
+        # An unchosen branch posts "", which reached the integer lookup and
+        # came back a 500 rather than the empty list this already knows how to
+        # answer with.
+        branch_id = (request.GET.get('branch_id') or '').strip()
+        if not branch_id.isdigit():
+            return JsonResponse({'lines': []})
         if not branches_for(request.user).filter(id=branch_id).exists():
             return JsonResponse({'lines': []})
         lines = list(BroilerLine.objects.filter(branch_id=branch_id, is_active=True).values('id', 'description'))
@@ -2297,8 +2302,15 @@ class DailyEntryAPI(BaseAPIView):
                 # Scoped on the single fetch too: a row id in the url is not a
                 # permission, and the list below is the only thing that would
                 # otherwise have hidden it.
-                row = _scope_rows(request.user, DailyEntry.objects.select_related(
-                    "farm__branch", "batch", "feed_1", "feed_2")).get(id=id)
+                row = (_scope_rows(request.user, DailyEntry.objects.select_related(
+                    "farm__branch", "batch", "feed_1", "feed_2"))
+                    .filter(id=id).first())
+                # A row that is gone, or that this user may not see, is a 404.
+                # It used to raise DoesNotExist into the catch-all below and
+                # come back as "Internal server error", so the caller could not
+                # tell a deleted entry from a broken server.
+                if row is None:
+                    return JsonResponse({"error": "Daily entry not found."}, status=404)
                 return JsonResponse(_daily_entry_to_dict(row))
 
             qs = _scope_rows(request.user, DailyEntry.objects.select_related(
@@ -8653,8 +8665,12 @@ def gc_settlement_batches(request):
 def gc_settlement_schemes(request):
     """Schemes whose date range covers the batch's placement date (region
     matched), plus the auto-matched one — for the Scheme Name dropdown."""
+    # An empty "batch=" is what an unchosen dropdown sends, and it reached the
+    # integer lookup as "" and raised before the not-found branch below could
+    # answer — a 500 where the view already knew what to say.
     batch_id = (request.GET.get("batch") or "").strip()
-    batch = BroilerBatch.objects.select_related("broiler_farm__branch").filter(id=batch_id).first()
+    batch = (BroilerBatch.objects.select_related("broiler_farm__branch")
+             .filter(id=batch_id).first() if batch_id.isdigit() else None)
     if not batch:
         return JsonResponse({"schemes": [], "selected": None}, safe=False)
     placement = _placement_date(batch)
@@ -8677,7 +8693,7 @@ def gc_settlement_autofill_api(request):
     scheme_id = (request.GET.get("scheme") or "").strip()
     batch = (BroilerBatch.objects
              .select_related("broiler_farm__branch", "broiler_farm__supervisor")
-             .filter(id=batch_id).first())
+             .filter(id=batch_id).first() if batch_id.isdigit() else None)
     if not batch:
         return JsonResponse({"error": "Batch not found"}, status=404)
     if batch.is_closed:
