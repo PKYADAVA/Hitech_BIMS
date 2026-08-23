@@ -15,16 +15,26 @@
   /* -- type ------------------------------------------------------------- */
   --ds-font: "Inter", "Segoe UI", "IBM Plex Sans", Roboto, system-ui, sans-serif;
 
-  --ds-kpi-number: 32px;      --ds-kpi-title: 13px;
-  --ds-page-heading: 26px;    --ds-module-heading: 22px;
-  --ds-card-heading: 18px;    --ds-section-heading: 16px;
-  --ds-group-heading: 15px;
-  --ds-label: 13px;           --ds-input: 14px;
-  --ds-button: 14px;
-  --ds-grid-header: 13px;     --ds-grid-data: 13px;
-  --ds-footer-total: 14px;
-  --ds-caption: 12px;         --ds-badge: 12px;
-  --ds-nav: 14px;             --ds-tooltip: 12px;
+  /* Two steps down from the scale this started with (32/26/22/18/16/15/14/13/12).
+     The pages read as oversized at those sizes, and a working day here is spent
+     in grids: the point of the reduction is rows on screen, so the text sizes
+     come down while the control heights below do not, which is what keeps a
+     12px button still comfortable to hit.
+
+     11px grid data and 10px captions are deliberately small. If they turn out
+     to be too small on the older monitors in the branches, move this block up
+     one step (12/11) rather than reaching into individual rules - every size
+     in the system is consumed from here, so the scale is one edit. */
+  --ds-kpi-number: 26px;      --ds-kpi-title: 11px;
+  --ds-page-heading: 20px;    --ds-module-heading: 18px;
+  --ds-card-heading: 15px;    --ds-section-heading: 14px;
+  --ds-group-heading: 13px;
+  --ds-label: 11px;           --ds-input: 12px;
+  --ds-button: 12px;
+  --ds-grid-header: 11px;     --ds-grid-data: 11px;
+  --ds-footer-total: 12px;
+  --ds-caption: 10px;         --ds-badge: 10px;
+  --ds-nav: 12px;             --ds-tooltip: 10px;
 
   --ds-lh-heading: 1.3;       --ds-lh-text: 1.5;      --ds-lh-table: 1.45;
 
