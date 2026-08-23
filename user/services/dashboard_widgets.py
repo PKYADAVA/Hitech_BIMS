@@ -319,22 +319,22 @@ def _ageing(parties, amount_key, credit_days):
 #: Ageing bands, read the way a collections list is read: how long the money
 #: has been late, not how recently it went late.
 #:
-#: They nest *upward* — "1 month+" is a subset of "1 week+", which is a subset
-#: of the total — so every rupee that is late at all appears in at least the
-#: first band and the oldest debt appears in all of them.
+#: Each band runs from the day the money went late up to its own limit, so they
+#: nest: 0-2 days is inside 0-7, which is inside 0-1 month, which is inside the
+#: total. ``None`` is the total — everything overdue, with no upper limit.
 #:
-#: Both ends of that had to be got right, and the first attempt got only one.
-#: Read as "≤ N" the widest band was a month, so a customer forty-five days
-#: late fell outside all three and the money most worth chasing was the money
-#: the card did not show. Inverting it to "≥ N" with two days as the narrowest
-#: band moved the hole rather than closing it: a customer one day late — which
-#: is what the live data actually held — then showed in none of them. So the
-#: first band is every overdue rupee there is, and the other two are the
-#: ageing above it.
+#: That last band is the point. Without it the widest was a month, and a
+#: customer forty-five days late fell outside every tile: the money most worth
+#: chasing was the money the card did not show, and the old test said so out
+#: loud. Inverting the bands to "N or more" moved the hole instead of closing
+#: it — a customer one day late, which is what the live data held, then showed
+#: in none of them. A closed set needs both: bands from nought, and a total
+#: with no ceiling.
 OVERDUE_WINDOWS = (
-    (1, "Total overdue"),
-    (7, "Overdue 1 week+"),
-    (30, "Overdue 1 month+"),
+    (2, "Overdue 0-2 days"),
+    (7, "Overdue 0-7 days"),
+    (30, "Overdue 0-1 month"),
+    (None, "Total overdue"),
 )
 
 
@@ -348,17 +348,18 @@ def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
     one, so a customer sits in one window rather than being split across
     several by invoice.
 
-    A band counts everything at least that late, so the totals nest rather than
-    partition: the total includes the money that is a month late, because that
-    money is also overdue. Nothing that is late falls outside all of them,
-    which is the property both earlier readings lacked — one lost the oldest
-    debt, the other the newest.
+    A band counts everything from the day it went late up to its own limit, so
+    the figures nest rather than partition: 0-7 days includes the two-day
+    money. The last band has no limit and is therefore every overdue rupee
+    there is, which is what stops anything falling outside all of them —
+    the property both earlier readings lacked, one losing the oldest debt and
+    the other the newest.
     """
     late = [((p.get("gap") or 0) - credit_days(p), p) for p in parties]
     late = [(days, p) for days, p in late if days > 0]
     out = []
     for span, label in windows:
-        inside = [p for days, p in late if days >= span]
+        inside = [p for days, p in late if span is None or days <= span]
         total = sum((p[amount_key] for p in inside), 0)
         out.append({
             "label": label,

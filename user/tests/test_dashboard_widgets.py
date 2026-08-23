@@ -313,8 +313,8 @@ class DashboardWidgetTests(TestCase):
 
         w = self.widget(clerk, "receivables")
         self.assertEqual([s["label"] for s in w["stats"]],
-                         ["Total receivable", "Total overdue",
-                          "Overdue 1 week+", "Overdue 1 month+"])
+                         ["Total receivable", "Overdue 0-2 days", "Overdue 0-7 days",
+                          "Overdue 0-1 month", "Total overdue"])
         # And nothing of the supplier side reaches them at all — the two are
         # separate widgets now, not two halves of one card.
         self.assertIsNone(self.widget(clerk, "payables"))
