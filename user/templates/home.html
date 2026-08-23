@@ -149,41 +149,6 @@
   .dw-col-receivables .dw-stats:has(> :nth-child(4):last-child) {
     grid-template-columns: repeat(2, 1fr); }
 
-  /* Five — Receivables at full strength: everything owed, everything overdue,
-     then the three windows those break into. The two totals take a row to
-     themselves because they are the pair that get read against each other;
-     the windows follow underneath, narrowest last.
-
-     Left to the default auto-fit these came out three to a row at ~90px, which
-     is narrower than the figures they hold: "₹26,545" broke between the 4 and
-     the 5 and the first line read as a whole number, ₹26,54.
-
-     How many windows fit on a row depends on the card, not the screen — this
-     card is a third of the row above 1200px and half of it below, so the
-     viewport is a poor proxy for it: the grid is 287px wide on a 1440px screen
-     and 464px wide on an 1100px one. It asks its own width instead. Two to a row is what always fits; three
-     only once there is room for a lakh figure in each. */
-  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) {
-    container-type: inline-size;
-    grid-template-columns: repeat(6, 1fr); }
-  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(-n+2) {
-    grid-column: span 3; }
-  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(n+3) {
-    grid-column: span 3; }
-  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(5) {
-    grid-column: 1 / -1; }
-  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(n+3) .dw-value {
-    font-size: .85rem; }
-  /* Three to a row once the grid can give each window ~125px of text — room
-     for a ten-digit lakh figure, not merely for the figures that happen to be
-     on the card today. Written at the same specificity as the two-across rule
-     above and after it, so it is the later rule that wins rather than an
-     accident of :has() weight. */
-  @container (min-width: 460px) {
-    .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(n+3),
-    .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(5) {
-      grid-column: span 2; }
-  }
 
   /* Charts. Inline SVG, so the styling is the card's rather than a library's. */
   .dw-chart { margin-top:13px; }
