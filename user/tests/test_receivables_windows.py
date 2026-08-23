@@ -7,6 +7,13 @@ nested windows — a month, a week, two days — so the last figure is the one a
 collection call can still be early for.
 
 Nested, not partitioned: money two days late is inside all three.
+
+Overdue is read from `gap` alone (days since the balance last moved), with no
+credit-period offset netted out of it — a customer with a 30-day credit period
+sitting at day 15 counts as 15 days overdue here, not 0. This card asks "how
+long has this money been outstanding," a collections question; whether a party
+is in breach of their agreed terms is a different question, which is what
+Customer Balance's own Debit/Credit split still answers.
 """
 from datetime import timedelta
 from decimal import Decimal
@@ -32,7 +39,9 @@ class ReceivableWindowTests(TestCase):
 
         The balance is raised by an invoice and never receipted, which is what
         makes the gap the age of that invoice — the same reading the Customer
-        Balance report takes.
+        Balance report takes. `credit_period` is accepted (Customer Balance's
+        own Debit/Credit split still reads it) but plays no part in these
+        overdue bands — see test_credit_period_plays_no_part_in_overdue below.
         """
         # phone and mobile are unique on Contact; blank collides on the second.
         n = Customer.objects.count()
@@ -52,7 +61,7 @@ class ReceivableWindowTests(TestCase):
         return self.stats()[label]["value"]
 
     def test_the_total_is_everything_owed_whether_late_or_not(self):
-        self.customer("Within terms", 10000, days_standing=5, credit_period=30)
+        self.customer("Recent", 10000, days_standing=5)
         self.customer("Long overdue", 25000, days_standing=400)
         self.assertEqual(self.money("Total receivable"), "₹35,000")
 
@@ -80,9 +89,10 @@ class ReceivableWindowTests(TestCase):
             self.assertEqual(self.money(label), "₹0", label)
 
     def test_total_receivable_and_total_overdue_are_different_figures(self):
-        """One customer inside their terms, one a day late. Everything owed is
-        both of them; what is overdue is only the second."""
-        self.customer("Within terms", 24159, days_standing=10, credit_period=30)
+        """One customer billed today, not yet late by even a day; one a day
+        late. Everything owed is both of them; what is overdue is only the
+        second."""
+        self.customer("Not yet late", 24159, days_standing=0)
         self.customer("A day late", 2386, days_standing=1)
         self.assertEqual(self.money("Total receivable"), "₹26,545")
         self.assertEqual(self.money("Total overdue"), "₹2,386")
@@ -106,18 +116,26 @@ class ReceivableWindowTests(TestCase):
         for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
             self.assertEqual(self.money(label), "₹5,000", label)
 
-    def test_the_credit_period_is_what_lateness_is_measured_from(self):
-        """Thirty days standing on thirty days' credit is not late at all."""
-        self.customer("On terms", 9000, days_standing=30, credit_period=30)
+    def test_credit_period_plays_no_part_in_overdue(self):
+        """Fifteen days standing on a thirty-day credit period would once have
+        read as not late at all — the excess past the agreed term was what
+        counted. It now counts as fifteen days overdue regardless: inside the
+        month and week bands, outside the two-day one, exactly as a customer
+        with no credit period at fifteen days standing would."""
+        self.customer("Generous terms", 9000, days_standing=15, credit_period=30)
         self.assertEqual(self.money("Total receivable"), "₹9,000")
-        for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
-            self.assertEqual(self.money(label), "₹0", label)
+        self.assertEqual(self.money("Total overdue"), "₹9,000")
+        self.assertEqual(self.money("Overdue 0-1 month"), "₹9,000")
+        self.assertEqual(self.money("Overdue 0-7 days"), "₹0")
+        self.assertEqual(self.money("Overdue 0-2 days"), "₹0")
 
-    def test_a_day_past_the_credit_period_is_a_day_late_not_a_month(self):
-        """The window measures from the due date, not from the invoice."""
-        self.customer("Just over", 6000, days_standing=31, credit_period=30)
-        # One day past a thirty-day term is one day late, not a month late.
-        self.assertEqual(self.money("Overdue 0-2 days"), "₹6,000")
+    def test_a_generous_credit_period_does_not_shift_the_window(self):
+        """The window measures from the balance's own age, not from a due date
+        computed off the credit period — a hundred-day credit period does not
+        make a five-day-old balance read as brand new."""
+        self.customer("Long credit", 6000, days_standing=5, credit_period=100)
+        self.assertEqual(self.money("Overdue 0-7 days"), "₹6,000")
+        self.assertEqual(self.money("Overdue 0-2 days"), "₹0")
 
     def test_a_customer_counts_once_and_the_card_says_how_many(self):
         self.customer("A", 1000, days_standing=3)

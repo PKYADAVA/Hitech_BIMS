@@ -333,15 +333,21 @@ OVERDUE_WINDOWS = (
 )
 
 
-def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
+def _overdue_windows(parties, amount_key, windows=OVERDUE_WINDOWS):
     """What is late, by how recently it went late.
 
-    A party's ``gap`` is how many days its balance has been standing; past the
-    credit period agreed with them, the excess is how late the money is. The
-    whole of a party's balance ages by that one figure, exactly as the Customer
-    Balance report reads it — this is a party-level ageing, not a document-level
-    one, so a customer sits in one window rather than being split across
-    several by invoice.
+    A party's ``gap`` — days since its balance last moved — is read directly
+    as how late the money is, with no credit-period offset netted out of it.
+    Any standing balance is overdue from the day it was raised, regardless of
+    what credit terms that party was given; a customer with a 30-day credit
+    period sitting at day 15 counts as 15 days overdue here, not 0. Deliberate:
+    lateness for this card is "how long has this money been outstanding," a
+    collections question, not "is this party in breach of their terms," which
+    is what Customer Balance's own Debit/Credit split already answers.
+
+    The whole of a party's balance ages by that one figure — this is a
+    party-level ageing, not a document-level one, so a customer sits in one
+    window rather than being split across several by invoice.
 
     A band counts everything from the day it went late up to its own limit, so
     the figures nest rather than partition: 0-7 days includes the two-day
@@ -350,7 +356,7 @@ def _overdue_windows(parties, amount_key, credit_days, windows=OVERDUE_WINDOWS):
     the property both earlier readings lacked, one losing the oldest debt and
     the other the newest.
     """
-    late = [((p.get("gap") or 0) - credit_days(p), p) for p in parties]
+    late = [(p.get("gap") or 0, p) for p in parties]
     late = [(days, p) for days, p in late if days > 0]
     out = []
     for span, label in windows:
@@ -845,13 +851,11 @@ def _receivables(viewable, filters, user=None):
                for c in Customer.objects.all()]
     owed = [p for p in parties if p["debit"] > 0]
     total = sum((p["debit"] for p in owed), 0)
-    # Credit period is per customer; none agreed means the money is due now.
-    terms = {c.id: (c.credit_period or 0) for c in Customer.objects.all()}
     return {
         "stats": [{"label": "Total receivable", "value": "₹" + _inr(total),
                    "sub": f"from {len(owed)} customer{'' if len(owed) == 1 else 's'}",
                    "tone": "warn" if total else None},
-                  *_overdue_windows(owed, "debit", lambda p: terms.get(p["id"], 0))],
+                  *_overdue_windows(owed, "debit")],
         "rows": [{"label": p["name"], "value": "₹" + _inr(p["debit"]),
                   "meta": f"{p['gap']}d"}
                  for p in sorted(owed, key=lambda p: -p["debit"])[:3]],
