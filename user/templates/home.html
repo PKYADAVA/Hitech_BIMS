@@ -149,6 +149,42 @@
   .dw-col-receivables .dw-stats:has(> :nth-child(4):last-child) {
     grid-template-columns: repeat(2, 1fr); }
 
+  /* Five — Receivables at full strength: everything owed, everything overdue,
+     then the three windows those break into. The two totals take a row to
+     themselves because they are the pair that get read against each other;
+     the windows follow underneath, narrowest last.
+
+     Left to the default auto-fit these came out three to a row at ~90px, which
+     is narrower than the figures they hold: "₹26,545" broke between the 4 and
+     the 5 and the first line read as a whole number, ₹26,54.
+
+     How many windows fit on a row depends on the card, not the screen — this
+     card is a third of the row above 1200px and half of it below, so the
+     viewport is a poor proxy for it: the grid is 287px wide on a 1440px screen
+     and 464px wide on an 1100px one. It asks its own width instead. Two to a row is what always fits; three
+     only once there is room for a lakh figure in each. */
+  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) {
+    container-type: inline-size;
+    grid-template-columns: repeat(6, 1fr); }
+  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(-n+2) {
+    grid-column: span 3; }
+  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(n+3) {
+    grid-column: span 3; }
+  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(5) {
+    grid-column: 1 / -1; }
+  .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(n+3) .dw-value {
+    font-size: 1rem; }
+  /* Three to a row once the grid can give each window ~125px of text — room
+     for a ten-digit lakh figure, not merely for the figures that happen to be
+     on the card today. Written at the same specificity as the two-across rule
+     above and after it, so it is the later rule that wins rather than an
+     accident of :has() weight. */
+  @container (min-width: 460px) {
+    .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(n+3),
+    .dw-col-receivables .dw-stats:has(> :nth-child(5):last-child) > :nth-child(5) {
+      grid-column: span 2; }
+  }
+
   /* Charts. Inline SVG, so the styling is the card's rather than a library's. */
   .dw-chart { margin-top:13px; }
   .dw-chart svg { width:100%; height:auto; display:block; max-height:210px;
@@ -187,8 +223,12 @@
   .dw-stat { padding:10px 11px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
   .dw-stat .dw-label { display:block; font-size:.68rem; color:#6b7890; text-transform:uppercase;
                        letter-spacing:.04em; }
+  /* Break at a space if the value has one ("1,234 kg"), never inside a run of
+     characters: `anywhere` let a rupee figure split between two of its own
+     digits, and half a number does not announce itself as half a number. If a
+     tile is too narrow for its figure the grid above it is what to widen. */
   .dw-stat .dw-value { display:block; font-size:1.12rem; font-weight:700; margin-top:3px;
-                       line-height:1.2; overflow-wrap:anywhere; }
+                       line-height:1.2; overflow-wrap:normal; word-break:normal; }
   .dw-stat .dw-sub { display:block; font-size:.69rem; color:#8494ab; margin-top:2px; }
   /* The card fills the row's height; its contents should not be spread to
      match. Anything after the last block simply sits below it. */
