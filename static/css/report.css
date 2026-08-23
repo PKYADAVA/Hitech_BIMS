@@ -20,7 +20,17 @@
               padding:.35rem .6rem; margin-bottom:.4rem; }
 .rpt-filter .form-label { font-size:.62rem; font-weight:600; margin-bottom:.05rem; line-height:1.1; }
 .rpt-filter .form-control-sm, .rpt-filter .form-select-sm {
-  font-size:.74rem; padding:.15rem .4rem; height:auto; min-height:0; line-height:1.35; }
+  font-size:.74rem; padding:.15rem .4rem; height:1.9rem; min-height:0; line-height:1.35; }
+/* main.js upgrades every select.form-select — including these — into a
+   Select2 widget, rendered as a sibling .select2-container the selectors
+   above never touch (Select2 hides the original <select>). Left alone it
+   renders at Select2's own default height (or, in a modal, the general
+   "small" height added for the site — see style.css), taller than the date/
+   text inputs beside it in the same filter row, so the two never line up. */
+.rpt-filter .select2-container .select2-selection { height:1.9rem; min-height:0; }
+.rpt-filter .select2-container .select2-selection--single .select2-selection__rendered {
+  line-height:1.9rem; font-size:.74rem; padding-left:.4rem; }
+.rpt-filter .select2-container .select2-selection--single .select2-selection__arrow { height:1.9rem; }
 .rpt-filter .btn-sm { font-size:.72rem; padding:.2rem .5rem; }
 .rpt-filter .row { --bs-gutter-y:.3rem; }
 /* Some reports wrap their filters in a Bootstrap card; drop the card chrome so

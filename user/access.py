@@ -249,6 +249,7 @@ MODULE_REGISTRY = [
                 "tabs": [
                     ("customer_ledger", "Customer Ledger"),
                     ("customer_balance", "Customer Balance"),
+                    ("customer_receipt_report", "Customer Receipt Report"),
                 ],
             },
         ],

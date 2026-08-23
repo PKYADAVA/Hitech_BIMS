@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load purchase_extras %}
+{% block title %}Customer Receipt Report — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+{% block content %}
+<style>
+  /* The shared .rpt-grid gives every filter an equal 1/7th-width column,
+     which squeezes a native date input's "dd-mm-yyyy" + calendar icon too
+     tight to read. A modest floor keeps every field legibly sized without
+     opting out of the grid's own responsive column-count breakpoints. */
+  .rpt-filter .rpt-grid .form-control-sm,
+  .rpt-filter .rpt-grid .form-select-sm { min-width: 150px; }
+</style>
+{% include '_sales_report_subnavbar.html' with active_tab='customer_receipt_report' %}
+
+{% include '_report_letterhead.html' with title='Customer Receipt Report' %}
+
+<div class="rpt-toolbar no-print">
+  <button class="btn btn-success btn-sm" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Print</button>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ request.get_full_path }}"><i class="fas fa-rotate me-1"></i>Refresh</a>
+</div>
+
+{% if rows %}
+<div class="rpt-kpis">
+  <div class="rpt-kpi k-1"><div class="k-ico"><i class="fas fa-receipt"></i></div>
+    <div><div class="k-label">Total Receipts</div><div class="k-num">{{ total_count }}</div><div class="k-sub">No. of Receipts</div></div></div>
+  <div class="rpt-kpi k-2"><div class="k-ico"><i class="fas fa-sack-dollar"></i></div>
+    <div><div class="k-label">Total Amount</div><div class="k-num">&#8377; {{ total_amount|indian_currency }}</div><div class="k-sub">All Receipt Amounts</div></div></div>
+  <div class="rpt-kpi k-3"><div class="k-ico"><i class="fas fa-building-columns"></i></div>
+    <div><div class="k-label">Bank / Transfer</div><div class="k-num">&#8377; {{ bank_amount|indian_currency }}</div><div class="k-sub">Through Bank</div></div></div>
+  <div class="rpt-kpi k-4"><div class="k-ico"><i class="fas fa-money-bill-wave"></i></div>
+    <div><div class="k-label">Cash Receipts</div><div class="k-num">&#8377; {{ cash_amount|indian_currency }}</div><div class="k-sub">Cash Received</div></div></div>
+  <div class="rpt-kpi k-5"><div class="k-ico"><i class="fas fa-file-invoice-dollar"></i></div>
+    <div><div class="k-label">Avg Receipt Amount</div><div class="k-num">&#8377; {{ avg_amount|indian_currency }}</div><div class="k-sub">Per Receipt</div></div></div>
+</div>
+{% endif %}
+
+<div class="rpt-filter no-print">
+  <form method="get" class="rpt-grid">
+    <div><label class="form-label">From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}" class="form-control form-control-sm"></div>
+    <div><label class="form-label">Group</label>
+      <select name="customer_group" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for g in customer_groups %}<option value="{{ g.id }}" {% if group == g.id|stringformat:'s' %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Customer</label>
+      <select name="customer" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for c in customers %}<option value="{{ c.id }}" {% if customer == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Source</label>
+      <select name="source" class="form-select form-select-sm"><option value="">-All-</option>
+        <option value="sales" {% if source == 'sales' %}selected{% endif %}>Sales Receipt</option>
+        <option value="bird_sale" {% if source == 'bird_sale' %}selected{% endif %}>Bird Sale Receipt</option>
+        <option value="chick_sale" {% if source == 'chick_sale' %}selected{% endif %}>Chick Sale Receipt</option>
+      </select></div>
+    <div><label class="form-label">Mode</label>
+      <select name="mode" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for value, label in modes %}<option value="{{ value }}" {% if mode == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Payment Method</label>
+      <select name="account" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for a in accounts %}<option value="{{ a.id }}" {% if account == a.id|stringformat:'s' %}selected{% endif %}>{{ a.code }} - {{ a.description }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Location</label>
+      <select name="location" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for w in locations %}<option value="{{ w.id }}" {% if location == w.id|stringformat:'s' %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label">Added Employee</label>
+      <select name="added_by" class="form-select form-select-sm"><option value="">-All-</option>
+        {% for u in added_by_users %}<option value="{{ u.id }}" {% if added_by == u.id|stringformat:'s' %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+      </select></div>
+    <div class="rpt-actions">
+      <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-filter me-1"></i>Filter</button>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'customer_receipt_report' %}"><i class="fas fa-xmark me-1"></i>Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="card"><div class="card-body p-2">
+  {% if rows %}
+  <div class="rpt-scroll">
+    <table class="table table-bordered table-hover rpt-table rpt-wrap-head mb-0 ds-grid">
+      <thead><tr>
+        <th class="ds-mid">Date</th><th>Receipt No.</th><th>Source</th><th>Customer</th><th>DC No.</th>
+        <th>Mode</th><th>Payment Method</th><th class="ds-num num">Amount</th>
+        <th>Location</th><th class="ds-num num">Balance</th><th>Remarks</th>
+        <th>Added By</th><th>Added Time</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.date|date:"d.m.Y" }}</td>
+          <td class="rpt-link">{{ r.receipt_no }}</td>
+          <td class="rpt-type">{{ r.source }}</td>
+          <td class="rpt-loc">{{ r.party_name }}</td>
+          <td>{{ r.dc_no }}</td>
+          <td>{{ r.mode }}</td>
+          <td>{{ r.account.code }} - {{ r.account.description }}</td>
+          <td class="num rpt-amount">{{ r.amount|indian_currency }}</td>
+          <td>{{ r.location }}</td>
+          <td class="num {% if r.balance_cr_dr == 'Cr' %}rpt-neg{% endif %}">{{ r.balance|indian_currency }} {{ r.balance_cr_dr }}</td>
+          <td>{{ r.remarks }}</td>
+          <td>{{ r.added_by }}</td>
+          <td>{{ r.added_time|date:"d.m.Y h:i A" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="7" class="text-center">Total</td>
+        <td class="num rpt-amount">{{ total_amount|indian_currency }}</td>
+        <td colspan="5"></td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div class="small text-muted mt-2 px-1">
+    <i class="fas fa-circle-info me-1"></i>
+    Unifies every customer-facing receipt across Sales, Bird Sale and Chick Sale — Source shows which one raised the
+    row. Balance is that customer's outstanding position as of the receipt's own date, the same figure Customer
+    Balance reads; a negative (Cr) balance means the customer was in advance, not owing.
+  </div>
+  {% else %}
+  <div class="rpt-empty">
+    <i class="fas fa-receipt fa-2x mb-2 d-block"></i>
+    No receipts match these filters.
+  </div>
+  {% endif %}
+</div></div>
+{% endblock %}

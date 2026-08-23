@@ -496,6 +496,9 @@
               {% if 'customer_balance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_balance' %}" target="_blank" rel="noopener">
                 <i class="fas fa-scale-balanced"></i>Customer Balance
               </a></li>{% endif %}
+              {% if 'customer_receipt_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_receipt_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-receipt"></i>Customer Receipt Report
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}

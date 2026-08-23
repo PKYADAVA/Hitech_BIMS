@@ -949,10 +949,14 @@ def customer_ledger_report(request):
 
 def _customer_balance_row(cust, fd, td, ref_date):
     """One Customer Balance row: opening (signed receivable before the window),
-    period Birds/Weight/Amount (Bird Sales + Sales Invoices) and Receipt (Bird
-    Sale Receipts), the between-days movement, the closing split into Debit
-    (customer owes) / Credit (advance), credit-limit position, and days since
-    the last receipt."""
+    period Quantity/Weight/Amount (Bird Sales + Chick Sales + Sales Invoices)
+    and Receipt (Bird Sale Receipts), the between-days movement, the closing
+    split into Debit (customer owes) / Credit (advance), credit-limit
+    position, and days since the last receipt.
+
+    Quantity is birds and chicks sold added together — a customer's period
+    activity is one or the other in practice, not usefully split across two
+    columns."""
     from decimal import Decimal
     from broiler.models import BirdSale, BirdSaleReceipt
     from hatchery.models import ChickSale, ChickSaleReceipt
@@ -981,15 +985,16 @@ def _customer_balance_row(cust, fd, td, ref_date):
     opening = signed
     amount = Decimal("0")   # receivable-raising in period (sales)
     receipt = Decimal("0")  # receivable-lowering in period (receipts)
-    birds = 0
+    quantity = Decimal("0")  # birds + chicks sold in period — one column, since
+                              # a customer's period activity is one or the other
+                              # in practice, not usefully split across two.
     weight = Decimal("0")
-    chicks = Decimal("0")
     for bs in bird_sales:
         v = _si_num(bs.amount)
         opening += v if before(bs.date) else 0
         if within(bs.date):
             amount += v
-            birds += int(bs.birds or 0)
+            quantity += int(bs.birds or 0)
             weight += _si_num(bs.net_weight)
     for inv in invoices:
         v = _si_num(inv.net_amount)
@@ -1000,7 +1005,7 @@ def _customer_balance_row(cust, fd, td, ref_date):
         opening += v if before(cs.date) else 0
         if within(cs.date):
             amount += v
-            chicks += _si_num(cs.total_net_qty())
+            quantity += _si_num(cs.total_net_qty())
     for rc in receipts:
         v = _si_num(rc.amount)
         opening -= v if before(rc.date) else 0
@@ -1047,7 +1052,7 @@ def _customer_balance_row(cust, fd, td, ref_date):
         "group": (cust.customer_group.description or cust.customer_group.code
                   if cust.customer_group_id else "") or "Sundry Debtors",
         "opening": opening.quantize(q2),
-        "birds": birds, "weight": weight.quantize(q2), "chicks": chicks.quantize(q2),
+        "quantity": quantity.quantize(q2), "weight": weight.quantize(q2),
         "amount": amount.quantize(q2), "receipt": receipt.quantize(q2), "bw": bw.quantize(q2),
         "debit": closing.quantize(q2) if closing >= 0 else Decimal("0.00"),
         "credit": (-closing).quantize(q2) if closing < 0 else Decimal("0.00"),
@@ -1086,9 +1091,8 @@ def customer_balance_report(request):
     tkeys = ["opening", "amount", "receipt", "bw", "debit", "credit",
              "credit_limit", "limit_exceeded", "available"]
     totals = {k: sum((r[k] for r in rows), Decimal("0")).quantize(q2) for k in tkeys}
-    totals["birds"] = sum((r["birds"] for r in rows), 0)
+    totals["quantity"] = sum((r["quantity"] for r in rows), Decimal("0")).quantize(q2)
     totals["weight"] = sum((r["weight"] for r in rows), Decimal("0")).quantize(q2)
-    totals["chicks"] = sum((r["chicks"] for r in rows), Decimal("0")).quantize(q2)
 
     groups = [{"id": g.id, "name": g.description or g.code or f"Group {g.id}"}
               for g in CustomerGroup.objects.order_by("description")]
@@ -1096,6 +1100,160 @@ def customer_balance_report(request):
     return render(request, "customer_balance_report.html", {
         "rows": rows, "totals": totals,
         "customer_groups": groups, "group": group,
+        "from_date": from_date, "to_date": to_date,
+        "company": CompanyProfile.get_solo(),
+    })
+
+
+def _receipt_report_row(obj, source_label, party, mode_field="mode",
+                        account_field="receipt_account", added_by_field="created_by",
+                        added_time_field="created_at"):
+    """One row of the Customer Receipt Report, normalised out of whichever of
+    the three receipt models it came from — SalesReceipt, BirdSaleReceipt and
+    ChickSaleReceipt carry the same handful of fields under two different
+    naming conventions (created_by/created_at vs entry_by/entry_time)."""
+    added_by = getattr(obj, added_by_field)
+    return {
+        "date": obj.date, "receipt_no": obj.receipt_no, "dc_no": obj.reference_no,
+        "customer": party, "party_name": party.name,
+        "mode": getattr(obj, mode_field),
+        "account": getattr(obj, account_field),
+        "amount": obj.amount,
+        "location": obj.location.name if obj.location_id else "",
+        "source": source_label,
+        "remarks": obj.remarks,
+        "added_by": added_by.get_full_name() or added_by.username if added_by else "",
+        "added_by_id": added_by.id if added_by else None,
+        "added_time": getattr(obj, added_time_field),
+    }
+
+
+@login_required(login_url="login")
+def customer_receipt_report(request):
+    """Sales > Reports > Customer Receipt Report — every payment collected
+    against a customer, unified across the three modules that raise one
+    (Sales Receipt, Bird Sale Receipt, Chick Sale Receipt), since a customer's
+    money coming in does not care which module happened to record it.
+
+    Farmer-side Bird Sale Receipts are deliberately left out: this report's
+    "Balance" column is that customer's outstanding position as of the
+    receipt's date, read the same way Customer Balance does it, and there is
+    no equivalent balance figure for a Farmer to show there instead.
+
+    DC No. is each model's own free-text "reference_no" field. Invoice No.
+    still is not shown — none of the three receipt models ties a receipt to
+    one specific invoice (they are all account-level payments, "reduces the
+    outstanding balance", not the settlement of a particular document).
+    """
+    from decimal import Decimal
+    from django.contrib.auth import get_user_model
+    from django.utils.dateparse import parse_date
+    from account.models import CompanyProfile
+    from account.services.bank_cash import bank_cash_accounts
+    from broiler.models import BirdSaleReceipt
+    from hatchery.models import ChickSaleReceipt
+
+    User = get_user_model()
+    q2 = Decimal("0.01")
+
+    from_date = (request.GET.get("from_date") or "").strip()
+    to_date = (request.GET.get("to_date") or "").strip()
+    group = (request.GET.get("customer_group") or "").strip()
+    customer_id = (request.GET.get("customer") or "").strip()
+    mode = (request.GET.get("mode") or "").strip()
+    account_id = (request.GET.get("account") or "").strip()
+    location_id = (request.GET.get("location") or "").strip()
+    added_by_id = (request.GET.get("added_by") or "").strip()
+    source = (request.GET.get("source") or "").strip()
+
+    fd = parse_date(from_date) if from_date else None
+    td = parse_date(to_date) if to_date else None
+
+    customers = customers_for(request.user, Customer.objects.select_related("customer_group"))
+    if group.isdigit():
+        customers = customers.filter(customer_group_id=group)
+    if customer_id.isdigit():
+        customers = customers.filter(id=customer_id)
+    allowed_customers = {c.id: c for c in customers}
+
+    def scoped(qs, date_field="date"):
+        qs = qs.filter(customer_id__in=allowed_customers.keys())
+        if fd:
+            qs = qs.filter(**{f"{date_field}__gte": fd})
+        if td:
+            qs = qs.filter(**{f"{date_field}__lte": td})
+        if mode:
+            qs = qs.filter(mode=mode)
+        if account_id.isdigit():
+            qs = qs.filter(receipt_account_id=account_id)
+        if location_id.isdigit():
+            qs = qs.filter(location_id=location_id)
+        return qs
+
+    rows = []
+    if not source or source == "sales":
+        qs = scoped(SalesReceipt.objects.select_related("customer", "location", "receipt_account", "created_by"))
+        if added_by_id.isdigit():
+            qs = qs.filter(created_by_id=added_by_id)
+        rows += [_receipt_report_row(r, "Sales Receipt", allowed_customers[r.customer_id])
+                for r in qs]
+    if not source or source == "bird_sale":
+        qs = scoped(BirdSaleReceipt.objects.filter(sale_type="customer")
+                    .select_related("customer", "location", "receipt_account", "entry_by"))
+        if added_by_id.isdigit():
+            qs = qs.filter(entry_by_id=added_by_id)
+        rows += [_receipt_report_row(r, "Bird Sale Receipt", allowed_customers[r.customer_id],
+                                     added_by_field="entry_by", added_time_field="entry_time")
+                for r in qs]
+    if not source or source == "chick_sale":
+        qs = scoped(ChickSaleReceipt.objects.select_related("customer", "location", "receipt_account", "entry_by"))
+        if added_by_id.isdigit():
+            qs = qs.filter(entry_by_id=added_by_id)
+        rows += [_receipt_report_row(r, "Chick Sale Receipt", allowed_customers[r.customer_id],
+                                     added_by_field="entry_by", added_time_field="entry_time")
+                for r in qs]
+
+    # "Balance" is the customer's outstanding position as of this receipt's
+    # date, read the same way Customer Balance does — cached per (customer,
+    # date) since several receipts on the same day for the same customer
+    # would otherwise re-walk that customer's whole transaction history once
+    # per row.
+    balance_cache = {}
+    for row in rows:
+        key = (row["customer"].id, row["date"])
+        if key not in balance_cache:
+            b = _customer_balance_row(row["customer"], None, row["date"], row["date"])
+            balance_cache[key] = (b["debit"], "Dr") if b["debit"] else (b["credit"], "Cr")
+        row["balance"], row["balance_cr_dr"] = balance_cache[key]
+
+    rows.sort(key=lambda r: (r["date"], r["receipt_no"]), reverse=True)
+
+    total_count = len(rows)
+    total_amount = sum((r["amount"] for r in rows), Decimal("0")).quantize(q2)
+    cash_amount = sum((r["amount"] for r in rows if r["mode"] == "Cash"), Decimal("0")).quantize(q2)
+    bank_amount = (total_amount - cash_amount).quantize(q2)
+    avg_amount = (total_amount / total_count).quantize(q2) if total_count else Decimal("0.00")
+
+    groups = [{"id": g.id, "name": g.description or g.code or f"Group {g.id}"}
+              for g in CustomerGroup.objects.order_by("description")]
+    added_by_ids = set(SalesReceipt.objects.values_list("created_by_id", flat=True)) \
+        | set(BirdSaleReceipt.objects.filter(sale_type="customer").values_list("entry_by_id", flat=True)) \
+        | set(ChickSaleReceipt.objects.values_list("entry_by_id", flat=True))
+    added_by_ids.discard(None)
+
+    return render(request, "customer_receipt_report.html", {
+        "rows": rows,
+        "total_count": total_count, "total_amount": total_amount,
+        "cash_amount": cash_amount, "bank_amount": bank_amount, "avg_amount": avg_amount,
+        "customer_groups": groups, "group": group,
+        "customers": customers_for(request.user, Customer.objects.order_by("name")),
+        "customer": customer_id,
+        "modes": SalesReceipt.MODE_CHOICES, "mode": mode,
+        "accounts": bank_cash_accounts(), "account": account_id,
+        "locations": Warehouse.objects.order_by("name"), "location": location_id,
+        "added_by_users": User.objects.filter(id__in=added_by_ids).order_by("username"),
+        "added_by": added_by_id,
+        "source": source,
         "from_date": from_date, "to_date": to_date,
         "company": CompanyProfile.get_solo(),
     })

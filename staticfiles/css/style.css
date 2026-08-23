@@ -1412,6 +1412,24 @@ img, svg, video, canvas {
   border-color: var(--border-strong);
   border-radius: var(--radius);
 }
+/* main.js already flags a select upgraded from .form-select-sm with
+   selectionCssClass: 'select2--small' (landing on .select2-selection
+   itself, per Select2's own option semantics — not the outer container),
+   but nothing sized the resulting box to match: it kept rendering at the
+   full 40px height above, mismatched against every other .form-control-sm
+   / .form-select-sm control sitting beside it in the same filter bar.
+   Matches Bootstrap's own .form-select-sm proportions. */
+.select2-container--bootstrap-5 .select2-selection.select2--small {
+  min-height: 31px;
+}
+.select2-container--bootstrap-5 .select2-selection--single.select2--small .select2-selection__rendered {
+  line-height: 29px;
+  padding-left: .5rem;
+  font-size: .875rem;
+}
+.select2-container--bootstrap-5 .select2-selection--single.select2--small .select2-selection__arrow {
+  height: 29px;
+}
 .select2-container--bootstrap-5.select2-container--focus .select2-selection,
 .select2-container--bootstrap-5.select2-container--open .select2-selection {
   border-color: var(--border-focus);

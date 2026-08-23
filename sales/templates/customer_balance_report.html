@@ -91,7 +91,7 @@
           <th rowspan="2">Code</th>
           <th rowspan="2">Name</th>
           <th rowspan="2" class="ds-num num">Opening Balance</th>
-          <th colspan="6">Selected Period</th>
+          <th colspan="5">Selected Period</th>
           <th class="ds-num" colspan="2">Balance</th>
           <th rowspan="2" class="ds-num num">Credit Limit</th>
           <th rowspan="2" class="num">Limit Exceeded</th>
@@ -99,7 +99,7 @@
           <th rowspan="2" class="ds-num num">Last Receipt Gap Days</th>
         </tr>
         <tr>
-          <th class="num">Birds</th><th class="ds-num num">Weight</th><th class="num">Chicks</th><th class="ds-num num">Amount</th>
+          <th class="num">Quantity</th><th class="ds-num num">Weight</th><th class="ds-num num">Amount</th>
           <th class="num">Receipt</th><th class="ds-num num">B/w days balance</th>
           <th class="ds-num num">Credit</th><th class="ds-num num">Debit</th>
         </tr>
@@ -111,9 +111,8 @@
           <td>{{ r.code }}</td>
           <td class="name"><a href="{% url 'customer_ledger' %}?customer={{ r.id }}{% if from_date %}&from_date={{ from_date }}{% endif %}{% if to_date %}&to_date={{ to_date }}{% endif %}" target="_blank" rel="noopener">{{ r.name }}</a></td>
           <td class="num {% if r.opening < 0 %}neg{% endif %}">{{ r.opening|indian_currency }}</td>
-          <td class="num">{{ r.birds }}</td>
+          <td class="num">{{ r.quantity|floatformat:0 }}</td>
           <td class="num">{{ r.weight|floatformat:2 }}</td>
-          <td class="num">{{ r.chicks|floatformat:0 }}</td>
           <td class="num">{{ r.amount|indian_currency }}</td>
           <td class="num">{{ r.receipt|indian_currency }}</td>
           <td class="num">{{ r.bw|indian_currency }}</td>
@@ -125,16 +124,15 @@
           <td class="num {% if r.gap >= 90 %}gap-hi{% endif %}">{{ r.gap }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="17" class="text-center text-muted py-4">No customers found.</td></tr>
+        <tr><td colspan="16" class="text-center text-muted py-4">No customers found.</td></tr>
         {% endfor %}
       </tbody>
       {% if rows %}
       <tfoot><tr>
         <td colspan="3" class="text-center">Total</td>
         <td class="num {% if totals.opening < 0 %}neg{% endif %}">{{ totals.opening|indian_currency }}</td>
-        <td class="num">{{ totals.birds }}</td>
+        <td class="num">{{ totals.quantity|floatformat:0 }}</td>
         <td class="num">{{ totals.weight|floatformat:2 }}</td>
-        <td class="num">{{ totals.chicks|floatformat:0 }}</td>
         <td class="num">{{ totals.amount|indian_currency }}</td>
         <td class="num">{{ totals.receipt|indian_currency }}</td>
         <td class="num">{{ totals.bw|indian_currency }}</td>
