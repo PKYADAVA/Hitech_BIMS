@@ -314,19 +314,20 @@ def _ageing(parties, amount_key, credit_days):
 #: order the tile row itself reads in, left to right.
 #:
 #: Nested, not exclusive: money two days late is inside the week and the month
-#: as well. Each band runs from the day the money went late up to its own
-#: limit, so 0-2 days is a subset of 0-7, which is a subset of 0-1 month.
+#: as well. Each band runs from day zero (a balance raised today already
+#: counts) up to its own limit, so 0-2 days is a subset of 0-7, which is a
+#: subset of 0-1 month.
 #:
-#: The first band has no ceiling: it is every overdue rupee there is, and it is
-#: what stops a debt older than a month falling outside every tile. It was
-#: dropped once as an accepted tradeoff, on the grounds that such a balance
-#: still shows in Total receivable — but those two figures are not the same
-#: thing and cannot stand in for one another. Total receivable is everything
-#: owed, late or not; Total overdue is only the part that is late. On a card
-#: where every customer happens to be overdue they read alike, which is exactly
-#: when the difference is invisible and exactly when it is about to matter.
+#: No "Total overdue"/no-ceiling band. There was one, briefly — twice — on the
+#: grounds that a debt older than the widest band would otherwise fall outside
+#: every tile. Both times it went back out once day-zero balances started
+#: counting as overdue too: with every owed balance at least zero days old,
+#: a no-ceiling band always equals the sum of everything owed, which is Total
+#: receivable already sitting one tile to the left of this row. A tile that
+#: cannot read differently from its neighbour is not carrying information.
+#: The accepted cost is real and was accepted knowingly: a balance over a
+#: month old shows in Total receivable and nowhere in this row.
 OVERDUE_WINDOWS = (
-    (None, "Total overdue"),
     (30, "Overdue 0-1 month"),
     (7, "Overdue 0-7 days"),
     (2, "Overdue 0-2 days"),
@@ -345,19 +346,22 @@ def _overdue_windows(parties, amount_key, windows=OVERDUE_WINDOWS):
     collections question, not "is this party in breach of their terms," which
     is what Customer Balance's own Debit/Credit split already answers.
 
+    A balance raised today (``gap == 0``) counts from day zero, not from day
+    one — it is still money owed, so it belongs in the narrowest band rather
+    than being excluded from every band until it turns a day old.
+
     The whole of a party's balance ages by that one figure — this is a
     party-level ageing, not a document-level one, so a customer sits in one
     window rather than being split across several by invoice.
 
     A band counts everything from the day it went late up to its own limit, so
     the figures nest rather than partition: 0-7 days includes the two-day
-    money. The last band has no limit and is therefore every overdue rupee
-    there is, which is what stops anything falling outside all of them —
-    the property both earlier readings lacked, one losing the oldest debt and
-    the other the newest.
+    money. ``windows`` has no no-ceiling entry — see OVERDUE_WINDOWS for why —
+    so a balance older than the widest band's own limit ages out of every
+    band this function returns, on purpose.
     """
     late = [(p.get("gap") or 0, p) for p in parties]
-    late = [(days, p) for days, p in late if days > 0]
+    late = [(days, p) for days, p in late if days >= 0]
     out = []
     for span, label in windows:
         inside = [p for days, p in late if span is None or days <= span]

@@ -6,7 +6,10 @@ for a year. It now leads on the total and breaks the overdue money into three
 nested windows — a month, a week, two days — so the last figure is the one a
 collection call can still be early for.
 
-Nested, not partitioned: money two days late is inside all three.
+Nested, not partitioned: money two days late is inside all three. A balance
+raised today counts from day zero, not from the day after — it is still money
+owed, so it belongs in the narrowest band immediately rather than waiting a
+day to appear anywhere.
 
 Overdue is read from `gap` alone (days since the balance last moved), with no
 credit-period offset netted out of it — a customer with a 30-day credit period
@@ -14,6 +17,16 @@ sitting at day 15 counts as 15 days overdue here, not 0. This card asks "how
 long has this money been outstanding," a collections question; whether a party
 is in breach of their agreed terms is a different question, which is what
 Customer Balance's own Debit/Credit split still answers.
+
+There is deliberately no "Total overdue"/no-ceiling band any more. There was
+one, briefly, on the grounds that a debt older than the widest band would
+otherwise show in no overdue tile at all — real, and still true. It went back
+out because day-zero inclusion means a no-ceiling band always equals the sum
+of every owed balance, which is Total receivable, one tile to its left. A
+tile that cannot read differently from its neighbour is not carrying
+information, so the gap it leaves — a balance over a month old shows in Total
+receivable and nowhere in this row — is an accepted, knowing cost, not an
+oversight.
 """
 from datetime import timedelta
 from decimal import Decimal
@@ -77,36 +90,33 @@ class ReceivableWindowTests(TestCase):
         self.assertEqual(self.money("Overdue 0-1 month"), "₹7,000")
         self.assertEqual(self.money("Total receivable"), "₹15,000")
 
-    def test_the_oldest_debt_is_held_by_the_band_with_no_ceiling(self):
-        """A balance older than the widest dated band must still appear in an
-        overdue figure. It was argued once that Total receivable covers it —
-        it does not: that figure is everything owed, late or not, and this one
-        is only what is late. They coincide only when every customer happens to
-        be overdue, which is precisely when nobody notices the difference."""
+    def test_a_debt_older_than_every_band_is_invisible_to_all_of_them(self):
+        """The accepted cost of having no no-ceiling band: a balance past the
+        widest dated band's own limit shows in Total receivable and nowhere
+        in this row. Real, and known — see the module docstring."""
         self.customer("Half a year", 8000, days_standing=180)
-        self.assertEqual(self.money("Total overdue"), "₹8,000")
+        self.assertEqual(self.money("Total receivable"), "₹8,000")
         for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
             self.assertEqual(self.money(label), "₹0", label)
 
-    def test_total_receivable_and_total_overdue_are_different_figures(self):
-        """One customer billed today, not yet late by even a day; one a day
-        late. Everything owed is both of them; what is overdue is only the
-        second."""
-        self.customer("Not yet late", 24159, days_standing=0)
-        self.customer("A day late", 2386, days_standing=1)
-        self.assertEqual(self.money("Total receivable"), "₹26,545")
-        self.assertEqual(self.money("Total overdue"), "₹2,386")
+    def test_there_is_no_total_overdue_tile(self):
+        """Dropped a second time, this time for good — see the module
+        docstring for why a no-ceiling band cannot coexist with day-zero
+        balances counting as overdue."""
+        self.customer("Anything", 1000, days_standing=1)
+        self.assertNotIn("Total overdue", self.stats())
 
-    def test_a_balance_one_day_late_is_not_lost_off_the_near_end(self):
-        """The second failure these bands were rewritten for. A narrowest band
-        of "two days or more" moved the hole rather than closing it: the live
-        data held a customer exactly one day late, and every tile read nought
-        while the money was plainly overdue."""
-        self.customer("Not yet late", 24159, days_standing=0)
+    def test_a_balance_raised_today_counts_from_day_zero(self):
+        """Money billed today is still money owed — it belongs in the
+        narrowest band immediately rather than waiting a day to appear
+        anywhere. The second failure these bands were rewritten for was a
+        customer exactly one day late reading nought everywhere; the same
+        principle now reaches back to day zero itself."""
+        self.customer("Billed today", 24159, days_standing=0)
         self.customer("One day late", 2386, days_standing=1)
         for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
-            self.assertEqual(self.money(label), "₹2,386", label)
-        self.assertEqual(self.stats()["Overdue 0-2 days"]["sub"], "1 customer")
+            self.assertEqual(self.money(label), "₹26,545", label)
+        self.assertEqual(self.stats()["Overdue 0-2 days"]["sub"], "2 customers")
         self.assertEqual(self.money("Total receivable"), "₹26,545")
 
     def test_the_bands_nest_rather_than_partition(self):
@@ -124,7 +134,6 @@ class ReceivableWindowTests(TestCase):
         with no credit period at fifteen days standing would."""
         self.customer("Generous terms", 9000, days_standing=15, credit_period=30)
         self.assertEqual(self.money("Total receivable"), "₹9,000")
-        self.assertEqual(self.money("Total overdue"), "₹9,000")
         self.assertEqual(self.money("Overdue 0-1 month"), "₹9,000")
         self.assertEqual(self.money("Overdue 0-7 days"), "₹0")
         self.assertEqual(self.money("Overdue 0-2 days"), "₹0")
