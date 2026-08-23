@@ -317,13 +317,16 @@ def _ageing(parties, amount_key, credit_days):
 #: as well. Each band runs from the day the money went late up to its own
 #: limit, so 0-2 days is a subset of 0-7, which is a subset of 0-1 month.
 #:
-#: Deliberately has no "everything overdue, no ceiling" band any more — that
-#: band existed for exactly one reason (a customer overdue more than a month
-#: fell outside every other tile), and dropping it brings that gap back on
-#: purpose: a balance overdue more than a month now shows in none of these
-#: three. Accepted tradeoff, not an oversight — see
-#: test_the_oldest_debt_is_no_longer_caught_by_any_band.
+#: The first band has no ceiling: it is every overdue rupee there is, and it is
+#: what stops a debt older than a month falling outside every tile. It was
+#: dropped once as an accepted tradeoff, on the grounds that such a balance
+#: still shows in Total receivable — but those two figures are not the same
+#: thing and cannot stand in for one another. Total receivable is everything
+#: owed, late or not; Total overdue is only the part that is late. On a card
+#: where every customer happens to be overdue they read alike, which is exactly
+#: when the difference is invisible and exactly when it is about to matter.
 OVERDUE_WINDOWS = (
+    (None, "Total overdue"),
     (30, "Overdue 0-1 month"),
     (7, "Overdue 0-7 days"),
     (2, "Overdue 0-2 days"),

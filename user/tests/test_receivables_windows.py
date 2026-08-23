@@ -68,17 +68,24 @@ class ReceivableWindowTests(TestCase):
         self.assertEqual(self.money("Overdue 0-1 month"), "₹7,000")
         self.assertEqual(self.money("Total receivable"), "₹15,000")
 
-    def test_the_oldest_debt_is_no_longer_caught_by_any_band(self):
-        """Accepted, on-purpose regression: the card used to carry a fourth,
-        no-ceiling "Total overdue" tile precisely so a balance older than the
-        widest band still showed somewhere. That tile was dropped so the row
-        reads Total receivable / 0-1 Month / 0-7 Day / 0-2 Day, descending —
-        which means a debt over a month old is, once again, outside every
-        overdue tile. Total receivable still counts it; no overdue band does."""
+    def test_the_oldest_debt_is_held_by_the_band_with_no_ceiling(self):
+        """A balance older than the widest dated band must still appear in an
+        overdue figure. It was argued once that Total receivable covers it —
+        it does not: that figure is everything owed, late or not, and this one
+        is only what is late. They coincide only when every customer happens to
+        be overdue, which is precisely when nobody notices the difference."""
         self.customer("Half a year", 8000, days_standing=180)
-        self.assertEqual(self.money("Total receivable"), "₹8,000")
+        self.assertEqual(self.money("Total overdue"), "₹8,000")
         for label in ("Overdue 0-2 days", "Overdue 0-7 days", "Overdue 0-1 month"):
             self.assertEqual(self.money(label), "₹0", label)
+
+    def test_total_receivable_and_total_overdue_are_different_figures(self):
+        """One customer inside their terms, one a day late. Everything owed is
+        both of them; what is overdue is only the second."""
+        self.customer("Within terms", 24159, days_standing=10, credit_period=30)
+        self.customer("A day late", 2386, days_standing=1)
+        self.assertEqual(self.money("Total receivable"), "₹26,545")
+        self.assertEqual(self.money("Total overdue"), "₹2,386")
 
     def test_a_balance_one_day_late_is_not_lost_off_the_near_end(self):
         """The second failure these bands were rewritten for. A narrowest band
