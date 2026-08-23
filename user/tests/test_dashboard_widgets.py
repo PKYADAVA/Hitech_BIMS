@@ -228,11 +228,14 @@ class DashboardWidgetTests(TestCase):
         # and none at all when nothing is filtered
         self.assertIsNone(self.widget(self.admin, "receivables")["ignored"])
 
-    def test_stock_alerts_takes_the_farm_but_not_the_supervisor(self):
+    def test_stock_alerts_takes_the_farm_and_the_supervisor(self):
+        """A Farm location carries a Branch, Line and Supervisor of its own —
+        unlike a Warehouse, which has none of the three — so all four filters
+        narrow it, and none is admitted as ignored."""
         w = self.widget(self.admin, "stock_alerts",
-                        {"farm": self.farm.id, "supervisor": self.supervisor.id})
-        self.assertIn("Supervisor", w["ignored"])
-        self.assertNotIn("Farm", w["ignored"])
+                        {"farm": self.farm.id, "supervisor": self.supervisor.id,
+                         "branch": self.farm.branch_id})
+        self.assertIsNone(w["ignored"])
 
     def test_a_filtered_dashboard_is_not_served_from_cache(self):
         """The unfiltered payload must never be handed back for a filter."""

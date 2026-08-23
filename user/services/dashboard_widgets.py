@@ -895,9 +895,13 @@ def _stock_alerts(viewable, filters, user=None):
 
     These are always data errors, and they silently corrupt valuation until
     someone notices, which is exactly what a dashboard is for. Stock sits at a
-    location, so Farm narrows it; Branch, Line and Supervisor have no meaning
-    for a stock balance.
+    location: a Warehouse (an "Office"), which carries no Branch, Line or
+    Supervisor of its own, or a Farm, which carries all three — so those three
+    filters narrow the farm-located rows exactly as _scope_farms does
+    elsewhere, and drop warehouse-located rows entirely once any of them is
+    set, the same way choosing a Farm already excludes every warehouse.
     """
+    from broiler.models import BroilerFarm
     from inventory.services.item_summary import negative_stock
 
     from user.services.scoping import allowed_ids
@@ -907,6 +911,17 @@ def _stock_alerts(viewable, filters, user=None):
                           location_type="farm" if farm_id else None,
                           location_id=farm_id)
     used = ["date", "farm"]
+
+    farm_filters = {k: filters[k] for k in ("branch", "line", "supervisor") if filters.get(k)}
+    if farm_filters:
+        used += list(farm_filters.keys())
+        qs = BroilerFarm.objects.all()
+        for key, field in (("branch", "branch_id"), ("line", "line"), ("supervisor", "supervisor_id")):
+            if key in farm_filters:
+                qs = qs.filter(**{field: farm_filters[key]})
+        allowed_farm_ids = set(qs.values_list("id", flat=True))
+        rows = [r for r in rows
+                if r["location_type"] == "farm" and r["location_id"] in allowed_farm_ids]
 
     # Stock sits at a location, so the warehouse and farm scopes apply. Done
     # here rather than in negative_stock because that engine is shared with the
