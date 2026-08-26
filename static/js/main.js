@@ -459,7 +459,12 @@ window.loadOptions = function (select, url, data, options) {
       opt.textContent = row[labelKey];
       $select.append(opt);
     });
-    if (options.selected) $select.val(options.selected);
+    // Some endpoints pick for you - the scheme matching a batch, say - and name
+    // the choice in the reply rather than the caller knowing it beforehand.
+    // `selectedFrom` reads it from the response; `selected` still takes a value
+    // the caller already holds.
+    const chosen = options.selectedFrom ? response[options.selectedFrom] : options.selected;
+    if (chosen) $select.val(chosen);
     if ($select.hasClass('select2-hidden-accessible')) $select.trigger('change.select2');
   });
 };

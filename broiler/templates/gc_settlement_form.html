@@ -337,30 +337,32 @@ async function loadAutofill() {
 // native addEventListener('change') would NOT hear, so these MUST be bound with
 // jQuery .on('change'). After repopulating a select's <option>s we notify
 // Select2 with .trigger('change.select2') so its rendered list/value refreshes.
-$('#f-farm').on('change', async function () {
-  const farm = this.value;
-  const batchSel = document.getElementById('f-batch');
+// Both of these ran twice for one pick and listed every batch twice: choosing
+// a farm in the Select2 box raises a jQuery change, and the bridge in main.js
+// re-dispatches a native one, so a jQuery-bound handler hears both. The old
+// shape emptied the select straight away but appended in the reply, so the
+// clearing had already happened twice by the time either reply arrived and
+// both appended to the same empty list.
+//
+// loadOptions is built for exactly this: it rebuilds the list inside the reply
+// rather than appending to it, and takes a token so only the newest reply is
+// allowed to render. The endpoints answer an empty farm or batch with an empty
+// list, so these run on the clearing path too and the token guard stays in
+// charge of the select rather than a bare innerHTML reset racing it.
+$('#f-farm').on('change', function () {
   const schemeSel = document.getElementById('f-scheme');
-  batchSel.innerHTML = '<option value="">select</option>';
   schemeSel.innerHTML = '<option value="">select</option>';
-  $(batchSel).trigger('change.select2'); $(schemeSel).trigger('change.select2');
-  if (!farm) return;
-  const res = await fetch(`/gc_settlement_batches/?farm=${farm}`);
-  (await res.json()).forEach(b => batchSel.add(new Option(b.batch_name, b.id)));
-  $(batchSel).trigger('change.select2');
+  $(schemeSel).trigger('change.select2');
+  loadOptions('#f-batch', '/gc_settlement_batches/', { farm: this.value },
+              { label: 'batch_name', placeholderDisabled: false });
 });
 
-$('#f-batch').on('change', async function () {
-  const batch = this.value;
-  const schemeSel = document.getElementById('f-scheme');
-  schemeSel.innerHTML = '<option value="">select</option>';
-  if (!batch) { $(schemeSel).trigger('change.select2'); return; }
-  const res = await fetch(`/gc_settlement_schemes/?batch=${batch}`);
-  const d = await res.json();
-  d.schemes.forEach(s => schemeSel.add(new Option(s.name, s.id)));
-  if (d.selected) schemeSel.value = d.selected;
-  $(schemeSel).trigger('change.select2');  // refresh Select2 UI without firing our handler
-  loadAutofill();
+$('#f-batch').on('change', function () {
+  // The scheme is chosen for us by the endpoint, so it comes out of the reply.
+  loadOptions('#f-scheme', '/gc_settlement_schemes/', { batch: this.value },
+              { list: 'schemes', label: 'name', selectedFrom: 'selected',
+                placeholderDisabled: false })
+    .then(loadAutofill);
 });
 
 $('#f-scheme').on('change', loadAutofill);

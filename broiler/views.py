@@ -4444,8 +4444,12 @@ def _match_growing_charge_scheme(batch, on_date):
         region_id=branch.region_id, is_active=True,
         from_date__lte=on_date, to_date__gte=on_date,
     )
-    return (qs.filter(branch=branch).order_by("-from_date").first()
-            or qs.filter(branch__isnull=True).order_by("-from_date").first())
+    # -id breaks a tie on from_date. Two schemes starting the same day left the
+    # order to the database, so the same batch could match one scheme on one
+    # request and the other on the next, and settle at different rates for no
+    # reason anybody could see. Newest wins, consistently.
+    return (qs.filter(branch=branch).order_by("-from_date", "-id").first()
+            or qs.filter(branch__isnull=True).order_by("-from_date", "-id").first())
 
 
 def _price_rows_for_management(rows, items_by_id, transfer_key="transfer_id", med_key=None):
@@ -8663,8 +8667,15 @@ def gc_settlement_batches(request):
 
 @login_required
 def gc_settlement_schemes(request):
-    """Schemes whose date range covers the batch's placement date (region
-    matched), plus the auto-matched one — for the Scheme Name dropdown."""
+    """Schemes open to this batch — for the Scheme Name dropdown.
+
+    Narrowed to the branch the farm sits in, plus any scheme left open to every
+    branch, which is the same rule ``_match_growing_charge_scheme`` applies when
+    it picks one. Region alone was too wide: two branches in one region each had
+    a scheme called "Summer GC 2026", so a Bahraich farm was offered Akbarpur's
+    as well and the list read as the same scheme twice. They are only told apart
+    by their codes, which is not something anyone should have to do to avoid
+    settling a batch against another branch's rates."""
     # An empty "batch=" is what an unchosen dropdown sends, and it reached the
     # integer lookup as "" and raised before the not-found branch below could
     # answer — a 500 where the view already knew what to say.
@@ -8674,8 +8685,10 @@ def gc_settlement_schemes(request):
     if not batch:
         return JsonResponse({"schemes": [], "selected": None}, safe=False)
     placement = _placement_date(batch)
-    region_id = batch.broiler_farm.branch.region_id
-    qs = GrowingChargeScheme.objects.filter(region_id=region_id, is_active=True)
+    branch = batch.broiler_farm.branch
+    qs = GrowingChargeScheme.objects.filter(
+        region_id=branch.region_id, is_active=True,
+    ).filter(Q(branch=branch) | Q(branch__isnull=True))
     if placement:
         qs = qs.filter(from_date__lte=placement, to_date__gte=placement)
     matched = _match_growing_charge_scheme(batch, placement)
