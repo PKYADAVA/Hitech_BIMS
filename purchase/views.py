@@ -710,6 +710,64 @@ def delete_general_purchase(request, id):
 
 
 @login_required
+def general_purchase_item_rates(request):
+    """What this item last cost, split by who sold it.
+
+    Someone entering a purchase has to judge whether the rate on the invoice in
+    front of them is reasonable, and the only way to check was to abandon the
+    half-typed form and open the register. This puts the recent history beside
+    the row instead.
+
+    Two lists, because the two answer different questions. What this supplier
+    charged last time is the one that settles an argument with them; what other
+    suppliers charged is the one that says whether to be having the argument at
+    all. Merging them into a single "last three" would usually bury whichever
+    matters: buy mostly from one supplier and the other prices never surface,
+    buy around and the supplier's own last rate falls off the end.
+
+    Scoped the way the register is, through the line's own destination, so a
+    user restricted to their own warehouses sees the rates they are allowed to
+    see rather than every branch's buying price. Lines with no destination stay
+    visible, as they do in the register.
+
+    Free quantity is not netted off the rate. It is a discount in kind and
+    belongs to the deal rather than to the price on the line, and quietly
+    reporting a different number from the one recorded would be worse than
+    showing nothing at all.
+    """
+    item_id = (request.GET.get("item") or "").strip()
+    supplier_id = (request.GET.get("supplier") or "").strip()
+    if not item_id.isdigit():
+        return JsonResponse({"same": [], "others": [], "supplier": ""})
+
+    lines = scope_any(
+        request.user,
+        GeneralPurchaseItem.objects.filter(item_id=item_id),
+        sectors="farm_warehouse_id",
+    ).select_related("purchase__supplier").order_by("-purchase__date", "-purchase_id")
+
+    def rows(qs):
+        return [{
+            "date": r.purchase.date.strftime("%d-%m-%Y"),
+            "rate": f"{r.rate:.2f}",
+            "qty": f"{(r.rcv_qty or 0):.2f}".rstrip("0").rstrip("."),
+            "unit": r.unit or "",
+            "supplier": r.purchase.supplier.name if r.purchase.supplier_id else "",
+            "purchase_no": r.purchase.purchase_no or "",
+        } for r in qs[:3]]
+
+    if supplier_id.isdigit():
+        same = rows(lines.filter(purchase__supplier_id=supplier_id))
+        others = rows(lines.exclude(purchase__supplier_id=supplier_id))
+        chosen = Supplier.objects.filter(id=supplier_id).values_list("name", flat=True).first() or ""
+    else:
+        # No supplier chosen yet: there is no "them" to compare against, so the
+        # whole history is simply the other list.
+        same, others, chosen = [], rows(lines), ""
+    return JsonResponse({"same": same, "others": others, "supplier": chosen})
+
+
+@login_required
 def general_purchase_api_list(request):
     """JSON rows for the General Purchase register's DataTable + filter bar."""
     from_date = (request.GET.get("from_date") or "").strip()

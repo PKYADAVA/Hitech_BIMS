@@ -9,6 +9,8 @@ urlpatterns = [
          {"request_mode": True}, name="general_purchase_request_change"),
     path("general-purchase/<int:id>/delete/", views.delete_general_purchase, name="general_purchase_delete"),
     path("general_purchase_api/", views.general_purchase_api_list, name="general_purchase_api_list"),
+    path("general-purchase/item-rates/", views.general_purchase_item_rates,
+         name="general_purchase_item_rates"),
     path("chicks-purchase/", views.chicks_purchase_list, name="chicks_purchase_list"),
     path("chicks-purchase/add/", views.create_chicks_purchase, name="chicks_purchase_add"),
     path("chicks-purchase/<int:id>/edit/", views.edit_chicks_purchase, name="chicks_purchase_edit"),
