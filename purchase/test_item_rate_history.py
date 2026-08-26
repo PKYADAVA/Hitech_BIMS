@@ -14,7 +14,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from inventory.models import Item, ItemCategory, Warehouse
-from purchase.models import GeneralPurchase, GeneralPurchaseItem, Supplier
+from purchase.models import (ChicksPurchase, ChicksPurchaseItem, GeneralPurchase,
+                             GeneralPurchaseItem, Supplier)
 
 
 class ItemRateHistoryTests(TestCase):
@@ -39,6 +40,15 @@ class ItemRateHistoryTests(TestCase):
             purchase=p, item=item or self.item, farm_warehouse=self.warehouse,
             unit="Bag", sent_qty=Decimal("10"), rcv_qty=Decimal("10"),
             rate=Decimal(rate))
+        return p
+
+    def bought_as_chicks(self, supplier, on, rate, item=None):
+        """The chicks register keeps the item on the header and the rate on the
+        line beneath it."""
+        p = ChicksPurchase.objects.create(supplier=supplier, date=on, item=item or self.item)
+        ChicksPurchaseItem.objects.create(
+            purchase=p, farm_warehouse=self.warehouse,
+            sent_qty=Decimal("5000"), rate=Decimal(rate))
         return p
 
     def ask(self, supplier=None):
@@ -101,3 +111,27 @@ class ItemRateHistoryTests(TestCase):
         for bad in ("", "abc", "0x1"):
             d = self.client.get(self.url, {"item": bad}).json()
             self.assertEqual((d["same"], d["others"]), ([], []), bad)
+
+    def test_chicks_bought_on_their_own_form_are_part_of_the_history(self):
+        """Day-old chicks are bought on the Chicks Purchase page, where the item
+        sits on the header. Reading only the general register left a chick row
+        on this page showing nothing while its whole buying history sat in the
+        other table."""
+        self.bought_as_chicks(self.usual, date(2026, 7, 18), "42")
+        self.assertEqual([r["rate"] for r in self.ask()["others"]], ["42.00"])
+
+    def test_the_two_registers_are_one_history_in_date_order(self):
+        """What an item cost is a question about the item, not about which
+        screen recorded it."""
+        self.bought(self.usual, date(2026, 5, 1), "40")
+        self.bought_as_chicks(self.usual, date(2026, 7, 18), "42")
+        self.bought(self.usual, date(2026, 6, 1), "41")
+        self.assertEqual([r["rate"] for r in self.ask()["others"]],
+                         ["42.00", "41.00", "40.00"])
+
+    def test_a_chicks_purchase_splits_by_supplier_like_any_other(self):
+        self.bought_as_chicks(self.usual, date(2026, 7, 18), "42")
+        self.bought_as_chicks(self.rival, date(2026, 7, 19), "39")
+        d = self.ask(self.usual)
+        self.assertEqual([r["rate"] for r in d["same"]], ["42.00"])
+        self.assertEqual([r["rate"] for r in d["others"]], ["39.00"])

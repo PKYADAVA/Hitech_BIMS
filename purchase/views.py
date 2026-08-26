@@ -725,10 +725,16 @@ def general_purchase_item_rates(request):
     matters: buy mostly from one supplier and the other prices never surface,
     buy around and the supplier's own last rate falls off the end.
 
-    Scoped the way the register is, through the line's own destination, so a
+    Both registers are read. Chicks are bought on their own form, where the
+    item sits on the header and the rate on the lines beneath it, so a day-old
+    chick row on this page found nothing at all while its whole buying history
+    sat in the other table. What an item cost is a question about the item, not
+    about which screen recorded it.
+
+    Scoped the way the registers are, through each line's own destination, so a
     user restricted to their own warehouses sees the rates they are allowed to
-    see rather than every branch's buying price. Lines with no destination stay
-    visible, as they do in the register.
+    see rather than every branch's buying price. General lines with no
+    destination stay visible, as they do in that register.
 
     Free quantity is not netted off the rate. It is a discount in kind and
     belongs to the deal rather than to the price on the line, and quietly
@@ -740,30 +746,48 @@ def general_purchase_item_rates(request):
     if not item_id.isdigit():
         return JsonResponse({"same": [], "others": [], "supplier": ""})
 
-    lines = scope_any(
+    def entry(purchase, rate, qty, unit):
+        return {
+            "sort": (purchase.date, purchase.id),
+            "supplier_id": purchase.supplier_id,
+            "date": purchase.date.strftime("%d-%m-%Y"),
+            "rate": f"{rate:.2f}",
+            "qty": f"{(qty or 0):.2f}".rstrip("0").rstrip("."),
+            "unit": unit or "",
+            "supplier": purchase.supplier.name if purchase.supplier_id else "",
+            "purchase_no": purchase.purchase_no or "",
+        }
+
+    history = [entry(r.purchase, r.rate, r.rcv_qty, r.unit) for r in scope_any(
         request.user,
         GeneralPurchaseItem.objects.filter(item_id=item_id),
         sectors="farm_warehouse_id",
-    ).select_related("purchase__supplier").order_by("-purchase__date", "-purchase_id")
+    ).select_related("purchase__supplier")]
 
-    def rows(qs):
-        return [{
-            "date": r.purchase.date.strftime("%d-%m-%Y"),
-            "rate": f"{r.rate:.2f}",
-            "qty": f"{(r.rcv_qty or 0):.2f}".rstrip("0").rstrip("."),
-            "unit": r.unit or "",
-            "supplier": r.purchase.supplier.name if r.purchase.supplier_id else "",
-            "purchase_no": r.purchase.purchase_no or "",
-        } for r in qs[:3]]
+    # The chicks register keeps the item on the header, so the filter reaches
+    # up through the line rather than across it.
+    history += [entry(r.purchase, r.rate, r.received_qty, "") for r in scope_any(
+        request.user,
+        ChicksPurchaseItem.objects.filter(purchase__item_id=item_id),
+        sectors="farm_warehouse_id",
+    ).select_related("purchase__supplier")]
+
+    history.sort(key=lambda e: e["sort"], reverse=True)
+    for e in history:
+        del e["sort"]
+
+    def take(rows):
+        return [{k: v for k, v in r.items() if k != "supplier_id"} for r in rows[:3]]
 
     if supplier_id.isdigit():
-        same = rows(lines.filter(purchase__supplier_id=supplier_id))
-        others = rows(lines.exclude(purchase__supplier_id=supplier_id))
-        chosen = Supplier.objects.filter(id=supplier_id).values_list("name", flat=True).first() or ""
+        sid = int(supplier_id)
+        same = take([r for r in history if r["supplier_id"] == sid])
+        others = take([r for r in history if r["supplier_id"] != sid])
+        chosen = Supplier.objects.filter(id=sid).values_list("name", flat=True).first() or ""
     else:
         # No supplier chosen yet: there is no "them" to compare against, so the
         # whole history is simply the other list.
-        same, others, chosen = [], rows(lines), ""
+        same, others, chosen = [], take(history), ""
     return JsonResponse({"same": same, "others": others, "supplier": chosen})
 
 
