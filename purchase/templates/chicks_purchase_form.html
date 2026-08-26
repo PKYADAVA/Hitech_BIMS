@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}{% if chicks_purchase %}Edit{% else %}Add{% endif %} Chicks Purchase — BIMS{% endblock %}
 
@@ -68,8 +69,13 @@
   </div>
 
   <div class="card mb-3">
-    <div class="card-header">
-      <i class="fa-solid fa-kiwi-bird me-1"></i><strong>Batches</strong>
+    <div class="card-header d-flex align-items-center flex-wrap gap-2">
+      <span><i class="fa-solid fa-kiwi-bird me-1"></i><strong>Batches</strong></span>
+      {% comment %}
+      What this item last cost. The item is a header field here rather than a
+      per-row one, so the strip follows that select and the supplier beside it.
+      {% endcomment %}
+      <div id="rate-history" class="rate-history ms-3 flex-grow-1"></div>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
@@ -312,6 +318,7 @@
 {% endblock %}
 
 {% block js %}
+<script src="{% static 'js/purchase/rate_history.js' %}?v=20260823a"></script>
 <script>
 const existingItems = {{ existing_items_json|safe }};
 const warehouseOptions = `<option value="">select</option>{% for w in warehouses %}<option value="{{ w.id }}">{{ w.name|escapejs }}</option>{% endfor %}`;
@@ -505,6 +512,22 @@ get('chicks-purchase-form').addEventListener('submit', function (e) {
 });
 
 (existingItems.length ? existingItems : [{}]).forEach(itemRow);
+
+// The item is chosen once for the whole bill here, so the rate strip hangs off
+// that select rather than off a row. Both lists depend on the supplier too, so
+// a change of either re-asks. On an existing purchase both are already filled,
+// and the history is worth having on screen before anything is touched.
+$('[name=item]').on('change', function () {
+  const opt = this.selectedOptions[0];
+  RateHistory.show(this.value, opt ? opt.textContent.trim() : '');
+});
+$('[name=supplier]').on('change', () => RateHistory.refresh());
+(function () {
+  const item = document.querySelector('[name=item]');
+  if (item && item.value) {
+    RateHistory.show(item.value, item.selectedOptions[0].textContent.trim());
+  }
+})();
 totals();
 </script>
 {% endblock %}

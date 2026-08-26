@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load picklist_tags %}
 
 {% block title %}{% if general_purchase %}Edit{% else %}Add{% endif %} General Purchase — BIMS{% endblock %}
@@ -91,7 +92,7 @@
       What the item in the row being edited last cost. Filled by the row's own
       item select, so it follows whichever row is being worked on.
       {% endcomment %}
-      <div id="rate-history" class="gp-rates ms-3 flex-grow-1"></div>
+      <div id="rate-history" class="rate-history ms-3 flex-grow-1"></div>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
@@ -136,19 +137,6 @@
     .freight-row > .freight-field { flex: 1 1 180px; }
   }
 
-  /* What the selected item last cost, along the Items header. Scrolls inside
-     itself rather than pushing the card wider or wrapping the heading. */
-  .gp-rates { display: flex; align-items: center; gap: .4rem; min-width: 0;
-              overflow-x: auto; font-size: .78rem; color: var(--text-secondary); }
-  .gp-rates .gp-rates-item { white-space: nowrap; font-weight: 600; color: var(--text); }
-  .gp-rates .gp-rates-label { white-space: nowrap; text-transform: uppercase;
-                              letter-spacing: .03em; font-size: .72rem; opacity: .8; }
-  .gp-rates .gp-rates-label::before { content: ''; }
-  .gp-rate { white-space: nowrap; border: 1px solid #e3e9f2; border-radius: 6px;
-             background: #f8fafc; padding: .1rem .45rem; }
-  .gp-rate b { color: var(--text); font-weight: 600; }
-  .gp-rate .gp-rate-when { opacity: .75; }
-  .gp-rates-none { white-space: nowrap; font-style: italic; opacity: .8; }
 </style>
     <div class="card-header">Freight &amp; Payment</div>
     <div class="card-body">
@@ -347,6 +335,7 @@
 {% endblock %}
 
 {% block js %}
+<script src="{% static 'js/purchase/rate_history.js' %}?v=20260823a"></script>
 <script>
 const existingItems = {{ existing_items_json|safe }};
 const taxOptions = `<option value="0">select</option>{% for t in tax_masters %}<option value="{{ t.tax_percentage }}">{{ t.tax_code }} ({{ t.tax_percentage }}%)</option>{% endfor %}`;
@@ -433,107 +422,11 @@ function itemRow(row = {}) {
   tr.querySelector('.item').addEventListener('change', e => {
     const opt = e.target.selectedOptions[0];
     tr.querySelector('.uom').value = opt ? (opt.dataset.uom || '') : '';
-    showRateHistory(e.target.value, opt ? opt.textContent.trim() : '');
+    RateHistory.show(e.target.value, opt ? opt.textContent.trim() : '');
   });
   calcRow(tr);
   renumberRows();
   refreshRowAddButtons();
-}
-
-// What the item in the row being edited last cost, in the Items header.
-//
-// Two groups: what the supplier chosen on this bill charged for it, and what
-// anyone else charged. The first settles an argument with them, the second says
-// whether to be having it.
-//
-// The panel follows whichever row was last touched rather than showing every
-// row at once - eight rows on an invoice leaves no room for eight histories,
-// and the row being typed is the one whose price is in question. It also
-// reloads when the supplier changes, since both lists depend on who that is.
-//
-// Each call takes a token and only the newest reply renders: picking two items
-// quickly otherwise leaves whichever reply lands last on screen, which need not
-// be the one for the item now selected.
-let rateHistoryToken = 0;
-let rateHistoryItem = { id: '', name: '' };
-
-function chip(r) {
-  const el = document.createElement('span');
-  el.className = 'gp-rate';
-  const rate = document.createElement('b');
-  rate.textContent = `₹${r.rate}`;
-  const when = document.createElement('span');
-  when.className = 'gp-rate-when';
-  // textContent throughout: a supplier name with < or & cannot inject markup.
-  when.textContent = ` · ${r.date}`;
-  el.append(rate, when);
-  el.title = [r.supplier, r.purchase_no, r.qty ? `${r.qty} ${r.unit}`.trim() : '']
-             .filter(Boolean).join('  ·  ');
-  return el;
-}
-
-function rateGroup(box, label, rows, opts) {
-  opts = opts || {};
-  const head = document.createElement('span');
-  head.className = 'gp-rates-label';
-  head.textContent = label;
-  box.append(head);
-  if (!rows.length) {
-    const none = document.createElement('span');
-    none.className = 'gp-rates-none';
-    none.textContent = opts.empty || 'none';
-    box.append(none);
-    return;
-  }
-  // Only the other-suppliers chips name who sold it; against the chosen
-  // supplier the name is the heading and repeating it on every chip is noise.
-  rows.forEach(r => {
-    const c = chip(r);
-    if (opts.withName && r.supplier) {
-      const who = document.createElement('span');
-      who.className = 'gp-rate-when';
-      who.textContent = ` · ${r.supplier}`;
-      c.append(who);
-    }
-    box.append(c);
-  });
-}
-
-async function showRateHistory(itemId, itemName) {
-  const box = get('rate-history');
-  if (!box) return;
-  rateHistoryItem = { id: itemId || '', name: itemName || rateHistoryItem.name };
-  const token = ++rateHistoryToken;
-  if (!itemId) { box.innerHTML = ''; return; }
-
-  const supplier = (get('supplier') || {}).value || '';
-  box.innerHTML = '<span class="gp-rates-none">loading…</span>';
-  let data;
-  try {
-    const res = await fetch('/general-purchase/item-rates/?item=' +
-                            encodeURIComponent(itemId) + '&supplier=' + encodeURIComponent(supplier));
-    if (!res.ok) throw new Error(res.status);
-    data = await res.json();
-  } catch (err) {
-    if (token !== rateHistoryToken) return;
-    box.innerHTML = '<span class="gp-rates-none">Could not load earlier rates.</span>';
-    return;
-  }
-  if (token !== rateHistoryToken) return;   // a newer pick won
-
-  box.innerHTML = '';
-  const name = document.createElement('span');
-  name.className = 'gp-rates-item';
-  name.textContent = rateHistoryItem.name || '';
-  if (name.textContent) box.append(name);
-
-  if (data.supplier) {
-    rateGroup(box, data.supplier, data.same, { empty: 'not bought from them before' });
-    rateGroup(box, 'Others', data.others, { withName: true, empty: 'none' });
-  } else {
-    rateGroup(box, 'Last purchases', data.others,
-              { withName: true, empty: 'none recorded yet' });
-  }
 }
 
 function calcRow(tr) {
@@ -690,12 +583,7 @@ get('general-purchase-form').addEventListener('submit', function (e) {
 });
 
 (existingItems.length ? existingItems : [{}]).forEach(itemRow);
-// Both lists are relative to the supplier on the bill, so a change of supplier
-// re-asks for the row already on screen rather than leaving last supplier's
-// comparison sitting under the new one's name.
-$('#supplier').on('change', () => {
-  if (rateHistoryItem.id) showRateHistory(rateHistoryItem.id, rateHistoryItem.name);
-});
+$('#supplier').on('change', () => RateHistory.refresh());
 totals();
 </script>
 {% endblock %}

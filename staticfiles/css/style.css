@@ -538,6 +538,21 @@ footer { margin-top: auto; }
 
 .form-text { font-size: 0.78rem; color: var(--text-muted); }
 
+/* What an item last cost, along a purchase form's item-table header. Shared by
+   the General Purchase and Chicks Purchase forms — see js/purchase/rate_history.js.
+   Scrolls inside itself rather than pushing the card wider or wrapping the
+   heading it sits beside. */
+.rate-history { display: flex; align-items: center; gap: .4rem; min-width: 0;
+                overflow-x: auto; font-size: .78rem; color: var(--text-secondary); }
+.rate-history-item { white-space: nowrap; font-weight: 600; color: var(--text); }
+.rate-history-label { white-space: nowrap; text-transform: uppercase;
+                      letter-spacing: .03em; font-size: .72rem; opacity: .8; }
+.rate-history-none { white-space: nowrap; font-style: italic; opacity: .8; }
+.rate-chip { white-space: nowrap; border: 1px solid #e3e9f2; border-radius: 6px;
+             background: #f8fafc; padding: .1rem .45rem; }
+.rate-chip b { color: var(--text); font-weight: 600; }
+.rate-chip-when { opacity: .75; }
+
 /* ---------- Form Sections ---------- */
 .form-section {
   background: var(--bg-subtle);
