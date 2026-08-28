@@ -25,6 +25,14 @@ def bank_cash_ledger(sender, instance, **kwargs):
     sync_ledger(instance, instance.name, [anchor_role])
 
 
+@receiver(post_save, sender='broiler.Farmer', dispatch_uid='coa_ledger_farmer')
+def farmer_ledger(sender, instance, **kwargs):
+    # A farmer is a party we owe growing charges to, so they get a ledger under
+    # their own control group exactly as a supplier gets one under Accounts
+    # Payable. Their name field is farmer_name, not name.
+    sync_ledger(instance, instance.farmer_name, ['FARMER_PAYABLE'])
+
+
 @receiver(post_save, sender='hr.Employee', dispatch_uid='coa_ledger_employee')
 def employee_ledger(sender, instance, **kwargs):
     sync_ledger(instance, instance.full_name, ['SALARY_PAYABLE', 'EMPLOYEE_ADVANCE'])

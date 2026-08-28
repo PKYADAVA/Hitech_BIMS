@@ -49,6 +49,7 @@ CONTAINER_ROLES = {
     "CASH", "BANK_ACCOUNTS", "ACCOUNTS_RECEIVABLE", "INVENTORY", "TAX_INPUT_GROUP",
     "LIABILITIES_ROOT", "CURRENT_LIABILITIES", "LONG_TERM_LIABILITIES",
     "ACCOUNTS_PAYABLE", "TAX_OUTPUT_GROUP", "SALARY_PAYABLE", "EMPLOYEE_ADVANCE",
+    "FARMER_PAYABLE",
     "EQUITY_ROOT", "INCOME_ROOT", "SALES", "OTHER_INCOME",
     "COGS_ROOT", "COGS_GROUP", "EXPENSES_ROOT", "ADMIN_EXPENSES",
     "SELLING_EXPENSES", "FINANCIAL_EXPENSES", "DEPRECIATION_EXPENSE",
@@ -84,6 +85,11 @@ BASE_TREE = [
             ("211000", "Accounts Payable", "LIABILITY", "Current Liability", "ACCOUNTS_PAYABLE", []),
             ("212000", "Duties & Taxes", "LIABILITY", "Tax", "TAX_OUTPUT_GROUP", []),
             ("213000", "Salary Payable", "LIABILITY", "Current Liability", "SALARY_PAYABLE", []),
+            # Growing charges owed to contract farmers. Its own control group
+            # rather than a corner of Accounts Payable: a farmer is not a
+            # supplier, the two are reported separately, and each farmer gets a
+            # ledger under here the way each supplier gets one under AP.
+            ("215000", "Farmer Payable", "LIABILITY", "Current Liability", "FARMER_PAYABLE", []),
             ("214000", "Other Payables", "LIABILITY", "Current Liability", None, [
                 ("214001", "Expenses Payable", "LIABILITY", "Current Liability", None, []),
                 ("214002", "Customer Advances", "LIABILITY", "Current Liability", "CUSTOMER_ADVANCE", []),
@@ -136,7 +142,9 @@ BASE_TREE = [
             ("620004", "Discount Allowed", "EXPENSE", "Selling & Distribution Expense", None, []),
         ]),
         ("630000", "Financial Expenses", "EXPENSE", "Financial Expense", "FINANCIAL_EXPENSES", [
-            ("630001", "Bank Charges", "EXPENSE", "Financial Expense", None, []),
+            # Rolled so posting can find it: a farmer payment charges the
+            # transfer fee here rather than to the farmer.
+            ("630001", "Bank Charges", "EXPENSE", "Financial Expense", "BANK_CHARGES", []),
             ("630002", "Interest Expense", "EXPENSE", "Financial Expense", "INTEREST_EXPENSE", []),
         ]),
         ("650000", "Depreciation", "EXPENSE", "Depreciation", "DEPRECIATION_EXPENSE", []),
@@ -232,6 +240,9 @@ INDUSTRY_OVERLAYS = {
                 ("640003", "Mortality Loss", "EXPENSE", "Manufacturing Expense", None, []),
                 ("640004", "Farm Labour", "EXPENSE", "Manufacturing Expense", None, []),
                 ("640005", "Brooding Expenses", "EXPENSE", "Manufacturing Expense", None, []),
+                # The largest farm cost of the lot, and the only one that was
+                # missing.
+                ("640006", "Growing Charges", "EXPENSE", "Manufacturing Expense", "GROWING_CHARGES", []),
             ]),
         ],
     },

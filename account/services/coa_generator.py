@@ -44,6 +44,9 @@ ANCHOR_SPECS = [
     ("ACCOUNTS_PAYABLE", "Accounts Payable", "LIABILITY", "CURRENT_LIABILITIES", True),
     ("TAX_OUTPUT_GROUP", "Duties & Taxes", "LIABILITY", "CURRENT_LIABILITIES", True),
     ("SALARY_PAYABLE", "Salary Payable", "LIABILITY", "CURRENT_LIABILITIES", True),
+    # Under CURRENT_LIABILITIES, which every chart has, so the farmer control
+    # group exists even on a company generated without the poultry overlay.
+    ("FARMER_PAYABLE", "Farmer Payable", "LIABILITY", "CURRENT_LIABILITIES", True),
     ("EQUITY_ROOT", "Equity", "EQUITY", None, True),
     ("INCOME_ROOT", "Income", "INCOME", None, True),
     ("SALES", "Sales", "INCOME", "INCOME_ROOT", True),
