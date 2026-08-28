@@ -125,6 +125,7 @@ MODULE_REGISTRY = [
                     ("gc_realization_report", "GC Realization Report",
                      ("gc_realization_medicine_cost_save",)),
                     ("farmer_ledger_report", "Farmer Ledger"),
+                    ("farmer_reconciliation_report", "Farmer Reconciliation"),
                 ],
             },
             {
@@ -708,6 +709,7 @@ _ACTION_BASE_TO_TAB = {
     "growing_charge": "growing_charge",
     "gc_settlement": "gc_settlement",
     "farmer_ledger_report": "farmer_ledger_report",
+    "farmer_reconciliation_report": "farmer_reconciliation_report",
     "farmer_gc_payment": "farmer_gc_payment",
     "breed": "breed",
     "breed_standard": "breed_standard",

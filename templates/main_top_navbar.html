@@ -205,6 +205,9 @@
               {% if 'farmer_ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farmer_ledger_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-book"></i>Farmer Ledger
               </a></li>{% endif %}
+              {% if 'farmer_reconciliation_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farmer_reconciliation_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-scale-balanced"></i>Farmer Reconciliation
+              </a></li>{% endif %}
               {% if 'farm_map_planner' in allowed_tabs or 'route_history' in allowed_tabs or 'route_reports' in allowed_tabs %}
               <li><hr class="dropdown-divider"></li>
               <li class="dropdown-submenu">

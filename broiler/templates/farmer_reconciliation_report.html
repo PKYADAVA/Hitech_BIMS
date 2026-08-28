@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}Farmer Reconciliation — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='broiler_report' active_tab='farmer_reconciliation_report' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-scale-balanced me-1"></i>Farmer Reconciliation</div>
+    <div class="page-header-subtitle">
+      What the records say against what was posted — the two must agree
+    </div>
+  </div>
+</div>
+
+{% if not payable %}
+  <div class="card mb-3"><div class="card-body">
+    <strong>Farmer Payable is not in the chart of accounts.</strong>
+    Until it is, nothing can be posted to a farmer and there is nothing to
+    reconcile against. Run <code>manage.py backfill_farmer_accounts</code>.
+  </div></div>
+{% endif %}
+
+<form class="card mb-3" method="get">
+  <div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">As on</label>
+        <input type="date" class="form-control" name="as_on" value="{{ as_on }}">
+      </div>
+      <div class="col-md-4">
+        <div class="form-check mt-4">
+          <input class="form-check-input" type="checkbox" name="only_diff" value="1"
+                 id="only_diff" {% if only_diff %}checked{% endif %}>
+          <label class="form-check-label" for="only_diff">Show only rows that disagree</label>
+        </div>
+      </div>
+      <div class="col-md-2 d-grid">
+        <button class="btn btn-primary"><i class="fas fa-filter me-1"></i>Show</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="row g-2 mb-3">
+  <div class="col-6 col-lg-3">
+    <div class="ds-kpi-card"><div class="ds-kpi-title">From the records</div>
+      <div class="ds-kpi-number">₹{{ totals.operational|floatformat:2 }}</div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="ds-kpi-card"><div class="ds-kpi-title">On the accounts</div>
+      <div class="ds-kpi-number">₹{{ totals.posted|floatformat:2 }}</div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="ds-kpi-card"><div class="ds-kpi-title">Difference</div>
+      <div class="ds-kpi-number">₹{{ totals.difference|floatformat:2 }}</div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="ds-kpi-card"><div class="ds-kpi-title">Farmers out</div>
+      <div class="ds-kpi-number">{{ out_by }}</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="fas fa-list me-1"></i>By farmer</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-bordered table-hover mb-0 ds-grid">
+        <thead class="table-light">
+          <tr>
+            <th>Farmer</th>
+            <th>Ledger account</th>
+            <th class="ds-num text-end">Settlements</th>
+            <th class="ds-num text-end">Payments</th>
+            <th class="ds-num text-end">From the records</th>
+            <th class="ds-num text-end">On the accounts</th>
+            <th class="ds-num text-end">Difference</th>
+            <th class="ds-mid">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.farmer.farmer_name }}</td>
+            <td>
+              {% if row.ledger %}{{ row.ledger.code }} — {{ row.ledger.description }}
+              {% else %}<span class="text-danger">no ledger</span>{% endif %}
+            </td>
+            <td class="text-end">{{ row.settlements }}</td>
+            <td class="text-end">{{ row.payments }}</td>
+            <td class="text-end">{{ row.operational|floatformat:2 }}</td>
+            <td class="text-end">{{ row.posted|floatformat:2 }}</td>
+            <td class="text-end fw-semibold">{{ row.difference|floatformat:2 }}</td>
+            <td class="ds-mid">
+              {% if row.difference %}
+                <span class="badge bg-danger">Out by {{ row.difference|floatformat:2 }}</span>
+              {% else %}
+                <span class="badge bg-success">Agrees</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted py-4">
+            {% if only_diff %}Every farmer agrees.{% else %}No farmers to reconcile.{% endif %}
+          </td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="table-light">
+            <th colspan="4" class="text-end">Total</th>
+            <th class="text-end">{{ totals.operational|floatformat:2 }}</th>
+            <th class="text-end">{{ totals.posted|floatformat:2 }}</th>
+            <th class="text-end">{{ totals.difference|floatformat:2 }}</th>
+            <th></th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% comment %}
+Until posting is wired, every farmer with a balance reads as out by the whole of
+it — the accounts genuinely hold nothing yet. Saying so here is better than
+letting the page look broken on its first day.
+{% endcomment %}
+<p class="text-muted mt-3 mb-0" style="font-size:.9rem;">
+  A row disagrees when the settlements and payments on record do not add up to
+  what the farmer's account was posted. While posting is switched off, every
+  balance shows as a difference: the records are right and the accounts are
+  simply empty.
+</p>
+{% endblock %}

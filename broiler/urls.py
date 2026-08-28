@@ -234,6 +234,8 @@ urlpatterns = [
          name='farmer_gc_payment_gc_amount'),
     path('farmer-ledger-report/', farmer_ledger.farmer_ledger_report,
          name='farmer_ledger_report'),
+    path('farmer-reconciliation-report/', farmer_ledger.farmer_reconciliation_report,
+         name='farmer_reconciliation_report'),
     path('gc_settlement_batches/', views.gc_settlement_batches, name='gc_settlement_batches'),
     path('gc_settlement_schemes/', views.gc_settlement_schemes, name='gc_settlement_schemes'),
     path('gc_settlement_autofill/', views.gc_settlement_autofill_api, name='gc_settlement_autofill'),

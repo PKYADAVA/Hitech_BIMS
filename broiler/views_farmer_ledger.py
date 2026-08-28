@@ -21,6 +21,7 @@ from collections import OrderedDict
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils.dateparse import parse_date
@@ -192,3 +193,72 @@ def _excel(farmer, data, from_date, to_date):
     response["Content-Disposition"] = f'attachment; filename="farmer_ledger_{name}.xlsx"'
     wb.save(response)
     return response
+
+# ---------------------------------------------------------------------------
+# Reconciliation — Broiler > Reports > Farmer Reconciliation
+#
+# The Farmer Ledger reads the operational records; the farmer's account in the
+# chart reads what was posted. They are two routes to the same number and they
+# must arrive at the same place. Any row where they do not is a posting fault,
+# and this is where it should be found rather than by an accountant closing the
+# month.
+#
+# Built before posting goes live rather than after, so the day it is switched on
+# there is already something to check it against.
+# ---------------------------------------------------------------------------
+@login_required(login_url="login")
+def farmer_reconciliation_report(request):
+    """Every farmer's operational balance beside their posted account balance."""
+    from account.models import ChartOfAccount, CompanyProfile
+    from account.services import journal
+
+    as_on = (request.GET.get("as_on") or "").strip()
+    upto = parse_date(as_on) if as_on else None
+    only_diff = (request.GET.get("only_diff") or "") == "1"
+
+    company = CompanyProfile.objects.filter(pk=1).first()
+    payable = (ChartOfAccount.objects.filter(company=company,
+                                             system_role="FARMER_PAYABLE").first()
+               if company else None)
+
+    rows, totals = [], {"operational": Decimal("0"), "posted": Decimal("0"),
+                        "difference": Decimal("0")}
+    for farmer in _visible_farmers(request.user):
+        data = _ledger(request.user, farmer, None, upto)
+        operational = data["closing"]
+
+        ledger = None
+        if payable is not None:
+            ct = ContentType.objects.get_for_model(Farmer)
+            ledger = ChartOfAccount.objects.filter(
+                company=company, parent=payable,
+                source_content_type=ct, source_object_id=farmer.pk).first()
+        # A credit balance is money owed, and account_balance is positive for a
+        # debit, so the sign is flipped to read the same way round as the
+        # operational figure.
+        posted = -journal.account_balance(ledger, upto) if ledger else Decimal("0")
+
+        difference = operational - posted
+        if only_diff and not difference:
+            continue
+        rows.append({
+            "farmer": farmer,
+            "ledger": ledger,
+            "operational": operational,
+            "posted": posted,
+            "difference": difference,
+            "settlements": data["totals"]["settlements"],
+            "payments": data["totals"]["payments"],
+        })
+        totals["operational"] += operational
+        totals["posted"] += posted
+        totals["difference"] += difference
+
+    return render(request, "farmer_reconciliation_report.html", {
+        "rows": rows,
+        "totals": totals,
+        "as_on": as_on,
+        "only_diff": only_diff,
+        "payable": payable,
+        "out_by": sum(1 for r in rows if r["difference"]),
+    })
