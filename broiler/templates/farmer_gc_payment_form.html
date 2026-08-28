@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if payment %}Edit{% else %}Add{% endif %} Farmer Payment — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+{% block content %}
+{% include '_subnav.html' with module='broiler_farmer_gc' active_tab='farmer_gc_payment' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title">
+      <i class="fas fa-money-bill-transfer"></i>
+      {% if payment %}Edit{% else %}Add{% endif %} Farmer Payment
+    </div>
+    <div class="page-header-subtitle">Paying a farmer against their growing charges</div>
+  </div>
+  <div class="page-header-right">
+    <a class="btn btn-outline-secondary" href="{% url 'farmer_gc_payment' %}">
+      <i class="fas fa-arrow-left"></i> Back to list</a>
+  </div>
+</div>
+
+<form method="post" id="gcp-form">
+  {% csrf_token %}
+  <input type="hidden" name="lines_json" id="lines_json">
+
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-receipt me-1"></i><strong>Voucher</strong></div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Date <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" name="date" id="date" required
+                 value="{% if payment %}{{ payment.date|date:'Y-m-d' }}{% else %}{{ today }}{% endif %}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Trnum</label>
+          <input type="text" class="form-control bg-light" readonly
+                 value="{% if payment %}{{ payment.payment_no }}{% else %}{{ next_payment_no }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Narration</label>
+          <input type="text" class="form-control" name="narration" id="narration"
+                 placeholder="Written for you from the lines if left blank"
+                 value="{{ payment.narration|default:'' }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><i class="fas fa-users me-1"></i><strong>Payments</strong></div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered mb-0 ds-entry" id="line-table">
+          <thead class="table-light">
+            <tr>
+              <th class="c-fit m-short ds-mid">Sr.</th>
+              <th class="c-grow m-long">Farm <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid">Batch</th>
+              <th class="c-fit m-mid">Pay Type <span class="text-danger">*</span></th>
+              <th class="c-fit m-mid">Mode <span class="text-danger">*</span></th>
+              <th class="c-grow m-long">Code <span class="text-danger">*</span></th>
+              <th class="c-num m-num ds-num">GC Amount</th>
+              <th class="c-num m-num ds-num">Amount <span class="text-danger">*</span></th>
+              <th class="c-num m-num ds-num">Bank Charges</th>
+              <th class="c-fit m-mid">Reference No</th>
+              <th class="c-grow m-long">Remarks</th>
+              <th class="c-fit"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr>
+              <th colspan="7" class="ds-num text-end">Total</th>
+              <th class="ds-num text-end" id="total_amount">0.00</th>
+              <th class="ds-num text-end" id="total_charges">0.00</th>
+              <th colspan="3"></th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center mb-4">
+    <button type="submit" class="btn btn-primary px-4"><i class="fas fa-check me-1"></i>Submit</button>
+    <a class="btn btn-danger px-4" href="{% url 'farmer_gc_payment' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script>
+const existingLines = {{ existing_lines_json|safe }};
+const editingId = {% if payment %}{{ payment.id }}{% else %}null{% endif %};
+
+const farmOptions = `<option value="">select</option>{% for f in farms %}<option value="{{ f.id }}">{{ f.farm_name|escapejs }}{% if f.farmer %} — {{ f.farmer.farmer_name|escapejs }}{% endif %}</option>{% endfor %}`;
+const payTypeOptions = `{% for value, label in pay_types %}<option value="{{ value|escapejs }}">{{ label|escapejs }}</option>{% endfor %}`;
+const modeOptions = `<option value="">select</option>{% for value, label in mode_choices %}<option value="{{ value|escapejs }}">{{ label|escapejs }}</option>{% endfor %}`;
+const accountOptions = `<option value="">select</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code|escapejs }} - {{ a.description|escapejs }}</option>{% endfor %}`;
+
+const get = id => document.getElementById(id);
+
+function lineRow(row = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="sr text-center"></td>
+    <td><select class="form-select farm" required>${farmOptions}</select></td>
+    <td><select class="form-select batch"><option value="">select</option></select></td>
+    <td><select class="form-select pay-type">${payTypeOptions}</select></td>
+    <td><select class="form-select mode" required>${modeOptions}</select></td>
+    <td><select class="form-select pay-account" required>${accountOptions}</select></td>
+    <td><input class="form-control bg-light gc-amount text-end" readonly value="${row.gc_amount || '0.00'}"></td>
+    <td><input class="form-control amount" type="number" min="0" step=".01" required value="${row.amount || 0}"></td>
+    <td><input class="form-control bank-charges" type="number" min="0" step=".01" value="${row.bank_charges || 0}"></td>
+    <td><input class="form-control reference-no" value="${row.reference_no || ''}"></td>
+    <td><input class="form-control remarks" value="${row.remarks || ''}"></td>
+    <td class="text-nowrap">
+      <button type="button" class="btn btn-sm btn-outline-primary add-row me-1" title="Add Row"><i class="fas fa-plus"></i></button>
+      <button type="button" class="btn btn-sm btn-outline-danger remove" title="Delete"><i class="fas fa-trash"></i></button>
+    </td>`;
+  get('line-table').tBodies[0].append(tr);
+
+  if (row.farm) tr.querySelector('.farm').value = row.farm;
+  if (row.pay_type) tr.querySelector('.pay-type').value = row.pay_type;
+  if (row.mode) tr.querySelector('.mode').value = row.mode;
+  if (row.pay_account) tr.querySelector('.pay-account').value = row.pay_account;
+
+  // Batches belong to the farm, so an existing line has to load its own list
+  // before its batch can be selected on it.
+  if (row.farm) loadBatches(tr, row.batch);
+
+  $(tr.querySelector('.farm')).on('change', () => loadBatches(tr));
+  $(tr.querySelector('.batch')).on('change', () => loadGcAmount(tr));
+  ['.amount', '.bank-charges'].forEach(sel =>
+    tr.querySelector(sel).addEventListener('input', totals));
+
+  renumber();
+  totals();
+  return tr;
+}
+
+function loadBatches(tr, selected) {
+  const farm = tr.querySelector('.farm').value;
+  // loadOptions rebuilds the list inside the reply and takes a token, so the
+  // Select2 bridge firing this handler twice cannot list every batch twice.
+  return loadOptions(tr.querySelector('.batch'), "{% url 'farmer_gc_payment_batches' %}",
+                     { farm: farm }, { label: 'batch_name', placeholderDisabled: false,
+                                       selected: selected })
+    .then(() => loadGcAmount(tr));
+}
+
+async function loadGcAmount(tr) {
+  const batch = tr.querySelector('.batch').value;
+  const box = tr.querySelector('.gc-amount');
+  if (!batch) { box.value = '0.00'; box.title = ''; return; }
+  const params = new URLSearchParams({ batch: batch });
+  // Editing: this voucher's own lines must not count against the batch, or a
+  // payment would appear to have been made twice.
+  if (editingId) params.set('exclude', editingId);
+  try {
+    const res = await fetch("{% url 'farmer_gc_payment_gc_amount' %}?" + params);
+    const d = await res.json();
+    box.value = d.outstanding;
+    box.title = d.settled
+      ? `Growing charge ${d.gc_amount}, already paid ${d.paid}`
+      : 'This batch has no growing-charge settlement yet.';
+  } catch (err) {
+    box.value = '0.00';
+    box.title = 'Could not read the settlement.';
+  }
+}
+
+function renumber() {
+  document.querySelectorAll('#line-table tbody tr').forEach((tr, i) => {
+    tr.querySelector('.sr').textContent = i + 1;
+  });
+  const rows = document.querySelectorAll('#line-table tbody tr');
+  // The last row offers "+"; with one row left it cannot be deleted either, or
+  // there would be no "+" anywhere to add one back.
+  rows.forEach((tr, i) => {
+    tr.querySelector('.add-row').classList.toggle('d-none', i !== rows.length - 1);
+    tr.querySelector('.remove').classList.toggle('d-none', rows.length === 1);
+  });
+}
+
+function totals() {
+  let amount = 0, charges = 0;
+  document.querySelectorAll('#line-table tbody tr').forEach(tr => {
+    amount += Number(tr.querySelector('.amount').value) || 0;
+    charges += Number(tr.querySelector('.bank-charges').value) || 0;
+  });
+  get('total_amount').textContent = amount.toFixed(2);
+  get('total_charges').textContent = charges.toFixed(2);
+}
+
+document.getElementById('line-table').addEventListener('click', e => {
+  if (e.target.closest('.add-row')) { lineRow(); }
+  if (e.target.closest('.remove')) {
+    const rows = document.querySelectorAll('#line-table tbody tr');
+    if (rows.length > 1) { e.target.closest('tr').remove(); renumber(); totals(); }
+  }
+});
+
+get('gcp-form').addEventListener('submit', e => {
+  const rows = [...document.querySelectorAll('#line-table tbody tr')].map(tr => ({
+    farm: tr.querySelector('.farm').value,
+    batch: tr.querySelector('.batch').value || null,
+    pay_type: tr.querySelector('.pay-type').value,
+    mode: tr.querySelector('.mode').value,
+    pay_account: tr.querySelector('.pay-account').value,
+    gc_amount: tr.querySelector('.gc-amount').value || 0,
+    amount: tr.querySelector('.amount').value || 0,
+    bank_charges: tr.querySelector('.bank-charges').value || 0,
+    reference_no: tr.querySelector('.reference-no').value,
+    remarks: tr.querySelector('.remarks').value,
+  })).filter(r => r.farm && r.pay_account);
+
+  if (!rows.length) {
+    e.preventDefault();
+    alert('Add at least one payment line — a farm and a code are needed.');
+    return;
+  }
+  get('lines_json').value = JSON.stringify(rows);
+});
+
+(existingLines.length ? existingLines : [{}]).forEach(lineRow);
+</script>
+{% endblock %}

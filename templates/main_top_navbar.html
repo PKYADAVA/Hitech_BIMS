@@ -150,7 +150,10 @@
             </a>
             <ul class="dropdown-menu">
               {% if 'gc_settlement' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'gc_settlement' %}">
-                <i class="fas fa-file-invoice-dollar"></i>Farmer GC &amp; Payment
+                <i class="fas fa-file-invoice-dollar"></i>Farmer Growing Charges
+              </a></li>{% endif %}
+              {% if 'farmer_gc_payment' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farmer_gc_payment' %}">
+                <i class="fas fa-money-bill-transfer"></i>GC Payment
               </a></li>{% endif %}
             </ul>
           </li>
@@ -198,6 +201,9 @@
               </a></li>{% endif %}
               {% if 'gc_realization_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'gc_realization_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-scale-balanced"></i>GC Realization Report
+              </a></li>{% endif %}
+              {% if 'farmer_ledger_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'farmer_ledger_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-book"></i>Farmer Ledger
               </a></li>{% endif %}
               {% if 'farm_map_planner' in allowed_tabs or 'route_history' in allowed_tabs or 'route_reports' in allowed_tabs %}
               <li><hr class="dropdown-divider"></li>

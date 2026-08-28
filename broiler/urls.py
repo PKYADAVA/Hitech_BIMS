@@ -2,6 +2,8 @@
 from django.urls import path
 from . import views
 from . import views_route_planner as route_planner
+from . import views_gc_payment as gc_payment
+from . import views_farmer_ledger as farmer_ledger
 
 from .views import BranchAPI, BranchTemplateView, BroilerBatchAPI, BroilerBatchTemplateView, BroilerDiseaseAPI, BroilerDiseaseTemplateView, BroilerFarmAPI, BroilerFarmShedAPI, BroilerFarmShedTemplateView, BroilerFarmTemplateView, BroilerLineAPI, BroilerLineTemplateView, FarmerAPI, FarmerGroupAPI, FarmerGroupTemplateView, RegionAPI, RegionTemplateView, SupervisorAPI, SupervisorTemplateView
 
@@ -218,6 +220,20 @@ urlpatterns = [
 
     # Farmer Growing Charge Settlement / Batch Closing
     path('gc-settlement/', views.GCSettlementTemplateView.as_view(), name='gc_settlement'),
+    # Farmer GC Payment — paying the farmer what the settlement said they were owed.
+    path('gc-payment/', gc_payment.farmer_gc_payment, name='farmer_gc_payment'),
+    path('gc-payment/add/', gc_payment.farmer_gc_payment_add, name='farmer_gc_payment_add'),
+    path('gc-payment/<int:id>/edit/', gc_payment.farmer_gc_payment_edit,
+         name='farmer_gc_payment_edit'),
+    path('gc-payment/<int:id>/delete/', gc_payment.farmer_gc_payment_delete,
+         name='farmer_gc_payment_delete'),
+    path('gc_payment_api/', gc_payment.farmer_gc_payment_api, name='farmer_gc_payment_api'),
+    path('gc_payment_batches/', gc_payment.farmer_gc_payment_batches,
+         name='farmer_gc_payment_batches'),
+    path('gc_payment_gc_amount/', gc_payment.farmer_gc_payment_gc_amount,
+         name='farmer_gc_payment_gc_amount'),
+    path('farmer-ledger-report/', farmer_ledger.farmer_ledger_report,
+         name='farmer_ledger_report'),
     path('gc_settlement_batches/', views.gc_settlement_batches, name='gc_settlement_batches'),
     path('gc_settlement_schemes/', views.gc_settlement_schemes, name='gc_settlement_schemes'),
     path('gc_settlement_autofill/', views.gc_settlement_autofill_api, name='gc_settlement_autofill'),

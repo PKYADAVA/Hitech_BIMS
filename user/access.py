@@ -101,7 +101,11 @@ MODULE_REGISTRY = [
             {
                 "label": "Farmer GC & Payment",
                 "tabs": [
-                    ("gc_settlement", "Farmer GC & Payment", ("gc_settlement_list",)),
+                    ("gc_settlement", "Farmer Growing Charges", ("gc_settlement_list",)),
+                    ("farmer_gc_payment", "GC Payment",
+                     ("farmer_gc_payment_api", "farmer_gc_payment_add",
+                      "farmer_gc_payment_edit", "farmer_gc_payment_delete",
+                      "farmer_gc_payment_batches", "farmer_gc_payment_gc_amount")),
                 ],
             },
             {
@@ -120,6 +124,7 @@ MODULE_REGISTRY = [
                     ("batch_wise_feed_scheduling_report", "Batch wise Feed Scheduling Report"),
                     ("gc_realization_report", "GC Realization Report",
                      ("gc_realization_medicine_cost_save",)),
+                    ("farmer_ledger_report", "Farmer Ledger"),
                 ],
             },
             {
@@ -702,6 +707,8 @@ _ACTION_BASE_TO_TAB = {
     "broiler_batch": "broiler_batch",
     "growing_charge": "growing_charge",
     "gc_settlement": "gc_settlement",
+    "farmer_ledger_report": "farmer_ledger_report",
+    "farmer_gc_payment": "farmer_gc_payment",
     "breed": "breed",
     "breed_standard": "breed_standard",
     "broiler_disease": "broiler_disease",

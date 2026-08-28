@@ -2959,3 +2959,154 @@ class FarmRouteStop(models.Model):
         """True when the round reached this stop out of its planned turn."""
         return (self.actual_sequence is not None
                 and self.actual_sequence != self.sequence)
+
+
+class FarmerGCPayment(models.Model):
+    """Money paid out to a farmer against their growing charges.
+
+    A header carrying the date, with one line per farmer being paid — the same
+    shape as ``purchase.SupplierPayment``, and for the same reason: a day's
+    payments are usually written up together, and the register wants one row
+    per voucher rather than one per farmer. The list's Farm / Farmer / Mode /
+    Method columns are therefore summaries over the lines, reading "Multiple"
+    when a voucher covers more than one.
+
+    Does NOT post to accounting. Growing-charge settlement does not either, and
+    wiring a payment into the ledger while the charge it settles stays outside
+    it would put the two halves of the same transaction on different sides of
+    the accounts.
+    """
+
+    payment_no = models.CharField(max_length=30, unique=True, editable=False, blank=True,
+                                  help_text=_("Auto-generated, e.g. FGP-2627-0001"))
+    date = models.DateField(default=now)
+    # Composed from the lines when left empty, so a voucher always carries a
+    # sentence an accountant can read even though the form asks only for
+    # remarks. A narration typed by hand is never overwritten.
+    narration = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        verbose_name = _("Farmer GC Payment")
+
+    def __str__(self):
+        return self.payment_no or f"Farmer GC Payment #{self.pk}"
+
+    def save(self, *args, **kwargs):
+        if not self.payment_no:
+            self.payment_no = self._next_payment_no(self.date)
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def _next_payment_no(cls, on_date=None):
+        """FGP-<financial year>-NNNN.
+
+        Tolerates a string date for the reason SupervisorTrip._next_no does:
+        Django only coerces a field on full_clean or on the way to the
+        database, so anything assigning a date from JSON reaches here with a
+        str and would otherwise fail asking it for year.
+        """
+        on_date = on_date or now().date()
+        if isinstance(on_date, str):
+            from django.utils.dateparse import parse_date
+            on_date = parse_date(on_date) or now().date()
+        # April starts the Indian financial year, so January to March belongs
+        # to the year before.
+        start = on_date.year if on_date.month >= 4 else on_date.year - 1
+        prefix = f"FGP-{str(start)[-2:]}{str(start + 1)[-2:]}-"
+        last = (cls.objects.filter(payment_no__startswith=prefix)
+                .order_by("-payment_no").values_list("payment_no", flat=True).first())
+        nxt = int(last.rsplit("-", 1)[1]) + 1 if last else 1
+        return f"{prefix}{nxt:04d}"
+
+    @property
+    def total_amount(self):
+        return sum((line.amount for line in self.lines.all()), Decimal("0"))
+
+    @property
+    def total_bank_charges(self):
+        return sum((line.bank_charges for line in self.lines.all()), Decimal("0"))
+
+    def _summary(self, values):
+        names = [n for n in dict.fromkeys(values) if n]
+        if not names:
+            return ""
+        return names[0] if len(names) == 1 else "Multiple"
+
+    @property
+    def farm_summary(self):
+        return self._summary(self.lines.values_list("farm__farm_name", flat=True))
+
+    @property
+    def farmer_summary(self):
+        return self._summary(self.lines.values_list("farm__farmer__farmer_name", flat=True))
+
+    @property
+    def mode_summary(self):
+        return self._summary(self.lines.values_list("mode", flat=True))
+
+    @property
+    def method_summary(self):
+        """Which cash or bank account the money actually left."""
+        return self._summary(self.lines.values_list("pay_account__description", flat=True))
+
+    def compose_narration(self):
+        """The sentence this voucher would carry, from its own lines."""
+        from account.services.narration import compose_narration
+        lines = list(self.lines.select_related("farm__farmer", "pay_account"))
+        if not lines:
+            return ""
+        party = self.farmer_summary or self.farm_summary
+        return compose_narration(
+            "payment",
+            party_name=party if party != "Multiple" else "multiple farmers",
+            amount=self.total_amount,
+            reference=self._summary(self.lines.values_list("reference_no", flat=True)),
+            mode=self.mode_summary if self.mode_summary != "Multiple" else None,
+        )
+
+
+class FarmerGCPaymentLine(models.Model):
+    """One farmer paid within a Farmer GC Payment voucher."""
+
+    #: The three reasons money goes to a farmer, in the order the old system
+    #: listed them: against a settled growing charge, ahead of one, or on top
+    #: of one.
+    PAY_TYPE_CHOICES = [
+        ("GC Pay", "GC Pay"),
+        ("Advance Pay", "Advance Pay"),
+        ("Additional Pay", "Additional Pay"),
+    ]
+    MODE_CHOICES = [
+        ("Cash", "Cash"), ("Bank Transfer", "Bank Transfer"), ("Cheque", "Cheque"),
+        ("UPI", "UPI"), ("Card", "Card"),
+    ]
+
+    payment = models.ForeignKey(FarmerGCPayment, on_delete=models.CASCADE, related_name="lines")
+    farm = models.ForeignKey(BroilerFarm, on_delete=models.PROTECT, related_name="gc_payment_lines")
+    # Optional: an advance can be paid before a batch is placed, and a farmer
+    # can be squared up across several at once.
+    batch = models.ForeignKey(BroilerBatch, on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="gc_payment_lines")
+    pay_type = models.CharField(max_length=20, choices=PAY_TYPE_CHOICES, default="GC Pay")
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES, default="Cash")
+    pay_account = models.ForeignKey("account.ChartOfAccount", on_delete=models.PROTECT,
+                                    related_name="farmer_gc_payment_lines",
+                                    help_text=_("The cash or bank account the money leaves"))
+    # What the settlement said was owed when this payment was written, kept as
+    # a snapshot: a later re-settlement must not silently restate the figure a
+    # payment was made against.
+    gc_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    bank_charges = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    reference_no = models.CharField(max_length=100, blank=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = _("Farmer GC Payment Line")
+
+    def __str__(self):
+        return f"{self.farm} — {self.amount}"

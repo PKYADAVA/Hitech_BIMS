@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}Farmer Ledger — BIMS{% endblock %}
+{% block nav %}{% include 'main_top_navbar.html' with active_tab='broiler' %}{% endblock %}
+
+{% block content %}
+{% include '_subnav.html' with module='broiler_report' active_tab='farmer_ledger_report' %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title"><i class="fas fa-book me-1"></i>Farmer Ledger</div>
+    <div class="page-header-subtitle">
+      Growing charges raised against payments made — what is still owed to the farmer
+    </div>
+  </div>
+  {% if data %}
+  <div class="page-header-right">
+    <a class="btn btn-outline-secondary"
+       href="?farmer={{ farmer_id }}&amp;from_date={{ from_date }}&amp;to_date={{ to_date }}&amp;export=excel">
+      <i class="fas fa-file-excel"></i> Excel
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+<form class="card mb-3" method="get">
+  <div class="card-body py-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Farmer</label>
+        <select class="form-select" name="farmer" required>
+          <option value="">select</option>
+          {% for f in farmers %}
+          <option value="{{ f.id }}" {% if farmer_id == f.id %}selected{% endif %}>{{ f.farmer_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" class="form-control" name="from_date" value="{{ from_date }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" class="form-control" name="to_date" value="{{ to_date }}">
+      </div>
+      <div class="col-md-2 d-grid">
+        <button class="btn btn-primary"><i class="fas fa-filter me-1"></i>Show</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+{% if not farmer %}
+  <div class="card"><div class="card-body text-muted">
+    Choose a farmer to see their account.
+  </div></div>
+{% else %}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="ds-kpi-card"><div class="ds-kpi-title">Opening</div>
+        <div class="ds-kpi-number">₹{{ data.opening|floatformat:2 }}</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="ds-kpi-card"><div class="ds-kpi-title">Growing charges ({{ data.totals.settlements }})</div>
+        <div class="ds-kpi-number">₹{{ data.totals.credit|floatformat:2 }}</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="ds-kpi-card"><div class="ds-kpi-title">Paid ({{ data.totals.payments }})</div>
+        <div class="ds-kpi-number">₹{{ data.totals.debit|floatformat:2 }}</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="ds-kpi-card"><div class="ds-kpi-title">Still owed</div>
+        <div class="ds-kpi-number">₹{{ data.closing|floatformat:2 }}</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><i class="fas fa-list me-1"></i>{{ farmer.farmer_name }}</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover mb-0 ds-grid">
+          <thead class="table-light">
+            <tr>
+              <th class="ds-mid">Date</th>
+              <th>Particulars</th>
+              <th>Voucher</th>
+              <th>Farm</th>
+              <th>Detail</th>
+              <th class="ds-num text-end">Debit</th>
+              <th class="ds-num text-end">Credit</th>
+              <th class="ds-num text-end">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="table-light">
+              <td></td>
+              <td colspan="4"><em>Opening balance</em></td>
+              <td class="text-end">&mdash;</td>
+              <td class="text-end">&mdash;</td>
+              <td class="text-end fw-semibold">{{ data.opening|floatformat:2 }}</td>
+            </tr>
+            {% for group in data.groups %}
+            <tr class="table-secondary">
+              <td colspan="5" class="fw-semibold">{{ group.label }}</td>
+              <td class="text-end fw-semibold">{{ group.debit|floatformat:2 }}</td>
+              <td class="text-end fw-semibold">{{ group.credit|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+              {% for row in group.rows %}
+              <tr>
+                <td class="ds-mid">{{ row.date|date:'d-m-Y'|default:'—' }}</td>
+                <td>{{ row.particulars }}</td>
+                <td>{{ row.voucher }}</td>
+                <td>{{ row.farm }}</td>
+                <td class="text-muted">{{ row.detail|default:'—' }}</td>
+                <td class="text-end">{% if row.debit %}{{ row.debit|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                <td class="text-end">{% if row.credit %}{{ row.credit|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+                <td class="text-end">{{ row.balance|floatformat:2 }}</td>
+              </tr>
+              {% endfor %}
+            {% empty %}
+            <tr><td colspan="8" class="text-center text-muted py-4">
+              Nothing on this account in that date range.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="table-light">
+              <th colspan="5" class="text-end">Total</th>
+              <th class="text-end">{{ data.totals.debit|floatformat:2 }}</th>
+              <th class="text-end">{{ data.totals.credit|floatformat:2 }}</th>
+              <th class="text-end">{{ data.closing|floatformat:2 }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
