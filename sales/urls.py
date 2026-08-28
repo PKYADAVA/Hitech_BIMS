@@ -35,6 +35,7 @@ urlpatterns = [
 
     path('customer-ledger/', views.customer_ledger_report, name='customer_ledger'),
     path('customer-balance/', views.customer_balance_report, name='customer_balance'),
+    path('customer-list/', views.customer_list_report, name='customer_list_report'),
     path('customer-receipt-report/', views.customer_receipt_report, name='customer_receipt_report'),
 
     path('sales-receipt/', views.sales_receipt_list, name='sales_receipt_list'),

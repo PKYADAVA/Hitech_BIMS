@@ -1065,6 +1065,29 @@ def _customer_balance_row(cust, fd, td, ref_date):
 
 
 @login_required(login_url="login")
+def customer_list_report(request):
+    """Sales > Reports > Customer List — the customer master as a report.
+
+    Who we sell to and whether their record is complete. Customer Balance
+    answers what they owe; this one answers who they are.
+    """
+    from sales.models import CustomerGroup
+    from user.services.party_list import party_list_report
+
+    groups = [(str(g.id), g.description or g.code)
+              for g in CustomerGroup.objects.order_by("description", "code")]
+
+    return party_list_report(
+        request, kind="customer", model=Customer,
+        queryset=customers_for(request.user,
+                               Customer.objects.select_related("customer_group")
+                               .order_by("name")),
+        group_label="Customer Group", group_choices=groups,
+        group_field="customer_group_id",
+        title="Customer List")
+
+
+@login_required(login_url="login")
 def customer_balance_report(request):
     """Sales > Reports > Customer Balance — every customer's receivable position:
     opening, this period's Birds/Weight/Amount/Receipt movement, closing Debit

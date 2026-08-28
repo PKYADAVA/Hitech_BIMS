@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ title }} — BIMS{% endblock %}
+{% block css %}<link rel="stylesheet" href="{% static 'css/report.css' %}">{% endblock %}
+{% block nav %}{% endblock nav %}
+
+{% comment %}
+Supplier List and Customer List are the same report over two masters, so they
+share this template rather than being two files that drift apart the first time
+a column is added to one of them. The columns come from the model, so nothing
+here knows or needs to know which master it is drawing.
+{% endcomment %}
+
+{% block content %}
+{% if kind == 'supplier' %}
+  {% include '_purchase_report_subnavbar.html' with active_tab='supplier_list_report' %}
+{% else %}
+  {% include '_sales_report_subnavbar.html' with active_tab='customer_list_report' %}
+{% endif %}
+
+<style>
+  .pl-head { text-align:center; margin-bottom:.5rem; }
+  .pl-head h5 { font-weight:700; margin:.1rem 0; }
+  .pl-company { font-size:.78rem; color:#444; }
+  .pl-filter { background:#fff; border:1px solid #eef0f4; border-radius:.55rem;
+               padding:.5rem .8rem; margin:.5rem 0; }
+  .pl-filter .form-label { font-size:.68rem; font-weight:600; margin-bottom:.1rem; }
+  .pl-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin-bottom:.6rem; }
+  @media (max-width:900px){ .pl-kpis { grid-template-columns:repeat(2,1fr); } }
+  .pl-kpi { background:#fff; border:1px solid #eef0f4; border-radius:.5rem;
+            padding:.5rem .6rem; display:flex; align-items:center; gap:.55rem;
+            box-shadow:0 1px 4px rgba(0,0,0,.04); }
+  .pl-kpi .k-label { font-size:.63rem; color:#6c757d; font-weight:600; white-space:nowrap; }
+  .pl-kpi .k-num { font-size:1rem; font-weight:800; line-height:1.1; white-space:nowrap; }
+  .pl-kpi .k-ico { flex:0 0 auto; width:2.5rem; height:2.5rem; border-radius:.5rem;
+                   display:flex; align-items:center; justify-content:center; font-size:1.1rem; }
+  .k-all .k-ico{ background:#e7f0ff; color:#3b6fd4; }  .k-all .k-num{ color:#1b3a6b; }
+  .k-gst .k-ico{ background:#e6f7ea; color:#20a56a; }  .k-gst .k-num{ color:#178a53; }
+  .k-lim .k-ico{ background:#ece9fb; color:#6a5acd; }  .k-lim .k-num{ color:#5346a8; }
+  .k-op  .k-ico{ background:#ffe9e0; color:#e0693a; }  .k-op .k-num{ color:#d8592a; }
+
+  /* The whole master is thirty-odd columns, so the table scrolls inside its own
+     box rather than pushing the page sideways, and the row number and name stay
+     put while it does — without them a reader loses which row they are on
+     within a screen or two of scrolling. */
+  .pl-scroll { overflow-x:auto; border:1px solid #eef0f4; border-radius:.5rem; background:#fff; }
+  .pl-table { margin:0; white-space:nowrap; }
+  .pl-table th, .pl-table td { font-size:.72rem; padding:.32rem .5rem; }
+  .pl-table thead th { position:sticky; top:0; background:#f6f8fb; z-index:3; }
+  .pl-table .sticky-1 { position:sticky; left:0;    z-index:2; background:#fff; }
+  .pl-table .sticky-2 { position:sticky; left:3rem; z-index:2; background:#fff; }
+  .pl-table thead .sticky-1, .pl-table thead .sticky-2 { z-index:4; background:#f6f8fb; }
+  .pl-table tfoot td { position:sticky; bottom:0; background:#f6f8fb; font-weight:700; }
+  .pl-blank { color:#c0392b; font-style:italic; }
+  @media print {
+    .pl-filter { display:none; }
+    .pl-scroll { overflow:visible; border:0; }
+    .pl-table th, .pl-table td { font-size:.6rem; white-space:normal; }
+    .pl-table .sticky-1, .pl-table .sticky-2, .pl-table thead th { position:static; }
+  }
+</style>
+
+<div class="pl-head">
+  <div class="pl-company">{{ company.name|default:'' }}</div>
+  <h5>{{ title }}</h5>
+  <div class="pl-company">as on {{ today|date:'d-m-Y' }}</div>
+</div>
+
+<form class="pl-filter" method="get">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label">{{ group_label }}</label>
+      <select class="form-select form-select-sm" name="group">
+        <option value="">All</option>
+        {% for value, label in groups %}
+        <option value="{{ value }}" {% if group == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Search</label>
+      <input type="text" class="form-control form-control-sm" name="q" value="{{ q }}"
+             placeholder="name, code, GSTIN or mobile">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">GSTIN</label>
+      <select class="form-select form-select-sm" name="gst">
+        <option value="">All</option>
+        <option value="with" {% if gst == 'with' %}selected{% endif %}>Registered</option>
+        <option value="without" {% if gst == 'without' %}selected{% endif %}>Not registered</option>
+      </select>
+    </div>
+    <div class="col-md-4 d-flex gap-2">
+      <button class="btn btn-sm btn-primary"><i class="fas fa-filter me-1"></i>Apply</button>
+      <a class="btn btn-sm btn-outline-secondary"
+         href="?group={{ group }}&amp;q={{ q }}&amp;gst={{ gst }}&amp;export=excel">
+        <i class="fas fa-file-excel me-1"></i>Excel</a>
+      <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()">
+        <i class="fas fa-print me-1"></i>Print</button>
+    </div>
+  </div>
+</form>
+
+<div class="pl-kpis">
+  <div class="pl-kpi k-all"><span class="k-ico"><i class="fas fa-users"></i></span>
+    <span><span class="k-label">{{ noun|title }}s listed</span><br><span class="k-num">{{ totals.count }}</span></span></div>
+  <div class="pl-kpi k-gst"><span class="k-ico"><i class="fas fa-file-invoice"></i></span>
+    <span><span class="k-label">With GSTIN</span><br><span class="k-num">{{ totals.with_gstin }}</span></span></div>
+  <div class="pl-kpi k-lim"><span class="k-ico"><i class="fas fa-scale-balanced"></i></span>
+    <span><span class="k-label">Total credit limit</span><br><span class="k-num">₹{{ totals.credit_limit|floatformat:2 }}</span></span></div>
+  <div class="pl-kpi k-op"><span class="k-ico"><i class="fas fa-indian-rupee-sign"></i></span>
+    <span><span class="k-label">Total opening</span><br><span class="k-num">₹{{ totals.opening|floatformat:2 }}</span></span></div>
+</div>
+
+<div class="pl-scroll">
+  <table class="table table-bordered table-sm pl-table">
+    <thead>
+      <tr>
+        <th class="sticky-1">#</th>
+        {% for column in columns %}
+        <th class="{% if forloop.first %}sticky-2{% endif %}{% if column.numeric %} text-end{% endif %}">
+          {{ column.label }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="sticky-1">{{ forloop.counter }}</td>
+        {% for cell in row.cells %}
+        <td class="{% if forloop.first %}sticky-2{% endif %}">
+          {% if cell %}{{ cell }}{% else %}<span class="pl-blank">—</span>{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% empty %}
+      <tr><td colspan="{{ columns|length|add:1 }}" class="text-center text-muted py-4">
+        No {{ noun }}s match these filters.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr>
+        <td class="sticky-1">Total</td>
+        {% for column in columns %}
+        <td class="{% if forloop.first %}sticky-2{% endif %}{% if column.numeric %} text-end{% endif %}">
+          {% if column.totalled %}{{ column.total }}{% endif %}</td>
+        {% endfor %}
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+{% endblock %}

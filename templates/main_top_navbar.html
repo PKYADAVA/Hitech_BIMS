@@ -435,6 +435,9 @@
               {% if 'supplier_balance' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supplier_balance' %}" target="_blank" rel="noopener">
                 <i class="fas fa-scale-balanced"></i>Supplier Balance
               </a></li>{% endif %}
+              {% if 'supplier_list_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'supplier_list_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-address-book"></i>Supplier List
+              </a></li>{% endif %}
             </ul>
           </li>
           {% endif %}
@@ -507,6 +510,9 @@
               </a></li>{% endif %}
               {% if 'customer_receipt_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_receipt_report' %}" target="_blank" rel="noopener">
                 <i class="fas fa-receipt"></i>Customer Receipt Report
+              </a></li>{% endif %}
+              {% if 'customer_list_report' in allowed_tabs %}<li><a class="dropdown-item" href="{% url 'customer_list_report' %}" target="_blank" rel="noopener">
+                <i class="fas fa-address-book"></i>Customer List
               </a></li>{% endif %}
             </ul>
           </li>

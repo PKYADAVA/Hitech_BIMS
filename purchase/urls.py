@@ -44,6 +44,7 @@ urlpatterns = [
     path("purchase-report/", views.purchase_report, name="purchase_report"),
     path("supplier-ledger/", views.supplier_ledger_report, name="supplier_ledger"),
     path("supplier-balance/", views.supplier_balance_report, name="supplier_balance"),
+    path("supplier-list/", views.supplier_list_report, name="supplier_list_report"),
 
     path("debit-note/", views.debit_note_list, name="debit_note_list"),
     path("debit-note/add/", views.create_debit_note, name="debit_note_add"),

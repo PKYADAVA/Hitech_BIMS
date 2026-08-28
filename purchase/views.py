@@ -1851,6 +1851,29 @@ def _supplier_balance_row(sup, fd, td, ref_date):
 
 
 @login_required
+def supplier_list_report(request):
+    """Purchase > Reports > Supplier List — the supplier master as a report.
+
+    Who we buy from and whether their record is complete, rather than what they
+    are owed; Supplier Balance already answers that. Scoped through
+    ``suppliers_for``, so a user restricted to their own suppliers gets their
+    own list rather than the company's.
+    """
+    from user.services.party_list import party_list_report
+
+    groups = [(g, g) for g in Supplier.objects
+              .exclude(supplier_group__isnull=True).exclude(supplier_group="")
+              .values_list("supplier_group", flat=True).distinct().order_by("supplier_group")]
+
+    return party_list_report(
+        request, kind="supplier", model=Supplier,
+        queryset=suppliers_for(request.user, Supplier.objects.order_by("name")),
+        group_label="Supplier Group", group_choices=groups,
+        group_field="supplier_group",
+        title="Supplier List")
+
+
+@login_required
 def supplier_balance_report(request):
     """Purchase > Reports > Supplier Balance — every supplier's payable position:
     opening, this period's Amount/Receipt movement, and closing Credit (payable)

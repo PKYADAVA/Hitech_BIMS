@@ -24,6 +24,13 @@ class CustomerGroup(models.Model):
         help_text="Advance account from the chart of accounts",
     )
 
+    def __str__(self):
+        # Without this a group renders as "CustomerGroup object (2)" wherever
+        # one is shown by name — a dropdown, the admin, the Customer List
+        # report. The description is what people call it; the code is the
+        # fallback for a group that never got one.
+        return (self.description or self.code or "").strip() or f"Customer Group {self.pk}"
+
 
 class SalesPriceMaster(models.Model):
     item_category = models.ForeignKey(
