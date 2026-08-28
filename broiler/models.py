@@ -1990,6 +1990,10 @@ class GrowingChargeSettlement(models.Model):
     equipment_charges = models.DecimalField(**_M)
     advance_deductions = models.DecimalField(**_M)
     farmer_payable = models.DecimalField(**_M)
+    # The rate that applied when this settlement was made, snapshotted from the
+    # farmer rather than read from them later. Editing a farmer's rate next year
+    # must not restate what was deducted on a settlement already posted.
+    tds_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     per_bird_cost = models.DecimalField(**_M)
     remarks = models.TextField(blank=True)
 
@@ -2959,6 +2963,25 @@ class FarmRouteStop(models.Model):
         """True when the round reached this stop out of its planned turn."""
         return (self.actual_sequence is not None
                 and self.actual_sequence != self.sequence)
+
+
+def tds_on(settlement):
+    """Tax deducted at source on a settled growing charge.
+
+    One function, because the voucher and the Farmer Ledger both need it and a
+    second implementation is how the two would drift apart and start reporting
+    every farmer as out by their own TDS.
+
+    Rounded to the rupee-paise the deduction is actually made in; the farmer's
+    credit is then the remainder, so gross always splits exactly and the voucher
+    balances without a rounding line.
+    """
+    gross = Decimal(str(getattr(settlement, "farmer_payable", 0) or 0))
+    percent = Decimal(str(getattr(settlement, "tds_percent", 0) or 0))
+    if gross <= 0 or percent <= 0:
+        return Decimal("0.00")
+    return (gross * percent / Decimal("100")).quantize(Decimal("0.01"),
+                                                       rounding=ROUND_HALF_UP)
 
 
 class FarmerGCPayment(models.Model):

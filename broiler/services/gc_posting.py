@@ -22,11 +22,12 @@ Bank charges are our cost, not the farmer's, so they never touch Farmer
 Payable. That is the same rule the Farmer Ledger report already follows, and
 the two have to agree or the reconciliation in phase four is meaningless.
 
-TDS is deliberately absent. ``Farmer.tds_percent`` is captured and unused, the
-deduction falls at credit rather than at payment under Indian practice, and
-guessing at a compliance rule is worse than leaving a decision visible. When it
-is decided, it is one more credit line on the settlement entry — the shape here
-does not have to change.
+TDS is deducted at settlement, which is where the credit arises and therefore
+where Indian practice puts it. The rate is snapshotted onto the settlement when
+it is made, so changing a farmer's rate later cannot restate a deduction already
+posted, and ``broiler.models.tds_on`` is the only place the amount is worked out
+— the Farmer Ledger reads the same function, or the two would drift and the
+reconciliation would report every farmer as out by their own TDS.
 
 Rather than editing a posted voucher, an amendment cancels it and posts a new
 one. A posted figure that silently changes is exactly what an audit trail
@@ -123,18 +124,29 @@ def post_settlement(settlement, user=None):
         # but there is no entry to make, and a one-sided voucher is not one.
         return None
 
+    from broiler.models import tds_on
+
     company = _company()
     reverse(settlement, user=user, reason="Settlement re-posted")
 
     expense = _by_role(company, "GROWING_CHARGES", "Growing Charges")
     ledger = farmer_ledger(settlement.farm.farmer, company)
 
+    # The charge is the whole cost to us; the farmer is only owed what is left
+    # after tax is withheld, and the balance of it is owed to the department.
+    tds = tds_on(settlement)
+    rows = [{"account": expense.id, "debit": gross, "credit": 0,
+             "narration": f"Growing charge — {settlement.batch.batch_name}"},
+            {"account": ledger.id, "debit": 0, "credit": gross - tds,
+             "narration": settlement.settlement_code}]
+    if tds > 0:
+        rows.append({"account": _by_role(company, "TDS_PAYABLE", "TDS Payable").id,
+                     "debit": 0, "credit": tds,
+                     "narration": (f"TDS {settlement.tds_percent}% — "
+                                   f"{settlement.farm.farmer.farmer_name}")})
+
     voucher = journal.create_voucher(
-        company, settlement.gc_date,
-        [{"account": expense.id, "debit": gross, "credit": 0,
-          "narration": f"Growing charge — {settlement.batch.batch_name}"},
-         {"account": ledger.id, "debit": 0, "credit": gross,
-          "narration": settlement.settlement_code}],
+        company, settlement.gc_date, rows,
         user=user, voucher_type="Journal", manual=False, system_generated=True,
         reference=settlement.settlement_code,
         narration=(f"Being growing charge of {journal_amount(gross)} due to "

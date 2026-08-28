@@ -8799,6 +8799,10 @@ class GCSettlementAPI(View):
         settlement = GrowingChargeSettlement(
             batch=batch, farm=batch.broiler_farm, scheme=scheme,
             gc_date=gc_date, remarks=data.get("remarks") or "", created_by=request.user,
+            # Snapshotted, not looked up later: changing a farmer's rate must
+            # not restate what was deducted on settlements already made.
+            tds_percent=(batch.broiler_farm.farmer.tds_percent or 0)
+            if batch.broiler_farm.farmer_id else 0,
         )
         model_field_names = {f.name for f in GrowingChargeSettlement._meta.get_fields()}
         for k, v in fields.items():

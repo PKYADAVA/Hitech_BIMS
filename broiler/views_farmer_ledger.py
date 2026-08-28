@@ -4,6 +4,7 @@ A farmer's running account with the company. Two things move it:
 
   credit   a growing charge settled on one of their batches — what the
            settlement said we owe them
+  debit    tax withheld from that charge, which never becomes theirs
   debit    a GC payment made to them — what we have actually handed over
 
 The closing balance is therefore what is still owed. It reads the same way the
@@ -29,7 +30,7 @@ from django.utils.dateparse import parse_date
 from user.services.scoping import farms_for
 
 from .models import (BroilerFarm, Farmer, FarmerGCPaymentLine,
-                     GrowingChargeSettlement)
+                     GrowingChargeSettlement, tds_on)
 
 
 def _num(value):
@@ -64,7 +65,7 @@ def _ledger(user, farmer, fd, td):
     opening = Decimal("0")
     for s in settlements:
         if fd and s.gc_date and s.gc_date < fd:
-            opening += _num(s.farmer_payable)
+            opening += _num(s.farmer_payable) - tds_on(s)
     for p in payments:
         if fd and p.payment.date and p.payment.date < fd:
             opening -= _num(p.amount)
@@ -74,11 +75,15 @@ def _ledger(user, farmer, fd, td):
         if s.gc_date and ((fd and s.gc_date < fd) or (td and s.gc_date > td)):
             continue
         events.append((s.gc_date, 0, "GC", s))
+        # The deduction reads immediately under the charge it comes out of, so
+        # the balance never shows a farmer owed money that was never theirs.
+        if tds_on(s):
+            events.append((s.gc_date, 1, "TDS", s))
     for p in payments:
         d = p.payment.date
         if d and ((fd and d < fd) or (td and d > td)):
             continue
-        events.append((d, 1, "PAY", p))
+        events.append((d, 2, "PAY", p))
     # A settlement and its payment on the same day read in that order: the
     # charge is raised before it is paid.
     events.sort(key=lambda e: (e[0] or parse_date("1900-01-01"), e[1]))
@@ -104,6 +109,11 @@ def _ledger(user, farmer, fd, td):
             voucher, farm = obj.settlement_code, obj.farm.farm_name
             detail = obj.scheme.schema_name if obj.scheme_id else ""
             totals["settlements"] += 1
+        elif kind == "TDS":
+            credit, debit = Decimal("0"), tds_on(obj)
+            particulars = f"TDS deducted at {obj.tds_percent}%"
+            voucher, farm = obj.settlement_code, obj.farm.farm_name
+            detail = "Withheld and payable to the department"
         else:
             credit, debit = Decimal("0"), _num(obj.amount)
             particulars = f"{obj.pay_type} — {obj.mode}"
