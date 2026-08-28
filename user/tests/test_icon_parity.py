@@ -24,7 +24,10 @@ from user.services.mobile_access import PHONE_REPORTS, PHONE_SCREENS
 #: drawn by the app. Every value is checked against the bundled glyph map below,
 #: so a typo here fails rather than rendering a fallback circle.
 FA_TO_MCI = {
-    "fa-arrow-down-to-bracket": "tray-arrow-down",
+    # Was fa-arrow-down-to-bracket, which is a Font Awesome Pro glyph and so
+    # rendered as nothing in the free build the ERP loads. The phone was
+    # never wrong here, so only the web name changed.
+    "fa-inbox": "tray-arrow-down",
     "fa-arrow-up-from-bracket": "tray-arrow-up",
     "fa-book": "book-open-variant",
     "fa-box": "package-variant-closed",
