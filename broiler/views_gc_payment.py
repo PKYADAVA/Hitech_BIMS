@@ -28,6 +28,7 @@ from user.services.scoping import farms_for, scope_any
 
 from .models import (BroilerBatch, BroilerFarm, FarmerGCPayment,
                      FarmerGCPaymentLine, GrowingChargeSettlement)
+from .services import gc_posting
 
 
 def _line_dict(line):
@@ -187,6 +188,10 @@ def _save(request, payment):
         if not payment.narration:
             payment.narration = payment.compose_narration()
             payment.save(update_fields=["narration"])
+        # Inside the same transaction as the save, so a posting failure takes
+        # the voucher down with it rather than leaving money recorded as paid
+        # with nothing on the books to say where it went.
+        gc_posting.post_payment_if_enabled(payment, user=request.user)
 
 
 @login_required(login_url="login")
@@ -220,6 +225,12 @@ def farmer_gc_payment_edit(request, id):
 
 @login_required(login_url="login")
 @require_POST
+@transaction.atomic
 def farmer_gc_payment_delete(request, id):
-    get_object_or_404(FarmerGCPayment, id=id).delete()
+    payment = get_object_or_404(FarmerGCPayment, id=id)
+    # Unpost before deleting: the voucher is found through a link to this
+    # record, so once it is gone there is nothing left to find it by.
+    gc_posting.reverse_if_posted(payment, user=request.user,
+                                 reason="Payment deleted")
+    payment.delete()
     return JsonResponse({"success": True})

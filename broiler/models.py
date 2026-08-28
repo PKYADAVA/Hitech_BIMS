@@ -3110,3 +3110,51 @@ class FarmerGCPaymentLine(models.Model):
 
     def __str__(self):
         return f"{self.farm} — {self.amount}"
+
+class GCPostingSettings(models.Model):
+    """When growing charges and farmer payments reach the ledger.
+
+    Off by default, and deliberately so. Settlement and payment have to start
+    posting together — wiring only the payment would drop Cash against nothing
+    and put the Trial Balance out in a way nobody could trace — and the day
+    that switch is thrown is a decision about the books, not about the code.
+
+    ``cutoff_date`` is the other half of it. There are settlements on record
+    from before any of this existed, and posting them retrospectively would
+    write into financial years that may be closed, which ``post_voucher``
+    refuses by design. Documents dated on or after the cut-off post; earlier
+    ones are left alone and belong in one reviewed opening journal per farmer.
+
+    Leaving the cut-off empty with posting enabled means everything posts,
+    including that history — which is only right on a system with no history
+    worth the name.
+    """
+
+    enabled = models.BooleanField(
+        default=False,
+        help_text=_("Post growing charges and farmer payments to the ledger"))
+    cutoff_date = models.DateField(
+        null=True, blank=True,
+        help_text=_("Only documents dated on or after this post. Leave empty to post everything."))
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("GC Posting Settings")
+        verbose_name_plural = _("GC Posting Settings")
+
+    def __str__(self):
+        return "GC Posting Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def posts_on(self, on_date):
+        """Whether a document of this date should reach the ledger."""
+        if not self.enabled:
+            return False
+        if self.cutoff_date and on_date and on_date < self.cutoff_date:
+            return False
+        return True
+

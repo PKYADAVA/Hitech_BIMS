@@ -191,3 +191,46 @@ def journal_amount(value):
     narration reads the same as every other one in the system."""
     from account.services.narration import format_inr
     return format_inr(value)
+
+# ---------------------------------------------------------------------------
+# The gate the documents call through.
+#
+# Everything above will post whatever it is handed; these two decide whether it
+# should be handed anything at all. Keeping the switch out here means the save
+# paths read the same whether posting is on or off, and that turning it on is a
+# settings change rather than a deployment.
+# ---------------------------------------------------------------------------
+def posting_enabled(on_date=None):
+    from broiler.models import GCPostingSettings
+    return GCPostingSettings.get_solo().posts_on(on_date)
+
+
+def post_settlement_if_enabled(settlement, user=None):
+    """Post a settlement, or don't, according to the switch.
+
+    A posting failure is allowed to propagate. The save paths are atomic, so it
+    takes the settlement down with it — which is the intent: a settlement that
+    exists without its voucher is the silent divergence this whole exercise is
+    meant to remove, and it would show up in the reconciliation as a farmer out
+    by exactly the amount nobody noticed.
+    """
+    if not posting_enabled(settlement.gc_date):
+        return None
+    return post_settlement(settlement, user=user)
+
+
+def post_payment_if_enabled(payment, user=None):
+    if not posting_enabled(payment.date):
+        return None
+    return post_payment(payment, user=user)
+
+
+def reverse_if_posted(document, user=None, reason="Source document deleted"):
+    """Unpost whatever a document put on the books, before it goes.
+
+    Not gated on the switch: a document posted while it was on must still
+    reverse if it is deleted after it was turned off, or the charge stays on the
+    books for something that no longer exists.
+    """
+    return reverse(document, user=user, reason=reason)
+

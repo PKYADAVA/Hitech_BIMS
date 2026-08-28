@@ -33,6 +33,7 @@ from .models import (
     FarmerFarmSetupRequestPhoto,
 )
 from account.models import ChartOfAccount
+from .services import gc_posting
 from inventory.models import Item, Warehouse
 from sales.models import Customer
 from hatchery_master.models import Hatchery
@@ -8815,6 +8816,11 @@ class GCSettlementAPI(View):
         # closed flag we just changed, so drop the stale snapshot.
         cache.delete("broiler_batch_list")
 
+        # The charge is now owed, so the books should say so. A posting failure
+        # is not swallowed: this method is atomic, so it takes the settlement
+        # with it rather than leaving one that exists without its voucher.
+        gc_posting.post_settlement_if_enabled(settlement, user=request.user)
+
         return JsonResponse({"message": "Settlement saved and batch closed",
                              "id": settlement.id, "code": settlement.settlement_code}, status=201)
 
@@ -8839,12 +8845,21 @@ class GCSettlementAPI(View):
             s.gc_date = timezone.datetime.fromisoformat(data["gc_date"]).date()
         s.remarks = data.get("remarks", s.remarks) or ""
         s.save()
+        # Re-posting cancels the previous voucher and writes a fresh one, rather
+        # than amending a posted figure in place.
+        gc_posting.post_settlement_if_enabled(s, user=request.user)
         return JsonResponse({"message": "Settlement updated", "id": s.id, "code": s.settlement_code})
 
     @transaction.atomic
     def delete(self, request, id):
         s = get_object_or_404(GrowingChargeSettlement.objects.select_related("batch"), id=id)
         batch = s.batch
+        # Take the charge off the books before the document that raised it goes.
+        # Reopening a batch is the path most likely to be forgotten, and missing
+        # it would leave an expense and a liability behind for a settlement that
+        # no longer exists.
+        gc_posting.reverse_if_posted(s, user=request.user,
+                                     reason="Settlement deleted, batch reopened")
         # Reopen the batch — clear the end/closed marks the settlement set so
         # the flock counts as live again.
         s.delete()
