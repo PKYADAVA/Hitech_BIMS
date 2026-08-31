@@ -121,7 +121,8 @@
           <td>{{ r.driver }}</td>
           <td>{{ r.remarks }}</td>
           <td><span class="rpt-pill {% if r.upload_status == 'Uploaded' %}rpt-pill-ok{% else %}rpt-pill-wait{% endif %}">
-            <i class="fas {% if r.upload_status == 'Uploaded' %}fa-circle-check{% else %}fa-clock{% endif %} me-1"></i>{{ r.upload_status }}</span></td>
+            <i class="fas {% if r.upload_status == 'Uploaded' %}fa-circle-check{% else %}fa-clock{% endif %} me-1"></i>{{ r.upload_status }}</span>
+            {% for f in r.upload_files %}<a href="{{ f.url }}" target="_blank" rel="noopener" class="rpt-doc-link" title="{{ f.name }}"><i class="fas fa-paperclip"></i></a>{% endfor %}</td>
           <td>{{ r.added_by }}</td>
           <td>{{ r.added_time|date:"d.m.Y h:i A" }}</td>
         </tr>

@@ -1629,6 +1629,8 @@ def supplier_ledger_report(request):
                         "farm_code": "",
                         "remarks": (obj.remarks or "") if first else "",
                         "vehicle": h_vehicle if first else "",
+                        # Egg Purchase carries no reference-document field at all.
+                        "docs": (_pr_upload_files(obj) if first else []) if kind in ("GP", "CP") else [],
                     })
                 totals["debit"] += amt
                 purchases_total += amt
@@ -1645,7 +1647,7 @@ def supplier_ledger_report(request):
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
                     # Sector column shows the cash/bank account the payment came from.
                     "sector": (obj.pay_account.description if obj.pay_account_id else obj.mode) or "",
-                    "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
+                    "farm_code": "", "remarks": obj.remarks or "", "vehicle": "", "docs": [],
                 })
                 totals["credit"] += amt
                 payments_total += amt
@@ -1676,7 +1678,7 @@ def supplier_ledger_report(request):
                     "balance": abs(running).quantize(q2), "cr_dr": "Dr" if running >= 0 else "Cr",
                     # Sector = the office/branch, as on the Journal screen.
                     "sector": obj.sector.name if obj.sector_id else "",
-                    "farm_code": "", "remarks": obj.remarks or "", "vehicle": "",
+                    "farm_code": "", "remarks": obj.remarks or "", "vehicle": "", "docs": [],
                 })
             grp["closing"] = running  # running after the latest event in the month
 
@@ -1962,6 +1964,19 @@ def _pr_upload_status(purchase):
     return "Not Uploaded"
 
 
+def _pr_upload_files(purchase):
+    """The purchase's attached reference documents as {url, name}, for a
+    direct link from the report — not just the Uploaded/Not Uploaded status.
+    Egg Purchase carries no such field, so this is always empty for it."""
+    files = []
+    for i, field in enumerate(("reference_document_1", "reference_document_2",
+                               "reference_document_3"), start=1):
+        f = getattr(purchase, field, None)
+        if f:
+            files.append({"url": f.url, "name": f"Document {i}"})
+    return files
+
+
 def _pr_added_by(model_names, object_ids):
     """{(model_name, object_id): actor} for the *create* audit entries of the
     given purchases — the purchase models carry no created_by of their own, so
@@ -1979,6 +1994,8 @@ def purchase_report(request):
     """Purchase > Reports > Purchase Report — one row per purchased item line
     across General and Chicks purchases, with supplier, document references,
     quantities, rate/value, the receiving farm/warehouse and who entered it."""
+    from datetime import timedelta
+
     from django.utils.dateparse import parse_date
     from account.models import CompanyProfile
     from broiler.models import Branch
@@ -1991,6 +2008,15 @@ def purchase_report(request):
     branch_id, warehouse_id = g("branch"), g("warehouse")
     upload_status, export = g("upload_status"), g("export").lower()
     purchase_type = g("purchase_type")
+
+    # No date filter at all (a fresh visit, not a deliberately-cleared filter —
+    # that always leaves at least one of the two params on the querystring)
+    # defaults to the last 7 days, so the report opens on something rather
+    # than the whole purchase history.
+    if not from_date and not to_date:
+        today = timezone.localdate()
+        from_date = (today - timedelta(days=6)).isoformat()
+        to_date = today.isoformat()
 
     fd = parse_date(from_date) if from_date else None
     td = parse_date(to_date) if to_date else None
@@ -2112,6 +2138,7 @@ def purchase_report(request):
                        or getattr(purchase, "driver", "") or ""),
             "remarks": purchase.remarks,
             "upload_status": _pr_upload_status(purchase),
+            "upload_files": _pr_upload_files(purchase),
             "added_by": added_by.get((model_name, str(purchase.id)), ""),
             "added_time": purchase.created_at,
             "branch": branch_of_sector.get(wh.sector_id, "") if wh else "",

@@ -110,6 +110,8 @@
 .rpt-pill-wait { background:#fff4e0; color:#b5761e; }
 .rpt-amount { color:#1a7f4b; font-weight:700; }
 .rpt-link { color:#2b62c9; font-weight:600; }
+.rpt-doc-link { color:#6c757d; margin-left:.35rem; }
+.rpt-doc-link:hover { color:#2b62c9; }
 
 /* DataTables controls sit above/below the table; keep them compact. */
 .rpt-dt-wrap .dataTables_filter input, .rpt-dt-wrap .dataTables_length select { font-size:.78rem; }

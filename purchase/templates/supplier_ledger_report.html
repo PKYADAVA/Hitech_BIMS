@@ -120,14 +120,14 @@
         <th class="ds-num num">Sent Qty</th><th class="ds-num num">Received Qty</th><th class="num">Free</th><th class="ds-num num">Rate</th><th class="ds-num num">Amount</th>
         <th class="num">Freight</th><th class="num">GST</th><th class="num">TDS</th>
         <th class="ds-num num">Debit</th><th class="ds-num num">Credit</th><th class="ds-num num">Balance</th>
-        <th>Sector</th><th>Farm Code</th><th>Vehicle</th><th>Remarks</th>
+        <th>Sector</th><th>Farm Code</th><th>Vehicle</th><th>Remarks</th><th>Attachment</th>
       </tr></thead>
       <tbody>
         {% if supplier %}
         <tr class="sl-prev">
           <td colspan="16" class="text-end">Previous Balance</td>
           <td class="num {% if prev_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ prev_balance|indian_currency }} {{ prev_cr_dr }}</td>
-          <td colspan="4"></td>
+          <td colspan="5"></td>
         </tr>
         {% for g in groups %}
         <tr class="grp-row">
@@ -135,7 +135,7 @@
           <td class="num">{{ g.debit|indian_currency }}</td>
           <td class="num">{{ g.credit|indian_currency }}</td>
           <td class="num {% if g.cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ g.closing|indian_currency }} {{ g.cr_dr }}</td>
-          <td colspan="4"></td>
+          <td colspan="5"></td>
         </tr>
         {% for r in g.rows %}
         <tr>
@@ -160,6 +160,7 @@
           <td>{{ r.farm_code }}</td>
           <td title="{{ r.vehicle }}">{{ r.vehicle }}</td>
           <td title="{{ r.remarks }}">{{ r.remarks }}</td>
+          <td>{% for f in r.docs %}<a href="{{ f.url }}" target="_blank" rel="noopener" class="rpt-doc-link" title="{{ f.name }}"><i class="fas fa-paperclip"></i></a>{% endfor %}</td>
         </tr>
         {% endfor %}
         {% endfor %}
@@ -168,10 +169,10 @@
           <td class="num">{{ totals.debit|indian_currency }}</td>
           <td class="num">{{ totals.credit|indian_currency }}</td>
           <td class="num {% if closing_cr_dr == 'Cr' %}cr{% else %}dr{% endif %}">{{ closing|indian_currency }} {{ closing_cr_dr }}</td>
-          <td colspan="4"></td>
+          <td colspan="5"></td>
         </tr>
         {% else %}
-        <tr><td colspan="21" class="text-center text-muted py-4">Select a supplier and click Update Report.</td></tr>
+        <tr><td colspan="22" class="text-center text-muted py-4">Select a supplier and click Update Report.</td></tr>
         {% endif %}
       </tbody>
     </table>
