@@ -67,6 +67,8 @@ $(function () {
   const BANKCASH = [{% for b in bank_cash_list %}{ id: {{ b.id }}, label: "{{ b.code|escapejs }} - {{ b.name|escapejs }}", cash: {{ b.is_cash|yesno:"true,false" }} },{% endfor %}];
 
   function methodCheckboxes(category, selected) {
+    // Digital Wallet has no account type of its own in the Bank / Cash
+    // master — it settles like a bank account, so it shares that list.
     const wantCash = category === 'Cash';
     const sel = (selected || []).map(String);
     const list = BANKCASH.filter(b => b.cash === wantCash);

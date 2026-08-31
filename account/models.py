@@ -568,15 +568,16 @@ class PaymentMode(models.Model):
     Category (Cash/Bank). On a payment/receipt, choosing the mode auto-fills that
     account. ``applicable_for`` scopes the mode to Payment / Receipt / Both. The
     transaction's own ``mode`` field stays a plain name string."""
-    CATEGORY_CHOICES = [("Cash", "Cash"), ("Bank", "Bank")]
+    CATEGORY_CHOICES = [("Cash", "Cash"), ("Bank", "Bank"), ("Digital Wallet", "Digital Wallet")]
     APPLICABLE_CHOICES = [("Payment", "Payment"), ("Receipt", "Receipt"), ("Both", "Both")]
 
     code = models.CharField(max_length=20, unique=True, editable=False, blank=True,
                             help_text=_("Auto-generated code, e.g. PM-0001"))
     name = models.CharField(max_length=100, unique=True,
                             help_text=_("Mode name shown in payment/receipt dropdowns"))
-    category = models.CharField(max_length=10, choices=CATEGORY_CHOICES, default="Bank",
-                                help_text=_("Cash or Bank — filters the Payment Method options"))
+    category = models.CharField(max_length=14, choices=CATEGORY_CHOICES, default="Bank",
+                                help_text=_("Cash, Bank or Digital Wallet — filters the Payment Method options "
+                                            "(Digital Wallet uses the Bank accounts, same as Bank)"))
     bank_cash = models.ManyToManyField('account.BankCashMaster', blank=True,
                                        related_name='payment_modes',
                                        help_text=_("Payment Method — the Bank/Cash Master accounts this mode maps to"))
