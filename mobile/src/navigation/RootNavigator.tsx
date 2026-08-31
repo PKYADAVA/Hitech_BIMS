@@ -42,6 +42,7 @@ import { SyncCenterScreen } from "@/screens/SyncCenterScreen";
 import { ReportsHubScreen, ReportsStackParams } from "@/screens/ReportsHubScreen";
 import { ResourceListScreen } from "@/screens/ResourceListScreen";
 import { SmsSendScreen } from "@/screens/SmsSendScreen";
+import { SmsTransactionScreen } from "@/screens/SmsTransactionScreen";
 import { SupervisorTripFormScreen } from "@/screens/SupervisorTripFormScreen";
 import { useAuthStore } from "@/store/authStore";
 import { usePermissionsStore } from "@/store/permissionsStore";
@@ -221,6 +222,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="SupervisorTripForm" component={SupervisorTripFormScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />
+      <ModuleStack.Screen name="SmsTransaction" component={SmsTransactionScreen} />
       <ModuleStack.Screen name="Report" component={ReportScreen} />
       <ModuleStack.Screen name="ReportWebView" component={ReportWebViewScreen}
         options={{ headerShown: false }} />

@@ -53,9 +53,14 @@ from sales.api_write import write_urls as sales_write_urls
 from notification.api import (
     DeviceRegisterView,
     DeviceTestView,
+    SmsDocSourcesView,
     SmsMessageRetryView,
+    SmsPartiesView,
     SmsSettingsSerializer,
     SmsTemplateSendView,
+    SmsTransactionDocumentsView,
+    SmsTransactionPreviewView,
+    SmsTransactionSendView,
 )
 from notification.models import SmsMessage, SmsSettings, SmsTemplate
 from purchase.models import Supplier
@@ -210,6 +215,16 @@ urlpatterns = [
     # SMS actions (not plain CRUD) — declared before the router so they win.
     path("sms/templates/<int:pk>/send", SmsTemplateSendView.as_view(), name="sms-template-send"),
     path("sms/messages/<int:pk>/retry", SmsMessageRetryView.as_view(), name="sms-message-retry"),
+    # SMS Transaction: browse SMS-eligible documents across every registered
+    # source and send to the selected ones — the phone's version of the web
+    # SMS Transaction page.
+    path("sms/doc-sources", SmsDocSourcesView.as_view(), name="sms-doc-sources"),
+    path("sms/parties", SmsPartiesView.as_view(), name="sms-parties"),
+    path("sms/transaction/documents", SmsTransactionDocumentsView.as_view(),
+         name="sms-transaction-documents"),
+    path("sms/transaction/preview", SmsTransactionPreviewView.as_view(),
+         name="sms-transaction-preview"),
+    path("sms/transaction/send", SmsTransactionSendView.as_view(), name="sms-transaction-send"),
     # Push notifications: device registration + a user-triggered test.
     path("devices/register", DeviceRegisterView.as_view(), name="device-register"),
     path("devices/test", DeviceTestView.as_view(), name="device-test"),

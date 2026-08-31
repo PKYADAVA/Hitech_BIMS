@@ -123,7 +123,7 @@ export interface HubTool {
   key: string;
   title: string;
   icon: string;
-  screen: "ManageAccess";
+  screen: "ManageAccess" | "SmsTransaction";
 }
 
 export interface ModuleConfig {
@@ -2056,6 +2056,9 @@ export const MODULES: Record<ModuleKey, ModuleConfig> = {
           "sms-messages",
         ],
       },
+    ],
+    tools: [
+      { key: "sms-transaction", title: "SMS Transaction", icon: "📤", screen: "SmsTransaction" },
     ],
   },
   account: {

@@ -18,6 +18,9 @@ export type ModuleStackParams = {
     onDoneGoBack?: boolean;
   };
   SmsSend: { row: Row };
+  /** Browse SMS-eligible documents (every registered source), pick a
+   *  template, multi-select, and send — the phone's SMS Transaction page. */
+  SmsTransaction: undefined;
   Report: { title: string; path: string };
   /** The same report's full web page, opened in-app — see ReportWebViewScreen. */
   ReportWebView: { title: string; webReportName: string };
