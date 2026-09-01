@@ -151,7 +151,10 @@ $(function () {
   let pendingDeleteId = null;
 
   const today = localDay();
-  $("#from-date").val(today);
+  // Last 7 days by default, not just today — a register opened fresh should
+  // show something to work from, not one narrow day.
+  const weekAgo = localDay(new Date(Date.now() - 6 * 86400000));
+  $("#from-date").val(weekAgo);
   $("#to-date").val(today);
 
   function escapeHtml(str) {
@@ -309,7 +312,7 @@ $(function () {
 
   $("#filter-submit").on("click", loadRows);
   $("#filter-clear").on("click", function () {
-    $("#from-date").val(today);
+    $("#from-date").val(weekAgo);
     $("#to-date").val(today);
     $("#farm").val("");
     $("#status").val("Active");
