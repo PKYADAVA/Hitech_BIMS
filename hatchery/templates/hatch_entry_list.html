@@ -67,10 +67,10 @@ $(function () {
   let table = null;
   let allRows = [];
 
-  // Left blank on load, not defaulted to today: this register is read to
-  // find a past entry as often as today's, and a same-day default silently
-  // hid every earlier record behind an unset-looking filter that was
-  // actually already narrowed to nothing.
+  // Last 7 days by default, not just today — a register opened fresh
+  // should show something to work from, not one narrow day.
+  $("#from-date").val(localDay(new Date(Date.now() - 6 * 86400000)));
+  $("#to-date").val(localDay());
 
   // escapeHtml() provided globally by main.js
 
