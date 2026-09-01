@@ -92,7 +92,9 @@ $(function () {
   let table = null;
 
   const today = localDay();
-  $("#from-date").val(today);
+  // Last 7 days by default, not just today — a register opened fresh should
+  // show something to work from, not one narrow day.
+  $("#from-date").val(localDay(new Date(Date.now() - 6 * 86400000)));
   $("#to-date").val(today);
 
   function escapeHtml(str) {

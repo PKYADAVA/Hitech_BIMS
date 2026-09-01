@@ -45,6 +45,10 @@
 <script>
 $(function () {
   let table = null;
+  // Last 7 days by default, not the entire history — a register opened
+  // fresh should show something to work from.
+  $("#from-date").val(localDay(new Date(Date.now() - 6 * 86400000)));
+  $("#to-date").val(localDay());
   function esc(s){ return s==null?"":String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
   function renderRows(rows) {
     if (table) table.destroy();
