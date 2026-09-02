@@ -1,4 +1,3 @@
-import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -6,7 +5,6 @@ import {
   Image,
   Linking,
   Modal,
-  Platform,
   Pressable,
   Switch,
   Text,
@@ -22,6 +20,8 @@ import { makeStyles, radius, spacing, type, useTheme } from "@/theme";
 import { formatDate } from "@/utils/format";
 import { AppIcon } from "./AppIcon";
 import { SearchBar } from "./ui";
+import { DatePicker } from "./DatePicker";
+import { TimePicker } from "./TimePicker";
 
 /** Label + control + inline error wrapper shared by all field types. */
 function FieldShell({
@@ -127,6 +127,14 @@ export function FormControl({
     );
   }
 
+  if (field.type === "time") {
+    return (
+      <FieldShell label={field.label} required={field.required} error={error}>
+        <TimeControl value={value} onChange={onChange} />
+      </FieldShell>
+    );
+  }
+
   if (field.type === "select") {
     return (
       <FieldShell label={field.label} required={field.required} error={error}>
@@ -186,7 +194,6 @@ export function FormControl({
 function DateControl({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const styles = useStyles();
   const [show, setShow] = useState(false);
-  const current = value ? new Date(value) : new Date();
 
   return (
     <>
@@ -196,13 +203,38 @@ function DateControl({ value, onChange }: { value: string; onChange: (v: string)
         </Text>
       </Pressable>
       {show ? (
-        <DateTimePicker
-          value={isNaN(current.getTime()) ? new Date() : current}
-          mode="date"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          onChange={(_e, d) => {
-            setShow(Platform.OS === "ios");
-            if (d) onChange(toISODate(d));
+        <DatePicker
+          value={value}
+          onPick={(d) => {
+            // Close back to the plain trigger on every platform — otherwise
+            // the raw native control (a second, differently-formatted date,
+            // e.g. "01-09-2026" under "01 Sept 2026") stays on screen
+            // permanently once opened, showing the same date twice.
+            setShow(false);
+            if (d) onChange(d);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function TimeControl({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const styles = useStyles();
+  const [show, setShow] = useState(false);
+
+  return (
+    <>
+      <Pressable style={styles.input} onPress={() => setShow(true)}>
+        <Text style={value ? styles.inputText : styles.placeholder}>{value || "Select time"}</Text>
+      </Pressable>
+      {show ? (
+        <TimePicker
+          value={value}
+          onPick={(t) => {
+            // Close back to the plain trigger on every platform — see DateControl.
+            setShow(false);
+            if (t) onChange(t);
           }}
         />
       ) : null}
@@ -477,12 +509,6 @@ function GeoControl({
       ) : null}
     </>
   );
-}
-
-function toISODate(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 const useStyles = makeStyles((colors) => ({
