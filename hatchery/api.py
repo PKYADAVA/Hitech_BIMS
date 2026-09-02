@@ -10,6 +10,9 @@ Registered under ``/api/v1/hatchery/…`` by :func:`register`.
 """
 from __future__ import annotations
 
+from rest_framework import serializers
+
+from api.serializers import serializer_factory
 from api.viewsets import register_model
 from hatchery_master.models import ExpenseType, Hatcher, Hatchery, HatcheryExpense, Setter
 
@@ -28,9 +31,25 @@ from .models import (
 )
 
 
+# The factory serializes real columns only — Setting Qty/Saleable Chicks/
+# Hatch %/Unsold Chicks are plain Python methods on HatchSetting (nothing
+# stores them), the same figures the web list computes per row. DRF calls a
+# same-named method automatically when it resolves a declared field, so no
+# SerializerMethodField indirection is needed here.
+_HatchSettingBase = serializer_factory(HatchSetting)
+
+
+class HatchSettingSerializer(_HatchSettingBase):
+    total_saleable_chicks = serializers.IntegerField(read_only=True)
+    hatch_percent = serializers.FloatField(read_only=True)
+    total_chicks_sold = serializers.IntegerField(read_only=True)
+    unsold_chicks = serializers.IntegerField(read_only=True)
+
+
 def register(router) -> None:
     # --- Settings / operational records (full CRUD) ---------------------
     register_model(router, "hatchery/hatch-settings", HatchSetting,
+                   serializer=HatchSettingSerializer,
                    search_fields=["setting_no", "batch_flock_no", "supplier_name"])
     register_model(router, "hatchery/tray-settings", TraySetting,
                    search_fields=["setting_no", "loaded_by"])

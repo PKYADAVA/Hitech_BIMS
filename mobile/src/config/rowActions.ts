@@ -15,8 +15,8 @@ import { RecordAction } from "@/components/RecordCard";
  * here would need a cast at every call site and would let a typo through.
  */
 export type RowActionNavigate = (
-  screen: "SupervisorTripForm" | "FarmCaptureFill" | "BirdSalePhotos",
-  params: { row: Row; ending?: boolean },
+  screen: "SupervisorTripForm" | "FarmCaptureFill" | "BirdSalePhotos" | "HatchSettingForm",
+  params: { row: Row; ending?: boolean; completing?: boolean },
 ) => void;
 
 /** What the asker may do here, so each action gates itself the way the ERP
@@ -107,6 +107,27 @@ function uploadPhotosAction(row: Row, navigate: RowActionNavigate): RecordAction
   };
 }
 
+/**
+ * Fill in the pending sections — transfer/hatch date, candling and hatch
+ * output, environmental log, sales — without touching what's already saved.
+ *
+ * The register's "+", same rule as fillCaptureAction: a batch is set on Day
+ * 1 with only its identity and egg intake known, and candling/hatch/sales
+ * data lands 18-21 days later from a different visit. Opening the full Edit
+ * form for that risks overwriting the Day 1 figures by mistake; this opens
+ * the same form with everything already filled locked read-only, matching
+ * the web register's own Complete Data modal. Gated on add, not edit — the
+ * same "filling a blank is adding" rule fillCaptureAction uses above.
+ */
+function completeHatchAction(row: Row, navigate: RowActionNavigate): RecordAction {
+  return {
+    key: "complete",
+    label: "Complete",
+    icon: "plus",
+    onPress: () => navigate("HatchSettingForm", { row, completing: true }),
+  };
+}
+
 export function extraRowActions(
   resourceKey: string,
   row: Row,
@@ -131,6 +152,9 @@ export function extraRowActions(
       out.push(clearLocationAction(row, () => handlers.clearLocation!(row)));
     }
     return out;
+  }
+  if (resourceKey === "hatchery-hatch-settings") {
+    return perms.add ? [completeHatchAction(row, navigate)] : [];
   }
   return [];
 }

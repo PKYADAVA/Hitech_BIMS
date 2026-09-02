@@ -27,6 +27,30 @@
     </div>
 </div>
 
+<!-- Date Filter -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="from-date" class="form-label">From Date:</label>
+        <input type="date" class="form-control" id="from-date">
+      </div>
+      <div class="col-md-3">
+        <label for="to-date" class="form-label">To Date:</label>
+        <input type="date" class="form-control" id="to-date">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary" id="filter-submit">Submit</button>
+      </div>
+      <div class="col-md-4">
+        <label for="hatchery-search" class="form-label">Search:</label>
+        <input type="search" class="form-control" id="hatchery-search"
+               placeholder="Setting No, Batch / Flock No or Supplier">
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Hatch Setting List Card -->
 <div class="card">
   <div class="card-header">
@@ -329,10 +353,16 @@
 
 <script>
 $(document).ready(function () {
+  // Last 7 days by default, not the entire history — matches every other
+  // Hatchery transaction register's own default.
+  $("#from-date").val(localDay(new Date(Date.now() - 6 * 86400000)));
+  $("#to-date").val(localDay());
+
   function loadHatchSettingList() {
     $.ajax({
       url: "{% url 'hatchery_api_list' %}",
       type: "GET",
+      data: { from_date: $("#from-date").val(), to_date: $("#to-date").val() },
       success: function (response) {
         const table = $("#hatchery-table");
         if ($.fn.DataTable.isDataTable(table)) {
@@ -385,6 +415,16 @@ $(document).ready(function () {
           searching: true,
           info: true,
           lengthChange: true,
+          // 'f' (the built-in search box) dropped from the default
+          // "Blfrtip" — the dedicated search field above the table replaces
+          // it, so the register doesn't carry two.
+          dom: "Blrtip",
+          // The table is torn down and rebuilt on every load (a save,
+          // delete or Complete all call this again) — re-seeding the
+          // current search box value here is what keeps a search standing
+          // across that rebuild, same as re-selecting whatever page/length
+          // the table already had.
+          search: { search: $("#hatchery-search").val() || "" },
           columnDefs: [{ orderable: false, targets: -1 }],
         });
       },
@@ -395,6 +435,12 @@ $(document).ready(function () {
   }
 
   loadHatchSettingList();
+
+  $("#filter-submit").on("click", loadHatchSettingList);
+
+  $("#hatchery-search").on("input", function () {
+    $("#hatchery-table").DataTable().search($(this).val()).draw();
+  });
 
   $(document).on("click", ".delete-button", async function () {
     const id = $(this).data("id");

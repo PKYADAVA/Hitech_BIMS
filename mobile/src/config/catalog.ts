@@ -651,17 +651,34 @@ const hatcheryResources: ResourceConfig[] = [
     key: "hatchery-hatch-settings",
     module: "hatchery",
     path: "/hatchery/hatch-settings/",
-    title: "Hatch Settings",
-    singular: "Hatch Setting",
+    // Named "Hatch Register" to match the web's Transactions tab and page
+    // title exactly — the model is HatchSetting, but nothing user-facing
+    // should say "Settings" for what the ERP calls the Hatch Register.
+    title: "Hatch Register",
+    singular: "Hatch Register",
     icon: "egg",
     accent: H,
-    emptyMessage: "No hatch settings yet.",
+    emptyMessage: "No hatch registers yet.",
+    dateField: "setting_date",
     searchKeys: ["setting_no", "batch_flock_no", "supplier_name"],
     card: (r) => ({
       title: pick(r, ["setting_no"], `Setting #${r.id}`),
-      subtitle: joinParts([formatDate(r.setting_date), pick(r, ["batch_flock_no"])]),
-      trailing: !isBlank(r.setting_qty)
-        ? { value: formatNumber(r.setting_qty), caption: "set" }
+      // Same columns the web register leads with, beyond Setting No and
+      // Batch — who supplied the eggs and when they were set.
+      subtitle: joinParts([
+        pick(r, ["supplier_name"]),
+        formatDate(r.setting_date),
+        pick(r, ["batch_flock_no"]),
+      ]),
+      trailing: !isBlank(r.total_saleable_chicks)
+        ? { value: formatNumber(r.total_saleable_chicks), caption: "saleable" }
+        : undefined,
+      // Hatch % is the one figure the web register's own colour scheme
+      // singles out (its own column, no others toned) — green once it
+      // clears the 65% floor the form's own target line quotes, amber short
+      // of it.
+      badge: !isBlank(r.hatch_percent)
+        ? { label: `${r.hatch_percent}% hatch`, tone: Number(r.hatch_percent) >= 65 ? "success" : "warning" }
         : undefined,
     }),
   },

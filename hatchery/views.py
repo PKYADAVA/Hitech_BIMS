@@ -183,6 +183,12 @@ class HatchSettingAPI(BaseAPIView):
                 return JsonResponse(_hatch_setting_to_dict(hs))
 
             hatch_settings = HatchSetting.objects.all()
+            from_date = (request.GET.get("from_date") or "").strip()
+            to_date = (request.GET.get("to_date") or "").strip()
+            if from_date:
+                hatch_settings = hatch_settings.filter(setting_date__gte=from_date)
+            if to_date:
+                hatch_settings = hatch_settings.filter(setting_date__lte=to_date)
             results = []
             for hs in hatch_settings:
                 results.append({

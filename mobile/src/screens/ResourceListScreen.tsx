@@ -7,6 +7,7 @@ import { createChangeRequest } from "@/api/changeRequests";
 import { deleteResource } from "@/api/resources";
 import { Row } from "@/api/types";
 import { useOverview } from "@/api/stats";
+import { toISODate } from "@/components/DatePicker";
 import { CHANGE_REQUEST_MODULE } from "@/config/changeRequestModules";
 import { LIST_KPIS } from "@/config/modulePrimary";
 import { buildGroups, GroupItem } from "@/domain/grouping";
@@ -30,6 +31,12 @@ type Props = NativeStackScreenProps<ModuleStackParams, "List">;
 
 const isGroup = (item: Row | GroupItem): item is GroupItem =>
   Array.isArray((item as GroupItem).rows);
+
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return toISODate(d);
+}
 
 /** Read a dotted path out of the overview payload. */
 const at = (obj: unknown, path: string): number | undefined =>
@@ -71,8 +78,11 @@ export function ResourceListScreen({ route, navigation }: Props) {
   const config = RESOURCES[route.params.resourceKey];
   const list = useResourceList<Row>(config.path);
   const [query, setQuery] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // A register with a date field opens on its last 7 days, not its entire
+  // history — the same default the web reports use. A register with no date
+  // field has no range UI at all, so there is nothing to default here.
+  const [from, setFrom] = useState(() => (config.dateField ? daysAgo(6) : ""));
+  const [to, setTo] = useState(() => (config.dateField ? toISODate(new Date()) : ""));
   const can = usePermissionsStore((s) => s.canResource);
   const canAdd = can(config.key, config.module, "add");
   const canEdit = can(config.key, config.module, "edit");
