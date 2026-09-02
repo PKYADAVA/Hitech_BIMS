@@ -24,6 +24,7 @@ import { FarmCaptureFillScreen } from "@/screens/FarmCaptureFillScreen";
 import { FarmCaptureFormScreen } from "@/screens/FarmCaptureFormScreen";
 import { EggPurchaseFormScreen } from "@/screens/EggPurchaseFormScreen";
 import { GeneralPurchaseFormScreen } from "@/screens/GeneralPurchaseFormScreen";
+import { HatchSettingFormScreen } from "@/screens/HatchSettingFormScreen";
 import { FarmerFarmSetupRequestFormScreen } from "@/screens/FarmerFarmSetupRequestFormScreen";
 import { FormScreen } from "@/screens/FormScreen";
 import { HomeScreen } from "@/screens/HomeScreen";
@@ -219,6 +220,7 @@ function ModuleStackScreen({ moduleKey }: { moduleKey: ModuleKey }) {
       <ModuleStack.Screen name="FarmerFarmSetupRequestForm" component={FarmerFarmSetupRequestFormScreen} />
       <ModuleStack.Screen name="EggPurchaseForm" component={EggPurchaseFormScreen} />
       <ModuleStack.Screen name="GeneralPurchaseForm" component={GeneralPurchaseFormScreen} />
+      <ModuleStack.Screen name="HatchSettingForm" component={HatchSettingFormScreen} />
       <ModuleStack.Screen name="SupervisorTripForm" component={SupervisorTripFormScreen} />
       <ModuleStack.Screen name="DocumentForm" component={DocumentFormScreen} />
       <ModuleStack.Screen name="SmsSend" component={SmsSendScreen} />

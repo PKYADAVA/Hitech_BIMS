@@ -62,6 +62,13 @@ export type ModuleStackParams = {
    *  EggPurchaseForm, plus the destination toggle and TDS/bag fields the
    *  list's summary row doesn't carry. */
   GeneralPurchaseForm: { row?: Row } | undefined;
+  /** `row` corrects a saved hatch setting, loaded fresh — its list row is only
+   *  a summary, not the full egg-intake/hatcher-output/sales-line rows this
+   *  form edits. `completing` opens the same form with every already-filled
+   *  field/row locked read-only — the register's "+", for the pending data
+   *  (transfer/hatch date, candling, environment, sales) that lands on a
+   *  later visit than the one that set the batch up. */
+  HatchSettingForm: { row?: Row; completing?: boolean } | undefined;
   /** Transaction document form (header + line items) — inventory/purchase/sales. */
   DocumentForm: { resourceKey: string; mode: "create" | "edit"; row?: Row };
 };

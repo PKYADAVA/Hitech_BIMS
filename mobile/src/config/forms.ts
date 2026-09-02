@@ -29,6 +29,8 @@ export type FieldType =
   | "number"
   | "decimal"
   | "date"
+  /** HH:MM, 24-hour. */
+  | "time"
   | "boolean"
   | "select"
   /** Camera / gallery capture; the value is a local file URI or a stored URL. */
@@ -752,31 +754,9 @@ export const FORMS: Record<string, FormSchema> = {
   },
 
   /* ------------------------ Hatchery master data ------------------------ */
-  "hatchery-hatch-settings": {
-    fields: [
-      text("setting_no", "Setting No.", true),
-      text("batch_flock_no", "Batch / Flock No."),
-      text("supplier_name", "Supplier Name"),
-      date("received_date", "Received Date"),
-      date("setting_date", "Setting Date"),
-      date("transfer_date", "Transfer Date"),
-      date("hatch_date", "Hatch Date"),
-      num("received_qty", "Received Qty"),
-      num("breakage_qty", "Breakage Qty"),
-      num("crack_qty", "Crack Qty"),
-      num("setting_qty", "Setting Qty"),
-      text("setter_temperature", "Setter Temp"),
-      text("setter_humidity", "Setter Humidity"),
-      text("hatcher_temperature", "Hatcher Temp"),
-      text("hatcher_humidity", "Hatcher Humidity"),
-      text("avg_chick_weight", "Avg Chick Weight"),
-      text("medicine_vaccine", "Medicine / Vaccine"),
-      num("packing_boxes_used", "Packing Boxes"),
-      area("remarks", "Remarks"),
-      text("prepared_by", "Prepared By"),
-      text("verified_by", "Verified By"),
-    ],
-  },
+  // Hatch Setting's create/edit is HatchSettingFormScreen (see
+  // navigation/openForm.ts's ROW_FORM_SCREEN) — its header alone, with none
+  // of the setter/hatcher/sales row groups, has no shape here to duplicate.
   "hatchery-tray-settings": {
     fields: [
       text("setting_no", "Setting No.", true),

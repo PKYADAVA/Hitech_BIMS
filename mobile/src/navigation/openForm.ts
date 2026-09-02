@@ -22,7 +22,7 @@ const CUSTOM_FORM_SCREEN: Record<string, "BirdSaleForm" | "BirdSaleReceiptForm">
 const ROW_FORM_SCREEN: Record<string,
   "DailyEntryGrid" | "MedicineEntryForm" | "FarmCaptureForm"
   | "SupervisorTripForm" | "BatchForm" | "FarmerFarmSetupRequestForm" | "EggPurchaseForm"
-  | "GeneralPurchaseForm"> = {
+  | "GeneralPurchaseForm" | "HatchSettingForm"> = {
   // The shed picker has to know which units are free, and the batch number is
   // minted server-side — neither fits the generic form.
   "broiler-batches": "BatchForm",
@@ -44,6 +44,10 @@ const ROW_FORM_SCREEN: Record<string,
   // straight onto a farm's flock, plus TDS/bag tracking and reference-document
   // scans — none of which the generic document form has a shape for.
   "purchase-general-purchases": "GeneralPurchaseForm",
+  // Header over three independently-repeatable groups — setter rows, hatcher
+  // output rows and customer sale rows — plus running Damage%/Hatch%/Unsold
+  // Chicks totals the generic form has no shape for.
+  "hatchery-hatch-settings": "HatchSettingForm",
 };
 
 /**
