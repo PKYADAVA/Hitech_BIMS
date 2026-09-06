@@ -494,11 +494,19 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
 /* Frozen key columns. A wide report scrolls sideways and the row loses its
    identity — the code and name stay put so a figure three metres right is
    still attributable. Needs the scroll on the wrapper, which the report
-   layouts already have. */
-.ds .rpt-table th:first-child,
-.ds .rpt-table td:first-child,
-.ds table.ds-grid.freeze-1 th:first-child,
-.ds table.ds-grid.freeze-1 td:first-child {
+   layouts already have.
+
+   :not([colspan]) matters more than it looks. A summary row — Previous
+   Balance, a month heading, Grand Total — leads with a cell spanning fourteen
+   columns, and that cell is also a first-child. Frozen, it became a 1,364px
+   pane pinned to the left edge that slid over the Debit and Credit figures
+   beside it as the report scrolled, so a total read as 7,700.00 where it was
+   17,700.00. A cell that spans columns is not a key column and is never worth
+   freezing. */
+.ds .rpt-table th:first-child:not([colspan]),
+.ds .rpt-table td:first-child:not([colspan]),
+.ds table.ds-grid.freeze-1 th:first-child:not([colspan]),
+.ds table.ds-grid.freeze-1 td:first-child:not([colspan]) {
   position: sticky; left: 0; z-index: 1;
   background: var(--ds-card);
 }
@@ -514,10 +522,10 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
 }
 .ds table.ds-grid.freeze-2 thead th:nth-child(2) { z-index: 3; background: var(--ds-header-bg); }
 /* The shadow is what tells you a column is frozen rather than just first. */
-.ds .rpt-table th:first-child::after,
-.ds .rpt-table td:first-child::after,
-.ds table.ds-grid.freeze-1 th:first-child::after,
-.ds table.ds-grid.freeze-1 td:first-child::after {
+.ds .rpt-table th:first-child:not([colspan])::after,
+.ds .rpt-table td:first-child:not([colspan])::after,
+.ds table.ds-grid.freeze-1 th:first-child:not([colspan])::after,
+.ds table.ds-grid.freeze-1 td:first-child:not([colspan])::after {
   content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
   transform: translateX(100%);
   background: linear-gradient(90deg, rgba(16, 24, 40, .06), transparent);
