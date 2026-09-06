@@ -16,9 +16,10 @@ import logging
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import models, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone as _tz
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -64,7 +65,82 @@ class ChangeRequestListTemplateView(View):
         return render(request, "change_request_list.html")
 
 
-def _change_request_to_dict(cr, user):
+def _record_url(handler, user):
+    """The page the record actually lives on, or "" if this user cannot open it.
+
+    Every handler registers the permission tab it is reviewed against, and a
+    tab's code is also the URL name of its page — see ``URLNAME_TO_TAB``, which
+    maps a tab's code to itself. So the tab is enough to find the page, without
+    each of the twenty-nine modules having to register a second thing that would
+    be forgotten by the thirtieth.
+
+    Withheld from a reviewer who lacks access to that tab: offering a link that
+    can only end in a permission error is worse than showing none, and the
+    reviewer can still read the record through the proposed-changes view.
+    """
+    tab = handler.get("tab", "")
+    if not tab or not user_can(user, tab, "view"):
+        return ""
+    try:
+        return reverse(tab)
+    except NoReverseMatch:
+        # A module whose tab code is not its page's url name. Not fatal - the
+        # record simply shows as plain text, as it did before this existed.
+        logger.warning("Change request: no page url for tab %r", tab)
+        return ""
+
+
+def _date_field(model):
+    """The field that carries a record's own date, or None.
+
+    The first plain DateField on the model. auto_now / auto_now_add fields are
+    skipped: those are when the row was typed, not when the transaction
+    happened, and a register filters on the latter.
+
+    Found from the model rather than registered per module, for the same reason
+    the page url is: twenty-nine registrations kept in step is twenty-nine
+    chances for the thirtieth to be forgotten.
+    """
+    for field in model._meta.fields:
+        if isinstance(field, models.DateField) and not isinstance(field, models.DateTimeField):
+            if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
+                continue
+            return field.name
+    return None
+
+
+def record_dates(change_requests):
+    """Which records still exist, and on what date, a query per module.
+
+    Returns ``{(module, object_id): "YYYY-MM-DD" or ""}``. A key that is absent
+    means the record is gone — an approved deletion request, most often — and
+    the caller drops the link rather than sending a reviewer to a register that
+    cannot contain it. A key present with an empty value is a record that simply
+    has no date on it.
+
+    One query per module rather than one per row: the register loads three
+    hundred requests at a time, and a lookup per row would be three hundred
+    queries to decorate a column.
+    """
+    by_module = {}
+    for cr in change_requests:
+        by_module.setdefault(cr.module, set()).add(cr.object_id)
+
+    dates = {}
+    for module, ids in by_module.items():
+        handler = CHANGE_REQUEST_HANDLERS.get(module)
+        model = handler.get("model") if handler else None
+        if not model:
+            continue
+        field = _date_field(model)
+        columns = ["id"] + ([field] if field else [])
+        for row in model.objects.filter(id__in=ids).values_list(*columns):
+            pk, value = (row[0], row[1] if field else None)
+            dates[(module, pk)] = value.isoformat() if value else ""
+    return dates
+
+
+def _change_request_to_dict(cr, user, dates=None):
     handler = CHANGE_REQUEST_HANDLERS.get(cr.module, {})
     return {
         "id": cr.id, "module": cr.module, "module_label": handler.get("label", cr.module),
@@ -79,6 +155,16 @@ def _change_request_to_dict(cr, user):
         "review_note": cr.review_note,
         "can_review": user_can(user, handler.get("tab", ""), cr.action) if handler else False,
         "detail_api": handler.get("api", ""),
+        # No link once the record is gone — an approved deletion leaves the
+        # request on this page but nothing for it to point at, and a link to a
+        # register that cannot contain it reads as the register being broken.
+        "record_url": (_record_url(handler, user)
+                       if handler and (cr.module, cr.object_id) in (dates or {})
+                       else ""),
+        # The register the link lands on filters by date and opens on today or
+        # the last week, so a link to an older record would show an empty page.
+        # The date travels with the link and the page opens on it.
+        "record_date": (dates or {}).get((cr.module, cr.object_id), ""),
     }
 
 
@@ -126,9 +212,12 @@ class ChangeRequestAPI(BaseAPIView):
 
     def get(self, request):
         try:
-            requests_qs = ChangeRequest.objects.select_related("requested_by", "reviewed_by").all()[:300]
+            requests_qs = list(ChangeRequest.objects
+                               .select_related("requested_by", "reviewed_by").all()[:300])
+            dates = record_dates(requests_qs)
             return JsonResponse({
-                "requests": [_change_request_to_dict(cr, request.user) for cr in requests_qs],
+                "requests": [_change_request_to_dict(cr, request.user, dates)
+                             for cr in requests_qs],
                 "labels": self._fk_labels(),
             })
         except Exception as e:

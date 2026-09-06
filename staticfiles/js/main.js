@@ -1,4 +1,83 @@
 // ---------------------------------------------------------------------------
+// Open a register on the date a link asked for.
+//
+// Every transaction register opens on today, or on the last week. A link to a
+// particular record - from the Change Requests page, say - would therefore land
+// on a list that does not contain it, which reads as the record having been
+// deleted rather than as a filter hiding it.
+//
+// A link may carry ?from_date=&to_date=; if it does, this writes them into the
+// page's own date inputs and presses its own filter button, so the register
+// loads exactly the way it would if someone had typed the dates in.
+//
+// It may also carry ?record=, the number of the one row that was asked for.
+// That goes into the register's own search box rather than being filtered
+// invisibly: the reader can see why a list of one is a list of one, and clear
+// it to get the rest of the day back.
+//
+// Ordering is the whole difficulty. A register sets its defaults inside
+// jQuery's ready callback, and when the document is already complete by the
+// time that callback is registered - which it is, since these scripts sit at
+// the foot of the page - jQuery defers it. So a plain load listener runs first
+// and is then overwritten by the very defaults it meant to replace. Waiting a
+// turn of the event loop after load puts this behind that queue.
+//
+// Thirty-two registers share these control ids (#from-date, #to-date and either
+// #filter-submit or #search-btn), which is what makes one handler here better
+// than thirty-two copies of four lines.
+// ---------------------------------------------------------------------------
+window.addEventListener('load', function () {
+  const params = new URLSearchParams(window.location.search);
+  const from = params.get('from_date');
+  const to = params.get('to_date');
+  if (!from && !to) return;
+
+  setTimeout(function () {
+    const fromEl = document.getElementById('from-date');
+    const toEl = document.getElementById('to-date');
+    if (!fromEl && !toEl) return;            // not a register; nothing to do
+
+    if (fromEl && from) fromEl.value = from;
+    if (toEl && to) toEl.value = to;
+
+    // The page's own button, so the register reloads exactly as it would if
+    // someone had typed the dates and pressed it.
+    const reload = document.getElementById('filter-submit')
+                || document.getElementById('search-btn');
+    if (reload) reload.click();
+
+    const record = params.get('record');
+    if (record) showOnlyRecord(record);
+  }, 0);
+});
+
+// Put a record number into the register's own DataTables search box.
+//
+// The wait is the awkward part. Pressing the filter button starts a fetch, and
+// these registers destroy and rebuild their table when it returns, which would
+// throw away a search applied too early. So this waits until the row is
+// actually on screen before typing into the box - at which point the table it
+// is typing into is certainly the final one.
+//
+// If the row never appears the search is left alone: showing the day's list is
+// a better answer than an empty table filtered by a number that is not there.
+function showOnlyRecord(record) {
+  let attempts = 0;
+  (function tick() {
+    const input = document.querySelector('.dataTables_filter input');
+    const body = document.querySelector('table tbody');
+    if (input && body && body.textContent.includes(record)) {
+      input.value = record;
+      // DataTables listens for these rather than for a value assignment.
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('keyup', { bubbles: true }));
+      return;
+    }
+    if (++attempts < 40) setTimeout(tick, 150);   // give up after ~6 seconds
+  })();
+}
+
+// ---------------------------------------------------------------------------
 // The local calendar day as YYYY-MM-DD.
 //
 // Formatting straight from toISOString gives the UTC day. India runs 5:30

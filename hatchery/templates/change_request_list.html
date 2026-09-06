@@ -13,11 +13,16 @@
 <div class="card">
   <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <span><i class="fas fa-list"></i> Requests</span>
-    <div class="btn-group btn-group-sm" role="group" id="status-filter">
-      <button type="button" class="btn btn-outline-light active" data-status="pending">Pending <span class="badge bg-warning text-dark" id="count-pending">0</span></button>
-      <button type="button" class="btn btn-outline-light" data-status="approved">Approved <span class="badge bg-success" id="count-approved">0</span></button>
-      <button type="button" class="btn btn-outline-light" data-status="rejected">Rejected <span class="badge bg-danger" id="count-rejected">0</span></button>
-      <button type="button" class="btn btn-outline-light" data-status="all">All</button>
+    {% comment %}
+      btn-outline-secondary, not btn-outline-light. Bootstrap paints an outline-light
+      button in near-white text, which on this white card header left every
+      unselected tab invisible until the cursor landed on it and filled it in.
+      {% endcomment %}
+      <div class="btn-group btn-group-sm" role="group" id="status-filter">
+      <button type="button" class="btn btn-outline-secondary active" data-status="pending">Pending <span class="badge bg-warning text-dark" id="count-pending">0</span></button>
+      <button type="button" class="btn btn-outline-secondary" data-status="approved">Approved <span class="badge bg-success" id="count-approved">0</span></button>
+      <button type="button" class="btn btn-outline-secondary" data-status="rejected">Rejected <span class="badge bg-danger" id="count-rejected">0</span></button>
+      <button type="button" class="btn btn-outline-secondary" data-status="all">All</button>
     </div>
   </div>
   <div class="card-body p-0">
@@ -70,6 +75,23 @@
 </div>
 
 <style>
+/* Which status is being looked at. The handler below toggles .active on these
+   buttons, but nothing was drawing it: the selected tab used to stand out only
+   because outline-light happened to make it the one readable button, so fixing
+   the colour left the group with no selection at all. The ID keeps this ahead
+   of Bootstrap's own .active without !important. */
+#status-filter .btn.active,
+#status-filter .btn.active:hover,
+#status-filter .btn.active:focus {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+/* The count keeps its own colour, so it needs a little separation from the
+   blue behind it once its tab is selected. */
+#status-filter .btn.active .badge { box-shadow: 0 0 0 1px rgba(255, 255, 255, .55); }
+
 #payload-body table { font-size: 12.5px; }
 #payload-body .diff-changed { background: #fff3cd !important; }
 #payload-body .diff-was { color: #b02a37; font-size: 11px; display: block; text-decoration: line-through; }
@@ -99,6 +121,29 @@ $(function () {
     rejected: '<span class="badge bg-danger">Rejected</span>',
   };
 
+  // The record, linked to the page it lives on.
+  //
+  // The date rides along because those registers open on today or the last
+  // week: a link to a request raised in July would otherwise land on an empty
+  // list, which reads as the record having been deleted. main.js applies the
+  // range on arrival.
+  function recordLink(row) {
+    const label = escapeHtml(row.object_label);
+    if (!row.record_url) return label;
+    // The date opens the register on the right day; the record narrows it to
+    // the one row, in the page's own search box so it is visible and clearable.
+    const query = new URLSearchParams();
+    if (row.record_date) {
+      query.set('from_date', row.record_date);
+      query.set('to_date', row.record_date);
+    }
+    if (row.object_label) query.set('record', row.object_label);
+    const range = query.toString() ? `?${query}` : '';
+    return `<a href="${row.record_url}${range}" target="_blank" rel="noopener"`
+      + ` title="Open ${escapeHtml(row.module_label)}${row.record_date ? ' on ' + escapeHtml(row.record_date) : ''}">`
+      + `${label} <i class="fas fa-up-right-from-square small opacity-75"></i></a>`;
+  }
+
   function renderRows() {
     if (table) { table.destroy(); }
     const rows = statusFilter === "all" ? allRows : allRows.filter(r => r.status === statusFilter);
@@ -117,7 +162,7 @@ $(function () {
         <td>${escapeHtml(row.requested_at)}</td>
         <td>${escapeHtml(row.requested_by)}</td>
         <td>${escapeHtml(row.module_label)}</td>
-        <td>${escapeHtml(row.object_label)}</td>
+        <td>${recordLink(row)}</td>
         <td>${row.action === 'delete' ? '<span class="badge bg-danger">Deletion</span>' : '<span class="badge bg-primary">Modification</span>'}</td>
         <td>${escapeHtml(row.note) || "-"}</td>
         <td>${statusBadge[row.status] || escapeHtml(row.status)}${row.review_note ? `<div class="small text-muted">${escapeHtml(row.review_note)}</div>` : ''}</td>
