@@ -254,28 +254,35 @@ def _flock_by_breed(batch_ids, day, total_alive):
     if not batch_ids or total_alive <= 0:
         return []
 
+    # Breed's readable name is `description`; `code` is the BRE-0001 handle.
     breed_of = dict(BroilerBatch.objects.filter(id__in=batch_ids)
-                    .values_list("id", "breed__name"))
+                    .values_list("id", "breed__description"))
     if not any(breed_of.values()):
         return []
 
     chick_ids = list(Item.objects.filter(category__name__icontains="chick")
                      .values_list("id", flat=True))
 
+    # .order_by() before every .annotate(): all three models carry a
+    # Meta.ordering of ("-date", "-id"), and Django folds a default ordering
+    # into the GROUP BY. Left in, these group by (batch, date, id) -- a row per
+    # transaction rather than per batch -- and hand back wider rows than the
+    # aggregate asked for.
     per = {b: 0.0 for b in batch_ids}
-    for bid, qty in (StockTransfer.objects
-                     .filter(to_batch_id__in=batch_ids, item_id__in=chick_ids, date__lte=day)
-                     .values_list("to_batch_id").annotate(t=Sum("quantity"))):
-        per[bid] = per.get(bid, 0.0) + float(qty or 0)
-    for bid, mort, culls in (DailyEntry.objects
-                             .filter(batch_id__in=batch_ids, date__lte=day)
-                             .values_list("batch_id")
-                             .annotate(m=Sum("mortality"), c=Sum("culls"))):
-        per[bid] = per.get(bid, 0.0) - float(mort or 0) - float(culls or 0)
-    for bid, birds in (BirdSale.objects
-                       .filter(batch_id__in=batch_ids, date__lte=day)
-                       .values_list("batch_id").annotate(b=Sum("birds"))):
-        per[bid] = per.get(bid, 0.0) - float(birds or 0)
+    for row in (StockTransfer.objects
+                .filter(to_batch_id__in=batch_ids, item_id__in=chick_ids, date__lte=day)
+                .values("to_batch_id").order_by().annotate(t=Sum("quantity"))):
+        per[row["to_batch_id"]] = per.get(row["to_batch_id"], 0.0) + float(row["t"] or 0)
+    for row in (DailyEntry.objects
+                .filter(batch_id__in=batch_ids, date__lte=day)
+                .values("batch_id").order_by()
+                .annotate(m=Sum("mortality"), c=Sum("culls"))):
+        per[row["batch_id"]] = (per.get(row["batch_id"], 0.0)
+                                - float(row["m"] or 0) - float(row["c"] or 0))
+    for row in (BirdSale.objects
+                .filter(batch_id__in=batch_ids, date__lte=day)
+                .values("batch_id").order_by().annotate(b=Sum("birds"))):
+        per[row["batch_id"]] = per.get(row["batch_id"], 0.0) - float(row["b"] or 0)
 
     totals = {}
     for bid, alive in per.items():
