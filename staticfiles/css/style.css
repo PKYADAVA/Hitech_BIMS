@@ -121,7 +121,7 @@ footer { margin-top: auto; }
 
 /* ---------- Top Navbar ---------- */
 .bims-navbar {
-  background: #0f172a;                 /* flat, no gradient */
+  background: #123524;                 /* flat, no gradient — matches the login page's brand green */
   padding: 0 24px;
   height: var(--navbar-height);
   display: flex;
