@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% block title %}UI Settings{% endblock %}
+{% block nav %}
+{% include 'main_top_navbar.html' with active_tab='home' %}
+{% endblock nav %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="page-header-main">
+    <div class="page-header-title">
+      <i class="fas fa-sliders"></i>
+      UI Settings
+    </div>
+    <div class="page-header-subtitle">These settings apply to your account only</div>
+  </div>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card">
+      <div class="card-header">
+        <i class="fas fa-table-columns"></i>
+        Navigation Layout
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-4">
+          Choose where the module menu lives. Everything else on every page stays
+          exactly where it is.
+        </p>
+
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3">
+
+            <div class="col-md-6">
+              <label class="ui-layout-option {% if nav_layout == 'top' %}is-selected{% endif %}">
+                <input type="radio" name="nav_layout" value="top"
+                       {% if nav_layout == 'top' %}checked{% endif %}>
+                <span class="ui-layout-preview is-top">
+                  <span class="ui-lp-bar"></span>
+                  <span class="ui-lp-body">
+                    <span class="ui-lp-block"></span>
+                    <span class="ui-lp-block short"></span>
+                  </span>
+                </span>
+                <span class="ui-layout-meta">
+                  <strong>Top navigation bar</strong>
+                  <small>Modules across the top of every page. The current layout.</small>
+                </span>
+              </label>
+            </div>
+
+            <div class="col-md-6">
+              <label class="ui-layout-option {% if nav_layout == 'side' %}is-selected{% endif %}">
+                <input type="radio" name="nav_layout" value="side"
+                       {% if nav_layout == 'side' %}checked{% endif %}>
+                <span class="ui-layout-preview">
+                  <span class="ui-lp-side"></span>
+                  <span class="ui-lp-main">
+                    <span class="ui-lp-bar thin"></span>
+                    <span class="ui-lp-body">
+                      <span class="ui-lp-block"></span>
+                      <span class="ui-lp-block short"></span>
+                    </span>
+                  </span>
+                </span>
+                <span class="ui-layout-meta">
+                  <strong>Left sidebar</strong>
+                  <small>Modules down the left, collapsible. More room for wide tables.</small>
+                </span>
+              </label>
+            </div>
+
+          </div>
+
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save me-1"></i>Save Layout
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block css %}
+<style>
+  /* The two choices are pictures, not radio labels: the difference between the
+     layouts is spatial, and a thumbnail says it faster than a sentence does. */
+  .ui-layout-option {
+    display: flex; flex-direction: column; gap: 12px; cursor: pointer;
+    height: 100%; padding: 14px; margin: 0;
+    border: 2px solid #e2e8f0; border-radius: 10px; background: #fff;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .ui-layout-option:hover { border-color: #cbd5e1; }
+  .ui-layout-option.is-selected {
+    border-color: #123524;
+    box-shadow: 0 0 0 3px rgba(18, 53, 36, .12);
+  }
+  .ui-layout-option input { position: absolute; opacity: 0; pointer-events: none; }
+
+  .ui-layout-preview {
+    display: flex; height: 92px; border-radius: 6px; overflow: hidden;
+    background: #f1f5f9; border: 1px solid #e2e8f0;
+  }
+  .ui-layout-preview.is-top { flex-direction: column; }
+
+  .ui-lp-bar { height: 18px; background: #123524; flex: 0 0 18px; }
+  .ui-lp-bar.thin { height: 12px; flex: 0 0 12px; }
+  .ui-lp-side { width: 30%; background: #123524; flex: 0 0 30%; }
+  .ui-lp-main { display: flex; flex-direction: column; flex: 1; }
+  .ui-lp-body { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .ui-lp-block { height: 12px; background: #cbd5e1; border-radius: 3px; }
+  .ui-lp-block.short { width: 60%; }
+
+  .ui-layout-meta { display: flex; flex-direction: column; gap: 2px; }
+  .ui-layout-meta strong { font-size: 14px; }
+  .ui-layout-meta small { color: #64748b; line-height: 1.4; }
+
+</style>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var options = document.querySelectorAll(".ui-layout-option");
+    options.forEach(function (opt) {
+      opt.addEventListener("click", function () {
+        options.forEach(function (o) { o.classList.remove("is-selected"); });
+        opt.classList.add("is-selected");
+      });
+    });
+  });
+</script>
+{% endblock %}

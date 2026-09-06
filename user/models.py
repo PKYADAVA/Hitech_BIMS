@@ -14,6 +14,21 @@ class UserProfile(models.Model):
     #: default, so no existing account changes until someone turns it on.
     individual_permissions = models.BooleanField(default=False)
 
+    #: Which chrome this person gets: the top navbar or the left sidebar.
+    #: A personal preference rather than a deployment one, so two people on the
+    #: same server can disagree. Defaults to the top navbar, which is what
+    #: everyone already had -- nobody's screen changes until they choose.
+    NAV_TOP = "top"
+    NAV_SIDE = "side"
+    NAV_LAYOUT_CHOICES = [
+        (NAV_TOP, "Top navigation bar"),
+        (NAV_SIDE, "Left sidebar"),
+    ]
+    nav_layout = models.CharField(
+        max_length=8, choices=NAV_LAYOUT_CHOICES, default=NAV_TOP,
+        help_text="Where the module menu lives for this user.",
+    )
+
     def __str__(self):
         return self.user.username
 

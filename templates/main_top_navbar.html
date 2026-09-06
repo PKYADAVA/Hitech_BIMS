@@ -1,4 +1,14 @@
 {% load static %}
+{% comment %}
+Two layouts, one include.
+
+181 templates include this file directly, so the layout switch is made here
+rather than in each of them: with the sidebar on, the module menus below are
+replaced by the slim top bar, and every page picks that up without being
+touched. The profile modal at the bottom is outside the branch, because both
+layouts open it from the account menu.
+{% endcomment %}
+{% if ds_shell %}{% include "_ds_topbar.html" %}{% else %}
 <nav class="bims-navbar navbar navbar-expand-xl" id="mainNavbar">
   <!-- Brand -->
   <a class="navbar-brand me-4" href="{% url 'home' %}">
@@ -965,6 +975,9 @@
             <i class="fas fa-id-card"></i>View Profile
           </a></li>
           <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{% url 'ui_settings' %}">
+            <i class="fas fa-sliders"></i>UI Settings
+          </a></li>
           <li><a class="dropdown-item" href="{% url 'update_password' %}">
             <i class="fas fa-key"></i>Change Password
           </a></li>
@@ -976,6 +989,7 @@
     </div>
   </div>
 </nav>
+{% endif %}
 
 {% if request.user.is_authenticated %}
 <!-- Profile, as a modal: opened from the user menu on any page and closed on

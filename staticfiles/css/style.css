@@ -863,12 +863,13 @@ div.dataTables_wrapper div.dataTables_paginate {
 
 /* ---------- Footer ---------- */
 footer {
-  background: #0f172a;
+  background: #ffffff;
   padding: 16px 0;
-  color: rgba(255,255,255,0.5);
+  /* --text-secondary, not --text-muted: #94a3b8 on white is under 3:1. */
+  color: var(--text-secondary, #475569);
   font-size: 0.8rem;
   text-align: center;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--border, #e2e8f0);
 }
 
 footer p { margin: 0; }
