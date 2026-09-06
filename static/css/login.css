@@ -58,7 +58,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 0;
   isolation: isolate;
 }
@@ -115,30 +115,45 @@ body {
   text-shadow: 0 1px 10px rgba(248, 250, 248, 0.95);
 }
 
-/* A card, not tiles on the photo: at the foot of the frame the image is at its
-   busiest, and labels sitting straight on it were unreadable. */
-.features {
-  position: relative;
-  margin: 0 26px 26px;
-  padding: 15px 14px;
-  background: #fff;
-  border-radius: var(--radius-lg);
+/* Strip between the form and the footer, split the same way as the shell
+   above it: a field-green fill continues under the photo instead of going
+   blank, the tiles stay held under the form column on the right. A second
+   crop of the same photo was tried here first — at this sliver of height it
+   just repeated the same hens, reading as a glitch rather than a
+   continuation, so a plain tone stands in for the photo instead. */
+.login-tiles {
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  text-align: center;
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
+  grid-template-columns: 1fr 1fr;
 }
-.features .f-icon {
-  width: 40px; height: 40px; margin: 0 auto 7px;
+.login-tiles-photo {
+  background: linear-gradient(180deg, #4f7942, #3e6435);
+}
+.login-tiles-row {
+  background: var(--surface);
+  padding: 6px 32px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 24px;
+}
+.login-tiles-row > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.login-tiles .f-icon {
+  width: 18px; height: 18px; margin: 0; flex: none;
   display: grid; place-items: center;
-  border-radius: var(--radius);
+  border-radius: 6px;
   background: var(--brand-light);
   color: var(--brand);
-  font-size: 0.95rem;
+  font-size: 0.55rem;
 }
-.features .f-label { font-size: 0.78rem; font-weight: 700; color: var(--brand); line-height: 1.3; }
-.features .f-sub   { font-size: 0.74rem; color: var(--ink-soft); line-height: 1.3; }
+.login-tiles .f-label, .login-tiles .f-sub { text-align: left; }
+.login-tiles .f-label { font-size: 0.68rem; font-weight: 700; color: var(--brand); line-height: 1.15; }
+.login-tiles .f-sub   { font-size: 0.6rem; color: var(--ink-soft); line-height: 1.15; }
 
 /* ---------- right: the form column ------------------------------------- */
 
@@ -366,8 +381,6 @@ body {
   .assure { display: none; }
   .login-card .lock { width: 44px; height: 44px; font-size: 1rem; margin-bottom: 8px; }
   .pitch h1 { font-size: 1.85rem; }
-  .features { padding: 11px 12px; margin: 0 20px 20px; }
-  .features .f-icon { width: 34px; height: 34px; margin-bottom: 5px; }
 }
 
 @media (max-height: 660px) {
@@ -375,6 +388,7 @@ body {
   .pitch p { display: none; }
   .or-split, .btn-otp { display: none; }
   .login-card .lock { display: none; }
+  .login-tiles { display: none; }
 }
 
 /* ---------- narrow screens -------------------------------------------- */
@@ -384,12 +398,16 @@ body {
   .login-card  { justify-self: stretch; max-width: none; padding: 32px 24px; }
   .login-pitch h1 { font-size: 2rem; }
   .login-hero  { height: 170px; }
+  /* The shell above has already stacked into one column, so the strip
+     below it follows suit instead of keeping a photo half. */
+  .login-tiles { grid-template-columns: 1fr; }
+  .login-tiles-photo { display: none; }
 }
 
 /* Below tablet the pitch is scenery in front of the thing the user came for. */
 @media (max-width: 640px) {
   .login-pitch, .login-hero { display: none; }
   .login-brand { justify-content: center; margin-bottom: 24px; }
-  .login-features { grid-template-columns: repeat(2, 1fr); }
+  .login-tiles-row { gap: 16px 24px; padding: 6px 20px; }
   .login-foot { justify-content: center; text-align: center; }
 }

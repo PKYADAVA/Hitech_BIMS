@@ -8,7 +8,7 @@
   <link rel="icon" href="{% static 'images/hitech-mark.png' %}">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link href="{% static 'css/login.css' %}" rel="stylesheet">
+  <link href="{% static 'css/login.css' %}?v=20260906k" rel="stylesheet">
 </head>
 <body>
   <div class="lang" title="English is the only language currently available">
@@ -42,29 +42,6 @@
         </h1>
         <p>Manage Farms, Hatchery, Feed, Production, Inventory, Sales,
            Finance and more &ndash; Anytime, Anywhere.</p>
-      </div>
-
-      <div class="features">
-        <div>
-          <div class="f-icon"><i class="fas fa-warehouse"></i></div>
-          <div class="f-label">Multi Farm</div>
-          <div class="f-sub">Management</div>
-        </div>
-        <div>
-          <div class="f-icon"><i class="fas fa-chart-column"></i></div>
-          <div class="f-label">Real Time</div>
-          <div class="f-sub">Reports</div>
-        </div>
-        <div>
-          <div class="f-icon"><i class="fas fa-boxes-stacked"></i></div>
-          <div class="f-label">Inventory</div>
-          <div class="f-sub">Tracking</div>
-        </div>
-        <div>
-          <div class="f-icon"><i class="fas fa-shield-alt"></i></div>
-          <div class="f-label">Secure &amp;</div>
-          <div class="f-sub">Reliable</div>
-        </div>
       </div>
     </section>
 
@@ -140,6 +117,38 @@
       </div>
     </section>
 
+  </div>
+
+  <!-- Moved down from the photo panel: it reads as scenery up there, and the
+       page has to skim past it before reaching support contact. Down here
+       it's the last thing before the footer, in the same eye-line as the
+       help line it now sits above. The row is split like the shell above
+       it — photo on the left so nothing goes blank under the picture,
+       tiles held under the form column on the right. -->
+  <div class="login-tiles">
+    <div class="login-tiles-photo"></div>
+    <div class="login-tiles-row">
+      <div>
+        <div class="f-icon"><i class="fas fa-warehouse"></i></div>
+        <div class="f-label">Multi Farm</div>
+        <div class="f-sub">Management</div>
+      </div>
+      <div>
+        <div class="f-icon"><i class="fas fa-chart-column"></i></div>
+        <div class="f-label">Real Time</div>
+        <div class="f-sub">Reports</div>
+      </div>
+      <div>
+        <div class="f-icon"><i class="fas fa-boxes-stacked"></i></div>
+        <div class="f-label">Inventory</div>
+        <div class="f-sub">Tracking</div>
+      </div>
+      <div>
+        <div class="f-icon"><i class="fas fa-shield-alt"></i></div>
+        <div class="f-label">Secure &amp;</div>
+        <div class="f-sub">Reliable</div>
+      </div>
+    </div>
   </div>
 
   <footer class="login-foot">
