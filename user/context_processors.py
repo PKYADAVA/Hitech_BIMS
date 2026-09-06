@@ -41,14 +41,23 @@ def web_access(request):
     breadcrumb = breadcrumb_for(
         getattr(match, "url_name", None) if match else None, allowed_tabs)
 
-    # The sidebar layout is opt-in per deployment (DS_SIDEBAR). Off, the top
-    # navbar stays as it is; on, the shell becomes two columns. Building the
-    # menu is cheap, so it is computed either way and simply not rendered.
+    # The sidebar layout is a per-person choice, made on the UI Settings page
+    # and stored on UserProfile.nav_layout. DS_SIDEBAR stays as the deployment
+    # default for anyone who has never chosen -- so a server can start everyone
+    # on the sidebar without each person opting in one at a time.
+    #
+    # Anonymous requests (the login page) never get the shell: there is no
+    # profile to read and no menu to show.
     from django.conf import settings
-    from .services.navigation import sidebar_for
+    from .services.navigation import (nav_layout_for, role_label_for,
+                                      sidebar_for)
 
-    ds_shell = getattr(settings, "DS_SIDEBAR", False)
-    sidebar = sidebar_for(user, getattr(match, "url_name", None) if match else None)         if ds_shell else []
+    ds_shell = False
+    if user is not None and user.is_authenticated:
+        ds_shell = nav_layout_for(user) == "side"
+
+    sidebar = (sidebar_for(user, getattr(match, "url_name", None) if match else None)
+               if ds_shell else [])
 
     # Pending change-request count for the navbar badge (only for users who
     # can see the Change Requests page at all).
@@ -66,5 +75,7 @@ def web_access(request):
         "breadcrumb": breadcrumb,
         "sidebar": sidebar,
         "ds_shell": ds_shell,
+        "user_role_label": role_label_for(user),
+        "app_version": getattr(settings, "APP_VERSION", ""),
         "pending_change_requests": pending_change_requests,
     }

@@ -413,27 +413,32 @@ body.ds-shell.ds-sb-collapsed { --ds-sb-w: var(--ds-sb-w-collapsed); }
 
 .ds-sidebar {
   position: fixed; inset: 0 auto 0 0; width: var(--ds-sb-w, 260px);
-  background: #0f172a; color: #cbd5e1;
+  background: #123524; color: rgba(255, 255, 255, .72);
   display: flex; flex-direction: column;
   transition: width .16s ease; z-index: 1040; overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, .06);
 }
 .ds-sb-brand {
   display: flex; align-items: center; gap: 12px;
-  height: 64px; padding: 0 16px; flex: 0 0 64px;
+  /* Same height as the top bar, from the same variable: the sidebar's header
+     rule and the top bar's bottom border run into each other at the boundary,
+     and 64 against 60 left them visibly 4px apart. */
+  height: var(--navbar-height, 60px); flex: 0 0 var(--navbar-height, 60px);
+  padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, .07);
 }
 .ds-sb-logo {
   width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px;
-  background: var(--ds-primary, #2563eb); color: #fff;
+  background: #16a34a; color: #fff;
   display: grid; place-items: center; font-size: 15px;
 }
 .ds-sb-brand-text { display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap; }
 .ds-sb-brand-text strong { font-size: 14px; color: #fff; font-weight: 600; }
-.ds-sb-brand-text small { font-size: 11px; color: #7c8ba1; }
+.ds-sb-brand-text small { font-size: 11px; color: rgba(255, 255, 255, .55); }
 
 .ds-sb-nav { flex: 1; overflow-y: auto; padding: 10px 8px; }
 .ds-sb-nav::-webkit-scrollbar { width: 6px; }
-.ds-sb-nav::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+.ds-sb-nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); border-radius: 3px; }
 
 .ds-sb-item {
   display: flex; align-items: center; gap: 12px; width: 100%;
@@ -443,47 +448,230 @@ body.ds-shell.ds-sb-collapsed { --ds-sb-w: var(--ds-sb-w-collapsed); }
 }
 .ds-sb-item > i:first-child { width: 22px; font-size: 16px; text-align: center; flex: 0 0 22px; }
 .ds-sb-item:hover { background: rgba(255, 255, 255, .06); color: #fff; }
-.ds-sb-item.is-active { background: var(--ds-primary, #2563eb); color: #fff; }
+.ds-sb-item.is-active { background: rgba(255, 255, 255, .12); color: #fff; font-weight: 600; }
+/* The Dashboard entry is a page, not a module, so it takes the page accent. */
+a.ds-sb-item.is-active { background: rgba(22, 163, 74, .22); box-shadow: inset 3px 0 0 #22c55e; }
 .ds-sb-caret { margin-left: auto; font-size: 10px; transition: transform .16s ease; opacity: .6; }
 .ds-sb-group.is-open .ds-sb-caret { transform: rotate(90deg); }
 
-.ds-sb-sub { display: none; padding: 2px 0 6px 34px; }
+.ds-sb-sub { display: none; padding: 2px 0 6px 22px; }
 .ds-sb-group.is-open .ds-sb-sub { display: block; }
 .ds-sb-section {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
-  color: #64748b; padding: 8px 10px 4px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 7px 10px 5px; margin-top: 2px;
+  border: 0; background: transparent; text-align: left; cursor: pointer;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: rgba(255, 255, 255, .45);
+  border-radius: 6px; transition: color .15s ease, background .15s ease;
 }
+.ds-sb-section:hover { color: rgba(255, 255, 255, .8); background: rgba(255, 255, 255, .05); }
+.ds-sb-sec-icon { width: 14px; flex: 0 0 14px; text-align: center; font-size: 11px; opacity: .8; }
+.ds-sb-sec-caret { margin-left: auto; font-size: 9px; opacity: .7; transition: transform .16s ease; }
+.ds-sb-sec.is-open > .ds-sb-section { color: rgba(255, 255, 255, .8); }
+.ds-sb-sec.is-open > .ds-sb-section .ds-sb-sec-caret { transform: rotate(90deg); }
+
+/* Folded by default; the section holding the current page is opened server
+   side, so landing on a page never hides the page you are on. */
+.ds-sb-sec-items { display: none; }
+.ds-sb-sec.is-open > .ds-sb-sec-items { display: block; }
+/* Pages step in from their section, with a hairline running down the group so
+   the eye can trace which heading a long list still belongs to. */
+.ds-sb-sec-items {
+  padding-left: 12px; margin-left: 9px;
+  border-left: 1px solid rgba(255, 255, 255, .12);
+}
+
 .ds-sb-link {
-  display: block; padding: 7px 10px; border-radius: 6px;
-  font-size: 13px; color: #94a3b8; text-decoration: none;
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 10px; border-radius: 6px;
+  color: rgba(255, 255, 255, .62); font-size: 12.5px; text-decoration: none;
+  transition: background .15s ease, color .15s ease;
 }
-.ds-sb-link:hover { background: rgba(255, 255, 255, .06); color: #e2e8f0; }
-.ds-sb-link.is-active { color: #fff; background: rgba(37, 99, 235, .28); font-weight: 500; }
+.ds-sb-link > i {
+  width: 15px; flex: 0 0 15px; text-align: center;
+  font-size: 11.5px; opacity: .75;
+}
+.ds-sb-link.is-active > i { opacity: 1; }
+.ds-sb-link:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.ds-sb-link.is-active {
+  color: #fff; background: rgba(22, 163, 74, .22); font-weight: 600;
+  box-shadow: inset 3px 0 0 #22c55e;
+}
 
 .ds-sb-collapse {
-  height: 46px; border: 0; border-top: 1px solid rgba(255, 255, 255, .07);
-  background: none; color: #7c8ba1; font-size: 13px;
-  display: flex; align-items: center; gap: 12px; padding: 0 18px; cursor: pointer;
+  /* Pinned to the rail's outer edge and centred on it, so it reads as a handle
+     on the boundary rather than a button in either panel. `left` tracks the
+     same custom property the rail's width comes from, and shares its easing,
+     so handle and edge move together. */
+  position: fixed; z-index: 1045;
+  top: calc(var(--navbar-height, 60px) + 16px); left: var(--ds-sb-w, 260px);
+  transform: translateX(-50%);
+  transition: left .16s ease, background .15s ease, color .15s ease, border-color .15s ease;
+
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  border: 1px solid rgba(255, 255, 255, .22); border-radius: 50%;
+  background: #1c4a33; color: rgba(255, 255, 255, .85);
+  font-size: 10px; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .3);
 }
-.ds-sb-collapse:hover { color: #fff; }
-.ds-sb-collapse i { width: 22px; text-align: center; }
+.ds-sb-collapse:hover {
+  background: #226039; border-color: rgba(255, 255, 255, .4); color: #fff;
+}
+.ds-sb-collapse i { transition: transform .16s ease; }
+/* Points right while the rail is open; flips as it closes. */
+body.ds-sb-collapsed .ds-sb-collapse i { transform: rotate(180deg); }
+
+/* Hover tip for the collapsed rail. Lives on the body, so it is positioned in
+   viewport coordinates by the sidebar's script rather than by this rule: the
+   rail clips its own overflow, which is precisely where the tip must start. */
+.ds-sb-foot {
+  flex: 0 0 auto; margin: 8px; padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px;
+  border-radius: 10px; background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .08);
+  color: rgba(255, 255, 255, .6);
+}
+.ds-sb-foot > i { font-size: 13px; opacity: .8; }
+.ds-sb-foot span { display: flex; flex-direction: column; line-height: 1.3; white-space: nowrap; }
+.ds-sb-foot strong { font-size: 11.5px; font-weight: 600; color: rgba(255, 255, 255, .8); }
+.ds-sb-foot small { font-size: 10.5px; }
+/* At 72px there is room for the clock and nothing else. */
+body.ds-sb-collapsed .ds-sb-foot { justify-content: center; padding: 10px 0; }
+body.ds-sb-collapsed .ds-sb-foot span { display: none; }
+
+.ds-sb-tip {
+  position: fixed; z-index: 1060; pointer-events: none;
+  padding: 6px 10px; border-radius: 6px;
+  background: #0b2118; color: #fff;
+  font-size: 12px; font-weight: 500; line-height: 1.2; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .28);
+}
+/* Little arrow pointing back at the icon it names. */
+.ds-sb-tip::before {
+  content: ""; position: absolute; right: 100%; top: 50%;
+  margin-top: -4px; border: 4px solid transparent; border-right-color: #0b2118;
+}
 
 /* Collapsed: icons only. Labels are hidden rather than removed so the DOM and
    the tab order stay put. */
 body.ds-sb-collapsed .ds-sb-label,
 body.ds-sb-collapsed .ds-sb-brand-text,
-body.ds-sb-collapsed .ds-sb-caret,
+body.ds-sb-collapsed .ds-sb-caret { display: none; }
+
+/* The open module's sub-menu has to be hidden through a selector at least as
+   specific as `.ds-sb-group.is-open .ds-sb-sub`, which opened it -- otherwise
+   the module you last expanded keeps spilling its section headings into a
+   72px rail, where they wrap to "MA / GRO CHA / TRA" and read as nothing. */
+body.ds-sb-collapsed .ds-sb-group.is-open .ds-sb-sub,
 body.ds-sb-collapsed .ds-sb-sub { display: none; }
-body.ds-sb-collapsed .ds-sb-item { justify-content: center; padding: 0; }
+
+/* Centre what is left, and give the icon back the width the padding took. */
+body.ds-sb-collapsed .ds-sb-item { justify-content: center; padding: 0; gap: 0; }
+
+/* The mark stays on the rail -- at 72px it is the only thing identifying the
+   product -- and now has the header to itself. */
+body.ds-sb-collapsed .ds-sb-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+body.ds-sb-collapsed .ds-sb-nav { padding: 10px 6px; }
 
 /* The page sits beside the sidebar. */
 body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-left .16s ease; }
 
 @media (max-width: 1023.98px) {
+  .ds-sb-collapse { display: none; }
   body.ds-shell .content { margin-left: 0; }
   .ds-sidebar { transform: translateX(-100%); transition: transform .16s ease; }
   body.ds-sb-open .ds-sidebar { transform: none; }
 }
+
+
+/* ---------------------------------------------------------------------------
+   Slim top bar — white
+   ---------------------------------------------------------------------------
+   The rail carries the brand colour; the header sits on the content side of
+   the boundary and belongs to the page, so it is white. That means it cannot
+   wear `bims-navbar` (which paints green and styles its menus for a dark
+   ground), and restates those few components for a light one instead.
+   ------------------------------------------------------------------------ */
+.ds-topbar {
+  position: sticky; top: 0; z-index: 900;
+  display: flex; align-items: center; gap: 14px;
+  height: var(--navbar-height, 60px); padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.ds-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+/* The search takes the free space, capped so it does not run the width of a
+   wide monitor and leave the account button stranded at the far edge. */
+.ds-topbar .gs-wrap { flex: 1 1 420px; max-width: 460px; margin: 0; }
+
+/* The bell and account button carry the responsive margin classes tuned for
+   the full navbar's stacked mobile menu; in this single row they would push
+   both out of it. */
+.ds-topbar #ahBellWrap,
+.ds-topbar .dropdown { margin: 0 !important; }
+/* On white, the bell's own white-on-green colouring disappears. */
+.ds-topbar .ah-bell-btn { color: var(--text-secondary, #475569); }
+.ds-topbar .ah-bell-btn:hover { color: var(--text, #0f172a); background: var(--surface-hover, #f8fafc); }
+
+/* Account button: avatar, name over role, caret. */
+.ds-user-btn {
+  display: flex; align-items: center; gap: 9px;
+  padding: 5px 10px 5px 6px; border: 1px solid transparent; border-radius: 10px;
+  background: transparent; box-shadow: none;
+}
+.ds-user-btn:hover, .ds-user-btn:focus,
+.ds-user-btn.show { background: var(--surface-hover, #f8fafc); border-color: var(--border, #e5e7eb); }
+.ds-user-btn::after { display: none; }   /* Bootstrap's caret; there is a real one */
+.ds-user-avatar {
+  width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: #123524; color: #fff; font-size: 13px; font-weight: 600;
+}
+.ds-user-meta { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
+.ds-user-meta strong { font-size: 12.5px; font-weight: 600; color: var(--text, #0f172a); }
+.ds-user-meta small { font-size: 11px; color: var(--text-secondary, #475569); }
+.ds-user-caret { font-size: 10px; color: var(--text-muted, #94a3b8); margin-left: 2px; }
+
+/* Its menu, on a light ground. */
+.ds-user-menu {
+  border: 1px solid var(--border, #e5e7eb); border-radius: 12px; padding: 6px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .12); min-width: 210px;
+}
+.ds-user-menu .dropdown-header {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-muted, #94a3b8); padding: 8px 10px 4px;
+}
+.ds-user-menu .dropdown-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--text, #0f172a);
+}
+.ds-user-menu .dropdown-item i { width: 15px; text-align: center; color: var(--text-muted, #94a3b8); }
+.ds-user-menu .dropdown-item:hover { background: var(--surface-hover, #f8fafc); }
+.ds-user-menu .dropdown-item.text-danger,
+.ds-user-menu .dropdown-item.text-danger i { color: var(--danger, #dc2626); }
+
+/* Off-canvas handle. Desktop has the sidebar pinned, so there is nothing to
+   pull open and the button would only be a button that does nothing. */
+.ds-topbar-burger {
+  display: none; border: 0; background: transparent; color: var(--text, #0f172a);
+  font-size: 18px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+}
+.ds-topbar-burger:hover { background: var(--surface-hover, #f8fafc); }
+
+@media (max-width: 1023.98px) {
+  .ds-topbar-burger { display: inline-flex; align-items: center; }
+  .ds-topbar .gs-wrap { flex: 1 1 auto; }
+  .ds-user-meta { display: none; }
+}
+
+/* The shell's own header replaces the navbar's spacing, so the first block on
+   the page should not also clear a navbar that is no longer there. */
+body.ds-shell .content > .container-cstm { padding-top: 18px; }
+/* The rail's foot carries the version and copyright now, so the page-bottom
+   footer would say the same thing twice. */
+body.ds-shell .content > footer { display: none; }
 
 
 /* ===========================================================================

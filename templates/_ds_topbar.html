@@ -1,0 +1,78 @@
+{% comment %}
+Slim top bar — the sidebar layout's header.
+
+With the sidebar carrying module navigation, what is left is what was never
+module navigation: the global search, the alert bell and the account menu. The
+search lives here rather than on the dashboard's filter row, so it is reachable
+from every page.
+
+`bims-navbar` is deliberately NOT worn here. That class paints the brand green
+and styles its dropdowns for a dark ground; this bar is white, so it carries
+its own light-ground styling for the same components.
+{% endcomment %}
+<header class="ds-topbar">
+  <button type="button" class="ds-topbar-burger" id="dsSidebarOpen"
+          title="Menu" aria-label="Open menu">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  {% include "_global_search.html" %}
+
+  <div class="ds-topbar-right">
+    {% include "_alerthub_bell.html" %}
+
+    <div class="dropdown">
+      <button class="ds-user-btn btn dropdown-toggle" type="button"
+              id="userMenuBtn" data-bs-toggle="dropdown">
+        {% comment %}
+          Initial rather than a generic person glyph: on a bar where every
+          other control is an outline icon, a filled letter is the one thing
+          that says whose session this is.
+        {% endcomment %}
+        <span class="ds-user-avatar">{{ request.user.get_full_name|default:request.user.username|first|upper }}</span>
+        <span class="ds-user-meta">
+          <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+          <small>{{ user_role_label }}</small>
+        </span>
+        <i class="fas fa-chevron-down ds-user-caret"></i>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end ds-user-menu" aria-labelledby="userMenuBtn">
+        <li><h6 class="dropdown-header">My Account</h6></li>
+        {% if request.user.is_superuser %}<li><a class="dropdown-item" href="/admin">
+          <i class="fas fa-tools"></i>Django Admin
+        </a></li>{% endif %}
+        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userProfileModal">
+          <i class="fas fa-id-card"></i>View Profile
+        </a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{% url 'ui_settings' %}">
+          <i class="fas fa-sliders"></i>UI Settings
+        </a></li>
+        <li><a class="dropdown-item" href="{% url 'update_password' %}">
+          <i class="fas fa-key"></i>Change Password
+        </a></li>
+        <li><a class="dropdown-item text-danger" href="/logout/">
+          <i class="fas fa-sign-out-alt"></i>Logout
+        </a></li>
+      </ul>
+    </div>
+  </div>
+</header>
+
+<script>
+  // Phone: the sidebar is off-canvas, so the burger pulls it in and a tap on
+  // the page behind pushes it back out.
+  (function () {
+    var burger = document.getElementById("dsSidebarOpen");
+    if (!burger) return;
+    burger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      document.body.classList.toggle("ds-sb-open");
+    });
+    document.addEventListener("click", function (e) {
+      if (!document.body.classList.contains("ds-sb-open")) return;
+      if (e.target.closest(".ds-sidebar")) return;
+      document.body.classList.remove("ds-sb-open");
+    });
+  })();
+</script>
