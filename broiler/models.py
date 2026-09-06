@@ -3155,10 +3155,19 @@ class GCPostingSettings(models.Model):
 
     enabled = models.BooleanField(
         default=False,
-        help_text=_("Post growing charges and farmer payments to the ledger"))
+        help_text=_("Post growing charges and farmer payments to the ledger. "
+                    "While this is off they are recorded but never reach the "
+                    "Chart of Accounts. After switching it on, check Broiler > "
+                    "Reports > Farmer Reconciliation: every farmer should read "
+                    "Agrees."))
     cutoff_date = models.DateField(
         null=True, blank=True,
-        help_text=_("Only documents dated on or after this post. Leave empty to post everything."))
+        help_text=_("Only documents dated on or after this post. Settlements "
+                    "from before this system existed are left alone — many sit "
+                    "in financial years that are closed, and posting refuses "
+                    "those by design; bring them in as one reviewed opening "
+                    "journal per farmer. Leaving this empty posts everything, "
+                    "including that history."))
     modified_at = models.DateTimeField(auto_now=True)
 
     class Meta:

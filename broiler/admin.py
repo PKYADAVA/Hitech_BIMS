@@ -11,6 +11,7 @@ from .models import (
     GrowingChargeScheme, GCProductionCostIncentive, GCSalesIncentive, GCMortalityIncentive,
     GCFCRIncentive, GCSummerIncentive, GCProductionCostDecentive, GCMortalityDecentive,
     GCFCRRecovery, GCFarmerClassification, GrowingChargeSettlement,
+    GCPostingSettings,
 )
 
 
@@ -352,3 +353,29 @@ class GrowingChargeSettlementAdmin(admin.ModelAdmin):
     ordering = ('-id',)
     raw_id_fields = ('batch', 'farm', 'scheme', 'created_by')
     readonly_fields = ('settlement_code',)
+
+
+@admin.register(GCPostingSettings)
+class GCPostingSettingsAdmin(admin.ModelAdmin):
+    """The switch that sends growing charges and farmer payments to the ledger.
+
+    Registered here because it is a decision about the books that someone has
+    to be able to take without a shell. Off by default, and nothing posts until
+    it is turned on.
+    """
+
+    list_display = ("enabled", "cutoff_date", "modified_at")
+    readonly_fields = ("modified_at",)
+    # No fieldset description: jazzmin does not render one, so guidance put
+    # there would be written and never read. It lives on the fields' own
+    # help_text instead, which does show.
+    fields = ("enabled", "cutoff_date", "modified_at")
+
+    def has_add_permission(self, request):
+        # Singleton (pk=1, see GCPostingSettings.get_solo()): one row ever.
+        return not GCPostingSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        # Deleting it would silently switch posting off by making get_solo()
+        # build a fresh, default row.
+        return False
