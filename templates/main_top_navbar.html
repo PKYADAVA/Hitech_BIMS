@@ -953,6 +953,7 @@ layouts open it from the account menu.
 
     </ul>
 
+
     <!-- Notification Bell (business alerts; see _alerthub_bell.html) -->
     {% include "_alerthub_bell.html" %}
 
@@ -960,7 +961,7 @@ layouts open it from the account menu.
     <div class="ms-xl-3 mt-3 mt-xl-0 mb-3 mb-xl-0">
       <div class="dropdown">
         <button class="user-btn btn dropdown-toggle" type="button"
-                id="userMenuBtn" data-bs-toggle="dropdown">
+                id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static">
           <div class="user-avatar">
             <i class="fas fa-user" style="font-size:0.7rem;"></i>
           </div>
@@ -975,9 +976,15 @@ layouts open it from the account menu.
             <i class="fas fa-id-card"></i>View Profile
           </a></li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{% url 'ui_settings' %}">
-            <i class="fas fa-sliders"></i>UI Settings
-          </a></li>
+          <li>
+            <form method="post" action="{% url 'toggle_nav_layout' %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button type="submit" class="dropdown-item">
+                <i class="fa-solid fa-table-columns"></i>Switch to Sidebar Navigation
+              </button>
+            </form>
+          </li>
           <li><a class="dropdown-item" href="{% url 'update_password' %}">
             <i class="fas fa-key"></i>Change Password
           </a></li>

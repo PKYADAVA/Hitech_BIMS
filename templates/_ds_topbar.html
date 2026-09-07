@@ -16,14 +16,14 @@ its own light-ground styling for the same components.
     <i class="fas fa-bars"></i>
   </button>
 
-  {% include "_global_search.html" %}
-
   <div class="ds-topbar-right">
+    {% include "_global_search.html" %}
+
     {% include "_alerthub_bell.html" %}
 
     <div class="dropdown">
       <button class="ds-user-btn btn dropdown-toggle" type="button"
-              id="userMenuBtn" data-bs-toggle="dropdown">
+              id="userMenuBtn" data-bs-toggle="dropdown" data-bs-display="static">
         {% comment %}
           Initial rather than a generic person glyph: on a bar where every
           other control is an outline icon, a filled letter is the one thing
@@ -45,9 +45,15 @@ its own light-ground styling for the same components.
           <i class="fas fa-id-card"></i>View Profile
         </a></li>
         <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="{% url 'ui_settings' %}">
-          <i class="fas fa-sliders"></i>UI Settings
-        </a></li>
+        <li>
+          <form method="post" action="{% url 'toggle_nav_layout' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button type="submit" class="dropdown-item">
+              <i class="fa-solid fa-bars"></i>Switch to Top Navigation
+            </button>
+          </form>
+        </li>
         <li><a class="dropdown-item" href="{% url 'update_password' %}">
           <i class="fas fa-key"></i>Change Password
         </a></li>

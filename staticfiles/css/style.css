@@ -200,6 +200,15 @@ footer { margin-top: auto; }
   z-index: 1050;
 }
 
+/* This selector's own two-class specificity otherwise beats Bootstrap's
+   .dropdown-menu-end (one class), so a menu opting into end-alignment —
+   the account menu — got pinned back to the toggle's left edge instead
+   and ran off the right side of the screen. */
+.bims-navbar .dropdown-menu.dropdown-menu-end {
+  left: auto;
+  right: 0;
+}
+
 .bims-navbar .dropdown-menu.show { display: block; }
 
 .bims-navbar .dropdown-header {

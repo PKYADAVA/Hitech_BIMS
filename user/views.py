@@ -88,8 +88,7 @@ def _home_context(request):
     (cheap; harmless to compute even for users without access — both are
     permission-gated in the template)."""
     from broiler.models import BroilerFarm
-    from .services.dashboard_widgets import (dashboard_panels, hero_stats,
-                                             parse_filters, withheld_panels)
+    from .services.dashboard_widgets import dashboard_panels, withheld_panels
     from .services.scoping import branches_for, farms_for, supervisors_for
 
     user = getattr(request, "user", None)
@@ -103,9 +102,6 @@ def _home_context(request):
 
     return {
         "dash_panels": panels,
-        # The hero strip answers the filter bar like the widgets do, so a
-        # filtered dashboard does not headline unfiltered totals.
-        "hero_stats": hero_stats(user, parse_filters(request.GET)),
         "preview_group": preview,
         "preview_withheld": (withheld_panels(preview, _preview_prefs(request))
                              if preview else []),
@@ -763,6 +759,26 @@ def ui_settings(request):
         "nav_layout": profile.nav_layout,
         "nav_layout_choices": UserProfile.NAV_LAYOUT_CHOICES,
     })
+
+
+@login_required
+def toggle_nav_layout(request):
+    """One-click flip of the same choice `ui_settings` saves, from a button
+    that lives in the navbar itself rather than a page someone has to visit.
+    Redirects back to wherever it was pressed, since the point is not
+    leaving the page you were on."""
+    if request.method == "POST":
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile.nav_layout = (
+            UserProfile.NAV_SIDE if profile.nav_layout == UserProfile.NAV_TOP
+            else UserProfile.NAV_TOP
+        )
+        profile.save(update_fields=["nav_layout"])
+
+    next_url = request.POST.get("next", "")
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = reverse("dashboard")
+    return redirect(next_url)
 
 
 def _user_page_context():

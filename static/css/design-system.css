@@ -525,21 +525,6 @@ body.ds-sb-collapsed .ds-sb-collapse i { transform: rotate(180deg); }
 /* Hover tip for the collapsed rail. Lives on the body, so it is positioned in
    viewport coordinates by the sidebar's script rather than by this rule: the
    rail clips its own overflow, which is precisely where the tip must start. */
-.ds-sb-foot {
-  flex: 0 0 auto; margin: 8px; padding: 10px 12px;
-  display: flex; align-items: center; gap: 10px;
-  border-radius: 10px; background: rgba(255, 255, 255, .06);
-  border: 1px solid rgba(255, 255, 255, .08);
-  color: rgba(255, 255, 255, .6);
-}
-.ds-sb-foot > i { font-size: 13px; opacity: .8; }
-.ds-sb-foot span { display: flex; flex-direction: column; line-height: 1.3; white-space: nowrap; }
-.ds-sb-foot strong { font-size: 11.5px; font-weight: 600; color: rgba(255, 255, 255, .8); }
-.ds-sb-foot small { font-size: 10.5px; }
-/* At 72px there is room for the clock and nothing else. */
-body.ds-sb-collapsed .ds-sb-foot { justify-content: center; padding: 10px 0; }
-body.ds-sb-collapsed .ds-sb-foot span { display: none; }
-
 .ds-sb-tip {
   position: fixed; z-index: 1060; pointer-events: none;
   padding: 6px 10px; border-radius: 6px;
@@ -594,7 +579,13 @@ body.ds-shell .content { margin-left: var(--ds-sb-w, 260px); transition: margin-
    ground), and restates those few components for a light one instead.
    ------------------------------------------------------------------------ */
 .ds-topbar {
-  position: sticky; top: 0; z-index: 900;
+  /* Above the sidebar (1040): the search panel and account menu are its
+     children, and z-index only outranks a sibling when the stacking
+     context that holds it does — a child's own z-index can't reach past
+     its parent's. At 900 the topbar lost that comparison to the sidebar,
+     so the search panel (declared at 1050) rendered underneath it instead
+     of over it whenever a result list was wide enough to reach that far. */
+  position: sticky; top: 0; z-index: 1050;
   display: flex; align-items: center; gap: 14px;
   height: var(--navbar-height, 60px); padding: 0 20px;
   background: #fff;
