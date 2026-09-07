@@ -257,6 +257,8 @@ def _live_flock(viewable, filters, user=None):
         note = "No item category matching “chick”, so birds placed cannot be counted."
     elif not placed:
         note = "No chick placements recorded against these batches yet."
+    elif avg_age is None:
+        note = "Avg age is blank because none of these batches has a start date recorded."
 
     return {
         "stats": [
