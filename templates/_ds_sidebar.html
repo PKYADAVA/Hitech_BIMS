@@ -19,33 +19,74 @@ rather than a per-page one.
   </div>
 
   <nav class="ds-sb-nav">
-    <a class="ds-sb-item {% if not breadcrumb %}is-active{% endif %}" href="{% url 'dashboard' %}">
+    <a class="ds-sb-item {% if not breadcrumb %}is-active{% endif %}" href="{% url 'dashboard' %}"
+       data-tip="Dashboard">
       <i class="fa-solid fa-gauge-high"></i><span class="ds-sb-label">Dashboard</span>
     </a>
 
     {% for module in sidebar %}
     <div class="ds-sb-group {% if module.active %}is-open{% endif %}" data-module="{{ module.key }}">
-      <button type="button" class="ds-sb-item ds-sb-toggle {% if module.active %}is-active{% endif %}">
+      <button type="button" class="ds-sb-item ds-sb-toggle {% if module.active %}is-active{% endif %}"
+              data-tip="{{ module.label }}">
         <i class="{{ module.icon }}"></i>
         <span class="ds-sb-label">{{ module.label }}</span>
         <i class="fa-solid fa-chevron-right ds-sb-caret"></i>
       </button>
       <div class="ds-sb-sub">
         {% for section in module.sections %}
-        <div class="ds-sb-section">{{ section.label }}</div>
-        {% for item in section.items %}
-        <a class="ds-sb-link {% if item.active %}is-active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
-        {% endfor %}
+        {% comment %}
+          Master / Transactions / Reports fold too. A module like Broiler runs
+          to forty-odd pages across its sections; with all of them open the one
+          you want is a scroll away even after picking the right module.
+        {% endcomment %}
+        <div class="ds-sb-sec {% if section.active %}is-open{% endif %}">
+          <button type="button" class="ds-sb-section">
+            <i class="{{ section.icon }} ds-sb-sec-icon"></i>
+            <span>{{ section.label }}</span>
+            <i class="fa-solid fa-chevron-right ds-sb-sec-caret"></i>
+          </button>
+          <div class="ds-sb-sec-items">
+            {% for item in section.items %}
+            <a class="ds-sb-link {% if item.active %}is-active{% endif %}" href="{{ item.url }}">
+              <i class="{{ item.icon }}"></i><span>{{ item.label }}</span>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
         {% endfor %}
       </div>
     </div>
     {% endfor %}
   </nav>
 
-  <button type="button" class="ds-sb-collapse" id="dsSidebarToggle" title="Collapse menu">
-    <i class="fa-solid fa-angles-left"></i><span class="ds-sb-label">Collapse</span>
-  </button>
+
+  {% comment %}
+    Version card, pinned to the foot of the rail. It is the page footer's
+    content, moved: in a two-column shell the footer sat below a scrolling
+    page where nobody reached it, and the rail always has its own bottom.
+  {% endcomment %}
+  <div class="ds-sb-foot">
+    <i class="fa-regular fa-clock"></i>
+    <span>
+      <strong>Version {{ app_version }}</strong>
+      <small>&copy; {% now "Y" %} Hi Tech Farms</small>
+    </span>
+  </div>
+
 </aside>
+
+{% comment %}
+Collapse handle, riding the rail's outer edge.
+
+It sits outside the <aside> because the sidebar clips its own overflow: drawn
+inside, a control straddling the boundary would be sliced in half down the
+edge. Fixed positioning against the same --ds-sb-w the rail is sized from
+keeps the two in step whether it is 260px or 72px wide.
+{% endcomment %}
+<button type="button" class="ds-sb-collapse" id="dsSidebarToggle"
+        title="Collapse menu" aria-label="Collapse menu">
+  <i class="fa-solid fa-angles-right"></i>
+</button>
 
 <script>
   (function () {
@@ -53,11 +94,68 @@ rather than a per-page one.
     if (!sidebar) return;
     var KEY = "ds-sidebar-collapsed";
 
-    if (localStorage.getItem(KEY) === "1") document.body.classList.add("ds-sb-collapsed");
+    var collapseBtn = document.getElementById("dsSidebarToggle");
 
-    document.getElementById("dsSidebarToggle").addEventListener("click", function () {
-      var collapsed = document.body.classList.toggle("ds-sb-collapsed");
+    function setCollapsed(collapsed) {
+      document.body.classList.toggle("ds-sb-collapsed", collapsed);
       localStorage.setItem(KEY, collapsed ? "1" : "0");
+      // The handle does both jobs, so it should not go on saying "Collapse"
+      // while the only thing it can do is expand.
+      var label = collapsed ? "Expand menu" : "Collapse menu";
+      collapseBtn.title = label;
+      collapseBtn.setAttribute("aria-label", label);
+    }
+
+    setCollapsed(localStorage.getItem(KEY) === "1");
+
+    collapseBtn.addEventListener("click", function () {
+      setCollapsed(!document.body.classList.contains("ds-sb-collapsed"));
+    });
+
+    // Collapsed, every item is a bare icon, so hovering has to say which
+    // module it is. The tip is appended to the body rather than drawn as a
+    // pseudo-element on the item: the sidebar is `overflow: hidden` and the
+    // nav scrolls inside it, so anything drawn in there gets clipped at the
+    // rail's edge -- which is exactly where the tip needs to start.
+    var tip = document.createElement("div");
+    tip.className = "ds-sb-tip";
+    tip.hidden = true;
+    document.body.appendChild(tip);
+
+    function hideTip() { tip.hidden = true; }
+
+    sidebar.addEventListener("mouseover", function (e) {
+      if (!document.body.classList.contains("ds-sb-collapsed")) return;
+      var target = e.target.closest("[data-tip]");
+      if (!target) return hideTip();
+
+      var box = target.getBoundingClientRect();
+      tip.textContent = target.getAttribute("data-tip");
+      tip.hidden = false;
+      // Vertically centred on the item; clamped so a tip near either end of a
+      // tall menu still lands on screen.
+      var top = box.top + (box.height - tip.offsetHeight) / 2;
+      tip.style.top = Math.max(6, Math.min(top, window.innerHeight - tip.offsetHeight - 6)) + "px";
+      tip.style.left = (box.right + 10) + "px";
+    });
+
+    sidebar.addEventListener("mouseleave", hideTip);
+    // Clicking a module expands it under the cursor, so the tip is stale the
+    // moment it is acted on.
+    sidebar.addEventListener("click", hideTip);
+    window.addEventListener("scroll", hideTip, true);
+
+    // One section open at a time within a module, mirroring the module
+    // accordion above it: Broiler's Master alone runs to ten pages, so leaving
+    // Master open while opening Growing Charges pushes the latter off screen.
+    sidebar.addEventListener("click", function (e) {
+      var sec = e.target.closest(".ds-sb-section");
+      if (!sec) return;
+      var group = sec.parentElement;
+      var wasOpen = group.classList.contains("is-open");
+      group.parentElement.querySelectorAll(":scope > .ds-sb-sec.is-open")
+        .forEach(function (g) { g.classList.remove("is-open"); });
+      if (!wasOpen) group.classList.add("is-open");
     });
 
     // One module open at a time: the full list is 139 pages, and leaving them
@@ -67,6 +165,22 @@ rather than a per-page one.
       if (!toggle) return;
       var group = toggle.parentElement;
       var wasOpen = group.classList.contains("is-open");
+
+      // Clicking an icon on the collapsed rail opens the rail. Its sub-menu is
+      // hidden at 72px, so without this the click lands on a module whose
+      // pages cannot be shown and the sidebar appears not to respond at all.
+      // The module is then opened outright rather than toggled: whatever
+      // `is-open` it was carrying was invisible, so treating this as a close
+      // would answer a click with nothing again.
+      if (document.body.classList.contains("ds-sb-collapsed")) {
+        setCollapsed(false);
+        hideTip();
+        sidebar.querySelectorAll(".ds-sb-group.is-open").forEach(function (g) {
+          g.classList.remove("is-open");
+        });
+        group.classList.add("is-open");
+        return;
+      }
       sidebar.querySelectorAll(".ds-sb-group.is-open").forEach(function (g) {
         g.classList.remove("is-open");
       });

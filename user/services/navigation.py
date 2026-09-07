@@ -13,24 +13,88 @@ permission — because there is only one source for all three.
 from django.urls import NoReverseMatch, reverse
 
 from user.access import MODULE_REGISTRY, allowed_view_tabs
+from user.services.nav_icons import DEFAULT_TAB_ICON, TAB_ICONS
 
-#: nav key -> Font Awesome icon. The registry carries structure, not looks, so
-#: the icons live here; a module with no entry still renders, with a default.
+#: nav key -> Font Awesome icon, matched to the top navbar's own module icons
+#: so a module is the same picture in either layout. The registry carries
+#: structure, not looks, so the icons live here; a module with no entry still
+#: renders, with a default.
 NAV_ICONS = {
     "broiler": "fa-solid fa-egg",
     "hatchery": "fa-solid fa-kiwi-bird",
-    "environmental_monitoring": "fa-solid fa-temperature-half",
-    "inventory": "fa-solid fa-boxes-stacked",
     "purchase": "fa-solid fa-cart-shopping",
     "sales": "fa-solid fa-indian-rupee-sign",
-    "account": "fa-solid fa-book",
+    "account": "fa-solid fa-file-invoice",
+    "inventory": "fa-solid fa-warehouse",
     "hr": "fa-solid fa-users",
-    "tracking": "fa-solid fa-location-dot",
-    "user": "fa-solid fa-user-shield",
+    "change_requests": "fa-solid fa-clipboard-check",
+    "user": "fa-solid fa-users-gear",
     "notifications": "fa-solid fa-bell",
-    "alerts": "fa-solid fa-triangle-exclamation",
+    "alerts": "fa-solid fa-bell-concierge",
+    "environmental_monitoring": "fa-solid fa-temperature-half",
+    "tracking": "fa-solid fa-gear",
 }
 DEFAULT_ICON = "fa-solid fa-folder"
+
+#: Section heading -> icon, the same ones the top navbar's submenus use.
+SECTION_ICONS = {
+    "Master": "fas fa-sliders-h",
+    "Transactions": "fas fa-exchange-alt",
+    "Reports": "fas fa-chart-bar",
+    "Growing Charges": "fas fa-hand-holding-dollar",
+    "Farmer GC & Payment": "fas fa-file-invoice-dollar",
+    "Farm Route Planner": "fas fa-route",
+    "Environmental Monitoring": "fas fa-temperature-half",
+    "Employee Management": "fas fa-user-cog",
+    "Attendance": "fas fa-calendar-check",
+    "Employee Trip And Route": "fas fa-route",
+}
+DEFAULT_SECTION_ICON = "fas fa-folder-open"
+
+
+def nav_layout_for(user):
+    """This person's chrome: ``"top"`` or ``"side"``.
+
+    Profiles are created on demand, so most accounts have no row at all. Those
+    fall back to the deployment default (``DS_SIDEBAR``), which lets a server
+    start everyone on the sidebar without each person opting in one at a time.
+    """
+    from django.conf import settings
+
+    from user.models import UserProfile
+
+    default = "side" if getattr(settings, "DS_SIDEBAR", False) else "top"
+    if user is None or not getattr(user, "is_authenticated", False):
+        return "top"
+    layout = (UserProfile.objects
+              .filter(user=user)
+              .values_list("nav_layout", flat=True)
+              .first())
+    return layout or default
+
+
+def role_label_for(user):
+    """A short description of who this is, for the account button.
+
+    Their own profile role if it is set, otherwise the first group they belong
+    to -- that is what the permission matrix actually keys off, so it is the
+    most truthful one-word answer available. Superusers say Administrator when
+    nothing else is on file.
+    """
+    from user.models import UserProfile
+
+    if user is None or not getattr(user, "is_authenticated", False):
+        return ""
+    role = (UserProfile.objects
+            .filter(user=user)
+            .values_list("role", flat=True)
+            .first())
+    if role:
+        return role
+    group = user.groups.values_list("name", flat=True).first()
+    if group:
+        return group
+    return "Administrator" if user.is_superuser else "User"
 
 
 def sidebar_for(user, active_url_name=None):
@@ -59,10 +123,18 @@ def sidebar_for(user, active_url_name=None):
                     "code": code,
                     "label": label,
                     "url": url,
+                    "icon": TAB_ICONS.get(code, DEFAULT_TAB_ICON),
                     "active": active_url_name == code or active_url_name in extras,
                 })
             if items:
-                sections.append({"label": section["label"], "items": items})
+                # `active` so the sidebar can open the one section holding the
+                # page you are on, and leave the rest folded away.
+                sections.append({
+                    "label": section["label"],
+                    "items": items,
+                    "icon": SECTION_ICONS.get(section["label"], DEFAULT_SECTION_ICON),
+                    "active": any(i["active"] for i in items),
+                })
         if sections:
             out.append({
                 "key": module["nav"],

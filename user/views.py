@@ -88,7 +88,8 @@ def _home_context(request):
     (cheap; harmless to compute even for users without access — both are
     permission-gated in the template)."""
     from broiler.models import BroilerFarm
-    from .services.dashboard_widgets import dashboard_panels, withheld_panels
+    from .services.dashboard_widgets import (dashboard_panels, hero_stats,
+                                             parse_filters, withheld_panels)
     from .services.scoping import branches_for, farms_for, supervisors_for
 
     user = getattr(request, "user", None)
@@ -102,6 +103,9 @@ def _home_context(request):
 
     return {
         "dash_panels": panels,
+        # The hero strip answers the filter bar like the widgets do, so a
+        # filtered dashboard does not headline unfiltered totals.
+        "hero_stats": hero_stats(user, parse_filters(request.GET)),
         "preview_group": preview,
         "preview_withheld": (withheld_panels(preview, _preview_prefs(request))
                              if preview else []),
@@ -732,6 +736,33 @@ def update_password(request):
         return JsonResponse({"message": "Password updated successfully."})
 
     return render(request, "update_password.html")
+
+
+@login_required
+def ui_settings(request):
+    """Per-person appearance settings — currently the navigation layout.
+
+    The choice is this account's alone: two people on the same server can
+    disagree, and nobody's screen changes until they come here. Saving
+    redirects rather than re-rendering, so the new chrome is what draws.
+    """
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+    if request.method == "POST":
+        layout = request.POST.get("nav_layout")
+        valid = dict(UserProfile.NAV_LAYOUT_CHOICES)
+        if layout not in valid:
+            messages.error(request, "Please choose a valid layout.")
+            return redirect("ui_settings")
+        profile.nav_layout = layout
+        profile.save(update_fields=["nav_layout"])
+        messages.success(request, f"Layout changed to {valid[layout].lower()}.")
+        return redirect("ui_settings")
+
+    return render(request, "ui_settings.html", {
+        "nav_layout": profile.nav_layout,
+        "nav_layout_choices": UserProfile.NAV_LAYOUT_CHOICES,
+    })
 
 
 def _user_page_context():

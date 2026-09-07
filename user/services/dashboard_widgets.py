@@ -221,6 +221,7 @@ def _live_flock(viewable, filters, user=None):
         note = "No chick placements recorded against these batches yet."
 
     return {
+        "donut": _flock_by_breed(ids, day, alive),
         "stats": [
             {"label": "Open batches", "value": _num(len(batches))},
             {"label": "Birds alive", "value": _num(alive)},
@@ -233,6 +234,71 @@ def _live_flock(viewable, filters, user=None):
         "note": note,
         "filters_used": used,
     }
+
+
+def _flock_by_breed(batch_ids, day, total_alive):
+    """Live birds split by breed, for the Live Flock donut.
+
+    Same definition as the headline figure directly above -- placed less
+    mortality, culls and sales -- but grouped, so the slices always add up to
+    the number in the middle rather than being a second, differently-derived
+    count of the same birds.
+
+    Returns ``[]`` when the split would not be meaningful: no breeds recorded,
+    or a negative total, where proportions have no geometry.
+    """
+    from django.db.models import Sum
+    from broiler.models import BirdSale, BroilerBatch, DailyEntry
+    from inventory.models import Item, StockTransfer
+
+    if not batch_ids or total_alive <= 0:
+        return []
+
+    # Breed's readable name is `description`; `code` is the BRE-0001 handle.
+    breed_of = dict(BroilerBatch.objects.filter(id__in=batch_ids)
+                    .values_list("id", "breed__description"))
+    if not any(breed_of.values()):
+        return []
+
+    chick_ids = list(Item.objects.filter(category__name__icontains="chick")
+                     .values_list("id", flat=True))
+
+    # .order_by() before every .annotate(): all three models carry a
+    # Meta.ordering of ("-date", "-id"), and Django folds a default ordering
+    # into the GROUP BY. Left in, these group by (batch, date, id) -- a row per
+    # transaction rather than per batch -- and hand back wider rows than the
+    # aggregate asked for.
+    per = {b: 0.0 for b in batch_ids}
+    for row in (StockTransfer.objects
+                .filter(to_batch_id__in=batch_ids, item_id__in=chick_ids, date__lte=day)
+                .values("to_batch_id").order_by().annotate(t=Sum("quantity"))):
+        per[row["to_batch_id"]] = per.get(row["to_batch_id"], 0.0) + float(row["t"] or 0)
+    for row in (DailyEntry.objects
+                .filter(batch_id__in=batch_ids, date__lte=day)
+                .values("batch_id").order_by()
+                .annotate(m=Sum("mortality"), c=Sum("culls"))):
+        per[row["batch_id"]] = (per.get(row["batch_id"], 0.0)
+                                - float(row["m"] or 0) - float(row["c"] or 0))
+    for row in (BirdSale.objects
+                .filter(batch_id__in=batch_ids, date__lte=day)
+                .values("batch_id").order_by().annotate(b=Sum("birds"))):
+        per[row["batch_id"]] = per.get(row["batch_id"], 0.0) - float(row["b"] or 0)
+
+    totals = {}
+    for bid, alive in per.items():
+        if alive <= 0:
+            continue                       # a batch already out adds no slice
+        totals[breed_of.get(bid) or "Unspecified"] = (
+            totals.get(breed_of.get(bid) or "Unspecified", 0.0) + alive)
+    if not totals:
+        return []
+
+    grand = sum(totals.values())
+    palette = ["#16a34a", "#2563eb", "#7c3aed", "#d97706", "#0891b2", "#dc2626"]
+    return [{"label": name, "value": _num(v),
+             "pct": round(v / grand * 100, 1), "colour": palette[i % len(palette)]}
+            for i, (name, v) in enumerate(
+                sorted(totals.items(), key=lambda kv: -kv[1]))]
 
 
 def _daily_entries(viewable, filters, user=None):
@@ -1120,6 +1186,65 @@ DEFAULT_PANEL_ORDER = (
     "receivables", "payables", "stock_alerts",
     "field_team",
 )
+
+
+def hero_stats(user, filters=None):
+    """The four figures for the dashboard's hero strip.
+
+    Every one is taken from the engine that already owns it -- Live Flock for
+    the bird numbers, alerthub for the alert count, the scoping service for the
+    farm count -- for the reason at the top of this module: a second derivation
+    is a second answer waiting to disagree with the first.
+
+    Permission-gated the same way the widgets are. A user who cannot open the
+    Live Flock report is not shown its totals in a headline instead; the tile
+    is dropped rather than zeroed, because a zero reads as a fact.
+    """
+    from alerthub.engine import unread_count
+    from user.services.scoping import farms_for
+
+    filters = filters or dict.fromkeys(FILTER_KEYS)
+    viewable = allowed_view_tabs(user)
+    out = []
+
+    try:
+        out.append({"key": "farms", "label": "Farms",
+                    "value": _num(farms_for(user).count()),
+                    "icon": "fa-solid fa-tractor", "tone": "green"})
+    except Exception:                      # noqa: BLE001 - a tile must never 500 the page
+        logger.exception("hero: farm count failed")
+
+    if any(t in viewable for t in ("live_flock_report", "broiler_batch")):
+        try:
+            flock = _live_flock(viewable, filters, user)
+            by_label = {s["label"]: s for s in flock.get("stats", [])}
+            alive = by_label.get("Birds alive")
+            if alive:
+                out.append({"key": "birds", "label": "Total Birds",
+                            "value": alive["value"],
+                            "icon": "fa-solid fa-kiwi-bird", "tone": "blue"})
+            mortality = by_label.get("Mortality")
+            if mortality and mortality["value"] != "\u2014":
+                # Livability, not "health": it is 100 minus the mortality this
+                # same widget reports, and naming it health would imply a
+                # welfare score the app does not compute.
+                pct = float(mortality["value"].rstrip("%"))
+                out.append({"key": "livability", "label": "Livability",
+                            "value": f"{100 - pct:.1f}%",
+                            "icon": "fa-solid fa-heart-pulse", "tone": "teal"})
+        except Exception:                  # noqa: BLE001
+            logger.exception("hero: live flock failed")
+
+    try:
+        open_alerts = unread_count(user)
+        out.append({"key": "alerts", "label": "Open Alerts",
+                    "value": _num(open_alerts),
+                    "icon": "fa-solid fa-bell",
+                    "tone": "red" if open_alerts else "slate"})
+    except Exception:                      # noqa: BLE001
+        logger.exception("hero: alert count failed")
+
+    return out
 
 
 def all_panels():

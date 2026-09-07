@@ -17,7 +17,10 @@ QUICK_ACTIONS = [
     ("Chicks Placement", "chicks_placement_list"),
     ("Stock Transfer", "stock_transfer_list"),
     ("Daily Entry", "daily_entry_list"),
-    ("Medicine &amp; Vaccine Consumption", "medicine_entry_list"),
+    # Shortened on the card: the subtitle underneath already says "Log
+    # consumption", and the long form wrapped to two lines, making that card
+    # taller than the rest of the row.
+    ("Medicine &amp; Vaccine", "medicine_entry_list"),
     ("Bird Sale", "bird_sale_list"),
     ("Bird Receipt", "bird_sale_receipt_list"),
 ]

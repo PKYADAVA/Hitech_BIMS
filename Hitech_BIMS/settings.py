@@ -308,6 +308,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 APK_DOWNLOAD_URL = os.getenv("APK_DOWNLOAD_URL", "")
 APK_VERSION = os.getenv("APK_VERSION", "")
 
+# The web app's own version, shown in the sidebar's foot. Distinct from
+# SPECTACULAR_SETTINGS["VERSION"], which versions the mobile API's schema, and
+# from APK_VERSION, which versions the Android build.
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+
 # --- DigitalOcean Spaces (S3-compatible) for media uploads ---
 # Spaces speaks the S3 API, so django-storages' S3 backend drives it once
 # pointed at the regional Spaces endpoint. Only media is offloaded here; static

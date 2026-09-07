@@ -100,6 +100,12 @@
   color: var(--ah-faint);
 }
 .ah-empty i { font-size: 1.8rem; display: block; margin-bottom: .6rem; }
+/* On the dashboard the same message sits inside a card that already carries
+   two rows of tiles, so 3rem of padding turns "nothing to report" into the
+   tallest thing on the page. The notification centre keeps the roomy one --
+   there the empty state IS the page. */
+.ah-widget-list .ah-empty { padding: 1.1rem 1rem; }
+.ah-widget-list .ah-empty i { font-size: 1.35rem; margin-bottom: .4rem; }
 
 /* ---------------------------------------------------------------- the bell */
 
@@ -321,24 +327,26 @@
 }
 .ah-count {
   background: var(--ah-surface);
-  border-radius: var(--ah-radius);
-  box-shadow: var(--ah-shadow);
-  padding: .8rem 1rem;
+  border-radius: .8rem;
+  /* A hairline rather than a drop shadow: these sit inside a card that already
+     has one, and shadow inside shadow reads as clutter. */
+  border: 1px solid #eaeff6;
+  box-shadow: 0 1px 2px rgba(22, 42, 79, .04);
+  padding: .75rem .9rem;
   display: flex;
   align-items: center;
-  gap: .75rem;
+  gap: .7rem;
   cursor: pointer;
-  border: 2px solid transparent;
-  transition: border-color .15s, transform .12s;
+  transition: border-color .15s, transform .12s, box-shadow .15s;
 }
-.ah-count:hover { transform: translateY(-1px); }
+.ah-count:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(22, 42, 79, .08); }
 .ah-count.active { border-color: currentColor; }
 .ah-count.critical { color: var(--ah-critical); }
 .ah-count.high     { color: var(--ah-high); }
 .ah-count.medium   { color: var(--ah-medium); }
 .ah-count.low      { color: var(--ah-low); }
-.ah-count-n { font-size: 1.45rem; font-weight: 700; line-height: 1; }
-.ah-count-l { font-size: .75rem; color: var(--ah-muted); text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+.ah-count-n { font-size: 1.3rem; font-weight: 700; line-height: 1.1; }
+.ah-count-l { font-size: .74rem; color: var(--ah-muted); font-weight: 500; }
 
 .ah-foot {
   display: flex;
@@ -360,7 +368,7 @@
 }
 .ah-tile {
   background: var(--ah-canvas);
-  border-radius: .65rem;
+  border-radius: .7rem;
   padding: .6rem .7rem;
   display: flex;
   align-items: center;
