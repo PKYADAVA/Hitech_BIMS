@@ -92,77 +92,77 @@ body {
     rgba(248, 250, 248, 0) 64%);
 }
 
-.pitch-body { padding: 44px 52px 0; }
+.pitch-body { padding: 24px 40px 0; }
 
-.login-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 32px; }
-.login-brand img { width: 66px; height: auto; }
-.login-brand .name { font-size: 1.75rem; font-weight: 700; color: var(--brand); line-height: 1.1; }
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.login-brand img { width: 46px; height: auto; }
+.login-brand .name { font-size: 1.4rem; font-weight: 700; color: var(--brand); line-height: 1.1; }
 .login-brand .sub {
-  font-size: 0.7rem; font-weight: 600; letter-spacing: 3px;
+  font-size: 0.62rem; font-weight: 600; letter-spacing: 2.5px;
   color: var(--ink-soft); text-transform: uppercase;
-  border-top: 1.5px solid var(--brand-light); padding-top: 5px; margin-top: 5px;
+  border-top: 1.5px solid var(--brand-light); padding-top: 3px; margin-top: 3px;
 }
 
 .pitch h1 {
-  font-size: 2.5rem; line-height: 1.2; font-weight: 700; letter-spacing: -0.5px;
+  font-size: 1.85rem; line-height: 1.18; font-weight: 700; letter-spacing: -0.5px;
   color: var(--ink);
   text-shadow: 0 1px 12px rgba(248, 250, 248, 0.9);
 }
 .pitch h1 em { color: var(--brand); font-style: normal; }
 .pitch p {
-  margin-top: 20px; font-size: 1rem; line-height: 1.65;
+  margin-top: 10px; font-size: 0.88rem; line-height: 1.5;
   color: #33415c; max-width: 26rem; font-weight: 500;
   text-shadow: 0 1px 10px rgba(248, 250, 248, 0.95);
 }
 
-/* Strip between the form and the footer, split the same way as the shell
-   above it: a field-green fill continues under the photo instead of going
-   blank, the tiles stay held under the form column on the right. A second
-   crop of the same photo was tried here first — at this sliver of height it
-   just repeated the same hens, reading as a glitch rather than a
-   continuation, so a plain tone stands in for the photo instead. */
-.login-tiles {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-.login-tiles-photo {
-  background: linear-gradient(180deg, #4f7942, #3e6435);
-}
+/* Sits below the card, inside the form column — not a separate strip under
+   the photo. A second crop of the photo was tried there first to fill it;
+   at that sliver of height it just repeated the same hens, reading as a
+   glitch rather than a continuation. Living in the form column instead
+   means the photo beside it is one continuous box that stretches to match
+   whatever height this column ends up being, with nothing to seam against. */
 .login-tiles-row {
+  width: 100%;
+  max-width: 760px;
+  margin-top: 14px;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  padding: 6px 32px;
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px 24px;
+  gap: 10px;
 }
 .login-tiles-row > div {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  min-width: 0;
 }
-.login-tiles .f-icon {
-  width: 18px; height: 18px; margin: 0; flex: none;
+.login-tiles-row .f-icon {
+  width: 26px; height: 26px; margin: 0; flex: none;
   display: grid; place-items: center;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--brand-light);
   color: var(--brand);
-  font-size: 0.55rem;
+  font-size: 0.76rem;
 }
-.login-tiles .f-label, .login-tiles .f-sub { text-align: left; }
-.login-tiles .f-label { font-size: 0.68rem; font-weight: 700; color: var(--brand); line-height: 1.15; }
-.login-tiles .f-sub   { font-size: 0.6rem; color: var(--ink-soft); line-height: 1.15; }
+.login-tiles-row .f-label, .login-tiles-row .f-sub { text-align: left; }
+.login-tiles-row .f-label { font-size: 0.72rem; font-weight: 700; color: var(--brand); line-height: 1.25; white-space: nowrap; }
+.login-tiles-row .f-sub   { font-size: 0.62rem; color: var(--ink-soft); line-height: 1.25; }
 
 /* ---------- right: the form column ------------------------------------- */
 
 .form-col {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 0;
-  padding: 24px 40px;
+  padding: 14px 32px;
   background: var(--canvas);
   /* The card is the one thing that must never be cut off. If the window is too
      short for it, this column scrolls rather than the page — the photo beside
@@ -174,35 +174,35 @@ body {
   background: var(--surface);
   border-radius: var(--radius-lg);
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.10);
-  padding: 24px 30px;
-  max-width: 460px;
+  padding: 18px 26px;
+  max-width: 440px;
   width: 100%;
 }
 
 .login-card .lock {
-  width: 56px; height: 56px; margin: 0 auto 12px;
+  width: 40px; height: 40px; margin: 0 auto 8px;
   display: grid; place-items: center;
   border-radius: 50%;
   background: var(--brand-light);
   color: var(--brand);
-  font-size: 1.3rem;
+  font-size: 1rem;
 }
 
-.login-card h2 { text-align: center; font-size: 1.35rem; font-weight: 700; }
-.login-card .lead { text-align: center; color: var(--ink-soft); font-size: 0.9rem; margin: 4px 0 18px; }
+.login-card h2 { text-align: center; font-size: 1.15rem; font-weight: 700; }
+.login-card .lead { text-align: center; color: var(--ink-soft); font-size: 0.82rem; margin: 3px 0 12px; }
 
 .login-error {
   display: flex; align-items: flex-start; gap: 10px;
   background: var(--danger-bg);
   color: var(--danger);
   border-radius: var(--radius);
-  padding: 11px 13px;
-  font-size: 0.85rem;
-  margin-bottom: 18px;
+  padding: 9px 12px;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
 }
 
-.field { margin-bottom: 13px; }
-.field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 7px; }
+.field { margin-bottom: 9px; }
+.field label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; }
 
 .control { position: relative; display: flex; align-items: center; }
 .control .lead-icon {
@@ -211,8 +211,8 @@ body {
 .control input {
   width: 100%;
   font-family: inherit;
-  font-size: 0.93rem;
-  padding: 12px 46px 12px 44px;
+  font-size: 0.9rem;
+  padding: 9px 44px 9px 42px;
   border: 1.5px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -239,19 +239,19 @@ body {
 
 .row-between {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin: 2px 0 16px;
+  gap: 12px; margin: 2px 0 10px;
 }
-.remember { display: flex; align-items: center; gap: 9px; font-size: 0.87rem; cursor: pointer; }
-.remember input { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; }
-.link-brand { color: var(--brand); font-size: 0.87rem; font-weight: 600; text-decoration: none; }
+.remember { display: flex; align-items: center; gap: 8px; font-size: 0.83rem; cursor: pointer; }
+.remember input { width: 16px; height: 16px; accent-color: var(--brand); cursor: pointer; }
+.link-brand { color: var(--brand); font-size: 0.83rem; font-weight: 600; text-decoration: none; }
 .link-brand:hover { text-decoration: underline; }
 
 .btn-login {
   width: 100%;
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  font-family: inherit; font-size: 0.98rem; font-weight: 600; letter-spacing: 0.5px;
+  font-family: inherit; font-size: 0.92rem; font-weight: 600; letter-spacing: 0.5px;
   text-transform: uppercase;
-  padding: 13px;
+  padding: 10px;
   border: 0; border-radius: var(--radius);
   background: var(--brand); color: #fff;
   cursor: pointer;
@@ -261,14 +261,14 @@ body {
 .btn-login:active { transform: translateY(1px); }
 
 .assure {
-  display: flex; gap: 12px; align-items: flex-start;
-  margin-top: 16px; padding: 12px;
+  display: flex; gap: 10px; align-items: flex-start;
+  margin-top: 10px; padding: 9px;
   background: #f0fdf4;
   border-radius: var(--radius);
 }
-.assure i { color: var(--brand); font-size: 1.05rem; margin-top: 2px; }
-.assure .t { font-size: 0.87rem; font-weight: 600; color: var(--brand-dark); }
-.assure .d { font-size: 0.81rem; color: var(--ink-soft); line-height: 1.45; margin-top: 2px; }
+.assure i { color: var(--brand); font-size: 0.95rem; margin-top: 2px; }
+.assure .t { font-size: 0.82rem; font-weight: 600; color: var(--brand-dark); }
+.assure .d { font-size: 0.75rem; color: var(--ink-soft); line-height: 1.4; margin-top: 1px; }
 
 .lang {
   position: absolute;
@@ -285,7 +285,7 @@ body {
 
 .or-split {
   display: flex; align-items: center; gap: 14px;
-  margin: 13px 0;
+  margin: 8px 0;
   color: var(--ink-faint); font-size: 0.8rem; letter-spacing: 1px;
 }
 .or-split::before, .or-split::after {
@@ -297,15 +297,15 @@ body {
 .btn-otp {
   width: 100%;
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  font-family: inherit; font-size: 0.95rem; font-weight: 600;
-  padding: 11px;
+  font-family: inherit; font-size: 0.9rem; font-weight: 600;
+  padding: 8px;
   border: 1.5px solid var(--brand);
   border-radius: var(--radius);
   background: transparent; color: var(--brand);
 }
 .btn-otp[disabled] { opacity: 0.45; cursor: not-allowed; }
 .btn-otp-note {
-  text-align: center; font-size: 0.75rem; color: var(--ink-faint); margin-top: 6px;
+  text-align: center; font-size: 0.72rem; color: var(--ink-faint); margin-top: 4px;
 }
 
 /* ---------- single-card variant (reset password) ----------------------- */
@@ -342,10 +342,10 @@ body {
 .login-foot {
   border-top: 1px solid var(--line);
   background: var(--surface);
-  padding: 20px 32px;
+  padding: 10px 32px;
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
-  font-size: 0.84rem; color: var(--ink-soft);
+  font-size: 0.82rem; color: var(--ink-soft);
 }
 .login-foot a { color: inherit; text-decoration: none; display: flex; align-items: center; gap: 9px; }
 .login-foot a:hover { color: var(--brand); }
@@ -355,40 +355,28 @@ body {
 /* ---------- short windows ---------------------------------------------- */
 
 /*
- * The card is the one thing that must never be cut off, and a laptop at 720p
- * leaves it barely 580px once the footer and page padding are gone. Rather
- * than hand back a scrollbar, the card sheds what it can afford to lose, in
- * order of how little it costs the person signing in.
+ * The base sizing above is already compact enough to fit a typical laptop
+ * window (around 650-700px tall once browser chrome is gone) without any of
+ * this — these two tiers are only for windows shorter than that, and shed
+ * what they can afford to lose in order of how little it costs the person
+ * signing in.
  */
-@media (max-height: 820px) {
-  .form-col { padding: 16px 28px; }
-  .login-card { padding: 20px 26px; }
-  .login-card .lock { width: 48px; height: 48px; font-size: 1.1rem; margin-bottom: 10px; }
-  .login-card h2 { font-size: 1.25rem; }
-  .login-card .lead { margin: 3px 0 14px; }
-  .field { margin-bottom: 11px; }
-  .or-split { margin: 10px 0; }
-  .assure { margin-top: 12px; padding: 10px; }
-  .pitch-body { padding: 28px 36px 0; }
-  .pitch h1 { font-size: 2.1rem; }
-  .pitch p { margin-top: 14px; }
-}
-
-@media (max-height: 740px) {
+@media (max-height: 620px) {
   /* The OTP note explains a control that is disabled anyway, and the
      reassurance panel is decoration next to the fields themselves. */
   .btn-otp-note { display: none; }
   .assure { display: none; }
-  .login-card .lock { width: 44px; height: 44px; font-size: 1rem; margin-bottom: 8px; }
-  .pitch h1 { font-size: 1.85rem; }
+  .login-card .lock { width: 34px; height: 34px; font-size: 0.9rem; margin-bottom: 6px; }
+  .pitch h1 { font-size: 1.5rem; }
+  .pitch p { margin-top: 6px; }
 }
 
-@media (max-height: 660px) {
+@media (max-height: 540px) {
   /* Below this the pitch copy is what goes: the form has to survive intact. */
   .pitch p { display: none; }
   .or-split, .btn-otp { display: none; }
   .login-card .lock { display: none; }
-  .login-tiles { display: none; }
+  .login-tiles-row { display: none; }
 }
 
 /* ---------- narrow screens -------------------------------------------- */
@@ -398,16 +386,15 @@ body {
   .login-card  { justify-self: stretch; max-width: none; padding: 32px 24px; }
   .login-pitch h1 { font-size: 2rem; }
   .login-hero  { height: 170px; }
-  /* The shell above has already stacked into one column, so the strip
-     below it follows suit instead of keeping a photo half. */
-  .login-tiles { grid-template-columns: 1fr; }
-  .login-tiles-photo { display: none; }
 }
 
 /* Below tablet the pitch is scenery in front of the thing the user came for. */
 @media (max-width: 640px) {
   .login-pitch, .login-hero { display: none; }
   .login-brand { justify-content: center; margin-bottom: 24px; }
-  .login-tiles-row { gap: 16px 24px; padding: 6px 20px; }
+  /* One row is the desktop card's whole point; a phone-width screen has no
+     room for it, so it wraps back to a grid instead of overflowing. */
+  .login-tiles-row { flex-wrap: wrap; gap: 14px 24px; padding: 12px 20px; }
+  .login-tiles-row .f-label, .login-tiles-row .f-sub { white-space: normal; }
   .login-foot { justify-content: center; text-align: center; }
 }
