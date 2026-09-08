@@ -1157,6 +1157,235 @@ def _farm_route(viewable, filters, user=None):
             "filters_used": ["date", "branch", "supervisor"]}
 
 
+def _activity_who(user):
+    """(display name, initials) for an activity row, or (None, None) when the
+    entry has no recorded user — an alert the system raised, not a person's
+    action, and a fabricated name would misattribute it."""
+    if user is None:
+        return None, None
+    name = user.get_full_name() or user.username
+    parts = [p for p in name.split() if p]
+    initials = (parts[0][0] + parts[-1][0]).upper() if len(parts) > 1 else name[:2].upper()
+    return name, initials
+
+
+def _activity_ago(when):
+    """"2 hours ago" — timesince()'s own wording, trimmed to its first unit
+    so a row reads "3 hours ago" rather than "3 hours, 12 minutes ago"."""
+    from django.utils.timesince import timesince
+
+    return f"{timesince(when, timezone.now()).split(',')[0]} ago"
+
+
+def _broiler_activity(viewable, filters, user=None):
+    """Recent events across the broiler farms this user can see, newest first.
+
+    Every row is a real transaction record, not a derived one — the same
+    reason the rest of this module reuses engines rather than re-deriving
+    figures. Two things a mockup for this widget assumed turned out not to
+    exist when checked against the models: "Bird Lifting" and "Bird Sale"
+    are the same row (BirdSale) under two names, so they get one activity
+    type here, not two; and there is no minimum-stock/reorder-threshold
+    concept anywhere in Item, only negative-balance detection (the same
+    engine the Stock Alerts widget uses) — so the stock row here reports a
+    negative balance, not a fabricated "below threshold" warning.
+    """
+    from broiler.models import BirdSale, BroilerFarm, DailyEntry, MedicineVaccineEntry
+    from inventory.models import Item, StockTransfer
+    from inventory.services.item_summary import negative_stock
+    from user.services.scoping import allowed_ids
+
+    day = filters.get("date") or timezone.localdate()
+    window_start = day - timedelta(days=7)
+    used = list(FILTER_KEYS)
+
+    def scoped(qs, prefix):
+        qs = _scope_farms(qs, filters, prefix)
+        return qs if user is None else _scope_to_user(qs, user, prefix)
+
+    chick_ids = set(Item.objects.filter(category__name__icontains="chick")
+                    .values_list("id", flat=True))
+    feed_ids = set(Item.objects.filter(category__name__icontains="feed")
+                   .values_list("id", flat=True))
+
+    events = []
+
+    transfers = scoped(
+        StockTransfer.objects.filter(
+            date__gte=window_start, date__lte=day,
+            item_id__in=chick_ids | feed_ids, to_farm__isnull=False,
+        ), "to_farm"
+    ).select_related("item", "to_farm", "to_batch", "to_batch__breed", "created_by")[:25]
+    for t in transfers:
+        farm = t.to_farm.farm_name if t.to_farm_id else "—"
+        batch = f"Batch {t.to_batch.batch_name}" if t.to_batch_id and t.to_batch.batch_name else None
+        name, initials = _activity_who(t.created_by)
+        if t.item_id in chick_ids:
+            breed = (t.to_batch.breed.description
+                    if t.to_batch_id and t.to_batch.breed_id else None)
+            events.append({
+                "category": "placement", "icon": "fa-solid fa-kiwi-bird", "colour": "dw-c-amber",
+                "title": "Chicks Placed", "subtitle": "Placement recorded",
+                "farm": farm, "batch": batch,
+                "metric": f"{_num(t.quantity)} chicks", "metric_sub": breed,
+                "status": "Completed", "tone": "good",
+                "user_name": name, "user_initials": initials, "when": t.created_at,
+            })
+        else:
+            events.append({
+                "category": "feed", "icon": "fa-solid fa-sack", "colour": "dw-c-blue",
+                "title": "Feed Issued", "subtitle": "Feed issued from store",
+                "farm": farm, "batch": batch,
+                "metric": f"{_num(t.quantity)} kg", "metric_sub": t.item.description,
+                "status": "Completed", "tone": "good",
+                "user_name": name, "user_initials": initials, "when": t.created_at,
+            })
+
+    meds = scoped(
+        MedicineVaccineEntry.objects.filter(date__gte=window_start, date__lte=day),
+        "farm"
+    ).select_related("item", "farm", "batch", "entry_by")[:25]
+    for m in meds:
+        name, initials = _activity_who(m.entry_by)
+        events.append({
+            "category": "medicine", "icon": "fa-solid fa-syringe", "colour": "dw-c-cyan",
+            "title": "Medicine Given", "subtitle": m.item.description if m.item_id else "Medicine/vaccine entry",
+            "farm": m.farm.farm_name if m.farm_id else "—",
+            "batch": f"Batch {m.batch.batch_name}" if m.batch_id and m.batch.batch_name else None,
+            "metric": f"{_num(m.qty)} {m.item.consumption_uom.name}" if m.item_id and m.item.consumption_uom_id else _num(m.qty),
+            "metric_sub": None,
+            "status": "Completed", "tone": "good",
+            "user_name": name, "user_initials": initials, "when": m.entry_time,
+        })
+
+    entries = scoped(
+        DailyEntry.objects.filter(date__gte=window_start, date__lte=day),
+        "farm"
+    ).select_related("farm", "batch", "entry_by")[:25]
+    for e in entries:
+        name, initials = _activity_who(e.entry_by)
+        farm = e.farm.farm_name if e.farm_id else "—"
+        batch = f"Batch {e.batch.batch_name}" if e.batch_id and e.batch.batch_name else None
+        losses = (e.mortality or 0) + (e.culls or 0)
+        if losses > 0:
+            events.append({
+                "category": "mortality", "icon": "fa-solid fa-skull", "colour": "dw-c-red",
+                "title": "Mortality Entry", "subtitle": "Daily mortality recorded",
+                "farm": farm, "batch": batch,
+                "metric": f"{_num(losses)} birds", "metric_sub": None,
+                "status": "Attention", "tone": "warn",
+                "user_name": name, "user_initials": initials, "when": e.entry_time,
+            })
+        else:
+            events.append({
+                "category": "mortality", "icon": "fa-solid fa-clipboard-check", "colour": "dw-c-green",
+                "title": "Daily Entry", "subtitle": "Production data updated",
+                "farm": farm, "batch": batch,
+                "metric": (f"Avg wt. {_num(e.avg_weight_gms)} g"
+                          if e.avg_weight_gms else "—"),
+                "metric_sub": None,
+                "status": "Updated", "tone": "neutral",
+                "user_name": name, "user_initials": initials, "when": e.entry_time,
+            })
+
+    lifts = scoped(
+        BirdSale.objects.filter(date__gte=window_start, date__lte=day),
+        "farm"
+    ).select_related("farm", "batch", "customer", "farmer", "entry_by")[:25]
+    for s in lifts:
+        name, initials = _activity_who(s.entry_by)
+        buyer = (s.customer.customer_name if s.customer_id and hasattr(s.customer, "customer_name")
+                else (str(s.customer) if s.customer_id else (str(s.farmer) if s.farmer_id else None)))
+        events.append({
+            "category": "lifting", "icon": "fa-solid fa-truck-fast", "colour": "dw-c-purple",
+            "title": "Bird Sale", "subtitle": f"Lifted to {buyer}" if buyer else "Birds lifted",
+            "farm": s.farm.farm_name if s.farm_id else "—",
+            "batch": f"Batch {s.batch.batch_name}" if s.batch_id and s.batch.batch_name else None,
+            "metric": f"{_num(s.birds)} birds", "metric_sub": f"{_num(s.net_weight)} kg",
+            "status": "Completed", "tone": "good",
+            "user_name": name, "user_initials": initials, "when": s.entry_time,
+        })
+
+    # Stock alerts carry no responsible user in negative_stock's own data — an
+    # alert the system raised by replaying transactions, not an entry someone
+    # made — so that column is left blank rather than guessed.
+    stock_rows = [r for r in negative_stock(as_of_date=day, location_type="farm")
+                  if r["item_id"] in feed_ids]
+    farm_filters = {k: filters[k] for k in ("branch", "line", "supervisor", "farm") if filters.get(k)}
+    if farm_filters:
+        fqs = BroilerFarm.objects.all()
+        for key, field in (("branch", "branch_id"), ("line", "line"),
+                          ("supervisor", "supervisor_id"), ("farm", "id")):
+            if key in farm_filters:
+                fqs = fqs.filter(**{field: farm_filters[key]})
+        allowed_farm_ids = set(fqs.values_list("id", flat=True))
+        stock_rows = [r for r in stock_rows if r["location_id"] in allowed_farm_ids]
+    if user is not None:
+        limit = allowed_ids(user, "farms")
+        if limit is not None:
+            stock_rows = [r for r in stock_rows if r["location_id"] in limit]
+    for r in stock_rows:
+        if r["since"] < window_start:
+            continue
+        events.append({
+            "category": "stock", "icon": "fa-solid fa-triangle-exclamation", "colour": "dw-c-red",
+            "title": "Feed Stock Alert", "subtitle": "Stock balance went negative",
+            "farm": r["location"], "batch": None,
+            "metric": f"{_num(r['quantity'])} kg", "metric_sub": r["item"],
+            "status": "Low Stock", "tone": "bad",
+            "user_name": None, "user_initials": None, "when": r["since"],
+        })
+
+    if not events:
+        return {"timeline": [], "timeline_filters": [], "footer_stats": [],
+                "note": "No activity recorded in the last 7 days.", "filters_used": used}
+
+    def as_datetime(when):
+        if isinstance(when, timezone.datetime):
+            return when
+        return timezone.make_aware(timezone.datetime.combine(when, timezone.datetime.min.time()))
+
+    events.sort(key=lambda e: as_datetime(e["when"]), reverse=True)
+
+    # Captured before "when" is dropped in favour of the display string below.
+    farms_today = {e["farm"] for e in events if as_datetime(e["when"]).date() == day}
+    total_farms = scoped(BroilerFarm.objects.all(), "").count()
+
+    for e in events:
+        e["time_ago"] = _activity_ago(as_datetime(e["when"]))
+        del e["when"]
+
+    categories = [
+        ("placement", "Placement"), ("feed", "Feed"), ("medicine", "Medicine"),
+        ("mortality", "Mortality"), ("lifting", "Lifting"),
+    ]
+    present = {e["category"] for e in events}
+    timeline_filters = [{"key": "all", "label": "All Activities"}] + [
+        {"key": k, "label": label} for k, label in categories if k in present]
+
+    footer_stats = [
+        {"label": "Total Activities", "value": _num(len(events)),
+         "sub": "in the last 7 days"},
+        {"label": "Last Activity", "value": events[0]["time_ago"],
+         "sub": f"{events[0]['title']} — {events[0]['farm']}"},
+        {"label": "Stock Alerts", "value": _num(len(stock_rows)),
+         "tone": "bad" if stock_rows else "good"},
+    ]
+    if total_farms:
+        footer_stats.append({
+            "label": "Active Farms", "value": f"{len(farms_today)} / {_num(total_farms)}",
+            "sub": "Farms with activity today",
+        })
+
+    return {
+        "timeline": events[:12],
+        "timeline_filters": timeline_filters,
+        "footer_stats": footer_stats,
+        "note": None,
+        "filters_used": used,
+    }
+
+
 WIDGETS = [
     ("live_flock", "Live Flock", ("live_flock_summary_report",),
      "live_flock_summary_report", "fa-solid fa-egg", "gs-blue", _live_flock),
@@ -1164,6 +1393,13 @@ WIDGETS = [
      "daily_entry_list", "fa-solid fa-clipboard-check", "gs-green", _daily_entries),
     ("flock_ages", "Age wise Available Birds", ("live_flock_summary_report",),
      "live_flock_summary_report", "fa-solid fa-chart-column", "gs-purple", _flock_ages),
+    # Gated on any of the five transaction lists it draws from — the same
+    # "any of these" shape as Farm Route Today — and links to Daily Entry
+    # since that is both one of the five and the most-visited of them.
+    ("broiler_activity", "Broiler — Recent Activity",
+     ("chicks_placement_list", "stock_transfer_list", "daily_entry_list",
+      "medicine_entry_list", "bird_sale_list"),
+     "daily_entry_list", "fa-solid fa-clock-rotate-left", "gs-green", _broiler_activity),
     ("liftings", "Lifting Details", ("bird_sale_list",),
      "bird_sale_list", "fa-solid fa-truck-fast", "gs-cyan", _liftings),
     ("sale_overview", "Sale Overview", ("bird_sale_list",),
@@ -1221,6 +1457,7 @@ DEFAULT_PANEL_ORDER = (
     # reported today, and when it goes out.
     "live_flock", "daily_entries", "flock_ages",
     "liftings", "sale_overview",
+    "broiler_activity",
     # The day's round sits with the field widgets rather than the money ones:
     # it is about who is going where, which is the same question Field Team
     # answers from the other end.

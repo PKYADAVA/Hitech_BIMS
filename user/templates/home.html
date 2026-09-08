@@ -240,7 +240,13 @@
   @media (min-width: 1200px) {
     .dw-col-live_flock, .dw-col-daily_entries,
     .dw-col-flock_ages { flex:0 0 33.3333%; max-width:33.3333%; }
-    .dw-col-liftings, .dw-col-sale_overview { flex:0 0 50%; max-width:50%; }
+    /* Lifting, Sale Overview and the activity feed share a row: all three
+       read the same transactions from three angles. The activity table's own
+       row still needs more than a third of the card to lay out in full, so
+       its list scrolls sideways inside its own card (.dw-act-list) rather
+       than the row breaking the column. */
+    .dw-col-liftings, .dw-col-sale_overview,
+    .dw-col-broiler_activity { flex:0 0 33.3333%; max-width:33.3333%; }
   }
   .dw-col-liftings .dw-stats,
   .dw-col-sale_overview .dw-stats { grid-template-columns:repeat(auto-fit, minmax(112px, 1fr)); }
@@ -268,6 +274,71 @@
   .dw-row .dw-row-meta { color:#8494ab; font-size:.75rem; }
   .dw-row .dw-row-value { margin-left:auto; font-weight:600; white-space:nowrap; }
   .dw-note { margin-top:11px; font-size:.75rem; color:#6b7890; }
+
+  /* ---- Broiler activity feed --------------------------------------------- */
+  .dw-act-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .dw-act-tab { border:1px solid #e7edf5; background:#fbfdff; color:#475569;
+                font-size:.78rem; font-weight:600; padding:6px 13px; border-radius:20px;
+                cursor:pointer; transition:.14s ease; }
+  .dw-act-tab:hover { border-color:#cfe6d8; }
+  .dw-act-tab.is-active { background:#e6f7ee; border-color:#bfe8d3; color:#0f8a52; }
+
+  .dw-act-list { overflow-x:auto; }
+  .dw-act-row { display:grid; align-items:center; gap:10px; min-width:800px;
+                grid-template-columns:66px 6px 20px 1.3fr 1.05fr .95fr 84px 1.1fr;
+                padding:2px; border-bottom:1px solid #f0f3f8; font-size:.76rem; line-height:1.15; }
+  .dw-act-row:last-child { border-bottom:0; }
+  .dw-act-row[hidden] { display:none; }
+  .dw-act-time { color:#8494ab; font-size:.7rem; white-space:nowrap; line-height:1.15; }
+  .dw-act-dot { position:relative; width:5px; height:5px; border-radius:50%; justify-self:center; }
+  .dw-act-dot::before { content:''; position:absolute; left:50%; top:-100%; bottom:-100%;
+                        width:1px; background:#e7edf5; transform:translateX(-50%); z-index:-1; }
+  .dw-act-row:first-child .dw-act-dot::before { top:50%; }
+  .dw-act-row:last-child .dw-act-dot::before { bottom:50%; }
+  .dw-act-icon { width:19px; height:19px; border-radius:50%; display:grid; place-items:center;
+                font-size:.62rem; flex:0 0 19px; }
+  .dw-act-main { min-width:0; display:flex; flex-direction:column; gap:0; line-height:1.15; }
+  .dw-act-main b { font-size:.76rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dw-act-main span { color:#8494ab; font-size:.66rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dw-act-loc, .dw-act-metric { min-width:0; display:flex; flex-direction:column; gap:0; line-height:1.15; }
+  .dw-act-loc b, .dw-act-metric b { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dw-act-loc span, .dw-act-metric span { color:#8494ab; font-size:.66rem; overflow:hidden;
+                                          text-overflow:ellipsis; white-space:nowrap; }
+  .dw-act-badge { justify-self:start; font-size:.64rem; font-weight:700; padding:1px 7px;
+                 border-radius:20px; white-space:nowrap; line-height:1.5; }
+  .dw-act-badge.t-good    { background:#e6f7ee; color:#0f8a52; }
+  .dw-act-badge.t-warn    { background:#fffaf1; color:#b45309; }
+  .dw-act-badge.t-bad     { background:#fff5f6; color:#dc465b; }
+  .dw-act-badge.t-neutral { background:#eff6ff; color:#2563eb; }
+  .dw-act-user { display:flex; align-items:center; gap:6px; min-width:0; }
+  .dw-act-avatar { width:17px; height:17px; border-radius:50%; flex:0 0 17px; background:#e2e8f0;
+                   color:#334155; font-size:.58rem; font-weight:700; display:grid; place-items:center; }
+  .dw-act-user span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.74rem; line-height:1.15; }
+
+  /* Self-contained: named like the search panel's category colours, but not
+     the same classes — those live in _global_search.html, which the sidebar
+     layout's topbar does not include, so this card cannot depend on them. */
+  .dw-act-icon.dw-c-blue  {background:#e8f0ff;color:#2563eb}
+  .dw-act-icon.dw-c-green {background:#e6f7f3;color:#078b75}
+  .dw-act-icon.dw-c-orange{background:#fff1df;color:#d97706}
+  .dw-act-icon.dw-c-purple{background:#f1ebff;color:#7c3aed}
+  .dw-act-icon.dw-c-red   {background:#ffecee;color:#dc465b}
+  .dw-act-icon.dw-c-cyan  {background:#e5f7fb;color:#0087a5}
+  .dw-act-icon.dw-c-amber {background:#fef6e0;color:#b45309}
+  .dw-act-dot.dw-c-blue  {background:#2563eb} .dw-act-dot.dw-c-green {background:#078b75}
+  .dw-act-dot.dw-c-orange{background:#d97706} .dw-act-dot.dw-c-purple{background:#7c3aed}
+  .dw-act-dot.dw-c-red   {background:#dc465b} .dw-act-dot.dw-c-cyan  {background:#0087a5}
+  .dw-act-dot.dw-c-amber {background:#b45309}
+
+  .dw-act-foot { margin-top:14px; padding-top:14px; border-top:1px solid #edf1f6;
+                display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .dw-act-foot-tile { padding:11px 13px; border:1px solid #eaf0f7; border-radius:11px; background:#fbfdff; }
+  .dw-act-foot-tile.t-bad  { background:#fff5f6; border-color:#f7dbdf; }
+  .dw-act-foot-tile.t-good { background:#f2fbf8; border-color:#d8f0e9; }
+  .dw-act-foot-value { display:block; font-size:1.05rem; font-weight:700; color:#15233b; }
+  .dw-act-foot-label { display:block; font-size:.74rem; color:#6b7890; margin-top:2px; }
+  .dw-act-foot-sub { display:block; font-size:.72rem; color:#93a4bd; margin-top:1px;
+                     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .dw-card.is-error { border-color:#f7dbdf; background:#fffbfb; }
   .dw-skel { height:96px; border-radius:16px; border:1px solid #e7edf5; background:#fff; }
   .dw-skel:after { content:""; display:block; height:100%; border-radius:16px;
@@ -817,8 +888,50 @@
            + ' role="img" aria-label="Bar chart">' + svg + '</svg></div>';
     }
 
+    /**
+     * Broiler activity feed: a timeline row per transaction, a filter tab per
+     * category present, and a small strip of totals underneath. Its own shape
+     * because nothing already on the dashboard is a timeline — stats, rows and
+     * charts all summarise a number, this one lists events.
+     */
+    function activityRow(a) {
+      return '<div class="dw-act-row" data-cat="' + esc(a.category) + '">'
+           + '<div class="dw-act-time">' + esc(a.time_ago) + '</div>'
+           + '<span class="dw-act-dot ' + esc(a.colour) + '"></span>'
+           + '<span class="dw-act-icon ' + esc(a.colour) + '"><i class="' + esc(a.icon) + '"></i></span>'
+           + '<div class="dw-act-main"><b>' + esc(a.title) + '</b>'
+           + (a.subtitle ? '<span>' + esc(a.subtitle) + '</span>' : '') + '</div>'
+           + '<div class="dw-act-loc">' + (a.farm ? '<b>' + esc(a.farm) + '</b>' : '')
+           + (a.batch ? '<span>' + esc(a.batch) + '</span>' : '') + '</div>'
+           + '<div class="dw-act-metric"><b>' + esc(a.metric || '—') + '</b>'
+           + (a.metric_sub ? '<span>' + esc(a.metric_sub) + '</span>' : '') + '</div>'
+           + '<span class="dw-act-badge t-' + esc(a.tone) + '">' + esc(a.status) + '</span>'
+           + '<div class="dw-act-user">' + (a.user_initials
+               ? '<span class="dw-act-avatar">' + esc(a.user_initials) + '</span><span>' + esc(a.user_name) + '</span>'
+               : '') + '</div>'
+           + '</div>';
+    }
+
+    function timelineCard(w) {
+      var tabs = (w.timeline_filters || []).map(function (f, i) {
+        return '<button type="button" class="dw-act-tab' + (i === 0 ? ' is-active' : '')
+             + '" data-cat="' + esc(f.key) + '">' + esc(f.label) + '</button>';
+      }).join('');
+      var footer = (w.footer_stats || []).map(function (s) {
+        return '<div class="dw-act-foot-tile' + (s.tone ? ' t-' + esc(s.tone) : '') + '">'
+             + '<span class="dw-act-foot-value">' + esc(s.value) + '</span>'
+             + '<span class="dw-act-foot-label">' + esc(s.label) + '</span>'
+             + (s.sub ? '<span class="dw-act-foot-sub">' + esc(s.sub) + '</span>' : '')
+             + '</div>';
+      }).join('');
+      return (tabs ? '<div class="dw-act-tabs">' + tabs + '</div>' : '')
+           + '<div class="dw-act-list">' + (w.timeline || []).map(activityRow).join('') + '</div>'
+           + (footer ? '<div class="dw-act-foot">' + footer + '</div>' : '');
+    }
+
     function card(w) {
       var body = '';
+      if (w.timeline) body += timelineCard(w);
       // A donut replaces the stat grid rather than joining it: it is the same
       // birds counted the same way, and showing both says it twice.
       if (w.donut && w.donut.length) {
@@ -901,6 +1014,23 @@
         .catch(function () { if (mine === token) grid.innerHTML = ''; })
         .then(function () { if (bar) bar.classList.remove('is-busy'); });
     }
+
+    // Delegated on the grid rather than bound per row: the cards are replaced
+    // wholesale on every filter reload, and a listener on the container
+    // outlives that the way one on the row itself would not.
+    grid.addEventListener('click', function (e) {
+      var tab = e.target.closest('.dw-act-tab');
+      if (!tab) return;
+      var tabs = tab.closest('.dw-act-tabs');
+      var list = tabs.nextElementSibling;
+      tabs.querySelectorAll('.dw-act-tab').forEach(function (t) {
+        t.classList.toggle('is-active', t === tab);
+      });
+      var cat = tab.dataset.cat;
+      list.querySelectorAll('.dw-act-row').forEach(function (row) {
+        row.hidden = cat !== 'all' && row.dataset.cat !== cat;
+      });
+    });
 
     // Restore whatever the URL carries, so a reload keeps the filter.
     var initial = new URLSearchParams(location.search);

@@ -42,11 +42,26 @@
         <thead class="table-dark">
           <tr>
             <th class="ds-mid">Date</th><th>Trnum</th><th>Customer</th><th>Mode</th>
-            <th>Method</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Action</th>
+            <th>Method</th><th>Reference</th><th class="ds-num">Amount</th><th class="ds-mid text-center">Action</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- View Modal -->
+<div class="modal fade" id="viewReceiptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Bird Receipt Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-borderless mb-0 ds-grid" id="view-receipt-body"></table>
+      </div>
     </div>
   </div>
 </div>
@@ -78,6 +93,7 @@ $(function () {
   const csrfToken = "{{ csrf_token }}";
   let table = null;
   let pendingDeleteId = null;
+  let currentRows = [];
 
   const today = localDay();
   // Last 7 days by default, not just today — a register opened fresh should
@@ -88,6 +104,7 @@ $(function () {
   // escapeHtml() provided globally by main.js
 
   function renderRows(rows) {
+    currentRows = rows;
     if (table) { table.destroy(); }
     const tbody = $("#receipt-table tbody");
     tbody.empty();
@@ -98,9 +115,11 @@ $(function () {
         <td>${escapeHtml(row.buyer_name)}</td>
         <td>${escapeHtml(row.mode)}</td>
         <td>${escapeHtml(row.receipt_account_name)}</td>
+        <td>${escapeHtml(row.reference_no)}</td>
         <td>${Number(row.amount).toFixed(2)}</td>
         <td class="text-center">
           <div class="d-flex gap-1 justify-content-center">
+            <button type="button" class="btn btn-outline-secondary btn-sm view-button" data-id="${row.id}" title="View"><i class="fas fa-eye"></i></button>
             {% if page_perms.edit %}<a class="btn btn-outline-primary btn-sm" href="/bird-sale-receipt/${row.id}/edit/" title="Edit"><i class="fas fa-pen"></i></a>{% endif %}
             {% if not page_perms.edit %}<a class="btn btn-outline-info btn-sm" href="/bird-sale-receipt/${row.id}/request-edit/" title="Request modification"><i class="fas fa-pen-to-square"></i></a>{% endif %}
             {% if page_perms.delete %}<button type="button" class="btn btn-outline-danger btn-sm delete-button" data-id="${row.id}" title="Delete"><i class="fas fa-trash"></i></button>{% endif %}
@@ -128,6 +147,27 @@ $(function () {
   }
 
   $("#filter-submit").on("click", loadRows);
+
+  $(document).on("click", ".view-button", function () {
+    const row = currentRows.find(r => String(r.id) === String($(this).data("id")));
+    if (!row) return;
+    const fields = [
+      ["Trnum", row.receipt_no],
+      ["Date", row.date],
+      ["Location", row.location_name],
+      [row.sale_type === "farmer" ? "Farmer" : "Customer", row.buyer_name],
+      ["Mode", row.mode],
+      ["Receipt Account", row.receipt_account_name],
+      ["Reference", row.reference_no],
+      ["Amount", Number(row.amount).toFixed(2)],
+      ["Remarks", row.remarks],
+    ];
+    const body = $("#view-receipt-body").empty();
+    fields.forEach(([label, value]) => {
+      body.append(`<tr><td class="fw-bold" style="width:200px;">${escapeHtml(label)}</td><td>${escapeHtml(value || "—")}</td></tr>`);
+    });
+    new bootstrap.Modal(document.getElementById("viewReceiptModal")).show();
+  });
 
   $(document).on("click", ".delete-button", function () {
     pendingDeleteId = $(this).data("id");
