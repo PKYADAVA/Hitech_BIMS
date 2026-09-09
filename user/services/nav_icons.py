@@ -14,6 +14,7 @@ entry falls back to a neutral dot, so a new page is never a crash.
 
 #: tab code -> Font Awesome classes.
 TAB_ICONS = {
+    "activity_log": "fas fa-clock-rotate-left",
     "alert_catalog": "fas fa-book",
     "alert_rule_list": "fas fa-sliders",
     "assign_groups": "fas fa-users-cog",

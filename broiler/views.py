@@ -9808,3 +9808,200 @@ _CR_HANDLERS.update({
         "number": lambda obj: obj.entry_no,
     },
 })
+
+
+# ---------------------------------------------------------------------------
+# Recent Activity Log (Broiler > Reports)
+# ---------------------------------------------------------------------------
+
+@login_required
+def activity_log(request):
+    """The full register behind the dashboard's Recent Activity card.
+
+    Server-rendered shell, client-rendered body: the filters, the pills, the
+    charts and the detail panel all read one JSON payload, so a filter can
+    narrow every one of them together instead of each re-asking the server
+    for its own slice.
+    """
+    return render(request, "broiler_activity_log.html")
+
+
+@login_required
+def activity_log_api(request):
+    """Events plus everything drawn from them: the headline figures, the type
+    split, the day-by-day trend and the busiest people. Computed here rather
+    than in the browser so the page and the dashboard card, which share the
+    same gathering engine, also share the arithmetic on top of it."""
+    from datetime import date as _date, timedelta as _timedelta
+
+    from django.utils.dateparse import parse_date
+
+    from broiler.services.activity_log import (CATEGORIES, activity_ago,
+                                               as_datetime, gather_events)
+
+    today = timezone.localdate()
+    to_date = parse_date((request.GET.get("to_date") or "").strip()) or today
+    from_date = parse_date((request.GET.get("from_date") or "").strip()) or (to_date - _timedelta(days=6))
+    if from_date > to_date:
+        from_date, to_date = to_date, from_date
+
+    window = gather_events({"date": to_date, "branch": None, "line": None,
+                            "supervisor": None, "farm": None},
+                           request.user, window_days=(to_date - from_date).days)
+    window = [e for e in window if from_date <= as_datetime(e["when"]).date() <= to_date]
+
+    # Offered before the narrowing filters are applied, so choosing a farm
+    # does not empty the list you would use to choose a different one.
+    options = {
+        "farms": sorted({(e["farm_id"], e["farm"]) for e in window if e["farm_id"]},
+                        key=lambda p: p[1]),
+        "batches": sorted({(e["batch_id"], e["batch"]) for e in window if e["batch_id"]},
+                          key=lambda p: p[1]),
+        "users": sorted({(e["user_id"], e["user_name"]) for e in window if e["user_id"]},
+                        key=lambda p: p[1]),
+    }
+
+    def as_int(name):
+        raw = (request.GET.get(name) or "").strip()
+        return int(raw) if raw.isdigit() else None
+
+    farm_id, batch_id, user_id = as_int("farm"), as_int("batch"), as_int("user")
+    category = (request.GET.get("type") or "").strip()
+    search = (request.GET.get("q") or "").strip().lower()
+
+    rows = window
+    if farm_id:
+        rows = [e for e in rows if e["farm_id"] == farm_id]
+    if batch_id:
+        rows = [e for e in rows if e["batch_id"] == batch_id]
+    if user_id:
+        rows = [e for e in rows if e["user_id"] == user_id]
+    if category and category != "all":
+        rows = [e for e in rows if e["category"] == category]
+    if search:
+        def matches(e):
+            haystack = " ".join(str(e.get(k) or "") for k in
+                                ("title", "subtitle", "farm", "batch", "metric",
+                                 "metric_sub", "user_name"))
+            return search in haystack.lower()
+        rows = [e for e in rows if matches(e)]
+
+    # Counts for the pills come from everything the other filters allow, not
+    # from the current type — otherwise picking one pill zeroes the rest.
+    pill_source = rows if not category or category == "all" else [
+        e for e in window
+        if (not farm_id or e["farm_id"] == farm_id)
+        and (not batch_id or e["batch_id"] == batch_id)
+        and (not user_id or e["user_id"] == user_id)
+    ]
+    counts = {"all": len(pill_source)}
+    for key, _label, _colour in CATEGORIES:
+        counts[key] = sum(1 for e in pill_source if e["category"] == key)
+
+    on_day = lambda day: [e for e in rows if as_datetime(e["when"]).date() == day]
+    today_rows, yesterday_rows = on_day(today), on_day(today - _timedelta(days=1))
+
+    def delta(now_count, before_count):
+        if not before_count:
+            return None
+        return round((now_count - before_count) / before_count * 100)
+
+    stats = {
+        "total": len(rows),
+        "total_delta": delta(len(today_rows), len(yesterday_rows)),
+        "farms": len({e["farm_id"] for e in rows if e["farm_id"]}),
+        "farms_delta_abs": (len({e["farm_id"] for e in today_rows if e["farm_id"]})
+                            - len({e["farm_id"] for e in yesterday_rows if e["farm_id"]})),
+        "users": len({e["user_id"] for e in rows if e["user_id"]}),
+        "users_delta_abs": (len({e["user_id"] for e in today_rows if e["user_id"]})
+                            - len({e["user_id"] for e in yesterday_rows if e["user_id"]})),
+        # The mockup asked for an average response time. Nothing in this
+        # database records when anything was responded to, so this reports
+        # what is actually known instead: how many of these want looking at.
+        "attention": sum(1 for e in rows if e["tone"] in ("warn", "bad")),
+    }
+
+    total = len(rows) or 1
+    distribution = [
+        {"key": key, "label": label, "colour": colour,
+         "count": sum(1 for e in rows if e["category"] == key),
+         "pct": round(sum(1 for e in rows if e["category"] == key) / total * 100, 1)}
+        for key, label, colour in CATEGORIES
+    ]
+    distribution = [d for d in distribution if d["count"]]
+
+    # A bar per day while the range is short enough to draw one; past that the
+    # whole range is bucketed into even blocks rather than the tail of it
+    # being drawn and passed off as the period — a quarter's chart that
+    # silently showed only its last month was the bug this replaces.
+    span_days = (to_date - from_date).days + 1
+    if span_days <= 31:
+        bucket_days = 1
+        buckets = [(to_date - _timedelta(days=i), to_date - _timedelta(days=i))
+                   for i in range(span_days - 1, -1, -1)]
+        title = f"Activity Trend · last {span_days} days" if span_days > 1 else "Activity Trend · today"
+    else:
+        bucket_days = -(-span_days // 15)          # ceil: at most 15 blocks
+        buckets = []
+        start = from_date
+        while start <= to_date:
+            end = min(start + _timedelta(days=bucket_days - 1), to_date)
+            buckets.append((start, end))
+            start = end + _timedelta(days=1)
+        title = f"Activity Trend · {bucket_days}-day blocks"
+
+    def bucket_label(start, end):
+        return start.strftime("%d %b") if start == end else f"{start.strftime('%d %b')}–{end.strftime('%d %b')}"
+
+    trend = {
+        "title": title,
+        "days": [bucket_label(s, e) for s, e in buckets],
+        "series": [
+            {"key": key, "label": label, "colour": colour,
+             "values": [sum(1 for ev in rows
+                            if ev["category"] == key
+                            and s <= as_datetime(ev["when"]).date() <= e)
+                        for s, e in buckets]}
+            for key, label, colour in CATEGORIES
+        ],
+    }
+    trend["series"] = [s for s in trend["series"] if any(s["values"])]
+
+    tally = {}
+    for e in rows:
+        if not e["user_id"]:
+            continue
+        entry = tally.setdefault(e["user_id"], {"name": e["user_name"],
+                                                "initials": e["user_initials"], "count": 0})
+        entry["count"] += 1
+    top = sorted(tally.values(), key=lambda r: -r["count"])[:5]
+    busiest = top[0]["count"] if top else 1
+    leaderboard = [{**r, "pct": round(r["count"] / busiest * 100)} for r in top]
+
+    # Every figure above is computed over the whole result; only the table's
+    # own rows are capped. At roughly half a kilobyte each an unbounded range
+    # would otherwise ship megabytes to draw ten visible rows — and a capped
+    # table with honest charts beats a complete table nobody can load. The
+    # client says so when this bites.
+    ROW_CAP = 1000
+    truncated = max(0, len(rows) - ROW_CAP)
+    rows = rows[:ROW_CAP]
+
+    payload = []
+    for e in rows:
+        when = as_datetime(e["when"])
+        payload.append({k: v for k, v in e.items() if k != "when"} | {
+            "when": when.isoformat(),
+            "date_time": timezone.localtime(when).strftime("%d-%m-%Y %I:%M %p"),
+            "time_ago": activity_ago(when),
+        })
+
+    return JsonResponse({
+        "events": payload, "truncated": truncated,
+        "stats": stats, "distribution": distribution,
+        "trend": trend, "leaderboard": leaderboard, "counts": counts,
+        "options": {k: [{"id": i, "label": lbl} for i, lbl in v]
+                    for k, v in options.items()},
+        "categories": [{"key": k, "label": lbl, "colour": c} for k, lbl, c in CATEGORIES],
+        "from_date": from_date.isoformat(), "to_date": to_date.isoformat(),
+    })

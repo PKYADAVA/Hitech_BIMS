@@ -130,6 +130,8 @@ urlpatterns = [
     path('day-record-report/', views.day_record_report, name='day_record_report'),
     path('farm-detailed-daily-entry-report/', views.farm_detailed_daily_entry_report, name='farm_detailed_daily_entry_report'),
     path('lifting-report/', views.lifting_report, name='lifting_report'),
+    path('activity-log/', views.activity_log, name='activity_log'),
+    path('activity-log/data/', views.activity_log_api, name='activity_log_api'),
     path('farmer-farm-report/', views.farmer_farm_report,
          name='farmer_farm_report'),
     path('batch-wise-feed-scheduling-report/', views.batch_wise_feed_scheduling_report, name='batch_wise_feed_scheduling_report'),
