@@ -49,6 +49,7 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
         {% if 'day_record_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'day_record_report' %}active{% endif %}" href="{% url 'day_record_report' %}"><i class="fas fa-calendar-day me-1"></i>Day Record Report</a></li>{% endif %}
         {% if 'farm_detailed_daily_entry_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'farm_detailed_daily_entry_report' %}active{% endif %}" href="{% url 'farm_detailed_daily_entry_report' %}"><i class="fas fa-table-list me-1"></i>Detailed Daily Entry Report</a></li>{% endif %}
         {% if 'lifting_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'lifting_report' %}active{% endif %}" href="{% url 'lifting_report' %}"><i class="fas fa-truck-loading me-1"></i>Lifting Report</a></li>{% endif %}
+        {% if 'activity_log' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'activity_log' %}active{% endif %}" href="{% url 'activity_log' %}"><i class="fas fa-clock-rotate-left me-1"></i>Recent Activity Log</a></li>{% endif %}
         {% if 'batch_wise_feed_scheduling_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'batch_wise_feed_scheduling_report' %}active{% endif %}" href="{% url 'batch_wise_feed_scheduling_report' %}"><i class="fas fa-calendar-check me-1"></i>Batch wise Feed Scheduling Report</a></li>{% endif %}
         {% if 'gc_realization_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'gc_realization_report' %}active{% endif %}" href="{% url 'gc_realization_report' %}"><i class="fas fa-scale-balanced me-1"></i>GC Realization Report</a></li>{% endif %}
         {% if 'farmer_ledger_report' in allowed_tabs %}<li class="subnav-tab"><a class="{% if active_tab == 'farmer_ledger_report' %}active{% endif %}" href="{% url 'farmer_ledger_report' %}"><i class="fas fa-book me-1"></i>Farmer Ledger</a></li>{% endif %}
@@ -200,3 +201,15 @@ forwarding `active_tab`. Keeps the nav markup/CSS in exactly one place.
     </ul>
   </div>
 </nav>
+<script>
+  // A module with a dozen tabs scrolls sideways, and the later ones sit past
+  // the edge — so the tab for the page you are actually on could be the one
+  // you cannot see. Nudge it into view, horizontally only: block:"nearest"
+  // keeps the page itself from jumping down to it.
+  (function () {
+    var active = document.querySelector("#{{ module }}-subnav .subnav-tab a.active");
+    if (active && active.scrollIntoView) {
+      active.scrollIntoView({ inline: "center", block: "nearest" });
+    }
+  })();
+</script>
