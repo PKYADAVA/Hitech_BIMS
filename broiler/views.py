@@ -6337,6 +6337,12 @@ def chicks_placement_report(request):
     to_date = (request.GET.get("to_date") or "").strip()
     status = (request.GET.get("status") or "").strip().lower()
     export = (request.GET.get("export") or "display").strip().lower()
+    # Date order is the register's natural reading; transaction-number order is
+    # how it is read back against a stack of dispatch papers. Anything else in
+    # the querystring falls back to date rather than reaching the ORM.
+    sort = (request.GET.get("sort") or "date").strip().lower()
+    if sort not in ("date", "trnum"):
+        sort = "date"
     submitted = bool(region_id or branch_id or line or supervisor_id or farm_id
                      or warehouse_id or hatchery_id
                      or from_date or to_date or status or request.GET.get("submit"))
@@ -6347,7 +6353,7 @@ def chicks_placement_report(request):
               .filter(to_location_type="farm", item__in=chick_items())
               .select_related("to_farm__branch", "to_farm__supervisor", "to_batch",
                               "from_warehouse", "source_hatchery", "source_supplier", "item")
-              .order_by("date", "id"))
+              .order_by(*(("trnum",) if sort == "trnum" else ("date", "id"))))
         # The dropdowns below are scoped, but nothing stopped a restricted user
         # leaving them on "All" (or editing the query string) and reading every
         # branch's placements. A placement has two ends, so either the receiving
@@ -6501,7 +6507,7 @@ def chicks_placement_report(request):
         "warehouse_id": warehouse_id, "hatchery_id": hatchery_id,
         "from_date": from_date, "to_date": to_date, "status": status,
         "submitted": submitted, "rows": rows, "totals": totals, "kpi": kpi,
-        "export": export,
+        "export": export, "sort": sort,
         "company": CompanyProfile.get_solo(),
     })
 
