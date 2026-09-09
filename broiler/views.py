@@ -6343,6 +6343,14 @@ def chicks_placement_report(request):
     sort = (request.GET.get("sort") or "date").strip().lower()
     if sort not in ("date", "trnum"):
         sort = "date"
+    # Opens on the last seven days rather than an empty page: the register is
+    # read to see what has just come in, and a blank first screen made every
+    # visit start by typing the same search. An explicit date still wins, and
+    # clearing both deliberately is what the other filters are for.
+    if not from_date and not to_date:
+        _today = timezone.localdate()
+        from_date = (_today - timedelta(days=6)).isoformat()
+        to_date = _today.isoformat()
     submitted = bool(region_id or branch_id or line or supervisor_id or farm_id
                      or warehouse_id or hatchery_id
                      or from_date or to_date or status or request.GET.get("submit"))
@@ -6353,7 +6361,10 @@ def chicks_placement_report(request):
               .filter(to_location_type="farm", item__in=chick_items())
               .select_related("to_farm__branch", "to_farm__supervisor", "to_batch",
                               "from_warehouse", "source_hatchery", "source_supplier", "item")
-              .order_by(*(("trnum",) if sort == "trnum" else ("date", "id"))))
+              # Oldest first, and within a day the transaction numbers run in
+              # their own order — a day's placements read down the page the
+              # way they were entered.
+              .order_by(*(("trnum",) if sort == "trnum" else ("date", "trnum"))))
         # The dropdowns below are scoped, but nothing stopped a restricted user
         # leaving them on "All" (or editing the query string) and reading every
         # branch's placements. A placement has two ends, so either the receiving

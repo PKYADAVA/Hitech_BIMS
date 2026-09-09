@@ -254,7 +254,12 @@
         <tbody>
           {% for r in rows %}
           <tr>
-            <td>{{ r.date|date:"d.m.Y" }}</td><td>{{ r.trnum|default:"-" }}</td><td>{{ r.dc_no|default:"-" }}</td>
+            {% comment %}
+              data-order carries the sortable value: the column reads d.m.Y,
+              which DataTables would otherwise sort as text — putting
+              01.02.2026 above 31.01.2026 because it compares the day first.
+            {% endcomment %}
+            <td data-order="{{ r.date|date:'Y-m-d' }}">{{ r.date|date:"d.m.Y" }}</td><td>{{ r.trnum|default:"-" }}</td><td>{{ r.dc_no|default:"-" }}</td>
             <td>{{ r.branch_name }}</td><td>{{ r.warehouse_name|default:"-" }}</td>
             <td>{{ r.line }}</td><td>{{ r.supervisor_name|default:"-" }}</td>
             <td>{{ r.farm_code }}</td><td>{{ r.farm_name }}</td><td>{{ r.batch_name|default:"-" }}</td>
@@ -339,8 +344,10 @@ $(function () {
     // Follows the Sort By field. DataTables re-sorts on load, so leaving this
     // fixed on the date column would quietly undo the ordering the server was
     // asked for — and the export buttons take the table's order, not the
-    // server's, so it would have gone out wrong too.
-    order: [[{% if sort == 'trnum' %}1, 'asc'{% else %}0, 'desc'{% endif %}]],
+    // server's, so it would have gone out wrong too. Date order is oldest
+    // first with the day's transaction numbers in sequence under it, which
+    // needs both columns named here, not just the first.
+    order: [[{% if sort == 'trnum' %}1, 'asc'{% else %}0, 'asc'], [1, 'asc'{% endif %}]],
     pageLength: 10,
     lengthMenu: [10, 25, 50, 100],
     dom: 'Bfrtip',
