@@ -169,6 +169,58 @@ class WebStockTransferFilterTests(TransferFixture):
                          {self.placement.id, self.dispatch.id, self.restock.id})
 
 
+class MedicineTransferFilterTests(TransferFixture):
+    """The sibling API over a near-identical model.
+
+    Nothing sends these filters today — the Medicine Transfer register asks by
+    date alone — so this is not a regression guard but a statement that the two
+    APIs answer the same question the same way. The alternative was deleting
+    the parameters, which would have left `?to_location_type=farm` silently
+    ignored: the very failure this whole change is about.
+    """
+
+    MEDICINE_URL = "/medicine_transfer_api/"
+
+    def setUp(self):
+        super().setUp()
+        from inventory.models import MedicineTransfer, MedicineTransferItem
+
+        self.vaccine = self.item("Newcastle Vaccine", "Medicine")
+        self.to_farm = MedicineTransfer.objects.create(
+            date=self.today, from_location_type="warehouse",
+            from_warehouse=self.warehouse, to_location_type="farm",
+            to_farm=self.farm)
+        self.to_warehouse = MedicineTransfer.objects.create(
+            date=self.today, from_location_type="warehouse",
+            from_warehouse=self.warehouse, to_location_type="warehouse",
+            to_warehouse=self.warehouse)
+        for header in (self.to_farm, self.to_warehouse):
+            MedicineTransferItem.objects.create(
+                transfer=header, item=self.vaccine, quantity=10)
+
+    def medicine_ids(self, query=""):
+        resp = self.client.get(self.MEDICINE_URL + query)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return {row["id"] for row in resp.json()}
+
+    def test_a_destination_type_narrows_without_a_particular_destination(self):
+        self.assertEqual(self.medicine_ids("?to_location_type=farm"),
+                         {self.to_farm.id})
+
+    def test_a_destination_id_still_narrows_further(self):
+        self.assertEqual(
+            self.medicine_ids("?to_location_type=farm&to_location_id=%s" % self.farm.id),
+            {self.to_farm.id})
+
+    def test_a_source_type_narrows_too(self):
+        self.assertEqual(self.medicine_ids("?from_location_type=warehouse"),
+                         {self.to_farm.id, self.to_warehouse.id})
+
+    def test_no_filters_still_lists_everything(self):
+        self.assertEqual(self.medicine_ids(),
+                         {self.to_farm.id, self.to_warehouse.id})
+
+
 class MobileCatalogTests(TestCase):
     """The phone's list path is where the two conditions actually meet."""
 

@@ -1489,12 +1489,21 @@ class MedicineTransferAPI(View):
             qs = qs.filter(items__item__category_id=category)
         if item_id:
             qs = qs.filter(items__item_id=item_id)
-        if from_location_type and from_location_id:
-            qs = qs.filter(from_location_type=from_location_type, **{
+        # Same rule as StockTransferAPI above: the type narrows on its own,
+        # the id narrows further. No page sends either of these today — the
+        # register filters on dates alone — but the two APIs are siblings over
+        # near-identical models, and a caller that reads one and reaches for
+        # the other should not get a filter that quietly does not apply.
+        if from_location_type:
+            qs = qs.filter(from_location_type=from_location_type)
+        if from_location_id:
+            qs = qs.filter(**{
                 ("from_farm_id" if from_location_type == "farm" else "from_warehouse_id"): from_location_id,
             })
-        if to_location_type and to_location_id:
-            qs = qs.filter(to_location_type=to_location_type, **{
+        if to_location_type:
+            qs = qs.filter(to_location_type=to_location_type)
+        if to_location_id:
+            qs = qs.filter(**{
                 ("to_farm_id" if to_location_type == "farm" else "to_warehouse_id"): to_location_id,
             })
         rows = qs.order_by("-date", "-id").distinct()
