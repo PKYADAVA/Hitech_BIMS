@@ -180,7 +180,7 @@ def _live_flock(viewable, filters, user=None):
     the per-batch costing engine N times — the report does the latter because it
     prints a row per flock; a dashboard only needs the totals.
     """
-    from django.db.models import Sum
+    from django.db.models import Min, Sum
     from broiler.models import BirdSale, DailyEntry
     from inventory.models import Item, StockTransfer
 
@@ -205,12 +205,15 @@ def _live_flock(viewable, filters, user=None):
     # BY if left in, grouping by (batch, date, id) — a row per transaction
     # rather than per batch — and silently dropping all but the last row
     # once collected into a dict keyed by batch id.
-    placed_by_batch = {
-        r["to_batch_id"]: float(r["t"] or 0) for r in
-        StockTransfer.objects.filter(
+    # The earliest placement rides along on the same aggregate, because it is
+    # what the age is measured from when a batch has no start_date of its own.
+    placed_by_batch, first_in = {}, {}
+    for r in (StockTransfer.objects.filter(
             to_batch_id__in=ids, item_id__in=chick_ids, date__lte=day
-        ).values("to_batch_id").order_by().annotate(t=Sum("quantity"))
-    }
+        ).values("to_batch_id").order_by()
+         .annotate(t=Sum("quantity"), first=Min("date"))):
+        placed_by_batch[r["to_batch_id"]] = float(r["t"] or 0)
+        first_in[r["to_batch_id"]] = r["first"]
     losses_by_batch = {
         r["batch_id"]: float(r["m"] or 0) + float(r["c"] or 0) for r in
         DailyEntry.objects.filter(batch_id__in=ids, date__lte=day)
@@ -228,7 +231,15 @@ def _live_flock(viewable, filters, user=None):
     alive = placed - mort_culls - sold
     mort_pct = _pct(mort_culls, placed)
 
-    ages = [(day - s).days for _i, s in batches if s]
+    # A batch created straight from a chicks placement carries no start_date,
+    # and every batch here was created that way — which is why this tile read
+    # "—" on a farm plainly full of birds. The placement is the day the chicks
+    # went in, so it stands in when the column is blank: the same rule
+    # _placement_date applies on the forms and the age bands use for their own
+    # figures. A batch with neither is left out rather than counted as day 0.
+    ages = [max((day - placed_on).days, 0)
+            for batch_id, start in batches
+            if (placed_on := start or first_in.get(batch_id))]
     avg_age = round(sum(ages) / len(ages)) if ages else None
 
     # Attention Required: live batches with any recorded mortality or culls,
@@ -258,7 +269,8 @@ def _live_flock(viewable, filters, user=None):
     elif not placed:
         note = "No chick placements recorded against these batches yet."
     elif avg_age is None:
-        note = "Avg age is blank because none of these batches has a start date recorded."
+        note = ("Avg age is blank: none of these batches has a start date or a "
+                "chicks placement to date it from.")
 
     return {
         "stats": [

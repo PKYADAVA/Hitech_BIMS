@@ -74,6 +74,38 @@ class DashboardWidgetTests(TestCase):
         self.assertEqual(self.stat(w, "Birds alive")["value"], "760")   # 1000-30-10-200
         self.assertEqual(self.stat(w, "Mortality")["value"], "4.00%")   # (30+10)/1000
 
+    def test_live_flock_ages_a_batch_from_its_placement(self):
+        """A batch created from a chicks placement carries no start_date.
+
+        The tile read "—" on a farm plainly full of birds, because every batch
+        on it had been created that way. The placement is the day the chicks
+        went in, which is what the forms and the age bands already date from.
+        """
+        b = self.batch("No-Start", placed=1000, age=30)
+        BroilerBatch.objects.filter(pk=b.pk).update(start_date=None)
+
+        w = self.widget(self.admin, "live_flock")
+        self.assertEqual(self.stat(w, "Avg age")["value"], "30 d")
+        self.assertIsNone(w.get("note"))
+
+    def test_live_flock_averages_over_the_batches_it_can_date(self):
+        """One undated flock must not take the age of the ones that have one."""
+        self.batch("Dated", placed=500, age=40)
+        undated = self.batch("Undated", placed=500, age=10)
+        BroilerBatch.objects.filter(pk=undated.pk).update(start_date=None)
+        StockTransfer.objects.filter(to_batch=undated).delete()
+
+        w = self.widget(self.admin, "live_flock")
+        self.assertEqual(self.stat(w, "Avg age")["value"], "40 d")
+
+    def test_live_flock_says_why_the_age_is_blank(self):
+        b = self.batch("Nothing", placed=600, age=15)
+        BroilerBatch.objects.filter(pk=b.pk).update(start_date=None)
+        StockTransfer.objects.filter(to_batch=b).delete()
+
+        w = self.widget(self.admin, "live_flock")
+        self.assertEqual(self.stat(w, "Avg age")["value"], "—")
+
     def test_live_flock_ignores_closed_batches(self):
         self.batch("Open", placed=500)
         self.batch("Closed", placed=900, closed=True)
